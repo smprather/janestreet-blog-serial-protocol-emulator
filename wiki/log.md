@@ -27,3 +27,8 @@
 - ~/asic-runs/spm (kept out of repo): route/magic/klayout DRC 0, XOR 0, LVS 0, setup/hold violations 0 at fast+slow corners; ~9.8k area units; final GDS+netlist emitted
 ## [2026-09-17] decide | ADR-002 latch-pair dual-edge flop
 - Lib has no negedge flops; DDR capture = dlh+dll latch-pair + mux, pure stdcell; custom static/dynamic DET rejected
+## [2026-09-17] rtl | pe_serdes implemented, verified, pushed (94bf44e)
+- rtl/pe_serdes.v + tb/tb_pe_serdes.v + sim/pe_serdes.vcd; iverilog PASS, verilator clean
+- Real bug caught by TB: LSB-first RX stranded payload in top bits; rewrote RX as bit-placer, payload always in [len-1:0]
+## [2026-09-17] synth | pe_serdes = 623 cells / ~11.5k um2 (typ corner)
+- 129 flops (54.9% of area), rest mux/combo; ~2% of the 32-tile cell budget; estimate in factored-hardware-blocks replaced with silicon number
