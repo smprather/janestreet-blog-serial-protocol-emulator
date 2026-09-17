@@ -1,0 +1,17 @@
+[project]
+name = "janestreet-blog-serial-protocol-emulator"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Myles Prather", email = "smprather@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+janestreet-blog-serial-protocol-emulator = "janestreet_blog_serial_protocol_emulator:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
