@@ -108,6 +108,9 @@ module tb_pe_serdes;
       strobe();
     end
     check(tx_done === 1'b1, {tag, ": tx done"});
+    // RX completion is delayed one cycle past the final strobe (by design).
+    @(posedge clk);
+    #1;
     check(rx_valid === 1'b1, {tag, ": rx valid"});
     check((rx_data & mask) === (d & mask), {tag, ": payload matches"});
     check(rx_busy === 1'b0, {tag, ": rx busy drops"});
