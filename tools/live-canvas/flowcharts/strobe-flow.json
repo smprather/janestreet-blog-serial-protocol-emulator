@@ -1,0 +1,171 @@
+{
+  "title": "pe_serdes — one strobe, end to end (UART TX, 8N1)",
+  "subtitle": "The same bit_en pulse drives every stage. Timing numbers from tb_pe_uart.v: 16 clk cycles per bit cell.",
+  "output": "strobe-flow.svg",
+  "legend": true,
+  "nodes": [
+    {
+      "id": "t0",
+      "kind": "start",
+      "text": "TB: line = 1 (idle)",
+      "row": 0,
+      "col": 0,
+      "w": 300
+    },
+    {
+      "id": "t1",
+      "kind": "start",
+      "text": "TB: line = 0 — START bit",
+      "row": 1,
+      "col": 0,
+      "w": 300
+    },
+    {
+      "id": "t2",
+      "kind": "process",
+      "text": "TB: tx_load = 1, tx_len = 8\n(one clk wide)",
+      "row": 2,
+      "col": 0,
+      "w": 300
+    },
+    {
+      "id": "t3",
+      "kind": "decision",
+      "text": "tx_load && |tx_len ?",
+      "row": 3,
+      "col": 0,
+      "w": 320
+    },
+    {
+      "id": "t4",
+      "kind": "process",
+      "text": "snapshot into the DUT:\ntx_shreg, tx_nbits, tx_cnt = 0,\ncfg_lsb_tx (= 1 for UART)",
+      "row": 4,
+      "col": 0,
+      "w": 320
+    },
+    {
+      "id": "t5",
+      "kind": "side",
+      "text": "tx_busy ← 1",
+      "row": 5,
+      "col": 0,
+      "w": 260
+    },
+    {
+      "id": "t6",
+      "kind": "process",
+      "text": "bit_en pulse — THE STROBE\n(first one 16 clk after load)",
+      "row": 6,
+      "col": 0,
+      "w": 320
+    },
+    {
+      "id": "t7",
+      "kind": "decision",
+      "text": "tx_cnt == tx_nbits - 1 ?",
+      "row": 7,
+      "col": 0,
+      "w": 320
+    },
+    {
+      "id": "t9",
+      "kind": "end",
+      "text": "8th strobe: tx_busy ← 0,\ntx_done ← 1 (one-cycle pulse)",
+      "row": 9,
+      "col": 0,
+      "w": 320
+    },
+    {
+      "id": "t8",
+      "kind": "side",
+      "text": "tx_cnt ← tx_cnt + 1:\nthe next bit appears on tx_ser",
+      "row": 8,
+      "col": 1,
+      "w": 300
+    },
+    {
+      "id": "m2",
+      "kind": "note",
+      "text": "tx_ser is COMBINATIONAL — it reads tx_shreg through tx_rd_idx, so the bit is already correct BEFORE the strobe arrives.",
+      "row": 4,
+      "col": 1,
+      "w": 250
+    },
+    {
+      "id": "m1",
+      "kind": "note",
+      "text": "THE COMMITTING EDGE = the clk edge where bit_en is high. Nothing in this DUT changes without one.",
+      "row": 6,
+      "col": 1,
+      "w": 250
+    },
+    {
+      "id": "m3",
+      "kind": "note",
+      "text": "The strobe supplies the TIMING; the DUT only counts. Spacing (16 clk here) is the timing block's job, not this block's.",
+      "row": 9,
+      "col": 1,
+      "w": 250
+    }
+  ],
+  "edges": [
+    {
+      "from": "t0",
+      "to": "t1"
+    },
+    {
+      "from": "t1",
+      "to": "t2"
+    },
+    {
+      "from": "t2",
+      "to": "t3"
+    },
+    {
+      "from": "t3",
+      "to": "t4",
+      "label": "yes"
+    },
+    {
+      "from": "t4",
+      "to": "t5"
+    },
+    {
+      "from": "t5",
+      "to": "t6"
+    },
+    {
+      "from": "t6",
+      "to": "t7"
+    },
+    {
+      "from": "t7",
+      "to": "t9",
+      "label": "yes — last bit"
+    },
+    {
+      "from": "t7",
+      "to": "t8",
+      "label": "no — more bits"
+    },
+    {
+      "from": "t8",
+      "to": "t6",
+      "label": "wait 16 clk, strobe again",
+      "route": "loop-left"
+    },
+    {
+      "from": "m1",
+      "to": "t6"
+    },
+    {
+      "from": "m2",
+      "to": "t4"
+    },
+    {
+      "from": "m3",
+      "to": "t9"
+    }
+  ]
+}

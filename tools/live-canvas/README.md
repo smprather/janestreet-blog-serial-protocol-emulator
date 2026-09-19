@@ -46,7 +46,20 @@ pane never renders a half-written file.
 python3 gen_block_status.py                  # STATUS.md table -> block-status.svg
 python3 gen_flowchart.py                     # flowcharts/rx-path.json -> serdes-rx-flow.svg
 python3 gen_flowchart.py flowcharts/x.json   # any spec
+python3 gen_vcd_view.py --vcd ../../sim/tb_pe_uart.vcd \
+    --signals clk,bit_en,tx_busy,tx_ser,line \
+    --from 200000 --to 2100000 --strobe bit_en \
+    --title "…" -o ../../diagrams/uart-byte.svg
 ```
+
+`gen_vcd_view.py` renders a window of any VCD as a labelled timing diagram so a
+testbench's actual behaviour can be shown instead of described. Two things it
+does deliberately: the **clock is drawn from its real transitions** (sampling a
+clock at its own rising edges always reads a constant 1 and teaches nothing),
+and every other signal is **sampled at each rising edge**, so a signal that is
+only valid mid-cycle is visibly so. `--strobe signal[=label]` and
+`--commit signal[=label]` draw labelled vertical markers; `--window lo,hi`
+highlights a region. Times are VCD ticks (the TBs run 1 ns).
 
 `gen_flowchart.py` lays out a flowchart from a JSON spec (grid `row`/`col`
 placement, `w`/`h` optional) and routes every edge from geometry. It also

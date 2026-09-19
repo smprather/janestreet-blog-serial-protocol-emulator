@@ -315,11 +315,13 @@ def route_edge(edge: dict, boxes: dict, gutters: dict) -> dict:
             tx, ty = pb[side]
             emit(f"M {sx:.1f} {sy:.1f} H {lane:.1f} V {ty:.1f} H {tx:.1f}")
             segs += [_h(sy, sx, lane), _v(lane, sy, ty), _h(ty, lane, tx)]
-            mid_y = (sy + ty) / 2
+            # Label at the SOURCE end of the lane, not the midpoint: whatever
+            # sits between the two nodes owns the midpoint, and a label parked
+            # there lands on top of it.
             if side == "left":
-                svg += label_svg(lbl, lane + 6, mid_y, anchor="start")
+                svg += label_svg(lbl, lane + 6, sy - 9, anchor="start")
             else:
-                svg += label_svg(lbl, lane - 6, mid_y, anchor="end")
+                svg += label_svg(lbl, lane - 6, sy - 9, anchor="end")
         return {"from": a, "to": b, "segs": segs, "svg": svg}
 
     # -- same row: straight across -------------------------------------------
