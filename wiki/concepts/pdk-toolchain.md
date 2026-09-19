@@ -1,7 +1,7 @@
 ---
 title: PDK and Toolchain Setup
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-18
 type: concept
 tags: [process-node, signoff, sta, spice]
 sources: []
@@ -15,7 +15,7 @@ Local bring-up of the IHP sg13g2 design environment on CachyOS (Arch). All paths
 ## PDK: ~/pdk/IHP-Open-PDK (1.2 GB, depth-1 clone of IHP-GmbH/IHP-Open-PDK)
 
 - `ihp-sg13g2/libs.ref/sg13g2_stdcell`: lib, lef, gds, verilog, cdl, spice.
-- `ihp-sg13g2/libs.ref/sg13g2_sram`: single-port 1P macros with BIST + bitmask, 256x16 up to 2048x64, each with fast/typ/slow .lib plus lef/verilog/gds/cdl. NO compiler — fixed macros only (upstream OpenRAM does not support sg13g2). Instruction-memory plan: pick the smallest macro that fits, or flops for tiny tables.
+- `ihp-sg13g2/libs.ref/sg13g2_sram`: single-port 1P macros with BIST + bitmask, 256x16 up to 2048x64, each with fast/typ/slow .lib plus lef/verilog/gds/cdl. NO compiler — fixed macros only (upstream OpenRAM does not support sg13g2). Instruction-memory plan: pick the smallest macro that fits, or flops for tiny tables. Capacity analysis: [[reference/sram-budget]].
 - `ihp-sg13g2/libs.ref/sg13g2_io`: lib/lef/gds/verilog/cdl/spice, 6 corners + dummy.
 - `ihp-sg13g2/libs.tech`: checked-in tool configs for klayout, magic, netgen, ngspice, xyce, openroad, librelane, xschem, and more.
 

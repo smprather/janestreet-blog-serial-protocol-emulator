@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-18 | Total pages: 17
+> Last updated: 2026-09-18 | Total pages: 18
 
 ## Start here
 
@@ -28,6 +28,7 @@
 
 - [[reference/signal-names]] — Every RTL port: direction, width, meaning, validity. Port tables generated from the Verilog (drift-checked in `tb/run_all.sh`).
 - [[reference/protocol-pin-budget]] — Per-protocol IO pin counts vs the TT pad budget (26 pads, 24 usable); what the board must add per protocol.
+- [[reference/sram-budget]] — SRAM capacity vs the 8×4 die: every PDK macro's real size, what packs, and the area cost of 1–32 KB.
 
 ## Comparisons
 

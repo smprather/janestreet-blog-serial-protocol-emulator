@@ -75,4 +75,17 @@ else
   echo "STALE: wiki/reference/protocol-pin-budget.md — run python3 tools/gen_pin_budget.py"
   stale=1
 fi
+# The SRAM budget reads the PDK, which lives outside the repo. Skip it (loudly)
+# when the PDK is not cloned rather than failing a regression on a missing
+# dependency.
+if [ -d "$HOME/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram/lef" ]; then
+  if python3 tools/gen_sram_budget.py --check >/dev/null 2>&1; then
+    echo "sram budget up to date"
+  else
+    echo "STALE: wiki/reference/sram-budget.md — run python3 tools/gen_sram_budget.py"
+    stale=1
+  fi
+else
+  echo "sram budget: SKIPPED (PDK not at ~/pdk/IHP-Open-PDK)"
+fi
 [ "$stale" -eq 0 ] || exit 1

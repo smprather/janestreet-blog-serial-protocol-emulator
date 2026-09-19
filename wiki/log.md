@@ -91,3 +91,10 @@
 - Answer: max single protocol = 4 pins (SPI, JTAG). All nine pinned out simultaneously = ~23 of 24, i.e. it fits but is the wrong design — the premise is that protocols are firmware claiming pins at runtime via the programmable matrix, so the real constraint is how many run at once, not the count
 - Counts read from the testbenches (wire sets confirmed against tb_pe_*.v declarations); TB presence is checked by the generator so a deleted TB cannot leave the page claiming coverage. Drift-verified by pointing a TB reference at a nonexistent file
 - Same generated-doc discipline as signal-names.md: tools/gen_pin_budget.py + --check wired into tb/run_all.sh (now gates both reference pages)
+## [2026-09-18] reference | SRAM budget — the die shape, not the area, is the constraint
+- Created wiki/reference/sram-budget.md from the PDK LEFs (tools/gen_sram_budget.py): all 30 macros with real W×H, area and bits/µm²
+- Key finding: TT tile notation is WIDTH×HEIGHT, so 8x4 at the template's 167x108 um tile is 1336x432 um — a 3.1:1 die, 0.577 mm² (the blog's 200x150 would give 1600x600 / 0.96 mm²). Consequence: the two densest macro classes (8192x32 at 1520x618, 2048x64 at 784x627) DO NOT FIT in either orientation
+- Corrected a methodology error mid-task: density×area overestimates capacity because a rectangle packs worse than its area implies. Switched to real 2D grid packing — best packable is 131,072 bits (16 KB) on the template die, 196,608 (24 KB) on the blog die, both ~90% die efficiency with zero logic
+- Practical answer: 1 KB = 8% of die, 2 KB = 14%, 4 KB = 24%, 8 KB = 45%, 16 KB = 89%; 32 KB unreachable with a single macro type. 1-2 KB comfortable, 4 KB ceiling for a design that also needs logic
+- Also corrected the record: the wiki's "256x16 … 2048x64" macro list was incomplete (4096/8192 classes, 2P variants, non-BIST 64x16/64x32 exist). STATUS open risk updated with the real numbers
+- Gate: gen_sram_budget --check joins run_all.sh, skipped loudly if the PDK is absent (external dependency, not repo state). Drift-verified by perturbing the tile size

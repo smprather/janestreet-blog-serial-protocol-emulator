@@ -138,8 +138,11 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 
 - **IHP-specific max pad clock is unpublished.** The ~66 MHz figure is sky130
   pad-macro-derived. Signing off at 66 gives margin if the real limit is lower.
-- **No SRAM compiler for sg13g2** — only fixed 1P macros (256×16 … 2048×64).
-  Instruction memory sizing must use those macros (or flops).
+- **No SRAM compiler for sg13g2** — only fixed macros (30 shapes; the wiki's
+  earlier "256×16 … 2048×64" understated the set, there are also 4096 and 8192
+  classes, 2P variants, and 64×16/64×32 without BIST). Sizing is analysed in
+  [[reference/sram-budget]]: 1–2 KB is comfortable, 4 KB is the practical
+  ceiling, and the densest macros in the PDK **do not fit** the 3:1 die.
 - **Tile size discrepancy**: blog says ~200×150 µm/tile, the TT template's
   `info.yaml` says ~167×108 µm. Use the template for layout math; re-check after
   the first real floorplan of the full design.
