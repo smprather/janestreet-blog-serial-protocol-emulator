@@ -106,6 +106,37 @@ created.
 | Roots config | `canvas_roots.json` | publish directories |
 | Agent surface | `__init__.py` | deliberately empty — the filesystem is the API |
 
+## Zoom & pan
+
+Wide diagrams are unreadable squeezed into the pane, so rendered slides have a
+viewer. Controls sit in the toolbar next to the slide count:
+
+| Control | Does |
+|---|---|
+| `−` / `+` | step zoom (25% → 800%; steps are 25/33/50/67/80/100/125/150/200/250/300/400/600/800) |
+| `100%` | actual size — the diagram's own pixel width (the width its author wrote) |
+| `Fit` | scale to the pane width |
+| Ctrl/Cmd + scroll | zoom in the diagram |
+| drag | pan (at any zoom other than Fit) |
+
+Text slides (`.md`, `.txt`, …) zoom by **font size** rather than scaling, so the
+text reflows and stays crisp. HTML slides are the author's own document and get
+no viewer injected.
+
+Two things this gets right that are easy to get wrong:
+
+- **Fit is not 100%.** `gen_flowchart`/`gen_vcd_view` emit diagrams thousands of
+  px wide; fitted into a ~740 px pane that is 15–20%, so the labels are tiny.
+  `100%` is the escape hatch: it shows the diagram at its authored size and
+  scrolls. Coming *out* of Fit, `+` starts from wherever Fit landed rather than
+  lurching to 100%, and the toolbar shows the live figure.
+- **The viewer is inside the sandbox.** The iframe is
+  `sandbox="allow-scripts"` with no `allow-same-origin`, so the parent cannot
+  reach into it and the viewer cannot reach out. Zoom and the fit-scale readout
+  therefore travel by `postMessage` only (verified: a script in that sandbox can
+  post to the parent, and inline scripts do run). Nothing about the sandbox is
+  relaxed for the viewer.
+
 ## Security
 
 - All `/api/plugins/live-canvas/*` routes sit behind the dashboard's own auth
@@ -157,10 +188,25 @@ created.
   delivers markup through `srcdoc`; a byte-level encoding disagreement turns `—`
   into `â€"`. `gen_flowchart.esc()` exists for exactly this — route every text
   emission through it (`html.escape` alone is not enough).
-- **Verify a generated diagram by rasterizing it**, not by looking at a small
+- **A zoomed SVG needs BOTH width and height set.** An `<svg>` carrying
+  `width`+`height`+`viewBox` scales its *content* to fit whatever box it is
+  given (`preserveAspectRatio` defaults to `xMidYMid meet`). Setting only
+  `style.width` leaves the height pinned, so the content stays at its original
+  size and drifts to the centre of a too-wide box — "150%" silently renders at
+  100%. Set width, height (both `= intrinsic × scale`) and the attributes
+  together.
+- **Never rebuild the frame document to change zoom.** React re-setting `srcdoc`
+  reloads the iframe: that blanked the stage and discarded scroll position. The
+  document is memoised on the *slide* only; every later view change goes over
+  `postMessage`.
+- **Only the pane's own iframe may drive state.** The `message` listener checks
+  `e.source === iframeRef.current.contentWindow` — without that, any other frame
+  or window on the page could move the zoom.
+- **Verify generated diagrams by rasterizing**, not by looking at a small
   preview: `rsvg-convert -w 1500 -f png -o /tmp/x.png file.svg` and inspect at
   full size. Geometry bugs (a line through a box, a label over text) are
-  invisible at thumbnail scale.
+  invisible at thumbnail scale — and a 4000 px-wide diagram hides them in the
+  pane at any fit level.
 - **Backend import is once at startup** — editing `plugin_api.py` needs a
   dashboard restart; editing `dist/index.js` only needs a page reload (the SPA
   re-injects the bundle with a cache-busting query).
