@@ -99,6 +99,9 @@ Environment: PDK clone `~/pdk/IHP-Open-PDK`; Ciel PDK `~/.ciel` (enabled
 `ihp-sg13g2` c4b8b4e); venv `~/venvs/asic` (volare + LibreLane 3.0.14); run dirs
 `~/asic-runs` (outside git). Details: `concepts/pdk-toolchain.md`.
 
+Waveforms: every TB writes a VCD into `sim/` (untracked — they churn on each
+run; `git add -f sim/*.vcd` restores them to the repo if wanted).
+
 ## Gotchas learned the hard way
 
 1. **LibreLane's `--dockerized` wrapper cannot auto-enable the IHP PDK** — it
