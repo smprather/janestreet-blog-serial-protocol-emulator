@@ -86,6 +86,11 @@ cd ~/janestreet-blog-serial-protocol-emulator && ./tb/run_all.sh
 # mapped area per block (native yosys + IHP liberty)
 ./tb/synth_area.sh
 
+# live diagram pane (side-quest): start the dashboard once, write SVG/HTML into
+# diagrams/ and it renders live in the Canvas tab (~1s, no reload)
+hermes dashboard                                   # http://127.0.0.1:9119/canvas
+tools/live-canvas/canvas-publish.sh scratch.svg    # or just cp
+
 # full place & route (dockerized LibreLane) — NOTE the explicit -p / -s flags,
 # the wrapper's PDK auto-enable fails for ihp-sg13g2 (see gotchas)
 cd ~/asic-runs/pe-serdes && docker run --rm -i --user 1000:1000 \

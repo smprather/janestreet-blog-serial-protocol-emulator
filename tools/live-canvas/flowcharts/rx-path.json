@@ -1,0 +1,38 @@
+{
+  "title": "pe_serdes — RX word path",
+  "subtitle": "as built and verified (539 cells, 14/14 TBs). Right column: config side-band into the RX path.",
+  "output": "serdes-rx-flow.svg",
+  "legend": true,
+  "nodes": [
+    { "id": "e1", "kind": "start", "text": "PIN — serial in", "row": 0, "col": 0, "w": 300 },
+    { "id": "e2", "kind": "decision", "text": "shift edge?\n(TB strobes at the committing edge)", "row": 1, "col": 0, "w": 320 },
+    { "id": "e3", "kind": "process", "text": "shift register captures the bit at the configured edge", "row": 2, "col": 0, "w": 320 },
+    { "id": "e4", "kind": "decision", "text": "word complete?\n(bits_left == 0)", "row": 3, "col": 0, "w": 320 },
+    { "id": "e5", "kind": "process", "text": "bit-placer: payload lands in [len-1:0]", "row": 4, "col": 0, "w": 320 },
+    { "id": "e6", "kind": "process", "text": "rx_valid delayed one cycle (rx_complete)", "row": 5, "col": 0, "w": 320 },
+    { "id": "e7", "kind": "process", "text": "word FIFO / sequencer reads the word", "row": 6, "col": 0, "w": 320 },
+    { "id": "e8", "kind": "end", "text": "payload in [31:0], MSB- or LSB-aligned per cfg", "row": 7, "col": 0, "w": 340 },
+
+    { "id": "s1", "kind": "process", "text": "cfg snapshot at load/start", "row": 1, "col": 1, "w": 210 },
+    { "id": "s2", "kind": "side", "text": "LEN counts down\n(run_cfg / len load)", "row": 2, "col": 1, "w": 210 },
+    { "id": "s3", "kind": "side", "text": "order mux: MSB vs LSB first", "row": 4, "col": 1, "w": 210 },
+    { "id": "s4", "kind": "process", "text": "MAXLEN >= 2 (elaboration guard)", "row": 5, "col": 1, "w": 210 },
+    { "id": "s5", "kind": "side", "text": "no clamp on len > MAXLEN", "row": 6, "col": 1, "w": 210 }
+  ],
+  "edges": [
+    { "from": "e1", "to": "e2" },
+    { "from": "e2", "to": "e3", "label": "yes" },
+    { "from": "e2", "to": "e2", "label": "no — hold", "route": "loop-right" },
+    { "from": "e3", "to": "e4" },
+    { "from": "e4", "to": "e5", "label": "yes" },
+    { "from": "e4", "to": "e3", "label": "no — next bit", "route": "loop-left" },
+    { "from": "e5", "to": "e6" },
+    { "from": "e6", "to": "e7" },
+    { "from": "e7", "to": "e8" },
+    { "from": "s1", "to": "s2" },
+    { "from": "s2", "to": "e4", "route": "into-left" },
+    { "from": "s3", "to": "e5", "route": "into-left", "label": "align" },
+    { "from": "s4", "to": "e6", "route": "into-left" },
+    { "from": "s5", "to": "e7", "route": "into-left", "label": "documented" }
+  ]
+}

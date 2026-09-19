@@ -1,0 +1,8 @@
+name: live-canvas
+version: 0.1.0
+description: >-
+  Live diagram canvas for the web dashboard. Watches one or more directories
+  and pushes HTML/SVG/diagram files into a dashboard pane over a WebSocket as
+  soon as they are written — the filesystem is the publish API, so any agent,
+  editor or script can send a diagram to the browser tab with no credentials.
+author: Myles Prather + Hermes Agent

@@ -1,0 +1,13 @@
+{
+  "name": "live-canvas",
+  "label": "Canvas",
+  "description": "Live diagram canvas — HTML/SVG files written to watched directories appear here instantly",
+  "icon": "Eye",
+  "version": "0.1.0",
+  "tab": {
+    "path": "/canvas",
+    "position": "after:skills"
+  },
+  "entry": "dist/index.js",
+  "api": "plugin_api.py"
+}

@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-18 | Total pages: 13
+> Last updated: 2026-09-18 | Total pages: 14
 
 ## Start here
 
@@ -21,6 +21,7 @@
 - [[concepts/factored-hardware-blocks]] — Shared RTL primitives (CDR, SerDes, stuffing, CRC LFSR); no 8b/10b needed.
 - [[concepts/pdk-toolchain]] — Local IHP PDK + EDA bring-up: paths, corners, SRAM macros, install workarounds.
 - [[concepts/tx-timing-generation]] — Exact-integer protocol timing at 40 MHz; NCO for fractional bauds; the forced-66MHz fallback.
+- [[concepts/live-canvas]] — Side-quest tooling: agent→browser live diagram channel (dashboard plugin, file-write publish).
 
 ## Comparisons
 

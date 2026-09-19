@@ -33,6 +33,7 @@ confidence: high | medium | low
 - signoff, sta, spice
 - architecture, verification
 - decision
+- tooling
 
 Rule: every tag on a page must appear in this taxonomy. Add new tags here first, then use them.
 
