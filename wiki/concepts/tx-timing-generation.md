@@ -38,3 +38,12 @@ Pulse width sets the SPEED floor: capture needs >=1 grid tick (12.5 ns plan grid
 - Source-synchronous (clock on wire): unlimited rates, pure firmware, no tracking constraint.
 - Async + regular transitions: bounded by tolerance class — 10BASE-T-class (+-100 ppm) tolerates 2500 UI runs; CAN-class (+-0.5%) 100 UI; UART-class (+-4%) only 12.5 UI; typical RC-osc (+-2%) 25 UI.
 - Async + long runs + sloppy clocks (e.g. 30-bit preamble from a +-2% RC device): NOT DRU-coverable; falls back to firmware polling at core speed — same wall every PIO/PRU-class machine (RP2040 included) hits.
+
+## Signoff policy: close at 66, run at 40
+
+Core clock and protocol timing are orthogonal (all timing is strobe-based via NCOs/dividers), so:
+- SIGN OFF every block at 66 MHz (15.15 ns), the pad ceiling — pe_serdes already closed there (+7.6 ns setup slack at slow corner). DDR capture blocks additionally at 66 DDR (7.58 ns half-cycle paths).
+- DEFAULT board clock 40 MHz for integer-exact protocol timing; 66 MHz is a documented turbo: +65% core cycles for firmware-polling fallbacks, byte-at-a-time protocol engines, and demos.
+- Free upside: 66 MHz DDR RX grid is 7.58 ns = ~6.6 samples per 50 ns half-UI vs the planned 4 — an overclock RX mode for exotic captures.
+- Robustness hedge: the 66 MHz ceiling is sky130-derived; no IHP-specific figure published. Blocks closed at 66 still close with the board clock turned down if real IHP pads top out lower (50-55) — no re-signoff.
+- Costs: ~65% dynamic power at turbo (no per-tile power wall at TT scale); area delta at 66 was nil for pe_serdes (already closed with margin).
