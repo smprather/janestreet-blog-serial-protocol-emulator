@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-17 | Total pages: 11
+> Last updated: 2026-09-18 | Total pages: 12
 
 ## Entities
 
@@ -16,6 +16,7 @@
 - [[concepts/gpio-signoff-corners]] — FS/SF corners, SPICE bit-thinning extraction, SDC injection.
 - [[concepts/factored-hardware-blocks]] — Shared RTL primitives (CDR, SerDes, stuffing, CRC LFSR); no 8b/10b needed.
 - [[concepts/pdk-toolchain]] — Local IHP PDK + EDA bring-up: paths, corners, SRAM macros, install workarounds.
+- [[concepts/tx-timing-generation]] — Exact-integer protocol timing at 40 MHz; NCO for fractional bauds; the forced-66MHz fallback.
 
 ## Comparisons
 
