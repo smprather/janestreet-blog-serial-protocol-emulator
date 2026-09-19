@@ -1,7 +1,7 @@
 ---
 title: Physical Layer via GPIO
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-18
 type: concept
 tags: [physical-layer, gpio, protocol, constraint]
 sources: [raw/transcripts/gemini-asic-competition-discussion-2026-09.md]
@@ -11,6 +11,9 @@ confidence: medium
 # Physical Layer via GPIO
 
 Tiles reach the outside world through standard digital IO cells (3.3 V IO domain on the breakout board, ~1.2 V core). So the physical layer is restricted to GPIO state changes: drive high, drive low, high-Z/input. The contest is timing precision and state-machine flexibility, not PHY synthesis — voltage/differential conversion happens in passives or external transceivers on the dev board.
+
+Pin counts per protocol (how many pads each needs, and whether the TT budget
+covers all of them at once): [[reference/protocol-pin-budget]].
 
 ## Native CMOS-swing protocols
 

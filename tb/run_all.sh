@@ -59,11 +59,20 @@ echo "all testbenches pass"
 
 # Docs that are generated from the RTL are checked too: a renamed port must not
 # leave wiki/reference/signal-names.md describing an interface that no longer
-# exists. Regenerate with: python3 tools/gen_signal_glossary.py
+# exists, and a deleted TB must not leave the pin budget claiming coverage.
+# Regenerate with: python3 tools/gen_signal_glossary.py / tools/gen_pin_budget.py
 cd .. || exit 1
+stale=0
 if python3 tools/gen_signal_glossary.py --check >/dev/null 2>&1; then
   echo "signal glossary up to date"
 else
   echo "STALE: wiki/reference/signal-names.md — run python3 tools/gen_signal_glossary.py"
-  exit 1
+  stale=1
 fi
+if python3 tools/gen_pin_budget.py --check >/dev/null 2>&1; then
+  echo "protocol pin budget up to date"
+else
+  echo "STALE: wiki/reference/protocol-pin-budget.md — run python3 tools/gen_pin_budget.py"
+  stale=1
+fi
+[ "$stale" -eq 0 ] || exit 1
