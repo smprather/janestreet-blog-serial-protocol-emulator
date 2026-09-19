@@ -1,4 +1,5 @@
 // pe_codec_mux.v — config-driven codec pipeline (SERDES <-> pin matrix).
+// Signal meanings: wiki/reference/signal-names.md#pe_codec_mux
 //
 // Composes the Tier-1 codecs into one pipeline. Every stage is
 // runtime-bypassable from the cfg register, so firmware muxes any subset

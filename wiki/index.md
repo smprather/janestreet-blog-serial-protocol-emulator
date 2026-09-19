@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-18 | Total pages: 15
+> Last updated: 2026-09-18 | Total pages: 16
 
 ## Start here
 
@@ -23,6 +23,10 @@
 - [[concepts/tx-timing-generation]] — Exact-integer protocol timing at 40 MHz; NCO for fractional bauds; the forced-66MHz fallback.
 - [[concepts/live-canvas]] — Side-quest tooling: agent→browser live diagram channel (dashboard plugin, file-write publish).
 - [[concepts/strobe-and-committing-edge]] — What the strobe (`bit_en`) and the committing edge are, and the sample-order trap they cause.
+
+## Reference
+
+- [[reference/signal-names]] — Every RTL port: direction, width, meaning, validity. Port tables generated from the Verilog (drift-checked in `tb/run_all.sh`).
 
 ## Comparisons
 

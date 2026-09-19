@@ -19,7 +19,7 @@ Protocol-emulator ASIC competition entry: a Tiny Tapeout (IHP 130nm CMOS5L) gene
 title: Page Title
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-type: entity | concept | comparison | query | decision
+type: entity | concept | comparison | query | decision | reference
 tags: [from taxonomy below]
 sources: [raw/articles/source-name.md]
 confidence: high | medium | low
@@ -34,6 +34,7 @@ confidence: high | medium | low
 - architecture, verification
 - decision
 - tooling
+- reference
 
 Rule: every tag on a page must appear in this taxonomy. Add new tags here first, then use them.
 

@@ -1,4 +1,5 @@
 // pe_serdes.v — protocol-emulator shared serializer / deserializer.
+// Signal meanings: wiki/reference/signal-names.md#pe_serdes
 //
 // One shift engine serves every target protocol (UART, SPI, I2C, JTAG, SWD,
 // PS/2, CAN, USB-LS, 10BASE-T): firmware works at the word level, this block

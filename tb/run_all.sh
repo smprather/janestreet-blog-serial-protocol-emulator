@@ -52,7 +52,18 @@ for c in "${CASES[@]}"; do
 done
 
 echo
-echo "======================================"
+echo "========================================"
 echo "TOTAL: $((pass+fail))   PASS: $pass   FAIL: $fail"
 [ "$fail" -eq 0 ] || { echo "failed: ${failed_names[*]}"; exit 1; }
 echo "all testbenches pass"
+
+# Docs that are generated from the RTL are checked too: a renamed port must not
+# leave wiki/reference/signal-names.md describing an interface that no longer
+# exists. Regenerate with: python3 tools/gen_signal_glossary.py
+cd .. || exit 1
+if python3 tools/gen_signal_glossary.py --check >/dev/null 2>&1; then
+  echo "signal glossary up to date"
+else
+  echo "STALE: wiki/reference/signal-names.md — run python3 tools/gen_signal_glossary.py"
+  exit 1
+fi

@@ -1,4 +1,5 @@
 // pe_line_codec.v — Tier-1 line-code codecs: NRZI, Manchester, bit-stuffing.
+// Signal meanings: wiki/reference/signal-names.md#pe_line_codec
 //
 // These sit between the SM/SERDES (plain NRZ bits, one per bit_en strobe)
 // and the pin matrix (wire levels). Each stage is runtime-bypassable so a
