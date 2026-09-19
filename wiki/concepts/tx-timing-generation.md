@@ -30,3 +30,11 @@ The ~66 MHz figure is the platform's pad ceiling ([[entities/tiny-tapeout]]), NO
 ## Verdict
 
 One programmable 40 MHz board clock; DDR capture for RX only; integer timing for every hard protocol; tiny NCO for the slow fractional ones. No PLL, no DLL, no on-die multiplication anywhere. See [[comparisons/clocking-options]] and [[concepts/cdr-oversampling]].
+
+## Post-fabrication protocol ceiling (the Jane Street "arbitrary protocol" question)
+
+Pulse width sets the SPEED floor: capture needs >=1 grid tick (12.5 ns plan grid / 15.15 ns if 66 MHz single-edge), robust sampling >=2. Run length sets the PROTOCOL-CLASS ceiling for async protocols: (longest transition-free run) x (combined clock tolerance) must stay under 0.5 UI.
+
+- Source-synchronous (clock on wire): unlimited rates, pure firmware, no tracking constraint.
+- Async + regular transitions: bounded by tolerance class — 10BASE-T-class (+-100 ppm) tolerates 2500 UI runs; CAN-class (+-0.5%) 100 UI; UART-class (+-4%) only 12.5 UI; typical RC-osc (+-2%) 25 UI.
+- Async + long runs + sloppy clocks (e.g. 30-bit preamble from a +-2% RC device): NOT DRU-coverable; falls back to firmware polling at core speed — same wall every PIO/PRU-class machine (RP2040 included) hits.
