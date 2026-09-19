@@ -44,11 +44,17 @@
 - rtl/pe_codec_mux.v: cfg byte selects any subset of {stuff, nrzi, manch}; 9 cells glue, 110 total / 1.6k um2
 - Real bugs caught: NRZI shared TX/RX level register (invalid receiver) + XOR instead of XNOR decode; bit-stuff replaced the run's last data bit instead of appending after it; yosys PROC_DFF rejects clr OR'd into async reset (made it a sync branch)
 - 14/14 TBs pass (serdes + 9 protocols + 3 codecs + mux), lint clean
-## [2026-09-18] rtl | post-review rev of pe_serdes: PASS, 583 cells / ~11.2k um2
+## [2026-09-18] rtl | post-review rev of pe_serdes: PASS, 539 cells / 11.2k um2
 - Bugs fixed: cfg_lsb_first now snapshotted at load/start (was live mid-transfer — core rewrite would corrupt in-flight word); restart-on-final-cell race closed
 - Efficiency: RX completion delayed one cycle, deleting the 32b variable-shift forward path (~40 cells); mux2 count 47->17 of 82, area 11.5k->11.2k um2 despite +3 flops
 - Contract documented: len>MAXLEN not clamped; MAXLEN>=2 elaboration guard; delayed rx_valid is by design (TB updated)
+- (Cell count corrected 2026-09-18 from a derived 583 to the measured 539 via tb/synth_area.sh)
 ## [2026-09-18] rtl | 9 protocol testbenches, all PASS (bed11b1)
 - tb/tb_pe_{uart,spi,i2c,jtag,swd,ps2,can,usb,eth}.v wrap pe_serdes with each protocol's real framing: 8N1/Mode0/7-bit-addr/TAP+BSR/req-ACK-parity/odd-parity+inhibit/stuffing+CRC15/NRZI+stuffing+SE0/Manchester+CRC32
 - TB bugs found+fixed en route: sticky flags needed for 1-cycle pulses; >32b fields must chunk (SWD parity, CAN/USB/ETH payloads) — real core contract; JTAG needs 5xTMS TAP reset; CAN destuffer skips bit AFTER the 5-run
 - Regression: 9/9 PASS, verilator lint clean; VCDs per protocol in sim/
+## [2026-09-18] milestone | Milestone 1: shared hardware layer complete
+- Created wiki/STATUS.md (resume-here doc) and tb/run_all.sh + tb/synth_area.sh (one-command regression and area report)
+- Verified state: 14/14 TBs pass; pe_serdes 539 cells/11.2k um2 mapped, 17.2k um2 routed, 66 MHz signoff clean; codecs 110 cells total
+- Corrected: pe_serdes cell count is 539 (measured), not the 583 previously derived in a commit message
+- Not built yet: DRU, SM/sequencer, pin matrix/OE, word FIFO, assembler — next milestone per STATUS.md

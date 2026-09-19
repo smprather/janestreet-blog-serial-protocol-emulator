@@ -1,7 +1,11 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-18 | Total pages: 12
+> Last updated: 2026-09-18 | Total pages: 13
+
+## Start here
+
+- [[STATUS]] — **Milestone status + resume-here after a context flush.** Read first.
 
 ## Entities
 
