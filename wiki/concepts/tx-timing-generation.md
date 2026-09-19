@@ -47,3 +47,9 @@ Core clock and protocol timing are orthogonal (all timing is strobe-based via NC
 - Free upside: 66 MHz DDR RX grid is 7.58 ns = ~6.6 samples per 50 ns half-UI vs the planned 4 — an overclock RX mode for exotic captures.
 - Robustness hedge: the 66 MHz ceiling is sky130-derived; no IHP-specific figure published. Blocks closed at 66 still close with the board clock turned down if real IHP pads top out lower (50-55) — no re-signoff.
 - Costs: ~65% dynamic power at turbo (no per-tile power wall at TT scale); area delta at 66 was nil for pe_serdes (already closed with margin).
+
+## Clock uncertainty spec: 1.0 ns at 66 MHz (not a blanket 5%)
+
+TT's board clock is crystal-derived (RP2040/RP2350 PWM-PIO divided): ~50 ppm period accuracy — ppm-level offset, absorbed by NCOs, NOT STA uncertainty. The 10 ns pad insertion delay is constant skew (hits clock+data alike through the mux, cancels intra-tile), not uncertainty. FS/SF data-pad slew goes to set_input_delay rise/fall skew (SPICE-derived), not clock uncertainty.
+
+Defensible budget: 0.1 ns board PLL jitter + 0.2 ns DDR latch-pair duty penalty + 0.4 ns clock-tree IR derate (PDN-hardened plan) ~= 1.0 ns (6.6% of 15.15 ns). Leaves +6.6 ns of the +7.6 ns pe_serdes slack intact. If silicon disagrees, revisit the IR derate knob first.
