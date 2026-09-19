@@ -1,0 +1,119 @@
+$date
+	Fri Sep 18 20:43:40 2026
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1ps
+$end
+$scope module tb_pe_manch $end
+$var wire 1 ! tx_wire $end
+$var wire 1 " rx_raw $end
+$var wire 1 # rx_err $end
+$var reg 1 $ bit_en $end
+$var reg 1 % bypass $end
+$var reg 1 & clk $end
+$var reg 1 ' half_phase $end
+$var reg 1 ( rst_n $end
+$var reg 1 ) rx_first $end
+$var reg 1 * rx_second $end
+$var reg 1 + rx_wire $end
+$var reg 1 , tx_raw $end
+$var integer 32 - errors [31:0] $end
+$scope module dut $end
+$var wire 1 $ bit_en $end
+$var wire 1 % bypass $end
+$var wire 1 & clk $end
+$var wire 1 ' half_phase $end
+$var wire 1 ( rst_n $end
+$var wire 1 ) rx_first $end
+$var wire 1 * rx_second $end
+$var wire 1 + rx_wire $end
+$var wire 1 , tx_raw $end
+$var wire 1 ! tx_wire $end
+$var wire 1 " rx_raw $end
+$var wire 1 # rx_err $end
+$upscope $end
+$scope task check $end
+$upscope $end
+$scope task tx_bit $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+$comment Show the parameter values. $end
+$dumpall
+$end
+#0
+$dumpvars
+b0 -
+0,
+0+
+0*
+0)
+0(
+0'
+0&
+0%
+0$
+1#
+0"
+1!
+$end
+#5000
+1&
+#10000
+0&
+#15000
+1&
+#20000
+0&
+#25000
+1&
+#26000
+1(
+#30000
+0&
+#35000
+1&
+#37000
+0!
+1'
+#38000
+0!
+1,
+0'
+#39000
+1!
+1'
+#40000
+1!
+0,
+0'
+0&
+#41000
+0!
+1'
+#42000
+0#
+1)
+#43000
+1"
+1*
+0)
+#44000
+1#
+1)
+#45000
+0"
+0*
+0)
+1&
+#46000
+1!
+0#
+1*
+1)
+1,
+1%
+#47000
