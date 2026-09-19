@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 
 log = logging.getLogger(__name__)
 
@@ -44,13 +45,22 @@ _STATE_DIR = Path.home() / ".hermes" / "live-canvas"
 
 # Extensions the pane can render. `.excalidraw` is served as JSON metadata (the
 # pane can offer a download / excalidraw.com link) but not iframed.
+#
+# Raster images matter here as much as vector: a layout render out of KLayout is
+# a PNG, and refusing them would mean the one artifact class the flow actually
+# produces could not be shown.
 _RENDER_EXTS = frozenset({".html", ".htm", ".svg"})
+_IMAGE_EXTS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"})
 _TEXT_EXTS = frozenset({".md", ".txt", ".json", ".excalidraw", ".mmd"})
-_ALLOWED_EXTS = _RENDER_EXTS | _TEXT_EXTS
+_ALLOWED_EXTS = _RENDER_EXTS | _IMAGE_EXTS | _TEXT_EXTS
 
 # Files this large are almost certainly not diagrams; refuse rather than ship
-# megabytes down a WS frame or into an iframe.
+# megabytes down a WS frame or into an iframe. Layout renders raise this: a
+# 2x2 KLayout montage of a real block is ~10 MB, and it is exactly the kind of
+# artifact this pane exists to show. Raster images are streamed by /raw (never
+# through a WS frame), so they can afford the larger ceiling.
 _MAX_SLIDE_BYTES = 4 * 1024 * 1024
+_MAX_IMAGE_BYTES = 32 * 1024 * 1024
 
 _DEFAULT_ROOTS = [str(Path.home() / ".hermes" / "live-canvas")]
 
@@ -130,15 +140,21 @@ def _scan_roots(roots: list[Path]) -> dict[str, dict[str, Any]]:
                 stat = path.stat()
             except OSError:
                 continue
-            if stat.st_size > _MAX_SLIDE_BYTES:
+            suffix = path.suffix.lower()
+            limit = _MAX_IMAGE_BYTES if suffix in _IMAGE_EXTS else _MAX_SLIDE_BYTES
+            if stat.st_size > limit:
                 continue
             key = str(path.resolve())
             found[key] = {
                 "key": key,
                 "name": _rel_label(roots, path),
                 "path": key,
-                "ext": path.suffix.lower()[1:],
-                "kind": "render" if path.suffix.lower() in _RENDER_EXTS else "text",
+                "ext": suffix[1:],
+                "kind": (
+                    "render" if suffix in _RENDER_EXTS
+                    else "image" if suffix in _IMAGE_EXTS
+                    else "text"
+                ),
                 "bytes": stat.st_size,
                 "mtime": stat.st_mtime,
             }
@@ -310,6 +326,32 @@ async def slide(key: str = Query(..., description="Absolute slide path from /sta
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"cannot read slide: {exc}") from exc
     return {"key": key, "name": path.name, "body": body, "bytes": path.stat().st_size}
+
+
+@router.get("/raw")
+async def raw(key: str = Query(..., description="Absolute slide path from /state")):
+    """Raw bytes of a slide, for the pane's image viewer.
+
+    Stays behind the dashboard's normal auth (the caller fetches it with
+    ``SDK.authedFetch`` and turns the response into an object URL), so this
+    needs no entry in core's public-path allowlist and no hole is opened for an
+    <img src> that cannot carry a header. Confined to files the registry already
+    holds under a configured root.
+    """
+    REGISTRY.start()
+    path = REGISTRY.resolve_slide(key)
+    if path is None:
+        raise HTTPException(status_code=404, detail="slide not found")
+    media = {
+        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".gif": "image/gif", ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+    }.get(path.suffix.lower(), "application/octet-stream")
+    return FileResponse(
+        path,
+        media_type=media,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
 @router.post("/rescan")

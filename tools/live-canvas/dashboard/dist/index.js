@@ -193,6 +193,12 @@
     ".lc-stage pre{width:100%;height:100%;margin:0;overflow:auto;padding:14px 16px;background:#fff;color:#1f2328;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}",
     ".lc-empty{display:flex;height:100%;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:#57606a;background:#fff;font-size:13px;text-align:center;padding:20px}",
     ".lc-warn{color:#9a6700;font-size:12px}",
+    // Raster slides: the wrapper scrolls, the image is the sized thing. Fit
+    // means "the whole thing is visible" for an image (no reason to crop a
+    // layout render), so fit uses contain rather than width-100%.
+    ".lc-imgwrap{width:100%;height:100%;overflow:auto;background:#fff;display:flex;align-items:flex-start;justify-content:center}",
+    ".lc-img{display:block;background:#fff}",
+    ".lc-img-fit{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}",
     ".lc-zoom{display:flex;align-items:center;gap:3px}",
     ".lc-zoom button{min-width:26px;padding:2px 6px;font-size:13px;line-height:1.2}",
     ".lc-zoom .lc-pct{font-size:12px;min-width:52px;text-align:center;opacity:.85;font-variant-numeric:tabular-nums}",
@@ -397,7 +403,7 @@
 
     useEffect(function () {
       if (!selectedKey) {
-        setDoc({ key: null, slide: null, body: "", error: "" });
+        setDoc({ key: null, slide: null, body: "", error: "", blobUrl: "" });
         return;
       }
       var cancelled = false;
@@ -408,14 +414,49 @@
           break;
         }
       }
+      var isImg = slide && slide.kind === "image";
+
+      if (isImg) {
+        // Fetch the bytes with auth, then hand the <img> an object URL. Revoke
+        // the previous one so browsing a directory of layout renders does not
+        // leak every image it ever showed.
+        SDK.authedFetch(API + "/raw?key=" + encodeURIComponent(selectedKey))
+          .then(function (resp) {
+            if (!resp.ok) throw new Error(resp.status + ": " + resp.statusText);
+            return resp.blob();
+          })
+          .then(function (blob) {
+            if (cancelled) return;
+            var url = URL.createObjectURL(blob);
+            setDoc(function (prev) {
+              if (prev.blobUrl) {
+                try { URL.revokeObjectURL(prev.blobUrl); } catch (_e) {}
+              }
+              return { key: selectedKey, slide: slide, body: "", error: "", blobUrl: url };
+            });
+          })
+          .catch(function (err) {
+            if (cancelled) return;
+            setDoc({ key: selectedKey, slide: slide, body: "", blobUrl: "",
+                     error: err && err.message ? err.message : String(err) });
+          });
+        return function () { cancelled = true; };
+      }
+
       SDK.fetchJSON(API + "/slide?key=" + encodeURIComponent(selectedKey))
         .then(function (payload) {
           if (cancelled) return;
-          setDoc({ key: selectedKey, slide: slide, body: payload.body || "", error: "" });
+          setDoc(function (prev) {
+            if (prev.blobUrl) {
+              try { URL.revokeObjectURL(prev.blobUrl); } catch (_e) {}
+            }
+            return { key: selectedKey, slide: slide, body: payload.body || "", error: "", blobUrl: "" };
+          });
         })
         .catch(function (err) {
           if (cancelled) return;
-          setDoc({ key: selectedKey, slide: slide, body: "", error: err && err.message ? err.message : String(err) });
+          setDoc({ key: selectedKey, slide: slide, body: "", blobUrl: "",
+                   error: err && err.message ? err.message : String(err) });
         });
       return function () {
         cancelled = true;
@@ -429,6 +470,7 @@
     var isRender = activeSlide && activeSlide.kind === "render" && doc.key === selectedKey;
     var isSvg = isRender && activeSlide.ext === "svg";
     var isHtml = isRender && !isSvg;
+    var isImage = activeSlide && activeSlide.kind === "image" && doc.key === selectedKey;
 
     // The frame document must depend ONLY on the slide, never on the zoom.
     // Rebuilding it on zoom would make React re-set `srcdoc` — which reloads the
@@ -485,6 +527,30 @@
         key: doc.key,
         srcDoc: htmlFrameDoc(bodyForFrame),
       });
+    } else if (isImage) {
+      // Raster slides (a KLayout layout render, a waveform screenshot) get the
+      // same zoom model as SVG, but the browser's own image scaling does the
+      // work: width is the knob, and the stage scrolls. No iframe — there is
+      // nothing to sandbox.
+      //
+      // The bytes come through SDK.authedFetch rather than an <img src>: an img
+      // cannot carry the session header, and the endpoint is deliberately left
+      // behind normal auth rather than punched into core's public-path list.
+      // The blob URL also keeps a 10 MB layout render out of an <img> request
+      // that a reload would repeat.
+      var blobUrl = doc.blobUrl || "";
+      stage = h(
+        "div",
+        { className: "lc-imgwrap" },
+        blobUrl
+          ? h("img", {
+              src: blobUrl,
+              alt: activeSlide.name,
+              className: view.mode === "fit" ? "lc-img lc-img-fit" : "lc-img",
+              style: view.mode === "fit" ? {} : { width: view.scale * 100 + "%", maxWidth: "none" },
+            })
+          : h("div", { className: "lc-empty" }, h("div", null, doc.error || "loading…")),
+      );
     } else {
       // Text slides zoom by font size — they reflow, so scaling the type is the
       // right gesture (and the browser's own text zoom stays available).
