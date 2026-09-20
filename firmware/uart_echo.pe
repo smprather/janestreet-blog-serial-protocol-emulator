@@ -1,0 +1,225 @@
+; uart_echo.pe — a UART implemented entirely in software for pe_cpu.
+;
+; THERE IS NO UART HARDWARE. The SoC provides one input pin, one output pin,
+; and a free-running counter. Finding the start bit, aligning to bit centres,
+; shifting bits in, assembling bytes and framing the response are all below.
+;
+; 115200 8N1, LSB-first. Receive a byte, buffer it, echo it back.
+;
+; ---------------------------------------------------------------------------
+; TIMING MODEL
+;
+; TIMER (port 5) is an 8-bit counter incrementing once per HALF bit period
+; (173 clocks at 40 MHz/115200/2 -- integer division, so the delivered baud is
+; 115,607, +0.35% of nominal). Half-bit resolution is required, not
+; luxurious: sampling on whole-bit ticks can only land on bit BOUNDARIES, the
+; worst possible place to sample a serial line.
+;
+;      2 ticks == 1 bit period        1 tick == half a bit
+;
+; The falling edge is the start of the START bit. Bit 0's centre is 3 ticks
+; after that edge; every bit after it is +2 ticks.
+;
+; ---------------------------------------------------------------------------
+; THE POLLING IDIOM, AND WHY IT LOOKS ODD
+;
+; The obvious way to wait for a tick is to read STATUS and loop until bit 0 is
+; set. That DOES NOT WORK here: reading STATUS clears the flag, so the very
+; read that would exit the loop destroys the evidence, and the loop spins
+; forever. (This was the first bug found by tools/peemu.py, and it is exactly
+; the kind of thing a bit-accurate emulator is for.)
+;
+; Instead the code polls the TIMER VALUE and waits for it to CHANGE:
+;
+;     hold:  IN A, TIMER
+;            MOV Y, A            ; Y = current count
+;     wait:  IN A, TIMER
+;            SUB A, Y            ; non-zero once the count moved on
+;            JZ wait
+;
+; One tick of latency is acceptable -- we are aligning to bit centres with
+; 2 ticks of margin, so a sample landing 1 tick early still reads the right
+; bit. This idiom costs 4 instructions and needs no flag at all.
+; ---------------------------------------------------------------------------
+;
+; Data buffer (DMEM, 16 bytes):
+;   0..13  rolling receive buffer        14  write pointer
+;   15     last byte received            12  working accumulator
+;   13     bits remaining                9   ticks-to-skip counter
+;   8      tick snapshot (Y is enough, but RAM survives the shift code)
+
+        LDI   A, 0
+        STM   14, A                ; write pointer := 0
+
+; =========================================================== receive
+main:
+        ; ---- wait for the start bit: poll until the pin goes low -----
+wait_start:
+        ; Edge detection, not level. After transmitting, the line is still high,
+        ; and a bare level test would immediately "find" a start bit that is not
+        ; there. So: wait for the line to go idle (high), then wait for it to
+        ; fall. Both loops are level tests; the SEQUENCE is what makes it an
+        ; edge. At boot the line is already high, so the first loop falls
+        ; straight through -- which is the correct behaviour.
+wait_idle:
+        IN    A, PIN
+        JZ    wait_idle            ; line low -> still in the previous frame
+wait_low:
+        IN    A, PIN
+        JNZ   wait_low             ; line high -> not yet a start bit
+        ; falling edge seen: the start bit begins here
+
+        ; ---- skip 3 half-ticks: land on bit 0's CENTRE --------------
+        LDI   A, 3
+        STM   9, A
+        JMP   align_first
+
+; ---- alignment: wait 3 ticks, then sample each bit 2 ticks apart ---
+align_first:
+        IN    A, TIMER
+        STM   8, A
+wt1:
+        IN    A, TIMER
+        LDM   X, 8
+        SUB   A, X
+        JZ    wt1
+        LDM   A, 9
+        SUB   A, 1
+        STM   9, A
+        JNZ   align_first
+
+        ; ---- sample 8 data bits -------------------------------------
+        ; Bit-serial assembly with no shift-left: shift the ACCUMULATOR right
+        ; and insert each new bit at the top. After 8 LSB-first bits the
+        ; first-received bit has walked down to bit 0.
+        LDI   A, 8
+        STM   13, A
+        LDI   A, 0
+        STM   12, A
+
+bit_loop:
+        LDM   A, 12
+        SHR   A                    ; acc >>= 1, top bit vacated
+        STM   12, A
+
+        IN    A, PIN               ; sample at the bit centre
+        JZ    no_bit
+        LDM   A, 12
+        ADD   A, 0x80              ; set the top bit (ADD is safe: it is 0)
+        STM   12, A
+no_bit:
+        ; ---- advance 2 half-ticks to the next bit centre ------------
+        LDI   A, 2
+        STM   9, A
+skip2:
+        IN    A, TIMER
+        STM   8, A
+skip2w:
+        IN    A, TIMER
+        LDM   X, 8
+        SUB   A, X
+        JZ    skip2w
+        LDM   A, 9
+        SUB   A, 1
+        STM   9, A
+        JNZ   skip2
+
+        LDM   A, 13
+        SUB   A, 1
+        STM   13, A
+        JNZ   bit_loop
+
+        ; ---- byte complete: buffer it -------------------------------
+        LDM   A, 12
+        STM   15, A                ; echo source
+        LDM   A, 14
+        MOV   X, A                 ; X := write pointer
+        LDM   A, 15
+        STS   [X], A               ; buffer[ptr] := byte
+        LDM   A, 14
+        ADD   A, 1
+        AND   A, 0x0E              ; wrap within 0..13
+        STM   14, A
+
+; =========================================================== transmit
+        ; ---- half-duplex: wait for the line to go idle ------------------
+        ; The sender is still clocking out its STOP bit when we finish
+        ; sampling bit 7. Driving TX now would mean two drivers on the wire at
+        ; once, and the sender would see our start bit in place of its stop
+        ; bit. Wait for idle (high) before taking the line.
+tx_waitidle:
+        IN    A, PIN
+        JZ    tx_waitidle
+
+        LDI   A, 0
+        OUT   TXPIN, A             ; start bit: low
+        ; ---- wait 2 timer ticks (1 bit period) ----------------------
+        ; Snapshot the timer ONCE, then poll until (now - snapshot) != 0.
+        ; The poll must jump back to the POLL, not to the snapshot: taking a
+        ; new snapshot each iteration means the delta is always ~0 and the
+        ; loop falls through instantly.
+        LDI   A, 2
+        STM   9, A
+tx_start:
+        IN    A, TIMER
+        STM   8, A
+tx_startw:
+        IN    A, TIMER
+        LDM   X, 8
+        SUB   A, X
+        JZ    tx_startw
+        LDM   A, 9
+        SUB   A, 1
+        STM   9, A
+        JNZ   tx_start
+
+        LDM   A, 15
+        STM   12, A                ; working copy
+        LDI   A, 8
+        STM   13, A
+tx_loop:
+        LDM   A, 12
+        AND   A, 1                 ; isolate LSB
+        OUT   TXPIN, A             ; drive it
+
+        LDI   A, 2
+        STM   9, A
+tx_bit:
+        IN    A, TIMER
+        STM   8, A
+tx_bitw:
+        IN    A, TIMER
+        LDM   X, 8
+        SUB   A, X
+        JZ    tx_bitw
+        LDM   A, 9
+        SUB   A, 1
+        STM   9, A
+        JNZ   tx_bit
+
+        LDM   A, 12                ; next bit
+        SHR   A
+        STM   12, A
+        LDM   A, 13
+        SUB   A, 1
+        STM   13, A
+        JNZ   tx_loop
+
+        LDI   A, 1
+        OUT   TXPIN, A             ; stop bit: high
+        LDI   A, 2
+        STM   9, A
+tx_stop:
+        IN    A, TIMER
+        STM   8, A
+tx_stopw:
+        IN    A, TIMER
+        LDM   X, 8
+        SUB   A, X
+        JZ    tx_stopw
+        LDM   A, 9
+        SUB   A, 1
+        STM   9, A
+        JNZ   tx_stop
+
+        JMP   main

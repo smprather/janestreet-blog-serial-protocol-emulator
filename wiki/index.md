@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-18 | Total pages: 18
+> Last updated: 2026-09-20 | Total pages: 19
 
 ## Start here
 
@@ -33,6 +33,10 @@
 ## Comparisons
 
 - [[comparisons/clocking-options]] — External 80 MHz vs dual-edge 40 MHz vs internal doubler vs full-custom doubler.
+
+## Plans
+
+- [[plans/through-i2c]] — Plan to the I2C milestone: definition of done, the three blockers, the tick/bit timings, test strategy, ordered work list.
 
 ## Decisions
 

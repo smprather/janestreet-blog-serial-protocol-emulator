@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen_signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-5 modules, 60 ports.
+7 modules, 86 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -77,6 +77,25 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_bit_valid` | out | 1 | 0 ⇒ this wire bit was a stuff bit and carries no data. |
 | `rx_err` | out | 1 | Line-code violation (e.g. a bit after a full run that is not complementary). |
 
+## `pe_cpu`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `rst_n` | inp | 1 | Active-low asynchronous reset. |
+| `run` | inp | 1 | _no note yet_ |
+| `imem_addr` | out | `[((IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS))-1:0]` | _no note yet_ |
+| `imem_rdata` | inp | `[15:0]` | _no note yet_ |
+| `dmem_addr` | out | `[((DMEM_BYTES <= 2) ? 1 : $clog2(DMEM_BYTES))-1:0]` | _no note yet_ |
+| `dmem_we` | out | 1 | _no note yet_ |
+| `dmem_wdata` | out | `[7:0]` | _no note yet_ |
+| `dmem_rdata` | inp | `[7:0]` | _no note yet_ |
+| `io_port` | out | `[3:0]` | _no note yet_ |
+| `io_we` | out | 1 | _no note yet_ |
+| `io_re` | out | 1 | _no note yet_ |
+| `io_wdata` | out | `[7:0]` | _no note yet_ |
+| `io_rdata` | inp | `[7:0]` | _no note yet_ |
+
 ## `pe_nrzi`
 
 | Port | Dir | Width | Meaning |
@@ -122,6 +141,23 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_raw` | out | 1 | Bit out, with stuff bits removed. |
 | `rx_raw_valid` | out | 1 | 0 ⇒ this wire bit was a stuff bit. |
 | `rx_err` | out | 1 | The bit after a full run was not complementary. |
+
+## `pe_uart_soc`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `rst_n` | inp | 1 | Active-low asynchronous reset. |
+| `host_we` | inp | 1 | _no note yet_ |
+| `host_imem_sel` | inp | 1 | _no note yet_ |
+| `host_addr` | inp | `[7:0]` | _no note yet_ |
+| `host_wdata` | inp | `[15:0]` | _no note yet_ |
+| `run` | inp | 1 | _no note yet_ |
+| `pin_in` | inp | 1 | _no note yet_ |
+| `pin_out` | out | 1 | _no note yet_ |
+| `dbg_pc` | out | `[7:0]` | _no note yet_ |
+| `dbg_a` | out | `[7:0]` | _no note yet_ |
+| `dbg_timer` | out | `[7:0]` | _no note yet_ |
 
 ## Internal signals worth naming
 

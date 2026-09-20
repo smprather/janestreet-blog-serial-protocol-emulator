@@ -10,6 +10,19 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 mkdir -p sim
+
+# Firmware first: it assembles firmware/*.hex, and tb_pe_uart_soc.v $readmemh's
+# one of them. Running it here means the RTL test can never simulate a stale
+# image without the regression saying so.
+echo "=== firmware (assemble + emulator) ==="
+if ./tb/run_firmware_tests.sh; then
+  fw_rc=0
+else
+  fw_rc=1
+fi
+echo
+echo "=== RTL testbenches ==="
+
 cd sim || exit 1
 
 # tb file : rtl files : top module
@@ -28,6 +41,11 @@ CASES=(
   "tb_pe_line_codec|../rtl/pe_line_codec.v|tb_pe_manch"
   "tb_pe_line_codec|../rtl/pe_line_codec.v|tb_pe_bitstuff"
   "tb_pe_codec_mux|../rtl/pe_line_codec.v ../rtl/pe_codec_mux.v|tb_pe_codec_mux"
+  # The firmware processor, its unit TB, and the software-UART SoC TB. The SoC TB
+  # $readmemh's firmware/uart_echo.hex, so run_firmware_tests.sh (below) must have
+  # assembled a current copy -- it runs first for exactly that reason.
+  "tb_pe_cpu|../rtl/pe_cpu.v|tb_pe_cpu"
+  "tb_pe_uart_soc|../rtl/pe_cpu.v ../rtl/pe_uart_soc.v|tb_pe_uart_soc"
 )
 
 pass=0; fail=0; failed_names=()
@@ -54,6 +72,10 @@ done
 echo
 echo "========================================"
 echo "TOTAL: $((pass+fail))   PASS: $pass   FAIL: $fail"
+if [ "$fw_rc" -ne 0 ]; then
+  echo "firmware regression: FAILED (see above)"
+  fail=$((fail+1))
+fi
 [ "$fail" -eq 0 ] || { echo "failed: ${failed_names[*]}"; exit 1; }
 echo "all testbenches pass"
 

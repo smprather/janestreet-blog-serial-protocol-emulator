@@ -19,7 +19,7 @@ Protocol-emulator ASIC competition entry: a Tiny Tapeout (IHP 130nm CMOS5L) gene
 title: Page Title
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-type: entity | concept | comparison | query | decision | reference
+type: entity | concept | comparison | query | decision | reference | plan
 tags: [from taxonomy below]
 sources: [raw/articles/source-name.md]
 confidence: high | medium | low
@@ -33,6 +33,7 @@ confidence: high | medium | low
 - signoff, sta, spice
 - architecture, verification
 - decision
+- plan
 - tooling
 - reference
 
@@ -44,6 +45,10 @@ Rule: every tag on a page must appear in this taxonomy. Add new tags here first,
 - **DON'T create a page** for passing mentions or one-off details
 - **Split a page** when it exceeds ~200 lines
 - **Archive a page** when fully superseded — move to `_archive/`, remove from index
+- **A plan page** (`plans/`, type `plan`) is a forward-looking work plan with a definition
+  of done and an ordered work list. Update it in place as steps complete; when the
+  milestone lands, the durable findings move into concepts/reference/decisions and the
+  plan's status line records that it is done.
 
 ## Update Policy
 1. Check dates — newer sources generally supersede older ones

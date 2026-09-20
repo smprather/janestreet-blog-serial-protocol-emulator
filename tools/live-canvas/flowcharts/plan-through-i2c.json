@@ -1,0 +1,42 @@
+{
+  "title": "Plan — through I2C",
+  "subtitle": "Baseline tier UART → SPI → I2C. Left: the ordered work list. Right: why I2C is last of the three.",
+  "output": "plan-through-i2c.svg",
+  "legend": true,
+  "nodes": [
+    { "id": "w0", "kind": "start", "text": "Milestone 1 done\nshared hardware layer signed off", "row": 0, "col": 0, "w": 300 },
+    { "id": "w1", "kind": "process", "text": "1  UART RTL test fixed\nTB edge latch + full 114-word load + JNZ tx_start\n(done 2026-09-20: 4/4 bytes, cells 8.6-8.7 us)", "row": 1, "col": 0, "w": 380 },
+    { "id": "w2", "kind": "process", "text": "2  regression + docs\nTBs into run_all.sh, synth_area, glossary, 174 -> 173", "row": 2, "col": 0, "w": 380 },
+    { "id": "w3", "kind": "process", "text": "3  commit milestone 2\nCPU, SoC, assembler, emulator, firmware, TBs", "row": 3, "col": 0, "w": 380 },
+    { "id": "w4", "kind": "process", "text": "4  pin matrix / OE\nopen-drain, read-back, tri-state (+ own TB)", "row": 4, "col": 0, "w": 380 },
+    { "id": "w5", "kind": "process", "text": "5  I2C SoC wiring\npin matrix + 1 us tick (40 clocks)", "row": 5, "col": 0, "w": 380 },
+    { "id": "w6", "kind": "process", "text": "6  I2C firmware\nSTART/STOP, byte, ACK, repeated START, read", "row": 6, "col": 0, "w": 380 },
+    { "id": "w7", "kind": "process", "text": "7  tb_pe_i2c_soc.v\nchecks timing, not just bits", "row": 7, "col": 0, "w": 380 },
+    { "id": "w8", "kind": "end", "text": "DONE: real I2C transaction in firmware\non RTL, timing-checked, emulator parity", "row": 8, "col": 0, "w": 380 },
+
+    { "id": "r0", "kind": "decision", "text": "why I2C last of the baseline three?", "row": 1, "col": 1, "w": 260 },
+    { "id": "r1", "kind": "side", "text": "UART: 2 pins, push-pull\nno unbuilt hardware needed", "row": 2, "col": 1, "w": 260 },
+    { "id": "r2", "kind": "side", "text": "SPI: 4 pins, push-pull\ngenerated clock, still no OE", "row": 3, "col": 1, "w": 260 },
+    { "id": "r3", "kind": "side", "text": "I2C: open-drain NEEDED\nOE + read-back + arbitration", "row": 4, "col": 1, "w": 260 },
+    { "id": "r4", "kind": "side", "text": "1 us tick = 40 clocks\ntLOW 5, tHIGH 6 -> 90.9 kbit/s", "row": 5, "col": 1, "w": 260 },
+    { "id": "r5", "kind": "side", "text": "read path budget\ntLOW - tVD;DAT - tSU;DAT = 40 cycles", "row": 6, "col": 1, "w": 260 },
+    { "id": "r6", "kind": "side", "text": "IMEM 114/128 today -> 1P_1024x16\n(14% of die) when protocol 2 lands", "row": 7, "col": 1, "w": 260 }
+  ],
+  "edges": [
+    { "from": "w0", "to": "w1" },
+    { "from": "w1", "to": "w2" },
+    { "from": "w2", "to": "w3" },
+    { "from": "w3", "to": "w4" },
+    { "from": "w4", "to": "w5" },
+    { "from": "w5", "to": "w6" },
+    { "from": "w6", "to": "w7" },
+    { "from": "w7", "to": "w8" },
+    { "from": "r0", "to": "r1" },
+    { "from": "r1", "to": "r2" },
+    { "from": "r2", "to": "r3" },
+    { "from": "r3", "to": "r4" },
+    { "from": "r4", "to": "r5" },
+    { "from": "r5", "to": "r6" },
+    { "from": "r3", "to": "w4", "route": "into-left", "label": "needs" }
+  ]
+}

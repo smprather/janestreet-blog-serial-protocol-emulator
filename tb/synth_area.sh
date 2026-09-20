@@ -30,5 +30,13 @@ report pe_nrzi      "rtl/pe_line_codec.v"                        pe_nrzi
 report pe_manch     "rtl/pe_line_codec.v"                        pe_manch
 report pe_bitstuff  "rtl/pe_line_codec.v"                        pe_bitstuff
 report pe_codec_mux "rtl/pe_line_codec.v rtl/pe_codec_mux.v"     pe_codec_mux
+report pe_cpu       "rtl/pe_cpu.v"                               pe_cpu
+# Note on the SoC: its IMEM/DMEM are register arrays, and yosys will not map
+# flip-flop arrays to an SRAM macro here. They therefore synthesise as thousands
+# of individual flops (~2,215 at 48.9 um2 each) and the mapped area is huge
+# (~177k um2) for what it does. That is the expected consequence of flop memory,
+# not a synthesis failure -- see wiki/reference/sram-budget.md and
+# wiki/plans/through-i2c.md (Blocker 3) for the macro that fixes it.
+report pe_uart_soc  "rtl/pe_cpu.v rtl/pe_uart_soc.v"             pe_uart_soc
 echo "-----------------------------------------------"
 echo "routed reference: pe_serdes = 17,211 um2 cells / 29,164 um2 die @78% util"
