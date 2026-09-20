@@ -35,6 +35,16 @@ LEF_DIR = PDK_SRAM / "lef"
 # bound. Ranges are reported, never a single number pretending to be exact.
 TILE_TEMPLATE = (167.0, 108.0)
 TILE_BLOG = (200.0, 150.0)
+
+# Tile ALLOCATION, width x height in tiles. The blog instructs 8x4 and that is
+# the default, but the allocation is a live question: 8x4 and 4x6 are both 24-32
+# tiles yet they are completely different SHAPES, and shape is what decides
+# which macros fit. 8x4 at the template tile is 1336x432 (3.09:1); 4x6 is
+# 668x648 (1.03:1, essentially square), which is roomier for tall macros and
+# loses the entire 64-bit-wide family (784 um wide against a 668 um die).
+#
+# Override with --tiles WxH to re-answer the whole page for a new allocation:
+#     python3 tools/gen_sram_budget.py --tiles 4x6
 TILES_W, TILES_H = 8, 4
 
 # Measured on this machine from a real LibreLane run (~/asic-runs/pe-serdes,
@@ -212,8 +222,22 @@ def build() -> str:
     ]
     if blocked:
         for m in blocked:
-            why = ("wider than the die even rotated" if m["w"] > die_w_t and m["h"] > die_h_t
-                   else "too tall in both orientations")
+            # A macro fits in SOME orientation iff its short side fits the
+            # die's short side and its long side fits the die's long side.
+            # Name whichever of those two actually fails, rather than assuming
+            # height: on a near-square die (4x6) the 64-bit-wide macros are
+            # blocked by WIDTH, and calling that "too tall" misleads.
+            m_short, m_long = min(m["w"], m["h"]), max(m["w"], m["h"])
+            d_short, d_long = min(die_w_t, die_h_t), max(die_w_t, die_h_t)
+            if m_long > d_long and m_short > d_short:
+                why = (f"exceeds the die in both axes "
+                       f"({m_long:.0f} > {d_long:.0f} and {m_short:.0f} > {d_short:.0f} µm)")
+            elif m_long > d_long:
+                why = (f"its {m_long:.0f} µm long side exceeds the die's "
+                       f"{d_long:.0f} µm long side")
+            else:
+                why = (f"its {m_short:.0f} µm short side exceeds the die's "
+                       f"{d_short:.0f} µm short side")
             lines.append(f"- `{m['name'].replace('RM_IHPSG13_', '')}` ({m['bits']:,} bits, "
                          f"{m['w']:.0f}×{m['h']:.0f} µm) — {why}.")
         lines += [
@@ -352,7 +376,24 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--tiles", metavar="WxH", default=None,
+                    help="tile allocation, width x height (default 8x4, the "
+                         "blog's instruction). Example: --tiles 4x6")
     args = ap.parse_args()
+
+    if args.tiles:
+        global TILES_W, TILES_H
+        try:
+            w, h = args.tiles.lower().split("x")
+            TILES_W, TILES_H = int(w), int(h)
+        except ValueError:
+            print(f"gen_sram_budget: --tiles wants WxH, got {args.tiles!r}",
+                  file=sys.stderr)
+            return 1
+        if args.check:
+            print("gen_sram_budget: --tiles and --check are mutually exclusive "
+                  "(the committed page is the 8x4 answer)", file=sys.stderr)
+            return 1
 
     rendered = build()
     if args.check:

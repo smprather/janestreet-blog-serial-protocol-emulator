@@ -70,8 +70,8 @@ macros are taller than the die is.
 
 ### What does not fit
 
-- `1P_2048x64_c2_bm_bist` (131,072 bits, 784×627 µm) — too tall in both orientations.
-- `1P_8192x32_c4` (262,144 bits, 1520×618 µm) — wider than the die even rotated.
+- `1P_2048x64_c2_bm_bist` (131,072 bits, 784×627 µm) — its 627 µm short side exceeds the die's 432 µm short side.
+- `1P_8192x32_c4` (262,144 bits, 1520×618 µm) — exceeds the die in both axes (1520 > 1336 and 618 > 432 µm).
 
 **The highest-density macros in the PDK are unusable here.** The whole
 8192×32 and 2048×64 classes are excluded by the die's shape, not by the

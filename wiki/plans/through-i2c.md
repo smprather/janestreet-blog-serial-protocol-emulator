@@ -36,9 +36,15 @@ that gates every remaining protocol ([[concepts/physical-layer-gpio]],
    agreeing bit-for-bit on the transaction.
 5. All of it committed, with `wiki/log.md` and [[STATUS]] updated.
 
-Out of scope for this milestone: SRAM replacement of instruction memory (needed
-before *long* programs, see Blocker 3), fast-mode I2C, clock stretching, and the
+Out of scope for this milestone: fast-mode I2C, clock stretching, and the
 board-level PHY work (pull-ups, level shifting).
+
+**Changed 2026-09-20: the SRAM swap is now a PREREQUISITE, not out of scope.** An
+earlier revision deferred it on the grounds that the I2C program would probably stay
+under ~120 words. Two things killed that: `tools/peasm.py` now rejects a program
+over 128 words outright rather than emitting one the 7-bit program counter silently
+aliases, and flop instruction memory turns out to be 89% of the die. Do the swap
+first — see Blocker 3 and [[decisions/adr-003-memory-plan]].
 
 ## What already exists that this reuses
 
@@ -172,17 +178,22 @@ at once will not fit. Options, with the real numbers from [[reference/sram-budge
 | `1P_1024x16_c2_bm_bist` | 16,384 b | 79,674 µm² = **14%** | 1024 words, the comfortable choice |
 | `1P_1024x32_c2_bm_bist` | 32,768 b | 140,183 µm² = 24% | 4 KB — the practical ceiling |
 
-Recommendation: **`1P_1024x16` (1024 instructions, 14% of the template die)**, or
-flops at 256 words if the tile figure turns out to be the blog's 200x150 and the
-die is roomier — recheck after the first full-chip floorplan. The instruction port
+Recommendation: **`1P_1024x16` (1024 instructions)**. This section is now
+SUPERSEDED by [[decisions/adr-003-memory-plan]], which keeps that choice and adds
+the second macro for an Ethernet frame buffer, with the measured per-word cost of
+flop memory (1,271 um2 and 60 cells per instruction word, making IMEM 89% of the
+current design) and the occupancy figures for both tile allocations. The instruction port
 already models a registered ROM (`rtl/pe_cpu.v:104-117` documents the fetch-ahead
 that a registered read requires), so swapping flops for a macro does not change the
 CPU's interface or its cycle model. That was the right call when the SoC was written
 and it pays off exactly here.
 
-Not a blocker for *this* milestone if the I2C program stays under ~120 words: do
-the memory swap when the second protocol lands, not now. Track it so it does not
-become a surprise.
+**This is now a blocker sooner than the original text implied.** `tools/peasm.py`
+gained a hard size check on 2026-09-20: a program over 128 words is REJECTED rather
+than emitted and silently aliased by the 7-bit program counter. That is the right
+behaviour, and it means the I2C program cannot quietly overflow -- it will fail to
+assemble. With `uart_echo` at 114 of 128, do the swap FIRST. [[STATUS]]'s ordered
+next steps put it at position 1 for this reason.
 
 ## Firmware design for I2C
 
@@ -340,6 +351,22 @@ data to settle, which is still far inside `tSU;DAT`.
 | 6 | I2C firmware: START/STOP first, then byte, then ACK, then read | 1,5 | emulator decodes a full transaction |
 | 7 | `tb_pe_i2c_soc.v` with timing assertions | 6 | transaction passes with timing checked |
 | 8 | Fast-mode feasibility check (500 ns tick, 333 kHz) | 7 | written up, not necessarily built |
+
+### Where this sits in the wider order
+
+[[STATUS]] carries the authoritative ordered list beyond this milestone. The short
+version, and the reasoning for it:
+
+- **The SRAM swap comes before all of this** ([[decisions/adr-003-memory-plan]]).
+- **SPI as firmware is cheaper than I2C and should come first**, because SPI is
+  push-pull on 4 pins and needs NO pin matrix -- only the SoC's single in/out pin
+  generalised to a multi-bit port. The blog's baseline is "UART, SPI, and I2C" and
+  only UART exists as a program today.
+- **CRC LFSR before DRU.** The LFSR is ~120 cells, serves CRC-15/CRC-5/CRC-16/CRC-32,
+  and `tb_pe_can.v` / `tb_pe_usb.v` / `tb_pe_eth.v` already compute those CRCs in
+  their models, so a golden reference exists on day one. The DRU is the
+  highest-uncertainty block in the project and serves only stretch goals
+  ([[concepts/ethernet-scope]]), so it goes last unless de-risking is the priority.
 
 Step 1 is complete (see Blocker 1 for the measured evidence). Steps 2-3 are still
 the prerequisite for everything else: an uncommitted, undocumented milestone is the

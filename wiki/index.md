@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-20 | Total pages: 19
+> Last updated: 2026-09-20 | Total pages: 21
 
 ## Start here
 
@@ -22,6 +22,7 @@
 - [[concepts/pdk-toolchain]] — Local IHP PDK + EDA bring-up: paths, corners, SRAM macros, install workarounds.
 - [[concepts/tx-timing-generation]] — Exact-integer protocol timing at 40 MHz; NCO for fractional bauds; the forced-66MHz fallback.
 - [[concepts/live-canvas]] — Side-quest tooling: agent→browser live diagram channel (dashboard plugin, file-write publish).
+- [[concepts/ethernet-scope]] — what "10Mbit Ethernet" as a stretch goal actually asks for: the line layer, a 1.5 KB frame, and why 32 KB was never the requirement.
 - [[concepts/strobe-and-committing-edge]] — What the strobe (`bit_en`) and the committing edge are, and the sample-order trap they cause.
 
 ## Reference
@@ -42,6 +43,7 @@
 
 - [[decisions/adr-001-8x-oversampling]] — ADR: target 8x oversampling for 10BASE-T receive.
 - [[decisions/adr-002-latch-pair-det-flop]] — ADR: stdcell latch-pair dual-edge flop; no custom DDR.
+- [[decisions/adr-003-memory-plan]] — ADR: two `1P_1024x16` macros (instructions + frame buffer); flop IMEM is 89% of the die, and you cannot buy 1.5 KB.
 
 ## Queries
 

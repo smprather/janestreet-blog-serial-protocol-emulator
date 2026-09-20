@@ -110,10 +110,11 @@ the previous revision of this table:
 48.9 µm² each. The `ram_style` attributes on those arrays are FPGA pragmas and do
 nothing in this flow — sg13g2 has no inferable block RAM and no SRAM compiler,
 only fixed macros. For comparison a `1P_256x16` SRAM macro holds 4,096 bits in
-28,127 µm². Replacing flops with a macro is the documented next step (see
-[[plans/through-i2c]] Blocker 3 and [[reference/sram-budget]]), and it changes
-nothing in the CPU's interface or cycle model — the instruction port was written
-for a registered ROM from the start.
+28,127 µm². Replacing flops with a macro is the **highest-leverage next step** and
+the choice is made in [[decisions/adr-003-memory-plan]]; it changes nothing in the
+CPU's interface or cycle model, because the instruction port was written for a
+registered ROM from the start. See the area budget section below for the measured
+per-word cost.
 
 **Regression: 18/18 testbenches + 11/11 firmware tests pass, and the lint gate is
 clean** (`tb/run_all.sh` runs the firmware regression first, then every TB, then
@@ -156,6 +157,41 @@ is the fast firmware-development loop (2 s vs a 1 min RTL build).
 0 DRC, 0 LVS, setup WS +7.6 ns (slow corner), hold WS +0.116 ns (fast corner),
 die 161.7 × 180.4 µm, 78 % utilization. Run dir: `~/asic-runs/pe-serdes`.
 
+## Area budget — where the die actually goes
+
+Measured 2026-09-20. The mapped→die factor is **1.97**, from the only block that has
+been through real place-and-route (`pe_serdes`: 11,223 mapped → 17,211 routed cells
+→ 29,164 µm² die at 78% utilisation). Macros place as-is and take no inflation.
+
+**89% of the current design is instruction memory implemented as flip-flops.**
+Synthesising the SoC at four IMEM depths gives a dead-linear **1,271 µm² and 60
+cells per instruction word**; everything else (CPU, DMEM, timer, pin, glue) is
+19,947 µm² and 1,025 cells. Storing program in flops costs ~80 µm²/bit against ~5
+for a macro.
+
+| Scenario | Die µm² | of 4×6 | of 8×4 |
+|---|---|---|---|
+| Today, integrated (SoC + SERDES + codecs) | 384,500 | **89%** | 67% |
+| After the SRAM swap (see [[decisions/adr-003-memory-plan]]) | 235,116 | **54%** | 41% |
+
+Gate count is not the constraint: 9,397 cells today against ~24,000 for 24 tiles at
+the blog's ~1K cells/tile, and ~1,700 cells after the swap.
+
+**The tile allocation is an open question.** [[entities/tiny-tapeout]] records 8×4
+(32 tiles) from the blog and marks the transcript's "6×4" as superseded; `info.yaml`
+says 8×4. If the offer is now 4×6, change `info.yaml` and re-run
+`tools/gen_sram_budget.py --tiles 4x6`. Both are 24–32 tiles but completely
+different SHAPES, and shape decides macro fit:
+
+| Allocation | Die (template tile) | Aspect |
+|---|---|---|
+| 4×6 | 668 × 648 µm, 0.433 mm² | 1.03:1, near square |
+| 8×4 | 1336 × 432 µm, 0.577 mm² | 3.09:1, wide and flat |
+
+A 4×6 die loses the entire 64-bit-wide macro family (784 µm wide against a 668 µm
+die). Neither macro in ADR-003 is affected.
+
+
 ## Design decisions in force
 
 | Decision | Where |
@@ -167,6 +203,8 @@ die 161.7 × 180.4 µm, 78 % utilization. Run dir: `~/asic-runs/pe-serdes`.
 | SERDES words ≤ 32 b; longer fields chunk (SWD parity, CAN/USB/ETH payloads) | `rtl/pe_serdes.v` header |
 | Codec pipeline order fixed (stuff → line-code); cfg selects the **subset** | `rtl/pe_codec_mux.v` header |
 | No elasticity FIFO needed (source-sync protocols + per-edge re-lock) | `concepts/cdr-oversampling.md` |
+| Two SRAM macros: 1024-word instructions + 2 KB frame buffer, both `1P_1024x16` | `decisions/adr-003-memory-plan.md` |
+| 10BASE-T is the LINE LAYER only; the stack is off-chip, and firmware never touches Ethernet bits | `concepts/ethernet-scope.md` |
 | Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | `rtl/pe_line_codec.v` header |
 | `ena` must never gate logic; every pad output driven in every state | `rtl/tt_um_protocol_emulator.v` header |
 
@@ -283,14 +321,23 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 
 - **IHP-specific max pad clock is unpublished.** The ~66 MHz figure is sky130
   pad-macro-derived. Signing off at 66 gives margin if the real limit is lower.
-- **No SRAM compiler for sg13g2** — only fixed macros (30 shapes; the wiki's
-  earlier "256×16 … 2048×64" understated the set, there are also 4096 and 8192
-  classes, 2P variants, and 64×16/64×32 without BIST). Sizing is analysed in
-  [[reference/sram-budget]]: 1–2 KB is comfortable, 4 KB is the practical
-  ceiling, and the densest macros in the PDK **do not fit** the 3:1 die.
+- **No SRAM compiler for sg13g2** — only fixed macros (30 shapes). Sizing is in
+  [[reference/sram-budget]]; the choice is made in [[decisions/adr-003-memory-plan]].
+  Note the granularity trap: **1.5 KB cannot be bought.** The two 1 KB parts miss a
+  1,518-byte Ethernet frame by 494 bytes, so the practical floor for a frame buffer
+  is 2 KB.
 - **Tile size discrepancy**: blog says ~200×150 µm/tile, the TT template's
   `info.yaml` says ~167×108 µm. Use the template for layout math; re-check after
   the first real floorplan of the full design.
+- **Tile ALLOCATION is unconfirmed.** The blog instructs 8×4 and `info.yaml` says
+  8×4; the superseded transcript said 6×4. A 4×6 allocation has been raised as
+  possibly current. It is 24 tiles rather than 32 and, more importantly, a near
+  square rather than a 3:1 strip. Confirm with Jane Street; then set `info.yaml`
+  and run `tools/gen_sram_budget.py --tiles 4x6`. See the area budget section.
+- **No host data path exists.** The SoC's `host_*` port is firmware loading only and
+  `rtl/tt_um_protocol_emulator.v` ties it off. If Ethernet or a logic-analyser mode
+  wants to stream to a host, that is unbuilt and unplanned, and it needs a decision
+  record BEFORE the pin matrix fixes pin assignments ([[concepts/ethernet-scope]]).
 - **The `~66 MHz` ceiling and `--docker-no-tty` wrapper bug** are both worth
   confirming with TT/Jane Street (Discord / asic-competition@janestreet.com).
 
@@ -301,18 +348,50 @@ three blockers with numbers, and an 8-step ordered plan to a real I2C transactio
 Its Blocker 1 (the red UART RTL test) is **fixed as of 2026-09-20**; steps 2 and 3
 of that plan are the housekeeping this file just went through.
 
-Beyond I2C, in rough order:
-0. **Pin matrix**, which now has a real top level to plug into
-   (`rtl/tt_um_protocol_emulator.v` wires `uio_oe` to pads and its TB asserts the
-   open-drain property). It replaces the wrapper's fixed pin mapping.
-1. **DRU** (oversampled phase-picker): edge detect, 3-bit phase counter with
+### The recommended order, and why it is not DRU and LFSR next
+
+The blog's baseline is **"Start with UART, SPI, and I2C"**; USB and 10Mbit Ethernet
+are stretch goals. Only UART exists as firmware today. SPI and I2C are proven at the
+SERDES level by their testbenches but neither has been demonstrated as a *program*,
+which is the thing the whole submission claims. **Finish the baseline before the
+stretch**, and inside the baseline take the cheap one first.
+
+1. **SRAM swap for instruction memory** ([[decisions/adr-003-memory-plan]]).
+   Highest leverage in the project: it takes the design from 89% of a 4×6 die to
+   54%, and from 128 program words to 1,024. `uart_echo` is already 114 of 128, and
+   `tools/peasm.py` now *hard-fails* past the limit rather than silently aliasing,
+   so the next protocol hits this wall immediately. Independent of everything else.
+2. **SPI as firmware.** The cheapest remaining baseline protocol, because **SPI
+   needs no pin matrix**: it is push-pull on 4 pins with no open-drain, no
+   arbitration and no clock stretching. It needs the SoC's single in/out pin
+   generalised to a multi-bit port, which is a fraction of the matrix. Completes
+   baseline protocol #2 with almost no new hardware.
+3. **Pin matrix / OE**, then **I2C** ([[plans/through-i2c]]). The real new hardware:
+   open-drain, read-back for arbitration, clock stretching. It replaces the fixed
+   mapping in `rtl/tt_um_protocol_emulator.v` and gates every stretch protocol too.
+4. **CRC LFSR** (~120 cells). Do this before the DRU. It is small, well understood,
+   serves *three* protocols (CRC-15 CAN, CRC-5/16 USB, CRC-32 Ethernet), and
+   `tb_pe_can.v`, `tb_pe_usb.v` and `tb_pe_eth.v` already compute these CRCs in
+   their models — so a golden reference exists to check the hardware against on day
+   one. Lowest risk, immediate payoff.
+5. **DRU** (oversampled phase-picker): edge detect, 3-bit phase counter with
    re-lock on every edge, mid-bit strobe, preamble lock, majority-vote filter.
-   Spec is in `concepts/cdr-oversampling.md`; ~60–100 cells. Needed for 10BASE-T
-   and PS/2 receive, not for I2C.
-2. **Word FIFO** (16–32 deep) if gapless multi-word streaming is wanted.
-3. **Full-chip floorplan** against the 32-tile budget; then the flow end to end.
-4. **SRAM swap** for instruction memory once a second protocol lands
-   ([[plans/through-i2c]] Blocker 3 has the macro choice and the area numbers).
+   Spec in [[concepts/cdr-oversampling]]; ~60–100 cells. Needed for 10BASE-T and
+   PS/2 receive, not for I2C. **Last of these, because it is the hardest and it
+   only serves stretch goals** — phase recovery is where designs of this kind
+   actually fail.
+6. **Frame buffer + Ethernet framing**, per [[concepts/ethernet-scope]]. The
+   acceptance test is an ARP request/reply, 42 bytes each way, no IP stack.
+7. **Word FIFO** (16–32 deep) if gapless multi-word streaming is wanted. Size it
+   *after* the SRAM swap: 16 words of 32 bits is another 512 flops.
+8. **Full-chip floorplan** against the real tile allocation; then the flow end to
+   end on the whole design rather than one block.
+
+**The one reason to reorder:** if de-risking matters more than sequencing, pull the
+DRU forward to position 2. It is the highest-uncertainty block in the project and
+there are ~16 months to the 2027-01-18 deadline. That is a defensible choice; it is
+not the default one, because a complete and verified baseline beats a partial
+stretch in a competition that says "verification matters" out loud.
 
 Done since the last revision of this list: the programmable core exists
 (`rtl/pe_cpu.v`), the assembler and emulator exist (`tools/peasm.py`,
@@ -338,3 +417,7 @@ without ever writing.
 9. `rtl/tt_um_protocol_emulator.v` header — the pad contract, the two TT rules
    that are expensive to get wrong (`ena` gates nothing; every output driven),
    and why open-drain is native to `uio_oe`.
+10. [[decisions/adr-003-memory-plan]] — the two SRAM macros and the measured
+    per-word cost of flop memory. Read before touching the SoC's memories.
+11. [[concepts/ethernet-scope]] — what the 10BASE-T stretch goal is and is not,
+    and the throughput arithmetic that puts Ethernet bits in hardware.
