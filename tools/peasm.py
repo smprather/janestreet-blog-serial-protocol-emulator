@@ -81,8 +81,36 @@ CONSTS: dict[str, int] = {
 }
 
 
+# Target sizing. These are the pe_uart_soc defaults and they are what makes
+# the range checks below meaningful: every field in this ISA is narrower than
+# the immediate that can be written into it, so without a check the assembler
+# silently truncates and emits a program that runs wrong.
+#
+# The four that actually bite:
+#   * the program counter is 8-bit but instruction memory is IMEM_WORDS deep,
+#     so word 128 aliases onto word 0 at run time;
+#   * a jump target is encoded in 8 bits and truncated to the memory's address
+#     width, so `JMP 200` lands somewhere unrelated;
+#   * LDM's bit 7 is a DESTINATION SELECTOR (A vs X), so `LDM A, 128` assembles
+#     as `LDM X, 0`;
+#   * data addresses wider than DMEM_BYTES wrap into occupied slots.
+IMEM_WORDS = 128
+DMEM_BYTES = 16
+IO_PORTS = 16
+
+
 class AsmError(Exception):
     pass
+
+
+def check_range(value: int, limit: int, what: str, tok: str) -> int:
+    """Reject a field that does not fit its hardware. `limit` is exclusive."""
+    if not 0 <= value < limit:
+        raise AsmError(
+            f"{what} {tok} = {value} is out of range (0..{limit - 1}); "
+            f"the field is truncated in hardware, so this would assemble "
+            f"clean and run wrong")
+    return value
 
 
 def strip_a(tok: str, what: str) -> str:
@@ -181,7 +209,8 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
                     port_tok = toks[0]
                 else:
                     raise AsmError(f"{mnem} form is '{mnem} A, PORT' (got {ops!r})")
-                arg = parse_imm(port_tok, CONSTS) & 0xF
+                arg = check_range(parse_imm(port_tok, CONSTS), IO_PORTS,
+                                  "IO port", port_tok)
             elif kind == "mov_sel":
                 key = re.sub(r"\s+", "", ops).upper()
                 if key not in MOV_SEL:
@@ -193,7 +222,11 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
                 if tok in labels:
                     arg = labels[tok]
                 else:
-                    arg = parse_imm(tok, CONSTS) & 0xFF
+                    arg = parse_imm(tok, CONSTS)
+                # The PC is 8 bits but only $clog2(IMEM_WORDS) of them reach
+                # the memory, so a target past the end is not "high memory",
+                # it is a different instruction.
+                check_range(arg, IMEM_WORDS, "jump target", tok)
             elif kind == "alu":
                 # forms: "AND A, 1" / "AND 1" / "ADD A, A" (register form is
                 # not in the ISA -- the assembler rejects it explicitly rather
@@ -225,12 +258,14 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
                 else:
                     raise AsmError(f"LDM form is 'LDM A|X, addr8' (got {ops!r})")
                 v = parse_imm(imm, CONSTS)
-                if dest == "X":
-                    arg = (1 << 7) | (v & 0x0F)
-                elif dest == "A":
-                    arg = v & 0xFF
-                else:
+                if dest not in ("A", "X"):
                     raise AsmError(f"LDM destination must be A or X (got {dest!r})")
+                # Bit 7 of the operand selects X as the destination, so an
+                # address of 128 or more is not addressable at all -- it would
+                # re-encode `LDM A` as `LDM X`. DMEM_BYTES is the real limit
+                # and it is far below 128 anyway.
+                check_range(v, DMEM_BYTES, "data address", imm)
+                arg = (1 << 7) | (v & 0x0F) if dest == "X" else v & 0xFF
             elif kind == "stm_arg":
                 # STM addr8, A
                 toks = [t.strip() for t in ops.split(",")]
@@ -240,13 +275,21 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
                     imm = toks[0]
                 else:
                     raise AsmError(f"STM form is 'STM addr8, A' (got {ops!r})")
-                arg = parse_imm(imm, CONSTS) & 0xFF
+                arg = check_range(parse_imm(imm, CONSTS), DMEM_BYTES,
+                                  "data address", imm)
         except AsmError as exc:
             raise AsmError(f"addr {a:3d} ({mnem} {ops}): {exc}") from exc
 
         word = (opcode << 12) | (arg & 0x0FFF)
         words.append(word)
         listing.append((a, f"{word:04X}", f"{mnem} {ops}".strip()))
+
+    if len(words) > IMEM_WORDS:
+        raise AsmError(
+            f"program is {len(words)} words and instruction memory holds "
+            f"{IMEM_WORDS}; the program counter aliases word {IMEM_WORDS} "
+            f"onto word 0, so the overflow does not fail loudly at run time. "
+            f"See wiki/plans/through-i2c.md Blocker 3 for the SRAM swap.")
     return words, listing
 
 

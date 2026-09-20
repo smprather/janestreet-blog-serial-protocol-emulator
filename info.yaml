@@ -1,0 +1,72 @@
+# info.yaml — Tiny Tapeout project metadata.
+#
+# This file and rtl/tt_um_protocol_emulator.v are the two things that make the
+# repo submittable. Everything else is blocks and testbenches.
+#
+# tiles: the competition brief allocates 8x4. Note that TT tile notation is
+# WIDTH x HEIGHT, which wiki/reference/sram-budget.md establishes is the
+# load-bearing detail: at the template's 167 x 108 um tile, 8x4 is 1336 x 432
+# um, a 3.1:1 die. Two of the densest SRAM macros in the PDK do not fit in
+# either orientation because of that aspect ratio, not because of area.
+#
+# clock_hz: 40 MHz is the operating point, chosen because 50 ns (the 10BASE-T
+# half-UI, the binding TX constraint) is exactly 2 ticks. The design is signed
+# off at 66 MHz for margin. See wiki/concepts/tx-timing-generation.md.
+
+project:
+  title: "Protocol Emulator"
+  author: "Myles Prather"
+  discord: ""
+  description: >-
+    A programmable serial-protocol emulator: protocol logic runs as firmware on
+    a small core rather than as a state machine in gates, so the chip speaks
+    UART, SPI, I2C, JTAG, SWD, PS/2, CAN, USB-LS or 10BASE-T by loading a
+    different program. A shared SERDES and line-code pipeline carry the
+    protocols whose control flow is per-word; the firmware core bit-bangs the
+    ones whose control flow is per-bit.
+  language: "Verilog"
+  clock_hz: 40000000
+  tiles: "8x4"
+  top_module: "tt_um_protocol_emulator"
+
+  # Order matters: pe_cpu before pe_uart_soc before the wrapper.
+  source_files:
+    - "rtl/pe_cpu.v"
+    - "rtl/pe_uart_soc.v"
+    - "rtl/tt_um_protocol_emulator.v"
+
+# Pin map. Keep this in step with the header comment of the wrapper: this file
+# is what the TT docs render, and a wrong pinout here is a wrong datasheet.
+pinout:
+  ui[0]: "UART RX (protocol input pin)"
+  ui[1]: "run (1 = execute firmware, 0 = hold at PC 0)"
+  ui[2]: ""
+  ui[3]: ""
+  ui[4]: ""
+  ui[5]: ""
+  ui[6]: ""
+  ui[7]: ""
+
+  uo[0]: "UART TX (protocol output pin)"
+  uo[1]: "heartbeat (timer bit 7)"
+  uo[2]: "dbg_pc[0]"
+  uo[3]: "dbg_pc[1]"
+  uo[4]: "dbg_pc[2]"
+  uo[5]: "dbg_pc[3]"
+  uo[6]: "dbg_pc[4]"
+  uo[7]: "dbg_pc[5]"
+
+  uio[0]: "SDA (open-drain; needs an external pull-up)"
+  uio[1]: "SCL (open-drain; needs an external pull-up)"
+  uio[2]: ""
+  uio[3]: ""
+  uio[4]: ""
+  uio[5]: ""
+  uio[6]: ""
+  uio[7]: ""
+
+documentation:
+  # The board must supply what the pads cannot: I2C pull-ups today, and per
+  # wiki/reference/protocol-pin-budget.md a transceiver for CAN, a transformer
+  # for 10BASE-T and a pull-up for USB when those land.
+  external_hw: "I2C pull-ups (4.7k) on uio[0] and uio[1] for the I2C milestone."

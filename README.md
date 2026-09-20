@@ -19,17 +19,25 @@ in firmware on real RTL. See [`wiki/STATUS.md`](wiki/STATUS.md), and
 | Block | File | Size (mapped, sg13g2 typ) |
 |---|---|---|
 | SERDES — 1–32 b word engine, runtime bit order, strobe-paced | `rtl/pe_serdes.v` | 539 cells / 11.2k µm² (17.2k µm² routed) |
-| NRZI / Manchester / bit-stuffing codecs | `rtl/pe_line_codec.v` | 12 / 5 / 84 cells |
-| Config-driven codec pipeline mux | `rtl/pe_codec_mux.v` | 9 cells glue |
-| CPU — 16-bit insn, 16 opcodes, A/Y/X, 8-bit PC | `rtl/pe_cpu.v` | 377 cells / 4.8k µm² |
-| Software-UART SoC — CPU + tick timer + 2 pins | `rtl/pe_uart_soc.v` | 8,592 cells (flop memory; see STATUS) |
+| NRZI / Manchester / bit-stuffing codecs | `rtl/pe_line_codec.v` | 15 / 7 / 84 cells |
+| Config-driven codec pipeline mux | `rtl/pe_codec_mux.v` | 115 cells / 1.7k µm² |
+| CPU — 16-bit insn, 16 opcodes, A/Y/X, 8-bit PC | `rtl/pe_cpu.v` | 387 cells / 5.0k µm² |
+| Software-UART SoC — CPU + tick timer + 2 pins | `rtl/pe_uart_soc.v` | 8,744 cells (flop memory; see STATUS) |
+| **Tiny Tapeout top level** — the deliverable | `rtl/tt_um_protocol_emulator.v` | 8,743 cells / 183k µm² |
 | Assembler / bit-accurate emulator | `tools/peasm.py`, `tools/peemu.py` | Python |
 | The UART itself — **as firmware** | `firmware/uart_echo.pe` | 114 words |
 
-Verified by **16 self-checking testbenches + 5 firmware tests** (`tb/run_all.sh`),
-including one TB per target protocol: UART, SPI, I2C, JTAG, SWD, PS/2, CAN,
-USB-LS, 10BASE-T. The SERDES has been through the full place-and-route flow:
-**0 DRC, 0 LVS, 66 MHz timing clean** (+7.6 ns setup slack at the slow corner).
+Verified by **18 self-checking testbenches + 11 firmware tests + a lint gate**
+(`tb/run_all.sh`), including one TB per target protocol: UART, SPI, I2C, JTAG,
+SWD, PS/2, CAN, USB-LS, 10BASE-T. The SERDES has been through the full
+place-and-route flow: **0 DRC, 0 LVS, 66 MHz timing clean** (+7.6 ns setup slack
+at the slow corner), reproducible with `flow/run_librelane.sh`.
+
+`tb/lint.sh` runs Verilator `-Wall` plus a yosys elaboration check on every top,
+and the regression fails if either finds anything. It exists because a green
+testbench says nothing about the netlist: two drivers on one flop raced in Icarus
+and became a constant 0 in yosys, and a hierarchical debug reference simulated
+correctly while synthesising backwards. Neither is reachable from a testbench.
 
 The headline is `tb/tb_pe_uart_soc.v`: **there is no UART in the RTL.** One input
 pin, one output pin, a counter, and a program — 115200 8N1, echoing bytes at
@@ -41,8 +49,9 @@ phase-picker), the word FIFO, and the SRAM swap for instruction memory.
 ## Quick start
 
 ```bash
-./tb/run_all.sh             # firmware regression, then all 16 TBs (~1 min, needs iverilog)
+./tb/run_all.sh             # firmware regression, all 18 TBs, lint, doc drift (~1 min)
 ./tb/run_firmware_tests.sh  # just assemble + emulate the firmware
+./tb/lint.sh                # verilator -Wall + yosys elaboration check
 ./tb/synth_area.sh          # mapped cell count + area per block (needs yosys + IHP PDK)
 
 # the fast firmware loop: 2 seconds instead of a 1-minute RTL build
@@ -50,23 +59,23 @@ python3 tools/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex
 python3 tools/peemu.py firmware/uart_echo.hex --send "41 42" --max-cycles 900000
 ```
 
-Place-and-route (dockerized LibreLane; see `wiki/concepts/pdk-toolchain.md`):
+Place-and-route (dockerized LibreLane; see `wiki/concepts/pdk-toolchain.md`).
+The config is in the repo, so the signoff result is reproducible from a clone:
 
 ```bash
-cd ~/asic-runs/pe-serdes
-docker run --rm -i --user 1000:1000 \
-  -v $HOME:$HOME -v $HOME/.ciel:$HOME/.ciel -e PDK_ROOT=$HOME/.ciel \
-  -w $PWD ghcr.io/librelane/librelane:3.0.14 \
-  python3 -m librelane -p ihp-sg13g2 -s sg13g2_stdcell config.json
+flow/run_librelane.sh flow/pe_serdes.json   # results under ~/asic-runs/
 ```
 
 ## Layout
 
 ```
 rtl/      synthesizable Verilog (the hardware): pe_serdes, pe_line_codec,
-          pe_codec_mux, pe_cpu, pe_uart_soc
+          pe_codec_mux, pe_cpu, pe_uart_soc, and tt_um_protocol_emulator
+          (the Tiny Tapeout top level — the only submittable module)
+info.yaml Tiny Tapeout project metadata: tiles, clock, pinout
+flow/     LibreLane config + runner, so place-and-route is reproducible
 tb/       self-checking testbenches + run_all.sh / run_firmware_tests.sh /
-          synth_area.sh
+          lint.sh / synth_area.sh
 firmware/ protocol programs (.pe source, .hex assembled) — uart_echo is the UART
 tools/    peasm.py (assembler), peemu.py (bit-accurate emulator),
           gen_*_budget.py (docs generated from RTL/PDK, drift-checked in run_all),
@@ -82,7 +91,7 @@ worth not rediscovering). `wiki/STATUS.md` is the resume-here page.
 
 ## Design in one paragraph
 
-Protocol logic belongs in **firmware**. A 377-cell CPU executes a program that
+Protocol logic belongs in **firmware**. A 387-cell CPU executes a program that
 bit-bangs a protocol against pins and a counter; the UART exists only as
 114 words of firmware. For protocols where a byte moves in one operation
 (UART/SPI/CAN/USB) a shared SERDES does the datapath: a programmable divider

@@ -20,11 +20,26 @@
 //                the bit after a full run is not complementary.
 //
 // None of these know protocols; config bits and one runtime parameter only.
+//
+// Every stage takes `clr`, the frame/SOF boundary reset. NRZI needs it as much
+// as the stuffer does: a USB packet starts from idle J, and without a way to
+// force that the only route back to a known line state is a chip reset.
+//
+// Every stage's rx_err is REGISTERED and asserted for one cycle after the
+// strobe that produced it. That uniformity is the point -- pe_codec_mux ORs
+// them into one output, and a consumer cannot have one sampling rule for a
+// combinational error and another for a registered one.
+
+// verilator lint_off DECLFILENAME
+// Three codecs share this file on purpose: they are one tier of the pipeline,
+// they are configured together, and pe_codec_mux is the only thing that
+// instantiates them. Splitting into three files would scatter one idea.
 
 module pe_nrzi (
   input  logic clk, rst_n,
   input  logic bit_en,
   input  logic bypass,
+  input  logic clr,       // frame/SOF boundary: return to idle J
   input  logic tx_raw,
   output logic tx_wire,
   input  logic rx_wire,
@@ -43,6 +58,9 @@ module pe_nrzi (
     if (!rst_n) begin
       tx_level <= 1'b1;   // idle J
       rx_level <= 1'b1;   // idle J
+    end else if (clr) begin
+      tx_level <= 1'b1;   // idle J
+      rx_level <= 1'b1;   // idle J
     end else if (bit_en) begin
       if (!bypass && (tx_raw == 1'b0)) tx_level <= ~tx_level;
       rx_level <= rx_wire;
@@ -55,6 +73,7 @@ module pe_manch (
   input  logic clk, rst_n,
   input  logic bit_en,
   input  logic bypass,
+  input  logic clr,             // frame boundary: drop any pending error
   input  logic half_phase,      // 0 = first half-cell, 1 = second half-cell
   input  logic tx_raw,
   output logic tx_wire,
@@ -69,7 +88,23 @@ module pe_manch (
   assign tx_wire = bypass ? tx_raw : (half_phase ? tx_raw : ~tx_raw);
   // RX: the second-half level carries the bit (a 0's second half is low).
   assign rx_raw  = bypass ? rx_wire : rx_second;
-  assign rx_err  = bypass ? 1'b0 : (rx_first == rx_second);
+
+  // rx_err is REGISTERED and strobe-gated, matching pe_bitstuff.
+  //
+  // It used to be `assign rx_err = bypass ? 0 : (rx_first == rx_second)`, which
+  // is true of an IDLE line as much as of a corrupt bit cell: with no strobe
+  // qualifying it, the output sat high between frames and whenever another
+  // protocol ran with Manchester bypassed. pe_codec_mux ORs this with the
+  // stuffer's registered rx_err, so the two must agree on when to be read --
+  // a consumer cannot have one sampling rule per source.
+  //
+  // Equal half-cells mean no mid-bit transition, which is a code violation
+  // (IEEE 802.3 guarantees one per cell). Only a committed cell can be one.
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n)     rx_err <= 1'b0;
+    else if (clr)   rx_err <= 1'b0;
+    else            rx_err <= bit_en && !bypass && (rx_first == rx_second);
+  end
 endmodule
 
 

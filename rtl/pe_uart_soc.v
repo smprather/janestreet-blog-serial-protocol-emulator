@@ -72,6 +72,14 @@ module pe_uart_soc #(
   logic [7:0]     io_wdata, io_rdata;
 
   // Instruction memory, one registered read port + host write port.
+  //
+  // `ram_style` is an FPGA synthesis pragma and has NO effect in this flow:
+  // yosys targeting sg13g2 has no block RAM to infer and no SRAM compiler to
+  // call (the PDK ships fixed macros only). Both arrays therefore become
+  // flops, which is where pe_uart_soc's ~8.7k cells come from. The attributes
+  // are kept only as a statement of intent for the SRAM swap
+  // ([[reference/sram-budget]]); they are not doing anything today, and
+  // reading them as "this is a RAM" is how the area number gets misread.
   (* ram_style = "block" *) logic [15:0] imem [0:IMEM_WORDS-1];
   always_ff @(posedge clk) begin
     if (host_we && host_imem_sel) imem[host_addr[IAW-1:0]] <= host_wdata;
@@ -89,7 +97,7 @@ module pe_uart_soc #(
 
   always_ff @(posedge clk) begin
     if (dmem_we) dmem[dmem_addr] <= dmem_wdata;
-    if (host_we && !host_imem_sel && (host_addr < DMEM_BYTES))
+    if (host_we && !host_imem_sel && (32'(host_addr) < DMEM_BYTES))
       dmem[host_addr[DAW-1:0]] <= host_wdata[7:0];
   end
 
@@ -99,28 +107,46 @@ module pe_uart_soc #(
     .dmem_addr(dmem_addr), .dmem_we(dmem_we),
     .dmem_wdata(dmem_wdata), .dmem_rdata(dmem_rdata),
     .io_port(io_port), .io_we(io_we), .io_re(io_re),
-    .io_wdata(io_wdata), .io_rdata(io_rdata)
+    .io_wdata(io_wdata), .io_rdata(io_rdata),
+    .dbg_pc(dbg_pc), .dbg_a(dbg_a)
   );
 
-  assign dbg_pc    = u_cpu.pc;
-  assign dbg_a     = u_cpu.a;
-
   // ---- tick counter -----------------------------------------------------
+  // tick_cnt, tick_val and tick_flag are ONE register process. They used to be
+  // two: the counter set tick_flag and a second always_ff cleared it on the
+  // STATUS read. That is two drivers on one flop, and the two tools disagreed
+  // about what it meant -- Icarus raced (dropping ~17% of ticks when the poll
+  // loop happened to align with the counter wrap) and yosys reported a
+  // driver-driver conflict and resolved tick_flag to a CONSTANT 0, so the
+  // STATUS port was dead in the netlist while working in simulation.
+  //
+  // One process, and set-beats-clear when a tick and its STATUS read land on
+  // the same cycle. Set wins because losing a tick costs the firmware a whole
+  // bit period, while re-reporting one it has already seen costs it one extra
+  // poll iteration.
   logic [CNTW-1:0] tick_cnt;
   logic [7:0]      tick_val;
   logic            tick_flag;
+  logic            tick_now, status_rd;
+
+  assign tick_now  = (tick_cnt == CNTW'(TICKS_PER_BIT - 1));
+  assign status_rd = io_re && (io_port == 4'h7);
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       tick_cnt  <= '0;
       tick_val  <= 8'h00;
       tick_flag <= 1'b0;
-    end else if (tick_cnt == CNTW'(TICKS_PER_BIT - 1)) begin
-      tick_cnt  <= '0;
-      tick_val  <= tick_val + 8'd1;
-      tick_flag <= 1'b1;
     end else begin
-      tick_cnt <= tick_cnt + 1'b1;
+      if (tick_now) begin
+        tick_cnt <= '0;
+        tick_val <= tick_val + 8'd1;
+      end else begin
+        tick_cnt <= tick_cnt + 1'b1;
+      end
+
+      if (tick_now)        tick_flag <= 1'b1;   // set beats clear
+      else if (status_rd)  tick_flag <= 1'b0;
     end
   end
 
@@ -133,12 +159,11 @@ module pe_uart_soc #(
     else if (io_we && io_port == 4'h1) pin_out <= io_wdata[0];
   end
 
-  // STATUS read clears the flag: firmware waits on "a tick happened" without
-  // burning a second register to remember the last count it saw.
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) tick_flag <= 1'b0;
-    else if (io_re && io_port == 4'h7) tick_flag <= 1'b0;
-  end
+  // Only bit 0 of a CPU write reaches a pin today (one output pin, one bit).
+  // Sink the rest explicitly rather than leaving a lint warning that a reader
+  // has to be told is expected. The pin matrix will consume all eight.
+  logic [6:0] _unused_io_wdata;
+  assign _unused_io_wdata = io_wdata[7:1];
 
   // ---- IO read mux ------------------------------------------------------
   always_comb begin

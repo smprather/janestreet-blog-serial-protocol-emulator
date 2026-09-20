@@ -50,7 +50,7 @@ module pe_codec_mux (
   assign run_cfg  = (cfg[7:4] == 4'd0) ? 4'd5 : cfg[7:4];
 
   // ---- TX cascade: stuff -> nrzi -> manch ----
-  logic s_wire, n_wire, m_rx_out, n_rx_out, st_rx_err, m_rx_err;
+  logic s_wire, n_wire, m_rx_out, n_rx_out, st_rx_err, m_rx_err, n_tx_lvl;
 
   pe_bitstuff u_stuff (
     .clk(clk), .rst_n(rst_n), .bit_en(bit_en),
@@ -60,14 +60,17 @@ module pe_codec_mux (
     .rx_err(st_rx_err)
   );
 
+  // clr reaches EVERY stage, not just the stuffer. NRZI carries a TX line
+  // level and an RX sampled level across bit cells; a USB packet begins from
+  // idle J, and before this the only way to get there was a chip reset.
   pe_nrzi u_nrzi (
-    .clk(clk), .rst_n(rst_n), .bit_en(bit_en), .bypass(~nrzi_en),
-    .tx_raw(s_wire), .tx_wire(n_wire), .tx_lvl(),
+    .clk(clk), .rst_n(rst_n), .bit_en(bit_en), .bypass(~nrzi_en), .clr(clr),
+    .tx_raw(s_wire), .tx_wire(n_wire), .tx_lvl(n_tx_lvl),
     .rx_wire(m_rx_out), .rx_raw(n_rx_out)
   );
 
   pe_manch u_manch (
-    .clk(clk), .rst_n(rst_n), .bit_en(bit_en), .bypass(~manch_en),
+    .clk(clk), .rst_n(rst_n), .bit_en(bit_en), .bypass(~manch_en), .clr(clr),
     .half_phase(cfg[3]),
     .tx_raw(n_wire), .tx_wire(tx_wire),
     .rx_wire(rx_wire), .rx_first(rx_first), .rx_second(rx_second),
@@ -75,6 +78,15 @@ module pe_codec_mux (
   );
 
   // ---- error aggregation ----
+  // Both sources are now registered one-cycle pulses aligned to the committing
+  // edge, so this OR has a single sampling rule. It did not before: pe_manch's
+  // rx_err was combinational and ungated, so it sat high on an idle line and
+  // permanently high whenever Manchester was bypassed for another protocol.
   assign rx_err = st_rx_err | m_rx_err;
+
+  // The NRZI line level is a debug tap the codec pipeline does not consume;
+  // tb_pe_line_codec drives it directly on a bare pe_nrzi.
+  logic _unused_n_tx_lvl;
+  assign _unused_n_tx_lvl = n_tx_lvl;
 
 endmodule

@@ -1,0 +1,18 @@
+{
+  "//": "LibreLane config for the pe_serdes signoff run. This is the ONLY",
+  "//2": "configuration behind the repo's routed result (0 DRC, 0 LVS, setup",
+  "//3": "WS +7.6 ns slow, hold WS +0.116 ns fast, die 161.7 x 180.4 um, 78%",
+  "//4": "utilisation). It used to live only in ~/asic-runs/pe-serdes, outside",
+  "//5": "git, so a clone could not reproduce the one signoff number the",
+  "//6": "project claims. Run it with flow/run_librelane.sh.",
+  "//7": "CLOCK_PERIOD 15.15 ns = 66 MHz: the pad-macro ceiling, not the",
+  "//8": "operating point. The design runs at 40 MHz; signing off at 66 buys",
+  "//9": "margin if the real IHP pad limit turns out lower than the sky130",
+  "//10": "figure. See wiki/concepts/tx-timing-generation.md.",
+  "PDK": "ihp-sg13g2",
+  "STD_CELL_LIBRARY": "sg13g2_stdcell",
+  "DESIGN_NAME": "pe_serdes",
+  "VERILOG_FILES": ["./src/pe_serdes.v"],
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 15.15
+}

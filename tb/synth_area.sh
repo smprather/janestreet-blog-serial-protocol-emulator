@@ -12,6 +12,8 @@ PDK="${IHP_PDK:-$HOME/pdk/IHP-Open-PDK}"
 LIB="$PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib"
 [ -f "$LIB" ] || { echo "liberty not found: $LIB"; exit 1; }
 
+rc=0
+
 report() {   # name, rtl files, top
   local name=$1 rtl=$2 top=$3
   local out
@@ -19,8 +21,29 @@ report() {   # name, rtl files, top
   local cells area
   # hierarchical designs print per-module lines then a design total: take the last
   cells=$(grep -oE '^ +[0-9]+ +[0-9.E+]+ +cells' <<< "$out" | awk '{print $1}' | tail -1)
-  area=$(grep -oE "Chip area for module '\\\\$top': [0-9.]+" <<< "$out" | awk '{print $NF}')
+  # Prefer the WHOLE-DESIGN total. "Chip area for module 'X'" is X's LOCAL
+  # area, excluding submodules -- for a wrapper like tt_um_protocol_emulator
+  # that is 0.0, which reads as a broken tool rather than as "all the area is
+  # one level down". yosys emits "Chip area for top module" with the real
+  # total for a hierarchical design; fall back to the local line for a flat one.
+  area=$(grep -oE "Chip area for top module '\\\\$top': [0-9.]+" <<< "$out" | awk '{print $NF}')
+  [ -n "$area" ] || area=$(grep -oE "Chip area for module '\\\\$top': [0-9.]+" <<< "$out" | awk '{print $NF}')
   printf '%-16s %8s cells  %12s um2\n' "$name" "${cells:--}" "${area:--}"
+
+  # SURFACE THE DIAGNOSTICS. This script used to capture yosys's whole output
+  # into $out and grep it only for numbers, so every warning it printed was
+  # discarded. Two real defects lived in that blind spot for an entire
+  # milestone: a driver-driver conflict on tick_flag (resolved to a constant,
+  # so the STATUS port was dead in the netlist) and two hierarchical references
+  # that yosys turned into implicit wires driven backwards. Both were reported
+  # on every single run. An area report that hides correctness warnings is
+  # worse than no area report, because it looks like a check.
+  local bad
+  bad=$(grep -E "Driver-driver conflict|implicitly declared|Warning: Wire .* is used but has no driver" <<< "$out")
+  if [ -n "$bad" ]; then
+    sed 's/^/    !! /' <<< "$bad"
+    rc=1
+  fi
 }
 
 echo "sg13g2 typ corner (1.20V/25C) — mapped, pre-route"
@@ -38,5 +61,15 @@ report pe_cpu       "rtl/pe_cpu.v"                               pe_cpu
 # not a synthesis failure -- see wiki/reference/sram-budget.md and
 # wiki/plans/through-i2c.md (Blocker 3) for the macro that fixes it.
 report pe_uart_soc  "rtl/pe_cpu.v rtl/pe_uart_soc.v"             pe_uart_soc
+# The deliverable: the only module Tiny Tapeout will instantiate.
+report tt_um_top    "rtl/pe_cpu.v rtl/pe_uart_soc.v rtl/tt_um_protocol_emulator.v" tt_um_protocol_emulator
 echo "-----------------------------------------------"
 echo "routed reference: pe_serdes = 17,211 um2 cells / 29,164 um2 die @78% util"
+echo "reproduce it with: flow/run_librelane.sh flow/pe_serdes.json"
+
+if [ "$rc" -ne 0 ]; then
+  echo
+  echo "SYNTHESIS DIAGNOSTICS ABOVE (marked !!) — the netlist will not match"
+  echo "the RTL you simulated. Fix them before trusting any number here."
+fi
+exit "$rc"

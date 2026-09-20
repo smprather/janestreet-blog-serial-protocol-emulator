@@ -76,6 +76,9 @@ NOTES: dict[tuple[str, str], str] = {
     ("pe_nrzi", "rx_wire"): "Line level in.",
     ("pe_nrzi", "rx_raw"): "Decoded bit: `wire XNOR previous level` — a transition is a 0, no transition is a 1.",
     ("pe_nrzi", "tx_lvl"): "The line level currently being driven.",
+    ("pe_nrzi", "clr"): "Frame/SOF boundary — return both the TX and RX line "
+                        "levels to idle J. A USB packet starts from idle J, and "
+                        "without this the only route there is a chip reset.",
     # ---- pe_manch --------------------------------------------------------
     ("pe_manch", "half_phase"): "0 = first half-cell, 1 = second half-cell. Driven by the SM/timing side.",
     ("pe_manch", "bypass"): "1 ⇒ pass the raw bit through untouched.",
@@ -85,9 +88,18 @@ NOTES: dict[tuple[str, str], str] = {
     ("pe_manch", "rx_first"): "First half-cell sample.",
     ("pe_manch", "rx_second"): "Second half-cell sample.",
     ("pe_manch", "rx_raw"): "Decoded bit.",
-    ("pe_manch", "rx_err"): "Illegal symbol — equal halves mean there was no mid-bit edge.",
+    ("pe_manch", "rx_err"): "Illegal symbol — equal halves mean there was no "
+                            "mid-bit edge. REGISTERED and strobe-gated: valid "
+                            "for one cycle after the committing edge, like "
+                            "pe_bitstuff's. It was combinational and ungated, "
+                            "which made it true of an idle line too.",
+    ("pe_manch", "clr"): "Frame boundary — drop any pending error.",
     # ---- pe_bitstuff -----------------------------------------------------
     ("pe_bitstuff", "clr"): "Frame/SOF boundary — reset run tracking.",
+    ("pe_cpu", "dbg_pc"): "Program counter, for observability. A real PORT, not a "
+                          "hierarchical reference from the parent: a cross-module "
+                          "reference simulates but does not synthesise.",
+    ("pe_cpu", "dbg_a"): "Accumulator, for observability. See dbg_pc.",
     ("pe_bitstuff", "bypass"): "1 ⇒ pass the raw bit through untouched (no stuffing).",
     ("pe_bitstuff", "run_cfg"): "Stuff after this many identical bits (5 = CAN, 6 = USB-LS).",
     ("pe_bitstuff", "tx_raw"): "Raw bit in.",

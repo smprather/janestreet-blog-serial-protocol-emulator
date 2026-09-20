@@ -1,0 +1,37 @@
+; tick_count.pe — counts timer ticks through the STATUS flag.
+;
+; This program exists to test ONE thing: that a tick is never lost when the
+; firmware's STATUS read lands on the same cycle as the counter wrap.
+;
+; uart_echo.pe deliberately does not use STATUS -- it polls the TIMER VALUE and
+; waits for it to change, because a read-and-clear flag cannot be polled in a
+; loop that also needs to see it. That left port 7 with no firmware exercising
+; it at all, and the defect sat there through a 16/16 green regression:
+; `tick_flag` was driven by two always_ff blocks, which Icarus raced (losing
+; ~17% of ticks) and yosys resolved to a CONSTANT 0, so STATUS worked in
+; simulation and was dead in silicon.
+;
+; The loop below is the adversarial case on purpose. It is two instructions
+; long when idle, so `IN A, STATUS` asserts io_re every other cycle and
+; collides with the tick counter's wrap as often as this SoC can arrange.
+;
+; Contract under test: after N ticks of real time, the count assembled here
+; equals the free-running TIMER, because every tick is reported exactly once.
+;
+;   dmem[0] = ticks observed via STATUS
+;
+; Both counters are 8-bit and wrap together, so the testbench must compare
+; them over a window shorter than 256 ticks.
+
+        LDI   A, 0
+        STM   0, A                 ; count := 0
+
+poll:
+        IN    A, STATUS            ; read-and-clear: a set flag is consumed here
+        JZ    poll                 ; no tick yet -- 2-cycle loop, io_re every 2nd
+
+        ; A tick was reported. Bank it.
+        LDM   A, 0
+        ADD   A, 1
+        STM   0, A
+        JMP   poll

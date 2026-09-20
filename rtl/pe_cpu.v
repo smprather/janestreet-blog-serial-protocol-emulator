@@ -71,7 +71,17 @@ module pe_cpu #(
   output logic             io_we,
   output logic             io_re,
   output logic [7:0]       io_wdata,
-  input  logic [7:0]       io_rdata
+  input  logic [7:0]       io_rdata,
+
+  // Observability. These are real ports, not hierarchical references from the
+  // parent: `assign dbg_pc = u_cpu.pc` in pe_uart_soc.v simulated correctly in
+  // Icarus but yosys declared `\u_cpu.pc` as an implicit wire and drove it
+  // BACKWARDS, leaving the SoC's dbg_pc constant-zero above bit 0 in the
+  // netlist. A cross-module reference is not synthesisable; a port is.
+  // They cost nothing: pc and a exist regardless, and an unloaded output is
+  // removed by the synthesiser at the top level.
+  output logic [7:0]       dbg_pc,
+  output logic [7:0]       dbg_a
 );
 
   localparam int IAW = (IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS);
@@ -100,6 +110,9 @@ module pe_cpu #(
                          ALU_OR  = 2'd3;
 
   logic [7:0] a, y, x, pc;
+
+  assign dbg_pc = pc;
+  assign dbg_a  = a;
 
   // ---- fetch (fetch-ahead) ----------------------------------------------
   // The instruction ROM has a REGISTERED output (it models a real ROM macro,
@@ -159,6 +172,14 @@ module pe_cpu #(
   // bits 7:0 carry the immediate when bit 9 is clear.
   logic [7:0] alu_rhs;
   assign alu_rhs = arg[9] ? x : arg[7:0];
+
+  // arg[8] is the one encoding bit no instruction reads: ALU uses [11:10]+[9]+
+  // [7:0], LDM uses [7] and [3:0], everything else uses [7:0] or less. It is
+  // reserved for a second ALU source select. Sink it explicitly so the lint
+  // gate stays clean and so "unused" is a statement in the RTL rather than a
+  // warning somebody has to remember is expected.
+  logic _unused_arg8;
+  assign _unused_arg8 = arg[8];
 
   logic [7:0] alu_q;
   always_comb begin

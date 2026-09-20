@@ -19,13 +19,19 @@ Both layers of the thesis now exist and are verified:
   pin, one output pin and a tick counter. That is the competition thesis,
   demonstrated end to end in simulation.
 
+**The repo is now submittable**: `rtl/tt_um_protocol_emulator.v` and `info.yaml`
+exist, so there is a `tt_um_*` top level with a real pad interface
+(`ui_in`/`uo_out`/`uio_*`), an `ena` that gates nothing, and open-drain SDA/SCL on
+`uio[1:0]`. Until 2026-09-20 every pin-budget conclusion in the wiki described an
+interface that no RTL in this repo implemented.
+
 Nothing has been taped out. The pin matrix, the DRU, and the SRAM swap do not
 exist yet. **[[plans/through-i2c]] has the ordered work list to the next
 milestone** (the I2C transaction); the summary is at the bottom of this file.
 
 ```
                     +---------------------+
-   firmware  --->   |  pe_cpu             |   BUILT (377 cells) — ISA in its header
+   firmware  --->   |  pe_cpu             |   BUILT (387 cells) — ISA in its header
    (.pe -> .hex)    |  16 opcodes, A/Y/X  |
                     +---------------------+
                               |
@@ -52,6 +58,12 @@ milestone** (the I2C transaction); the summary is at the bottom of this file.
     |  (not built)      |           |  / tri-state      |   gates I2C + stretch
     +-------------------+           +-------------------+
                               |
+                +---------------------------+
+                | tt_um_protocol_emulator   |  BUILT — the deliverable.
+                | ui_in / uo_out / uio_oe   |  Pad contract TB: no X on an
+                | open-drain SDA+SCL        |  output, ena gates nothing,
+                +---------------------------+  uio never drives high.
+                              |
                         TT GPIO pins
 ```
 
@@ -66,30 +78,65 @@ states the reasoning; do not "unify" them without reading it.
 | Block | File | Cells | Area (µm²) | TBs |
 |---|---|---|---|---|
 | SERDES (bit engine, 1–32 b, runtime order) | `rtl/pe_serdes.v` | 539 | 11,223 synth → **17,211 routed** | `tb_pe_serdes.v` + 9 protocol TBs |
-| NRZI codec | `rtl/pe_line_codec.v` | 12 | 189 | `tb_pe_nrzi` |
-| Manchester codec | `rtl/pe_line_codec.v` | 5 | 62 | `tb_pe_manch` |
+| NRZI codec | `rtl/pe_line_codec.v` | 15 | 212 | `tb_pe_nrzi` |
+| Manchester codec | `rtl/pe_line_codec.v` | 7 | 120 | `tb_pe_manch` |
 | Bit stuffer/unstuffer | `rtl/pe_line_codec.v` | 84 | 1,290 | `tb_pe_bitstuff` |
-| Codec pipeline mux | `rtl/pe_codec_mux.v` | 110 total (9 glue) | 69 glue (+ sub-blocks above) | `tb_pe_codec_mux` |
-| **CPU** (16-bit insn, 16 opcodes, 8-bit PC) | `rtl/pe_cpu.v` | 377 | 4,805 | `tb_pe_cpu` |
-| **Software-UART SoC** (CPU + tick timer + 2 pins) | `rtl/pe_uart_soc.v` | 8,592 | 177,328 local (+4,805 = 182,133 total) | `tb_pe_uart_soc` |
+| Codec pipeline mux | `rtl/pe_codec_mux.v` | 115 | 1,691 (whole pipeline) | `tb_pe_codec_mux` |
+| **CPU** (16-bit insn, 16 opcodes, 8-bit PC) | `rtl/pe_cpu.v` | 387 | 4,952 | `tb_pe_cpu` |
+| **Software-UART SoC** (CPU + tick timer + 2 pins) | `rtl/pe_uart_soc.v` | 8,744 | 182,650 total | `tb_pe_uart_soc`, `tb_pe_tick_status` |
+| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | 8,743 | 182,652 total | `tb_tt_um_protocol_emulator` |
 
 Numbers from `tb/synth_area.sh` (sg13g2 typ corner, mapped pre-route). The routed
 figure for the SERDES comes from the full LibreLane flow (route+CTS+PDN inflate
-area ~1.54× over mapped).
+area ~1.54× over mapped), reproducible from a clean clone with
+`flow/run_librelane.sh flow/pe_serdes.json`.
 
-**The SoC's 177.3k µm² figure is flop memory, not a synthesis failure**: its IMEM
+Two reporting changes on 2026-09-20, so these do not look like regressions against
+the previous revision of this table:
+
+- **Areas are now whole-design totals.** `synth_area.sh` read yosys's "Chip area for
+  module 'X'", which is X's *local* area excluding submodules — 69 µm² for the codec
+  mux (the glue only) and 0 µm² for any wrapper. It now prefers "Chip area for top
+  module", so the codec mux reads 1,691 and the SoC reads one number instead of
+  needing the reader to add the CPU back in.
+- **A few blocks genuinely grew**, all of it fixes: NRZI and Manchester gained a
+  frame-boundary `clr` and a registered error, the CPU gained real `dbg_pc`/`dbg_a`
+  ports (they were hierarchical references that did not synthesise), and the SoC's
+  `tick_flag` became an actual flop instead of a driver conflict yosys was tying to
+  a constant.
+
+**The SoC's 182.7k µm² figure is flop memory, not a synthesis failure**: its IMEM
 (128×16) and DMEM (16×8) are register arrays, so yosys emits ~2,215 flops at
-48.9 µm² each. For comparison a `1P_256x16` SRAM macro holds 4,096 bits in
+48.9 µm² each. The `ram_style` attributes on those arrays are FPGA pragmas and do
+nothing in this flow — sg13g2 has no inferable block RAM and no SRAM compiler,
+only fixed macros. For comparison a `1P_256x16` SRAM macro holds 4,096 bits in
 28,127 µm². Replacing flops with a macro is the documented next step (see
 [[plans/through-i2c]] Blocker 3 and [[reference/sram-budget]]), and it changes
 nothing in the CPU's interface or cycle model — the instruction port was written
 for a registered ROM from the start.
 
-**Regression: 16/16 testbenches + 5/5 firmware tests pass** (`tb/run_all.sh` runs
-the firmware regression first, then every TB). Verilator lint clean on all RTL —
-note it reports 4 warnings on the new blocks (multidriven `tick_flag`, unused
-`arg[8]`/`io_wdata[7:1]`) and exits non-zero under `-Wall`; they are intentional
-and the pre-existing blocks are clean, so lint is not yet wired into `run_all.sh`.
+**Regression: 18/18 testbenches + 11/11 firmware tests pass, and the lint gate is
+clean** (`tb/run_all.sh` runs the firmware regression first, then every TB, then
+`tb/lint.sh`, then the generated-doc drift checks).
+
+**`tb/lint.sh` is not optional, and the reason is the most useful thing in this
+file.** A previous revision said the Verilator warnings were "intentional". They
+were not. Two of them were real defects that no testbench could ever have caught,
+because a testbench only ever sees the *simulator's* resolution of illegal RTL:
+
+- `tick_flag` was driven by two `always_ff` blocks. Icarus raced it (measured: 50 of
+  100 ticks silently dropped by a two-instruction poll loop) and **yosys resolved the
+  driver-driver conflict to a constant 0**, so the STATUS port worked in simulation
+  and was dead in the netlist. Nothing caught it because no firmware read the port —
+  `firmware/tick_count.pe` and `tb/tb_pe_tick_status.v` now do.
+- `assign dbg_pc = u_cpu.pc` is a cross-module reference. Icarus accepts it; yosys
+  declared an implicit wire and drove it *backwards*, leaving `dbg_pc[7:1]` tied low
+  in the netlist. They are real ports on `pe_cpu` now.
+
+Both were printed by the tools on every run and discarded: `tb/synth_area.sh`
+captured yosys's output and grepped it only for numbers. It now surfaces them and
+exits non-zero. **An area report that hides correctness warnings looks like a check
+and is not one.**
 
 Protocol testbenches (one per target, each wrapping the same SERDES with that
 protocol's real framing): UART 8N1 · SPI mode 0 full duplex · I2C 7-bit
@@ -120,6 +167,8 @@ die 161.7 × 180.4 µm, 78 % utilization. Run dir: `~/asic-runs/pe-serdes`.
 | SERDES words ≤ 32 b; longer fields chunk (SWD parity, CAN/USB/ETH payloads) | `rtl/pe_serdes.v` header |
 | Codec pipeline order fixed (stuff → line-code); cfg selects the **subset** | `rtl/pe_codec_mux.v` header |
 | No elasticity FIFO needed (source-sync protocols + per-edge re-lock) | `concepts/cdr-oversampling.md` |
+| Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | `rtl/pe_line_codec.v` header |
+| `ena` must never gate logic; every pad output driven in every state | `rtl/tt_um_protocol_emulator.v` header |
 
 ## Toolchain — exact commands
 
@@ -135,8 +184,13 @@ cd ~/janestreet-blog-serial-protocol-emulator && ./tb/run_all.sh
 python3 tools/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex
 python3 tools/peemu.py firmware/uart_echo.hex --send "41 42" --max-cycles 900000
 
-# mapped area per block (native yosys + IHP liberty)
+# mapped area per block (native yosys + IHP liberty). Exits non-zero if yosys
+# reports a driver conflict or an implicit declaration -- it used to swallow them.
 ./tb/synth_area.sh
+
+# the static gate on its own: verilator -Wall + a yosys elaboration check.
+# run_all.sh runs this; there are no accepted warnings in this RTL.
+./tb/lint.sh
 
 # live diagram pane (side-quest): start the dashboard once, write SVG/HTML into
 # diagrams/ and it renders live in the Canvas tab (~1s, no reload)
@@ -146,13 +200,12 @@ tools/live-canvas/canvas-publish.sh scratch.svg    # or just cp
 # how the layout bugs get caught before they ship):
 tools/live-canvas/gen_flowchart.py tools/live-canvas/flowcharts/plan-through-i2c.json
 
-# full place & route (dockerized LibreLane) — NOTE the explicit -p / -s flags,
-# the wrapper's PDK auto-enable fails for ihp-sg13g2 (see gotchas)
-cd ~/asic-runs/pe-serdes && docker run --rm -i --user 1000:1000 \
-  -v /home/mylesp:/home/mylesp -v /home/mylesp/.ciel:/home/mylesp/.ciel \
-  -e PDK_ROOT=/home/mylesp/.ciel -w /home/mylesp/asic-runs/pe-serdes \
-  ghcr.io/librelane/librelane:3.0.14 \
-  python3 -m librelane -p ihp-sg13g2 -s sg13g2_stdcell config.json
+# full place & route. The config now lives IN THE REPO (flow/), so the signoff
+# result is reproducible from a clean clone; it used to exist only in
+# ~/asic-runs, which meant the one routed number the project claims could not be
+# regenerated by anyone else. The script handles the explicit -p / -s flags the
+# dockerized wrapper needs (see gotcha 1) and stages sources into the run dir.
+flow/run_librelane.sh flow/pe_serdes.json
 ```
 
 Environment: PDK clone `~/pdk/IHP-Open-PDK`; Ciel PDK `~/.ciel` (enabled
@@ -200,6 +253,31 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     correctly while the RTL TB failed; that asymmetry was the clue that the bug
     was in the TB/firmware, not the CPU. Keep both, and treat a disagreement as
     a signal, not an inconvenience.
+12. **A simulator's resolution of illegal RTL is not the synthesiser's, so a
+    green testbench says NOTHING about the netlist.** Two drivers on one flop
+    raced in Icarus and became a constant 0 in yosys. A hierarchical reference
+    (`assign dbg_pc = u_cpu.pc`) simulated fine and was driven backwards into an
+    implicit wire by yosys. Neither is reachable by any testbench. `tb/lint.sh`
+    is the only thing that can catch this class, which is why it is in
+    `run_all.sh` and not a thing you remember to run.
+13. **A tool whose warnings you discard is not a check.** `synth_area.sh`
+    captured yosys's entire output and grepped it for numbers, so both defects
+    above were printed on every single run for a whole milestone and never read.
+    If a script captures output, it owes the reader a decision about the parts
+    it did not use.
+14. **Hardware nothing exercises is hardware you have not tested.** The STATUS
+    port had no firmware reading it, so its flop could be a constant and the
+    regression stayed green. When you add a peripheral, add the program that
+    uses it (`firmware/tick_count.pe`) in the same change.
+15. **A test that only checks the output cannot see broken bookkeeping.** The
+    UART echo path reads slot 15, so a receive-buffer write pointer that never
+    advanced (`AND 0x0E` applied to ptr+1 is always 0) passed every byte-level
+    test for a milestone. `--expect-buffer` now checks the state, not just the
+    bytes.
+16. **Silent truncation is the assembler's worst failure mode.** Every field in
+    this ISA is narrower than the immediate that fits in it, so `JMP 200`,
+    `LDM A, 128` (which re-encoded as `LDM X`) and a 129-word program all
+    assembled clean and ran wrong. `tools/peasm.py` now rejects all of them.
 
 ## Open questions / risks
 
@@ -224,6 +302,9 @@ Its Blocker 1 (the red UART RTL test) is **fixed as of 2026-09-20**; steps 2 and
 of that plan are the housekeeping this file just went through.
 
 Beyond I2C, in rough order:
+0. **Pin matrix**, which now has a real top level to plug into
+   (`rtl/tt_um_protocol_emulator.v` wires `uio_oe` to pads and its TB asserts the
+   open-drain property). It replaces the wrapper's fixed pin mapping.
 1. **DRU** (oversampled phase-picker): edge detect, 3-bit phase counter with
    re-lock on every edge, mid-bit strobe, preamble lock, majority-vote filter.
    Spec is in `concepts/cdr-oversampling.md`; ~60–100 cells. Needed for 10BASE-T
@@ -235,7 +316,12 @@ Beyond I2C, in rough order:
 
 Done since the last revision of this list: the programmable core exists
 (`rtl/pe_cpu.v`), the assembler and emulator exist (`tools/peasm.py`,
-`tools/peemu.py`), and a UART runs in firmware on real RTL.
+`tools/peemu.py`), and a UART runs in firmware on real RTL. Then a review pass on
+2026-09-20 fixed four defects that the green regression could not see (the
+two-driver `tick_flag`, the unsynthesisable debug ports, the stuck receive-buffer
+pointer, and the assembler's silent truncation), added the gate that catches that
+class, and built the Tiny Tapeout top level the repo had been reasoning about
+without ever writing.
 
 ## Reading order for a fresh session
 
@@ -249,3 +335,6 @@ Done since the last revision of this list: the programmable core exists
 6. `concepts/cdr-oversampling.md` (the DRU spec, still unbuilt).
 7. `wiki/log.md` (last ~15 entries) for recent activity.
 8. `rtl/pe_serdes.v` header comment for the SERDES contract.
+9. `rtl/tt_um_protocol_emulator.v` header — the pad contract, the two TT rules
+   that are expensive to get wrong (`ena` gates nothing; every output driven),
+   and why open-drain is native to `uio_oe`.

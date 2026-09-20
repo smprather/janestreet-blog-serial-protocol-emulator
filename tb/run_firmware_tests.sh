@@ -37,13 +37,31 @@ size=$(grep -c . firmware/uart_echo.hex)
 printf '%-34s PASS (%s of 128 words)\n' "assemble uart_echo" "$size"
 pass=$((pass+1))
 
+# tick_count.pe is the STATUS-port exerciser that tb_pe_tick_status.v runs.
+# It must assemble here for the same reason uart_echo does: the RTL testbench
+# $readmemh's the .hex, so a stale image would be a silent pass.
+if ! $PY tools/peasm.py firmware/tick_count.pe -o firmware/tick_count.hex >/dev/null 2>&1; then
+  echo "assemble tick_count                    FAIL"
+  $PY tools/peasm.py firmware/tick_count.pe 2>&1 | head -3 | sed 's/^/    /'
+  exit 1
+fi
+printf '%-34s PASS (%s words)\n' "assemble tick_count" \
+  "$(grep -c . firmware/tick_count.hex)"
+pass=$((pass+1))
+
 # 2. single byte
 run_case "emulate: one byte" \
   $PY tools/peemu.py firmware/uart_echo.hex --send 41 --max-cycles 900000
 
-# 3. multi-byte, with the half-duplex gap the echo loop requires
-run_case "emulate: three bytes" \
-  $PY tools/peemu.py firmware/uart_echo.hex --send "41 42 43" --max-cycles 900000
+# 3. multi-byte, with the half-duplex gap the echo loop requires.
+#    --expect-buffer also checks the ROLLING BUFFER, not just the echoed bytes.
+#    The echo path reads slot 15 ("last byte received"), so it cannot see a
+#    broken write pointer -- and the pointer was broken: its wrap mask made it
+#    a constant 0 and every byte overwrote slot 0. Bytes-only checks passed
+#    throughout.
+run_case "emulate: three bytes + buffer" \
+  $PY tools/peemu.py firmware/uart_echo.hex --send "41 42 43" \
+     --expect-buffer "41 42 43" --max-cycles 900000
 
 # 4. stress: every byte position pattern (0x00 and 0xFF are the cases that
 #    expose timing slips, because a mis-sampled bit is invisible in 0xAA)
@@ -66,6 +84,72 @@ else
   printf '%-34s PASS (emulator err = not delivered)\n' "limitation: gap=1 loses bytes"
   pass=$((pass+1))
 fi
+
+# ---------------------------------------------------------------------------
+# Assembler range checks.
+#
+# These are NEGATIVE tests: each snippet must be REJECTED. The assembler used
+# to silently truncate every out-of-range field, which is the worst possible
+# behaviour for a machine whose whole point is that the program is the design:
+#
+#   * a program over IMEM_WORDS was emitted in full, and the 7-bit program
+#     counter aliased word 128 onto word 0 at run time. uart_echo is already
+#     114 of 128 words, so the next protocol hits this first.
+#   * a jump past the end of instruction memory encoded fine and landed
+#     somewhere else entirely.
+#   * LDM's bit 7 is a destination selector (A vs X), so `LDM A, 128` silently
+#     assembled as `LDM X`.
+#   * data addresses above DMEM_BYTES wrapped into occupied slots.
+#
+# Every one of those is a program that assembles clean and runs wrong.
+expect_err() {   # label, expected-substring, source-lines...
+  local label="$1" want="$2"; shift 2
+  local tmp; tmp=$(mktemp /tmp/peasm_neg_XXXXXX.pe)
+  printf '%s\n' "$@" > "$tmp"
+  local out rc
+  out=$($PY tools/peasm.py "$tmp" 2>&1); rc=$?
+  rm -f "$tmp"
+  if [ "$rc" -ne 0 ] && grep -qi -- "$want" <<< "$out"; then
+    printf '%-34s PASS (rejected)\n' "$label"
+    pass=$((pass+1))
+  else
+    printf '%-34s FAIL\n' "$label"
+    printf '    exit=%s out=%s\n' "$rc" "$(head -2 <<< "$out")"
+    fail=$((fail+1)); failed+=("$label")
+  fi
+}
+
+echo
+echo "=== assembler range checks (must be rejected) ==="
+
+# 129 words into a 128-word memory. Built as a file rather than through
+# expect_err's varargs so the shell cannot word-split it.
+big=$(mktemp /tmp/peasm_big_XXXXXX.pe)
+for _ in $(seq 1 129); do echo "        LDI A, 0"; done > "$big"
+if out=$($PY tools/peasm.py "$big" 2>&1); then
+  printf '%-34s FAIL (accepted 129 words)\n' "reject: program over 128 words"
+  fail=$((fail+1)); failed+=("reject: program over 128 words")
+elif grep -qi "instruction memory" <<< "$out"; then
+  printf '%-34s PASS (rejected)\n' "reject: program over 128 words"
+  pass=$((pass+1))
+else
+  printf '%-34s FAIL (wrong error)\n' "reject: program over 128 words"
+  printf '    %s\n' "$(head -1 <<< "$out")"
+  fail=$((fail+1)); failed+=("reject: program over 128 words")
+fi
+rm -f "$big"
+
+expect_err "reject: jump past imem" "out of range" \
+  "        JMP 200"
+
+expect_err "reject: LDM A above dmem" "data address" \
+  "        LDM A, 128"
+
+expect_err "reject: STM above dmem" "data address" \
+  "        STM 20, A"
+
+expect_err "reject: IO port above 15" "port" \
+  "        IN A, 31"
 
 echo
 echo "========================================"

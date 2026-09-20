@@ -1,7 +1,18 @@
+# This project is Verilog plus a small set of standalone Python tools; it is not
+# a Python package. `uv init` scaffolded one (a src/ layout with a "Hello from"
+# entry point), which was removed: the real tools live in tools/ and are run
+# directly, the entry point pointed at a stub, and `pip install .` produced a
+# console script that printed a greeting.
+#
+# What is kept is the interpreter floor and the lint config, because the tools
+# are checked with ruff and they use 3.12 syntax (PEP 604 unions, `list[int]`).
+# They have no third-party dependencies on purpose: tb/run_all.sh must work on a
+# clean clone with nothing but python3, iverilog, verilator and yosys.
+
 [project]
 name = "janestreet-blog-serial-protocol-emulator"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "Programmable serial-protocol emulator for Tiny Tapeout (IHP 130nm): protocol logic as firmware, not gates."
 readme = "README.md"
 authors = [
     { name = "Myles Prather", email = "smprather@gmail.com" }
@@ -9,9 +20,6 @@ authors = [
 requires-python = ">=3.12"
 dependencies = []
 
-[project.scripts]
-janestreet-blog-serial-protocol-emulator = "janestreet_blog_serial_protocol_emulator:main"
-
-[build-system]
-requires = ["uv_build>=0.12.3,<0.13.0"]
-build-backend = "uv_build"
+[tool.ruff]
+line-length = 90
+target-version = "py312"

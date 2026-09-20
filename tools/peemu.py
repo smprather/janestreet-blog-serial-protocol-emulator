@@ -7,8 +7,13 @@ map here mirror rtl/pe_cpu.v and rtl/pe_uart_soc.v exactly — if they disagree,
 one of them is wrong and the mismatch is the bug.
 
 Cycle model (matches the RTL):
-  * instruction fetch is combinational; imem read is REGISTERED (1 cycle)
-  * dmem read is registered (1 cycle), dmem write is same-cycle
+  * instruction fetch is combinational; imem read is REGISTERED (1 cycle),
+    which is why pe_cpu drives next_pc at the ROM rather than pc
+  * dmem read is COMBINATIONAL, dmem write is same-cycle. That is deliberate
+    in rtl/pe_uart_soc.v: `LDM addr` changes the address on the very cycle it
+    wants the data, so a registered read would return whatever the previous
+    instruction addressed. (This line used to claim "registered", which
+    contradicted the RTL this file exists to mirror.)
   * PC increments every cycle
 
     python3 tools/peemu.py firmware/uart_echo.hex --send 41 42 43
@@ -72,7 +77,6 @@ class Soc:
 
         # registered read paths
         self.imem_rdata = 0
-        self.dmem_rdata = 0
         self.first = True               # imem read is registered: 1-cycle lag
 
         # wire model
@@ -128,42 +132,40 @@ class Soc:
 
         next_a, next_y, next_x, next_pc = self.a, self.y, self.x, m8(self.pc + 1)
         dm_we, dm_addr, dm_data = False, self.x, self.a
-        # branch operand forwarding, mirroring rtl/pe_cpu.v's branch_a: a branch
-        # immediately after a load tests the LOADED value, not the stale register
-        branch_a = self.a
+        # No branch-operand forwarding: rtl/pe_cpu.v has none and needs none.
+        # The core is single-cycle, so an instruction that writes A has already
+        # committed it before the next cycle's JZ/JNZ reads it. A `branch_a`
+        # variable used to be computed here, described as "mirroring
+        # rtl/pe_cpu.v's branch_a" -- there is no such signal in the RTL, and
+        # nothing but the branches ever read it, where it equalled self.a.
 
         if op == OP_LDI:
             next_a = arg & 0xFF
-            branch_a = next_a
         elif op == OP_OUT:
             self._io_write(arg & 0xF, self.a)
         elif op == OP_IN:
             next_a = self._io_read(arg & 0xF)
-            branch_a = next_a
         elif op == OP_MOV:
             sel = arg & 3
             if sel == 0:
                 next_a = self.y
-                branch_a = next_a
             elif sel == 1:
                 next_y = self.a
             elif sel == 2:
                 next_x = self.a
             else:
                 next_a = self.x
-                branch_a = next_a
         elif op == OP_JMP:
             next_pc = arg & 0xFF
         elif op == OP_JZ:
-            if branch_a == 0:
+            if self.a == 0:
                 next_pc = arg & 0xFF
         elif op == OP_JNZ:
-            if branch_a != 0:
+            if self.a != 0:
                 next_pc = arg & 0xFF
         elif op == OP_ALU:
             sub = (arg >> 10) & 3
             rhs = self.x if (arg >> 9) & 1 else (arg & 0xFF)
-            branch_a = next_a
             if sub == ALU_ADD:
                 next_a = m8(self.a + rhs)
             elif sub == ALU_SUB:
@@ -172,17 +174,14 @@ class Soc:
                 next_a = self.a & rhs
             else:
                 next_a = self.a | rhs
-            branch_a = next_a
         elif op == OP_INCX:
             next_x = m8(self.x + 1)
         elif op == OP_DECX:
             next_x = m8(self.x - 1)
         elif op == OP_SHR:
             next_a = self.a >> 1
-            branch_a = next_a
         elif op == OP_LDS:
             next_a = self.dmem[self.x % len(self.dmem)]
-            branch_a = next_a
         elif op == OP_STS:
             dm_we, dm_addr, dm_data = True, self.x, self.a
         elif op == OP_LDM:
@@ -192,7 +191,6 @@ class Soc:
                 next_x = self.dmem[(arg & 0x0F) % len(self.dmem)]
             else:
                 next_a = self.dmem[(arg & 0xFF) % len(self.dmem)]
-            branch_a = next_a
         elif op == OP_STM:
             dm_we, dm_addr, dm_data = True, arg & 0xFF, self.a
         # OP_NOP: nothing
@@ -202,9 +200,10 @@ class Soc:
             self.dmem[dm_addr % len(self.dmem)] = m8(dm_data)
         self.a, self.y, self.x, self.pc = next_a, next_y, next_x, next_pc
 
-        # registered memory reads (visible next cycle)
+        # The instruction ROM's registered read: the word fetched now is the
+        # one executed next cycle. dmem needs no equivalent -- it is read
+        # combinationally, in the opcode cases above, exactly as the RTL does.
         self.imem_rdata = self.imem[self.pc % len(self.imem)]
-        self.dmem_rdata = self.dmem[self.x % len(self.dmem)]
 
     # -- wire side ---------------------------------------------------------
     def set_rx_bit(self, bit: int) -> None:
@@ -309,6 +308,11 @@ def main() -> int:
                     help="print state every N cycles")
     ap.add_argument("--gap", type=int, default=24,
                     help="idle bit periods between sent bytes (half-duplex turnaround)")
+    ap.add_argument("--expect-buffer", type=_send_list, default=None,
+                    help="also assert the firmware's rolling receive buffer "
+                         "(dmem[0..]) holds exactly these bytes, in order")
+    ap.add_argument("--dump-dmem", action="store_true",
+                    help="print the data memory at the end of the run")
     args = ap.parse_args()
 
     got, soc = run(args.hexfile, args.send, args.max_cycles, args.trace, args.gap)
@@ -317,10 +321,31 @@ def main() -> int:
     print(f"cycles: {soc.cycles:,}")
     print(f"sent:   {' '.join(f'{b:02X}' for b in want)}")
     print(f"echoed: {' '.join(f'{b:02X}' for b in got)}")
-    if got == want:
+    if args.dump_dmem:
+        print("dmem:   " + " ".join(f"{v:02X}" for v in soc.dmem))
+
+    ok = got == want
+    if not ok:
+        print(f"FAIL: expected {want}, got {got}")
+
+    # The echo path only ever reads slot 15 ("last byte received"), so a broken
+    # rolling buffer is invisible to the byte check above -- and it WAS broken:
+    # the write pointer's wrap mask (AND 0x0E applied to ptr+1) evaluated to 0
+    # for every input, so all three bytes of a three-byte run landed in slot 0.
+    if args.expect_buffer is not None:
+        n = len(args.expect_buffer)
+        seen = soc.dmem[:n]
+        if seen != args.expect_buffer:
+            print(f"FAIL: receive buffer holds "
+                  f"{[f'{v:02X}' for v in seen]}, expected "
+                  f"{[f'{v:02X}' for v in args.expect_buffer]}")
+            ok = False
+        else:
+            print(f"buffer: {' '.join(f'{v:02X}' for v in seen)} (rolled correctly)")
+
+    if ok:
         print("PASS: every byte came back")
         return 0
-    print(f"FAIL: expected {want}, got {got}")
     return 1
 
 

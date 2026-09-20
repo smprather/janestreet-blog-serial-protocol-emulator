@@ -17,12 +17,14 @@ module tb_pe_nrzi;
   logic clk=0, rst_n;
   logic tx_en, tx_bypass, tx_raw, tx_wire, tx_lvl;
   logic rx_en, rx_bypass, rx_wire, rx_raw, rx_lvl_unused;
-  logic wire_lvl;
+  logic wire_lvl, clr;
 
   pe_nrzi u_tx (.clk(clk), .rst_n(rst_n), .bit_en(tx_en), .bypass(tx_bypass),
+                .clr(clr),
                 .tx_raw(tx_raw), .tx_wire(tx_wire), .rx_wire(1'b0),
                 .rx_raw(), .tx_lvl(tx_lvl));
   pe_nrzi u_rx (.clk(clk), .rst_n(rst_n), .bit_en(rx_en), .bypass(rx_bypass),
+                .clr(clr),
                 .tx_raw(1'b1), .tx_wire(), .rx_wire(rx_wire),
                 .rx_raw(rx_raw), .tx_lvl(rx_lvl_unused));
 
@@ -52,7 +54,7 @@ module tb_pe_nrzi;
 
   initial begin
     $dumpfile("tb_pe_nrzi.vcd"); $dumpvars(0, tb_pe_nrzi);
-    rst_n=0; tx_en=0; rx_en=0; tx_bypass=0; rx_bypass=0;
+    rst_n=0; tx_en=0; rx_en=0; tx_bypass=0; rx_bypass=0; clr=0;
     tx_raw=0; rx_wire=0; wire_lvl=0;
     repeat(3) @(posedge clk); #1; rst_n=1; @(posedge clk); #1;
 
@@ -100,6 +102,24 @@ module tb_pe_nrzi;
     rx_wire = 1'b0; #1; check(rx_raw === 1'b0, "bypass rx passthrough");
     tx_bypass = 0; rx_bypass = 0;
 
+    // clr returns both sides to idle J at a frame boundary.
+    //
+    // Without this the only route back to a known line state is a chip reset,
+    // which a USB packet boundary is not: every packet starts from idle J and
+    // the stuffer already had a clr for exactly this reason. Drive the line to
+    // K first so "idle J" is a real change and not the state we were in.
+    begin
+      bit d;
+      send_bit(1'b0, d);                       // a 0 toggles the line off J
+      check(tx_lvl === 1'b0, "line is at K before clr");
+      rx_wire = 1'b0; strobe_rx();             // receiver tracks K too
+      clr = 1'b1; @(posedge clk); #1; clr = 1'b0; #1;
+      check(tx_lvl === 1'b1, "clr returns TX to idle J");
+      // A receiver reset to J decodes a held-J wire as 1 (no transition).
+      rx_wire = 1'b1; #1;
+      check(rx_raw === 1'b1, "clr returns RX level to idle J");
+    end
+
     if (errors == 0) $display("PASS: tb_pe_nrzi");
     else $display("FAILURES nrzi: %0d", errors);
     $finish;
@@ -111,6 +131,7 @@ endmodule
 module tb_pe_manch;
   logic clk=0, rst_n, bit_en, bypass, half_phase, tx_raw, tx_wire;
   logic rx_wire, rx_first, rx_second, rx_raw, rx_err;
+  logic clr;
   pe_manch dut (.*);
   always #5 clk = ~clk;
   integer errors = 0;
@@ -127,9 +148,18 @@ module tb_pe_manch;
     check(tx_wire === (b ? 1'b1 : 1'b0), $sformatf("bit %b second half", b));
   endtask
 
+  // Present one bit-cell's two half samples and commit it with the strobe.
+  // rx_raw is combinational and is read BEFORE the committing edge; rx_err is
+  // REGISTERED and is read after it. That split is the repo's standing
+  // sampling rule (wiki/concepts/strobe-and-committing-edge.md).
+  task automatic rx_cell(input bit f, input bit s);
+    rx_first = f; rx_second = s; bit_en = 1'b1; #1;
+    @(posedge clk); #1; bit_en = 1'b0;
+  endtask
+
   initial begin
     $dumpfile("tb_pe_manch.vcd"); $dumpvars(0, tb_pe_manch);
-    rst_n=0; bit_en=0; bypass=0; half_phase=0; tx_raw=0;
+    rst_n=0; bit_en=0; bypass=0; clr=0; half_phase=0; tx_raw=0;
     rx_wire=0; rx_first=0; rx_second=0;
     repeat(3) @(posedge clk); #1; rst_n=1; @(posedge clk); #1;
 
@@ -137,21 +167,37 @@ module tb_pe_manch;
     tx_bit(1'b1);   // L then H
     tx_bit(1'b0);
 
-    // RX decode from DRU half-cell samples
+    // RX decode from DRU half-cell samples. rx_raw before the strobe...
     rx_first=1'b1; rx_second=1'b0; #1;
     check(rx_raw === 1'b0, "rx H->L decodes 0");
+    rx_cell(1'b1, 1'b0);
     check(rx_err === 1'b0, "rx H->L legal");
     rx_first=1'b0; rx_second=1'b1; #1;
     check(rx_raw === 1'b1, "rx L->H decodes 1");
+    rx_cell(1'b0, 1'b1);
     check(rx_err === 1'b0, "rx L->H legal");
-    rx_first=1'b1; rx_second=1'b1; #1;
+
+    // A cell with no mid-bit edge is illegal, and the error arrives with the
+    // committing edge, one cycle wide.
+    rx_cell(1'b1, 1'b1);
     check(rx_err === 1'b1, "rx high no-transition flagged");
-    rx_first=1'b0; rx_second=1'b0; #1;
+    @(posedge clk); #1;
+    check(rx_err === 1'b0, "error is one cycle wide");
+    rx_cell(1'b0, 1'b0);
     check(rx_err === 1'b1, "rx low no-transition flagged");
+    @(posedge clk); #1;
+
+    // The reason rx_err is registered at all: equal half-cells with NO strobe
+    // are not an error, they are an idle line. The combinational version
+    // asserted continuously between frames and whenever another protocol had
+    // Manchester bypassed, so rx_err could not be OR'd with the stuffer's.
+    rx_first=1'b1; rx_second=1'b1; bit_en=1'b0; #1;
+    @(posedge clk); #1;
+    check(rx_err === 1'b0, "equal halves without a strobe are not an error");
 
     // Bypass
     bypass = 1; tx_raw = 1'b1; rx_wire = 1'b0;
-    rx_first=1'b1; rx_second=1'b1; #1;
+    rx_cell(1'b1, 1'b1);
     check(tx_wire === 1'b1, "bypass tx passthrough");
     check(rx_raw === 1'b0, "bypass rx passthrough");
     check(rx_err === 1'b0, "bypass suppresses error");

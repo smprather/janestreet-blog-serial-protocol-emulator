@@ -235,3 +235,6 @@ diagrams/.part-*
 # hand-written IIFE (no build step), so un-ignore it from the stock dist/ rule
 !tools/live-canvas/dashboard/dist/
 !tools/live-canvas/dashboard/dist/**
+
+# repowise local index/cache (a tool's database, not repo state)
+.repowise/

@@ -9,11 +9,12 @@ orientation, and it is current as of the timestamp above.
 Run these two and you will see the state, not a claim about it:
 
 ```bash
-./tb/run_all.sh            # 16/16 TBs + 5/5 firmware tests, exits 0
-./tb/synth_area.sh         # mapped cells/area for all 7 blocks
+./tb/run_all.sh            # 18/18 TBs + 11/11 firmware tests + lint, exits 0
+./tb/synth_area.sh         # mapped cells/area for all 8 blocks; non-zero on
+                           # a yosys driver conflict or implicit declaration
 ```
 
-Measured 2026-09-20: `run_all.sh` → `TOTAL: 16 PASS: 16 FAIL: 0`, plus
+Measured 2026-09-20: `run_all.sh` → `TOTAL: 18 PASS: 18 FAIL: 0`, `lint clean`, plus
 `signal glossary up to date`, `protocol pin budget up to date`,
 `sram budget up to date`. The `gen_*` docs are generated from the RTL/PDK and
 drift-checked inside the regression, so a renamed port or deleted TB fails the run.
@@ -53,10 +54,23 @@ emulator. They disagreed once and that disagreement is how the real bug was foun
 4. **`tb_pe_uart_soc.v` `$readmemh`s an assembled `.hex`.** `run_all.sh` now runs
    `run_firmware_tests.sh` first so it can never simulate a stale image. If you add
    another SoC TB that loads firmware, keep that ordering.
-5. **Verilator `-Wall` on the new blocks reports 4 warnings and exits non-zero**
-   (multidriven `tick_flag`, unused `arg[8]`, `io_wdata[7:1]`). They are
-   intentional; lint is deliberately not wired into `run_all.sh`. The pre-existing
-   blocks are clean.
+5. **The lint gate is load-bearing; do not route around it.** `tb/lint.sh` runs
+   Verilator `-Wall` and a yosys elaboration check on every top, and `run_all.sh`
+   fails if either finds anything. An earlier revision of this file called those
+   warnings "intentional". Two of them were real defects that NO testbench can
+   reach, because a testbench only sees the simulator's resolution of illegal RTL:
+   `tick_flag` had two `always_ff` drivers (Icarus raced it, losing half the ticks
+   a poll loop should have seen; yosys tied it to a constant 0, so the STATUS port
+   was dead in silicon), and `assign dbg_pc = u_cpu.pc` was a hierarchical
+   reference that yosys drove backwards into an implicit wire. Both were printed
+   on every run and discarded, because `synth_area.sh` captured yosys's output and
+   grepped it only for numbers. If you add RTL and the gate complains, the gate is
+   right.
+5b. **Hardware that no firmware exercises is untested hardware.** The STATUS port
+   had no program reading it for an entire milestone, which is exactly why its
+   flop could be a constant and the regression stayed green.
+   `firmware/tick_count.pe` + `tb/tb_pe_tick_status.v` exist to close that.
+   When you add a peripheral, add the program that uses it in the same change.
 6. **The LibreLane `--dockerized` wrapper cannot auto-enable ihp-sg13g2.** Invoke
    the container with explicit `-p ihp-sg13g2 -s sg13g2_stdcell`. Command is in
    `wiki/STATUS.md` and `README.md`. This cost hours once; do not rediscover it.
@@ -72,6 +86,16 @@ is done.
 The next unstarted item is **step 4: the pin matrix / OE** (open-drain, read-back,
 tri-state) — the real new hardware gating I2C and every stretch protocol. It is
 independent of everything else and has its own TB as an acceptance test.
+
+It now has a top level to plug into. `rtl/tt_um_protocol_emulator.v` (added
+2026-09-20) is the Tiny Tapeout deliverable: before it there was no `tt_um_*`
+module anywhere, so nothing in the repo was submittable and every pin-budget
+conclusion in the wiki described a pad interface no RTL implemented. It wires
+`uio_oe[1:0]` to open-drain SDA/SCL with a fixed mapping that the pin matrix
+replaces. Read its header before writing the matrix: it states the two Tiny
+Tapeout rules that are expensive to get wrong (`ena` must gate nothing, and every
+output must be driven in every state), and `tb/tb_tt_um_protocol_emulator.v`
+enforces both continuously.
 
 ## Conventions this repo expects
 

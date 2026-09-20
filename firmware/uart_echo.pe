@@ -37,16 +37,49 @@
 ;            SUB A, Y            ; non-zero once the count moved on
 ;            JZ wait
 ;
-; One tick of latency is acceptable -- we are aligning to bit centres with
-; 2 ticks of margin, so a sample landing 1 tick early still reads the right
-; bit. This idiom costs 4 instructions and needs no flag at all.
+; This idiom costs 4 instructions and needs no flag at all. What it costs
+; instead is SAMPLING MARGIN, and the real number is worth stating plainly
+; because an earlier version of this comment overstated it ("2 ticks of
+; margin, so a sample landing 1 tick early still reads the right bit").
+;
+; The timer free-runs and is NOT synchronised to the start-bit edge. A wait
+; that snapshots the count and loops until it changes therefore returns after
+; anywhere in (0, 1] ticks, not after 1 tick: if the counter happens to be
+; about to increment, the first wait falls through almost immediately.
+;
+; So the 3-tick alignment below actually lands somewhere in (2, 3] ticks after
+; the falling edge. Bit 0 spans ticks 2..4 and its centre is at 3, which means:
+;
+;   * every sample is inside the correct bit cell -- the +2-tick steps after it
+;     are exact, so the whole byte inherits one offset and decodes as one,
+;   * but the offset can be up to a full tick (HALF A BIT) early, and the worst
+;     case sits exactly on the boundary between the start bit and bit 0.
+;
+; That is inherent to a free-running tick: the alignment quantum is one tick,
+; so a half-bit of uncertainty cannot be removed by counting more ticks -- a
+; 4-tick wait just moves the same window onto the trailing boundary instead.
+; Removing it needs a sub-tick delay (roughly 86 clocks of counted NOPs) to
+; recentre the window on (2.5, 3.5]. That is a real improvement and it is not
+; done here; it is recorded in wiki/plans/through-i2c.md as a follow-up,
+; because this UART is verified at the pin and the change would need requalifying.
+;
+; It works today because the baud error is +0.35%, which is 0.06 ticks of drift
+; across a 10-bit frame -- far too small to walk a sample out of its cell.
 ; ---------------------------------------------------------------------------
 ;
-; Data buffer (DMEM, 16 bytes):
-;   0..13  rolling receive buffer        14  write pointer
-;   15     last byte received            12  working accumulator
-;   13     bits remaining                9   ticks-to-skip counter
+; Data buffer (DMEM, 16 bytes). The buffer is 0..7 and the scalars live above
+; it; nothing overlaps, which the previous version of this map got wrong -- it
+; claimed the buffer ran 0..13 while slots 12 and 13 held the working
+; accumulator and the bit counter, and slot 14 held the pointer itself. A
+; pointer that ever reached 12 would have eaten the byte it was assembling.
+;
+;   0..7   rolling receive buffer (8 entries, wraps with AND 0x07)
 ;   8      tick snapshot (Y is enough, but RAM survives the shift code)
+;   9      ticks-to-skip counter
+;   12     working accumulator
+;   13     bits remaining
+;   14     write pointer
+;   15     last byte received (the echo source)
 
         LDI   A, 0
         STM   14, A                ; write pointer := 0
@@ -138,7 +171,12 @@ skip2w:
         STS   [X], A               ; buffer[ptr] := byte
         LDM   A, 14
         ADD   A, 1
-        AND   A, 0x0E              ; wrap within 0..13
+        ; Wrap within the 8-entry buffer. This was AND 0x0E, which is not a
+        ; wrap at all: it clears bit 0, so ptr+1 = 1 masked back to 0 and the
+        ; pointer never left slot 0. Every byte overwrote the same cell and the
+        ; echo path (which reads slot 15) never noticed. 0x07 is the mask for
+        ; an 8-entry buffer, and 8 is what fits below the scalars at 8..15.
+        AND   A, 0x07              ; wrap within 0..7
         STM   14, A
 
 ; =========================================================== transmit

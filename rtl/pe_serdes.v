@@ -53,7 +53,9 @@ module pe_serdes #(
 );
 
   // Elaboration guard: MAXLEN=1 would make IDXW=0 (illegal range).
-  if (IDXW < 1) $error("pe_serdes: MAXLEN must be >= 2");
+  if (IDXW < 1) begin : g_maxlen_guard
+    $error("pe_serdes: MAXLEN must be >= 2");
+  end
 
   // ---------------- Transmit ----------------
   logic [MAXLEN-1:0] tx_shreg;

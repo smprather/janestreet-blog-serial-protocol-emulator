@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen_signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-7 modules, 86 ports.
+8 modules, 98 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -95,6 +95,8 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `io_re` | out | 1 | _no note yet_ |
 | `io_wdata` | out | `[7:0]` | _no note yet_ |
 | `io_rdata` | inp | `[7:0]` | _no note yet_ |
+| `dbg_pc` | out | `[7:0]` | Program counter, for observability. A real PORT, not a hierarchical reference from the parent: a cross-module reference simulates but does not synthesise. |
+| `dbg_a` | out | `[7:0]` | Accumulator, for observability. See dbg_pc. |
 
 ## `pe_nrzi`
 
@@ -103,6 +105,7 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
 | `bit_en` | inp | 1 | **The strobe** — one-cycle pulse meaning "this is the moment". The only thing that commits state in this block. Supplied by the timing block/DRU. See [[concepts/strobe-and-committing-edge]]. |
 | `bypass` | inp | 1 | 1 ⇒ pass the raw bit through untouched. |
+| `clr` | inp | 1 | Frame/SOF boundary — return both the TX and RX line levels to idle J. A USB packet starts from idle J, and without this the only route there is a chip reset. |
 | `tx_raw` | inp | 1 | Raw bit in. 0 toggles the line, 1 holds it. |
 | `tx_wire` | out | 1 | Line level out. |
 | `rx_wire` | inp | 1 | Line level in. |
@@ -116,6 +119,7 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
 | `bit_en` | inp | 1 | **The strobe** — one-cycle pulse meaning "this is the moment". The only thing that commits state in this block. Supplied by the timing block/DRU. See [[concepts/strobe-and-committing-edge]]. |
 | `bypass` | inp | 1 | 1 ⇒ pass the raw bit through untouched. |
+| `clr` | inp | 1 | Frame boundary — drop any pending error. |
 | `half_phase` | inp | 1 | 0 = first half-cell, 1 = second half-cell. Driven by the SM/timing side. |
 | `tx_raw` | inp | 1 | Raw bit in: 0 ⇒ H then L, 1 ⇒ L then H (IEEE 802.3). |
 | `tx_wire` | out | 1 | Manchester-encoded level out: `half_phase` selects which half-cell of the symbol is currently driven. |
@@ -123,7 +127,7 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_first` | inp | 1 | First half-cell sample. |
 | `rx_second` | inp | 1 | Second half-cell sample. |
 | `rx_raw` | out | 1 | Decoded bit. |
-| `rx_err` | out | 1 | Illegal symbol — equal halves mean there was no mid-bit edge. |
+| `rx_err` | out | 1 | Illegal symbol — equal halves mean there was no mid-bit edge. REGISTERED and strobe-gated: valid for one cycle after the committing edge, like pe_bitstuff's. It was combinational and ungated, which made it true of an idle line too. |
 
 ## `pe_bitstuff`
 
@@ -158,6 +162,19 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `dbg_pc` | out | `[7:0]` | _no note yet_ |
 | `dbg_a` | out | `[7:0]` | _no note yet_ |
 | `dbg_timer` | out | `[7:0]` | _no note yet_ |
+
+## `tt_um_protocol_emulator`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `ui_in` | inp | `[7:0]` | _no note yet_ |
+| `uo_out` | out | `[7:0]` | _no note yet_ |
+| `uio_in` | inp | `[7:0]` | _no note yet_ |
+| `uio_out` | out | `[7:0]` | _no note yet_ |
+| `uio_oe` | out | `[7:0]` | _no note yet_ |
+| `ena` | inp | 1 | _no note yet_ |
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `rst_n` | inp | 1 | Active-low asynchronous reset. |
 
 ## Internal signals worth naming
 

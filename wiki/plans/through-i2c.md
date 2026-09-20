@@ -204,13 +204,35 @@ Resulting bus: **90.9 kbit/s**, inside the 100 kHz Standard-mode ceiling. 5/5 wo
 be exactly 100.0 kbit/s — at the limit, which is the kind of thing that works on the
 bench and fails in a compliance report. 5/6 is the safe choice.
 
-The 300 ns margins are the ones to watch, because they are consumed by the pin: a
-0.3→0.7 V<sub>DD</sub> edge through an external pull-up is ~100 ns at reasonable
-Rp·Cb (see [[concepts/gpio-signoff-corners]]), and the spec measures its minimums at
-those thresholds. So firmware should budget `tLOW` as **4.8 µs driven** (5 ticks
-plus one tick of slack absorbed by the edge) rather than relying on 5 ticks being
-measured at the pin. The spec's own numbers are what this table is checked against;
-they were read from UM10204 Table 10, not recalled.
+### Which tick the pull-up actually eats (corrected 2026-09-20)
+
+An earlier revision of this section said the 300 ns margins were consumed on `tLOW`
+and told firmware to budget `tLOW` as 4.8 µs driven. **That is backwards**, and the
+direction matters because it decides which parameter gets the spare tick.
+
+The spec measures at V<sub>IL</sub> = 0.3 V<sub>DD</sub> and V<sub>IH</sub> =
+0.7 V<sub>DD</sub>. SCL's falling edge is **driven** by the master and is fast
+(t<sub>f</sub> ≤ 300 ns); its rising edge is **released** to an external pull-up and
+is slow (t<sub>r</sub> ≤ 1000 ns in Standard mode). So:
+
+- **`tLOW` is measured longer than it is driven.** The clock goes low promptly at
+  the start and only crosses back up through 0.3 V<sub>DD</sub> some way into the
+  rise. Driving 5 ticks yields ≥ 5.0 µs at the pin. It has margin it did not pay for.
+- **`tHIGH` is measured shorter than it is released.** The window does not open
+  until SCL crosses 0.7 V<sub>DD</sub>, near the *end* of the rise, and it closes on
+  a fast falling edge. Releasing for 6 ticks yields as little as 6.0 − 1.0 = **5.0 µs**
+  at the pin against a 4.0 µs minimum.
+
+The 5/6 split in the table above is therefore correct, but for the opposite reason
+to the one previously written: the extra tick belongs to `tHIGH` because `tHIGH` is
+the one the pull-up edge takes from. Firmware should drive `tLOW` for its full 5
+ticks and **not** shorten it to 4.8 µs.
+
+The same asymmetry is why clock stretching is cheap to support: a slave holding SCL
+low simply delays the 0.7 V<sub>DD</sub> crossing, and a master that polls SCL before
+counting `tHIGH` is already measuring the right thing.
+
+Spec values are from UM10204 Table 10, not recalled.
 
 ### The turnaround budget — the number that decides the read path
 
@@ -253,8 +275,9 @@ already solves.
 ### Transaction structure
 
 ```
-START:  SDA released, SCL high (tHIGH), 5 ticks; SDA low; 5 ticks (tSU;STA); SCL low
-byte:   8x { SCL low; drive or release SDA per bit (>=10 cycles before SCL rises);
+START:  SDA released, SCL high 6 ticks; SDA low; 5 ticks (tSU;STA); SCL low
+byte:   8x { SCL low; hold SDA >=1 tick AFTER SCL falls (tHD;DAT, see below);
+             then drive or release SDA per bit, >=1 tick before SCL rises;
              if transmitting a 1, read SDA back -> arbitration loss;
              (if reading, release SDA and sample the bit);
              SCL high (6 ticks); }
@@ -267,6 +290,24 @@ where implementations get this wrong: SDA may only change **while SCL is low**
 (except START/STOP, which are defined by changing while SCL is high), and the
 read-back for arbitration must happen **before** the SCL falling edge, since that is
 when the slave is still obliged to hold its data.
+
+**Both data-timing margins are a full tick, not the minimum (corrected 2026-09-20).**
+An earlier revision budgeted "≥10 cycles before SCL rises" for `tSU;DAT`. Ten cycles
+at 40 MHz is 250 ns, which is *exactly* the Standard-mode minimum — a setup budget
+with zero margin, at the one place where the pull-up's rise time also lands. Use one
+tick (1 µs, 4× the minimum); it is free at this bit rate.
+
+**`tHD;DAT` is not zero, and this is the error worth catching before the firmware is
+written.** An earlier revision of the risks section said our write path "changes SDA
+right after SCL falls (hold ~0) which is legal". Table 10 does give
+t<sub>HD;DAT</sub>(min) = 0 µs, but note 2 of that table requires a transmitter to
+**internally provide at least 300 ns of SDA hold** with respect to
+V<sub>IH</sub>(min) of SCL, to bridge the undefined region of SCL's falling edge.
+Changing SDA the instant SCL falls does not do that, and the failure it produces is
+the nastiest kind: a receiver that latches on the old data most of the time and on
+the new data occasionally, depending on bus capacitance. Hold SDA for one full tick
+after SCL falls before changing it. At 5 ticks of `tLOW` that leaves 4 ticks for the
+data to settle, which is still far inside `tSU;DAT`.
 
 ## Test strategy
 
@@ -293,7 +334,8 @@ when the slave is still obliged to hold its data.
 | 1 | ~~Fix the UART RTL test~~ **DONE 2026-09-20**: TB edge latch + full 114-word load, `JNZ tx_start` in the firmware | — | `tb_pe_uart_soc` 4/4 green, cells 8.6-8.7 µs |
 | 2 | Regenerate the glossary; add both new TBs + `run_firmware_tests.sh` to `run_all.sh`; extend `synth_area.sh`; fix the 174→173 comments | 1 | `run_all.sh` exits 0 with the new tests listed |
 | 3 | Commit milestone 2 (CPU, SoC, assembler, emulator, firmware, TBs) and update [[STATUS]] + `log.md` | 2 | nothing untracked, STATUS describes what exists |
-| 4 | Pin matrix / OE, as its own block with its own TB | — | open-drain, read-back and tri-state verified |
+| 3b | ~~TT top level + `info.yaml`~~ **DONE 2026-09-20**: `rtl/tt_um_protocol_emulator.v`, `info.yaml`, `tb/tb_tt_um_protocol_emulator.v` (pad contract: no X on an output, `ena` gates nothing, open-drain never drives high) | — | the repo is submittable; `uio_oe` has a real path to a pad |
+| 4 | Pin matrix / OE, as its own block with its own TB; replaces the fixed mapping in the TT wrapper | 3b | open-drain, read-back and tri-state verified |
 | 5 | I2C SoC wiring (pin matrix + tick divider for 1 µs) | 4 | TB: pins do what firmware says |
 | 6 | I2C firmware: START/STOP first, then byte, then ACK, then read | 1,5 | emulator decodes a full transaction |
 | 7 | `tb_pe_i2c_soc.v` with timing assertions | 6 | transaction passes with timing checked |
@@ -308,12 +350,18 @@ largest risk in the project today.
 - **The tile-size discrepancy is unresolved** (blog ~200x150 µm vs template
   167x108 µm). Every area number in this plan is per the template; the SRAM
   decision in Blocker 3 is the one place it changes the answer materially.
-- **Pad OE and open-drain through the TT harness** is assumed available (`uio_oe`)
-  but has not been verified end to end in this repo. Verify at step 4 with the real
-  pad cells before the pin matrix is written, not after.
-- **`tHD;DAT(max) = 3.45 µs` applies to the slave**, but a master that holds SDA too
-  long after SCL falls can hold the bus. Our write path changes SDA right after SCL
-  falls (hold ~0) which is legal; the read path must not drive SDA while ACKing.
+- ~~**Pad OE and open-drain through the TT harness** is assumed available (`uio_oe`)
+  but has not been verified end to end in this repo.~~ **Partly closed 2026-09-20:**
+  `rtl/tt_um_protocol_emulator.v` now exists and wires `uio_oe[1:0]` to SDA/SCL, and
+  `tb/tb_tt_um_protocol_emulator.v` asserts the open-drain property continuously
+  (a driven-high uio pin fails the run). What is still unverified is the *physical*
+  pad cell: this is RTL-level proof, not a post-layout one. Re-check after the first
+  full-chip floorplan.
+- **`tVD;DAT(max) = 3.45 µs` applies to the slave**, but a master that holds SDA too
+  long after SCL falls can hold the bus. Our write path holds SDA for one tick after
+  SCL falls and then changes it — see the `tHD;DAT` note above, which corrects an
+  earlier claim here that a hold of ~0 is legal. The read path must not drive SDA
+  while ACKing.
 - **No interrupts** means a long tick wait blocks everything. That is fine for a
   single protocol; it is the reason the architecture eventually wants two cores or
   an event/interrupt path to the firmware. Worth a decision record before the
@@ -322,6 +370,17 @@ largest risk in the project today.
 - Verification emphasis in the competition rules is explicit; the timing
   assertions in step 7 and the emulator/RTL parity check are the two artifacts that
   demonstrate it cheaply.
+- **The tick-delta wait has a half-tick of unremovable jitter, and I2C inherits it.**
+  The timer free-runs, so "wait until the count changes" returns after (0, 1] ticks,
+  not 1 tick. `uart_echo.pe` absorbs that: its 3-tick alignment lands in (2, 3] and
+  every subsequent sample inherits the same offset, so a byte decodes as a unit. I2C
+  is less forgiving, because the jitter lands on *each* SCL edge independently rather
+  than once per frame. With a 1 µs tick and 5 µs of `tLOW` that is 20% of the
+  parameter, which still clears every minimum in the table above — but it is the
+  reason the table has whole ticks of margin everywhere and not 250 ns of it.
+  A sub-tick delay (a counted NOP loop, ~86 clocks at 40 MHz for half a tick) would
+  remove it for both protocols. Worth doing before fast mode, where the budget is
+  12 cycles rather than 40.
 
 ## Related
 

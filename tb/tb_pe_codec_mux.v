@@ -154,13 +154,27 @@ module tb_pe_codec_mux;
       cfg[3] = 1'b1; #1;
       check(tx_wire === 1'b1, "manch: bit 1 second half high (L->H)");
 
+      // rx_bit is combinational and is read BEFORE the committing edge;
+      // rx_err is registered in both sources now, so it is read AFTER one.
+      // (Gotcha 7: combinational stages before the strobe, registered after.)
       rx_first = 1'b1; rx_second = 1'b0; #1;
       check(rx_bit === 1'b0, "manch rx: decodes 0");
+      bit_en = 1; @(posedge clk); #1; bit_en = 0;
       check(rx_err === 1'b0, "manch rx: legal bit");
       rx_first = 1'b0; rx_second = 1'b1; #1;
       check(rx_bit === 1'b1, "manch rx: decodes 1");
+      bit_en = 1; @(posedge clk); #1; bit_en = 0;
+      check(rx_err === 1'b0, "manch rx: legal bit 2");
+
       rx_first = 1'b1; rx_second = 1'b1; #1;
+      bit_en = 1; @(posedge clk); #1; bit_en = 0;
       check(rx_err === 1'b1, "manch rx: no mid-bit edge flagged");
+
+      // The aggregated rx_err must fall again on its own. While pe_manch drove
+      // it combinationally this stayed high for as long as the two half-cell
+      // samples happened to match, which on an idle line is forever.
+      @(posedge clk); #1;
+      check(rx_err === 1'b0, "manch rx: error clears without a strobe");
     end
 
     // ====== cfg=0x63: stuff(run 6) + NRZI, USB-LS composition =======

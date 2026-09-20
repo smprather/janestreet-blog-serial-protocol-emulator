@@ -46,6 +46,14 @@ CASES=(
   # assembled a current copy -- it runs first for exactly that reason.
   "tb_pe_cpu|../rtl/pe_cpu.v|tb_pe_cpu"
   "tb_pe_uart_soc|../rtl/pe_cpu.v ../rtl/pe_uart_soc.v|tb_pe_uart_soc"
+  # The STATUS port. Nothing exercised it until firmware/tick_count.pe existed,
+  # which is how a two-driver tick_flag survived a green regression: it raced
+  # in Icarus and synthesised to a constant 0, and no test read the port.
+  "tb_pe_tick_status|../rtl/pe_cpu.v ../rtl/pe_uart_soc.v|tb_pe_tick_status"
+  # The Tiny Tapeout top level: the pad contract (no X on an output, ena gates
+  # nothing, open-drain pins never drive high). This is the only submittable
+  # module in the repo.
+  "tb_tt_um_protocol_emulator|../rtl/pe_cpu.v ../rtl/pe_uart_soc.v ../rtl/tt_um_protocol_emulator.v|tb_tt_um_protocol_emulator"
 )
 
 pass=0; fail=0; failed_names=()
@@ -79,11 +87,24 @@ fi
 [ "$fail" -eq 0 ] || { echo "failed: ${failed_names[*]}"; exit 1; }
 echo "all testbenches pass"
 
+# The static gate. It runs HERE, in the regression, and not on request, because
+# the two defects it was written for (a two-driver flop that yosys resolved to a
+# constant, and a hierarchical reference that yosys drove backwards) were both
+# reported by the tools on every single run and discarded unread. A simulator's
+# resolution of illegal RTL is not the synthesiser's, so a green testbench says
+# nothing about the netlist.
+cd .. || exit 1
+if ./tb/lint.sh; then
+  lint_rc=0
+else
+  lint_rc=1
+fi
+echo
+
 # Docs that are generated from the RTL are checked too: a renamed port must not
 # leave wiki/reference/signal-names.md describing an interface that no longer
 # exists, and a deleted TB must not leave the pin budget claiming coverage.
 # Regenerate with: python3 tools/gen_signal_glossary.py / tools/gen_pin_budget.py
-cd .. || exit 1
 stale=0
 if python3 tools/gen_signal_glossary.py --check >/dev/null 2>&1; then
   echo "signal glossary up to date"
@@ -111,3 +132,4 @@ else
   echo "sram budget: SKIPPED (PDK not at ~/pdk/IHP-Open-PDK)"
 fi
 [ "$stale" -eq 0 ] || exit 1
+[ "$lint_rc" -eq 0 ] || { echo "lint gate FAILED (see above)"; exit 1; }
