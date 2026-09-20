@@ -11,7 +11,10 @@ Protocol-emulator ASIC competition entry: a Tiny Tapeout (IHP 130nm CMOS5L) gene
 - Every new page must be added to `index.md` under the correct section
 - Every action must be appended to `log.md`
 - **Provenance:** the Jane Street blog post is the primary source for competition facts and supersedes the Gemini transcript wherever they differ. Transcript-only claims (board/mux speed limits, cell counts) are marked `confidence: low` or `medium` until verified against Tiny Tapeout docs.
-- Raw sources are immutable: corrections go in wiki pages, never in `raw/`.
+- **A source outranks another only if the CAPTURE is faithful.** Authority of origin does not survive a lossy transcription. Learned the hard way on 2026-09-20: the 2026-09-17 ingest recorded a hand-written *summary* of the competition blog, got the tile allocation wrong (8x4 for the blog's 6x4), and that paraphrase was then used to rule a *correct* transcript claim stale. Before letting source A overrule source B, check that what you hold of A is A's text.
+- **Keep the full text of any source the wiki's facts depend on**, under `raw/`, with a `sha256:` of the fetched bytes in the frontmatter. A summary is a derived work and belongs in a wiki page, not in `raw/`. See `raw/articles/janestreet-competition-blog-fulltext.md`.
+- **Mark living sources as living.** The competition blog says it will be updated if the tile allocation changes. Re-fetch and diff such pages periodically rather than treating one ingest as permanent.
+- Raw sources are immutable: corrections go in wiki pages, never in `raw/`. A superseding capture is a NEW file, not an edit to the old one.
 
 ## Frontmatter
 ```yaml

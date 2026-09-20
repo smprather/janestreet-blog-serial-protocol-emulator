@@ -169,27 +169,33 @@ cells per instruction word**; everything else (CPU, DMEM, timer, pin, glue) is
 19,947 µm² and 1,025 cells. Storing program in flops costs ~80 µm²/bit against ~5
 for a macro.
 
-| Scenario | Die µm² | of 4×6 | of 8×4 |
+**The allocation is 6×4 = 24 tiles**, not 8×4. The blog says so three times, and
+`info.yaml` now matches. 8×4 is described only as "the possibility of scaling up
+… (~30% more area)", to be announced by a page update and an email to sign-ups.
+**Design to 24 tiles; treat 32 as headroom that may never arrive.** Verbatim source:
+[[raw/articles/janestreet-competition-blog-fulltext]].
+
+| Scenario | Die µm² | of 6×4 (real) | of 8×4 (upside) |
 |---|---|---|---|
-| Today, integrated (SoC + SERDES + codecs) | 384,500 | **89%** | 67% |
-| After the SRAM swap (see [[decisions/adr-003-memory-plan]]) | 235,116 | **54%** | 41% |
+| Today, integrated (SoC + SERDES + codecs) | 385,265 | **89%** | 67% |
+| After the SRAM swap ([[decisions/adr-003-memory-plan]]) | 235,116 | **54%** | 41% |
+| Leaner swap (`1P_512x16` IMEM) | 200,751 | 46% | 35% |
 
 Gate count is not the constraint: 9,397 cells today against ~24,000 for 24 tiles at
 the blog's ~1K cells/tile, and ~1,700 cells after the swap.
 
-**The tile allocation is an open question.** [[entities/tiny-tapeout]] records 8×4
-(32 tiles) from the blog and marks the transcript's "6×4" as superseded; `info.yaml`
-says 8×4. If the offer is now 4×6, change `info.yaml` and re-run
-`tools/gen_sram_budget.py --tiles 4x6`. Both are 24–32 tiles but completely
-different SHAPES, and shape decides macro fit:
+**Shape matters more than tile count**, because a macro has to physically fit the
+rectangle. TT notation is WIDTH × HEIGHT:
 
-| Allocation | Die (template tile) | Aspect |
-|---|---|---|
-| 4×6 | 668 × 648 µm, 0.433 mm² | 1.03:1, near square |
-| 8×4 | 1336 × 432 µm, 0.577 mm² | 3.09:1, wide and flat |
+| Allocation | Die (template tile) | Aspect | Note |
+|---|---|---|---|
+| **6×4 (real)** | 1002 × 432 µm, 0.433 mm² | 2.32:1 | keeps every macro 8×4 keeps |
+| 8×4 (upside) | 1336 × 432 µm, 0.577 mm² | 3.09:1 | +33% area, same height |
+| 4×6 (not the offer) | 668 × 648 µm, 0.433 mm² | 1.03:1 | would lose all 64-bit-wide macros |
 
-A 4×6 die loses the entire 64-bit-wide macro family (784 µm wide against a 668 µm
-die). Neither macro in ADR-003 is affected.
+The 6×4 and 8×4 dice are the same height, so **nothing in the macro analysis
+changes if 8×4 arrives** — it is pure extra width. Re-answer the whole SRAM page for
+the upside case with `tools/gen_sram_budget.py --tiles 8x4`.
 
 
 ## Design decisions in force
@@ -329,11 +335,12 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 - **Tile size discrepancy**: blog says ~200×150 µm/tile, the TT template's
   `info.yaml` says ~167×108 µm. Use the template for layout math; re-check after
   the first real floorplan of the full design.
-- **Tile ALLOCATION is unconfirmed.** The blog instructs 8×4 and `info.yaml` says
-  8×4; the superseded transcript said 6×4. A 4×6 allocation has been raised as
-  possibly current. It is 24 tiles rather than 32 and, more importantly, a near
-  square rather than a 3:1 strip. Confirm with Jane Street; then set `info.yaml`
-  and run `tools/gen_sram_budget.py --tiles 4x6`. See the area budget section.
+- **The blog is a LIVING DOCUMENT and must be re-checked.** It states it will be
+  updated if 8×4 becomes available, and that sign-ups will be emailed. The repo's
+  first capture of it was a summary that got the tile count wrong and stood for
+  three days. Re-fetch and diff
+  [[raw/articles/janestreet-competition-blog-fulltext]] periodically; its
+  frontmatter carries the sha256 of the HTML as fetched on 2026-09-20.
 - **No host data path exists.** The SoC's `host_*` port is firmware loading only and
   `rtl/tt_um_protocol_emulator.v` ties it off. If Ethernet or a logic-analyser mode
   wants to stream to a host, that is unbuilt and unplanned, and it needs a decision

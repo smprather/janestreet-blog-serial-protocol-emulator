@@ -4,7 +4,7 @@ created: 2026-09-20
 updated: 2026-09-20
 type: decision
 tags: [decision, area-budget, architecture, process-node]
-sources: [raw/articles/janestreet-protocol-emulator-competition.md]
+sources: [raw/articles/janestreet-competition-blog-fulltext.md]
 confidence: medium
 ---
 
@@ -86,32 +86,35 @@ matrix, plus both macros.
 
 | Allocation | Die (µm²) | Design | Occupancy |
 |---|---|---|---|
-| 4×6 = 668 × 648 µm | 432,864 | 235,116 | **54%** |
-| 8×4 = 1336 × 432 µm | 577,152 | 235,116 | **41%** |
+| **6×4 = 1002 × 432 µm (the real budget)** | 432,864 | 235,116 | **54%** |
+| 8×4 = 1336 × 432 µm (upside, if offered) | 577,152 | 235,116 | 41% |
 
-For comparison, the design **today** (flop IMEM, SoC + SERDES + codecs) is 384,500
-µm² of die, which is **89% of a 4×6** and 67% of an 8×4. The swap is what turns "will
-not fit once the pin matrix and DRU land" into "roomy on either allocation."
+For comparison, the design **today** (flop IMEM, SoC + SERDES + codecs) is 385,265
+µm² of die, which is **89% of the 6×4** and 67% of an 8×4. The swap is what turns
+"will not fit once the pin matrix and DRU land" into "roomy either way."
 
 Dropping instruction memory to `1P_512x16` (512 words) saves 34,365 µm² and lands at
-46% of a 4×6. Take that only if the floorplan demands it: `uart_echo` is already 114
-words, and two or three resident protocol programs will approach 512.
+46% of the 6×4. Take that only if the floorplan demands it: `uart_echo` is already
+114 words, and two or three resident protocol programs will approach 512.
 
-## The allocation is a live question
+## The allocation, settled
 
-[[entities/tiny-tapeout]] records **8×4** from the blog, and marks the transcript's
-"6×4" as superseded. If the offer is now 4×6, `info.yaml` needs changing and this
-page's occupancy column shifts to the 4×6 row. Both are 24–32 tiles but they are
-completely different *shapes*, and shape is what decides macro fit.
+**6×4 = 24 tiles.** The blog says "Set the tile size in info.yaml to 6x4" and "The
+current maximum area is 6x4 tiles per design", and describes 8×4 only as a
+possibility worth ~30% more area that would be announced by a page update and an
+email. `info.yaml` matches. Verbatim source:
+[[raw/articles/janestreet-competition-blog-fulltext]].
 
-`tools/gen_sram_budget.py --tiles 4x6` re-answers [[reference/sram-budget]] for the
-other allocation without editing anything. The committed page is the 8×4 answer.
+**This decision survives the upside intact.** 6×4 and 8×4 are the same *height*
+(432 µm at the template tile) and differ only in width, so no macro that fits one
+fails on the other. `tools/gen_sram_budget.py --tiles 8x4` re-answers
+[[reference/sram-budget]] for the larger die; the committed page is the 6×4 answer.
 
-**A 4×6 die loses the entire 64-bit-wide macro family** — `1P_1024x64`,
-`1P_512x64`, `1P_256x64` and `1P_64x64` are all 784 µm wide against a 668 µm die
-width, and none fit in either orientation. This decision is unaffected (both chosen
-macros are 237 × 336 µm and fit comfortably either way), but a future move to wide
-fetch would be.
+Worth recording because it nearly went the other way: a **4×6** die — the same 24
+tiles, rotated — would be 668 × 648 µm and would lose the entire 64-bit-wide macro
+family (`1P_1024x64`, `1P_512x64`, `1P_256x64`, `1P_64x64`), all 784 µm wide. Both
+macros chosen here are 237 × 336 µm and fit any of the three shapes, but a future
+move to wide fetch would not. **Shape, not tile count, is what decides macro fit.**
 
 ## Alternatives rejected
 

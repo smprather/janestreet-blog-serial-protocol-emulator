@@ -4,7 +4,7 @@ created: 2026-09-20
 updated: 2026-09-20
 type: concept
 tags: [protocol, architecture, area-budget, constraint]
-sources: [raw/articles/janestreet-protocol-emulator-competition.md]
+sources: [raw/articles/janestreet-competition-blog-fulltext.md]
 confidence: medium
 ---
 

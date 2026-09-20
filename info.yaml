@@ -3,11 +3,17 @@
 # This file and rtl/tt_um_protocol_emulator.v are the two things that make the
 # repo submittable. Everything else is blocks and testbenches.
 #
-# tiles: the competition brief allocates 8x4. Note that TT tile notation is
-# WIDTH x HEIGHT, which wiki/reference/sram-budget.md establishes is the
-# load-bearing detail: at the template's 167 x 108 um tile, 8x4 is 1336 x 432
-# um, a 3.1:1 die. Two of the densest SRAM macros in the PDK do not fit in
-# either orientation because of that aspect ratio, not because of area.
+# tiles: the blog says "Set the tile size in info.yaml to 6x4" and "The current
+# maximum area is 6x4 tiles per design", with 8x4 described only as a
+# possibility they are working on (~30% more area) that would be announced by
+# email and a page update. So 6x4 is the number, and it is checked against the
+# verbatim source at wiki/raw/articles/janestreet-competition-blog-fulltext.md.
+#
+# TT tile notation is WIDTH x HEIGHT, which wiki/reference/sram-budget.md shows
+# is the load-bearing detail: at the template's 167 x 108 um tile, 6x4 is
+# 1002 x 432 um, a 2.3:1 die. Shape, not area, is what decides which SRAM
+# macros fit -- the same 24 tiles arranged 4x6 would be near-square and would
+# lose the entire 64-bit-wide macro family.
 #
 # clock_hz: 40 MHz is the operating point, chosen because 50 ns (the 10BASE-T
 # half-UI, the binding TX constraint) is exactly 2 ticks. The design is signed
@@ -26,7 +32,7 @@ project:
     ones whose control flow is per-bit.
   language: "Verilog"
   clock_hz: 40000000
-  tiles: "8x4"
+  tiles: "6x4"
   top_module: "tt_um_protocol_emulator"
 
   # Order matters: pe_cpu before pe_uart_soc before the wrapper.

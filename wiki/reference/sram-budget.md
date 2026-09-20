@@ -10,7 +10,7 @@ confidence: medium
 
 # SRAM Budget
 
-How much SRAM fits on the 32-tile die. Macro geometry is parsed from the
+How much SRAM fits on the 24-tile die. Macro geometry is parsed from the
 PDK LEFs by `tools/gen_sram_budget.py`
 (`pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram`), so the numbers are the real
 macros, not the datasheet's bit counts in isolation.
@@ -19,20 +19,20 @@ macros, not the datasheet's bit counts in isolation.
 
 TT tile notation is **width × height in tiles**, not a count. The ttihp
 template's own comment says *"A single tile is about 167x108 uM"*, and the
-competition is 8×4, so:
+competition is 6×4, so:
 
-| Source | Tile | Die (8×4) | Area |
+| Source | Tile | Die (6×4) | Area |
 |---|---|---|---|
-| **ttihp-verilog-template** (authoritative) | 167×108 µm | **1336 × 432 µm** | **577,152 µm² (0.577 mm²)** |
-| Jane Street blog (optimistic) | 200×150 µm | 1600 × 600 µm | 960,000 µm² (0.960 mm²) |
+| **ttihp-verilog-template** (authoritative) | 167×108 µm | **1002 × 432 µm** | **432,864 µm² (0.433 mm²)** |
+| Jane Street blog (optimistic) | 200×150 µm | 1200 × 600 µm | 720,000 µm² (0.720 mm²) |
 
-Aspect ratio is ~3.1:1. That matters more than total area:
+Aspect ratio is ~2.3:1. That matters more than total area:
 **a macro has to physically fit the rectangle**, and most of the larger
 macros are taller than the die is.
 
 ## Every macro in the PDK
 
-`fit` = can it be placed in the 8×4 die at the template's tile size
+`fit` = can it be placed in the 6×4 die at the template's tile size
 (`rotated` means only at 90°, which the flow supports).
 
 | Macro | Bits | W×H (µm) | Area (µm²) | bits/µm² | P | fit |
@@ -71,12 +71,12 @@ macros are taller than the die is.
 ### What does not fit
 
 - `1P_2048x64_c2_bm_bist` (131,072 bits, 784×627 µm) — its 627 µm short side exceeds the die's 432 µm short side.
-- `1P_8192x32_c4` (262,144 bits, 1520×618 µm) — exceeds the die in both axes (1520 > 1336 and 618 > 432 µm).
+- `1P_8192x32_c4` (262,144 bits, 1520×618 µm) — exceeds the die in both axes (1520 > 1002 and 618 > 432 µm).
 
 **The highest-density macros in the PDK are unusable here.** The whole
 8192×32 and 2048×64 classes are excluded by the die's shape, not by the
 area budget. If the tile figure turns out to be the blog's 200×150,
-the die becomes 1600×600 and that changes — re-run this
+the die becomes 1200×600 and that changes — re-run this
 page if the tile size is confirmed.
 
 ## So how much actually fits
@@ -91,8 +91,8 @@ Largest **practically packable** capacity, one macro type, grid packing:
 
 | Die | Best macro | Layout | Total | Occupied area | Die efficiency |
 |---|---|---|---|---|---|
-| Template (1336×432) | `1P_2048x32_c2_bm_bist` | 2×1 @ 627×417 µm | **131,072 bits (16 KB)** | 522,217 µm² | 90% |
-| Blog (1600×600) | `1P_512x64_c2_bm_bist` | 2×3 @ 784×191 µm | **196,608 bits (24 KB)** | 900,614 µm² | 94% |
+| Template (1002×432) | `1P_512x32_c2_bm_bist` | 5×1 @ 191×417 µm | **81,920 bits (10 KB)** | 398,599 µm² | 92% |
+| Blog (1200×600) | `1P_256x48_c2_bm_bist` | 10×1 @ 119×596 µm | **122,880 bits (15 KB)** | 708,499 µm² | 98% |
 
 *That 100%-occupied figure is the theoretical roof with no logic at all.*
 Real capacity is what you get after reserving logic, and the honest way to
@@ -105,11 +105,11 @@ Smallest single-macro-type area reaching each size, on the **template** die
 
 | SRAM | Bits | Template die: macro × n | Area | % of die | Blog die: area | % of die |
 |---|---|---|---|---|---|---|
-| 1 KB | 8,192 | `1P_512x16_c2_bm_bist` × 1 | 45,309 µm² | 8% | 45,309 µm² | 5% |
-| 2 KB | 16,384 | `1P_1024x16_c2_bm_bist` × 1 | 79,674 µm² | 14% | 79,674 µm² | 8% |
-| 4 KB | 32,768 | `1P_1024x32_c2_bm_bist` × 1 | 140,183 µm² | 24% | 140,183 µm² | 15% |
-| 8 KB | 65,536 | `1P_4096x16_c3_bm_bist` × 1 | 257,609 µm² | 45% | 257,609 µm² | 27% |
-| 16 KB | 131,072 | `1P_4096x16_c3_bm_bist` × 2 | 515,217 µm² | 89% | 515,217 µm² | 54% |
+| 1 KB | 8,192 | `1P_512x16_c2_bm_bist` × 1 | 45,309 µm² | 10% | 45,309 µm² | 6% |
+| 2 KB | 16,384 | `1P_1024x16_c2_bm_bist` × 1 | 79,674 µm² | 18% | 79,674 µm² | 11% |
+| 4 KB | 32,768 | `1P_1024x32_c2_bm_bist` × 1 | 140,183 µm² | 32% | 140,183 µm² | 19% |
+| 8 KB | 65,536 | `1P_4096x16_c3_bm_bist` × 1 | 257,609 µm² | 60% | 257,609 µm² | 36% |
+| 16 KB | 131,072 | *not reachable* | — | — | — | — |
 | 32 KB | 262,144 | *not reachable* | — | — | — | — |
 
 *(Single macro type. A mixed floorplan can do somewhat better; this is the
@@ -121,12 +121,12 @@ The measured SERDES run gives ~31.9 µm² of standard cell per
 logic cell, inflating ×1.69 once routing, clock tree and fill cells are
 included (die ÷ stdcell area on that run). Applying that to the template die:
 
-- Whole die, no SRAM: **≈ 10,667 logic cells**
-- With 4 KB of SRAM (140,183 µm²): ≈ 8,076 logic cells
-- With 8 KB of SRAM (257,609 µm²): ≈ 5,906 logic cells
+- Whole die, no SRAM: **≈ 8,000 logic cells**
+- With 4 KB of SRAM (140,183 µm²): ≈ 5,409 logic cells
+- With 8 KB of SRAM (257,609 µm²): ≈ 3,239 logic cells
 
-**These are well under the blog's "~1K cells per tile" (≈32,000
-cells for 32 tiles).** The two published tile figures are inconsistent with
+**These are well under the blog's "~1K cells per tile" (≈24,000
+cells for 24 tiles).** The two published tile figures are inconsistent with
 each other, and the template's tile size is what the flow will actually
 enforce. See [[STATUS]] open risks — worth confirming with TT/Jane Street
 before committing to an SRAM-heavy architecture.

@@ -4,7 +4,7 @@ Entry for [Jane Street's protocol emulator ASIC competition](https://blog.janest
 design an open-source, general-purpose protocol emulator — a small chip whose
 instruction set is built for reading pins, writing pins, counting cycles and
 hitting protocol timing precisely, so protocols are implemented in **firmware**
-rather than fixed logic. Target: IHP 130 nm CMOS5L via Tiny Tapeout, 8×4 tiles,
+rather than fixed logic. Target: IHP 130 nm CMOS5L via Tiny Tapeout, 6×4 tiles,
 submission 2027-01-18.
 
 **Status: Milestone 2 (the programmable core) complete — a UART running entirely

@@ -14,7 +14,8 @@ Shared-shuttle tapeout platform; this competition targets its IHP 130 nm CMOS5L 
 
 ## What constrains this design
 
-- Tile allocation 8x4 (set in `info.yaml`); the mux supports designs up to 16 tiles each, 512 designs per chip. See [[concepts/competition-overview]].
+- **Tile allocation 6x4 = 24 tiles** (set in `info.yaml`), per the blog's "Set the tile size in info.yaml to 6x4" and "The current maximum area is 6x4 tiles per design". 8x4 (~30% more) is described as a possibility being worked on, to be announced by a page update and an email to sign-ups — so it is headroom, not the budget. Corrected 2026-09-20 from a wrong 8x4; see [[raw/articles/janestreet-competition-blog-fulltext]]. The mux supports designs up to 16 tiles each, 512 designs per chip. See [[concepts/competition-overview]].
+- **Shape, not just tile count.** TT notation is WIDTH x HEIGHT. At the template tile, 6x4 is 1002x432 um (2.32:1). The same 24 tiles as 4x6 would be 668x648 (near square) and would lose every 64-bit-wide SRAM macro, which are 784 um wide. See [[reference/sram-budget]].
 - Tile size discrepancy: blog says ~200x150 um/tile; the ttihp-verilog-template `info.yaml` says a single tile is ~167x108 um. Use the template figure for layout math, the blog's ~1K cells/tile for budget math, and re-check after first synthesis.
 - Custom GDS macros allowed if DRC/LVS-clean, grid-aligned, with LEF/LIB — relevant to the [[concepts/clock-doubler]] full-custom fallback.
 - SRAM examples exist on this node for area-efficient instruction memory.

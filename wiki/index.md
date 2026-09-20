@@ -1,11 +1,15 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-20 | Total pages: 21
+> Last updated: 2026-09-20 | Total pages: 22
 
 ## Start here
 
 - [[STATUS]] — **Milestone status + resume-here after a context flush.** Read first.
+
+## Root reference (verbatim sources)
+
+- [[raw/articles/janestreet-competition-blog-fulltext]] — **the competition blog, full verbatim text.** Primary source for every competition fact. Says 6x4 tiles; a living page that will change if 8x4 is offered.
 
 ## Entities
 

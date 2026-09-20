@@ -171,7 +171,7 @@ should be *smaller*, because it has no datapath.
 master plus per-bit arbitration and stretching is more, and two protocols resident
 at once will not fit. Options, with the real numbers from [[reference/sram-budget]]:
 
-| Option | Size | Die cost (template 1336x432) | Note |
+| Option | Size | Die cost (template 6x4 = 1002x432) | Note |
 |---|---|---|---|
 | Flops, 256 words | ~4.1 kbit | ~4 k cells ≈ 18% of the logic budget | no macro needed, no latency change |
 | `1P_512x16_c2_bm_bist` | 8,192 b | 45,309 µm² = **8%** | 512 words, 1-cycle read, wide-and-flat shape |

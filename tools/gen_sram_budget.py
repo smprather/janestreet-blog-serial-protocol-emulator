@@ -7,7 +7,7 @@ rather than assumed:
 1. **Macro geometry** — parsed from the sg13g2_sram LEFs (SIZE lines). A macro's
    bits-per-um2 and, more importantly, whether it physically fits the die shape
    at all.
-2. **Die size** — the competition is 8x4 tiles. TT tile notation is
+2. **Die size** — the competition is 6x4 tiles (8x4 is a possible upside). TT tile notation is
    width x height in tiles (per the ttihp template's own comment: "A single tile
    is about 167x108 uM"), so the die is wide and short. Tall macros do not fit
    unrotated, and the biggest ones do not fit in either orientation.
@@ -36,16 +36,20 @@ LEF_DIR = PDK_SRAM / "lef"
 TILE_TEMPLATE = (167.0, 108.0)
 TILE_BLOG = (200.0, 150.0)
 
-# Tile ALLOCATION, width x height in tiles. The blog instructs 8x4 and that is
-# the default, but the allocation is a live question: 8x4 and 4x6 are both 24-32
-# tiles yet they are completely different SHAPES, and shape is what decides
-# which macros fit. 8x4 at the template tile is 1336x432 (3.09:1); 4x6 is
-# 668x648 (1.03:1, essentially square), which is roomier for tall macros and
-# loses the entire 64-bit-wide family (784 um wide against a 668 um die).
+# Tile ALLOCATION, width x height in tiles. The blog says 6x4 ("Set the tile
+# size in info.yaml to 6x4", "The current maximum area is 6x4 tiles per
+# design") and describes 8x4 only as a possibility they are working on, worth
+# ~30% more area, to be announced by a page update and an email to sign-ups.
+# So 6x4 is the default and 8x4 is the upside case: --tiles 8x4.
+#
+# Shape matters more than tile count. At the template tile: 6x4 is 1002x432
+# (2.32:1), 8x4 is 1336x432 (3.09:1), and a hypothetical 4x6 would be 668x648
+# (near square) -- same 24 tiles as 6x4 but it would lose the entire
+# 64-bit-wide macro family, which is 784 um wide.
 #
 # Override with --tiles WxH to re-answer the whole page for a new allocation:
-#     python3 tools/gen_sram_budget.py --tiles 4x6
-TILES_W, TILES_H = 8, 4
+#     python3 tools/gen_sram_budget.py --tiles 8x4
+TILES_W, TILES_H = 6, 4
 
 # Measured on this machine from a real LibreLane run (~/asic-runs/pe-serdes,
 # RUN_2026-09-18_16-53-07): 539 cells, stdcell area 17211.4 um2, die 29163.7 um2
@@ -180,7 +184,7 @@ def build() -> str:
         "",
         "# SRAM Budget",
         "",
-        "How much SRAM fits on the 32-tile die. Macro geometry is parsed from the",
+        f"How much SRAM fits on the {TILES_W*TILES_H}-tile die. Macro geometry is parsed from the",
         "PDK LEFs by `tools/gen_sram_budget.py`",
         f"(`{PDK_SRAM.relative_to(Path.home())}`), so the numbers are the real",
         "macros, not the datasheet's bit counts in isolation.",
@@ -189,9 +193,9 @@ def build() -> str:
         "",
         "TT tile notation is **width × height in tiles**, not a count. The ttihp",
         "template's own comment says *\"A single tile is about 167x108 uM\"*, and the",
-        "competition is 8×4, so:",
+        f"competition is {TILES_W}×{TILES_H}, so:",
         "",
-        "| Source | Tile | Die (8×4) | Area |",
+        f"| Source | Tile | Die ({TILES_W}×{TILES_H}) | Area |",
         "|---|---|---|---|",
         f"| **ttihp-verilog-template** (authoritative) | {TILE_TEMPLATE[0]:.0f}×{TILE_TEMPLATE[1]:.0f} µm | **{die_w_t:.0f} × {die_h_t:.0f} µm** | **{area_t:,.0f} µm² ({area_t/1e6:.3f} mm²)** |",
         f"| Jane Street blog (optimistic) | {TILE_BLOG[0]:.0f}×{TILE_BLOG[1]:.0f} µm | {die_w_b:.0f} × {die_h_b:.0f} µm | {area_b:,.0f} µm² ({area_b/1e6:.3f} mm²) |",
@@ -202,7 +206,7 @@ def build() -> str:
         "",
         "## Every macro in the PDK",
         "",
-        "`fit` = can it be placed in the 8×4 die at the template's tile size",
+        f"`fit` = can it be placed in the {TILES_W}×{TILES_H} die at the template's tile size",
         "(`rotated` means only at 90°, which the flow supports).",
         "",
         "| Macro | Bits | W×H (µm) | Area (µm²) | bits/µm² | P | fit |",
@@ -266,7 +270,8 @@ def build() -> str:
         "| Die | Best macro | Layout | Total | Occupied area | Die efficiency |",
         "|---|---|---|---|---|---|",
     ]
-    for label, cap in (("Template (1336×432)", cap_t), ("Blog (1600×600)", cap_b)):
+    for label, cap in ((f"Template ({die_w_t:.0f}×{die_h_t:.0f})", cap_t),
+                       (f"Blog ({die_w_b:.0f}×{die_h_b:.0f})", cap_b)):
         if not cap:
             continue
         m, n, lay = cap["macro"], cap["n"], cap["layout"]
@@ -328,7 +333,7 @@ def build() -> str:
     lines += [
         "",
         f"**These are well under the blog's \"~1K cells per tile\" (≈{TILES_W*TILES_H*1000:,}",
-        "cells for 32 tiles).** The two published tile figures are inconsistent with",
+        f"cells for {TILES_W*TILES_H} tiles).** The two published tile figures are inconsistent with",
         "each other, and the template's tile size is what the flow will actually",
         "enforce. See [[STATUS]] open risks — worth confirming with TT/Jane Street",
         "before committing to an SRAM-heavy architecture.",
@@ -377,8 +382,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--tiles", metavar="WxH", default=None,
-                    help="tile allocation, width x height (default 8x4, the "
-                         "blog's instruction). Example: --tiles 4x6")
+                    help="tile allocation, width x height (default 6x4, the "
+                         "blog's current allocation). Example: --tiles 8x4")
     args = ap.parse_args()
 
     if args.tiles:
@@ -392,7 +397,7 @@ def main() -> int:
             return 1
         if args.check:
             print("gen_sram_budget: --tiles and --check are mutually exclusive "
-                  "(the committed page is the 8x4 answer)", file=sys.stderr)
+                  "(the committed page is the 6x4 answer)", file=sys.stderr)
             return 1
 
     rendered = build()

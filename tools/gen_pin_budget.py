@@ -237,7 +237,7 @@ def build() -> tuple[str, list[str]]:
         "",
         "- [[concepts/physical-layer-gpio]] — what each protocol needs electrically.",
         "- [[reference/signal-names]] — the RTL port list.",
-        "- [[concepts/competition-overview]] — the 8×4 tile budget this sits inside.",
+        "- [[concepts/competition-overview]] — the 6×4 tile budget this sits inside.",
         "- [[STATUS]] — what is actually built.",
         "",
     ]
