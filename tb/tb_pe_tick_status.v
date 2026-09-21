@@ -24,14 +24,15 @@
 `timescale 1ns / 1ps
 
 module tb_pe_tick_status;
-  localparam int IMEM_WORDS = 128;
+  localparam int IMEM_WORDS = 1024;   // SRAM swap, ADR-004
+  localparam int IAW = $clog2(IMEM_WORDS);
   localparam int DMEM_BYTES = 16;
   localparam int TICKS_PER_BIT = 173;    // 40 MHz / 115200 / 2
   localparam int CLK_NS = 25;            // 40 MHz
 
   logic clk = 0, rst_n;
   logic host_we, host_imem_sel, run;
-  logic [7:0]  host_addr;
+  logic [IAW-1:0] host_addr;
   logic [15:0] host_wdata;
   logic pin_in = 1, pin_out;
   logic [7:0] dbg_pc, dbg_a, dbg_timer;
@@ -72,12 +73,35 @@ module tb_pe_tick_status;
     // own loop-back target as a NOP and the program runs off the end.
     host_imem_sel = 1;
     for (i = 0; i < IMEM_WORDS; i++) begin
-      host_addr  = i[7:0];
+      host_addr  = i[IAW-1:0];
       host_wdata = prog[i];
       host_we    = 1;
       @(posedge clk); #1;
     end
     host_we = 0;
+    @(posedge clk); #1;
+
+    // PULSE RESET AGAIN after the load, and this is not cosmetic.
+    //
+    // The timer free-runs from the release of reset, so it has already advanced
+    // during the load window. At 128 words that window was 128 cycles -- SHORTER
+    // than one 173-cycle tick -- so the timer happened to still be at 0 when the
+    // core started, and this test's "observed vs free-running TIMER" comparison
+    // was true by accident of timing, not by construction.
+    //
+    // At 1024 words the load is 1024 cycles (~6 ticks), the free-running counter
+    // is ahead before the first instruction executes, and the comparison fails
+    // by exactly the number of ticks the loader consumed. See the SRAM swap
+    // (decisions/adr-004-program-counter-width.md): this is the first place the
+    // longer load window changes observable behaviour, and a real loader would
+    // take longer still.
+    //
+    // Resetting here makes the assumption true instead of lucky. It is safe
+    // because pe_imem has NO reset: the SRAM keeps its contents, so the program
+    // survives while pc, the registers and the timer all return to 0 together.
+    rst_n = 0;
+    repeat (4) @(posedge clk); #1;
+    rst_n = 1;
     @(posedge clk); #1;
 
     run = 1;

@@ -21,13 +21,16 @@ in firmware on real RTL. See [`wiki/STATUS.md`](wiki/STATUS.md), and
 | SERDES — 1–32 b word engine, runtime bit order, strobe-paced | `rtl/pe_serdes.v` | 539 cells / 11.2k µm² (17.2k µm² routed) |
 | NRZI / Manchester / bit-stuffing codecs | `rtl/pe_line_codec.v` | 15 / 7 / 84 cells |
 | Config-driven codec pipeline mux | `rtl/pe_codec_mux.v` | 115 cells / 1.7k µm² |
-| CPU — 16-bit insn, 16 opcodes, A/Y/X, 8-bit PC | `rtl/pe_cpu.v` | 387 cells / 5.0k µm² |
-| Software-UART SoC — CPU + tick timer + 2 pins | `rtl/pe_uart_soc.v` | 8,744 cells (flop memory; see STATUS) |
-| **Tiny Tapeout top level** — the deliverable | `rtl/tt_um_protocol_emulator.v` | 8,743 cells / 183k µm² |
+| **CRC / LFSR engine** — CRC-5/8/15/16/32, one datapath | `rtl/pe_crc.v` | 209 cells / 3.4k µm² |
+| **DRU** — oversampled Manchester receive (10BASE-T, PS/2) | `rtl/pe_dru.v` | 116 cells / 2.1k µm² |
+| CPU — 16-bit insn, 16 opcodes, A/Y/X, PC width from IMEM depth | `rtl/pe_cpu.v` | 383 cells / 4.9k µm² |
+| **Instruction memory** — real SRAM macro + protocol wrapper | `rtl/pe_imem.v` | 12 glue cells (+ the macro's LEF area) |
+| Software-UART SoC — CPU + 1024-word SRAM + ticks + 2 pins | `rtl/pe_uart_soc.v` | 1,083 cells / 19.8k µm² |
+| **Tiny Tapeout top level** — the deliverable | `rtl/tt_um_protocol_emulator.v` | 1,083 cells / 19.8k µm² |
 | Assembler / bit-accurate emulator | `tools/peasm.py`, `tools/peemu.py` | Python |
 | The UART itself — **as firmware** | `firmware/uart_echo.pe` | 114 words |
 
-Verified by **18 self-checking testbenches + 11 firmware tests + a lint gate**
+Verified by **21 self-checking testbenches + 13 firmware tests + a lint gate**
 (`tb/run_all.sh`), including one TB per target protocol: UART, SPI, I2C, JTAG,
 SWD, PS/2, CAN, USB-LS, 10BASE-T. The SERDES has been through the full
 place-and-route flow: **0 DRC, 0 LVS, 66 MHz timing clean** (+7.6 ns setup slack
@@ -43,13 +46,14 @@ The headline is `tb/tb_pe_uart_soc.v`: **there is no UART in the RTL.** One inpu
 pin, one output pin, a counter, and a program — 115200 8N1, echoing bytes at
 8.6–8.7 µs per bit cell measured at the pin.
 
-Not built yet: the pin matrix (open-drain/OE), the DRU (oversampled
-phase-picker), the word FIFO, and the SRAM swap for instruction memory.
+The instruction memory is a **real SRAM macro** (`1P_1024x16`, 1,024 program words)
+behind `rtl/pe_imem.v`. Not built yet: the pin matrix (open-drain/OE), the word FIFO,
+and the 2 KB frame buffer.
 
 ## Quick start
 
 ```bash
-./tb/run_all.sh             # firmware regression, all 18 TBs, lint, doc drift (~1 min)
+./tb/run_all.sh             # firmware regression, all 21 TBs, lint, doc drift
 ./tb/run_firmware_tests.sh  # just assemble + emulate the firmware
 ./tb/lint.sh                # verilator -Wall + yosys elaboration check
 ./tb/synth_area.sh          # mapped cell count + area per block (needs yosys + IHP PDK)
@@ -70,8 +74,9 @@ flow/run_librelane.sh flow/pe_serdes.json   # results under ~/asic-runs/
 
 ```
 rtl/      synthesizable Verilog (the hardware): pe_serdes, pe_line_codec,
-          pe_codec_mux, pe_cpu, pe_uart_soc, and tt_um_protocol_emulator
-          (the Tiny Tapeout top level — the only submittable module)
+          pe_codec_mux, pe_crc, pe_dru, pe_cpu, pe_uart_soc, and
+          tt_um_protocol_emulator (the Tiny Tapeout top level — the only
+          submittable module)
 info.yaml Tiny Tapeout project metadata: tiles, clock, pinout
 flow/     LibreLane config + runner, so place-and-route is reproducible
 tb/       self-checking testbenches + run_all.sh / run_firmware_tests.sh /

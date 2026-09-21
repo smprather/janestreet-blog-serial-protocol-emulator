@@ -14,7 +14,8 @@ Cycle model (matches the RTL):
     wants the data, so a registered read would return whatever the previous
     instruction addressed. (This line used to claim "registered", which
     contradicted the RTL this file exists to mirror.)
-  * PC increments every cycle
+  * PC increments every cycle, wrapping at PCW bits (== clog2(IMEM_WORDS), min 8)
+  * jump targets are the operand's low PCW bits, not a fixed 8
 
     python3 tools/peemu.py firmware/uart_echo.hex --send 41 42 43
     python3 tools/peemu.py firmware/uart_echo.hex --send 55 --trace 200
@@ -37,6 +38,15 @@ OP_INCX, OP_DECX, OP_SHR = 0x8, 0x9, 0xA
 OP_LDS, OP_STS, OP_LDM, OP_STM, OP_NOP = 0xB, 0xC, 0xD, 0xE, 0xF
 
 ALU_ADD, ALU_SUB, ALU_AND, ALU_OR = 0, 1, 2, 3
+
+# Instruction memory depth and the PC width derived from it. These MUST match
+# rtl/pe_cpu.v and tools/peasm.py: the emulator is only useful as a fast loop if
+# it mirrors the machine exactly, and a PC that is one bit wider or narrower than
+# the RTL's is the kind of disagreement wiki/STATUS.md gotcha 11 says to treat as
+# a signal rather than an inconvenience.
+IMEM_WORDS = 1024
+PCW = max(8, (IMEM_WORDS - 1).bit_length())      # 10 at 1024 words
+PC_MASK = (1 << PCW) - 1
 
 # ---- IO ports (mirrors rtl/pe_uart_soc.v) --------------------------------
 P_PIN, P_TXPIN, P_TIMER, P_STATUS = 0x0, 0x1, 0x5, 0x7
@@ -62,7 +72,7 @@ def _send_list(s: str) -> list[int]:
 class Soc:
     """pe_uart_soc, cycle-accurate enough for firmware."""
 
-    def __init__(self, words: list[int], imem_words: int = 128, dmem_bytes: int = 16):
+    def __init__(self, words: list[int], imem_words: int = IMEM_WORDS, dmem_bytes: int = 16):
         self.imem = list(words) + [0xF000] * max(0, imem_words - len(words))
         self.dmem = [0] * dmem_bytes
         self.a = self.y = self.x = self.pc = 0
@@ -130,7 +140,7 @@ class Soc:
         op = (insn >> 12) & 0xF
         arg = insn & 0xFFF
 
-        next_a, next_y, next_x, next_pc = self.a, self.y, self.x, m8(self.pc + 1)
+        next_a, next_y, next_x, next_pc = self.a, self.y, self.x, (self.pc + 1) & PC_MASK
         dm_we, dm_addr, dm_data = False, self.x, self.a
         # No branch-operand forwarding: rtl/pe_cpu.v has none and needs none.
         # The core is single-cycle, so an instruction that writes A has already
@@ -156,13 +166,13 @@ class Soc:
             else:
                 next_a = self.x
         elif op == OP_JMP:
-            next_pc = arg & 0xFF
+            next_pc = arg & PC_MASK
         elif op == OP_JZ:
             if self.a == 0:
-                next_pc = arg & 0xFF
+                next_pc = arg & PC_MASK
         elif op == OP_JNZ:
             if self.a != 0:
-                next_pc = arg & 0xFF
+                next_pc = arg & PC_MASK
         elif op == OP_ALU:
             sub = (arg >> 10) & 3
             rhs = self.x if (arg >> 9) & 1 else (arg & 0xFF)

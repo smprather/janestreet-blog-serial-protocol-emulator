@@ -189,11 +189,35 @@ CPU's interface or its cycle model. That was the right call when the SoC was wri
 and it pays off exactly here.
 
 **This is now a blocker sooner than the original text implied.** `tools/peasm.py`
-gained a hard size check on 2026-09-20: a program over 128 words is REJECTED rather
-than emitted and silently aliased by the 7-bit program counter. That is the right
-behaviour, and it means the I2C program cannot quietly overflow -- it will fail to
-assemble. With `uart_echo` at 114 of 128, do the swap FIRST. [[STATUS]]'s ordered
-next steps put it at position 1 for this reason.
+gained a hard size check on 2026-09-20: a program over the depth is REJECTED rather
+than emitted and silently aliased. That is the right behaviour, and it means the I2C
+program cannot quietly overflow -- it will fail to assemble. With `uart_echo` at 114
+of what was then 128, do the swap FIRST. [[STATUS]]'s ordered next steps put it at
+position 1 for this reason.
+
+### RESOLVED 2026-09-20 — and it was NOT free
+
+The swap is done: `rtl/pe_imem.v` instantiates the real `1P_1024x16_c2_bm_bist`
+macro, the program is 1,024 words, and the SoC went from **8,744 cells / 182,650 µm²
+to 1,083 cells / 19,795 µm²**.
+
+**This page's claim that the swap "does not change the CPU's interface" was true of
+the cycle model and FALSE of the address width**, which is the part worth recording.
+The macro's read latency is one cycle (matching the registered-ROM port this design
+already had), so the fetch protocol really was ready. But `pe_cpu.v` had a fixed
+8-bit PC and encoded jump targets in `arg[7:0]`, so at 1024 words:
+
+- `next_pc[IAW-1:0]` was an out-of-range part-select on an 8-bit vector, and
+- the reachable program stayed **256 words** regardless of memory depth.
+
+896 words of the 79,674 µm² macro would have been addressable by nothing. The PC and
+the jump-target field had to widen in the same change, and the assembler's range
+check had to widen with them or the two would have disagreed about the limit
+silently. Full reasoning: [[decisions/adr-004-program-counter-width]].
+
+Verified after the change: `tb_pe_uart_soc` still PASSes on 41/42/00/FF with the
+program in SRAM, and `run_firmware_tests.sh` gained a positive test that word 300 is
+reachable -- which the old 8-bit PC could not express.
 
 ## Firmware design for I2C
 
@@ -362,11 +386,13 @@ version, and the reasoning for it:
   push-pull on 4 pins and needs NO pin matrix -- only the SoC's single in/out pin
   generalised to a multi-bit port. The blog's baseline is "UART, SPI, and I2C" and
   only UART exists as a program today.
-- **CRC LFSR before DRU.** The LFSR is ~120 cells, serves CRC-15/CRC-5/CRC-16/CRC-32,
-  and `tb_pe_can.v` / `tb_pe_usb.v` / `tb_pe_eth.v` already compute those CRCs in
-  their models, so a golden reference exists on day one. The DRU is the
-  highest-uncertainty block in the project and serves only stretch goals
-  ([[concepts/ethernet-scope]]), so it goes last unless de-risking is the priority.
+- ~~**CRC LFSR before DRU.**~~ **BOTH DONE 2026-09-20.** `rtl/pe_crc.v` (209 cells) and
+  `rtl/pe_dru.v` (116 cells) are built, self-checked and in `run_all.sh`. The LFSR
+  came first, as planned, and the plan's reasoning held: the catalogue gave a golden
+  reference on day one ([[reference/crc-config]]) where the DRU had none. The DRU's
+  uncertainty was real — its sampling grid needed a theorem (an absent half-cell
+  transition can only be a bit boundary), and a 3-tap majority filter turned out to
+  shift every edge by a sample. Both are recorded in [[concepts/cdr-oversampling]].
 
 Step 1 is complete (see Blocker 1 for the measured evidence). Steps 2-3 are still
 the prerequisite for everything else: an uncommitted, undocumented milestone is the
@@ -408,6 +434,15 @@ largest risk in the project today.
   A sub-tick delay (a counted NOP loop, ~86 clocks at 40 MHz for half a tick) would
   remove it for both protocols. Worth doing before fast mode, where the budget is
   12 cycles rather than 40.
+
+## The two blocks that landed 2026-09-20 (not part of this milestone's steps)
+
+`rtl/pe_crc.v` and `rtl/pe_dru.v` are items 4 and 5 of [[STATUS]]'s wider ordered
+list, not steps of the I2C plan. Neither is needed for I2C — the CRC block does not
+serve it (SMBus PEC does, which is a stretch), and the DRU serves only 10BASE-T and
+PS/2 receive. They were built out of order deliberately: both are small, both are
+independently testable, and the DRU is the highest-uncertainty block in the project,
+so its risk is now retired rather than carried. **The I2C plan itself is unchanged.**
 
 ## Related
 

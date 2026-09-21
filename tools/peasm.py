@@ -94,9 +94,15 @@ CONSTS: dict[str, int] = {
 #   * LDM's bit 7 is a DESTINATION SELECTOR (A vs X), so `LDM A, 128` assembles
 #     as `LDM X, 0`;
 #   * data addresses wider than DMEM_BYTES wrap into occupied slots.
-IMEM_WORDS = 128
+# Target sizing. IMEM_WORDS moved 128 -> 1024 with the SRAM swap
+# (decisions/adr-004-program-counter-width.md); the jump-target field
+# widened with it, because an 8-bit target cannot name word 1023.
+IMEM_WORDS = 1024
 DMEM_BYTES = 16
 IO_PORTS = 16
+# Jump targets are encoded in the operand's low bits. The PC is
+# clog2(IMEM_WORDS) wide (min 8), so the field is that many bits.
+PCW = max(8, (IMEM_WORDS - 1).bit_length())
 
 
 class AsmError(Exception):
@@ -223,10 +229,16 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
                     arg = labels[tok]
                 else:
                     arg = parse_imm(tok, CONSTS)
-                # The PC is 8 bits but only $clog2(IMEM_WORDS) of them reach
-                # the memory, so a target past the end is not "high memory",
-                # it is a different instruction.
+                # The jump target is encoded in the operand field, which is as
+                # wide as the PC (PCW bits, min 8). A target past the end of
+                # instruction memory is not "high memory" -- it is a different
+                # instruction, because the PC only has PCW bits.
                 check_range(arg, IMEM_WORDS, "jump target", tok)
+                # ...and it must also fit the FIELD. At IMEM_WORDS=1024 both are
+                # 10 bits so they agree, but a depth that is not a power of two
+                # would make clog2(IMEM_WORDS) > bits needed, and the wider of
+                # the two is the real limit. Fail loudly rather than truncate.
+                check_range(arg, 1 << PCW, "jump target field", tok)
             elif kind == "alu":
                 # forms: "AND A, 1" / "AND 1" / "ADD A, A" (register form is
                 # not in the ISA -- the assembler rejects it explicitly rather

@@ -12,9 +12,17 @@ confidence: medium
 
 ## Status
 
-Accepted as the plan of record. **Not implemented.** Supersedes the single-macro
+Accepted as the plan of record. **The instruction half is IMPLEMENTED** (2026-09-20,
+`rtl/pe_imem.v`); the frame buffer is not. Supersedes the single-macro
 recommendation in [[plans/through-i2c]] Blocker 3, which considered instruction
 memory only.
+
+**Read [[decisions/adr-004-program-counter-width]] before acting on this page.** The
+macro choice below stands unchanged, but the swap turned out NOT to be free: the CPU
+had a fixed 8-bit PC, so 1024 words were not addressable until the PC and the
+jump-target field widened in the same change. This page's projection was computed
+from flop memory and its "does not change the CPU's interface" implication was
+wrong.
 
 ## Context
 

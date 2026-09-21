@@ -25,8 +25,7 @@ exist, so there is a `tt_um_*` top level with a real pad interface
 `uio[1:0]`. Until 2026-09-20 every pin-budget conclusion in the wiki described an
 interface that no RTL in this repo implemented.
 
-Nothing has been taped out. The pin matrix, the DRU, and the SRAM swap do not
-exist yet. **[[plans/through-i2c]] has the ordered work list to the next
+Nothing has been taped out. The pin matrix and the SRAM swap do not exist yet. **[[plans/through-i2c]] has the ordered work list to the next
 milestone** (the I2C transaction); the summary is at the bottom of this file.
 
 ```
@@ -49,8 +48,8 @@ milestone** (the I2C transaction); the summary is at the bottom of this file.
     +-------------------+           +-------------------+
               |
     +-------------------+           +-------------------+
-    |  pe_codec_mux     |           |  DRU (oversampled |   NOT BUILT
-    |  stuff/nrzi/manch |           |  phase picker)    |   spec in wiki
+    |  pe_codec_mux     |           |  pe_dru           |   BUILT (116 cells)
+    |  stuff/nrzi/manch |           |  8x oversampling  |   + pe_crc (209)
     +-------------------+           +-------------------+
               |                               |
     +-------------------+           +-------------------+
@@ -82,9 +81,12 @@ states the reasoning; do not "unify" them without reading it.
 | Manchester codec | `rtl/pe_line_codec.v` | 7 | 120 | `tb_pe_manch` |
 | Bit stuffer/unstuffer | `rtl/pe_line_codec.v` | 84 | 1,290 | `tb_pe_bitstuff` |
 | Codec pipeline mux | `rtl/pe_codec_mux.v` | 115 | 1,691 (whole pipeline) | `tb_pe_codec_mux` |
-| **CPU** (16-bit insn, 16 opcodes, 8-bit PC) | `rtl/pe_cpu.v` | 387 | 4,952 | `tb_pe_cpu` |
-| **Software-UART SoC** (CPU + tick timer + 2 pins) | `rtl/pe_uart_soc.v` | 8,744 | 182,650 total | `tb_pe_uart_soc`, `tb_pe_tick_status` |
-| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | 8,743 | 182,652 total | `tb_tt_um_protocol_emulator` |
+| **CRC / LFSR engine** (5-, 8-, 15-, 16-, 32-bit) | `rtl/pe_crc.v` | 209 | 3,354 | `tb_pe_crc` |
+| **DRU** (oversampled Manchester receive) | `rtl/pe_dru.v` | 116 | 2,065 | `tb_pe_dru` |
+| **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 383 | 4,939 | `tb_pe_cpu` |
+| **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
+| **Software-UART SoC** (CPU + tick timer + 2 pins) | `rtl/pe_uart_soc.v` | **1,083** | **19,795 total** | `tb_pe_uart_soc`, `tb_pe_tick_status` |
+| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **1,083** | **19,795 total** | `tb_tt_um_protocol_emulator` |
 
 Numbers from `tb/synth_area.sh` (sg13g2 typ corner, mapped pre-route). The routed
 figure for the SERDES comes from the full LibreLane flow (route+CTS+PDN inflate
@@ -105,18 +107,24 @@ the previous revision of this table:
   `tick_flag` became an actual flop instead of a driver conflict yosys was tying to
   a constant.
 
-**The SoC's 182.7k µm² figure is flop memory, not a synthesis failure**: its IMEM
-(128×16) and DMEM (16×8) are register arrays, so yosys emits ~2,215 flops at
-48.9 µm² each. The `ram_style` attributes on those arrays are FPGA pragmas and do
-nothing in this flow — sg13g2 has no inferable block RAM and no SRAM compiler,
-only fixed macros. For comparison a `1P_256x16` SRAM macro holds 4,096 bits in
-28,127 µm². Replacing flops with a macro is the **highest-leverage next step** and
-the choice is made in [[decisions/adr-003-memory-plan]]; it changes nothing in the
-CPU's interface or cycle model, because the instruction port was written for a
-registered ROM from the start. See the area budget section below for the measured
-per-word cost.
+**DONE 2026-09-20 — the SoC went from 8,744 cells / 182.7k µm² to 1,083 cells /
+19.8k µm².** The instruction memory is now the real `1P_1024x16_c2_bm_bist` macro
+(`rtl/pe_imem.v`), and the program is 1,024 words instead of 128. Measured both
+ways round: 1,024 words in flops is 60,806 cells / 1,300,104 µm², which reproduces
+ADR-003's 1,271 µm² per instruction word exactly.
 
-**Regression: 18/18 testbenches + 11/11 firmware tests pass, and the lint gate is
+**It did NOT change nothing, and the plan was wrong to say it would.**
+[[plans/through-i2c]] Blocker 3 claimed the swap "does not change the CPU's
+interface or its cycle model, because the instruction port was written for a
+registered ROM from the start". The cycle model was indeed already right — the
+macro's read latency is one cycle, which is what the fetch-ahead assumes. But the
+CPU had a **fixed 8-bit PC**, so at 1024 words `next_pc[IAW-1:0]` was an
+out-of-range part-select and the reachable program stayed 256 words regardless of
+depth: 896 words of addressable-by-nothing SRAM for 79,674 µm². **The PC and the
+jump-target field had to widen in the same change.** Full reasoning and the
+rejected alternatives: [[decisions/adr-004-program-counter-width]].
+
+**Regression: 21/21 testbenches + 13/13 firmware tests pass, and the lint gate is
 clean** (`tb/run_all.sh` runs the firmware regression first, then every TB, then
 `tb/lint.sh`, then the generated-doc drift checks).
 
@@ -138,6 +146,24 @@ Both were printed by the tools on every run and discarded: `tb/synth_area.sh`
 captured yosys's output and grepped it only for numbers. It now surfaces them and
 exits non-zero. **An area report that hides correctness warnings looks like a check
 and is not one.**
+
+**The CRC block is checked against an outside authority, not against itself.**
+`tools/gen_crc_config.py` derives every constant, asserts the RevEng catalogue's
+published `check` value for "123456789" for six polynomials, and refuses to write
+[[reference/crc-config]] unless the derived constants reproduce it. `tb_pe_crc`
+re-checks the same numbers in the RTL, using the TEXTBOOK datapath as the reference
+(shift-left for non-reflected CRCs, shift-right for reflected) so agreement means the
+"one right-shift register serves both families" claim is measured rather than
+asserted. It also folds the DUT's OWN emitted field bits and requires the catalogue's
+published `residue` — independent evidence that the wire order is the standard's.
+
+**The DRU's grid is the claim, and it is measured exhaustively.** `tb_pe_dru` drives
+every Manchester transition pattern (00, 01, 10, 11 — the complete set of things a
+half-cell boundary can look like), 32-bit runs, an Ethernet preamble+SFD frame, and a
+random soak, and requires the bits back. It then feeds the DRU into a real `pe_manch`
+and requires its `rx_err` to stay quiet, which is what makes the halves a legal
+symbol and not merely "some value". Mutation-checked: swapping `rx_first`/`rx_second`
+fails the run.
 
 Protocol testbenches (one per target, each wrapping the same SERDES with that
 protocol's real framing): UART 8N1 · SPI mode 0 full duplex · I2C 7-bit
@@ -163,11 +189,20 @@ Measured 2026-09-20. The mapped→die factor is **1.97**, from the only block th
 been through real place-and-route (`pe_serdes`: 11,223 mapped → 17,211 routed cells
 → 29,164 µm² die at 78% utilisation). Macros place as-is and take no inflation.
 
-**89% of the current design is instruction memory implemented as flip-flops.**
-Synthesising the SoC at four IMEM depths gives a dead-linear **1,271 µm² and 60
-cells per instruction word**; everything else (CPU, DMEM, timer, pin, glue) is
-19,947 µm² and 1,025 cells. Storing program in flops costs ~80 µm²/bit against ~5
-for a macro.
+**The swap is DONE and measured** (2026-09-20, [[decisions/adr-004-program-counter-width]]).
+The historical per-word figure stands and the new build confirms it:
+
+| | Cells | Area (µm²) | Note |
+|---|---|---|---|
+| Instruction memory, 1,024 words in flops | 60,806 | 1,300,104 | the projection ADR-003 was built on |
+| Instruction memory, 1,024 words in the macro | 12 + 1 instance | 187 glue + LEF area | measured 2026-09-20 |
+| Whole SoC before the swap (128 flop words) | 8,744 | 182,650 | |
+| **Whole SoC after the swap (1,024 SRAM words)** | **1,083** | **19,795** | **9.2× smaller, 8× the program** |
+
+The flop figure reproduces ADR-003's 1,271 µm²/word exactly (60,806 cells × 21.4 µm²
+/ 1,024 words), which cross-checks two measurements taken months apart. The macro
+contributes **no** synthesised cells — its area comes from the LEF, and it is
+79,674 µm² per [[reference/sram-budget]].
 
 **The allocation is 6×4 = 24 tiles**, not 8×4. The blog says so three times, and
 `info.yaml` now matches. 8×4 is described only as "the possibility of scaling up
@@ -177,12 +212,18 @@ for a macro.
 
 | Scenario | Die µm² | of 6×4 (real) | of 8×4 (upside) |
 |---|---|---|---|
-| Today, integrated (SoC + SERDES + codecs) | 385,265 | **89%** | 67% |
-| After the SRAM swap ([[decisions/adr-003-memory-plan]]) | 235,116 | **54%** | 41% |
-| Leaner swap (`1P_512x16` IMEM) | 200,751 | 46% | 35% |
+| Before the swap (flop IMEM, 128 words) | 385,265 | **89%** | 67% |
+| **Now: SoC + SERDES + codecs + instruction macro + DRU + CRC** | **154,786** | **36%** | 27% |
+| Still to come: pin matrix + 2 KB frame macro | +79,674 | → 54% | → 41% |
 
-Gate count is not the constraint: 9,397 cells today against ~24,000 for 24 tiles at
-the blog's ~1K cells/tile, and ~1,700 cells after the swap.
+The "still to come" row is the two known remaining consumers: the frame buffer is
+79,674 µm² of macro, and the pin matrix is estimated in the low hundreds of cells.
+**The design is no longer area-constrained**, which is the whole point of the swap:
+the remaining risk in this project is now verification, not floorplanning.
+
+Gate count is not the constraint: 1,083 cells for the whole SoC against ~24,000 for
+24 tiles at the blog's ~1K cells/tile — about 4.5% of the logic budget, with the
+SERDES's 539 and the codecs' 115 on top.
 
 **Shape matters more than tile count**, because a macro has to physically fit the
 rectangle. TT notation is WIDTH × HEIGHT:
@@ -204,12 +245,13 @@ the upside case with `tools/gen_sram_budget.py --tiles 8x4`.
 |---|---|
 | 8× oversampling per bit (4 samples per 50 ns half-UI) = 12.5 ns RX grid | `decisions/adr-001-8x-oversampling.md` |
 | Std-cell **latch-pair dual-edge flop** for DDR capture; no custom DET | `decisions/adr-002-latch-pair-det-flop.md` |
-| **40 MHz board clock, DDR** = exact integers for every hard protocol (50 ns = 2 ticks) | `concepts/tx-timing-generation.md` |
-| **Sign off at 66 MHz, run at 40** (turbo mode); 1.0 ns clock uncertainty | `concepts/tx-timing-generation.md` |
+| **40 MHz default board clock, 60 MHz turbo**; both = exact integers for every hard protocol (50 ns = 2 or 3 ticks) | `concepts/tx-timing-generation.md` |
+| **Sign off at 66 MHz** (conservative STA target only); 1.0 ns clock uncertainty. 66 is NOT an operating point — it provably fails the 10BASE-T TX jitter window | `concepts/tx-timing-generation.md` |
 | SERDES words ≤ 32 b; longer fields chunk (SWD parity, CAN/USB/ETH payloads) | `rtl/pe_serdes.v` header |
 | Codec pipeline order fixed (stuff → line-code); cfg selects the **subset** | `rtl/pe_codec_mux.v` header |
 | No elasticity FIFO needed (source-sync protocols + per-edge re-lock) | `concepts/cdr-oversampling.md` |
 | Two SRAM macros: 1024-word instructions + 2 KB frame buffer, both `1P_1024x16` | `decisions/adr-003-memory-plan.md` |
+| **Instruction macro is live; PC width derives from IMEM depth (10 bits at 1024)** | `decisions/adr-004-program-counter-width.md` |
 | 10BASE-T is the LINE LAYER only; the stack is off-chip, and firmware never touches Ethernet bits | `concepts/ethernet-scope.md` |
 | Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | `rtl/pe_line_codec.v` header |
 | `ena` must never gate logic; every pad output driven in every state | `rtl/tt_um_protocol_emulator.v` header |
@@ -322,6 +364,86 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     this ISA is narrower than the immediate that fits in it, so `JMP 200`,
     `LDM A, 128` (which re-encoded as `LDM X`) and a 129-word program all
     assembled clean and ran wrong. `tools/peasm.py` now rejects all of them.
+
+17. **A 3-tap majority is not a delay, and the difference is a whole sample.**
+    Its output moves one sample later than the centre tap at a level change (it takes
+    two agreeing taps to flip). Feeding it straight into `pe_dru`'s edge detector
+    shifted EVERY edge by a sample, which moved the phase-6 capture off the half-cell
+    centre and captured the wrong LEVEL — for one bit pattern out of four. Fixed by
+    resampling the majority before it drives the counter. A test that only asks "does
+    the filter remove the glitch" passes in both versions; the defect only shows up as
+    wrong data on a pattern the glitch test does not use.
+18. **A complement belongs on the wire, not in the feedback.** `pe_crc`'s
+    `cfg_out_inv` complements `crc_bit` only. Putting it inside the feedback makes
+    `fb == 1` on every field strobe, so the register XORs its mask 32 times while it
+    should be draining — and the emitted bits are IDENTICAL either way, so every
+    transmit-side check passes. Only the receiver's drain-to-zero distinguishes them.
+    When a block feeds its own output back, the output path and the feedback path are
+    not interchangeable and must be written as separate expressions.
+19. **Error detection is not "the CRC changed".** A payload corrupted BEFORE its CRC
+    is computed is a consistent frame and verifies correctly; so is a corrupted frame
+    whose CRC field happens to be the corrupted one's. The right test corrupts the
+    RECEIVED stream. Asserting the naive version produced 150+ failures that were all
+    arithmetic, not defects — the giveaway was that they appeared only in the soak,
+    where random payloads made the coincidence common.
+20. **An acquisition ambiguity is not a bug when the protocol has a preamble.**
+    `pe_dru` cannot label the first captured cell's halves without a transition to
+    seed the parity, so the first cell after acquisition may be mislabelled. Every
+    Manchester receiver has this property and that is exactly what the 56-bit
+    Ethernet preamble is for. The TB drives a lead-in and counts from the payload,
+    rather than asserting something no receiver promises.
+
+21. **A hard macro's protocol has traps that a functional test cannot see, and
+    its datasheet does not mention them.** `A_BM=0` with `A_WEN=1` is a **silent
+    write no-op**: the loader reports success, memory stays blank, and the SoC
+    executes NOPs. `A_REN=1` during a write is **write-through** — the read port
+    returns the value on `DIN`, not the stored word. Neither is in the datasheet;
+    both are visible in the vendor's *behavioural model*, which is the file to read
+    before writing a driver. A testbench that only checks "memory remembers a word"
+    passes with either bug present, so `tb_pe_imem` asserts the specific protocol
+    facts and is mutation-checked against both.
+22. **A longer load window is not free, and a test can be passing by accident.**
+    Deepening instruction memory from 128 to 1024 words made the loader take 1024
+    cycles instead of 128. The timer free-runs from reset, so it now advances ~6
+    ticks before the core starts — and `tb_pe_tick_status` began failing, because
+    its "observed ticks == free-running timer" comparison had been true only
+    because the old load window (128 cycles) was *shorter than one 173-cycle tick*.
+    The test was right by luck, not by construction. When a change alters how long
+    something takes, re-read every test whose assumption is about *when*, not *what*.
+23. **"Widening the memory" and "widening the address" are separate jobs, and
+    doing one without the other buys nothing.** The 1024-word macro was useless
+    until the PC and the jump-target field widened: with a fixed 8-bit PC the
+    reachable program stayed 256 words and `next_pc[IAW-1:0]` was an out-of-range
+    part-select. The plan had explicitly claimed the swap would need no CPU change,
+    which was true of the cycle model and false of the address width — a claim can
+    be right about one axis and wrong about another, and only re-reading the RTL
+    against the new size finds it.
+24. **A parameterised block is only tested at the values something actually
+    instantiates, and a guard with the wrong bound reads as protection while
+    providing none.** `pe_dru`'s guard checked `SPB % 4 != 0`, which was true and
+    necessary and incomplete: `phase` is 4 bits and the wrap constant is
+    `4'(SPB - 1)`, which **truncates above 16**. At SPB=20 the counter wraps at
+    phase 3 instead of 19, never reaches either capture phase, and the block
+    **emits nothing at all** — no error, no output, no failing signal. Every
+    testbench pinned SPB at its default, so a sweep of the parameter boundary
+    (8/12/16 pass, 20/24/32 fail) was the only thing that found it. The bound is
+    now an elaboration error and `tb/param_guards.sh` (in `run_all.sh`) requires
+    both guards to actually *reject* and both boundaries to actually *compile*,
+    so a guard that stops firing fails the build.
+25. **A gate invoked mid-script must resolve its paths from a captured absolute
+    root.** `run_all.sh` cds into `sim/` and then back to the repo root, and `$0`
+    may itself be relative (`./tb/run_all.sh`) — so `$(dirname "$0")` after the
+    cd resolved to `.` and `/param_guards.sh`, and the new gate failed while
+    passing perfectly when run by hand. The script now captures `REPO_ROOT` once
+    at the top and every later gate uses it. **A tool that works standalone and
+    fails inside the runner is a path bug, not a logic bug.**
+26. **"Within spec" is a conformance test, not a budget to nibble.** The 66 MHz
+    turbo was justified for months as costing "±3.8 ns = 7.6% of half-UI — eats
+    the 10BASE-T TX jitter budget". Solving the actual requirement (crossings at
+    8.0/8.5 BT ±11 ns, on a sliding window) proved no edge placement works at
+    66 MHz at all, while **60 MHz is exact with no dither and better on every
+    axis**. When a timing claim rests on a tolerance, quote the spec's numbers and
+    solve for feasibility before pricing the tradeoff. See [[decisions/adr-005-60mhz-turbo]].
 
 ## Open questions / risks
 

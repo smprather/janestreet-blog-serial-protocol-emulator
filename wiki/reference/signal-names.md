@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen_signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-8 modules, 98 ports.
+12 modules, 144 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -59,6 +59,28 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_busy` | out | 1 | High from start until the final strobe — drops one cycle **before** `rx_valid`. |
 | `rx_valid` | out | 1 | Word complete. Delayed one cycle past the final strobe by design (so `rx_data` can copy the register without a variable-shift path). |
 
+## `RM_IHPSG13_1P_1024x16_c2_bm_bist`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `A_CLK` | inp | 1 | _no note yet_ |
+| `A_MEN` | inp | 1 | _no note yet_ |
+| `A_WEN` | inp | 1 | _no note yet_ |
+| `A_REN` | inp | 1 | _no note yet_ |
+| `A_ADDR` | inp | `[9:0]` | _no note yet_ |
+| `A_DIN` | inp | `[15:0]` | _no note yet_ |
+| `A_DLY` | inp | 1 | _no note yet_ |
+| `A_DOUT` | out | `[15:0]` | _no note yet_ |
+| `A_BM` | inp | `[15:0]` | _no note yet_ |
+| `A_BIST_CLK` | inp | 1 | _no note yet_ |
+| `A_BIST_EN` | inp | 1 | _no note yet_ |
+| `A_BIST_MEN` | inp | 1 | _no note yet_ |
+| `A_BIST_WEN` | inp | 1 | _no note yet_ |
+| `A_BIST_REN` | inp | 1 | _no note yet_ |
+| `A_BIST_ADDR` | inp | `[9:0]` | _no note yet_ |
+| `A_BIST_DIN` | inp | `[15:0]` | _no note yet_ |
+| `A_BIST_BM` | inp | `[15:0]` | _no note yet_ |
+
 ## `pe_codec_mux`
 
 | Port | Dir | Width | Meaning |
@@ -97,6 +119,50 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `io_rdata` | inp | `[7:0]` | _no note yet_ |
 | `dbg_pc` | out | `[7:0]` | Program counter, for observability. A real PORT, not a hierarchical reference from the parent: a cross-module reference simulates but does not synthesise. |
 | `dbg_a` | out | `[7:0]` | Accumulator, for observability. See dbg_pc. |
+
+## `pe_crc`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `rst_n` | inp | 1 | Active-low asynchronous reset. |
+| `bit_en` | inp | 1 | **The strobe** — one-cycle pulse meaning "this is the moment". One strobe per **wire bit**, in transmission order. See [[concepts/strobe-and-committing-edge]]. |
+| `clr` | inp | 1 | Frame boundary: `R <= cfg_seed` and the verdict drops. Wins over `bit_en`. This is a re-seed, NOT a reset — a frame boundary is not a power cycle. Note the ordering rule it creates: a consumer must latch the verdict before clearing for the next frame. |
+| `crc_field` | inp | 1 | Level. While high, the block emits the CRC field: `crc_bit` is driven out and the register does a pure shift, so it drains to zero. |
+| `bit_in` | inp | 1 | Wire bit in, transmission order. Ignored while `crc_field` — the block feeds its own output back on those strobes. |
+| `cfg_poly_r` | inp | `[W-1:0]` | **The REVERSED polynomial**, low-justified (`rev(poly, Wcrc)`, not `rev(poly, 32)`). One expression serves both CRC families; see [[reference/crc-config]] for every value. |
+| `cfg_seed` | inp | `[W-1:0]` | Seed in R orientation, low-justified: `init` for a reflected algorithm, `rev(init, Wcrc)` for a non-reflected one. |
+| `cfg_out_inv` | inp | 1 | 1 ⇒ complement the field bits on the wire (Ethernet FCS, USB CRCs). Expresses `xorout` because every target's is all-ones or all-zeros. Applies to `crc_bit` only, never to the feedback — see the RTL header for why that distinction is load-bearing. |
+| `crc_bit` | out | 1 | The field bit for this strobe: `R[0] ^ cfg_out_inv`. LSB-first of `R` is LSB-first of the CRC for a reflected algorithm and **MSB-first** of it for a non-reflected one, which is correct for both. |
+| `crc_zero` | out | 1 | **A status, not an event.** Asserts after the final field strobe and holds until `clr`. Means "the frame at this boundary is clean" — the register drains to zero for a transmitter and for a receiver that folds the field un-complemented. |
+| `crc_state` | out | `[W-1:0]` | The register, for observability and firmware readback. Reading the CRC a receiver computed means sampling it at the right strobe, which is a firmware-timing decision, not a feature of this port. |
+
+## `pe_dru`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `rst_n` | inp | 1 | Active-low asynchronous reset. |
+| `rx_pin` | inp | 1 | The raw **asynchronous** pin. Synchronized internally (2 flops) before anything else touches it — this is the one place in the design where metastability would actually be sampled. |
+| `cfg_filter_en` | inp | 1 | 3-tap majority on the *synchronized* pin, for a noisy cable. The output is resampled before it drives the edge detector, so turning it on removes glitches without moving an edge; off by default because on a clean line it is pure latency. |
+| `cfg_lock_bits` | inp | `[7:0]` | Well-formed cells required before `locked` asserts (0 ⇒ default 4). A cell is well-formed when its two halves differ, which is the Manchester code itself. |
+| `bit_en` | out | 1 | **The strobe** — one per decoded **bit cell** (not per half-cell: pe_manch is given both halves at once). This is the DRU's whole output contract. See [[concepts/strobe-and-committing-edge]]. |
+| `rx_first` | out | 1 | First half-cell level of the bit `bit_en` commits. Fed to `pe_manch.rx_first`. |
+| `rx_second` | out | 1 | Second half-cell level — **this is the bit value**. H→L is a 0, L→H is a 1, so the codec reads it directly. Fed to `pe_manch.rx_second`. |
+| `rx_wire` | out | 1 | The latest half-cell sample, for a consumer that wants the raw oversampled level rather than Manchester bits. |
+| `locked` | out | 1 | **Confidence, not a gate.** Asserted after `cfg_lock_bits` well-formed cells; cleared by the first malformed one. `bit_en` is emitted whether or not locked — gating on it would drop the preamble, which is the part every protocol here expects to be dropped. Nothing in this repo gates on it. |
+| `dbg_phase` | out | `[3:0]` | The phase counter (distance from the last transition, mod SPB). Bring-up only; the capture phase is SPB/4 and 3·SPB/4. **SPB's ceiling is 16, not merely a multiple of 4** — this counter is 4 bits and `4'(SPB-1)` truncates above it, which silently kills all capture (SPB=20 emits nothing). Both constraints are elaboration errors in the RTL and are boundary-tested by `tb/param_guards.sh`. |
+
+## `pe_imem`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `imem_addr` | inp | `[((WORDS <= 2) ? 1 : $clog2(WORDS))-1:0]` | CPU fetch address. The data for this address appears on `imem_rdata` **one cycle later** — the macro's read latency, which pe_cpu's fetch-ahead is built around. |
+| `imem_rdata` | out | `[15:0]` | Instruction word for the address driven **last** cycle. Wire-to-wire from the macro's `A_DOUT`; a register here would add a second cycle of latency and break the fetch-ahead. |
+| `host_we` | inp | 1 | Loader write. Takes priority over the fetch port; by construction the two cannot collide, because the SoC holds the CPU at PC=0 while the loader owns the window. |
+| `host_addr` | inp | `[((WORDS <= 2) ? 1 : $clog2(WORDS))-1:0]` | Loader address, one word per cycle. Wide enough to name any instruction word. |
+| `host_wdata` | inp | `[15:0]` | Loader data. The wrapper writes all 16 bits; the macro's `A_BM` is tied high, because `BM=0` with `WEN=1` is a silent no-op rather than an error. |
 
 ## `pe_nrzi`
 
@@ -154,7 +220,8 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rst_n` | inp | 1 | Active-low asynchronous reset. |
 | `host_we` | inp | 1 | _no note yet_ |
 | `host_imem_sel` | inp | 1 | _no note yet_ |
-| `host_addr` | inp | `[7:0]` | _no note yet_ |
+| `host_addr` | inp | `[((((IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS)) > 8)
+                 ? ((IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS)) : 8)-1:0]` | _no note yet_ |
 | `host_wdata` | inp | `[15:0]` | _no note yet_ |
 | `run` | inp | 1 | _no note yet_ |
 | `pin_in` | inp | 1 | _no note yet_ |

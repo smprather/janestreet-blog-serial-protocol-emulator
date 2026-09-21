@@ -6,7 +6,9 @@
 //
 // Deliberate minimums, each of which costs area to relax:
 //   * one 8-bit accumulator A, one 8-bit scratch Y, one 8-bit pointer X
-//   * 8-bit PC; instruction memory parameterised (128 words by default)
+//   * PC width derived from instruction memory depth (8 bits at 128 words,
+//     10 at 1024) -- it must be able to NAME every word it can fetch
+//   * instruction memory parameterised (128 words by default)
 //   * 16-bit fixed-width instructions, 16 opcodes, no addressing modes
 //   * Harvard: instruction port and data buffer are separate memories
 //   * no stack, no interrupts, no subroutine call, no multiply
@@ -87,6 +89,27 @@ module pe_cpu #(
   localparam int IAW = (IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS);
   localparam int DAW = (DMEM_BYTES <= 2) ? 1 : $clog2(DMEM_BYTES);
 
+  // PC width. The program counter must be able to NAME every word in
+  // instruction memory, so it is derived from IMEM_WORDS rather than fixed at 8.
+  //
+  // This used to be a fixed `logic [7:0] pc`, which silently capped the
+  // reachable program at 256 words no matter how deep the memory was: at
+  // IMEM_WORDS=1024 the expression `next_pc[IAW-1:0]` became an out-of-range
+  // part-select on an 8-bit vector, and the memory below word 256 was not
+  // addressable at all. See decisions/adr-004-program-counter-width.md.
+  //
+  // PCW is at least 8 for compatibility with the original ISA (a 128-word
+  // program still gets an 8-bit PC, and every existing fixture is unchanged).
+  localparam int PCW = (IAW > 8) ? IAW : 8;
+
+  // The jump target field. JMP/JZ/JNZ carry it in arg[PCW-1:0] when the PC is
+  // wider than 8 bits; at PCW=8 the field is arg[7:0] exactly as before, so the
+  // encoding of every existing program is bit-identical.
+  //
+  // arg[11:8] were unused by these three opcodes, so a 10-bit target costs no
+  // encoding and breaks no other instruction. If PCW ever exceeds 12 this needs
+  // a second instruction word instead -- guarded below.
+
   localparam logic [3:0] OP_LDI  = 4'h0,
                          OP_OUT  = 4'h1,
                          OP_IN   = 4'h2,
@@ -109,9 +132,10 @@ module pe_cpu #(
                          ALU_AND = 2'd2,
                          ALU_OR  = 2'd3;
 
-  logic [7:0] a, y, x, pc;
+  logic [7:0] a, y, x;
+  logic [PCW-1:0] pc;
 
-  assign dbg_pc = pc;
+  assign dbg_pc = pc[7:0];
   assign dbg_a  = a;
 
   // ---- fetch (fetch-ahead) ----------------------------------------------
@@ -135,15 +159,23 @@ module pe_cpu #(
   assign op   = insn[15:12];
   assign arg  = insn[11:0];
 
-  logic [7:0] next_pc;
+  logic [PCW-1:0] next_pc;
   always_comb begin
-    next_pc = pc + 8'd1;               // default: fall through
+    next_pc = pc + 1'b1;               // default: fall through
     case (op)
-      OP_JMP: next_pc = arg[7:0];
-      OP_JZ:  if (a == 8'h00) next_pc = arg[7:0];
-      OP_JNZ: if (a != 8'h00) next_pc = arg[7:0];
+      OP_JMP: next_pc = arg[PCW-1:0];
+      OP_JZ:  if (a == 8'h00) next_pc = arg[PCW-1:0];
+      OP_JNZ: if (a != 8'h00) next_pc = arg[PCW-1:0];
       default: ;
     endcase
+  end
+
+  // Elaboration guard: the jump target lives in the operand's low bits, and
+  // arg[11:8] are only free for these opcodes. A PC wider than 12 bits would
+  // need a second instruction word, which this ISA does not have -- failing here
+  // is better than a target that silently truncates.
+  if (PCW > 12) begin : g_pcw_guard
+    $error("pe_cpu: PCW exceeds the 12-bit operand field; the ISA needs a second instruction word before the PC can widen further");
   end
 
   // While !run the core holds pc at 0 (the boot loader owns the window), and
@@ -173,9 +205,11 @@ module pe_cpu #(
   logic [7:0] alu_rhs;
   assign alu_rhs = arg[9] ? x : arg[7:0];
 
-  // arg[8] is the one encoding bit no instruction reads: ALU uses [11:10]+[9]+
-  // [7:0], LDM uses [7] and [3:0], everything else uses [7:0] or less. It is
-  // reserved for a second ALU source select. Sink it explicitly so the lint
+  // arg[8] was the one encoding bit no instruction read. That is no longer true
+  // when the PC is wider than 8 bits: arg[8] and arg[9] are now part of the jump
+  // target for JMP/JZ/JNZ (see PCW above). It is still unused for every OTHER
+  // opcode, so it stays sunk -- but the sink is now honest about being
+  // opcode-dependent rather than a statement that the bit is dead.
   // gate stays clean and so "unused" is a statement in the RTL rather than a
   // warning somebody has to remember is expected.
   logic _unused_arg8;
@@ -195,7 +229,7 @@ module pe_cpu #(
   // ---- execute ----------------------------------------------------------
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      pc <= 8'h00;
+      pc <= '0;
       a  <= 8'h00;
       y  <= 8'h00;
       x  <= 8'h00;
@@ -230,7 +264,7 @@ module pe_cpu #(
         default: ;
       endcase
     end else begin
-      pc <= 8'h00;                     // held by the boot loader
+      pc <= '0;                        // held by the boot loader
     end
   end
 

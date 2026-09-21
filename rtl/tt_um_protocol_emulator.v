@@ -79,7 +79,12 @@ module tt_um_protocol_emulator (
   // a separate block and a separate decision record.
   wire        host_we       = 1'b0;
   wire        host_imem_sel = 1'b0;
-  wire [7:0]  host_addr     = 8'h00;
+  // Width follows the SoC's loader port, which follows IMEM_WORDS. Written as
+  // the same expression the SoC uses so the two cannot drift apart.
+  localparam int TT_IMEM_WORDS = 1024;
+  wire [((((TT_IMEM_WORDS <= 2) ? 1 : $clog2(TT_IMEM_WORDS)) > 8)
+         ? ((TT_IMEM_WORDS <= 2) ? 1 : $clog2(TT_IMEM_WORDS)) : 8)-1:0]
+       host_addr = '0;
   wire [15:0] host_wdata    = 16'h0000;
 
   wire       uart_rx = ui_in[0];
@@ -88,7 +93,7 @@ module tt_um_protocol_emulator (
   wire [7:0] dbg_pc, dbg_a, dbg_timer;
 
   pe_uart_soc #(
-    .IMEM_WORDS(128),
+    .IMEM_WORDS(TT_IMEM_WORDS),
     .DMEM_BYTES(16),
     .CLK_HZ(40_000_000),
     .BAUD(115_200)

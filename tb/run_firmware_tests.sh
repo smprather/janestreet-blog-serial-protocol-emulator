@@ -122,25 +122,54 @@ expect_err() {   # label, expected-substring, source-lines...
 echo
 echo "=== assembler range checks (must be rejected) ==="
 
-# 129 words into a 128-word memory. Built as a file rather than through
-# expect_err's varargs so the shell cannot word-split it.
+# Over-long program. The limit moved 128 -> 1024 with the SRAM swap, so this
+# test moved with it: it must FAIL at whatever IMEM_WORDS the assembler and the
+# RTL agree on, and the failure mode it guards is unchanged (the PC wraps and
+# word 1024 executes as word 0). Built as a file rather than through expect_err's
+# varargs so the shell cannot word-split it.
+#   read the limit from the assembler rather than hard-coding it, so this test
+#   cannot silently stop testing anything when the depth changes again.
+limit=$($PY -c "import sys; sys.path.insert(0,'tools'); import peasm; print(peasm.IMEM_WORDS)")
 big=$(mktemp /tmp/peasm_big_XXXXXX.pe)
-for _ in $(seq 1 129); do echo "        LDI A, 0"; done > "$big"
+for _ in $(seq 1 $((limit + 1))); do echo "        LDI A, 0"; done > "$big"
 if out=$($PY tools/peasm.py "$big" 2>&1); then
-  printf '%-34s FAIL (accepted 129 words)\n' "reject: program over 128 words"
-  fail=$((fail+1)); failed+=("reject: program over 128 words")
+  printf '%-34s FAIL (accepted %s words)\n' "reject: program over limit" "$((limit + 1))"
+  fail=$((fail+1)); failed+=("reject: program over limit")
 elif grep -qi "instruction memory" <<< "$out"; then
-  printf '%-34s PASS (rejected)\n' "reject: program over 128 words"
+  printf '%-34s PASS (rejected)\n' "reject: program over $limit words"
   pass=$((pass+1))
 else
-  printf '%-34s FAIL (wrong error)\n' "reject: program over 128 words"
+  printf '%-34s FAIL (wrong error)\n' "reject: program over limit"
   printf '    %s\n' "$(head -1 <<< "$out")"
-  fail=$((fail+1)); failed+=("reject: program over 128 words")
+  fail=$((fail+1)); failed+=("reject: program over limit")
 fi
 rm -f "$big"
 
+# A jump past the end of instruction memory. 200 was past the end at 128 words;
+# at 1024 it is INSIDE the memory, so the test must use the real limit or it
+# stops testing anything. Same reasoning as above.
 expect_err "reject: jump past imem" "out of range" \
-  "        JMP 200"
+  "        JMP $((limit + 1))"
+
+# ...and the field limit, which is a SECOND bound: the operand is PCW bits, so a
+# target inside the memory but outside the field must also be rejected. These
+# coincide at 1024 (both 10 bits), which is exactly why the check exists.
+expect_err "reject: jump past operand field" "out of range" \
+  "        JMP 4096"
+
+# A jump that is now LEGAL and was not before: word 300 is past 255, so this
+# program could not have been written against the old 8-bit PC. It is the
+# positive half of the PC-widening change and the reason the swap was worth it.
+ok=$(mktemp /tmp/peasm_wide_XXXXXX.pe)
+{ echo "        JMP 300"; for _ in $(seq 1 300); do echo "        LDI A, 0"; done; } > "$ok"
+if out=$($PY tools/peasm.py "$ok" 2>&1); then
+  printf '%-34s PASS (word 300 reachable)\n' "accept: jump past word 255"
+  pass=$((pass+1))
+else
+  printf '%-34s FAIL (%s)\n' "accept: jump past word 255" "$(head -1 <<< "$out")"
+  fail=$((fail+1)); failed+=("accept: jump past word 255")
+fi
+rm -f "$ok"
 
 expect_err "reject: LDM A above dmem" "data address" \
   "        LDM A, 128"

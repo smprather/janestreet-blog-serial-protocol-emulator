@@ -23,10 +23,11 @@
 // outgrows 128 words; the interface here does not change.
 
 module pe_uart_soc #(
-  parameter int IMEM_WORDS = 128,
+  parameter int IMEM_WORDS = 1024,
   parameter int DMEM_BYTES = 16,
   parameter int CLK_HZ     = 40_000_000,
-  parameter int BAUD       = 115_200
+  parameter int BAUD       = 115_200,
+  parameter int IMEM_FLOP  = 0     // 0 = SRAM macro, 1 = register array
 ) (
   input  logic        clk,
   input  logic        rst_n,
@@ -34,7 +35,12 @@ module pe_uart_soc #(
   // Firmware loading + control (the host interface)
   input  logic        host_we,
   input  logic        host_imem_sel,   // 1: host_addr indexes imem, 0: dmem
-  input  logic [7:0]  host_addr,
+  // Wide enough to name any instruction word -- it was 8 bits when IMEM was
+  // 128 deep, which would silently alias the loader past word 255. The width
+  // expression is repeated inline because Icarus binds port dimensions before
+  // later localparams are visible (same workaround as pe_cpu.v).
+  input  logic [((((IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS)) > 8)
+                 ? ((IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS)) : 8)-1:0] host_addr,
   input  logic [15:0] host_wdata,
   input  logic        run,
 
@@ -80,11 +86,23 @@ module pe_uart_soc #(
   // are kept only as a statement of intent for the SRAM swap
   // ([[reference/sram-budget]]); they are not doing anything today, and
   // reading them as "this is a RAM" is how the area number gets misread.
-  (* ram_style = "block" *) logic [15:0] imem [0:IMEM_WORDS-1];
-  always_ff @(posedge clk) begin
-    if (host_we && host_imem_sel) imem[host_addr[IAW-1:0]] <= host_wdata;
-    imem_rdata <= imem[imem_addr];
-  end
+  // Instruction memory: pe_imem owns the storage. It is a REAL SRAM macro
+  // (1P_1024x16_c2_bm_bist) by default, with a register-array fallback behind
+  // IMEM_FLOP for tests and area experiments.
+  //
+  // `ram_style` used to sit here as an FPGA pragma that did nothing in this flow;
+  // it is gone, because the memory is no longer inferred -- it is instantiated.
+  // See decisions/adr-004-program-counter-width.md for the macro's contract and
+  // the two traps (BM=0 is a silent write no-op; REN during a write is
+  // write-through), and rtl/pe_imem.v for how they are handled.
+  pe_imem #(.WORDS(IMEM_WORDS), .FLOP(IMEM_FLOP)) u_imem (
+    .clk(clk),
+    .imem_addr(imem_addr),
+    .imem_rdata(imem_rdata),
+    .host_we(host_we && host_imem_sel),
+    .host_addr(host_addr[IAW-1:0]),
+    .host_wdata(host_wdata)
+  );
 
   // Data buffer: 16 bytes of distributed RAM, one read/write port plus a host
   // write port. The read is COMBINATIONAL on purpose. A registered read is

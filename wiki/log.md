@@ -176,3 +176,119 @@
 - Occupancy on the real 6x4 die (432,864 um2): today, integrated, with flop IMEM = 385,265 um2 = **89%**; after the ADR-003 SRAM swap = 235,116 = **54%**; leaner swap (1P_512x16 IMEM) = 200,751 = 46%. ADR-003's decision is unaffected by the allocation change — both chosen macros are 237x336 and fit every candidate shape
 - Note the blog's own arithmetic is self-consistent at 6x4: 6x4 at 200x150 = 1200x600 = 0.72 mm2, matching its stated "about 0.7 mm2". The 8x4 reading never was (it implied ~1 mm2, which the old summary duly recorded)
 - Regression unchanged and green: 18/18 TBs, 11/11 firmware, lint clean, 3 generated-doc drift checks
+
+## [2026-09-20] rtl | pe_crc + pe_dru implemented: 20/20 TBs, lint clean
+- `rtl/pe_crc.v` (209 cells / 3,354 um2) — ONE shift-right datapath serves both CRC
+  families, so there is no mode bit and no width port. Constants checked against the
+  RevEng catalogue's published values (`tools/gen_crc_config.py`, drift-checked in
+  `run_all.sh`); `tb_pe_crc` asserts the catalogue `check` AND `residue` for six
+  polynomials, so a transcription error fails the build.
+- `rtl/pe_dru.v` (116 cells / 2,065 um2) — oversampled Manchester receive. The whole
+  design is: phase counter reset on EVERY edge, captures at phase 2 and 6, and one
+  flag. `tb_pe_dru` is the only place the grid claim is measured, against every
+  Manchester transition pattern, and it feeds the DRU into a real `pe_manch`.
+- Three findings worth keeping, all of which were TB or model bugs before they were
+  RTL bugs:
+  1. **A 3-tap majority is not a delay.** Its output moves a sample later than the
+     centre tap at a level change, so feeding it straight into the edge detector
+     shifted every edge by one sample — which moves the phase-6 capture off the
+     half-cell centre and returns the WRONG LEVEL. Fixed by resampling the majority
+     before it drives the counter: the filter now removes glitches and cannot move an
+     edge. This is the kind of defect a "does the filter work" test cannot see.
+  2. **`cfg_out_inv` must complement the WIRE BIT, not the feedback.** Routing the
+     complement into the CRC's feedback path makes `fb == 1` on every field strobe, so
+     the register applies its mask 32 times while it should be emptying and ends
+     somewhere meaningless. Every transmit-side check still passes either way — only
+     the receiver's drain-to-zero reveals it.
+  3. **Error detection is not "the CRC changed".** A corrupt payload with a
+     correspondingly corrupt CRC is a CONSISTENT frame and verifies correctly. The TB
+     therefore corrupts the RECEIVED stream, and the assertion is unconditional
+     because every polynomial here has a non-zero x^0 term.
+- The DRU's first cell after acquisition can be mislabelled (the F/S parity needs a
+  transition to seed). That is not a defect: it is why Ethernet has a 56-bit preamble
+  and why the preamble is defined as the part that gets consumed. The TB models a
+  frame boundary with a three-cell lead-in rather than demanding something no
+  Manchester receiver promises.
+- Regression: 20/20 TBs + 11/11 firmware + lint clean + all four generated-doc drift
+  checks green.
+
+## [2026-09-20] rtl | SRAM swap + PC widening: SoC 8,744 -> 1,083 cells
+- `rtl/pe_imem.v` added: the instruction memory is now the REAL `1P_1024x16_c2_bm_bist`
+  hard macro, behind a wrapper that owns the MEN/WEN/REN/BM protocol. `FLOP=1` gives
+  a register-array fallback at any depth for tests and area experiments.
+- `rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v` added: an empty port shell so yosys can
+  elaborate the instance. It is NOT a model — simulation uses the PDK's real
+  behavioural model, located by `tb/sram_model.sh`, and a missing model is a hard
+  failure rather than a silent fall back to the flops.
+- **Found a blocker the plan had missed.** `pe_cpu` had a fixed 8-bit PC, so 1024
+  words were not addressable: `next_pc[IAW-1:0]` became an out-of-range part-select
+  and the reachable program stayed 256 words no matter how deep the memory was.
+  Blocker 3's claim that the swap "does not change the CPU's interface" was true of
+  the cycle model and false of the address width. PC and jump-target field are now
+  derived from IMEM_WORDS (8 bits at 128 words, 10 at 1024). Recorded as
+  [[decisions/adr-004-program-counter-width]].
+- **Measured, from `tb/synth_area.sh`, both ways round:**
+  | | cells | um2 |
+  |---|---|---|
+  | 1024 words in flops | 60,806 | 1,300,104 |
+  | 1024 words in the macro | 12 glue + 1 macro instance | 187 + LEF area |
+  | SoC total | 8,744 -> **1,083** | 182,650 -> **19,795** |
+  The flop figure reproduces ADR-003's measured 1,271 um2/word exactly, which
+  cross-checks the two measurements against each other.
+- **Three protocol facts read from the vendor model, not guessed.** (1) `A_BM[i]=1`
+  means write bit i, so BM=0 with WEN=1 is a SILENT no-op; (2) read latency is one
+  cycle, matching the datasheet's "one-cycle data-access", so the CPU's fetch-ahead
+  survives unchanged; (3) `A_REN=1` during a write is WRITE-THROUGH. `tb_pe_imem`
+  tests all three against the real model and is mutation-checked — `BM` tied low
+  fails it, and `REN` tied high reproduces the write-through failure exactly.
+- One real behavioural change from the longer load window: `tb_pe_tick_status` began
+  losing ticks because the 1024-cycle loader (~6 ticks) let the free-running timer
+  advance before the core started. At 128 words the load was SHORTER than one
+  173-cycle tick, so the test's "timer starts at 0" assumption had been true by
+  accident. The TB now resets after loading, which is safe because `pe_imem` has no
+  reset and the SRAM keeps its contents.
+- Regression: 21/21 TBs + 13/13 firmware + lint clean. The firmware suite gained two
+  tests: rejection of a jump past the operand field, and a POSITIVE test that word
+  300 is now reachable — which the old 8-bit PC could not express.
+
+## [2026-09-21] decide | ADR-005: 60 MHz turbo, not 66 — the 66 MHz turbo claim was wrong
+
+- Question raised: "is there any advantage to going 66 MHz and placing some tx edges
+  a little off-grid, but still within protocol spec?" The answer is no, and the
+  reason is a proof rather than a preference.
+- The 10BASE-T transmit jitter requirement is a **conformance test**, not a budget to
+  nibble (IEEE 802.3 §14.3.1.2.3; UNH 10BASE-T MAU suite 14.1.10/14.1.11): crossings
+  must land at 8.0 BT ±11 ns and 8.5 BT ±11 ns (with TPM; ±20 ns without).
+- A run of identical bits places a crossing on every half-UI, so the 16- and 17-half-UI
+  spans are constrained at once. At 66.0 MHz (T = 15.1515 ns) each window admits exactly
+  one tick count (800 ns -> 53 ticks; 850 ns -> 56), which forces every inter-edge gap
+  to 3 ticks, so span16 = 16×3 = 48 ticks = 727 ns against a required 53 ticks = 803 ns.
+  **Contradiction — and dithering cannot escape it**, because the constraint is on the
+  sliding window, not the instantaneous edge.
+- 66.5 MHz IS feasible (A17 = {56, 57} admits a 16-periodic pattern of 5 gaps of 4 and
+  11 of 3) but needs a bespoke dither generator to gain 0.5 MHz over 60.
+- The real upgrade is **60 MHz**: f = 20n MHz keeps 50 ns and 100 ns exact, and 60 is
+  under the 66.5 ceiling and exactly generatable (RP2040 120/2). Strictly better than 40
+  on every axis — USB-LS becomes exact (40.000 vs 26.667 ticks), UART improves (+0.353%
+  -> +0.160%), RX grid refines 50% (12.5 -> 8.333 ns, SPB 8 -> 12).
+- SPB = 12 satisfies pe_dru's SPB % 4 == 0 guard. Verify by running the DRU testbench at
+  SPB=12: PASS.
+- 66 MHz retains exactly one role: a conservative STA signoff target (close at 66, run
+  at 60 leaves ~10% free margin and covers the "IHP pads top out below 66" hedge).
+- Also rejected in the same pass, on separate grounds: DDR on the core clock for an
+  "effective 135 MHz". It costs 1.52× area per storage bit (dlhrq_1 + dllrq_1 + mux2_1 =
+  74.39 µm² vs dfrbpq_1 = 48.99 µm²), the library has NO negedge flops to build it from
+  (all 14 sequential cells declare clocked_on: "CLK"; both latch polarities do exist),
+  and the logic already closes at ~2.5 ns reg-to-reg against a 7.58 ns half-cycle.
+  Raising the clock is strictly cheaper than adding a second edge.
+- The demo board's own default 62.5 MHz = 125/2 is NOT 20n MHz and fails the same way
+  66 does — a turbo must be requested explicitly.
+- **Measured, not just argued:** tb_pe_uart_soc with CLK_HZ = 60 MHz passes UNCHANGED,
+  firmware and all — no RTL or firmware edit. That is the evidence that the turbo is a
+  one-parameter change. (Run it from sim/: the TB $readmemh's ../firmware/uart_echo.hex,
+  and running from the wrong directory loads nothing and the CPU executes garbage —
+  which is exactly how this was first "failed" and then correctly diagnosed.)
+- Created: decisions/adr-005-60mhz-turbo.md. Updated: concepts/tx-timing-generation.md
+  (the "forced-66 fallback" section is replaced by the proof, and the signoff policy now
+  reads "close at 66, run at 60"), wiki/STATUS.md (key-decisions table + gotchas 24-26),
+  HANDOFF.md, wiki/index.md. New: tb/param_guards.sh (in run_all.sh).

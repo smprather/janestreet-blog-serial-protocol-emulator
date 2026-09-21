@@ -17,7 +17,11 @@
 
 module tb_pe_uart_soc;
 
-  localparam int IMEM_WORDS = 128;
+  // 1024 with the SRAM swap (decisions/adr-004-program-counter-width.md).
+  // The loader walks the WHOLE window: a short load leaves the tail as
+  // x's, and an x instruction decodes as an x opcode.
+  localparam int IMEM_WORDS = 1024;
+  localparam int IAW = $clog2(IMEM_WORDS);
   localparam int DMEM_BYTES = 16;
   localparam int CLK_HZ     = 40_000_000;
   localparam int BAUD       = 115_200;
@@ -30,7 +34,7 @@ module tb_pe_uart_soc;
 
   // host interface
   logic        host_we, host_imem_sel, run;
-  logic [7:0]  host_addr;
+  logic [IAW-1:0] host_addr;
   logic [15:0] host_wdata;
 
   // wire
@@ -62,12 +66,13 @@ module tb_pe_uart_soc;
 
   task automatic load_firmware();
     // Path is relative to the sim/ run directory (tb/run_all.sh runs there)
+    for (i = 0; i < IMEM_WORDS; i++) prog[i] = 16'hF000;   // NOP fill
     $readmemh("../firmware/uart_echo.hex", prog);
     for (i = 0; i < IMEM_WORDS; i++) begin
       @(posedge clk); #1;
       host_we = 1'b1; host_imem_sel = 1'b1;
-      host_addr = i[7:0];
-      host_wdata = (i < 128) ? prog[i] : 16'hF000;   // NOP fill
+      host_addr = i[IAW-1:0];
+      host_wdata = prog[i];
     end
     @(posedge clk); #1;
     host_we = 1'b0;
