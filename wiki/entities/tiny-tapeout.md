@@ -23,7 +23,7 @@ Shared-shuttle tapeout platform; this competition targets its IHP 130 nm CMOS5L 
 ## Clock ceiling (headline finding)
 
 - Official clock spec: max input frequency ~66 MHz, set by the IO pad macro; demo board generates 1 Hz-66.5 MHz from an RP2040 (PWM/PIO); newer demo PCBs use an RP2350. Expect up to ~10 ns pad-to-project insertion delay.
-- Consequence: external 80 MHz is off the table; dual-edge 40 MHz is the default plan — see [[comparisons/clocking-options]].
+- Consequence: external 80 MHz is off the table; **dual-edge at the core clock is the plan** (8.33 ns grid at 60 MHz — see [[comparisons/clocking-options]] and [[decisions/adr-005-60mhz-turbo]]). The "dual-edge 40 MHz" figures elsewhere on this page date from when 40 MHz was the operating point.
 - The transcript's "~50-60 MHz mux limit" was directionally right but misattributed: the mux passes clk through a buffer like any other bus bit; the limit is pad macro + board generator, not the mux.
 
 ## Mux behavior (tt-multiplexer INFO.md)

@@ -12,13 +12,21 @@ confidence: high
 
 Binding TX constraint across all targets: the 50 ns half-UI of 10BASE-T Manchester. (SPI half-SCLK ties it only if we choose 10 MHz SCK — that rate is ours to pick.) Everything else is >=100 ns.
 
-## The 40 MHz plan (default)
+## The 60 MHz operating point (ADR-005)
 
-The ~66 MHz figure is the platform's pad ceiling ([[entities/tiny-tapeout]]), NOT our operating point: the demo-board clock is programmable 1 Hz-66.5 MHz. Set it to 40 MHz:
+The ~66 MHz figure is the platform's pad ceiling ([[entities/tiny-tapeout]]), NOT
+our operating point: the demo-board clock is programmable 1 Hz-66.5 MHz. Set it
+to **60 MHz** (see [[decisions/adr-005-60mhz-turbo]]):
 
-- TX (single-edge, no DDR needed): 50 ns = exactly 2 ticks, 100 ns = exactly 4. Spec-exact Manchester edges, 10 MHz SCK, binary-rate SWD/JTAG. No fractional anything.
-- RX (DDR per [[decisions/adr-002-latch-pair-det-flop]]): 40 MHz dual-edge = 12.5 ns grid = exactly 4 samples per 50 ns half-UI — the ADR-001 8-samples-per-bit design point, integer.
-- USB-LS (1.5 Mbps): 666.67 ns = 26.67 ticks single-edge. In the 12.5 ns DDR capture grid it is 53.33 ticks -> NCO bit-strobe alternating 53/53/54, quantized ±6.25 ns (<1% of a 666 ns bit) — far inside USB-LS tolerance. The same NCO pattern serves UART/CAN/PS2 baud generation.
+- TX (single-edge, no DDR needed): 50 ns = exactly 3 ticks, 100 ns = exactly 6. Spec-exact Manchester edges, 10 MHz SCK, binary-rate SWD/JTAG. No fractional anything.
+- RX (DDR per [[decisions/adr-002-latch-pair-det-flop]]): 60 MHz dual-edge = 16.67 ns sample period, an 8.33 ns grid = exactly 6 samples per 50 ns half-UI — 12 samples per 100 ns bit (SPB = 12), extending the ADR-001 design point upward by 50%.
+- USB-LS (1.5 Mbps): 666.67 ns = **exactly 40.00 ticks** single-edge — integer, so the NCO is a plain divider here rather than a 53/53/54 dither. At 40 MHz it was 26.67 ticks and needed the dither; 60 MHz removes that quantization entirely.
+- UART 115200: half-bit tick is 260 clk (delivered 115,385, +0.160%) — improved from +0.353% at 40 MHz.
+
+**40 MHz is no longer the default.** The history: 40 MHz was chosen because
+50 ns = 2 ticks, and it worked; 60 MHz is strictly better on every axis, so the
+repo moved to it (2026-09-21). The change was parameters and comments only —
+no RTL restructuring, no firmware edit.
 
 ## 66 MHz is NOT the upgrade — it is provably infeasible for 10BASE-T TX
 
@@ -102,8 +110,9 @@ pre-existing and harmless: `uart_echo.hex` is 114 words and the TB loads into a
 
 One programmable board clock; DDR capture for RX only; integer timing for every hard protocol; tiny NCO for the slow fractional ones. No PLL, no DLL, no on-die multiplication anywhere.
 
-- **Default 40 MHz**, and **60 MHz is the documented turbo** — +50% core cycles
-  over 40, exact timing throughout, one parameter change plus a DRU `SPB` bump.
+- **Default is 60 MHz** (ADR-005) — +50% core cycles over 40, exact timing
+  throughout, SPB = 12. Switching to it was one parameter change plus a DRU
+  default; 40 MHz remains available by parameter and still passes.
 - **66 MHz is not a turbo, it is a trap.** It cannot meet the 10BASE-T TX jitter
   conformance window at any edge placement, and it breaks SPI's 10 MHz SCK
   integer relation. The only reason to keep 66 in view is as **STA margin**: see
@@ -112,7 +121,7 @@ One programmable board clock; DDR capture for RX only; integer timing for every 
 
 ## Post-fabrication protocol ceiling (the Jane Street "arbitrary protocol" question)
 
-Pulse width sets the SPEED floor: capture needs >=1 grid tick (12.5 ns plan grid / 15.15 ns if 66 MHz single-edge), robust sampling >=2. Run length sets the PROTOCOL-CLASS ceiling for async protocols: (longest transition-free run) x (combined clock tolerance) must stay under 0.5 UI.
+Pulse width sets the SPEED floor: capture needs >=1 grid tick (8.33 ns plan grid at 60 MHz / 15.15 ns if 66 MHz single-edge), robust sampling >=2. Run length sets the PROTOCOL-CLASS ceiling for async protocols: (longest transition-free run) x (combined clock tolerance) must stay under 0.5 UI.
 
 - Source-synchronous (clock on wire): unlimited rates, pure firmware, no tracking constraint.
 - Async + regular transitions: bounded by tolerance class — 10BASE-T-class (+-100 ppm) tolerates 2500 UI runs; CAN-class (+-0.5%) 100 UI; UART-class (+-4%) only 12.5 UI; typical RC-osc (+-2%) 25 UI.

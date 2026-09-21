@@ -21,4 +21,10 @@ Goal: 12.5 ns sample resolution for the [[concepts/cdr-oversampling]] DRU. Four 
 
 ## Verdict
 
-Try in order: dual-edge 40 MHz (default plan — comfortably under the ~66 MHz platform ceiling), else std-cell doubler with hardened PDN and tightened derates. External 80 MHz is off the table unless the competition confirms a higher IHP clock limit. Full custom is the last resort. The DRU logic is unchanged in all four cases, so the choice does not ripple into [[concepts/factored-hardware-blocks]].
+Try in order: dual-edge at the core clock (**the plan** — comfortably under the ~66 MHz platform ceiling; at the 60 MHz operating point this is an 8.33 ns grid, ADR-005), else std-cell doubler with hardened PDN and tightened derates. External 80 MHz is off the table unless the competition confirms a higher IHP clock limit. Full custom is the last resort. The DRU logic is unchanged in all four cases, so the choice does not ripple into [[concepts/factored-hardware-blocks]].
+
+Note: this page was written when 40 MHz was the intended core clock, so the
+"dual-edge 40 MHz" rows quote a 12.5 ns grid. The mechanism is identical and the
+table is kept as the decision record; only the clock it is applied to changed
+(ADR-005, 60 MHz -> 8.33 ns). The conclusion — dual-edge beats a doubler — is
+unchanged.

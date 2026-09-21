@@ -55,9 +55,11 @@ emulator. They disagreed once and that disagreement is how the real bug was foun
      repo.** `tb/sram_model.sh` locates it and FAILS LOUDLY if absent — never fall
      back to `pe_imem`'s `FLOP=1` array silently, because a testbench that runs
      against the fallback has verified nothing about the memory that will ship.
-3. **The tick is 173 clocks, not 174** (integer division of 40 MHz/115200/2). Three
-   comments were corrected on 2026-09-20; real baud is 115,607 (+0.35%). If you see
-   174 anywhere it is stale.
+3. **The tick is 260 clocks, not 173** (integer division of 60 MHz/115200/2).
+   The 173 figure was the 40 MHz operating point; ADR-005 moved the core to
+   60 MHz on 2026-09-21 and the real baud is 115,385 (+0.16%). If you see 173
+   or 174 in a *current* claim it is stale — 173 survives only inside historical
+   narration (the ADR-004 load-window story), where it is accurate.
 4. **`tb_pe_uart_soc.v` `$readmemh`s an assembled `.hex`.** `run_all.sh` now runs
    `run_firmware_tests.sh` first so it can never simulate a stale image. If you add
    another SoC TB that loads firmware, keep that ordering.
@@ -103,14 +105,21 @@ STATUS gotchas 17-19, and they are all of the kind that pass every obvious test.
 **If you touch `pe_dru`'s `SPB`:** the ceiling is **16**, not "any multiple of 4".
 `phase` is 4 bits and `4'(SPB-1)` truncates above it, which kills all capture
 silently. Both guards are elaboration errors now, and `tb/param_guards.sh` (run by
-`run_all.sh`) requires them to actually reject. SPB=12 is the 60 MHz turbo grid and
+`run_all.sh`) requires them to actually reject. SPB=12 is the 60 MHz grid and
 is verified passing.
 
-**Clock plan (ADR-005, 2026-09-21):** 40 MHz default, **60 MHz turbo** — 66 MHz is
+**Clock plan (ADR-005, 2026-09-21):** **60 MHz operating point** — 66 MHz is
 *not* usable. It provably fails the 10BASE-T TX jitter conformance window (8.0/8.5 BT
 ±11 ns) at any edge placement, dithered or not; 60 MHz keeps every hard protocol
-exact and refines the RX grid 50%. 66 MHz survives only as a conservative STA signoff
-target ("close at 66, run at 60").
+exact and refines the RX grid 50% (SPB 8 -> 12). 66 MHz survives only as a
+conservative STA signoff target ("close at 66, run at 60"). 40 MHz is no longer the
+default but still passes if selected by parameter.
+
+**The SRAM is now the critical path, and no existing signoff covers it.** The
+1024x16 macro's `A_CLK` -> `A_DOUT` is 7.25 ns at the slow corner = 43% of a
+16.667 ns period. `pe_imem` has no output register by design (it would add a cycle
+and break the CPU's fetch-ahead). The pe_serdes STA run has no SRAM in it, so the
+SoC needs its own run at 15.15 ns before tapeout.
 
 It now has a top level to plug into. `rtl/tt_um_protocol_emulator.v` (added
 2026-09-20) is the Tiny Tapeout deliverable: before it there was no `tt_um_*`

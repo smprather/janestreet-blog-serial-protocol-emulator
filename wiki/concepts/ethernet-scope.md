@@ -59,14 +59,16 @@ This is the part that decides the architecture.
 | Quantity | Value |
 |---|---|
 | 10BASE-T bit period | 100 ns |
-| Clocks per bit at 40 MHz | 4 |
-| Clocks per byte | 32 |
+| Clocks per bit at 60 MHz | 6 |
+| Clocks per byte | 48 |
 | CRC-32 in firmware ([[concepts/factored-hardware-blocks]]) | ~30 instructions/bit = 240/byte |
-| Over budget by | 7.5× |
+| Over budget by | 5.0× |
 
-The core is single-cycle, so 32 clocks per byte is 32 instructions per byte for
+The core is single-cycle, so 48 clocks per byte is 48 instructions per byte for
 *everything*. Software CRC is not merely slow here, it is impossible by a factor of
-seven. The consequence:
+five. (60 MHz improves this from 7.5x at 40 MHz — one of the smaller ways the
+higher clock pays off — but it is still out of reach, which is the actual
+conclusion.) The consequence:
 
 **For 10BASE-T the firmware sequences frames; it never touches bits.** The DRU, the
 Manchester codec, the SERDES and the CRC LFSR all have to be hardware. This is not a
@@ -116,7 +118,7 @@ one is wanted.
 
 ## Related
 
-- [[concepts/cdr-oversampling]] — the DRU spec; 8× oversampling, 12.5 ns grid.
+- [[concepts/cdr-oversampling]] — the DRU spec; 12× oversampling (SPB=12), 8.33 ns grid at the 60 MHz core.
 - [[concepts/factored-hardware-blocks]] — the CRC LFSR (~120 cells) and why no 8b/10b.
 - [[decisions/adr-003-memory-plan]] — the two macros that serve this.
 - [[reference/sram-budget]] — macro geometry and what fits the die.

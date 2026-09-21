@@ -51,13 +51,13 @@ PC_MASK = (1 << PCW) - 1
 # ---- IO ports (mirrors rtl/pe_uart_soc.v) --------------------------------
 P_PIN, P_TXPIN, P_TIMER, P_STATUS = 0x0, 0x1, 0x5, 0x7
 
-CLK_HZ = 40_000_000
+CLK_HZ = 60_000_000
 BAUD = 115_200
 # The timer runs at 2x baud: one tick per HALF bit period, so firmware can
 # sample mid-cell. This must match rtl/pe_uart_soc.v's TICKS_PER_BIT.
-TICKS_PER_BIT = CLK_HZ // BAUD // 2      # 173 (integer division: baud is 115,607)
+TICKS_PER_BIT = CLK_HZ // BAUD // 2      # 260 (integer division: baud is 115,385)
 TICKS_PER_HALF = TICKS_PER_BIT
-TICKS_PER_FULL_BIT = TICKS_PER_BIT * 2   # 347 clocks of real time per bit
+TICKS_PER_FULL_BIT = TICKS_PER_BIT * 2   # 521 clocks of real time per bit
 
 
 def m8(v: int) -> int:

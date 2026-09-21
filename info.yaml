@@ -15,9 +15,13 @@
 # macros fit -- the same 24 tiles arranged 4x6 would be near-square and would
 # lose the entire 64-bit-wide macro family.
 #
-# clock_hz: 40 MHz is the operating point, chosen because 50 ns (the 10BASE-T
-# half-UI, the binding TX constraint) is exactly 2 ticks. The design is signed
-# off at 66 MHz for margin. See wiki/concepts/tx-timing-generation.md.
+# clock_hz: 60 MHz is the operating point (ADR-005). It makes 50 ns -- the
+# 10BASE-T half-UI, the binding TX constraint -- exactly 3 ticks, keeps every
+# other hard protocol exact, and refines the RX grid by 50% (SPB 8 -> 12).
+# 66 MHz is NOT usable: it provably fails the 802.3 TX jitter window at any
+# edge placement, dithered or not. The design is still signed OFF at 66 MHz
+# for margin if the real pad limit comes in below the sky130 figure.
+# See wiki/decisions/adr-005-60mhz-turbo.md and concepts/tx-timing-generation.md.
 
 project:
   title: "Protocol Emulator"
@@ -31,7 +35,7 @@ project:
     protocols whose control flow is per-word; the firmware core bit-bangs the
     ones whose control flow is per-bit.
   language: "Verilog"
-  clock_hz: 40000000
+  clock_hz: 60000000
   tiles: "6x4"
   top_module: "tt_um_protocol_emulator"
 

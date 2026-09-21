@@ -23,7 +23,7 @@
 // encoded — from the other end of that, with no knowledge of the pattern.
 //
 // The DRU is single-edge and expects a sample grid; the "sample clock" here is
-// just clk at SPB cycles per bit period. That is the 40 MHz-clocked DRU with a
+// just clk at SPB cycles per bit period. That is the 60 MHz-clocked DRU with a
 // DDR front end (ADR-002) collapsed into one domain for the test — the logic is
 // the same either way.
 //
@@ -34,7 +34,7 @@
 
 module tb_pe_dru;
 
-  localparam int SPB  = 8;       // samples per bit period
+  localparam int SPB  = 12;      // samples per bit period (60 MHz / ADR-005)
   localparam int HALF = SPB / 2;
   localparam int MAXB = 2048;    // bit cells in the longest vector here
 

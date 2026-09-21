@@ -90,6 +90,6 @@ same edge as the last strobe will fail against a correct design.
 - [[reference/signal-names]] — every RTL port and what it means (the reference page).
 - [[concepts/cdr-oversampling]] — where the RX strobe comes from in the real chip
   (the DRU's mid-bit pick), versus the TB driving it at cell boundaries here.
-- [[concepts/tx-timing-generation]] — how the strobe spacing is generated at 40 MHz.
+- [[concepts/tx-timing-generation]] — how the strobe spacing is generated at 60 MHz.
 - [[concepts/factored-hardware-blocks]] — the block the strobe drives.
 - [[concepts/live-canvas]] — the generator that rendered the diagrams above.

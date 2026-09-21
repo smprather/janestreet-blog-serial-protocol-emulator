@@ -223,8 +223,8 @@ reachable -- which the old 8-bit PC could not express.
 
 ### Tick plan — one tick, and every Standard-mode constant is 4-5 of them
 
-At 40 MHz, 115200 baud needed a 173-clock tick. I2C needs a *different, coarser*
-tick: **1 µs = 40 clocks**, giving
+At 60 MHz, 115200 baud needs a 260-clock tick. I2C needs a *different, coarser*
+tick: **1 µs = 60 clocks**, giving
 
 | Parameter | Standard-mode min | Ticks | Delivered | Margin |
 |---|---|---|---|---|
@@ -275,11 +275,11 @@ Spec values are from UM10204 Table 10, not recalled.
 after SCL falls, and the master must have sampled it `tSU;DAT = 250 ns` before SCL
 rises again. So after the master pulls SCL low and releases SDA, the firmware has
 
-**tLOW − tVD;DAT − tSU;DAT = 4.7 − 3.45 − 0.25 = 1.0 µs = 40 cycles**
+**tLOW − tVD;DAT − tSU;DAT = 4.7 − 3.45 − 0.25 = 1.0 µs = 60 cycles**
 
 to notice the bit, read the pin, check it against what it drove, and raise SCL.
-40 cycles for a 3-4 cycle decision: comfortable, and it stays comfortable in
-fast mode (1.3 − 0.9 − 0.1 = 0.3 µs = 12 cycles). This is the number that makes
+60 cycles for a 3-4 cycle decision: comfortable, and it stays comfortable in
+fast mode (1.3 − 0.9 − 0.1 = 0.3 µs = 18 cycles). This is the number that makes
 the read path *designable* rather than hopeful, and it belongs in the firmware
 header as the reason the read sequence is written as straight-line code with no
 loops in the critical path.

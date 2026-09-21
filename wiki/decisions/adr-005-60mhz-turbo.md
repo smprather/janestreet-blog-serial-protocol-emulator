@@ -33,12 +33,17 @@ twisted-pair model (±20 ns without). 1 BT = 100 ns, so the two spans are 800 ns
 
 ## Decision
 
-**The documented turbo is 60 MHz, not 66 MHz.** 40 MHz remains the default.
+**The operating point is 60 MHz, not 40 and not 66.** `f = 20n MHz` makes both
+the 50 ns half-UI and the 100 ns bit exact integers. Under the demo board's
+66.5 MHz ceiling that admits n = 1 (20), n = 2 (40), and **n = 3 (60)**. 60 MHz
+is generated exactly by the demo board (RP2040 120 MHz / even divisor 2), and it
+is exact for every hard protocol at once.
 
-`f = 20n MHz` makes both the 50 ns half-UI and the 100 ns bit exact integers.
-Under the demo board's 66.5 MHz ceiling that admits n = 1 (20), n = 2 (40), and
-**n = 3 (60)**. 60 MHz is generated exactly by the demo board (RP2040 120 MHz /
-even divisor 2), and it is exact for every hard protocol at once.
+The repo was switched over on 2026-09-21: `CLK_HZ` defaults to 60 MHz in
+`pe_uart_soc` and the TT top level, `pe_dru`'s default grid is SPB = 12,
+`info.yaml` declares 60000000 and the emulator/assembler tick tables follow.
+The switch required **no RTL restructuring and no firmware edit** — only
+parameters, comments, and the derived tick arithmetic.
 
 ## Why 66 MHz is not merely worse — it is impossible
 
@@ -70,10 +75,24 @@ of 3**. So 66.5 works **only with a purpose-built dither generator**, buying
 
 ## Consequences
 
-- **60 MHz turbo is strictly better than 40 on every axis**, not just faster:
+- **60 MHz is strictly better than 40 on every axis**, not just faster:
   every hard protocol stays exact, USB-LS becomes exact (40.000 ticks) instead of
   26.667, UART's quantization improves (+0.353% → +0.160%), and the receive grid
   refines by 50% (12.5 ns → 8.333 ns, SPB 8 → 12).
+- **The switch is verified end to end, not argued.** `tb_pe_uart_soc` at
+  `CLK_HZ = 60_000_000` passes with no RTL or firmware change, `tb_pe_dru` passes
+  at SPB = 12, and the full regression is 21/21 RTL + 13/13 firmware with the
+  drift gates and `tb/param_guards.sh` green.
+- **The SRAM macro is now the tightest path in the design, and it is worth
+  stating because it changes what the flow must check.** At the slow corner
+  (1.08 V, 125 °C) the 1024x16 `_c2_bm_bist` macro's clock-to-output is
+  **~7.25 ns** (measured from the shipped `.lib`: 7.25 ns slow / 4.34 ns typ /
+  2.67 ns fast) — 29% of a 25 ns period at 40 MHz but **43% of a 16.667 ns period
+  at 60 MHz**. The read path is `A_CLK → A_DOUT → CPU` with no wrapper register
+  (deliberately: a register would add a second cycle and break the CPU's
+  fetch-ahead). The pe_serdes STA signoff above does not cover it — that run
+  has no SRAM. **The SoC needs its own STA run at 15.15 ns before tapeout**, and
+  this is the number it must close against.
 - **SPB 12 satisfies `pe_dru`'s constraints.** Verified by running the DRU
   testbench at SPB = 12: `PASS: tb_pe_dru`.
 - **The `SPB % 4 == 0` guard was incomplete, and the gap was silent.** Checking

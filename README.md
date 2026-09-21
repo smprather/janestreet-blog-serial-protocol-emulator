@@ -101,9 +101,9 @@ bit-bangs a protocol against pins and a counter; the UART exists only as
 114 words of firmware. For protocols where a byte moves in one operation
 (UART/SPI/CAN/USB) a shared SERDES does the datapath: a programmable divider
 generates a `bit_en` strobe per bit cell, the SERDES converts words to/from bit
-streams, and the codec pipeline applies line coding. A 40 MHz board clock (DDR
+streams, and the codec pipeline applies line coding. A 60 MHz board clock (DDR
 capture) makes every hard protocol's timing an exact integer number of ticks;
-10BASE-T's 50 ns half-bit cell is the binding constraint at 2 ticks. Signoff is at
+10BASE-T's 50 ns half-bit cell is the binding constraint at 3 ticks. Signoff is at
 66 MHz so the part can be run faster than the protocols require. No PLL, no DLL.
 The I2C plan picks bit-banging over the SERDES deliberately, because I2C's control
 flow is per-bit — see `wiki/plans/through-i2c.md`.

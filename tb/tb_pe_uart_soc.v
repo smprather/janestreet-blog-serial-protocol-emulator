@@ -23,10 +23,10 @@ module tb_pe_uart_soc;
   localparam int IMEM_WORDS = 1024;
   localparam int IAW = $clog2(IMEM_WORDS);
   localparam int DMEM_BYTES = 16;
-  localparam int CLK_HZ     = 40_000_000;
+  localparam int CLK_HZ     = 60_000_000;
   localparam int BAUD       = 115_200;
 
-  // 40 MHz clock: 25 ns period.
+  // 60 MHz clock: 16.667 ns period.
   localparam real CLK_NS = 1e9 / CLK_HZ;
   localparam real BIT_NS = 1e9 / BAUD;
 

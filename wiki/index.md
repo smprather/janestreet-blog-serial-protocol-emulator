@@ -19,12 +19,12 @@
 
 - [[concepts/competition-overview]] — Challenge, rules, area budget, timeline (blog-grounded; transcript corrections noted).
 - [[concepts/physical-layer-gpio]] — CMOS-swing GPIO reality: what works natively, what needs workarounds.
-- [[concepts/cdr-oversampling]] — 8x oversampled digital data-recovery unit for 10BASE-T; why 4x is rejected; BUILT (116 cells) and the filter trap found building it.
+- [[concepts/cdr-oversampling]] — 12x oversampled digital data-recovery unit for 10BASE-T (SPB=12 at 60 MHz); why 4x is rejected; BUILT (116 cells) and the filter trap found building it.
 - [[concepts/clock-doubler]] — XOR delay-line doubler options: standard-cell + PDN hardening vs full custom.
 - [[concepts/gpio-signoff-corners]] — FS/SF corners, SPICE bit-thinning extraction, SDC injection.
 - [[concepts/factored-hardware-blocks]] — Shared RTL primitives (CDR, SerDes, stuffing, CRC LFSR); no 8b/10b needed.
 - [[concepts/pdk-toolchain]] — Local IHP PDK + EDA bring-up: paths, corners, SRAM macros, install workarounds.
-- [[concepts/tx-timing-generation]] — Exact-integer protocol timing at 40 MHz; NCO for fractional bauds; the forced-66MHz fallback.
+- [[concepts/tx-timing-generation]] — Exact-integer protocol timing at 60 MHz (ADR-005); NCO for fractional bauds; why 66 MHz is infeasible.
 - [[concepts/live-canvas]] — Side-quest tooling: agent→browser live diagram channel (dashboard plugin, file-write publish).
 - [[concepts/ethernet-scope]] — what "10Mbit Ethernet" as a stretch goal actually asks for: the line layer, a 1.5 KB frame, and why 32 KB was never the requirement.
 - [[concepts/strobe-and-committing-edge]] — What the strobe (`bit_en`) and the committing edge are, and the sample-order trap they cause.
@@ -38,7 +38,7 @@
 
 ## Comparisons
 
-- [[comparisons/clocking-options]] — External 80 MHz vs dual-edge 40 MHz vs internal doubler vs full-custom doubler.
+- [[comparisons/clocking-options]] — External 80 MHz vs dual-edge at the core clock vs internal doubler vs full-custom doubler.
 
 ## Plans
 

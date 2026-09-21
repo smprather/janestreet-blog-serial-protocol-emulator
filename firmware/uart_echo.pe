@@ -10,8 +10,8 @@
 ; TIMING MODEL
 ;
 ; TIMER (port 5) is an 8-bit counter incrementing once per HALF bit period
-; (173 clocks at 40 MHz/115200/2 -- integer division, so the delivered baud is
-; 115,607, +0.35% of nominal). Half-bit resolution is required, not
+; (260 clocks at 60 MHz/115200/2 -- integer division, so the delivered baud is
+; 115,385, +0.16% of nominal). Half-bit resolution is required, not
 ; luxurious: sampling on whole-bit ticks can only land on bit BOUNDARIES, the
 ; worst possible place to sample a serial line.
 ;
@@ -58,12 +58,12 @@
 ; That is inherent to a free-running tick: the alignment quantum is one tick,
 ; so a half-bit of uncertainty cannot be removed by counting more ticks -- a
 ; 4-tick wait just moves the same window onto the trailing boundary instead.
-; Removing it needs a sub-tick delay (roughly 86 clocks of counted NOPs) to
+; Removing it needs a sub-tick delay (roughly 130 clocks of counted NOPs) to
 ; recentre the window on (2.5, 3.5]. That is a real improvement and it is not
 ; done here; it is recorded in wiki/plans/through-i2c.md as a follow-up,
 ; because this UART is verified at the pin and the change would need requalifying.
 ;
-; It works today because the baud error is +0.35%, which is 0.06 ticks of drift
+; It works today because the baud error is +0.16%, which is 0.03 ticks of drift
 ; across a 10-bit frame -- far too small to walk a sample out of its cell.
 ; ---------------------------------------------------------------------------
 ;

@@ -23,7 +23,9 @@
 `timescale 1ns / 1ps
 
 module tb_tt_um_protocol_emulator;
-  localparam int CLK_NS = 25;            // 40 MHz
+  // Must match the SoC's CLK_HZ: this TB drives the real top level, so its
+  // period is the operating point (60 MHz, ADR-005), not an arbitrary stimulus.
+  localparam real CLK_NS = 1e9 / 60e6;   // 60 MHz -> 16.667 ns
 
   logic       clk = 0, rst_n, ena;
   logic [7:0] ui_in, uio_in;

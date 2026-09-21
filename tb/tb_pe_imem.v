@@ -52,7 +52,8 @@ module tb_pe_imem;
     .host_wdata(host_wdata)
   );
 
-  always #12.5 clk = ~clk;   // 40 MHz
+  always #8.333 clk = ~clk;   // 60 MHz (ADR-005) -- the macro is clock-agnostic in
+                            // simulation; the period only has to be realistic
 
   integer errors = 0;
 

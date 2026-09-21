@@ -292,3 +292,31 @@
   (the "forced-66 fallback" section is replaced by the proof, and the signoff policy now
   reads "close at 66, run at 60"), wiki/STATUS.md (key-decisions table + gotchas 24-26),
   HANDOFF.md, wiki/index.md. New: tb/param_guards.sh (in run_all.sh).
+
+## [2026-09-21] decide | Switched the project to the 60 MHz operating point
+- ADR-005 moved from "60 MHz turbo, 40 default" to **60 MHz is the operating point**.
+  User: "yep. redesign everything around 60MHz."
+- Switched: pe_uart_soc CLK_HZ default -> 60_000_000; tt_um top instantiation -> 60 MHz;
+  pe_dru SPB default -> 12; info.yaml clock_hz -> 60000000; peemu.py CLK_HZ/tick table
+  (260, +0.160%); tb_pe_uart_soc, tb_pe_tick_status, tb_pe_dru, tb_tt_um_protocol_emulator
+  clock/grid params; firmware/uart_echo.pe timing comments; flow/pe_serdes.json comment.
+- **No RTL restructuring and no firmware edit were needed** — parameters, comments and
+  derived tick arithmetic only. 40 MHz still passes if selected by parameter.
+- New finding, recorded as STATUS gotcha 27: at 60 MHz the **SRAM macro is the critical
+  path, not the logic**. Measured from the shipped .lib: A_CLK -> A_DOUT = 7.25 ns slow /
+  4.34 ns typ / 2.67 ns fast. 7.25 ns is 29% of a 25 ns period but 43% of 16.667 ns.
+  pe_imem has no output register by design (it would add a cycle and break the CPU's
+  fetch-ahead), and the pe_serdes signoff contains no SRAM — so **the SoC needs its own
+  STA run at 15.15 ns before tapeout**. Written into reference/sram-budget.md (generated).
+- Also corrected while sweeping: ethernet-scope's firmware-CRC budget is 48 clocks/byte
+  at 60 MHz (5.0x over budget, was 7.5x at 40) — the higher clock helps here.
+- Two traps hit and recorded (STATUS gotchas 28-29): a TB hardcoding the clock period as
+  an INTEGER (`int CLK_NS = 17` -> #(17/2) -> 62.5 MHz, not 60) now derives it as `real`
+  from CLK_HZ; and a 60 MHz "failure" that was the harness running vvp from the wrong
+  directory, so the TB's relative $readmemh loaded nothing and the core executed garbage.
+  Read the failure's own warnings before diagnosing the design.
+- Verified: 21/21 RTL TBs, 13/13 firmware, param guards OK, lint clean, 4/4 drift gates,
+  and RTL/emulator tick arithmetic agree (both 60 MHz -> 260 ticks/bit).
+- Updated: ADR-005, tx-timing-generation.md, cdr-oversampling.md, STATUS.md, HANDOFF.md,
+  index.md, ethernet-scope.md, tiny-tapeout.md, clocking-options.md,
+  strobe-and-committing-edge.md, README.md, through-i2c.md, plan-through-i2c.json.

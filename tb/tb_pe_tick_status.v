@@ -27,8 +27,14 @@ module tb_pe_tick_status;
   localparam int IMEM_WORDS = 1024;   // SRAM swap, ADR-004
   localparam int IAW = $clog2(IMEM_WORDS);
   localparam int DMEM_BYTES = 16;
-  localparam int TICKS_PER_BIT = 173;    // 40 MHz / 115200 / 2
-  localparam int CLK_NS = 25;            // 40 MHz
+  // Derived from the same expression the RTL uses, so a clock change cannot
+  // leave this TB simulating at one rate while the SoC thinks it is at another.
+  // CLK_NS must be `real`: the period is 16.667 ns, and an integer here would
+  // round the half-period to 8 ns and silently simulate at 62.5 MHz instead.
+  localparam int  CLK_HZ       = 60_000_000;
+  localparam int  BAUD         = 115_200;
+  localparam int  TICKS_PER_BIT = CLK_HZ / BAUD / 2;   // 260
+  localparam real CLK_NS        = 1e9 / CLK_HZ;        // 16.667 ns
 
   logic clk = 0, rst_n;
   logic host_we, host_imem_sel, run;
@@ -37,7 +43,8 @@ module tb_pe_tick_status;
   logic pin_in = 1, pin_out;
   logic [7:0] dbg_pc, dbg_a, dbg_timer;
 
-  pe_uart_soc #(.IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES)) dut (
+  pe_uart_soc #(.IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES),
+                .CLK_HZ(CLK_HZ), .BAUD(BAUD)) dut (
     .clk(clk), .rst_n(rst_n),
     .host_we(host_we), .host_imem_sel(host_imem_sel),
     .host_addr(host_addr), .host_wdata(host_wdata), .run(run),

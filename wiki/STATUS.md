@@ -36,7 +36,7 @@ milestone** (the I2C transaction); the summary is at the bottom of this file.
                               |
                     +---------------------+     +------------------+
                     |   pe_uart_soc       | <-> |  tick timer      |  BUILT
-                    |   (CPU + IMEM/DMEM) |     |  173 clk = half  |  (flop memory —
+                    |   (CPU + IMEM/DMEM) |     |  260 clk = half  |  (flop memory —
                     +---------------------+     |  a 115200 bit    |   see below)
                               |
               +---------------+---------------+
@@ -49,7 +49,7 @@ milestone** (the I2C transaction); the summary is at the bottom of this file.
               |
     +-------------------+           +-------------------+
     |  pe_codec_mux     |           |  pe_dru           |   BUILT (116 cells)
-    |  stuff/nrzi/manch |           |  8x oversampling  |   + pe_crc (209)
+    |  stuff/nrzi/manch |           |  12x oversampling |   + pe_crc (209)
     +-------------------+           +-------------------+
               |                               |
     +-------------------+           +-------------------+
@@ -243,9 +243,9 @@ the upside case with `tools/gen_sram_budget.py --tiles 8x4`.
 
 | Decision | Where |
 |---|---|
-| 8× oversampling per bit (4 samples per 50 ns half-UI) = 12.5 ns RX grid | `decisions/adr-001-8x-oversampling.md` |
+| **12×** oversampling per bit (6 samples per 50 ns half-UI) = 8.33 ns RX grid at the 60 MHz core | `decisions/adr-001-8x-oversampling.md`, `decisions/adr-005-60mhz-turbo.md` |
 | Std-cell **latch-pair dual-edge flop** for DDR capture; no custom DET | `decisions/adr-002-latch-pair-det-flop.md` |
-| **40 MHz default board clock, 60 MHz turbo**; both = exact integers for every hard protocol (50 ns = 2 or 3 ticks) | `concepts/tx-timing-generation.md` |
+| **60 MHz operating point** = exact integers for every hard protocol (50 ns = 3 ticks); 40 MHz still available by parameter | `decisions/adr-005-60mhz-turbo.md` |
 | **Sign off at 66 MHz** (conservative STA target only); 1.0 ns clock uncertainty. 66 is NOT an operating point — it provably fails the 10BASE-T TX jitter window | `concepts/tx-timing-generation.md` |
 | SERDES words ≤ 32 b; longer fields chunk (SWD parity, CAN/USB/ETH payloads) | `rtl/pe_serdes.v` header |
 | Codec pipeline order fixed (stuff → line-code); cfg selects the **subset** | `rtl/pe_codec_mux.v` header |
@@ -444,6 +444,28 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     66 MHz at all, while **60 MHz is exact with no dither and better on every
     axis**. When a timing claim rests on a tolerance, quote the spec's numbers and
     solve for feasibility before pricing the tradeoff. See [[decisions/adr-005-60mhz-turbo]].
+27. **Raising the clock re-prices the HARD MACROS first, not the logic.** The
+    logic had slack to spare (2.5 ns worst reg-to-reg against a 7.58 ns
+    half-cycle), but the SRAM is a fixed circuit: `A_CLK` -> `A_DOUT` is **7.25 ns
+    at the slow corner**, which was 29% of a 25 ns period at 40 MHz and is **43%
+    of a 16.667 ns period at 60 MHz**. `pe_imem` deliberately has no output
+    register (it would add a second cycle and break the CPU's fetch-ahead), so
+    that path is what the SoC STA run must close. The pe_serdes signoff does not
+    cover it — that design has no SRAM. Hard macros do not scale with your clock.
+28. **A TB that hardcodes the clock period as an INTEGER silently simulates at
+    the wrong frequency.** `localparam int CLK_NS = 17` for a 60 MHz target is
+    wrong twice over: 60 MHz is 16.667 ns, and `#(CLK_NS/2)` with an integer 17
+    rounds the half-period to 8 ns, i.e. **62.5 MHz**. Always derive the period
+    as `real` from `CLK_HZ` (`1e9 / CLK_HZ`), and derive the tick count from the
+    same expression the RTL uses, so a clock change cannot leave the TB
+    simulating one rate while the SoC thinks it is at another.
+29. **Never trust a failing test until you have read the failure's own output.**
+    A 60 MHz run of `tb_pe_uart_soc` "failed" during this change, and the cause
+    was the harness: `vvp` was invoked from `/tmp`, so the TB's relative
+    `$readmemh ../firmware/uart_echo.hex` resolved to nothing, the core executed
+    uninitialised memory, and it hung like a firmware bug. The `$readmemh`
+    warning was in the very output being read. Before diagnosing a design, check
+    the run for warnings about the *inputs* it was supposed to load.
 
 ## Open questions / risks
 

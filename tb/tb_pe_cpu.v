@@ -40,7 +40,8 @@ module tb_pe_cpu;
     .io_wdata(io_wdata), .io_rdata(io_rdata)
   );
 
-  always #12.5 clk = ~clk;   // 40 MHz
+  always #8.333 clk = ~clk;   // 60 MHz (ADR-005) -- these blocks are clock-agnostic;
+                            // the period only has to be realistic
 
   // Instruction ROM: registered read (it models a ROM macro, and the CPU's
   // fetch-ahead depends on this one-cycle latency).

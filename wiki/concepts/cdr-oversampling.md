@@ -11,14 +11,20 @@ confidence: high
 # CDR Oversampling Design
 
 10BASE-T is 10 Mbps Manchester: a mid-bit transition every 100 ns bit period, so the
-shortest pulse is the 50 ns half-bit cell. An 8x oversampling digital data-recovery
-unit (80 MHz sample clock, 12.5 ns resolution) decodes it with margin to spare.
-Terminology: "8x" here means 8 samples per 100 ns bit period, i.e. 4 samples per 50 ns
-minimum UI. True 8-samples-per-minimum-UI would need 160 MHz (16x the bit rate) —
-beyond the ~66 MHz platform ceiling (see [[entities/tiny-tapeout]]) — so 4 samples per
-minimum UI is the design point. No DLL, PLL, or analog CDR needed — this collapses the
-classic multiphase "phase picker" CDR (cf. 480 Mbps USB2 designs) into a single-clock
-3-bit phase counter because 80 MHz is directly clockable in this node.
+shortest pulse is the 50 ns half-bit cell. A 12x oversampling digital data-recovery
+unit (60 MHz sample clock, 16.67 ns sample period, 8.33 ns per sample at SPB = 12)
+decodes it with margin to spare. Terminology: "12x" here means 12 samples per 100 ns
+bit period, i.e. 6 samples per 50 ns minimum UI. True 8-samples-per-minimum-UI would
+need 160 MHz (16x the bit rate) — beyond the ~66 MHz platform ceiling (see
+[[entities/tiny-tapeout]]) — so 6 samples per minimum UI is the design point. No DLL,
+PLL, or analog CDR needed — this collapses the classic multiphase "phase picker" CDR
+(cf. 480 Mbps USB2 designs) into a single-clock 4-bit phase counter because 60 MHz is
+directly clockable in this node.
+
+Note on the "x" convention, since the name ADR-001 is still 8x: the DRU captures TWO
+samples per bit period per core clock (ADR-002's latch-pair DDR front end doubles the
+effective grid), so a 60 MHz core gives a 12-sample-per-bit grid. ADR-005 raised the
+core to 60 MHz and the grid from 8 to 12 samples/bit.
 
 **IMPLEMENTED as `rtl/pe_dru.v`** (2026-09-20): **116 cells / 2,065 µm² mapped**
 (`tb/synth_area.sh`), against the ~50-100 cell estimate below. Verified by
@@ -53,9 +59,10 @@ centres, for every possible transition pattern:
 - A half-cell begins at a transition (phase 0) or at a boundary with no transition
   (phase 0 of the free-running counter, SPB/2 after the last edge). Its centre is
   SPB/4 samples later — phase SPB/4 in one case and phase 3·SPB/4 in the other.
-- So "capture at 2 and 6" covers both, with no boundary-edge exception logic. A grid
-  that is right for 0101 and wrong for 0011 would be a real failure, so `tb_pe_dru`
-  tests all four 2-bit patterns exhaustively plus runs, a preamble frame and a soak.
+- So "capture at SPB/4 and 3·SPB/4" (2 and 6 at SPB=8; 3 and 9 at SPB=12) covers
+  both, with no boundary-edge exception logic. A grid that is right for 0101 and
+  wrong for 0011 would be a real failure, so `tb_pe_dru` tests all four 2-bit
+  patterns exhaustively plus runs, a preamble frame and a soak.
 
 ### Why the preamble is not needed
 

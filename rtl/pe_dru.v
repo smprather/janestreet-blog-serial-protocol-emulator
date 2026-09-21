@@ -8,23 +8,24 @@
 // long and the RTL is short.
 //
 // ---------------------------------------------------------------------------
-// THE SAMPLING GRID: PHASE 2 AND PHASE 6 OF A COUNTER THAT RESETS ON EVERY EDGE
+// THE SAMPLING GRID: PHASE SPB/4 AND 3*SPB/4, OF A COUNTER THAT RESETS ON EVERY EDGE
 //
-// SPB = samples per bit period (8 by default: 12.5 ns grid on a 100 ns bit, the
-// ADR-001 design point). A half-cell is SPB/2 samples. The phase counter
+// SPB = samples per bit period (12 by default: an 8.33 ns grid on a 100 ns bit,
+// the ADR-001/ADR-005 design point at the 60 MHz core clock). A half-cell is
+// SPB/2 samples. The phase counter
 //
 //     phase <= edge ? 0 : phase + 1        (mod SPB)
 //
 // so `phase` is a sample's DISTANCE FROM THE LAST TRANSITION — the edge sample
 // itself is phase 0, the next sample phase 1, and so on. Two captures per bit
-// period, at phase SPB/4 (2) and phase 3*SPB/4 (6). Those instants are exactly
-// the half-cell centres:
+// period, at phase SPB/4 and phase 3*SPB/4 — 2 and 6 at SPB=8, 3 and 9 at
+// SPB=12. Those instants are exactly the half-cell centres:
 //
 //   * A half-cell begins at a transition (phase 0) or at a half-cell boundary
 //     with no transition (phase 0 of the free-running counter, i.e. SPB/2 after
 //     the last edge). Its centre is SPB/4 samples later — phase SPB/4 for one
 //     case and phase 3*SPB/4 for the other. Either way exactly one capture lands
-//     on it, which is why "sample at 2 and 6" covers both with no
+//     on it, which is why "sample at SPB/4 and 3*SPB/4" covers both with no
 //     boundary-edge-exception logic. This is verified in tb_pe_dru against every
 //     Manchester transition pattern (00, 01, 10, 11) and a random 4 KiB payload,
 //     and it is the single most important thing in the file.
@@ -82,7 +83,7 @@
 // three metastable samples would be worse than not filtering.
 
 module pe_dru #(
-  parameter int SPB = 8            // samples per bit period; must be even, >= 8
+  parameter int SPB = 12           // samples per bit period; must be even, >= 8
 ) (
   input  logic        clk,
   input  logic        rst_n,
@@ -111,7 +112,7 @@ module pe_dru #(
   //
   // The failure is silent, which is why it is an elaboration error here rather
   // than a comment. Widen `phase` and `SPB_M1` together if a larger SPB is ever
-  // needed; SPB=12 (the 60 MHz turbo grid) is well inside the limit.
+  // needed; SPB=12 (the 60 MHz default grid) is well inside the limit.
   //
   // NOTE: Icarus supports only a SINGLE STRING argument to $error at
   // elaboration, so these messages carry no %0d formatting -- passing an

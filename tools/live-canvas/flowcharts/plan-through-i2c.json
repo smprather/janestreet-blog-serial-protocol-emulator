@@ -18,8 +18,8 @@
     { "id": "r1", "kind": "side", "text": "UART: 2 pins, push-pull\nno unbuilt hardware needed", "row": 2, "col": 1, "w": 260 },
     { "id": "r2", "kind": "side", "text": "SPI: 4 pins, push-pull\ngenerated clock, still no OE", "row": 3, "col": 1, "w": 260 },
     { "id": "r3", "kind": "side", "text": "I2C: open-drain NEEDED\nOE + read-back + arbitration", "row": 4, "col": 1, "w": 260 },
-    { "id": "r4", "kind": "side", "text": "1 us tick = 40 clocks\ntLOW 5, tHIGH 6 -> 90.9 kbit/s", "row": 5, "col": 1, "w": 260 },
-    { "id": "r5", "kind": "side", "text": "read path budget\ntLOW - tVD;DAT - tSU;DAT = 40 cycles", "row": 6, "col": 1, "w": 260 },
+    { "id": "r4", "kind": "side", "text": "1 us tick = 60 clocks\ntLOW 5, tHIGH 6 -> 90.9 kbit/s", "row": 5, "col": 1, "w": 260 },
+    { "id": "r5", "kind": "side", "text": "read path budget\ntLOW - tVD;DAT - tSU;DAT = 60 cycles", "row": 6, "col": 1, "w": 260 },
     { "id": "r6", "kind": "side", "text": "IMEM 114/128 today -> 1P_1024x16\n(14% of die) when protocol 2 lands", "row": 7, "col": 1, "w": 260 }
   ],
   "edges": [

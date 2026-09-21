@@ -95,7 +95,7 @@ module tt_um_protocol_emulator (
   pe_uart_soc #(
     .IMEM_WORDS(TT_IMEM_WORDS),
     .DMEM_BYTES(16),
-    .CLK_HZ(40_000_000),
+    .CLK_HZ(60_000_000),
     .BAUD(115_200)
   ) u_soc (
     .clk(clk),

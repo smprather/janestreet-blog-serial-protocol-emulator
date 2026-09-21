@@ -25,7 +25,7 @@
 module pe_uart_soc #(
   parameter int IMEM_WORDS = 1024,
   parameter int DMEM_BYTES = 16,
-  parameter int CLK_HZ     = 40_000_000,
+  parameter int CLK_HZ     = 60_000_000,
   parameter int BAUD       = 115_200,
   parameter int IMEM_FLOP  = 0     // 0 = SRAM macro, 1 = register array
 ) (
@@ -61,9 +61,10 @@ module pe_uart_soc #(
   // Half-bit resolution is required, not a luxury -- sampling on whole-bit
   // ticks can only land on bit BOUNDARIES, which is the worst place to
   // sample a serial line. Firmware counts 2 ticks per bit to stay mid-cell.
-  // 40 MHz / 115200 / 2 = 173.61, so TICKS_PER_BIT is 173 (integer division)
-  // and the delivered baud is 115,607 (+0.35% -- inside the ~2% UART budget,
-  // but it is an approximation, not an exact integer like the 10BASE-T plan).
+  // 60 MHz / 115200 / 2 = 260.42, so TICKS_PER_BIT is 260 (integer division)
+  // and the delivered baud is 115,385 (+0.16% -- inside the ~2% UART budget,
+  // and half the error the 40 MHz point had, but still an approximation
+  // rather than an exact integer like the 10BASE-T plan).
   localparam int TICKS_PER_BIT = (CLK_HZ / BAUD) < 4 ? 4 : (CLK_HZ / BAUD / 2);
   localparam int CNTW = $clog2(TICKS_PER_BIT);
 
