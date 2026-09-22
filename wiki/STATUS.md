@@ -663,6 +663,40 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     LVS passed:** LVS checks connectivity and device identity, DRC checks
     geometry, and a cell can be electrically perfect while violating a spacing
     rule.
+44. **THE VERDICT ON THE MACRO DRC, and it is not ours.** Ran the PDK's own
+    `run_drc.py` on the SRAM macro **ALONE**, `--run_mode deep` (the same mode
+    LibreLane uses), and diffed rule-by-rule against the full SoC:
+
+    | rule | macro alone | full SoC | verdict |
+    |---|---|---|---|
+    | `Sdiod.d` | 1136 | 1136 | **identical** |
+    | `Sdiod.e` | 1136 | 1136 | **identical** |
+    | `Cnt.c.digibnd` | 400 | 400 | **identical** |
+    | `M5.j` / `M5Fil.h` / `TM1.c` / `TM2.c` | 1 each | **0** | our fill/PDN fixed them |
+    | **total** | **2676** | **2672** | |
+
+    **2,672 of 2,672 SoC violations are reproduced EXACTLY by the vendor macro
+    standalone; ZERO are introduced by assembling the SoC.** The vendor's own
+    flow even prints `❌ KLayout DRC Check Failed` on the macro by itself. So the
+    finding is the PDK's, and an exclusion is justified **with evidence** rather
+    than assumed. Note the SoC is *cleaner* than the macro alone — the four
+    1-count BEOL rules the macro fails are fixed by our PDN + fill.
+45. **This is a known class, corroborated two ways.** (a) IHP's own
+    `ihp-sg13g2-librelane-template` issue #19 reports the vendor's reference
+    design — **which contains no SRAM at all** — completing `make librelane`
+    with `1697 Magic DRC errors`, `40 KLayout DRC errors`, `[RSZ-0020] found 4
+    floating nets`, and **`Checker.MaxSlewViolations` / `Checker.MaxCapViolations`
+    firing in the same corners we see**. Those are deferred errors the flow
+    collects and reports at the end, exactly as ours are. (b) Tiny Tapeout's
+    memory page documents the IHP SRAM macros as supported for IHP shuttles and
+    points at a taped-out, tested 1024x8 SRAM project — i.e. the community route
+    to using these macros exists and is sanctioned.
+46. **What this does NOT license.** The macro DRC being the PDK's does not make
+    the *max-slew / max-cap* violations go away — those are on SRAM **pins** as
+    driven by *our* routing (`sg13g2_buf_1` drivers, `A_DOUT[4]` at fanout 20),
+    and they are gated by steps 74-75. Gotchas 37-39 stand unchanged. Fixing the
+    slew/cap means `DESIGN_REPAIR_MAX_SLEW_PCT` / `DESIGN_REPAIR_MAX_CAP_PCT`
+    plus buffering `A_DOUT`, which is our work, not the PDK's.
 
 ## Open questions / risks
 

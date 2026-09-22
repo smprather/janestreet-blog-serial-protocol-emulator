@@ -533,3 +533,37 @@
   after it, not a passing-with-warnings. Gotchas 39-41.
 - Verified: 22/22 RTL TBs, 15/15 firmware, param guards OK, lint clean,
   4/4 drift gates.
+
+## [2026-09-22] build | The macro DRC is the PDK's, not ours — proved by the macro-alone diff
+- **Ran the PDK's own `run_drc.py` on the SRAM macro ALONE** (`--run_mode deep`,
+  the mode LibreLane uses) and diffed rule-by-rule against the full SoC:
+
+  | rule | macro alone | full SoC | verdict |
+  |---|---|---|---|
+  | `Sdiod.d` | 1136 | 1136 | identical |
+  | `Sdiod.e` | 1136 | 1136 | identical |
+  | `Cnt.c.digibnd` | 400 | 400 | identical |
+  | `M5.j`/`M5Fil.h`/`TM1.c`/`TM2.c` | 1 each | **0** | our PDN/fill fixed them |
+  | **total** | **2676** | **2672** | |
+
+  **2,672 of 2,672 SoC violations reproduce EXACTLY from the vendor macro alone;
+  zero are introduced by assembling the SoC.** The vendor's own runner prints
+  `KLayout DRC Check Failed` on the macro by itself. The SoC is *cleaner* than
+  the macro standalone — the four 1-count BEOL rules are fixed by our PDN + fill.
+- **Corroborated two ways.** IHP's own `ihp-sg13g2-librelane-template` issue #19:
+  the vendor's reference design — **no SRAM in it** — completes `make librelane`
+  with `1697 Magic DRC`, `40 KLayout DRC`, `[RSZ-0020] found 4 floating nets`,
+  and **MaxSlew/MaxCap violations in the same corners**, all as deferred errors.
+  And Tiny Tapeout's memory page documents the IHP SRAM macros as supported and
+  points at a taped-out, tested 1024x8 SRAM project.
+- **LVS independently agrees**: "Circuits match uniquely", 1926 devices / 1939
+  nets both sides; step 71 `Checker.LVS` clear.
+- **What this does NOT fix:** max-slew/max-cap are on SRAM *pins as driven by our
+  routing* (`sg13g2_buf_1`, `A_DOUT[4]` fanout 20) and are gated by steps 74-75.
+  That is our work. Gotchas 37-46.
+- One process note: an earlier STATUS edit silently no-op'd because its anchor
+  did not match, and it printed success anyway — I reported gotchas 39-41 as
+  written when they were not. Rewritten with assertions that the text is present
+  after writing, and re-verified.
+- Verified: 22/22 RTL TBs, 15/15 firmware, param guards OK, lint clean,
+  4/4 drift gates.
