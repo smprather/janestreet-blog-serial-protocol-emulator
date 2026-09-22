@@ -161,7 +161,8 @@ period (it was signed against 15.15 ns; the target is now 60 MHz — see
 signoff covers it" risk below. What remains of the ordered list is **step 4: the
 pin matrix / OE** (open-drain, read-back, tri-state) for I2C. **Update
 2026-09-20: the CRC LFSR and the DRU were already BUILT** (`rtl/pe_crc.v` 209
-cells, `rtl/pe_dru.v` 116 cells, both with self-checking TBs and both in
+cells, `rtl/pe_dru.v` 116 cells (144 after the DDR front end below), both with
+self-checking TBs and both in
 `run_all.sh`), and the SRAM swap landed on 2026-09-20.
 
 If you touch `pe_crc`: its constants are generated and catalogue-checked

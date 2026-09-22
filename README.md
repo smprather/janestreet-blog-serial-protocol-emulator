@@ -22,15 +22,15 @@ in firmware on real RTL. See [`wiki/STATUS.md`](wiki/STATUS.md), and
 | NRZI / Manchester / bit-stuffing codecs | `rtl/pe_line_codec.v` | 15 / 7 / 84 cells |
 | Config-driven codec pipeline mux | `rtl/pe_codec_mux.v` | 115 cells / 1.7k µm² |
 | **CRC / LFSR engine** — CRC-5/8/15/16/32, one datapath | `rtl/pe_crc.v` | 209 cells / 3.4k µm² |
-| **DRU** — oversampled Manchester receive (10BASE-T, PS/2) | `rtl/pe_dru.v` | 116 cells / 2.1k µm² |
+| **DRU** — oversampled Manchester receive (10BASE-T, PS/2), dual-edge | `rtl/pe_dru.v` | 144 cells / 2.3k µm² |
 | CPU — 16-bit insn, 16 opcodes, A/Y/X, PC width from IMEM depth | `rtl/pe_cpu.v` | 383 cells / 4.9k µm² |
 | **Instruction memory** — real SRAM macro + protocol wrapper | `rtl/pe_imem.v` | 12 glue cells (+ the macro's LEF area) |
-| Software-UART SoC — CPU + 1024-word SRAM + ticks + 2 pins | `rtl/pe_uart_soc.v` | 1,083 cells / 19.8k µm² |
-| **Tiny Tapeout top level** — the deliverable | `rtl/tt_um_protocol_emulator.v` | 1,083 cells / 19.8k µm² |
+| Software-UART SoC — CPU + 1024-word SRAM + ticks + pin matrix | `rtl/pe_uart_soc.v` | 1,261 cells / 23.3k µm² |
+| **Tiny Tapeout top level** — the deliverable | `rtl/tt_um_protocol_emulator.v` | 1,294 cells / 23.4k µm² |
 | Assembler / bit-accurate emulator | `tools/peasm.py`, `tools/peemu.py` | Python |
 | The UART itself — **as firmware** | `firmware/uart_echo.pe` | 114 words |
 
-Verified by **21 self-checking testbenches + 13 firmware tests + a lint gate**
+Verified by **26 self-checking testbenches + 17 firmware tests + a lint gate**
 (`tb/run_all.sh`), including one TB per target protocol: UART, SPI, I2C, JTAG,
 SWD, PS/2, CAN, USB-LS, 10BASE-T. The SERDES has been through the full
 place-and-route flow: **0 DRC, 0 LVS, 66 MHz timing clean** (+7.6 ns setup slack
