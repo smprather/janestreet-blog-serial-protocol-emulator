@@ -243,6 +243,26 @@ module tb_pe_cpu;
     run_budget(14);
     check(dut.a === 8'h00, "INCX/DECX/SHR: A=0 after halving 1");
 
+    // ---- 10. a ONE-CLOCK stop must resume at instruction 0 ----------------
+    // With imem_addr selecting `pc` while stopped, the registered ROM sampled
+    // the OLD pc on the first stopped edge, so a one-clock stop then resumed
+    // by executing the stale word: `LDI A,55; LDI A,AA; JMP 2` came back with
+    // A=AA (measured, review 2 R2-4). The address is zero while stopped now,
+    // so the first instruction is already fetched when run rises.
+    clear_program();
+    load(0, LDI(8'h55));
+    load(1, LDI(8'haa));
+    load(2, JMP_(8'd2));
+    reset_cpu();
+    run_budget(2);                 // execute the two loads; pc is at JMP 2
+    run = 0;                       // ONE stopped clock
+    @(posedge clk); #1;
+    run = 1;
+    step(1);                       // resume: must execute imem[0]
+    check(dut.a === 8'h55, "one-clock stop: resume executes instruction 0");
+    check(dut.pc === 8'd1,
+          $sformatf("one-clock stop: pc = %0d, want 1", dut.pc));
+
     if (errors == 0) $display("PASS: tb_pe_cpu");
     else $display("FAILURES: %0d", errors);
     $finish;

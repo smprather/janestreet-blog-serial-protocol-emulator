@@ -180,8 +180,13 @@ module pe_cpu #(
 
   // While !run the core holds pc at 0 (the boot loader owns the window), and
   // the ROM must be pre-loading imem[0] so the first instruction is ready the
-  // moment run rises.
-  assign imem_addr = run ? next_pc[IAW-1:0] : pc[IAW-1:0];
+  // moment run rises. The address is ZERO, not `pc`: pc becomes 0 at the first
+  // stopped edge, but a registered ROM samples the address presented during
+  // that cycle, which was still the old pc. A one-clock stop then resumed with
+  // a stale fetched word (measured: `LDI A,55; LDI A,AA; JMP 2`, stopped for
+  // one clock, resumed at JMP 2 with A=AA instead of executing LDI A,55;
+  // review 2 R2-4). Addressing zero immediately makes a one-clock stop safe.
+  assign imem_addr = run ? next_pc[IAW-1:0] : {IAW{1'b0}};
 
   // ---- address / data bus ----------------------------------------------
   // One write port, muxed: STS addresses through X, STM through an immediate.
