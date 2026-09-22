@@ -67,10 +67,9 @@ flowchart LR
     pe_serdes["<b>pe_serdes</b><br/>word engine: load 8-32 bits, pace with bit_en<br/><i>539 cells</i>"]
     pe_dru["<b>pe_dru</b><br/>digital receiver unit: 12x oversampled edge recovery<br/><i>121 cells</i>"]
     pe_crc["<b>pe_crc</b><br/>CRC/LFSR generator, 8/16/32-bit, catalogue-checked<br/><i>209 cells</i>"]
-    pe_pinmux["<b>pe_pinmux</b><br/>per-pin direction, open-drain, read-back (the I2C gate)<br/><i>111 cells</i>"]
     pe_codec_mux["<b>pe_codec_mux</b><br/>stuff -> nrzi/manchester; cfg selects the subset<br/><i>115 cells</i>"]
     classDef orphan fill:#3a2f0f,stroke:#facc15,color:#fff,stroke-dasharray: 5 5
-    class pe_serdes,pe_dru,pe_crc,pe_pinmux,pe_codec_mux orphan
+    class pe_serdes,pe_dru,pe_crc,pe_codec_mux orphan
 ```
 
 ## The built blocks, and where they actually live
@@ -79,18 +78,18 @@ flowchart LR
 |---|---|---|---|---|
 | `pe_cpu` | the ISA: 16 opcodes, A/Y/X, 8-bit datapath | pe_uart_soc.v | 383 | `tb_pe_cpu` |
 | `pe_imem` | instruction memory; SRAM macro by default | pe_uart_soc.v | 12 | `tb_pe_imem` |
+| `pe_pinmux` | per-pin direction, open-drain, read-back (the I2C gate) | pe_uart_soc.v | 111 | `tb_pe_pinmux` |
 | `pe_nrzi` | NRZI encode/decode | pe_codec_mux.v | 15 | `tb_pe_codec_mux` |
 | `pe_manch` | Manchester encode/decode | pe_codec_mux.v | 7 | `tb_pe_codec_mux` |
 | `pe_bitstuff` | bit stuffing (CAN/USB style) | pe_codec_mux.v | 84 | `tb_pe_codec_mux` |
 | `pe_serdes` | word engine: load 8-32 bits, pace with bit_en | **nowhere — orphan** | 539 | `tb_pe_serdes` |
 | `pe_dru` | digital receiver unit: 12x oversampled edge recovery | **nowhere — orphan** | 121 | `tb_pe_dru` |
 | `pe_crc` | CRC/LFSR generator, 8/16/32-bit, catalogue-checked | **nowhere — orphan** | 209 | `tb_pe_crc` |
-| `pe_pinmux` | per-pin direction, open-drain, read-back (the I2C gate) | **nowhere — orphan** | 111 | `tb_pe_pinmux` |
 | `pe_codec_mux` | stuff -> nrzi/manchester; cfg selects the subset | **nowhere — orphan** | 115 | `tb_pe_codec_mux` |
 
 ### Orphans: built, tested, and driving nothing
 
-**5 of 10 blocks are instantiated nowhere in `rtl/`.**
+**4 of 10 blocks are instantiated nowhere in `rtl/`.**
 That is not an accident and not a bug in the diagram — it is the project's
 staging: each block was built and verified standalone before anything
 wired it up. But it is worth stating plainly, because it is the single
@@ -99,7 +98,6 @@ biggest gap between "what is built" and "what the chip does":
 - **`pe_serdes`** — word engine: load 8-32 bits, pace with bit_en
 - **`pe_dru`** — digital receiver unit: 12x oversampled edge recovery
 - **`pe_crc`** — CRC/LFSR generator, 8/16/32-bit, catalogue-checked
-- **`pe_pinmux`** — per-pin direction, open-drain, read-back (the I2C gate)
 - **`pe_codec_mux`** — stuff -> nrzi/manchester; cfg selects the subset
 
 [[STATUS]] gotcha 14 is the rule this section exists to satisfy:
@@ -113,9 +111,8 @@ in the design, and the difference is exactly what this table shows.
 |---|---|
 | **pe_ctrl (SPI load path)** | boot the chip in real silicon; today the loader is a host port driven by the TB, so the chip cannot boot itself |
 | **frame buffer (2nd SRAM)** | ADR-003; 10BASE-T needs 2 KB. Instruction macro only, so far |
-| **pe_pinmux into the SoC** | plan step 5: put the matrix in front of the fixed-mask port |
-| **I2C 1 us tick divider** | plan step 5: 60 clocks at 60 MHz, distinct from the 260 UART tick |
 | **pe_serdes into the SoC** | the SERDES is routed and TB-proven but no SoC instance drives it |
+| **I2C transaction layer** | byte transfer, ACK, 7-bit addressing; the pin-level grammar (START/bit cell/STOP) landed 2026-09-23 -- [[concepts/i2c-on-the-matrix]] |
 
 ## The two memory stories
 

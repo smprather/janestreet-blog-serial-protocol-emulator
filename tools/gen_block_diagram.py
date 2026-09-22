@@ -87,7 +87,12 @@ BLOCKS = [
         name="pe_pinmux",
         source_file="pe_pinmux.v",
         role="per-pin direction, open-drain, read-back (the I2C gate)",
-        instantiated_in=None,
+        # Was an orphan until 2026-09-23, when the matrix went inside the SoC
+        # (decisions/adr-006-pin-matrix). Note this field is HAND-MAINTAINED and
+        # the --check gate compares the page against this table, NOT against the
+        # RTL -- so the table going stale is exactly the failure this field can
+        # have. Verify with: grep -n "^  pe_pinmux #" rtl/*.v
+        instantiated_in="pe_uart_soc.v",
         tb="tb_pe_pinmux.v",
     ),
     dict(
@@ -125,15 +130,35 @@ PLANNED = [
     ("pe_ctrl (SPI load path)", "boot the chip in real silicon; today the loader is a "
                                 "host port driven by the TB, so the chip cannot boot itself"),
     ("frame buffer (2nd SRAM)", "ADR-003; 10BASE-T needs 2 KB. Instruction macro only, so far"),
-    ("pe_pinmux into the SoC", "plan step 5: put the matrix in front of the fixed-mask port"),
-    ("I2C 1 us tick divider", "plan step 5: 60 clocks at 60 MHz, distinct from the 260 UART tick"),
     ("pe_serdes into the SoC", "the SERDES is routed and TB-proven but no SoC instance drives it"),
+    ("I2C transaction layer", "byte transfer, ACK, 7-bit addressing; the pin-level grammar "
+                              "(START/bit cell/STOP) landed 2026-09-23 -- "
+                              "[[concepts/i2c-on-the-matrix]]"),
 ]
+# Removed 2026-09-23 as BUILT: "pe_pinmux into the SoC" and "I2C 1 us tick
+# divider" (plan step 5, decisions/adr-006-pin-matrix). A "planned" table is a
+# claim about the design like any other, so it is maintained with the same
+# intent as the orphan table -- an entry that has shipped is a stale claim, not
+# a leftover.
 
 
 def check_instantiated(blocks: list[dict], problems: list[str]) -> None:
     """Verify each block's instantiated_in claim against the RTL, so the
-    diagram cannot claim a signal path that does not exist."""
+    diagram cannot claim a signal path that does not exist.
+
+    BOTH DIRECTIONS, and the reverse one is the subtle half. Checking only that
+    a CLAIMED parent names the block catches a path that was removed; it cannot
+    catch a block that GREW a path and is still drawn as an orphan. That is what
+    happened to `pe_pinmux` on 2026-09-23: it was instantiated inside
+    `pe_uart_soc`, the diagram still said "instantiated nowhere", and `--check`
+    passed because it compared the page against this table rather than the table
+    against the RTL. An orphan claim is as much a factual claim as a parent
+    claim, so it is verified the same way.
+    """
+    # Every RTL file, for the reverse check.
+    sources = {p.name: p.read_text(encoding="utf-8")
+               for p in sorted(RTL.glob("*.v"))}
+
     for b in blocks:
         f = RTL / b["source_file"]
         if not f.is_file():
@@ -144,16 +169,30 @@ def check_instantiated(blocks: list[dict], problems: list[str]) -> None:
             problems.append(
                 f"{b['name']}: rtl/{b['source_file']} does not define module {b['name']}"
             )
+        # An instantiation is `<name> #(` (parameterised) or `<name> <inst> (`
+        # (not). Match those, not a bare mention -- comments and this file's own
+        # name appear all over the RTL and a bare `\\bname\\b` search is what
+        # made the first version of this check unable to see a real instance.
+        inst_re = re.compile(rf"^\s*{re.escape(b['name'])}\s*(#\s*\(|\w+\s*\()", re.M)
+        parents = sorted(n for n, src in sources.items()
+                         if n != b["source_file"] and inst_re.search(src))
+
         if b["instantiated_in"]:
             parent = RTL / b["instantiated_in"]
             if not parent.is_file():
                 problems.append(f"{b['name']}: parent {b['instantiated_in']} missing")
                 continue
-            src = parent.read_text(encoding="utf-8")
-            if not re.search(rf"\b{b['name']}\b", src):
+            if b["instantiated_in"] not in parents:
                 problems.append(
                     f"{b['name']}: diagram says it is instantiated in "
-                    f"{b['instantiated_in']}, but that file does not name it"
+                    f"{b['instantiated_in']}, but that file has no instantiation "
+                    f"of it (found: {parents or 'none'})"
+                )
+        else:
+            if parents:
+                problems.append(
+                    f"{b['name']}: diagram says INSTANTIATED NOWHERE, but it is "
+                    f"instantiated in {parents}"
                 )
 
 

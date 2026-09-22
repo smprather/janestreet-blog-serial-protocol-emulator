@@ -72,10 +72,11 @@ The one-line version, for the reader who wants it before clicking through:
   tt_um_protocol_emulator (BUILT, the deliverable)
     └── pe_uart_soc (BUILT) ── pe_cpu ── pe_imem ──[FLOP=0]── SRAM macro
                              └ tick timer (260 clk = half a 115200 bit)
-                             └ fixed-mask port (PIN_IN_MASK 8'hF8)
+                             └ 1 us I2C tick (60 clk, exact)
+                             └ pe_pinmux (111) ── per-pin {out,oe,od}
 
-  BUILT, TB-verified, INSTANTIATED NOWHERE (5):
-    pe_serdes (539)  pe_dru (121)  pe_crc (209)  pe_pinmux (111)  pe_codec_mux (115)
+  BUILT, TB-verified, INSTANTIATED NOWHERE (4):
+    pe_serdes (539)  pe_dru (121)  pe_crc (209)  pe_codec_mux (115)
 ```
 
 
@@ -707,8 +708,12 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 
     **What the flow actually deferred, in both runs, was only the DRC:**
     `1113909 Magic DRC errors found. - deferred` and `2672 KLayout DRC errors
-    found. - deferred`. Nothing else. So the `error.log` was empty and LibreLane
-    reached step 76/80 in both runs — the run ends because of DRC, full stop.
+    found. - deferred`. Nothing else. So LibreLane reached step 76/80 in both
+    runs — the run ends because of DRC, full stop. (`error.log` is those two
+    lines, **85 bytes**, not empty. An earlier revision of this gotcha said
+    "empty", which was a reading taken mid-run and never re-checked. The same
+    class of error as gotchas 37-39: a plausible claim standing in for reading
+    the file.)
 
     To turn these into real gates, set
     `MAX_SLEW_VIOLATION_CORNERS`/`MAX_CAP_VIOLATION_CORNERS` to `["*"]`.
