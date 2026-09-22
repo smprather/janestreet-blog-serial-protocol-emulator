@@ -151,7 +151,16 @@ run_case() {
 }
 
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP" "$PRISTINE"' EXIT
+# Interruption is not an excuse to leave the checkout mutated. The per-case
+# restore only runs on its normal path, and EXIT only cleaned temporaries -- so
+# SIGTERM mid-simulation left the mutated RTL in place and the next regression
+# measured it (measured, review 2 R2-7). This trap restores the pristine bytes
+# on ANY exit, including TERM/INT.
+restore_pristine() {
+  [ -f "$PRISTINE" ] && cp "$PRISTINE" "$MUTABLE"
+  return 0
+}
+trap 'restore_pristine; rm -rf "$TMP" "$PRISTINE"' EXIT INT TERM
 
 # ---------------------------------------------------------------- mutation 1
 # BREAK THE WRITE MASK: always select the low lane. A write to an odd (high-lane)

@@ -28,7 +28,7 @@ cleanup() {
   rm -f "$BAK"
   rmdir "$ROOT/sim" 2>/dev/null
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 mkdir -p "$ROOT/sim"
 cd "$ROOT/sim"

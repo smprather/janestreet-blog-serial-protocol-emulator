@@ -46,6 +46,11 @@ MUTABLE="rtl/pe_uart_soc.v rtl/pe_pinmux.v firmware/spi_xfer.pe"
 # on the fresh-clone regression the review runs.
 PRISTINE=$(mktemp -d)
 for f in $MUTABLE; do cp "$f" "$PRISTINE/"; done
+# The assembled image is committed too, and a mutation run regenerates it
+# from the mutated source. Snapshot it as well so an interrupted run can
+# put BOTH back byte-exactly (review 2 R2-7).
+IMAGE=firmware/spi_xfer.hex
+cp "$IMAGE" "$PRISTINE/"
 
 run_case() {
   local name="$1"; shift
@@ -145,7 +150,20 @@ run_case() {
     }
 
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP" "$PRISTINE"' EXIT
+# Interruption is not an excuse to leave the checkout mutated. The
+# per-case restore only runs on its normal path, and EXIT only cleaned
+# temporaries -- so SIGTERM mid-simulation left the mutated sources in
+# place and the next regression measured them (measured, review 2 R2-7).
+# This trap restores the pristine bytes and the committed image on ANY
+# exit, including TERM/INT.
+restore_pristine() {
+  for f in $MUTABLE; do
+    [ -f "$PRISTINE/$(basename "$f")" ] && cp "$PRISTINE/$(basename "$f")" "$f"
+  done
+  [ -f "$PRISTINE/$(basename "$IMAGE")" ] && cp "$PRISTINE/$(basename "$IMAGE")" "$IMAGE"
+  return 0
+}
+trap 'restore_pristine; rm -rf "$TMP" "$PRISTINE"' EXIT INT TERM
 
 # ---------------------------------------------------------------- mutation 1
 # SAMPLE THE WRONG EDGE. Move the master's MISO sample from after the rising
