@@ -621,6 +621,48 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     `A_ADDR[0]` +3.70 ns) so nothing is currently failing timing. The finding is
     that the instruction-fetch STA number rests on extrapolated macro timing, and
     the flow has a lever to remove that caveat.
+39. **The flow GATES on max-slew/max-cap, so they are failures, not cosmetics.**
+    `RUN_2026-09-22_00-48-35` has steps 72-75 as `Checker.SetupViolations`,
+    `Checker.HoldViolations`, `Checker.MaxSlewViolations`,
+    `Checker.MaxCapViolations`. The first two report "No setup/hold violations
+    found"; the last two report **"Max Slew violations found in the following
+    corners: nom_fast / nom_slow / nom_typ"** (same for Max Cap). LibreLane
+    collected them as *deferred* errors and quit at the end of the flow. So
+    gotcha 37's count is a gated failure with a checker step named after it.
+40. **1,113,909 Magic DRC + 2,672 KLayout DRC errors, and 100% of BOTH are inside
+    the vendor SRAM macro.** Established by parsing, not assertion: every
+    coordinate in `drc.magic.rpt` compared against the macro's placed footprint
+    (x 10..246.8, y 10..346.46 µm) gives **1,113,909 inside, 0 outside**, with
+    rules that are library-internal artefacts (`Cnt.c` 880,232; `LU.b` 104,724;
+    `Gat.c` 104,737; `M2.d` 59,165). KLayout on the PDK's own 174-rule deck fires
+    only **4 rules**, dominant pair `Sdiod.d`/`Sdiod.e` — **ContBar inside
+    nBuLay, an ESD-diode rule** — in a design that instantiates no diodes. Every
+    one of the 2,672 KLayout items names an `RM_IHPSG13_*` or `RSC_IHPSG13_*`
+    cell, and `RSC_IHPSG13_*` is in **neither** the design's `sg13g2_stdcell`
+    library **nor** the SRAM's LEF, so it exists only inside the SRAM's GDS.
+41. **`MAGIC_GDS_FLATGLOB` exists for exactly this and is unset.** LibreLane's
+    docstring: "Flatten cells by name pattern on input. **May be used to avoid
+    false positive DRC errors.**" With an SRAM-name glob that is the sanctioned
+    route, and better than disabling DRC. The other knob is `MAGIC_DRC_USE_GDS`
+    (default true; false checks the DEF view, "less accurate as some DEF/LEF
+    elements are abstract"). See gotcha 43 before using either.
+42. **LVS PASSES on the same layout — "Circuits match uniquely", 1926 devices and
+    1939 nets on both sides** (`70-netgen-lvs/reports/lvs.netgen.rpt`; the flow's
+    step 71 `Checker.LVS` reports "Check for LVS errors clear"). This is the
+    independent evidence that those DRC errors are geometric false positives
+    inside the vendor cell rather than a construction defect: netgen compared
+    layout against netlist and found them identical device for device, and a
+    genuinely mis-built macro would very likely fail LVS too. Note the
+    power-grid checker's message is itself conditional — "you may ignore these
+    if LVS passes" — and LVS passes.
+43. **A DRC failure inside a third-party macro is not automatically real OR
+    ignorable — the test that distinguishes them is running the PDK's own deck
+    on the macro ALONE.** Fails alone ⇒ the finding is the PDK/vendor's and an
+    exclusion list is justified *with evidence*. Passes alone ⇒ the failure is
+    introduced by composition and it is ours. **Do not silence DRC merely because
+    LVS passed:** LVS checks connectivity and device identity, DRC checks
+    geometry, and a cell can be electrically perfect while violating a spacing
+    rule.
 
 ## Open questions / risks
 
