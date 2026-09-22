@@ -40,6 +40,7 @@
 - [[reference/crc-config]] — every CRC constant `pe_crc` is loaded with, derived and checked against the RevEng catalogue's published values (generated).
 - [[reference/clock-arithmetic]] — every protocol constant at the LOCKED 60 MHz operating point: what is integer-exact and what is an approximation. `CLK_HZ` is read from the RTL (generated).
 - [[reference/block-diagram]] — Mermaid block diagram: what is in the chip, and which built blocks are wired to nothing. Built/orphan split checked against `rtl/` + `run_all.sh` (generated).
+- [[reference/simulator-bakeoff]] — Icarus vs Verilator, measured (speed, build cost, X)
 
 ## Comparisons
 

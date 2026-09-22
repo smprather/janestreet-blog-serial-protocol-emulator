@@ -88,6 +88,11 @@ CASES=(
   # the open-drain property checked on the RTL's own pin_oe output. This is the
   # test that makes "the matrix is enough to speak I2C" a measured claim.
   "tb_pe_i2c_soc|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_uart_soc.v|tb_pe_i2c_soc"
+  # SPI mode 0 as firmware, with a real mode-0 SLAVE modelled in the TB. SPI is
+  # a baseline protocol whose only executable spec was tools/peemu.py -- a model
+  # written from the same understanding as the firmware, so it can agree with it
+  # about a wrong bit order and pass. The slave here decodes MOSI from the pins.
+  "tb_pe_spi_soc|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_uart_soc.v|tb_pe_spi_soc"
 )
 
 pass=0; fail=0; failed_names=()
@@ -265,6 +270,17 @@ if ./tb/mutate_i2c_tb.sh > /tmp/mutate_i2c.log 2>&1; then
 else
   echo "i2c TB mutations: FAILED"
   tail -20 /tmp/mutate_i2c.log
+  stale=1
+fi
+
+# The SPI testbench's mutation suite. Same reasoning: SPI is a baseline protocol
+# and its TB makes a strong claim (the slave decodes the master's byte MSB-first
+# from the pins), so the claim is tested by making it false.
+if ./tb/mutate_spi_tb.sh > /tmp/mutate_spi.log 2>&1; then
+  echo "spi TB mutations: OK (no unexplained survivors)"
+else
+  echo "spi TB mutations: FAILED"
+  tail -20 /tmp/mutate_spi.log
   stale=1
 fi
 

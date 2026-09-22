@@ -149,9 +149,12 @@ depth: 896 words of addressable-by-nothing SRAM for 79,674 µm². **The PC and t
 jump-target field had to widen in the same change.** Full reasoning and the
 rejected alternatives: [[decisions/adr-004-program-counter-width]].
 
-**Regression: 23/23 testbenches + 16/16 firmware tests pass, and the lint gate is
+**Regression: 24/24 testbenches + 16/16 firmware tests pass, and the lint gate is
 clean** (`tb/run_all.sh` runs the firmware regression first, then every TB, then
-`tb/lint.sh`, then the generated-doc drift checks).
+`tb/lint.sh`, then the generated-doc drift checks, then two mutation harnesses --
+`tb/mutate_i2c_tb.sh` and `tb/mutate_spi_tb.sh`). Each mutation harness proves its
+testbench FAILS when the property it claims is broken, because a testbench that
+passes on broken RTL manufactures confidence.
 
 **`tb/lint.sh` is not optional, and the reason is the most useful thing in this
 file.** A previous revision said the Verilator warnings were "intentional". They
@@ -786,6 +789,134 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     slew/cap means `DESIGN_REPAIR_MAX_SLEW_PCT` / `DESIGN_REPAIR_MAX_CAP_PCT`
     plus buffering `A_DOUT`, which is our work, not the PDK's.
 
+47. **A diagram that renders fine can still be invisible -- check the VIEWER, not
+    just the file.** The block-diagram SVGs were correct on disk and correct in
+    `mermaid-cli`'s own render (verified by eye), yet the Canvas pane showed a
+    **blank white stage** for every mermaid diagram. The root cause was in the
+    pane, not the drawings, and it was two independent bugs:
+
+    **(a) `parseFloat('100%')` returns `100`.** Mermaid emits `width="100%"`
+    on most diagrams. The viewer read the intrinsic size with
+    `parseFloat(getAttribute('width'))`, got a *truthy* 100, so the
+    `if(!iw || !ih)` viewBox fallback never fired -- it believed the drawing was
+    100 px wide instead of its viewBox width. Every derived number was then
+    wrong by that ratio: the fit box, the reported fit ratio, and the 100%
+    button. Clicking `100%` rendered a 1593 px diagram into a 100x583 box, so
+    the drawing landed as a ~100x36 px sliver in the corner: effectively
+    invisible.
+
+    **(b) The initial apply raced layout.** The pane creates the iframe and React
+    commits its geometry *after* the srcdoc has parsed, so the first apply saw a
+    zero-width wrap and `wrap.clientWidth || 1` sized the SVG to a **1 px**
+    sliver. Nothing re-measured, because only the WINDOW `resize` was listened
+    for -- and that does not fire when an iframe is resized by its parent. The
+    stage stayed blank until the user clicked Fit, which is exactly the reported
+    symptom.
+
+    Both are fixed (`px()` accepts a bare number or an `px` suffix only;
+    `paneW() <= 1` refuses to size, plus a `ResizeObserver` on the wrap), and
+    both are **mutation-tested** in `tools/check_canvas_viewer.py`, wired into
+    `tb/run_all.sh` as a gate.
+
+    **The measurement lesson is the real one.** Nothing outside could see the
+    problem: the iframe is sandboxed with an opaque origin, so the parent page
+    cannot read into it and neither can CDP's DOM domain. Reasoning about the
+    geometry produced a *plausible* story that was wrong twice. What worked was
+    reconstructing the pane's exact document in the scratch dir, running the
+    **shipped** FRAME_SCRIPT (extracted from the source, never paraphrased), and
+    measuring in a real browser. The fix was then confirmed by the pane's own
+    `lc-fit` messages: `0.465` = 741/1593.7, the correct ratio, where the
+    pre-fix value had been `7.41`.
+48. **A checker that re-implements the code under test cannot detect its bugs.**
+    The first draft of `check_canvas_viewer.py` re-derived the *fixed* arithmetic
+    in Python and passed -- while the JS could have regressed underneath it and
+    it would still have passed. Rewritten to extract the shipped `FRAME_SCRIPT`
+    and run it in node against a DOM stub, then **mutate it back to each pre-fix
+    form and require a FAIL**. Mutation A implies `iw=100` (the phantom percent
+    width); mutation B emits a `1`px width call. Both are detected. Same rule as
+    the firmware/TB rule elsewhere in this project: a guard that cannot fail is
+    indistinguishable from a guard that passes.
+49. **Beware repr/JSON escaping when matching source text.** Three patch
+    attempts failed on the line containing `if(VIEW.mode === 'fit')` because
+    every `repr()`/JSON view of it renders the single quotes with a leading
+    backslash -- display escaping that is **not in the file**. I chased that
+    phantom backslash through three anchors that could never match. Reading the
+    file as **bytes** (`b.find(b"VIEW.mode ===")`) settled it in one command.
+    When an anchor will not match, look at raw bytes before rewriting it again.
+50. **A "wait for the counter to change" delay is a PHASE-ROBUSTNESS bug, not a
+    style choice.** `uart_echo.pe` and `spi_xfer.pe` poll a free-running tick
+    counter for a change, which delivers `(0, 1]` ticks -- up to a full tick
+    short. Harmless for SPI (synchronous, the slave times off our edges) and a
+    sampling-margin cost for the UART. For I2C it is a **spec violation**: tLOW
+    is measured at the pin against a 4.7 us floor, and the first draft of
+    `firmware/i2c_pins.pe` took 1,384 cycles for 28 us of nominal delays
+    (0.83x). It would have passed a bench test. Wait for an exact TARGET instead
+    (`IN` / `ADD A, N` / `MOV X, A` / spin `SUB A, X` / `JNZ`).
+51. **An N-tick wait delivers (N-1, N] us, so the number that must clear a floor
+    is N-1.** Firmware cannot see where in the 60-cycle window a read lands
+    (`0 <= phi < 60` cycles), so the target tick is `60*N - phi` cycles away.
+    Constants must be chosen for the worst case: tLOW uses 7 ticks (worst case
+    6 us vs a 4.7 us floor), not the 5 that looks compliant nominally. Also --
+    give the larger count to the larger FLOOR: tLOW (4.7) gets 7 and tHIGH (4.0)
+    gets 6. The period is `tLOW+tHIGH` either way because the waits chain in
+    target form, so the swap costs nothing and rebalances the margins.
+52. **Open-drain prevents CONTENTION, not a wrong-moment drive.** The OD bit
+    makes "drive high into someone else's low" inexpressible, which is the
+    destructive fault. It does not stop the pin driving LOW at a bad moment:
+    the first draft of `i2c_pins.pe` wrote `PINOE` before `TXPIN`, and since the
+    reset output register holds `0x01`, bits 4-5 were still 0 -- SDA pulled low
+    for two cycles with SCL high, which **is a START condition**. So the init
+    order is OD, then OUT, then OE. Same class: pulling SDA low while SCL is
+    high on the way into a STOP emits a second START. Grammar bugs like these
+    leave every timing interval compliant, so a timing-only check cannot see
+    them -- assert the SEQUENCE too.
+53. **In Verilog, a negative `time` difference wraps, and a `>=` check on it
+    passes.** The I2C TB computed `tHIGH` as `scl_fall_t[1] - scl_rise_t[1]`, a
+    NEGATIVE difference; `time` is unsigned, so it wrapped to ~1.8e19 and
+    satisfied `tHIGH >= 4.0` forever. Its partner check was equally unfailable
+    (tLOW measured the idle stretch at 19 us). Two assertions that could never
+    fail, in a TB that passed. Pair every `>=` interval check with a "plausibly
+    the right measurement" upper bound, and mutation-test the TB itself -- that
+    is what surfaced both. See also gotcha 48.
+
+54. **A trace that prints at `posedge clk` shows a MIXTURE of old and new
+      state, and it will accuse the design of a bug that does not exist.** Two
+      registers updated by the same edge -- `pc` and the instruction ROM's
+      registered `A_DOUT` -- mean a `$display` with no delay can print the new PC
+      beside the PREVIOUS instruction. It reported `OUT` executing with `a=00`
+      instead of `0x04`, which reads exactly like a CPU bug. Sample one time
+      step AFTER the edge (`#1`) and each line is a consistent snapshot of one
+      cycle. Same family as gotcha 53: the hardware was fine, the observer was
+      reading at the wrong instant.
+
+55. **A registered ROM needs an edge to load before the CPU is released.**
+      While the loader owns the bus, `pe_imem` holds the macro's read-enable
+      LOW, so `A_DOUT` is frozen. Dropping `host_we` starts a read that needs one
+      more edge before it holds `imem[0]`; releasing `run` in the same instant
+      makes the CPU decode a STALE instruction at `pc=0`, so the FIRST
+      instruction never executes and the PC lands on `imem[1]` with the reset
+      value still in `A`. The symptom was two misleading failures at once (an
+      INIT write landing as 0x00, and a slave counting frames it should not
+      have). `tb_pe_uart_soc` already had the required four-clock gap -- its
+      comment never said why, which is how the requirement stayed invisible.
+
+56. **A slave model needs a LEVEL, not an edge, and the pin may already be
+      asserted at reset.** The SoC drives CS_N low from reset (`RST_OUT` bit 2
+      is 0), so a model arming on the CS_N FALLING edge never sees one and never
+      arms -- while still reporting the frames it did catch, which makes the
+      failure look like a one-frame lag in the master. Model selection off the
+      LEVEL, and give a released pin a pull-up so an unselected slave reads as
+      deselected rather than as a low.
+
+57. **Verilator is 2-state, so `=== x` stops meaning anything under it.** An
+      unassigned or `x`-literal signal becomes 0 silently. Measured: 12.7x (SPI)
+      and 18.9x (I2C) faster than Icarus, with a ~300x more expensive build and
+      a break-even near 27 runs -- and on the current five SPI mutations it
+      detects exactly the same ones with identical FAIL counts. But a future TB
+      that relies on `=== x` to catch an undriven net would stop testing if it
+      were only ever run under Verilator. Keep the 4-state simulator for
+      signoff. See [[reference/simulator-bakeoff]].
+
 ## Open questions / risks
 
 - **IHP-specific max pad clock is unpublished.** The ~66 MHz figure is sky130
@@ -902,93 +1033,3 @@ without ever writing.
     per-word cost of flop memory. Read before touching the SoC's memories.
 11. [[concepts/ethernet-scope]] — what the 10BASE-T stretch goal is and is not,
     and the throughput arithmetic that puts Ethernet bits in hardware.
-
-47. **A diagram that renders fine can still be invisible -- check the VIEWER, not
-    just the file.** The block-diagram SVGs were correct on disk and correct in
-    `mermaid-cli`'s own render (verified by eye), yet the Canvas pane showed a
-    **blank white stage** for every mermaid diagram. The root cause was in the
-    pane, not the drawings, and it was two independent bugs:
-
-    **(a) `parseFloat('100%')` returns `100`.** Mermaid emits `width="100%"`
-    on most diagrams. The viewer read the intrinsic size with
-    `parseFloat(getAttribute('width'))`, got a *truthy* 100, so the
-    `if(!iw || !ih)` viewBox fallback never fired -- it believed the drawing was
-    100 px wide instead of its viewBox width. Every derived number was then
-    wrong by that ratio: the fit box, the reported fit ratio, and the 100%
-    button. Clicking `100%` rendered a 1593 px diagram into a 100x583 box, so
-    the drawing landed as a ~100x36 px sliver in the corner: effectively
-    invisible.
-
-    **(b) The initial apply raced layout.** The pane creates the iframe and React
-    commits its geometry *after* the srcdoc has parsed, so the first apply saw a
-    zero-width wrap and `wrap.clientWidth || 1` sized the SVG to a **1 px**
-    sliver. Nothing re-measured, because only the WINDOW `resize` was listened
-    for -- and that does not fire when an iframe is resized by its parent. The
-    stage stayed blank until the user clicked Fit, which is exactly the reported
-    symptom.
-
-    Both are fixed (`px()` accepts a bare number or an `px` suffix only;
-    `paneW() <= 1` refuses to size, plus a `ResizeObserver` on the wrap), and
-    both are **mutation-tested** in `tools/check_canvas_viewer.py`, wired into
-    `tb/run_all.sh` as a gate.
-
-    **The measurement lesson is the real one.** Nothing outside could see the
-    problem: the iframe is sandboxed with an opaque origin, so the parent page
-    cannot read into it and neither can CDP's DOM domain. Reasoning about the
-    geometry produced a *plausible* story that was wrong twice. What worked was
-    reconstructing the pane's exact document in the scratch dir, running the
-    **shipped** FRAME_SCRIPT (extracted from the source, never paraphrased), and
-    measuring in a real browser. The fix was then confirmed by the pane's own
-    `lc-fit` messages: `0.465` = 741/1593.7, the correct ratio, where the
-    pre-fix value had been `7.41`.
-48. **A checker that re-implements the code under test cannot detect its bugs.**
-    The first draft of `check_canvas_viewer.py` re-derived the *fixed* arithmetic
-    in Python and passed -- while the JS could have regressed underneath it and
-    it would still have passed. Rewritten to extract the shipped `FRAME_SCRIPT`
-    and run it in node against a DOM stub, then **mutate it back to each pre-fix
-    form and require a FAIL**. Mutation A implies `iw=100` (the phantom percent
-    width); mutation B emits a `1`px width call. Both are detected. Same rule as
-    the firmware/TB rule elsewhere in this project: a guard that cannot fail is
-    indistinguishable from a guard that passes.
-49. **Beware repr/JSON escaping when matching source text.** Three patch
-    attempts failed on the line containing `if(VIEW.mode === 'fit')` because
-    every `repr()`/JSON view of it renders the single quotes with a leading
-    backslash -- display escaping that is **not in the file**. I chased that
-    phantom backslash through three anchors that could never match. Reading the
-    file as **bytes** (`b.find(b"VIEW.mode ===")`) settled it in one command.
-    When an anchor will not match, look at raw bytes before rewriting it again.
-50. **A "wait for the counter to change" delay is a PHASE-ROBUSTNESS bug, not a
-    style choice.** `uart_echo.pe` and `spi_xfer.pe` poll a free-running tick
-    counter for a change, which delivers `(0, 1]` ticks -- up to a full tick
-    short. Harmless for SPI (synchronous, the slave times off our edges) and a
-    sampling-margin cost for the UART. For I2C it is a **spec violation**: tLOW
-    is measured at the pin against a 4.7 us floor, and the first draft of
-    `firmware/i2c_pins.pe` took 1,384 cycles for 28 us of nominal delays
-    (0.83x). It would have passed a bench test. Wait for an exact TARGET instead
-    (`IN` / `ADD A, N` / `MOV X, A` / spin `SUB A, X` / `JNZ`).
-51. **An N-tick wait delivers (N-1, N] us, so the number that must clear a floor
-    is N-1.** Firmware cannot see where in the 60-cycle window a read lands
-    (`0 <= phi < 60` cycles), so the target tick is `60*N - phi` cycles away.
-    Constants must be chosen for the worst case: tLOW uses 7 ticks (worst case
-    6 us vs a 4.7 us floor), not the 5 that looks compliant nominally. Also --
-    give the larger count to the larger FLOOR: tLOW (4.7) gets 7 and tHIGH (4.0)
-    gets 6. The period is `tLOW+tHIGH` either way because the waits chain in
-    target form, so the swap costs nothing and rebalances the margins.
-52. **Open-drain prevents CONTENTION, not a wrong-moment drive.** The OD bit
-    makes "drive high into someone else's low" inexpressible, which is the
-    destructive fault. It does not stop the pin driving LOW at a bad moment:
-    the first draft of `i2c_pins.pe` wrote `PINOE` before `TXPIN`, and since the
-    reset output register holds `0x01`, bits 4-5 were still 0 -- SDA pulled low
-    for two cycles with SCL high, which **is a START condition**. So the init
-    order is OD, then OUT, then OE. Same class: pulling SDA low while SCL is
-    high on the way into a STOP emits a second START. Grammar bugs like these
-    leave every timing interval compliant, so a timing-only check cannot see
-    them -- assert the SEQUENCE too.
-53. **In Verilog, a negative `time` difference wraps, and a `>=` check on it
-    passes.** The I2C TB computed `tHIGH` as `scl_fall_t[1] - scl_rise_t[1]`, a
-    NEGATIVE difference; `time` is unsigned, so it wrapped to ~1.8e19 and
-    satisfied `tHIGH >= 4.0` forever. Its partner check was equally unfailable
-    (tLOW measured the idle stretch at 19 us). Two assertions that could never
-    fail, in a TB that passed. Pair every `>=` interval check with a "plausibly
-    the right measurement" upper bound, and mutation-test the TB itself -- that
-    is what surfaced both. See also gotcha 48.
