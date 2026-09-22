@@ -19,7 +19,16 @@ Both layers of the thesis now exist and are verified:
   timing are programs (`firmware/uart_echo.pe`, `firmware/spi_xfer.pe`,
   `firmware/i2c_pins.pe`) the CPU executes against the pad interface, a tick
   counter and — for I2C — the pin matrix. UART, SPI and I2C share the **same
-  8-bit port**, so nothing in the RTL knows which one is running. That is the
+  8-bit port**, so nothing in the RTL knows which one is running.
+
+  **As of 2026-09-24 the frame buffer is BUILT** (`rtl/pe_fbuf.v`, 2 KB behind a
+  byte interface on the same 1024x16 macro as the instruction memory, per
+  ADR-003). It is TB-proven on BOTH implementations -- the real macro and the
+  `FLOP=1` fallback -- with 5 mutations detected and 0 survived. It is **not yet
+  wired into the SoC**: 10BASE-T is its consumer, so the instance lands with the
+  receive path. Byte granularity comes free from the macro's bit-mask port; the
+  read lane costs a register, and getting that register's timing wrong only
+  shows up on pipelined accesses (gotcha 62). That is the
   competition thesis, demonstrated end to end in simulation for all three of the
   blog's baseline protocols.
 - **I2C is the one that needed new hardware, and it is 111 cells** — the pin
@@ -942,6 +951,34 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
       survey of all 24 TBs under both simulators (21 agree, 1 differs, 3 use
       X-dependent constructs) is the cheap way to find out before wiring
       anything.
+
+60. **`expect` is a RESERVED WORD in Icarus, and the error message does not say
+      so.** `integer expect;` fails with "Syntax error in variable list" and a
+      cascade of errors at unrelated line numbers (a `$sformatf` two statements
+      later, a bare `100[AW-1:0]`). It is reserved for the SVA grammar, in a file
+      that uses no assertions at all. Two other Icarus limits bit this file the
+      same way: `integer a, b;` (one name per declaration) and a bit-select on a
+      literal (`100[AW-1:0]`) are both rejected. When a compile produces a
+      cluster of syntax errors at lines that look fine, bisect the file by
+      truncation rather than reading -- the reported lines are symptoms.
+
+61. **A mutation touching ONE implementation can only be caught by that
+      implementation.** `tb/mutate_fbuf_tb.sh` first required both the macro and
+      the FLOP path to fail, which reported three genuine detects as "survived".
+      What matters is that a mutation is caught SOMEWHERE, plus that the TB is
+      non-vacuous on each path (which a baseline PASS establishes). But keep the
+      per-path result in the output: a mutation touching both paths while only
+      one notices is the shape of a real blind spot.
+
+62. **Test the PIPELINED access, not just the idle one.** Mutation testing found
+      that `tb_pe_fbuf`'s read checks all held their address stable across the
+      whole access, so replacing the registered lane with the LIVE address lane
+      passed every one of them. In a real frame walk the address changes every
+      cycle, and then the registered lane and the live one differ on every
+      iteration. Sample mid-cycle (after presenting the next address, before the
+      data latches) and check the byte still belongs to the OLD address. A memory
+      with one cycle of read latency is only tested by requests that overlap.
+
 
 ## Open questions / risks
 

@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen_signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-13 modules, 154 ports.
+14 modules, 160 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -152,6 +152,17 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_wire` | out | 1 | The latest half-cell sample, for a consumer that wants the raw oversampled level rather than Manchester bits. |
 | `locked` | out | 1 | **Confidence, not a gate.** Asserted after `cfg_lock_bits` well-formed cells; cleared by the first malformed one. `bit_en` is emitted whether or not locked — gating on it would drop the preamble, which is the part every protocol here expects to be dropped. Nothing in this repo gates on it. |
 | `dbg_phase` | out | `[3:0]` | The phase counter (distance from the last transition, mod SPB). Bring-up only; the capture phase is SPB/4 and 3·SPB/4. **SPB's ceiling is 16, not merely a multiple of 4** — this counter is 4 bits and `4'(SPB-1)` truncates above it, which silently kills all capture (SPB=20 emits nothing). Both constraints are elaboration errors in the RTL and are boundary-tested by `tb/param_guards.sh`. |
+
+## `pe_fbuf`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `we` | inp | 1 | _no note yet_ |
+| `waddr` | inp | `[((BYTES <= 2) ? 1 : $clog2(BYTES))-1:0]` | _no note yet_ |
+| `wdata` | inp | `[7:0]` | _no note yet_ |
+| `raddr` | inp | `[((BYTES <= 2) ? 1 : $clog2(BYTES))-1:0]` | _no note yet_ |
+| `rdata` | out | `[7:0]` | _no note yet_ |
 
 ## `pe_imem`
 

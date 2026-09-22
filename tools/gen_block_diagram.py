@@ -63,6 +63,22 @@ BLOCKS = [
         cells_key="pe_imem_macro",
     ),
     dict(
+        name="pe_fbuf",
+        source_file="pe_fbuf.v",
+        role="frame buffer: 2 KB behind a byte interface, same macro as pe_imem",
+        # instantiated_in=None is ACCURATE, not an oversight: the block is
+        # built and TB-proven on both its macro and FLOP paths, but no SoC
+        # instance drives it yet -- wiring it needs the receive path
+        # (10BASE-T is the consumer), which is the next milestone's work.
+        # ADR-003 chose the part; this is the RTL for it.
+        instantiated_in=None,
+        tb="tb_pe_fbuf.v",
+        # Same reason as pe_imem above: synth_area maps macro and flop builds
+        # separately, so the label must name the configuration that ships. 48
+        # cells is glue only -- the macro's area is in its LEF, not in gates.
+        cells_key="pe_fbuf_macro",
+    ),
+    dict(
         name="pe_serdes",
         source_file="pe_serdes.v",
         role="word engine: load 8-32 bits, pace with bit_en",
@@ -129,13 +145,16 @@ BLOCKS = [
 PLANNED = [
     ("pe_ctrl (SPI load path)", "boot the chip in real silicon; today the loader is a "
                                 "host port driven by the TB, so the chip cannot boot itself"),
-    ("frame buffer (2nd SRAM)", "ADR-003; 10BASE-T needs 2 KB. Instruction macro only, so far"),
     ("pe_serdes into the SoC", "the SERDES is routed and TB-proven but no SoC instance drives it"),
     ("I2C transaction layer", "byte transfer, ACK, 7-bit addressing; the pin-level grammar "
                               "(START/bit cell/STOP) landed 2026-09-23 -- "
                               "[[concepts/i2c-on-the-matrix]]"),
 ]
-# Removed 2026-09-23 as BUILT: "pe_pinmux into the SoC" and "I2C 1 us tick
+# Removed as BUILT: "pe_pinmux into the SoC" and "I2C 1 us tick divider"
+# (2026-09-23, adr-006-pin-matrix), and "frame buffer (2nd SRAM)" -- that is
+# rtl/pe_fbuf.v, the 1024x16 macro at 2 KB per ADR-003. A "planned" table is a
+# claim about the design like any other, so it is maintained with the same
+# intent as the orphan table: an entry that has shipped is a stale claim.
 # divider" (plan step 5, decisions/adr-006-pin-matrix). A "planned" table is a
 # claim about the design like any other, so it is maintained with the same
 # intent as the orphan table -- an entry that has shipped is a stale claim, not

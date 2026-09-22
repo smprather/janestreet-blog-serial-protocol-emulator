@@ -9,5 +9,7 @@ pe_cpu 383
 pe_pinmux 111
 pe_imem_flop 60806
 pe_imem_macro 12
-pe_uart_soc 1121
-tt_um_top 1126
+pe_fbuf_flop 45368
+pe_fbuf_macro 48
+pe_uart_soc 1261
+tt_um_top 1294

@@ -135,6 +135,11 @@ CASES=(
   # written from the same understanding as the firmware, so it can agree with it
   # about a wrong bit order and pass. The slave here decodes MOSI from the pins.
   "tb_pe_spi_soc|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_uart_soc.v|tb_pe_spi_soc"
+  # The frame buffer: 2 KB behind a byte interface, on the same SRAM macro
+  # as the instruction memory (ADR-003). Byte granularity comes from the
+  # macro's bit-mask port and the read lane is a register -- two silent
+  # failure modes, both mutation-tested.
+  "tb_pe_fbuf|../rtl/pe_fbuf.v|tb_pe_fbuf"
 )
 
 pass=0; fail=0; failed_names=()
@@ -378,6 +383,17 @@ if ./tb/mutate_spi_tb.sh > /tmp/mutate_spi.log 2>&1; then
 else
   echo "spi TB mutations: FAILED"
   tail -20 /tmp/mutate_spi.log
+  stale=1
+fi
+
+# The frame buffer's TB, mutation-tested on BOTH implementations (the macro and
+# the FLOP=1 fallback), because the fallback exists to stand in for the macro --
+# so a test that only covered one would leave that claim unchecked.
+if ./tb/mutate_fbuf_tb.sh > /tmp/mutate_fbuf.log 2>&1; then
+  echo "fbuf TB mutations: OK (no unexplained survivors)"
+else
+  echo "fbuf TB mutations: FAILED"
+  tail -20 /tmp/mutate_fbuf.log
   stale=1
 fi
 

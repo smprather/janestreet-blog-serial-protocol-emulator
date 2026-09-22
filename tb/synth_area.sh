@@ -88,6 +88,13 @@ report pe_pinmux    "rtl/pe_pinmux.v"                            pe_pinmux
 # the instance and its area comes from the macro's LEF, not from gates).
 report pe_imem_flop  "rtl/pe_imem.v"                            pe_imem "-chparam FLOP 1"
 report pe_imem_macro "rtl/pe_imem.v rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v" pe_imem
+# Frame buffer, BOTH ways round, for the same reason as pe_imem above: the
+# macro build has no synthesised cells (its area is in the LEF) while the flop
+# build is the number the design would pay without it. ADR-003 chose the same
+# 1024x16 part as the instruction memory, so the two macro lines differ only in
+# the glue around them.
+report pe_fbuf_flop   "rtl/pe_fbuf.v"                            pe_fbuf "-chparam FLOP 1"
+report pe_fbuf_macro  "rtl/pe_fbuf.v rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v" pe_fbuf
 # Note on the SoC: its IMEM/DMEM are register arrays, and yosys will not map
 # flip-flop arrays to an SRAM macro here. They therefore synthesise as thousands
 # of individual flops (~2,215 at 48.9 um2 each) and the mapped area is huge
