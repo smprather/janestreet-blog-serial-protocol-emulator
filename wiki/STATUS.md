@@ -1,8 +1,9 @@
 # Project Status — through 10BASE-T receive
 
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
-> Last updated: 2026-09-22 · branch `review/fix-invisible-defects`
-> (HEAD `76d54f8`) · the log's last entries are the recent work.
+> Last updated: 2026-09-22, after the nine-finding project review was worked
+> (`reviews/2026-09-22/REVIEW.md`; the log's last entry is the work). Branch
+> `review/fix-invisible-defects`.
 >
 > **Where the work is:** pure RTL functional-simulation development. The standing
 > user ruling is *do not run flow, DRC or LVS* — those are tapeout-prep and are
@@ -21,9 +22,9 @@ Both layers of the thesis now exist and are verified:
   codec mux, all self-checking-TB verified, all synthesized on real IHP sg13g2
   cells, and the SERDES through the full LibreLane place-and-route flow to a
   clean 66 MHz signoff.
-- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (914
-  cells) is the first protocol block that is deliberately NOT firmware, and
-  [[concepts/ethernet-scope]] says why with arithmetic: at a 100 ns bit period
+- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (1,100
+  cells after the review fixes) is the first protocol block that is deliberately
+  NOT firmware, and [[concepts/ethernet-scope]] says why with arithmetic: at a 100 ns bit period
   the single-cycle core has 48 instructions per byte, and a software CRC-32
   alone needs ~240. So the bit work is hardware and the firmware sequences
   frames. The block ties together FOUR previously-orphaned pieces -- `pe_dru`,
@@ -108,7 +109,7 @@ The one-line version, for the reader who wants it before clicking through:
                              └ pe_pinmux (111) ── per-pin {out,oe,od}
 
   BUILT, TB-verified, INSTANTIATED NOWHERE (4):
-    pe_serdes (539)  pe_dru (121)  pe_crc (209)  pe_codec_mux (115)
+    pe_serdes (539)  pe_dru (144)  pe_crc (209)  pe_codec_mux (115)
 ```
 
 
@@ -129,12 +130,12 @@ states the reasoning; do not "unify" them without reading it.
 | Bit stuffer/unstuffer | `rtl/pe_line_codec.v` | 84 | 1,290 | `tb_pe_bitstuff` |
 | Codec pipeline mux | `rtl/pe_codec_mux.v` | 115 | 1,691 (whole pipeline) | `tb_pe_codec_mux` |
 | **CRC / LFSR engine** (5-, 8-, 15-, 16-, 32-bit) | `rtl/pe_crc.v` | 209 | 3,354 | `tb_pe_crc` |
-| **DRU** (oversampled Manchester receive) | `rtl/pe_dru.v` | 116 | 2,065 | `tb_pe_dru` |
+| **DRU** (oversampled Manchester receive, DDR) | `rtl/pe_dru.v` | **144** | **2,315** | `tb_pe_dru` |
 | **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 383 | 4,939 | `tb_pe_cpu` |
 | **Pin matrix** (per-pin OUT/OE/IN/OD, open-drain, read-back) | `rtl/pe_pinmux.v` | **111** | **2,061** | `tb_pe_pinmux` |
 | **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
-| **Software-UART SoC** (CPU + tick timer + 8-bit pin port) | `rtl/pe_uart_soc.v` | **1,083** | **19,795 total** | `tb_pe_uart_soc`, `tb_pe_tick_status` |
-| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **1,083** | **19,795 total** | `tb_tt_um_protocol_emulator` |
+| **Software-UART SoC** (CPU + tick timer + pin matrix) | `rtl/pe_uart_soc.v` | **1,261** | **23,294 total** | `tb_pe_uart_soc`, `tb_pe_tick_status` |
+| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **1,294** | **23,382 total** | `tb_tt_um_protocol_emulator` |
 
 Firmware (no RTL cells — these are programs the CPU runs; see
 [[concepts/spi-as-firmware]]):
@@ -181,12 +182,16 @@ depth: 896 words of addressable-by-nothing SRAM for 79,674 µm². **The PC and t
 jump-target field had to widen in the same change.** Full reasoning and the
 rejected alternatives: [[decisions/adr-004-program-counter-width]].
 
-**Regression: 24/24 testbenches + 16/16 firmware tests pass, and the lint gate is
+**Regression: 26/26 testbenches + 17/17 firmware tests pass, and the lint gate is
 clean** (`tb/run_all.sh` runs the firmware regression first, then every TB, then
-`tb/lint.sh`, then the generated-doc drift checks, then two mutation harnesses --
-`tb/mutate_i2c_tb.sh` and `tb/mutate_spi_tb.sh`). Each mutation harness proves its
-testbench FAILS when the property it claims is broken, because a testbench that
-passes on broken RTL manufactures confidence.
+`tb/lint.sh`, then the generated-doc drift checks, then FOUR mutation harnesses --
+`tb/mutate_i2c_tb.sh`, `tb/mutate_spi_tb.sh`, `tb/mutate_fbuf_tb.sh` and
+`tb/mutate_eth_mac_tb.sh`). The lint gate covers `pe_eth_mac` and `pe_fbuf` as of
+the 2026-09-22 review, and it now fails on ANY yosys `ERROR:` — it used to grep
+for three known diagnostics and reported "elaborate OK" beside a file yosys
+could not parse at all. Each mutation harness proves its testbench FAILS when the
+property it claims is broken, because a testbench that passes on broken RTL
+manufactures confidence.
 
 **`tb/lint.sh` is not optional, and the reason is the most useful thing in this
 file.** A previous revision said the Verilator warnings were "intentional". They
@@ -222,8 +227,19 @@ every Manchester transition pattern (00, 01, 10, 11 — the complete set of thin
 half-cell boundary can look like), 32-bit runs, an Ethernet preamble+SFD frame, and a
 random soak, and requires the bits back. It then feeds the DRU into a real `pe_manch`
 and requires its `rx_err` to stay quiet, which is what makes the halves a legal
-symbol and not merely "some value". Mutation-checked: swapping `rx_first`/`rx_second`
-fails the run.
+symbol and not merely "some value".
+
+**The grid is DUAL-EDGE as of the 2026-09-22 review.** The DRU had been sampling
+rising edges only, so at the 60 MHz core and SPB=12 it decoded a 200 ns bit while
+10BASE-T is 100 ns/bit — real-rate receive was missed entirely, and the TBs hid it
+by driving the wire at half rate. ADR-002's latch-pair DDR front end is now built:
+the rising sample goes through the 2-flop synchronizer, the falling sample through a
+transparent-high latch and a flop, an interleaved 3-tap majority filters the 2×
+stream, and a task-based grid machine consumes both samples per clock. `tb_pe_dru`
+and `tb_pe_eth_mac` now drive REAL 60 MHz / 100 ns bits; the Ethernet TB is real
+frames with a real FCS. One honest limitation is recorded there: a 3-tap majority
+outvotes an isolated spike on a stable level, but a spike inside the majority's
+window of a real transition can move the filtered edge by a sample.
 
 Protocol testbenches (one per target, each wrapping the same SERDES with that
 protocol's real framing): UART 8N1 · SPI mode 0 full duplex · I2C 7-bit
@@ -281,9 +297,11 @@ The "still to come" row is the two known remaining consumers: the frame buffer i
 **The design is no longer area-constrained**, which is the whole point of the swap:
 the remaining risk in this project is now verification, not floorplanning.
 
-Gate count is not the constraint: 1,083 cells for the whole SoC against ~24,000 for
-24 tiles at the blog's ~1K cells/tile — about 4.5% of the logic budget, with the
-SERDES's 539 and the codecs' 115 on top.
+Gate count is not the constraint: 1,261 cells for the whole SoC against ~24,000 for
+24 tiles at the blog's ~1K cells/tile — about 5.3% of the logic budget, with the
+SERDES's 539 and the codecs' 115 on top. (The row above is the SRAM-swap
+measurement; the pin matrix moved inside the SoC afterwards, which is the +178
+cells.)
 
 **Shape matters more than tile count**, because a macro has to physically fit the
 rectangle. TT notation is WIDTH × HEIGHT:

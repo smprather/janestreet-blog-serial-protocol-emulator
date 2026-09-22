@@ -1,23 +1,32 @@
-# Handoff — state of the repo (2026-09-20)
+# Handoff — state of the repo (2026-09-22)
 
 Written for whoever picks this up next, human or agent. If you are an agent: read
-this, then `wiki/STATUS.md`, then `wiki/plans/through-i2c.md`. That pair is the
-orientation, and it is current as of the timestamp above.
+this, then `wiki/STATUS.md`, then `reviews/2026-09-22/REVIEW.md` (the nine-finding
+review and how each one was worked). The pair is the orientation, and it is
+current as of the timestamp above.
 
 ## What is verified right now
 
 Run these two and you will see the state, not a claim about it:
 
 ```bash
-./tb/run_all.sh            # 21/21 TBs + 13/13 firmware tests + lint, exits 0
-./tb/synth_area.sh         # mapped cells/area for all 12 blocks; non-zero on
-                           # a yosys driver conflict or implicit declaration
+./tb/run_all.sh            # 26/26 TBs + 17/17 firmware + lint + 4 mutation
+                           # suites + generated-doc drift, exits 0
+./tb/run_all.sh --fast     # same verdicts, parallel TB loop, 4-state iverilog
+./tb/synth_area.sh         # mapped cells/area for all blocks; non-zero on
+                           # a yosys driver conflict, ERROR or implicit declaration
 ```
 
-Measured 2026-09-20: `run_all.sh` → `TOTAL: 21 PASS: 21 FAIL: 0`, `lint clean`, plus
+Measured 2026-09-22 after the review work: `run_all.sh --fast` →
+`TOTAL: 26 PASS: 26 FAIL: 0`, `FIRMWARE: 17 PASS: 17 FAIL: 0`, `lint clean`
+(13 verilator tops + 11 yosys elaborations), all four mutation suites green, plus
 `signal glossary up to date`, `protocol pin budget up to date`,
-`sram budget up to date`, `crc config up to date`. The `gen_*` docs are generated from the RTL/PDK and
-drift-checked inside the regression, so a renamed port or deleted TB fails the run.
+`sram budget up to date`, `crc config up to date`, `clock arithmetic up to date`,
+`block diagram up to date`, `canvas viewer: OK`. The `gen_*` docs are generated
+from the RTL/PDK and drift-checked inside the regression, so a renamed port or
+deleted TB fails the run. A `git archive` clone with none of the ignored diagrams
+present also exits 0 (the diagram gate is a committed source hash now; see
+`reviews/2026-09-22/REVIEW.md` finding 7).
 
 ## The thing that actually works
 
@@ -31,6 +40,22 @@ fast loop for firmware work (2 s, no iverilog).
 If you change anything in the firmware timing path, run **both** the TB and the
 emulator. They disagreed once and that disagreement is how the real bug was found
 (see below).
+
+## The 2026-09-22 review, in one paragraph
+
+Nine defects were found on a `git archive` clone where every test passed; the
+report is `reviews/2026-09-22/REVIEW.md`. Two change how you should read the
+RTL. (1) **The DRU sampled rising edges only**, so the advertised 60 MHz /
+100 ns 10BASE-T grid did not exist — the testbenches scaled the wire to the
+clock. It is dual-edge now (ADR-002's latch pair), and both `tb_pe_dru` and
+`tb_pe_eth_mac` drive real bit timing; the Ethernet TB is real frames with a real
+FCS. (2) **One oversized frame could zero the receiver's `room` permanently**
+(the reclaim truncated `pay_cnt` to 11 bits, and a full 2,048-byte frame is
+`11'h000`). The rest were the submission source lists, the emulator's timer
+order and stop→run prefetch, Ethernet padding, fresh-clone diagram/Canvas gates,
+`peasm --rtl-init`, and the lint gate's coverage — which now includes
+`pe_eth_mac`/`pe_fbuf` and fails on ANY yosys `ERROR:`, because the old gate
+grepped for three known diagnostics and passed a file yosys could not parse.
 
 ## Where the bodies are buried
 

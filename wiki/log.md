@@ -893,3 +893,62 @@
 - **Lesson:** the log is the one artifact that cannot be reconstructed from the
   code, so it is the first thing to rot. Four commits had landed with no entry
   because each felt like "still in progress".
+
+## [2026-09-22] review | nine findings worked: sources, DDR receive, framing, tools, gates
+
+- **A full project review found 9 defects** (3×P1, 6×P2) on a `git archive` clone
+  where the testbenches, firmware and mutation suites were all green. The report
+  and the reproduction artifacts are `reviews/2026-09-22/REVIEW.md` and its
+  neighbours; this entry is the log of the work.
+- **[P1] The Tiny Tapeout `info.yaml` source list did not compile.** It omitted
+  `pe_imem`, `pe_pinmux` and the SRAM shell; `iverilog` ended in `Unknown module
+  type: RM_IHPSG13_1P_1024x16_c2_bm_bist`. The LibreLane SoC config omitted
+  `pe_pinmux` the same way. Both lists completed and the TT list verified by
+  compiling it.
+- **[P1] The DRU sampled RISING EDGES ONLY.** At 60 MHz and SPB=12 it decoded a
+  200 ns bit; 10BASE-T is 100 ns/bit, so a real-rate stimulus was missed
+  entirely. The TBs drove the wire at half rate and hid it — a grid claim its
+  test could not reach. Built ADR-002's latch-pair DDR front end (rising 2-flop
+  synchronizer + falling transparent-high latch and flop), an interleaved 3-tap
+  majority with the latency match that keeps the filter from moving the grid, and
+  a task-based two-samples-per-clock grid machine. Both `tb_pe_dru` and
+  `tb_pe_eth_mac` now drive real 60 MHz / 100 ns bits; the Ethernet TB's real
+  frames + FCS pass end to end.
+- **[P1] One oversize frame exhausted the receiver permanently.** The reclaim
+  `{1'b0, pay_cnt[AW-1:0]}` truncates: a frame that fills 2,048 bytes leaves
+  `pay_cnt = 2048 = 11'h000`, so the reclaim added zero and `room` stayed 0 until
+  reset. Full-width reclaim; test = oversize from empty followed by a valid frame.
+- **[P2] Correctly PADDED short length frames were rejected** — the receiver
+  jumped from the declared length to the FCS, folding pad bytes as if they were
+  the FCS. New `S_PAD` consumes `46 - field` pad bytes (folded, not stored).
+- **[P2] The emulator ticked BEFORE executing**, so a wrap-cycle read returned
+  the new counter and could clear a flag the RTL preserves (set-beats-clear). It
+  now executes then ticks; the stopped path still ticks and now keeps
+  `imem_rdata = imem[0]`, so stop→run cannot skip instruction 0. Directed RTL
+  cases in `tb_pe_tick_status` and a new `emulate: timer wrap semantics` case.
+- **[P2] The regression could not pass on a fresh clone.** The block-diagram gate
+  compared timestamps against git-ignored SVGs and the Canvas check crashed on
+  the missing file. `diagrams/block-diagram.stamp` (a committed hash of the
+  mermaid source) is now the gate, and the Canvas check uses a built-in fixture.
+  Verified in a no-SVG clone, including that mermaid drift still fails.
+- **[P2] The lint gate omitted `pe_eth_mac` and `pe_fbuf`.** Direct `verilator
+  -Wall` on the MAC produced five findings, two of them 12 dead `dst`/`src`
+  registers; joining the file list surfaced a `TIMESCALEMOD` too. Fixed in RTL
+  (7-bit shift registers, dead registers removed, sized subtraction, timescale
+  removed), not suppressed. **The gate also ignored yosys `ERROR:`** — it listed
+  three expected diagnostics, so the DDR draft's struct-returning function that
+  yosys 0.68 cannot parse sailed through as "elaborate OK". Now any `ERROR` fails.
+- **[P2] `peasm.py --rtl-init` silently truncated to 128 words and emitted
+  invalid Verilog** (`initial $readmemh_unused;` plus a bare list). It now emits a
+  valid one-word-per-line `initial` block at the real 1,024-word depth and errors
+  on truncation.
+- **Files:** `rtl/pe_dru.v`, `rtl/pe_eth_mac.v`, `rtl/pe_fbuf.v`, `tb/tb_pe_dru.v`,
+  `tb/tb_pe_eth_mac.v`, `tb/tb_pe_tick_status.v`, `tb/mutate_eth_mac_tb.sh`,
+  `tb/mutate_fbuf_tb.sh`, `tb/lint.sh`, `tb/run_all.sh`,
+  `tb/run_firmware_tests.sh`, `tools/peasm.py`, `tools/peemu.py`,
+  `tools/render_block_diagram.py`, `tools/check_canvas_viewer.py`, `info.yaml`,
+  `flow/pe_uart_soc.json`, `.gitignore`, `diagrams/block-diagram.stamp`,
+  `reviews/2026-09-22/`.
+- **Regression:** RTL 26/26, firmware **17/17**, 13 lint tops + 11 elaborations
+  clean, all four mutation suites green, generated-doc drift checks green, and
+  `tb/run_all.sh --fast` exits 0 in a `git archive` clone with no ignored files.
