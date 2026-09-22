@@ -32,6 +32,13 @@ survived=0
 # Files any mutation may touch, for the snapshot/restore.
 MUTABLE="rtl/pe_uart_soc.v rtl/pe_pinmux.v firmware/i2c_pins.pe"
 
+# The pristine snapshot every restore is verified against. NOT git: a harness
+# must work in a `git archive` clone (which has no .git at all) and must not
+# call a legitimate uncommitted change a failed restore -- measured both ways
+# on the fresh-clone regression the review runs.
+PRISTINE=$(mktemp -d)
+for f in $MUTABLE; do cp "$f" "$PRISTINE/"; done
+
 run_case() {
   local name="$1"; shift
   local script="$1"
@@ -57,15 +64,17 @@ run_case() {
   # leftover mutation. The verdict was nonsense and it looked like a real
   # regression, which is the worst kind of wrong answer: loud and misleading.
   #
-  # So the restore is VERIFIED, per case, against git -- comparing the working
-  # tree to HEAD is exactly the property that matters.
+  # So the restore is VERIFIED, per case, against a PRISTINE SNAPSHOT: are the
+  # mutable files byte-identical to the ones this run started from?
   verify_restore() {
-    if ! git diff --quiet -- $MUTABLE; then
-      echo "  RESTORE FAILED -- the working tree is DIRTY:"
-      git diff --stat -- $MUTABLE | sed 's/^/    /'
-      echo "    Refusing to continue: every later result would be measuring the mutant."
-      exit 3
-    fi
+    for f in $MUTABLE; do
+      if ! cmp -s "$PRISTINE/$(basename "$f")" "$f"; then
+        echo "  RESTORE FAILED -- $f does not match the pristine snapshot:"
+        diff "$PRISTINE/$(basename "$f")" "$f" | head -10 | sed 's/^/    /'
+        echo "    Refusing to continue: every later result would be measuring the mutant."
+        exit 3
+      fi
+    done
   }
 
   if ! python3 "$script"; then
@@ -134,7 +143,7 @@ run_case() {
 }
 
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" "$PRISTINE"' EXIT
 
 # ---------------------------------------------------------------- mutation 1
 # Break the OD gate in pe_pinmux: make pad_oe ignore the od term, so a pin in
