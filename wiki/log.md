@@ -595,3 +595,35 @@
 - Also fixed: two stale 40-clock I2C tick figures (§ 1 µs = 60 clocks at 60 MHz)
   in `HANDOFF.md` and the plan flowchart JSON, and STATUS's "all 16 RTL TBs" → 22.
 - Verified: 22/22 RTL, 15/15 firmware, guards OK, lint clean, 4/4 drift gates.
+
+
+## [2026-09-22] build | The clock is locked at 60 MHz, and pe_serdes closes there CLEAN
+- **`CLK_HZ` is a `localparam`, not a parameter.** Nothing ever instantiated
+  `pe_uart_soc` at another rate: the TT top passed `60_000_000` — the same value
+  as the default it was overriding — and every TB passed `60_000_000`. A
+  parameter nobody varies is not a knob, it is a second place for the derived
+  arithmetic to disagree with the first, which this project has paid for twice
+  (the 173 tick, the 40-clock I2C µs). **Proven netlist-neutral**: `synth_area.sh`
+  reports `pe_uart_soc` at **1121 cells / 19,905.7824 um2** and `tt_um_top` at
+  **1126 / 19,922.0742** before AND after — a refactor that changes no cell.
+- **The 66 MHz STA signoff target is RETIRED.** Both flow configs moved
+  `CLOCK_PERIOD` 15.15 -> **16.667**. Closing at 66 made every reported slack
+  number require a conversion by the reader, and a longer period is strictly
+  easier for setup — a design that closes at 66 has already closed at 60. The
+  pad-ceiling hedge is honestly gone (no IHP-specific pad figure is published
+  either way).
+- **New drift-gated page: [[reference/clock-arithmetic]]** —
+  `tools/gen_clock_arithmetic.py` READS `CLK_HZ` OUT OF THE RTL and derives every
+  protocol constant from it. Exact at 60 MHz: 10BASE-T half-UI 50 ns = **3**
+  ticks, 10BASE-T bit = 6, USB-FS 83.33 ns = **5**, USB-LS 666.67 ns = **40**,
+  I2C µs = **60**, SPI 100 ns = **6**. Not exact: **UART 115200 half-bit = 260.417**
+  -> 260, the one approximation (+0.160% baud). It asserts `SPB=12` and
+  `TICKS_PER_BIT=260` and warns if either moves. Wired into `run_all.sh` as the
+  fifth gate, which is what makes the lock stick.
+- **`pe_serdes` re-signed at 60 MHz and it is CLEAN — every gate:**
+  `No setup violations found` / `No hold violations found` / `No max slew
+  violations found` / `No max cap violations found`, plus Magic DRC clear,
+  KLayout DRC clear, LVS clear, XOR clear, 0-byte `error.log`. Setup worst
+  **+8.816 ns** (was +7.6 at 66), hold **+0.116 ns**. Better than the 66 MHz
+  run, as the relaxed period predicts.
+- Verified: 22/22 RTL, 15/15 firmware, guards OK, lint clean, **5/5 drift gates**.
