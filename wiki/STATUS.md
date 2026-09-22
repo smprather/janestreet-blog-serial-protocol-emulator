@@ -106,6 +106,7 @@ states the reasoning; do not "unify" them without reading it.
 | **CRC / LFSR engine** (5-, 8-, 15-, 16-, 32-bit) | `rtl/pe_crc.v` | 209 | 3,354 | `tb_pe_crc` |
 | **DRU** (oversampled Manchester receive) | `rtl/pe_dru.v` | 116 | 2,065 | `tb_pe_dru` |
 | **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 383 | 4,939 | `tb_pe_cpu` |
+| **Pin matrix** (per-pin OUT/OE/IN/OD, open-drain, read-back) | `rtl/pe_pinmux.v` | **111** | **2,061** | `tb_pe_pinmux` |
 | **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
 | **Software-UART SoC** (CPU + tick timer + 8-bit pin port) | `rtl/pe_uart_soc.v` | **1,083** | **19,795 total** | `tb_pe_uart_soc`, `tb_pe_tick_status` |
 | **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **1,083** | **19,795 total** | `tb_tt_um_protocol_emulator` |

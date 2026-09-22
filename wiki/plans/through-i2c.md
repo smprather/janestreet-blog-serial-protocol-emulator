@@ -370,7 +370,7 @@ data to settle, which is still far inside `tSU;DAT`.
 | 2 | Regenerate the glossary; add both new TBs + `run_firmware_tests.sh` to `run_all.sh`; extend `synth_area.sh`; fix the 174→173 comments | 1 | `run_all.sh` exits 0 with the new tests listed |
 | 3 | Commit milestone 2 (CPU, SoC, assembler, emulator, firmware, TBs) and update [[STATUS]] + `log.md` | 2 | nothing untracked, STATUS describes what exists |
 | 3b | ~~TT top level + `info.yaml`~~ **DONE 2026-09-20**: `rtl/tt_um_protocol_emulator.v`, `info.yaml`, `tb/tb_tt_um_protocol_emulator.v` (pad contract: no X on an output, `ena` gates nothing, open-drain never drives high) | — | the repo is submittable; `uio_oe` has a real path to a pad |
-| 4 | Pin matrix / OE, as its own block with its own TB; replaces the fixed mapping in the TT wrapper | 3b | open-drain, read-back and tri-state verified |
+| 4 | ~~Pin matrix / OE~~ **DONE 2026-09-22**: `rtl/pe_pinmux.v` (OUT/OE/IN/OD per pin), `tb/tb_pe_pinmux.v`, 7/7 mutations caught ([[concepts/pin-matrix]]) | 3b | open-drain, read-back and tri-state verified |
 | 4b | ~~SPI as firmware~~ **DONE 2026-09-22**: `firmware/spi_xfer.pe` (mode-0 master, 70 words) on the shared 8-bit port; emulator mode-0 slave model; 3 mutations built ([[concepts/spi-as-firmware]]) | 3b | emulator exchanges 4 frames both directions; `run_firmware_tests.sh` green. **Open:** no `tb_pe_spi_soc.v` — SPI firmware has no RTL testbench |
 | 5 | I2C SoC wiring (pin matrix + tick divider for 1 µs) | 4 | TB: pins do what firmware says |
 | 6 | I2C firmware: START/STOP first, then byte, then ACK, then read | 1,5 | emulator decodes a full transaction |

@@ -434,3 +434,56 @@
   with the number and say explicitly that it is a measured figure that moves.
 - Verified: 21/21 RTL TBs, 15/15 firmware, param guards OK, lint clean,
   4/4 drift gates. Committed: 36f88cb, fd13b02, c70cf70.
+
+## [2026-09-22] build | Pin matrix (plan step 4) — the I2C gate, 111 cells
+- **`rtl/pe_pinmux.v` (111 cells / 2,061 µm²) is the last hardware the baseline
+  tier needs.** Four registers per pin: OUT, OE, IN (read-only), OD. Everything
+  after this (I2C, PS/2, SWD, USB) is firmware. The plan predicted "low hundreds
+  of cells" and smaller than the SERDES (539) because it has no datapath; both
+  hold. Table in [[STATUS]].
+- **The `OD` bit is the load-bearing decision, and it is about the FIRMWARE
+  IDIOM, not just safety.** `pad_oe = oe & ~(od & out)` makes open-drain
+  bus contention *unreachable* rather than merely discouraged -- but the payoff
+  is that `out=1`/`out=0` sends a 1/a 0 in BOTH push-pull and open-drain modes,
+  so the same bit-banging loop drives either. Without it open-drain firmware
+  toggles `oe` instead of `out` and every loop differs per mode, which would
+  falsify "swap the program, gates unchanged" for I2C specifically.
+- **`IN` is the pad, sampled combinationally, not a register.** A registered copy
+  reports the PREVIOUS bit cell, so an arbitration check would compare this
+  cell's drive against last cell's bus and report a win while the bus was being
+  fought. Arbitration is entirely a question of latency, so the read path has
+  none.
+- **Rejected the plan's own "mux of 8 protocol wire sets" (`cfg_prot[i]`).**
+  The selector would hold a constant per protocol -- a build-time map wearing a
+  runtime hat -- and a bad selector value is a configuration that can disagree
+  with the register file. Per-pin `{out,oe,od}` is smaller and cannot be
+  self-inconsistent. Recorded in the RTL header and [[concepts/pin-matrix]].
+- **`tb/tb_pe_pinmux.v` proves six properties, mutation-checked 7/7.** The
+  interesting ones: the OD safety property is checked on `pad_oe` (the
+  mechanism), NOT on the level, because a released pin and a driven-high pin
+  both read 1 on an idle bus -- a level-only check passes for a design that
+  shorts out on a busy one. And the wire model **reports contention as X rather
+  than resolving it to a level**: a model that picked a winner would hide the
+  fault it exists to expose. Mutations caught: drop OD gate (6), OD ignores OE
+  (8), OUT/OE share a register (18), IN reads reg_out (1), write to IN clobbers
+  OUT (1), reset does not clear OD (1), reset does not release (3).
+- **Two traps found and recorded.** (1) `$error` takes ONE string at
+  elaboration in Icarus; a `%0d` argument makes the tool emit "sorry:
+  Elaboration tasks currently only support a single string argument" INSTEAD of
+  the message, so the guard fires but the reader gets a parser complaint about
+  the guard. Same trap as `pe_dru.v:117`. (2) The first wire model resolved all
+  8 pins with one bus-wide ternary, so a single low pin dragged the whole byte
+  low and two "other pins stay high" checks failed for a reason with nothing to
+  do with the DUT -- a model wrong in the same direction as a plausible DUT bug
+  is worse than no model.
+- **`tb/*.vcd` is now gitignored.** `tb/tb_pe_pinmux.vcd` (40 KB) got committed
+  with this change because the existing rules named only `pe_serdes.vcd` and
+  `sim/*.vcd`; one glob covers the class. A VCD is an artifact of a run.
+- Updated: `rtl/pe_pinmux.v`, `tb/tb_pe_pinmux.v`, `tb/run_all.sh`, `tb/lint.sh`,
+  `tb/param_guards.sh` (PINS guard: 0 and 9 rejected, 1 and 8 accepted),
+  `tb/synth_area.sh`, `tools/gen_signal_glossary.py` + regenerated
+  `wiki/reference/signal-names.md`, `wiki/concepts/pin-matrix.md` (new),
+  `wiki/index.md` (26 pages), `wiki/plans/through-i2c.md` (step 4 done),
+  `wiki/STATUS.md`, `.gitignore`.
+- Verified: 22/22 RTL TBs, 15/15 firmware, param guards OK, lint clean,
+  4/4 drift gates. Committed: 19e4b2c, 1509c65.

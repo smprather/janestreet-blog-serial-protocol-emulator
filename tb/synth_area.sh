@@ -77,6 +77,11 @@ report pe_crc       "rtl/pe_crc.v"                               pe_crc
 # in the right range (see the measured figure in STATUS).
 report pe_dru       "rtl/pe_dru.v"                               pe_dru
 report pe_cpu       "rtl/pe_cpu.v"                               pe_cpu
+# The pin matrix. The plan estimated "8 pins x (2 out + 1 oe + 1 in + 1 cfg) ~
+# 40 flops plus a small mux tree, in the low hundreds of cells", and to be
+# SMALLER than the SERDES (539) because it has no datapath. The measured figure
+# in STATUS is the test of that claim.
+report pe_pinmux    "rtl/pe_pinmux.v"                            pe_pinmux
 # Instruction memory, BOTH ways round. This is the swap's whole argument in one
 # line each: the flop array at the same 1024-word depth is the number the design
 # used to pay, and the macro build has NO synthesised cells at all (yosys keeps
