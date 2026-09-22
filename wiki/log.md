@@ -634,3 +634,41 @@
   **SoC's SRAM pins**, and whether the relaxed period clears them is the question
   the SoC run answers, not this one.
 - Verified: 22/22 RTL, 15/15 firmware, guards OK, lint clean, **5/5 drift gates**.
+
+
+## [2026-09-22] build | The 60 MHz full-SoC signoff lands: 76/80, timing closed, only DRC defers
+- **`RUN_2026-09-22_02-58-32`** — the first full-SoC run signed off at
+  `CLOCK_PERIOD` 16.667 ns = **60 MHz directly**. Reached **76/80**.
+  | | value |
+  |---|---|
+  | setup WNS (slow, 1.08 V/125 C) | **+2.6601 ns** |
+  | hold WNS (fast, 1.32 V/-40 C) | **+0.1209 ns** |
+  | setup / hold violating paths | **0 / 0**, all three corners |
+  | max cap / max slew / max fanout | 8 / 10 / 7 — **warn only, do not gate** |
+  | die | 1002 x 432 um2 = **432,864 um2**, 27.44% utilisation, 1,921 stdcells |
+- **Every non-DRC checker is clear**: lint (errors, warnings, timing), unmapped
+  Yosys instances, power grid, routing DRC, disconnected pins, XOR, illegal
+  overlap, **LVS**, setup, hold. Plus IR drop 0.30% and `PSM-0040`.
+- **The +2.6601 ns reproduces, to four significant figures, the +2.660 ns
+  predicted by hand** from the 66 MHz run's critical path (arrival 13.4479 +
+  capture clock 0.6419 - uncertainty 1.0 - library setup 0.2008). Independent
+  check on the margin arithmetic.
+- **The die is exactly the 6x4 allocation** (6 x 167 x 4 x 108 = 1002 x 432), so
+  the routed result sits inside the confirmed tile budget with no scaling
+  assumption. The SRAM macro alone is 79,674 um2 = 18.4% of the die.
+- **The DRC counts are BYTE-IDENTICAL to the 66 MHz run** — 1113909 Magic / 2672
+  KLayout both times, and `error.log` is the same 85 bytes in both. Cleanest
+  evidence yet that they are macro-internal geometry, independent of the design's
+  timing. Combined with the macro-alone diff (gotcha 44) and IHP's own template
+  hitting the same class with no SRAM at all (gotcha 45), the finding is the
+  PDK's.
+- **What defers, exactly, and nothing else:** the 85-byte `error.log` holds two
+  lines — `1113909 Magic DRC errors found. - deferred` and `2672 KLayout DRC
+  errors found. - deferred`. That is the whole failure list. (An earlier reading
+  of "0-byte error.log" was taken mid-run, before the flow wrote it; corrected.)
+- **Also corrected:** gotcha 39 said the flow GATES on max-slew/max-cap. It does
+  not — `MAX_SLEW_VIOLATION_CORNERS`/`MAX_CAP_VIOLATION_CORNERS` default to `[""]`
+  and the empty string matches no corner, so those checkers can only warn. Read
+  the mechanism out of `librelane/steps/checker.py` and confirmed in
+  `resolved.json`. To make them gates: set both to `["*"]`.
+- Verified: 22/22 RTL, 15/15 firmware, guards OK, lint clean, 7/7 drift gates.
