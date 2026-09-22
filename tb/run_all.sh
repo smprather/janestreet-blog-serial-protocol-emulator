@@ -227,5 +227,18 @@ if command -v npx >/dev/null 2>&1; then
 else
   echo "rendered block diagrams: SKIPPED (no npx for mermaid-cli)"
 fi
+
+# The Canvas viewer's own arithmetic. It renders every diagram in diagrams/, so
+# a sizing bug there makes a correct diagram look broken -- which is exactly what
+# happened: width="100%" was parsed as an intrinsic 100 px. This checks the
+# shipped FRAME_SCRIPT by running it, and mutation-tests both fixes.
+if python3 tools/check_canvas_viewer.py > /tmp/canvas_viewer.log 2>&1; then
+  echo "canvas viewer: OK"
+else
+  echo "canvas viewer: FAILED"
+  cat /tmp/canvas_viewer.log
+  stale=1
+fi
+
 [ "$stale" -eq 0 ] || exit 1
 [ "$lint_rc" -eq 0 ] || { echo "lint gate FAILED (see above)"; exit 1; }

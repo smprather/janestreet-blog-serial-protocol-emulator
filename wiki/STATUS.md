@@ -879,3 +879,58 @@ without ever writing.
     per-word cost of flop memory. Read before touching the SoC's memories.
 11. [[concepts/ethernet-scope]] — what the 10BASE-T stretch goal is and is not,
     and the throughput arithmetic that puts Ethernet bits in hardware.
+
+47. **A diagram that renders fine can still be invisible -- check the VIEWER, not
+    just the file.** The block-diagram SVGs were correct on disk and correct in
+    `mermaid-cli`'s own render (verified by eye), yet the Canvas pane showed a
+    **blank white stage** for every mermaid diagram. The root cause was in the
+    pane, not the drawings, and it was two independent bugs:
+
+    **(a) `parseFloat('100%')` returns `100`.** Mermaid emits `width="100%"`
+    on most diagrams. The viewer read the intrinsic size with
+    `parseFloat(getAttribute('width'))`, got a *truthy* 100, so the
+    `if(!iw || !ih)` viewBox fallback never fired -- it believed the drawing was
+    100 px wide instead of its viewBox width. Every derived number was then
+    wrong by that ratio: the fit box, the reported fit ratio, and the 100%
+    button. Clicking `100%` rendered a 1593 px diagram into a 100x583 box, so
+    the drawing landed as a ~100x36 px sliver in the corner: effectively
+    invisible.
+
+    **(b) The initial apply raced layout.** The pane creates the iframe and React
+    commits its geometry *after* the srcdoc has parsed, so the first apply saw a
+    zero-width wrap and `wrap.clientWidth || 1` sized the SVG to a **1 px**
+    sliver. Nothing re-measured, because only the WINDOW `resize` was listened
+    for -- and that does not fire when an iframe is resized by its parent. The
+    stage stayed blank until the user clicked Fit, which is exactly the reported
+    symptom.
+
+    Both are fixed (`px()` accepts a bare number or an `px` suffix only;
+    `paneW() <= 1` refuses to size, plus a `ResizeObserver` on the wrap), and
+    both are **mutation-tested** in `tools/check_canvas_viewer.py`, wired into
+    `tb/run_all.sh` as a gate.
+
+    **The measurement lesson is the real one.** Nothing outside could see the
+    problem: the iframe is sandboxed with an opaque origin, so the parent page
+    cannot read into it and neither can CDP's DOM domain. Reasoning about the
+    geometry produced a *plausible* story that was wrong twice. What worked was
+    reconstructing the pane's exact document in the scratch dir, running the
+    **shipped** FRAME_SCRIPT (extracted from the source, never paraphrased), and
+    measuring in a real browser. The fix was then confirmed by the pane's own
+    `lc-fit` messages: `0.465` = 741/1593.7, the correct ratio, where the
+    pre-fix value had been `7.41`.
+48. **A checker that re-implements the code under test cannot detect its bugs.**
+    The first draft of `check_canvas_viewer.py` re-derived the *fixed* arithmetic
+    in Python and passed -- while the JS could have regressed underneath it and
+    it would still have passed. Rewritten to extract the shipped `FRAME_SCRIPT`
+    and run it in node against a DOM stub, then **mutate it back to each pre-fix
+    form and require a FAIL**. Mutation A implies `iw=100` (the phantom percent
+    width); mutation B emits a `1`px width call. Both are detected. Same rule as
+    the firmware/TB rule elsewhere in this project: a guard that cannot fail is
+    indistinguishable from a guard that passes.
+49. **Beware repr/JSON escaping when matching source text.** Three patch
+    attempts failed on the line containing `if(VIEW.mode === 'fit')` because
+    every `repr()`/JSON view of it renders the single quotes with a leading
+    backslash -- display escaping that is **not in the file**. I chased that
+    phantom backslash through three anchors that could never match. Reading the
+    file as **bytes** (`b.find(b"VIEW.mode ===")`) settled it in one command.
+    When an anchor will not match, look at raw bytes before rewriting it again.

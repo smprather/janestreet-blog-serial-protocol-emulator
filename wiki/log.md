@@ -672,3 +672,29 @@
   the mechanism out of `librelane/steps/checker.py` and confirmed in
   `resolved.json`. To make them gates: set both to `["*"]`.
 - Verified: 22/22 RTL, 15/15 firmware, guards OK, lint clean, 7/7 drift gates.
+
+## [2026-09-22] fix | The Canvas pane showed every mermaid diagram blank
+- **Symptom:** `diagrams/block-diagram-*.svg` rendered fine in `mermaid-cli` and
+  in a browser, but the Canvas pane showed a white stage until **Fit** was
+  clicked. Reported from a screenshot.
+- **Two independent bugs in `tools/live-canvas/dashboard/dist/index.js`:**
+  1. `parseFloat('100%')` = **100** (truthy), so the viewBox fallback never
+     fired: a 1593 px diagram was treated as 100 px wide. Fit ratio reported
+     **7.41** instead of 0.465; the `100%` button drew it into a 100x583 box,
+     i.e. a ~100x36 px sliver = invisible.
+  2. The initial apply **raced layout**: the iframe is created by the pane and
+     React commits its geometry after the srcdoc parses, so `wrap.clientWidth||1`
+     sized the SVG to **1 px**. Only the WINDOW resize was observed, and that
+     does not fire when a parent resizes an iframe -- so nothing re-measured.
+- **Fixes:** `px()` (bare number or `px` suffix only) for the intrinsic size;
+  `paneW() <= 1` refuses to size and returns early; a `ResizeObserver` on the
+  wrap re-applies when the pane gets a real size.
+- **Verified:** the pane's own `lc-fit` messages now report **0.4650** =
+  741/1593.7. Visually confirmed at Fit and at 100% in the live dashboard.
+- **Method that worked, after reasoning failed twice:** the iframe is sandboxed
+  with an opaque origin, so neither the parent page nor CDP can read into it.
+  Reconstructed the pane's exact frame document in scratch, ran the **shipped**
+  FRAME_SCRIPT (extracted from source), and measured in a real browser.
+- **New gate:** `tools/check_canvas_viewer.py` runs the shipped script in node
+  and mutation-tests both fixes; wired into `tb/run_all.sh`. Confirmed it fires
+  on both mutations (`iw=100`, width call `1`).
