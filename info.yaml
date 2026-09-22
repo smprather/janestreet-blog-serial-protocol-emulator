@@ -39,9 +39,19 @@ project:
   tiles: "6x4"
   top_module: "tt_um_protocol_emulator"
 
-  # Order matters: pe_cpu before pe_uart_soc before the wrapper.
+  # Order matters only in that every module must be present; the TT precheck
+  # compiles these together. pe_uart_soc instantiates pe_imem (the SRAM
+  # wrapper), pe_pinmux (the per-pin matrix), and -- through pe_imem -- the
+  # SRAM macro. The .bb.v is the macro's empty port shell, which is what lets
+  # an iverilog/verilator compile of these sources resolve the instance; the
+  # real macro model and GDS come from the PDK at build time.
+  # Measured before the fix: iverilog on the three listed files ended in
+  # "Unknown module type: RM_IHPSG13_1P_1024x16_c2_bm_bist".
   source_files:
     - "rtl/pe_cpu.v"
+    - "rtl/pe_imem.v"
+    - "rtl/pe_pinmux.v"
+    - "rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v"
     - "rtl/pe_uart_soc.v"
     - "rtl/tt_um_protocol_emulator.v"
 

@@ -28,6 +28,10 @@
   "//27": "All file paths are './src/<name>' because run_librelane.sh stages every",
   "//28": "file this config names into <out>/src/ -- the run directory lives",
   "//29": "outside the repo, so relative paths have to be made true by staging.",
+  "//30": "pe_pinmux is in VERILOG_FILES because pe_uart_soc instantiates it (the",
+  "//31": "I2C milestone moved the matrix inside the SoC); its omission was one of",
+  "//32": "the review findings, and the identical omission in info.yaml's source",
+  "//33": "list made the TT sources fail to compile.",
   "//90": "FP_SIZING absolute uses the REAL allocation: 6x4 tiles = 1002 x 432 um",
   "//91": "(ADR-003; the blog's 'set the tile size in info.yaml to 6x4'). An earlier",
   "//92": "version of this file said 1002x432 in the comment and then used 480x420,",
@@ -46,6 +50,7 @@
   "VERILOG_FILES": [
     "./src/pe_cpu.v",
     "./src/pe_imem.v",
+    "./src/pe_pinmux.v",
     "./src/pe_uart_soc.v"
   ],
   "EXTRA_VERILOG_MODELS": [
