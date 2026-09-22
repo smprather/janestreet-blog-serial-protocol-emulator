@@ -343,9 +343,14 @@ pins as driven by our routing. Setup/hold are clean; these two are not.
 ## Toolchain — exact commands
 
 ```bash
-# EVERYTHING: firmware regression (assemble + emulator) then all 22 RTL TBs.
+# EVERYTHING: firmware regression (assemble + emulator) then all 24 RTL TBs.
 # Runs the firmware first because tb_pe_uart_soc $readmemh's the .hex it builds.
 cd ~/janestreet-blog-serial-protocol-emulator && ./tb/run_all.sh
+
+# same suite, parallel testbench loop (same 4-state iverilog, not Verilator --
+# a simulator swap would make it 69.6x SLOWER, see reference/simulator-bakeoff)
+./tb/run_all.sh --fast
+./tb/run_all.sh --fast -j8      # explicit job count
 
 # firmware only (assemble firmware/*.pe -> .hex, run the emulator cases)
 ./tb/run_firmware_tests.sh
@@ -916,6 +921,27 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
       that relies on `=== x` to catch an undriven net would stop testing if it
       were only ever run under Verilator. Keep the 4-state simulator for
       signoff. See [[reference/simulator-bakeoff]].
+
+58. **A per-run speedup does not compose into a suite speedup, and the sign can
+      flip.** Verilator is 12-19x faster per simulation and made `run_all.sh`
+      **69.6x SLOWER** (2.40 s -> 167.19 s) because it builds per `--top-module`
+      with no shared cache: 24 one-shot testbenches pay 24 builds at a median
+      5.6 s. The per-run win is only realised after ~27 runs of the SAME
+      testbench. So `--fast` is PARALLEL ICARUS, not a simulator swap -- the same
+      4-state simulation, run 24-wide. Verify a fast path on the FAILING case
+      too, not only the passing one: `--fast` was checked to produce identical
+      verdicts on all 24 TBs and identical diagnostics plus exit code 1 on an
+      injected fault.
+
+ 59. **Check whether a testbench can run under a 2-state simulator AT ALL before
+      planning a flow around it.** `tb_pe_pinmux` aborts Verilator with
+      `%Error-DIDNOTCONVERGE` because it models the bus at STRENGTH LEVELS
+      (pull-up vs strong 0/1) to test the `od` bit's contention property, and
+      2-state has no weak/strong distinction. This is gotcha 57's problem in a
+      louder form: there it silently weakens a check, here it stops the run. A
+      survey of all 24 TBs under both simulators (21 agree, 1 differs, 3 use
+      X-dependent constructs) is the cheap way to find out before wiring
+      anything.
 
 ## Open questions / risks
 

@@ -56,10 +56,32 @@ run_case() {
     python3 tools/peasm.py firmware/spi_xfer.pe -o firmware/spi_xfer.hex >/dev/null 2>&1
   }
 
+
+  # ---- restore VERIFICATION -------------------------------------------------
+  # A mutation harness that fails to restore leaves MUTATED RTL on disk, and
+  # every subsequent test run then quietly tests the mutant. That happened during
+  # development (an ad-hoc cross-check loop, not this script) and it produced a
+  # full regression run reporting failures in the firmware and the SPI TB -- both
+  # of which were really reporting the leftover mutation. The verdict was
+  # nonsense and it looked like a real regression.
+  #
+  # So the restore is now VERIFIED, per case, against git. `git diff --quiet`
+  # compares the working tree to HEAD, which is exactly the property that
+  # matters: are the mutable files back to the committed state?
+  verify_restore() {
+    if ! git diff --quiet -- $MUTABLE; then
+      echo "  RESTORE FAILED -- the working tree is DIRTY:"
+      git diff --stat -- $MUTABLE | sed 's/^/    /'
+      echo "    Refusing to continue: every later result would be measuring the mutant."
+      exit 3
+    fi
+  }
+
   if ! python3 "$script"; then
     echo "  MUTATION DID NOT APPLY -> INCONCLUSIVE"
     inconclusive=$((inconclusive+1))
     restore
+    verify_restore
     echo
     return
   fi
@@ -85,6 +107,7 @@ run_case() {
     inconclusive=$((inconclusive+1))
     rm -rf "$work"
     restore
+    verify_restore
     echo
     return
   fi
@@ -106,11 +129,12 @@ run_case() {
     echo "  SURVIVED -- the TB passed on the mutated design (blind spot)"
     grep -E '^PASS|RESULT' <<< "$out" | head -3 | sed 's/^/    /'
     survived=$((survived+1))
-  fi
+    fi
 
-  restore
-  echo
-}
+    restore
+    verify_restore
+    echo
+    }
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

@@ -48,10 +48,31 @@ run_case() {
     python3 tools/peasm.py firmware/i2c_pins.pe -o firmware/i2c_pins.hex >/dev/null 2>&1
   }
 
+
+  # ---- restore VERIFICATION -------------------------------------------------
+  # A mutation harness that fails to restore leaves MUTATED RTL on disk, and
+  # every subsequent test run then quietly tests the mutant. That happened during
+  # development and produced a full regression run reporting failures in the
+  # firmware and the SPI testbench -- both of which were really reporting the
+  # leftover mutation. The verdict was nonsense and it looked like a real
+  # regression, which is the worst kind of wrong answer: loud and misleading.
+  #
+  # So the restore is VERIFIED, per case, against git -- comparing the working
+  # tree to HEAD is exactly the property that matters.
+  verify_restore() {
+    if ! git diff --quiet -- $MUTABLE; then
+      echo "  RESTORE FAILED -- the working tree is DIRTY:"
+      git diff --stat -- $MUTABLE | sed 's/^/    /'
+      echo "    Refusing to continue: every later result would be measuring the mutant."
+      exit 3
+    fi
+  }
+
   if ! python3 "$script"; then
     echo "  MUTATION DID NOT APPLY -> INCONCLUSIVE"
     inconclusive=$((inconclusive+1))
     restore
+    verify_restore
     echo
     return
   fi
@@ -83,6 +104,7 @@ run_case() {
     inconclusive=$((inconclusive+1))
     rm -rf "$work"
     restore
+    verify_restore
     echo
     return
   fi

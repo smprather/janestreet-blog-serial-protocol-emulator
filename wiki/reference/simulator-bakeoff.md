@@ -77,16 +77,69 @@ That is an empirical result about these five mutations, not a general guarantee
 `=== x` to catch an undriven net would silently stop testing if it were only
 ever run under Verilator.
 
+## The suite-level result, which is the opposite of the per-test one
+
+Per-run, Verilator wins by 12-19x. Per SUITE, it loses badly, and the number is
+worth writing down because the naive reading of "12-19x faster" is that
+`run_all.sh` should switch simulators:
+
+| 24 testbenches, compile + run | time |
+|---|---|
+| Icarus, serial | **2.40 s** |
+| Verilator, 24 separate `--binary` builds | **167.19 s** |
+
+**69.6x slower.** Verilator builds per `--top-module` and has no shared cache
+across them (median build 5.6 s, min 5.3 s, max 33.7 s), so a suite of 24
+one-shot testbenches pays 24 full builds. The 12-19x per-run speedup is paid
+back only after ~27 runs of the SAME testbench — which is exactly the loop
+Verilator is good for (iterating on one TB, or a long randomized soak) and
+exactly what a regression suite is not.
+
+So `tb/run_all.sh --fast` does NOT swap simulators. It runs the same 4-state
+Icarus simulation in parallel across the testbenches, which is where the suite's
+headroom actually is.
+
+`--fast` also cannot be a Verilator path for a second, independent reason:
+**`tb_pe_pinmux` does not run under Verilator at all.**
+
+```
+%Error-DIDNOTCONVERGE: ../tb/tb_pe_pinmux.v:51: Active region did not
+converge after '--converge-limit' of 10000 tries
+```
+
+That testbench models the bus at STRENGTH LEVELS — a pull-up versus strong 0/1 —
+because the `od` bit's whole purpose is making contention unreachable, so
+"contention never happened" is the property under test. Verilator's 2-state
+model cannot express weak/strong, and it aborts rather than degrading. This is
+the X problem again, in a form that stops the run instead of hiding in it.
+
 ## Recommendation
 
-Keep **Icarus as the signoff simulator** for `tb/run_all.sh`, because it is
-4-state and this suite's honesty depends on that. Add Verilator as the **fast
-loop** for iterating on a single testbench, where the 12–19x is worth a 3-second
-build. If the suite ever grows slow enough that the regression loop hurts, the
-migration is a `--binary` build per testbench and a C++ `main` that drives the
-clock — but it should be done with the X question answered first, not after.
+What is actually wired up:
+
+- **`tb/run_all.sh` (default) — Icarus, serial.** The signoff path, because it is
+  4-state and this suite's honesty depends on that.
+- **`tb/run_all.sh --fast [-jN]` — Icarus, parallel across testbenches.** The same
+  simulation, so it cannot weaken verification by being 2-state. Measured 10.7 s
+  → 9.4 s on the full suite; the testbench loop itself drops from ~2.4 s to
+  ~0.5 s, and the remainder is dominated by the two mutation harnesses
+  (`mutate_i2c_tb.sh` 4.9 s + `mutate_spi_tb.sh` 1.1 s), which are inherently
+  serial because they mutate and restore shared RTL in place.
+- **Verilator — the single-testbench iteration loop**, not wired into
+  `run_all.sh` at all, for the 69.6x reason above.
+
+Verified rather than assumed: `--fast` and the serial path produce **identical
+verdicts** on all 24 testbenches, and an injected fault (`pin_rd` forced to zero)
+fails both paths with identical diagnostics and exit code 1. A fast path that
+only agreed on the passing case would be worthless.
 
 The Verilator flow was proven end-to-end here: `--binary --timing` elaborates
 this design (with one ignorable `SPECIFYIGN` warning from the PDK SRAM model's
 `specify` block), and the `$dumpfile`/`$dumpvars` calls in the TB needed gating
 behind `+dump` because Verilator ignores them unless built with `--trace`.
+
+A note for whoever revisits this: the survey that produced the table above is
+worth re-running if the suite's shape changes a lot (many more testbenches, or a
+long soak test). The rule of thumb that falls out of the numbers is that
+Verilator wins when the SAME testbench runs many times and loses when each
+testbench runs once.

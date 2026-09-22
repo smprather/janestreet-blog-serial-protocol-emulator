@@ -2,10 +2,25 @@
 # run_all.sh — full regression: every testbench, one command.
 #
 # Usage:  tb/run_all.sh            (from anywhere in the repo)
+#         tb/run_all.sh --fast     parallel testbench loop (see below)
+#         tb/run_all.sh --fast -j8 explicit job count
 # Exit:   0 = all pass, 1 = at least one failure
 #
 # VCDs are written into sim/ (gitignored per-run artifacts; the checked-in
 # copies are snapshots). Requires iverilog (>= 11, -g2012 support).
+#
+# WHAT --fast ACTUALLY DOES, because the name invites the wrong assumption: it
+# runs the SAME 4-state iverilog simulation, in parallel. It does NOT switch to
+# Verilator. Measured, a Verilator swap would make this suite 69.6x SLOWER --
+# Verilator builds per --top-module with no shared cache (median 5.6 s per
+# testbench), so 24 testbenches cost 167 s of compilation against 2.4 s for all
+# 24 iverilog compiles AND runs. The per-run 12-19x speedup only pays back at
+# ~27 runs of the same testbench, and this suite runs each one once.
+#
+# So --fast buys concurrency, not a different simulator, and the default path is
+# byte-identical in what it simulates. tb_pe_pinmux is the hard blocker for a
+# Verilator path anyway: it models the bus at strength levels to test the od
+# bit's contention property, and Verilator aborts it with DIDNOTCONVERGE.
 
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -15,6 +30,33 @@ cd "$(dirname "$0")/.." || exit 1
 # invoked mid-script use this. (The param-guard gate failed exactly this way.)
 REPO_ROOT="$(pwd)"
 mkdir -p sim
+
+# ---- options ---------------------------------------------------------------
+FAST=0
+JOBS=$(nproc 2>/dev/null || echo 4)
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --fast)   FAST=1 ;;
+    -j*)      JOBS="${1#-j}" ;;
+    -j)       shift; JOBS="${1:-$JOBS}" ;;
+    -h|--help)
+      sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *)
+      echo "run_all.sh: unknown option '$1' (try --help)" >&2
+      exit 2 ;;
+  esac
+  shift
+done
+# A bad -j would make xargs fail in a way that reads like a test failure.
+case "$JOBS" in
+  ''|*[!0-9]*) echo "run_all.sh: -j needs a positive integer, got '$JOBS'" >&2; exit 2 ;;
+  0)           echo "run_all.sh: -j 0 would run nothing" >&2; exit 2 ;;
+esac
+
+if [ "$FAST" -eq 1 ]; then
+  echo "(--fast: parallel testbench loop, $JOBS jobs, same 4-state simulation)"
+fi
 
 # Firmware first: it assembles firmware/*.hex, and tb_pe_uart_soc.v $readmemh's
 # one of them. Running it here means the RTL test can never simulate a stale
@@ -96,6 +138,60 @@ CASES=(
 )
 
 pass=0; fail=0; failed_names=()
+
+if [ "$FAST" -eq 1 ]; then
+  # ---- parallel path --------------------------------------------------------
+  # PARALLELISM, NOT A DIFFERENT SIMULATOR, and that is a measured decision.
+  #
+  # The obvious reading of "fast mode" is to swap iverilog for Verilator, which
+  # is 12-19x faster per run. Measured, that makes THIS SUITE 69.6x SLOWER:
+  # Verilator compiles one testbench at a time (median 5.6 s, max 33.7 s, no
+  # shared cache across --top-module), so 24 testbenches need 24 builds -- 167 s
+  # against 2.4 s for all 24 iverilog compiles AND runs. The per-run speedup is
+  # real but it is paid back at ~27 runs of the SAME testbench, and a regression
+  # suite runs each testbench once. See wiki/reference/simulator-bakeoff.md.
+  #
+  # What the suite is actually short of is CONCURRENCY: 24 independent cases on
+  # 24 hardware threads, run one at a time. That is the win, and it needs no new
+  # simulator, so it cannot weaken verification by being 2-state.
+  #
+  # VERILATOR'S ONE HARD BLOCKER, recorded here because it is the reason a
+  # `--fast --verilator` flag does not exist: tb_pe_pinmux.v models the bus at
+  # STRENGTH LEVELS (pull-up vs strong 0/1, so the od bit's contention property
+  # is testable) and Verilator aborts it with
+  #   %Error-DIDNOTCONVERGE ... Active region did not converge
+  # 2-state simulation cannot express the weak/strong distinction the TB is
+  # built on. So the fast path stays on the 4-state simulator, where it belongs.
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+
+  printf '%s\n' "${CASES[@]}" \
+    | xargs -P "$JOBS" -I{} "$REPO_ROOT/tb/run_one_tb.sh" "{}" "$work"
+
+  # Read the verdicts back IN CASES ORDER. Collecting into files and printing
+  # afterwards is what keeps one table row per case: letting the workers print
+  # directly would interleave, and a verdict could appear under another case's
+  # name.
+  for c in "${CASES[@]}"; do
+    IFS='|' read -r name rtl top <<< "$c"
+    result="$work/$top.result"
+    if [ ! -f "$result" ]; then
+      printf '%-18s NO-RESULT (worker died without writing one)\n' "$top"
+      fail=$((fail+1)); failed_names+=("$top(no-result)")
+      continue
+    fi
+    verdict=$(head -1 "$result")
+    if [ "$verdict" = "PASS" ]; then
+      printf '%-18s PASS\n' "$top"
+      pass=$((pass+1))
+    else
+      printf '%-18s %s\n' "$top" "$verdict"
+      tail -n +2 "$result" | sed 's/^/  /'
+      fail=$((fail+1)); failed_names+=("$top")
+    fi
+  done
+else
+  # ---- serial path (default) ------------------------------------------------
 for c in "${CASES[@]}"; do
   IFS='|' read -r name rtl top <<< "$c"
   tb="../tb/${name}.v"
@@ -115,6 +211,7 @@ for c in "${CASES[@]}"; do
     fail=$((fail+1)); failed_names+=("$top")
   fi
 done
+fi
 
 echo
 echo "========================================"
