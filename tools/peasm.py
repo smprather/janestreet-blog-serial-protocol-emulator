@@ -368,11 +368,34 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
     return words, listing
 
 
-def rtl_init(words: list[int], width: int = 128) -> str:
-    """A Verilog initialiser for the SoC's instruction memory."""
+def rtl_init(words: list[int], width: int = IMEM_WORDS) -> str:
+    """A Verilog initialiser for the SoC's instruction memory.
+
+    Emits a valid `initial` block that assigns every word of an `imem` array
+    declared with `width` entries -- no $readmemh, so a testbench can embed the
+    image without a file path. Two defects this replaces, both measured:
+
+      * the default width was 128, and a 301-word program was silently
+        truncated when `--rtl-init` was the output format;
+      * the emitted text was not Verilog at all (`initial $readmemh_unused;`
+        followed by a bare comma-separated list).
+
+    Truncation is now an error rather than a short image: a TB that initialises
+    fewer words than the program has would run a different program than the one
+    assembled, and the failure would look like a CPU bug.
+    """
+    if len(words) > width:
+        raise AsmError(
+            f"--rtl-init: program is {len(words)} words but the initialiser "
+            f"width is {width}; pass a width >= {len(words)} (the SoC's IMEM "
+            f"is {IMEM_WORDS} words).")
     padded = words + [0xF000] * (width - len(words))     # NOP fill
-    body = ", ".join(f"16'h{w:04X}" for w in padded[:width])
-    return f"  initial $readmemh_unused;\n  // {len(words)} words used of {width}\n  {body}"
+    lines = ["  initial begin",
+             f"    // {len(words)} words used of {width}; the rest is NOP fill"]
+    for i, w in enumerate(padded):
+        lines.append(f"    imem[{i}] = 16'h{w:04X};")
+    lines.append("  end")
+    return "\n".join(lines)
 
 
 def main() -> int:
@@ -400,7 +423,11 @@ def main() -> int:
               f"({len(words) * 2} bytes of instruction memory)", file=sys.stderr)
 
     if args.rtl_init:
-        out = rtl_init(words)
+        try:
+            out = rtl_init(words)
+        except AsmError as exc:
+            print(f"peasm: {exc}", file=sys.stderr)
+            return 1
     elif args.vh:
         out = "\n".join(f"{w:04x}" for w in words)
     else:
