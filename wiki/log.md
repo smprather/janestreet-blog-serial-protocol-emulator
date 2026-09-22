@@ -567,3 +567,31 @@
   after writing, and re-verified.
 - Verified: 22/22 RTL TBs, 15/15 firmware, param guards OK, lint clean,
   4/4 drift gates.
+
+
+## [2026-09-22] build | Timing margin at 60 MHz: 16% setup, Fmax 71.4 MHz, and the hold fix costs 11% of it
+- Extracted the margin from `RUN_2026-09-22_00-48-35` / `55-openroad-stapostpnr`.
+  **Signoff is at 66 MHz (15.15 ns); the operating point is 60 MHz (16.667 ns)** —
+  two different margins, not to be conflated.
+  | | setup (slow corner) | hold (fast corner) |
+  |---|---|---|
+  | worst slack @66 MHz | **+1.143 ns** | **+0.121 ns** |
+  | same path @60 MHz | **+2.660 ns** | +0.121 ns |
+  | fraction of the 60 MHz period | **16.0%** | — |
+  | violating paths | **0** | **0** |
+- **Fmax (post-route, slow corner) = 71.4 MHz**, min period 14.007 ns — 19% over
+  the operating point.
+- **The critical path is not the CPU.** It starts at the SRAM
+  (`A_DOUT[12]`, **7.635 ns** = 57% of the 13.448 ns arrival), then a chain of
+  **hold-fix buffers** (`fanout118/115/113`, `sg13g2_buf_1`, 1.55 ns) and
+  `hold626` (`sg13g2_dlygate4sd3_1`, **0.623 ns** of pure delay). **The hold
+  repair is ~2.2 ns of a 14.0 ns period — ~11% of Fmax.** Drop it and the path
+  closes at ~84 MHz. Cheapest lever on the clock; it is why the SDC hold/setup
+  split (hold 0.25 ns) is load-bearing.
+- **The margin is not the same as confidence in the number.** The SRAM's 7.635 ns
+  is a `.lib` lookup taken OUTSIDE the characterised axes (gotchas 37-38): input
+  slew presents 1.291 vs a table max of 0.5952. It is the one figure here that was
+  extrapolated, not interpolated — and it is the majority of the path.
+- Also fixed: two stale 40-clock I2C tick figures (§ 1 µs = 60 clocks at 60 MHz)
+  in `HANDOFF.md` and the plan flowchart JSON, and STATUS's "all 16 RTL TBs" → 22.
+- Verified: 22/22 RTL, 15/15 firmware, guards OK, lint clean, 4/4 drift gates.

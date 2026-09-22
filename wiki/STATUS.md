@@ -288,10 +288,48 @@ the upside case with `tools/gen_sram_budget.py --tiles 8x4`.
 | Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | `rtl/pe_line_codec.v` header |
 | `ena` must never gate logic; every pad output driven in every state | `rtl/tt_um_protocol_emulator.v` header |
 
+## Timing margin at the 60 MHz operating point (measured, post-route)
+
+From `RUN_2026-09-22_00-48-35`, `55-openroad-stapostpnr`, the run that reached
+76/80. **Signoff is at 66 MHz (`CLOCK_PERIOD` 15.15 ns), the operating point is
+60 MHz (16.667 ns)** — so there are two different margins and they must not be
+conflated:
+
+| | setup (worst = slow corner) | hold (worst = fast corner) |
+|---|---|---|
+| worst slack **as reported @66 MHz** | **+1.143 ns** | **+0.121 ns** |
+| same path **@60 MHz** (the operating point) | **+2.660 ns** | +0.121 ns |
+| as a fraction of the 60 MHz period | **16.0%** | — |
+| violating paths, all 3 corners | **0** | **0** |
+
+**Fmax from the post-route critical path: 71.4 MHz** (slow corner, 1.08 V/125 C,
+min period 14.007 ns). That is real headroom over 60 MHz — 19% — and it is the
+number that answers "what are we leaving on the table".
+
+**What the critical path IS, and it is not the CPU:** it starts at the SRAM
+(`u_imem.g_macro.u_sram/A_DOUT[12]`), takes **7.635 ns** of the 13.448 ns
+arrival, then runs through a chain of **hold-fix buffers** — `fanout118`,
+`fanout115`, `fanout113`, all `sg13g2_buf_1` — costing a further **1.55 ns**,
+before ending in `hold626` (`sg13g2_dlygate4sd3_1`) which alone injects
+**0.623 ns** of the path as pure delay. **The hold repair is ~2.2 ns of a
+14.0 ns period, i.e. it is costing ~11% of Fmax**; without it the path would
+close at ~84 MHz. This is the single cheapest lever on the clock, and it is why
+the hold uncertainty value (0.25 ns, the SDC split) is load-bearing.
+
+**The margin is not the same thing as confidence in the number.** The SRAM's
+7.635 ns is a `.lib` table lookup taken **outside** the characterised axes (see
+gotchas 37-38): input slew presents 1.291 against a table max of 0.5952. The
+SRAM read is therefore the one number in this table that OpenROAD extrapolated
+rather than interpolated, and it is 57% of the arrival time.
+
+**Also gated, and not clean:** `Checker.MaxSlewViolations` (10) and
+`Checker.MaxCapViolations` (8) fire in all three corners, all on SRAM macro
+pins as driven by our routing. Setup/hold are clean; these two are not.
+
 ## Toolchain — exact commands
 
 ```bash
-# EVERYTHING: firmware regression (assemble + emulator) then all 16 RTL TBs.
+# EVERYTHING: firmware regression (assemble + emulator) then all 22 RTL TBs.
 # Runs the firmware first because tb_pe_uart_soc $readmemh's the .hex it builds.
 cd ~/janestreet-blog-serial-protocol-emulator && ./tb/run_all.sh
 
