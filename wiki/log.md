@@ -496,3 +496,40 @@
   `wiki/STATUS.md`, `.gitignore`.
 - Verified: 22/22 RTL TBs, 15/15 firmware, param guards OK, lint clean,
   4/4 drift gates. Committed: 19e4b2c, 1509c65.
+
+## [2026-09-22] build | Flow reaches 76/80 — and the last two blockers are both inside the vendor macro
+- **`RUN_2026-09-22_00-48-35` ran 76 of 80 steps.** It got past step 57 (the
+  Magic PR-boundary abort) and past everything else, through GDS streamout,
+  KLayout XOR ("Check for XOR differences clear"), Magic DRC, KLayout DRC, LVS,
+  and all four timing checkers, to `76-misc-reportmanufacturability`. It then
+  quit on **deferred** errors — the flow collects errors and reports at the end
+  rather than stopping at the step.
+- **Deferred errors: 1,113,909 Magic DRC + 2,672 KLayout DRC.** Investigated
+  rather than assumed, because the repo's own [[entities/tiny-tapeout]] says TT
+  accepts custom macros only when "DRC/LVS-clean":
+  - **Magic: 1,113,909 of 1,113,909 are inside the macro footprint** (parsed
+    every coordinate against the macro's placed bbox; 0 outside). Rules are
+    library-internal artefacts: `Cnt.c` contact overlap (880,232), `LU.b`
+    N-diff-to-P-tap (104,724), `Gat.c` poly overhang (104,737), `M2.d` minimum
+    area (59,165).
+  - **KLayout (PDK's own 174-rule deck): only 4 rules fire.** Dominant pair
+    `Sdiod.d`/`Sdiod.e` — **ContBar inside nBuLay, an ESD-diode rule**; this
+    design has no diodes, so those are the SRAM's own structures. Plus
+    `Cnt.c.digibnd`.
+  - **Every one of the 2,672 KLayout items names an `RM_IHPSG13_*` or
+    `RSC_IHPSG13_*` cell.** `RSC_IHPSG13_*` is in **neither** the design's
+    stdcell library **nor** the SRAM's LEF — it exists only inside the SRAM GDS.
+  - The macro has a proper top cell (`0,-0.225 .. 236.8,336.46`), so not a
+    malformed-GDS problem. **Decisive follow-up running: the PDK deck on the
+    macro ALONE.** If it fails there, the finding is the PDK's, not ours.
+- **`MAGIC_GDS_FLATGLOB` is the sanctioned route** and is unset. LibreLane's
+  docstring: "Flatten cells by name pattern on input. May be used to avoid false
+  positive DRC errors." Better than disabling DRC, which must not be done before
+  the macro-alone test says the finding is not ours.
+- **The flow GATES on max-slew/max-cap** — steps 72-75 are
+  `Checker.{Setup,Hold,MaxSlew,MaxCap}Violations`. Setup/hold: "No violations
+  found". Max-slew and max-cap: **"violations found" in all three corners.**
+  So yesterday's gotcha-37 finding is a gated failure with a checker step named
+  after it, not a passing-with-warnings. Gotchas 39-41.
+- Verified: 22/22 RTL TBs, 15/15 firmware, param guards OK, lint clean,
+  4/4 drift gates.
