@@ -44,6 +44,18 @@ SRC = REPO / "tools/live-canvas/dashboard/dist/index.js"
 # The pane's measured geometry, from the live dashboard over CDP.
 PANE_W = 741
 
+# A deterministic fixture for the unmeasured-pane and mutation cases. It used
+# to be diagrams/block-diagram-chip.svg, which is git-ignored -- a fresh clone
+# has no SVG, the harness's fs.readFileSync threw, and the whole regression
+# failed on an otherwise byte-identical tree. The fixture is tiny and has only
+# the property under test (a percent width with a real viewBox), so it is also
+# a better control: a mermaid re-render cannot change it.
+FIXTURE_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" '
+    'viewBox="0 0 1200 600"><rect width="1200" height="600" '
+    'fill="#0d1117"/></svg>\n'
+)
+
 HARNESS = r"""
 // Runs the REAL viewer script against a DOM stub and reports what it decided.
 // argv: svgPath paneW mode(measured|unmeasured) scriptPath
@@ -144,14 +156,20 @@ def main() -> int:
     problems = []
     src_text = SRC.read_text()
     fs = extract_frame_script(src_text)
-    svg = REPO / "diagrams/block-diagram-chip.svg"
 
     with tempfile.TemporaryDirectory() as td:
         tmp = pathlib.Path(td)
+        fixture = tmp / "fixture.svg"
+        fixture.write_text(FIXTURE_SVG, encoding="utf-8")
+
+        # Real diagrams are checked when they exist (a working checkout after a
+        # render); the fixture carries the gate everywhere else.
+        real = sorted((REPO / "diagrams").glob("*.svg"))
+        svgs = real if real else [fixture]
 
         # --- 1. the shipped script must measure every diagram correctly -----
         print(f"  pane {PANE_W}px; running the shipped viewer script per diagram")
-        for p in sorted((REPO / "diagrams").glob("*.svg")):
+        for p in svgs:
             vw = viewbox_width(p)
             got = run_case(fs, p, "measured", tmp)
             fit = got["fit"]
@@ -162,7 +180,7 @@ def main() -> int:
                 problems.append(f"{p.name}: viewer implies iw={implied}, viewBox says {vw}")
 
         # --- 2. an unmeasured pane must NOT produce a degenerate size -------
-        got = run_case(fs, svg, "unmeasured", tmp)
+        got = run_case(fs, fixture, "unmeasured", tmp)
         ws = got["setWidthCalls"]
         degenerate = [w for w in ws if w and float(w) <= 1]
         print(f"    unmeasured-pane run: width calls={ws}  {'ok (refused)' if not degenerate else 'WRONG (sized to ' + degenerate[0] + 'px)'}")
@@ -176,9 +194,9 @@ def main() -> int:
         # the checks above would have caught it.
         mut_a = fs.replace("= px(svg.getAttribute", "= num(svg.getAttribute")
         assert mut_a != fs, "mutation A did not apply — anchor changed"
-        got = run_case(mut_a, svg, "measured", tmp)
+        got = run_case(mut_a, fixture, "measured", tmp)
         imp = (PANE_W / got["fit"]) if got["fit"] else None
-        caught_a = imp is not None and abs(imp - viewbox_width(svg)) >= 1.5
+        caught_a = imp is not None and abs(imp - viewbox_width(fixture)) >= 1.5
         print(f"    mutation A (num instead of px): implies iw={imp and round(imp,1)}  "
               f"{'DETECTED' if caught_a else 'NOT DETECTED'}")
         if not caught_a:
@@ -187,7 +205,7 @@ def main() -> int:
         mut_b = fs.replace("return wrap.clientWidth || 0", "return wrap.clientWidth || 1")
         mut_b = mut_b.replace("if(pw <= 1) return;", "")
         assert mut_b != fs, "mutation B did not apply — anchor changed"
-        got = run_case(mut_b, svg, "unmeasured", tmp)
+        got = run_case(mut_b, fixture, "unmeasured", tmp)
         ws = got["setWidthCalls"]
         degenerate = [w for w in ws if w and float(w) <= 1]
         caught_b = bool(degenerate)

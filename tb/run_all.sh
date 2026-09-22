@@ -338,7 +338,7 @@ if command -v npx >/dev/null 2>&1; then
   if python3 tools/render_block_diagram.py --check >/dev/null 2>&1; then
     echo "rendered block diagrams up to date"
   else
-    echo "STALE: diagrams/block-diagram-*.svg — run python3 tools/render_block_diagram.py"
+    echo "STALE: the block-diagram mermaid source has changed since diagrams/block-diagram.stamp — run python3 tools/render_block_diagram.py"
     stale=1
   fi
 else

@@ -231,9 +231,13 @@ tb/*.vcd
 sim/*.vcd
 
 # live-canvas publish target: rendered presentation files, regenerated on demand
-# (README.md is kept as the directory's own explainer)
+# (README.md is kept as the directory's own explainer). The stamp is the one
+# committed exception: it is a hash of the mermaid source, not a render, and it
+# is what lets `render_block_diagram.py --check` work in a fresh clone where
+# the git-ignored SVGs do not exist.
 diagrams/*
 !diagrams/README.md
+!diagrams/block-diagram.stamp
 
 # dashboard state for the live-canvas plugin
 diagrams/.part-*

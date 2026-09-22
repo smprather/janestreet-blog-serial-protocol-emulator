@@ -18,6 +18,12 @@ rendered diagram is a reproducible artifact, not a checked-in one). Generate the
 diagram from a checked-in source — a script under `tools/` or an RTL-derived
 view — and treat the output as disposable.
 
+**One committed exception:** `block-diagram.stamp` holds the SHA-256 of the
+mermaid source the last `tools/render_block_diagram.py` run rendered. It is a
+source hash, not a render, and it is what lets the regression's diagram gate work
+in a fresh clone where none of the ignored SVGs exist. The SVGs themselves stay
+disposable; the stamp is what "the page is rendered" means for `--check`.
+
 Notes:
 - `.svg` and `.html` render; `.md/.txt/.json/.excalidraw/.mmd` show as text.
 - HTML runs sandboxed (no same-origin, no access to the dashboard's session).

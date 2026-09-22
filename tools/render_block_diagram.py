@@ -14,17 +14,21 @@ diagram and the SVG cannot drift apart.
 
 Rendering needs @mermaid-js/mermaid-cli, which pulls a headless browser. That
 is a heavy dependency for a repo script, so this is NOT wired into run_all.sh:
-it is run on demand, and the .svg outputs are committed. If mermaid-cli is
-missing the script says so and exits 0 (not a failure -- the page is still
-correct, just not re-rendered).
+it is run on demand. The SVG outputs are disposable render artifacts and stay
+git-ignored (diagrams/README.md's rule), but the SOURCE HASH is committed as
+diagrams/block-diagram.stamp -- that is what makes `--check` work in a fresh
+clone. A timestamp check against an ignored file can only fail there, and did:
+`git archive HEAD` has no SVGs, so the regression reported STALE on a clone
+that was byte-identical to the tree it came from.
 
-    python3 tools/render_block_diagram.py            # render, then report
-    python3 tools/render_block_diagram.py --check    # is the SVG stale?
+    python3 tools/render_block_diagram.py            # render, then stamp
+    python3 tools/render_block_diagram.py --check    # is the page unrendered?
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import shutil
 import subprocess
@@ -39,6 +43,11 @@ OUTDIR = REPO / "diagrams"
 # Output names, in the order the mermaid blocks appear in the page.
 NAMES = ["block-diagram-chip.svg", "block-diagram-orphans.svg"]
 STEMS = ["block-diagram-chip", "block-diagram-orphans"]
+
+# The committed fixture. It holds the hash of the mermaid SOURCE that the last
+# render consumed, so `--check` is a content comparison that works anywhere --
+# unlike the SVGs, which are disposable and git-ignored.
+STAMP = OUTDIR / "block-diagram.stamp"
 
 # Matches the neighbours in diagrams/ (hand-authored ones use #0d1117).
 CONFIG = {
@@ -61,6 +70,15 @@ CONFIG = {
 
 def mermaid_blocks() -> list[str]:
     return re.findall(r"```mermaid\n(.*?)```", PAGE.read_text(encoding="utf-8"), re.S)
+
+
+def source_hash(blocks: list[str]) -> str:
+    """Deterministic hash of the mermaid source the SVGs were rendered from."""
+    h = hashlib.sha256()
+    for b in blocks:
+        h.update(b.encode("utf-8"))
+        h.update(b"\0")
+    return h.hexdigest()
 
 
 def render(blocks: list[str]) -> list[Path]:
@@ -101,32 +119,47 @@ def render(blocks: list[str]) -> list[Path]:
             # stale-vs-fresh comparison has something deterministic to check.
             print(f"  rendered diagrams/{name} ({out.stat().st_size:,} bytes)")
             written.append(out)
+    # Stamp only after every block rendered: a partial render is not a state the
+    # page may be checked against.
+    if len(written) == len(blocks):
+        STAMP.write_text(source_hash(blocks) + "\n", encoding="utf-8")
+        print(f"  stamped diagrams/{STAMP.name} (sha256 of the mermaid source)")
     return written
 
 
 def check() -> int:
-    """Is every rendered SVG present and at least as new as the page?
+    """Has the mermaid source changed since the last render?
 
-    Deliberately a TIMESTAMP check, not a byte comparison: mermaid-cli's output
-    embeds a generated id and can differ run to run, so byte-equality would
-    false-fail. What we can assert cheaply is 'the SVG was rendered after the
-    page last changed', which catches the case that matters -- editing the
-    Mermaid and forgetting to re-render.
+    A CONTENT check against the committed stamp, not a timestamp check against
+    the ignored SVGs. The stamp records the hash of the source the last render
+    read, so `--check` catches the thing that matters -- editing the Mermaid
+    and forgetting to re-render -- in a fresh clone, in CI, and on a machine
+    with no mermaid-cli installed. The SVGs themselves are reported when
+    missing but do not fail the check: diagrams/README.md defines them as
+    disposable outputs, and a clone has never had them.
     """
-    page_mtime = PAGE.stat().st_mtime
-    stale = []
-    for name in NAMES:
-        p = OUTDIR / name
-        if not p.is_file():
-            stale.append(f"{name} is missing")
-        elif p.stat().st_mtime < page_mtime:
-            stale.append(f"{name} is older than the page")
-    if stale:
-        for s in stale:
-            print(f"STALE: {s}", file=sys.stderr)
+    blocks = mermaid_blocks()
+    if not blocks:
+        print("STALE: no mermaid blocks found in block-diagram.md", file=sys.stderr)
+        return 1
+    want = source_hash(blocks)
+    if not STAMP.is_file():
+        print(f"STALE: diagrams/{STAMP.name} is missing -- this page has never "
+              f"been rendered here", file=sys.stderr)
         print("re-render with: python3 tools/render_block_diagram.py", file=sys.stderr)
         return 1
-    print("rendered block diagrams up to date")
+    got = STAMP.read_text(encoding="utf-8").strip()
+    if got != want:
+        print("STALE: the mermaid source has changed since "
+              f"diagrams/{STAMP.name} was written", file=sys.stderr)
+        print("re-render with: python3 tools/render_block_diagram.py", file=sys.stderr)
+        return 1
+    missing = [n for n in NAMES if not (OUTDIR / n).is_file()]
+    if missing:
+        print(f"rendered block diagrams up to date (SVGs not present: "
+              f"{', '.join(missing)} -- disposable outputs)")
+    else:
+        print("rendered block diagrams up to date")
     return 0
 
 
@@ -145,8 +178,9 @@ def main() -> int:
         return 1
     print(f"rendering {len(blocks)} mermaid block(s) from {PAGE.relative_to(REPO)}")
     written = render(blocks)
-    if not written:
-        print("render_block_diagram: nothing rendered (see above)", file=sys.stderr)
+    if len(written) != len(blocks):
+        print(f"render_block_diagram: rendered {len(written)} of {len(blocks)} block(s)",
+              file=sys.stderr)
         return 1
     return 0
 
