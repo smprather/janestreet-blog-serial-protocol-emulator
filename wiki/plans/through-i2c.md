@@ -417,13 +417,19 @@ were flow-config, not silicon, and all three are fixed and verified:
 **What is left is not flow config**, and it is the honest answer to "is this
 taped out":
 
-1. **Max-slew and max-cap violations, gated by `Checker.{MaxSlew,MaxCap}Violations`
-   (steps 74-75) in all three corners.** Every violating pin is on the SRAM, and
-   several sit at slew/cap values the macro's `.lib` was never characterised for
-   (input slew axis max 0.5952 vs 1.291 presented; output cap axis max 0.0640 vs
-   0.1169). OpenROAD extrapolates **silently**. `repair_design` is running with
+1. **Max-slew and max-cap violations — which WARN, and do not gate.** *(Corrected
+   2026-09-22 evening: this item previously claimed steps 74-75 gate on them. They
+   do not — see STATUS gotcha 39 for the mechanism, which is that
+   `MAX_SLEW_VIOLATION_CORNERS`/`MAX_CAP_VIOLATION_CORNERS` default to `[""]`, and
+   the empty string matches no corner, so those checkers can only ever warn.)*
+   The violations are real and counted — **8 max-cap, 10 max-slew, 7 max-fanout**,
+   from `final/metrics.json` — and every violating pin is on the SRAM, several at
+   slew/cap values the macro's `.lib` was never characterised for (input slew axis
+   max 0.5952 vs 1.291 presented; output cap axis max 0.0640 vs 0.1169). OpenROAD
+   extrapolates **silently**. `repair_design` is running with
    `-slew_margin 20 -cap_margin 20` and resizes nothing;
-   `DESIGN_REPAIR_MAX_SLEW_PCT`/`MAX_CAP_PCT` is the lever. STATUS gotchas 37-38.
+   `DESIGN_REPAIR_MAX_SLEW_PCT`/`MAX_CAP_PCT` is the lever. To make them gates,
+   set both corner variables to `["*"]`. STATUS gotchas 37-39.
 2. **1,113,909 Magic DRC + 2,672 KLayout DRC errors, 100% inside the vendor
    macro** (established by parsing every coordinate and every cell name, not by
    assertion). KLayout, using the PDK's own deck, fires only **4 of 174 rules** and

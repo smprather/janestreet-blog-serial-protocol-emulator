@@ -281,7 +281,7 @@ operating-point margin with no conversion:
 | worst slack **@60 MHz — signed off here** | **+2.6601 ns** | **+0.1209 ns** |
 | as a fraction of the 60 MHz period | **16.0%** | — |
 | violating paths, all 3 corners | **0** | **0** |
-| max cap / max slew violations | **8 / 10 — STILL PRESENT** | |
+| max cap / max slew / max fanout violations | **8 / 10 / 7 — still present, and they WARN, they do not gate** | |
 
 The 60 MHz figure **+2.6601 ns reproduces the +2.660 ns predicted from the 66 MHz
 run's path by hand** (arrival 13.4479 ns, capture clock 0.6419 ns, uncertainty
@@ -292,9 +292,15 @@ in that table.
 have.** They are unchanged at 8 max-cap / 10 max-slew, identical to the 66 MHz
 run. A longer period relaxes *timing* (`setup`/`hold`); it does nothing to a
 slew or capacitance limit, which is a driver-strength and fanout property of the
-SRAM's pins as our routing drives them. See gotchas 37-38 — the lever is
+SRAM's pins as our routing drives them. See gotchas 37-39 — the lever is
 `DESIGN_REPAIR_MAX_SLEW_PCT` / `MAX_CAP_PCT`, and the IHP reference design hits
 the same checkers with no SRAM at all.
+
+**Both runs' `1113909`/`2672` DRC counts are byte-identical across the clock
+change, which is the cleanest evidence that they are macro-internal geometry and
+not a function of the design's timing at all** — and gotcha 44's macro-alone diff
+already showed all 2672 KLayout violations reproduce from the vendor macro with
+no SoC around it.
 
 **Fmax from the post-route critical path: 71.4 MHz** (slow corner, 1.08 V/125 C,
 min period 14.007 ns). That is real headroom over 60 MHz — 19% — and it is the
@@ -653,14 +659,49 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     `A_ADDR[0]` +3.70 ns) so nothing is currently failing timing. The finding is
     that the instruction-fetch STA number rests on extrapolated macro timing, and
     the flow has a lever to remove that caveat.
-39. **The flow GATES on max-slew/max-cap, so they are failures, not cosmetics.**
-    `RUN_2026-09-22_00-48-35` has steps 72-75 as `Checker.SetupViolations`,
-    `Checker.HoldViolations`, `Checker.MaxSlewViolations`,
-    `Checker.MaxCapViolations`. The first two report "No setup/hold violations
-    found"; the last two report **"Max Slew violations found in the following
-    corners: nom_fast / nom_slow / nom_typ"** (same for Max Cap). LibreLane
-    collected them as *deferred* errors and quit at the end of the flow. So
-    gotcha 37's count is a gated failure with a checker step named after it.
+39. **Max-slew/max-cap WARN; they do NOT gate — and I had this wrong.**
+    *(Corrected 2026-09-22 evening; the earlier text of this gotcha said the
+    opposite, and two runs were analysed on the wrong premise.)*
+
+    Steps 74-75 really were the flow's last word on slew/cap, and they really
+    are `Checker.MaxSlewViolations` / `Checker.MaxCapViolations`. But they raise
+    **nothing**. The mechanism, read out of `librelane/steps/checker.py`:
+
+        TimingViolations.check_timing_violations():
+            for each metric corner:
+                if corner matches a config wildcard -> err_violating_corner
+                else                                -> warn_violating_corner
+
+    and the two subclasses ship `corner_override = [""]` — **the empty string
+    matches no corner** (the class docstring says exactly this: *"The default
+    value is [""] which indicates matching no corners"*). So every corner lands
+    in the warn list, `err_violating_corner` stays empty, and no
+    `DeferredStepError` is raised. Confirmed in the run's own resolved config:
+
+        MAX_CAP_VIOLATION_CORNERS  = ['']
+        MAX_SLEW_VIOLATION_CORNERS = ['']
+        TIMING_VIOLATION_CORNERS   = ['*typ*']   <- setup's var
+        HOLD_VIOLATION_CORNERS     = ['*']
+
+    **The log prints both lines together, which is what misled me:**
+
+        Max Slew violations found in the following corners:   <- the WARN list
+        * nom_fast_1p32V_m40C / * nom_slow / * nom_typ
+        No max slew violations found                          <- the ERROR list
+
+    The second line is not a contradiction of the first — it means
+    `err_violating_corner` is EMPTY, i.e. "no corner met the gate". A checker
+    that can only warn is not a gate, and `"No X violations found"` here is the
+    *error* verdict, not a claim that no violations exist. The counts are real
+    and in `final/metrics.json`: **8 max-cap, 10 max-slew, 7 max-fanout**.
+
+    **What the flow actually deferred, in both runs, was only the DRC:**
+    `1113909 Magic DRC errors found. - deferred` and `2672 KLayout DRC errors
+    found. - deferred`. Nothing else. So the `error.log` was empty and LibreLane
+    reached step 76/80 in both runs — the run ends because of DRC, full stop.
+
+    To turn these into real gates, set
+    `MAX_SLEW_VIOLATION_CORNERS`/`MAX_CAP_VIOLATION_CORNERS` to `["*"]`.
 40. **1,113,909 Magic DRC + 2,672 KLayout DRC errors, and 100% of BOTH are inside
     the vendor SRAM macro.** Established by parsing, not assertion: every
     coordinate in `drc.magic.rpt` compared against the macro's placed footprint
