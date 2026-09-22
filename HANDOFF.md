@@ -105,6 +105,16 @@ emulator. They disagreed once and that disagreement is how the real bug was foun
    of a 30-minute flow run is `/home/mylesp/.hermes/cache/scratch/pdn_standalone.sh`
    (scratch, not repo — but the technique is worth reusing).
 
+10. **A watcher that greps for its own pattern waits forever.** `while pgrep -f
+   "run_librelane|librelane"; do sleep 30; done` never exits: `pgrep -f` matches
+   against the **full command line of every process, including the waiting
+   shell**, whose cmdline literally contains the pattern. Three of these piled up
+   and looked like hung flow runs. `pgrep -x <tool>` (process name only) showed 0
+   — the work was done. Poll a **completion artifact** (`[ -f "$RUN/.../summary.rpt" ]`)
+   rather than a process; if you must match a process, bracket the pattern
+   (`[o]penroad`) or exclude `$$`; and always cap the loop. Recorded globally as
+   the `background-job-watchers` skill.
+
 ## Current work list
 
 `wiki/plans/through-i2c.md` is authoritative — it has the definition of done for
