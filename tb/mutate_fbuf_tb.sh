@@ -43,11 +43,18 @@ MUTABLE="rtl/pe_fbuf.v"
 # A harness that fails to restore leaves MUTATED RTL on disk and every later run
 # then quietly tests the mutant. That has happened in this repo, and the result
 # was a full regression reporting failures that were really the leftover
-# mutation. So the restore is verified per case against git.
+# mutation. The restore is verified per case against a PRISTINE SNAPSHOT taken
+# here -- NOT against git. A `git diff --quiet` check flags any uncommitted
+# change in the file, including a legitimate one made during development, so it
+# reported RESTORE FAILED on a tree where the restore had in fact worked
+# (measured: this file after removing an unused localparam).
+PRISTINE=$(mktemp /tmp/pe_fbuf.pristine.XXXXXX.v)
+cp "$MUTABLE" "$PRISTINE"
+
 verify_restore() {
-  if ! git diff --quiet -- $MUTABLE; then
-    echo "  RESTORE FAILED -- the working tree is DIRTY:"
-    git diff --stat -- $MUTABLE | sed 's/^/    /'
+  if ! cmp -s "$PRISTINE" "$MUTABLE"; then
+    echo "  RESTORE FAILED -- the file does not match the pristine snapshot:"
+    diff "$PRISTINE" "$MUTABLE" | head -10 | sed 's/^/    /'
     echo "    Refusing to continue: every later result would be measuring the mutant."
     exit 3
   fi
@@ -144,7 +151,7 @@ run_case() {
 }
 
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" "$PRISTINE"' EXIT
 
 # ---------------------------------------------------------------- mutation 1
 # BREAK THE WRITE MASK: always select the low lane. A write to an odd (high-lane)

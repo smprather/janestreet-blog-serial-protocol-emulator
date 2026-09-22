@@ -81,7 +81,6 @@ module pe_fbuf #(
 );
 
   localparam int AW = (BYTES <= 2) ? 1 : $clog2(BYTES);   // byte address width
-  localparam int WW = (AW <= 1) ? 1 : AW - 1;             // word address width
 
   // The macro is a fixed 1024x16 shape, so the byte capacity is fixed too.
   // 1024 words x 2 bytes = 2048. A different BYTES would need a different macro
