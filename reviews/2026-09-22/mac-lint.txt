@@ -1,0 +1,25 @@
+%Warning-WIDTHEXPAND: rtl/pe_eth_mac.v:489:35: Operator SUB expects 11 bits on the RHS, but RHS's VARREF 'FCS_BYTES' generates 3 bits.
+                                             : ... note: In instance 'pe_eth_mac'
+  489 |                 wptr      <= wptr - FCS_BYTES;
+      |                                   ^
+                      ... For warning description see https://verilator.org/warn/WIDTHEXPAND?v=5.050
+                      ... Use "/* verilator lint_off WIDTHEXPAND */" and lint_on around source to disable this message.
+%Warning-UNUSEDSIGNAL: rtl/pe_eth_mac.v:216:15: Bits of signal are not used: 'sr'[0]
+                                              : ... note: In instance 'pe_eth_mac'
+  216 |   logic [7:0] sr, sr_n;
+      |               ^~
+                       ... For warning description see https://verilator.org/warn/UNUSEDSIGNAL?v=5.050
+                       ... Use "/* verilator lint_off UNUSEDSIGNAL */" and lint_on around source to disable this message.
+%Warning-UNUSEDSIGNAL: rtl/pe_eth_mac.v:245:18: Bits of signal are not used: 'shreg'[0]
+                                              : ... note: In instance 'pe_eth_mac'
+  245 |   logic [7:0]    shreg, shreg_n;
+      |                  ^~~~~
+%Warning-UNUSEDSIGNAL: rtl/pe_eth_mac.v:254:18: Signal is not used: 'dst'
+                                              : ... note: In instance 'pe_eth_mac'
+  254 |   logic [7:0]    dst [0:5];
+      |                  ^~~
+%Warning-UNUSEDSIGNAL: rtl/pe_eth_mac.v:255:18: Signal is not used: 'src'
+                                              : ... note: In instance 'pe_eth_mac'
+  255 |   logic [7:0]    src [0:5];
+      |                  ^~~
+%Error: Exiting due to 5 warning(s)
