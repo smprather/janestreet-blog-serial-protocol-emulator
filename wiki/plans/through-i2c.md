@@ -395,9 +395,47 @@ version, and the reasoning for it:
   transition can only be a bit boundary), and a 3-tap majority filter turned out to
   shift every edge by a sample. Both are recorded in [[concepts/cdr-oversampling]].
 
-Step 1 is complete (see Blocker 1 for the measured evidence). Steps 2-3 are still
-the prerequisite for everything else: an uncommitted, undocumented milestone is the
-largest risk in the project today.
+Step 1 is complete (see Blocker 1 for the measured evidence) and steps 2-4 are
+committed; step 4 (the pin matrix) landed 2026-09-22 at 111 cells
+([[concepts/pin-matrix]]). **Step 5 is the next unstarted work** -- I2C SoC wiring,
+i.e. putting the matrix in front of the SoC's fixed-mask port and adding the 1 µs
+tick divider.
+
+## The full-SoC flow run, and what actually blocks tapeout (2026-09-22)
+
+`flow/pe_uart_soc.json` reached **76 of 80 steps** in `RUN_2026-09-22_00-48-35`
+and then quit on **deferred** errors. Three of the four blockers found on the way
+were flow-config, not silicon, and all three are fixed and verified:
+
+| stage | failure | fix |
+|---|---|---|
+| resizer | `RSZ-0060` max buffer count | setup/hold uncertainty SPLIT (the bare `set_clock_uncertainty` hit hold too) |
+| global route | `GRT-0116` congestion at 4.6% utilization | `GRT_ADJUSTMENT: 0.0` (the generic 30% derate; `GRT-0704` recommended exactly this) |
+| IR drop | `PSM-0069` on VPWR | custom `PDN_CFG`: the macro's supplies are **Metal4**, the stock grid stops at TopMetal1/2 |
+| Magic streamout | "Failed to extract PR boundary" | `MAGIC_MACRO_STD_CELL_SOURCE: PDK`; stock reads a `pblock` layer the macro's GDS lacks |
+
+**What is left is not flow config**, and it is the honest answer to "is this
+taped out":
+
+1. **Max-slew and max-cap violations, gated by `Checker.{MaxSlew,MaxCap}Violations`
+   (steps 74-75) in all three corners.** Every violating pin is on the SRAM, and
+   several sit at slew/cap values the macro's `.lib` was never characterised for
+   (input slew axis max 0.5952 vs 1.291 presented; output cap axis max 0.0640 vs
+   0.1169). OpenROAD extrapolates **silently**. `repair_design` is running with
+   `-slew_margin 20 -cap_margin 20` and resizes nothing;
+   `DESIGN_REPAIR_MAX_SLEW_PCT`/`MAX_CAP_PCT` is the lever. STATUS gotchas 37-38.
+2. **1,113,909 Magic DRC + 2,672 KLayout DRC errors, 100% inside the vendor
+   macro** (established by parsing every coordinate and every cell name, not by
+   assertion). KLayout, using the PDK's own deck, fires only **4 of 174 rules** and
+   the dominant pair is an **ESD-diode rule** (`Sdiod.d`/`Sdiod.e`) in a design
+   that has no diodes. The sanctioned handling is `MAGIC_GDS_FLATGLOB` plus an
+   exclude list -- **but not before the macro-alone test says the finding is the
+   PDK's rather than ours**, because [[entities/tiny-tapeout]] makes
+   "DRC/LVS-clean" a tapeout requirement for custom macros. STATUS gotchas 40-41.
+
+Everything else is green: setup/hold close (WNS +1.143/+0.121, 0 violating paths,
+TNS 0.0, three corners), routing DRC clear, XOR clear, disconnected pins clear,
+`LVS` reached, lint clean, and IR drop 0.30%.
 
 ## Risks and open questions
 
