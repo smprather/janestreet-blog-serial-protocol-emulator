@@ -272,17 +272,29 @@ the upside case with `tools/gen_sram_budget.py --tiles 8x4`.
 
 ## Timing margin at the 60 MHz operating point (measured, post-route)
 
-From `RUN_2026-09-22_00-48-35`, `55-openroad-stapostpnr`, the run that reached
-76/80. **Both that run and the configs now sign off at 60 MHz (`CLOCK_PERIOD`
-16.667 ns) — the 66 MHz target is retired,** so the reported slack IS the
+From `RUN_2026-09-22_02-58-32`, `55-openroad-stapostpnr` — **the first run signed
+off at `CLOCK_PERIOD` 16.667 ns = 60 MHz directly**, so the reported slack IS the
 operating-point margin with no conversion:
 
 | | setup (worst = slow corner) | hold (worst = fast corner) |
 |---|---|---|
-| worst slack **@66 MHz** (the old target, for reference) | +1.143 ns | +0.121 ns |
-| same path **@60 MHz** (now the signoff point) | **+2.660 ns** | +0.121 ns |
+| worst slack **@60 MHz — signed off here** | **+2.6601 ns** | **+0.1209 ns** |
 | as a fraction of the 60 MHz period | **16.0%** | — |
 | violating paths, all 3 corners | **0** | **0** |
+| max cap / max slew violations | **8 / 10 — STILL PRESENT** | |
+
+The 60 MHz figure **+2.6601 ns reproduces the +2.660 ns predicted from the 66 MHz
+run's path by hand** (arrival 13.4479 ns, capture clock 0.6419 ns, uncertainty
+1.0 ns, library setup 0.2008 ns), which is an independent check on the arithmetic
+in that table.
+
+**The relaxed period did NOT clear the slew/cap violations, and it could not
+have.** They are unchanged at 8 max-cap / 10 max-slew, identical to the 66 MHz
+run. A longer period relaxes *timing* (`setup`/`hold`); it does nothing to a
+slew or capacitance limit, which is a driver-strength and fanout property of the
+SRAM's pins as our routing drives them. See gotchas 37-38 — the lever is
+`DESIGN_REPAIR_MAX_SLEW_PCT` / `MAX_CAP_PCT`, and the IHP reference design hits
+the same checkers with no SRAM at all.
 
 **Fmax from the post-route critical path: 71.4 MHz** (slow corner, 1.08 V/125 C,
 min period 14.007 ns). That is real headroom over 60 MHz — 19% — and it is the
