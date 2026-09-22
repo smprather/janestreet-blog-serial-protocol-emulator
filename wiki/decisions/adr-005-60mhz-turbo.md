@@ -12,6 +12,11 @@ confidence: high
 
 - Status: accepted
 - Date: 2026-09-21
+- **Amended 2026-09-22:** the operating point is now **locked** — `CLK_HZ` is a
+  `localparam` in `pe_uart_soc`, not a parameter, because nothing ever
+  instantiated the SoC at another rate. The 66 MHz STA signoff target is retired;
+  both flow configs close at `CLOCK_PERIOD` 16.667 ns. See
+  [[reference/clock-arithmetic]].
 
 ## Context
 
@@ -91,8 +96,10 @@ of 3**. So 66.5 works **only with a purpose-built dither generator**, buying
   at 60 MHz**. The read path is `A_CLK → A_DOUT → CPU` with no wrapper register
   (deliberately: a register would add a second cycle and break the CPU's
   fetch-ahead). The pe_serdes STA signoff above does not cover it — that run
-  has no SRAM. **The SoC needs its own STA run at 15.15 ns before tapeout**, and
-  this is the number it must close against.
+  has no SRAM. **The SoC needs its own STA run at 60 MHz (16.667 ns) before
+  tapeout**, and this is the number it must close against. (Originally written as
+  15.15 ns; the 66 MHz signoff target was retired 2026-09-22 — see
+  [[reference/clock-arithmetic]].)
 - **SPB 12 satisfies `pe_dru`'s constraints.** Verified by running the DRU
   testbench at SPB = 12: `PASS: tb_pe_dru`.
 - **The `SPB % 4 == 0` guard was incomplete, and the gap was silent.** Checking

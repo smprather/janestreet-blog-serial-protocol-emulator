@@ -129,7 +129,9 @@ port (and the same `PIN_IN_MASK`) as the UART; `tools/peemu.py` models a mode-0
 slave so the firmware is exercised end to end ([[concepts/spi-as-firmware]]).
 `RUN_2026-09-22_00-33-59` finished detailed routing with **0 DRC violations** and
 signed off **setup WNS +1.234 ns / hold +0.127 ns / 0 violations at all three
-corners**; the SRAM in-context access is **7.639 ns** against a 15.15 ns period
+corners**; the SRAM in-context access is **7.639 ns** against the 16.667 ns
+period (it was signed against 15.15 ns; the target is now 60 MHz — see
+[[reference/clock-arithmetic]])
 ([[reference/sram-budget]]). That closes the "SRAM is the critical path and no
 signoff covers it" risk below. What remains of the ordered list is **step 4: the
 pin matrix / OE** (open-drain, read-back, tri-state) for I2C. **Update

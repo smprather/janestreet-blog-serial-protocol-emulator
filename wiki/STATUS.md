@@ -291,14 +291,14 @@ the upside case with `tools/gen_sram_budget.py --tiles 8x4`.
 ## Timing margin at the 60 MHz operating point (measured, post-route)
 
 From `RUN_2026-09-22_00-48-35`, `55-openroad-stapostpnr`, the run that reached
-76/80. **Signoff is at 66 MHz (`CLOCK_PERIOD` 15.15 ns), the operating point is
-60 MHz (16.667 ns)** — so there are two different margins and they must not be
-conflated:
+76/80. **Both that run and the configs now sign off at 60 MHz (`CLOCK_PERIOD`
+16.667 ns) — the 66 MHz target is retired,** so the reported slack IS the
+operating-point margin with no conversion:
 
 | | setup (worst = slow corner) | hold (worst = fast corner) |
 |---|---|---|
-| worst slack **as reported @66 MHz** | **+1.143 ns** | **+0.121 ns** |
-| same path **@60 MHz** (the operating point) | **+2.660 ns** | +0.121 ns |
+| worst slack **@66 MHz** (the old target, for reference) | +1.143 ns | +0.121 ns |
+| same path **@60 MHz** (now the signoff point) | **+2.660 ns** | +0.121 ns |
 | as a fraction of the 60 MHz period | **16.0%** | — |
 | violating paths, all 3 corners | **0** | **0** |
 
