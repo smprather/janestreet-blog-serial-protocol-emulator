@@ -28,7 +28,13 @@ cleanup() {
   rm -f "$BAK"
   rmdir "$ROOT/sim" 2>/dev/null
 }
-trap cleanup EXIT INT TERM
+on_signal() {
+  cleanup
+  trap - EXIT INT TERM
+  exit 143
+}
+trap cleanup EXIT
+trap on_signal INT TERM
 
 mkdir -p "$ROOT/sim"
 cd "$ROOT/sim"

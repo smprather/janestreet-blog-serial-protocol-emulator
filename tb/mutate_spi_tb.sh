@@ -163,7 +163,21 @@ restore_pristine() {
   [ -f "$PRISTINE/$(basename "$IMAGE")" ] && cp "$PRISTINE/$(basename "$IMAGE")" "$IMAGE"
   return 0
 }
-trap 'restore_pristine; rm -rf "$TMP" "$PRISTINE"' EXIT INT TERM
+cleanup() {
+  restore_pristine
+  rm -rf "$TMP" "$PRISTINE"
+}
+# A trapped signal must NOT fall back into the script: bash continues after a
+# TERM trap returns, so the interrupted case was still running its normal path
+# and hit the now-deleted snapshot ("RESTORE FAILED", then exit 3). Restore,
+# disarm the traps, and exit with the signal status.
+on_signal() {
+  cleanup
+  trap - EXIT INT TERM
+  exit 143
+}
+trap cleanup EXIT
+trap on_signal INT TERM
 
 # ---------------------------------------------------------------- mutation 1
 # SAMPLE THE WRONG EDGE. Move the master's MISO sample from after the rising
