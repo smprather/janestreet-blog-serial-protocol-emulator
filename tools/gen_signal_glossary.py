@@ -40,6 +40,14 @@ NOTES: dict[tuple[str, str], str] = {
     ("*", "clk"): "System clock. Blocks count strobes, not cycles.",
     ("*", "rst_n"): "Active-low asynchronous reset.",
     ("*", "bit_en"): "**The strobe** — one-cycle pulse meaning \"this is the moment\". The only thing that commits state in this block. Supplied by the timing block/DRU. See [[concepts/strobe-and-committing-edge]].",
+    # ---- pe_pinmux: per-pin direction, open-drain, read-back ------------
+    ("pe_pinmux", "we"): "Register write strobe. One write port for all four registers — `addr` picks which.",
+    ("pe_pinmux", "addr"): "Register select: 0 = OUT, 1 = OE, 2 = IN (**read-only**; a write here is a no-op, not an error), 3 = OD.",
+    ("pe_pinmux", "wdata"): "Value to write to the selected register. One bit per pin; bits above `PINS` are ignored.",
+    ("pe_pinmux", "rdata"): "Value of the selected register. Reading IN returns the **pad level**, sampled combinationally — not a stored copy, which would report the previous bit cell and make arbitration read as a pass while the bus was being fought.",
+    ("pe_pinmux", "pad_in"): "The level on each pin, driven or not. The external pull-up owns a released line, and wired-AND means any driver pulling low drags the whole wire down.",
+    ("pe_pinmux", "pad_out"): "Level to drive. Only reaches the pad where `pad_oe` is high.",
+    ("pe_pinmux", "pad_oe"): "1 = this pin may drive. **In OD mode this is `oe & ~out`**, so a pin holding a 1 is RELEASED rather than driven high — that gate is the bus-contention safety property, and it is why the same firmware (`out=1` to send a 1, `out=0` to send a 0) works in both modes. See [[concepts/pin-matrix]].<br>**Open-drain** (I2C, PS/2): never drive high; release and let the board's pull-up do it.<br>**Tristate** (I2C arbitration): read back the pad level to see whether another master won the bit.<br>**Push-pull** (UART, SPI, CAN, USB): `oe=1` and toggle `out`.",
     # ---- pe_serdes: the shared bit engine -------------------------------
     ("pe_serdes", "clk"): "System clock. The DUT counts strobes, not cycles.",
     ("pe_serdes", "rst_n"): "Active-low async reset.",

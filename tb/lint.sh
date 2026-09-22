@@ -32,7 +32,7 @@ cd "$(dirname "$0")/.." || exit 1
 # port shell: yosys needs it to elaborate pe_imem, verilator does not (it
 # treats an undefined module as a blackbox already) but passing it is
 # harmless and keeps one file list.
-RTL_ALL="rtl/pe_serdes.v rtl/pe_line_codec.v rtl/pe_codec_mux.v rtl/pe_crc.v rtl/pe_dru.v rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_uart_soc.v rtl/tt_um_protocol_emulator.v"
+RTL_ALL="rtl/pe_serdes.v rtl/pe_line_codec.v rtl/pe_codec_mux.v rtl/pe_crc.v rtl/pe_dru.v rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_uart_soc.v rtl/pe_pinmux.v rtl/tt_um_protocol_emulator.v"
 SRAM_BB="rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v"
 rc=0
 
@@ -41,7 +41,7 @@ rc=0
 # behaviour we want: there are no accepted warnings in this RTL.
 if command -v verilator >/dev/null 2>&1; then
   for top in pe_serdes pe_nrzi pe_manch pe_bitstuff pe_codec_mux pe_crc pe_dru pe_cpu \
-             pe_imem pe_uart_soc tt_um_protocol_emulator; do
+             pe_imem pe_uart_soc pe_pinmux tt_um_protocol_emulator; do
     if out=$(verilator --lint-only -Wall --timing --top-module "$top" $RTL_ALL $SRAM_BB 2>&1); then
       printf '%-28s lint OK\n' "$top"
     else
@@ -65,7 +65,7 @@ fi
 #                            became a new floating wire.
 # found and reported .* problems -> hierarchy -check failure.
 if command -v yosys >/dev/null 2>&1; then
-  for top in pe_serdes pe_codec_mux pe_crc pe_dru pe_cpu pe_imem pe_uart_soc tt_um_protocol_emulator; do
+  for top in pe_serdes pe_codec_mux pe_crc pe_dru pe_cpu pe_imem pe_uart_soc pe_pinmux tt_um_protocol_emulator; do
     out=$(yosys -p "read_verilog -sv $RTL_ALL $SRAM_BB; hierarchy -check -top $top; proc; opt" 2>&1)
     bad=$(grep -E "Driver-driver conflict|implicitly declared|is not part of the design|Warning: Wire .* is used but has no driver" <<< "$out")
     if [ -z "$bad" ]; then

@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen_signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-12 modules, 144 ports.
+13 modules, 153 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -211,6 +211,20 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_raw` | out | 1 | Bit out, with stuff bits removed. |
 | `rx_raw_valid` | out | 1 | 0 ⇒ this wire bit was a stuff bit. |
 | `rx_err` | out | 1 | The bit after a full run was not complementary. |
+
+## `pe_pinmux`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `rst_n` | inp | 1 | Active-low asynchronous reset. |
+| `we` | inp | 1 | Register write strobe. One write port for all four registers — `addr` picks which. |
+| `addr` | inp | `[1:0]` | Register select: 0 = OUT, 1 = OE, 2 = IN (**read-only**; a write here is a no-op, not an error), 3 = OD. |
+| `wdata` | inp | `[PINS-1:0]` | Value to write to the selected register. One bit per pin; bits above `PINS` are ignored. |
+| `rdata` | out | `[PINS-1:0]` | Value of the selected register. Reading IN returns the **pad level**, sampled combinationally — not a stored copy, which would report the previous bit cell and make arbitration read as a pass while the bus was being fought. |
+| `pad_in` | inp | `[PINS-1:0]` | The level on each pin, driven or not. The external pull-up owns a released line, and wired-AND means any driver pulling low drags the whole wire down. |
+| `pad_out` | out | `[PINS-1:0]` | Level to drive. Only reaches the pad where `pad_oe` is high. |
+| `pad_oe` | out | `[PINS-1:0]` | 1 = this pin may drive. **In OD mode this is `oe & ~out`**, so a pin holding a 1 is RELEASED rather than driven high — that gate is the bus-contention safety property, and it is why the same firmware (`out=1` to send a 1, `out=0` to send a 0) works in both modes. See [[concepts/pin-matrix]].<br>**Open-drain** (I2C, PS/2): never drive high; release and let the board's pull-up do it.<br>**Tristate** (I2C arbitration): read back the pad level to see whether another master won the bit.<br>**Push-pull** (UART, SPI, CAN, USB): `oe=1` and toggle `out`. |
 
 ## `pe_uart_soc`
 

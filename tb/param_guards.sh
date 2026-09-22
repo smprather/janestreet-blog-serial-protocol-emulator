@@ -106,6 +106,62 @@ check_accepts "pe_dru SPB=16 (the boundary)" "rtl/pe_dru.v" "pe_dru #(.SPB(16))"
 # The 60 MHz turbo grid. If this ever starts failing, ADR-005's RX plan is dead.
 check_accepts "pe_dru SPB=12 (60 MHz turbo)" "rtl/pe_dru.v" "pe_dru #(.SPB(12))"
 
+# ------------------------------------------------------------------ pe_pinmux
+# check_pinmux <name> <expect|ACCEPT> <PINS value>
+#
+# pe_pinmux needs its own harness because its port list is nothing like the
+# DRU's. It is written out longhand rather than generalised: parameterising the
+# existing helpers over arbitrary port lists would make the DRU cases (the ones
+# that caught a REAL silent truncation) harder to read, and these three cases
+# are not worth that.
+#
+# The guard matters because the register file is addressed by 2 bits and the
+# vectors go to [-1:0] at PINS=0 -- a reversed range that iverilog accepts
+# without a word, so without the guard the module would elaborate and quietly
+# do the wrong thing.
+check_pinmux() {
+  local name="$1" expect="$2" pins="$3"
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  cat > "$tmpdir/elab.v" <<EOF
+\`timescale 1ns / 1ps
+module elab_top;
+  localparam int P = $pins;
+  logic clk = 0, rst_n = 0, we = 0;
+  logic [1:0] addr = 0;
+  logic [P-1:0] wdata = 0, rdata, pad_in = 0, pad_out, pad_oe;
+  pe_pinmux #(.PINS(P)) dut (.clk(clk), .rst_n(rst_n), .we(we), .addr(addr),
+                             .wdata(wdata), .rdata(rdata), .pad_in(pad_in),
+                             .pad_out(pad_out), .pad_oe(pad_oe));
+endmodule
+EOF
+  if out=$(iverilog -g2012 -s elab_top -o "$tmpdir/elab.vvp" rtl/pe_pinmux.v "$tmpdir/elab.v" 2>&1); then
+    if [ "$expect" = "ACCEPT" ]; then
+      printf '%-34s accepted OK\n' "$name"; pass=$((pass + 1))
+    else
+      printf '%-34s FAIL (compiled -- guard did not reject)\n' "$name"; fail=$((fail + 1))
+    fi
+  else
+    if [ "$expect" = "ACCEPT" ]; then
+      printf '%-34s FAIL (should have been accepted)\n' "$name"
+      grep -E 'ERROR|sorry' <<< "$out" | head -2
+      fail=$((fail + 1))
+    elif grep -q "$expect" <<< "$out"; then
+      printf '%-34s rejected OK\n' "$name"; pass=$((pass + 1))
+    else
+      printf '%-34s FAIL (rejected, but not with the expected message)\n' "$name"
+      grep -E 'ERROR|sorry' <<< "$out" | head -2
+      fail=$((fail + 1))
+    fi
+  fi
+  rm -rf "$tmpdir"
+}
+
+check_pinmux "pe_pinmux PINS=0 (reversed range)" "PINS must be >= 1" 0
+check_pinmux "pe_pinmux PINS=9 (> 8)"            "PINS must be <= 8" 9
+check_pinmux "pe_pinmux PINS=8 (the boundary)"   "ACCEPT"            8
+check_pinmux "pe_pinmux PINS=1 (the other end)"  "ACCEPT"            1
+
 echo
 echo "param guards: $pass rejected/accepted as specified, $fail wrong"
 [ "$fail" -eq 0 ] || exit 1

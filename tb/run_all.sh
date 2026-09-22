@@ -67,6 +67,10 @@ CASES=(
   # "phase 2 and 6 of an edge-reset counter are the half-cell centres" claim is
   # measured -- against every Manchester transition pattern.
   "tb_pe_dru|../rtl/pe_line_codec.v ../rtl/pe_dru.v|tb_pe_dru"
+  # The pin matrix: runtime per-pin direction, open-drain, read-back. The I2C
+  # gate -- it makes arbitration (reading a pin we are also driving) and
+  # bus-contention safety structural rather than a firmware convention.
+  "tb_pe_pinmux|../rtl/pe_pinmux.v|tb_pe_pinmux"
   # The firmware processor, its unit TB, and the software-UART SoC TB. The SoC TB
   # $readmemh's firmware/uart_echo.hex, so run_firmware_tests.sh (below) must have
   # assembled a current copy -- it runs first for exactly that reason.
