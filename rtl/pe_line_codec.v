@@ -13,9 +13,15 @@
 //                RX: decodes from the two half-cell samples the DRU
 //                captured; equal halves = illegal (no mid-bit edge).
 //   pe_bitstuff  Insert/drop a complementary bit after run_cfg identical
-//                consecutive bits (5 = CAN, 6 = USB). TX emits the real
-//                bit first, then consumes a FOLLOWING strobe for the stuff
-//                bit (tx_stuffed flags that strobe; raw input is ignored).
+//                consecutive bits (5 = CAN, 6 = USB). `ones_only` selects the
+//                protocol's rule: CAN stuffs a run of EQUAL bits at either
+//                polarity, while USB stamps a 0 only after six consecutive
+//                ONES (USB 1.1 §7.1.9) -- before NRZI, so the stuffer sees the
+//                raw bits. Getting this wrong made eight zeroes decode as
+//                seven bits with an error (measured, review 2 R2-3).
+//                TX emits the real bit first, then consumes a FOLLOWING strobe
+//                for the stuff bit (tx_stuffed flags that strobe; raw input is
+//                ignored).
 //                RX flags the stuffed bit (rx_raw_valid=0) and errors if
 //                the bit after a full run is not complementary.
 //
@@ -114,6 +120,7 @@ module pe_bitstuff (
   input  logic       bypass,
   input  logic       clr,          // frame/SOF boundary: reset run tracking
   input  logic [3:0] run_cfg,      // stuff after this many identical bits
+  input  logic       ones_only,    // 1 = only runs of 1 are stuffed (USB)
   input  logic       tx_raw,
   output logic       tx_wire,
   output logic       tx_stuffed,   // this strobe emits a stuff bit (raw ignored)
@@ -141,8 +148,12 @@ module pe_bitstuff (
         tx_run  <= 4'd1;      // the stuff bit opens a new run
         tx_lvl  <= ~tx_lvl;
       end else if (tx_raw == tx_lvl) begin
-        if (tx_run == run_cfg - 4'd1) tx_pend <= 1'b1;
-        tx_run <= tx_run + 4'd1;
+        // Only a qualifying run arms the stuff bit. A zero run under
+        // `ones_only` never does, so the counter SATURATES at run_cfg instead
+        // of wrapping -- a long zero run has no bound in USB data.
+        if (tx_run == run_cfg - 4'd1 && (tx_lvl == 1'b1 || !ones_only))
+          tx_pend <= 1'b1;
+        if (tx_run != run_cfg) tx_run <= tx_run + 4'd1;
       end else begin
         tx_lvl <= tx_raw;
         tx_run <= 4'd1;
@@ -155,7 +166,8 @@ module pe_bitstuff (
   logic       rx_lvl;
   logic       rx_is_stuff;
 
-  assign rx_is_stuff  = !bypass && (rx_run == run_cfg);
+  assign rx_is_stuff  = !bypass && (rx_run == run_cfg) &&
+                        (rx_lvl == 1'b1 || !ones_only);
   assign rx_raw       = rx_wire;
   assign rx_raw_valid = bypass ? 1'b1 : !rx_is_stuff;
 
@@ -166,13 +178,14 @@ module pe_bitstuff (
       rx_run <= 4'd0; rx_lvl <= 1'b0; rx_err <= 1'b0;
     end else if (bit_en && !bypass) begin
       rx_err <= 1'b0;
-      if (rx_run == run_cfg) begin
+      if (rx_run == run_cfg && (rx_lvl == 1'b1 || !ones_only)) begin
         // this wire bit is the stuffed one: it must be complementary
         if (rx_wire == rx_lvl) rx_err <= 1'b1;
         rx_run <= 4'd1;
         rx_lvl <= rx_wire;
       end else if (rx_wire == rx_lvl) begin
-        rx_run <= rx_run + 4'd1;
+        // Saturate: a non-stuffable run (zeroes under ones_only) is unbounded.
+        if (rx_run != run_cfg) rx_run <= rx_run + 4'd1;
       end else begin
         rx_run <= 4'd1;
         rx_lvl <= rx_wire;

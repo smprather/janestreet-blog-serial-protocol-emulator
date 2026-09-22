@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen_signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-15 modules, 183 ports.
+15 modules, 184 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -243,6 +243,7 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `bypass` | inp | 1 | 1 ⇒ pass the raw bit through untouched (no stuffing). |
 | `clr` | inp | 1 | Frame/SOF boundary — reset run tracking. |
 | `run_cfg` | inp | `[3:0]` | Stuff after this many identical bits (5 = CAN, 6 = USB-LS). |
+| `ones_only` | inp | 1 | _no note yet_ |
 | `tx_raw` | inp | 1 | Raw bit in. |
 | `tx_wire` | out | 1 | Bit out, with stuff bits inserted. |
 | `tx_stuffed` | out | 1 | A stuff bit is owed on the **next** strobe (`tx_pend`); the raw input is ignored on that strobe. |

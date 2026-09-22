@@ -213,6 +213,7 @@ endmodule
 module tb_pe_bitstuff;
   logic clk=0, rst_n, bit_en, bypass, clr;
   logic [3:0] run_cfg;
+  logic ones_only;
   logic tx_raw, tx_wire, tx_stuffed;
   logic rx_wire, rx_raw, rx_raw_valid, rx_err;
   pe_bitstuff dut (.*);
@@ -245,7 +246,7 @@ module tb_pe_bitstuff;
 
   initial begin
     $dumpfile("tb_pe_bitstuff.vcd"); $dumpvars(0, tb_pe_bitstuff);
-    rst_n=0; bit_en=0; bypass=0; clr=0; run_cfg=4'd5;
+    rst_n=0; bit_en=0; bypass=0; clr=0; run_cfg=4'd5; ones_only=1'b0;
     tx_raw=0; rx_wire=0;
     repeat(3) @(posedge clk); #1; rst_n=1; @(posedge clk); #1;
 
@@ -276,10 +277,10 @@ module tb_pe_bitstuff;
       check(w === 1'b1, "can0: stuff bit complementary (1)");
     end
 
-    // ---- USB (run_cfg=6): six 1s then a stuffed 0 ----
+    // ---- USB (run_cfg=6, ones_only): six 1s then a stuffed 0 ----
     begin
       bit w;
-      run_cfg = 4'd6;
+      run_cfg = 4'd6; ones_only = 1'b1;
       clr = 1; @(posedge clk); #1; clr = 0;
       for (int k = 0; k < 6; k++) begin
         tx_bit(1'b1, w);
@@ -288,6 +289,41 @@ module tb_pe_bitstuff;
       check(tx_stuffed === 1'b1, "usb: stuff owed after 6 ones");
       tx_stuff(w);
       check(w === 1'b0, "usb: stuff bit complementary");
+      ones_only = 1'b0;
+    end
+
+    // ---- USB: a run of ZEROES must NOT be stuffed (USB 1.1 7.1.9) ----
+    begin
+      bit w;
+      run_cfg = 4'd6; ones_only = 1'b1;
+      clr = 1; @(posedge clk); #1; clr = 0;
+      for (int k = 0; k < 10; k++) begin
+        tx_bit(1'b0, w);
+        check(w === 1'b0, $sformatf("usb0: data 0 at %0d", k));
+        check(tx_stuffed === 1'b0,
+              $sformatf("usb0: no stuff in a zero run at %0d", k));
+      end
+
+      // ...and the RX side must recover all ten zeroes with no error and no
+      // dropped/stuff-flagged bit. This is the case the review found: the
+      // symmetric counter saw the 7th zero as a stuff bit.
+      clr = 1; @(posedge clk); #1; clr = 0;
+      for (int k = 0; k < 10; k++) begin
+        rx_wire = 1'b0; #1;
+        check(rx_raw_valid === 1'b1, $sformatf("usb0 rx: bit %0d valid", k));
+        strobe(); #1;
+        check(rx_err === 1'b0, $sformatf("usb0 rx: no error at %0d", k));
+      end
+
+      // And a one-run still stuffs under the same config, so the RX is not
+      // simply ignoring the stuffer.
+      clr = 1; @(posedge clk); #1; clr = 0;
+      for (int k = 0; k < 6; k++) begin rx_wire = 1'b1; #1; strobe(); end
+      rx_wire = 1'b0; #1;
+      check(rx_raw_valid === 1'b0, "usb1 rx: the 7th one is a stuff slot");
+      strobe(); #1;
+      check(rx_err === 1'b0, "usb1 rx: complementary stuff accepted");
+      ones_only = 1'b0;
     end
 
     // ---- Wire-stream round trip: TX all-ones (max stuffing), replay RX ----

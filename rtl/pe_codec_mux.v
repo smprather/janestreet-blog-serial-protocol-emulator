@@ -9,7 +9,11 @@
 //   cfg[1]    nrzi_en      NRZI line coding (USB-LS)
 //   cfg[2]    manch_en     Manchester line coding (10BASE-T)
 //   cfg[3]    half_phase   Manchester half-cell select (SM/timing driven)
-//   cfg[7:4]  run_cfg      stuff run length (0 => default 5; CAN 5, USB 6)
+//   cfg[6:4]  run_cfg      stuff run length (0 => default 5; CAN 5, USB 6)
+//   cfg[7]    ones_only    stuff only runs of 1 (USB); 0 = either polarity
+//                          (CAN). USB 1.1 7.1.9 stamps a 0 after six ones; a
+//                          symmetric counter mis-stuffs zero runs (review 2).
+//                          USB's config byte is therefore 0xE3, not 0x63.
 //
 // TX order:  tx_bit -> [stuff] -> [nrzi] -> [manch] -> tx_wire
 // RX order:  rx_wire -> [manch] -> [nrzi] -> [stuff] -> rx_bit
@@ -41,13 +45,17 @@ module pe_codec_mux (
   output logic       rx_bit_valid,
   output logic       rx_err
 );
-  logic       stuff_en, nrzi_en, manch_en;
+  logic       stuff_en, nrzi_en, manch_en, ones_only;
   logic [3:0] run_cfg;
 
   assign stuff_en = cfg[0];
   assign nrzi_en  = cfg[1];
   assign manch_en = cfg[2];
-  assign run_cfg  = (cfg[7:4] == 4'd0) ? 4'd5 : cfg[7:4];
+  assign ones_only = cfg[7];
+  // 3 bits, not 4: bit 7 carries the stuffing polarity rule. The default run
+  // length is still 5 so a legacy cfg byte with the high nibble unused keeps
+  // its CAN-style behaviour.
+  assign run_cfg  = (cfg[6:4] == 3'd0) ? 4'd5 : {1'b0, cfg[6:4]};
 
   // ---- TX cascade: stuff -> nrzi -> manch ----
   logic s_wire, n_wire, m_rx_out, n_rx_out, st_rx_err, m_rx_err, n_tx_lvl;
@@ -55,6 +63,7 @@ module pe_codec_mux (
   pe_bitstuff u_stuff (
     .clk(clk), .rst_n(rst_n), .bit_en(bit_en),
     .bypass(~stuff_en), .clr(clr), .run_cfg(run_cfg),
+    .ones_only(ones_only),
     .tx_raw(tx_bit), .tx_wire(s_wire), .tx_stuffed(tx_stuffed),
     .rx_wire(n_rx_out), .rx_raw(rx_bit), .rx_raw_valid(rx_bit_valid),
     .rx_err(st_rx_err)

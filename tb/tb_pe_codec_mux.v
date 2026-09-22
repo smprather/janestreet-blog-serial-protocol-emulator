@@ -1,7 +1,7 @@
 // tb_pe_codec_mux.v — config-driven pipeline muxing.
 //
 // cfg[0]=stuff_en  cfg[1]=nrzi_en  cfg[2]=manch_en  cfg[3]=half_phase
-// cfg[7:4]=stuff run length (0 => default 5; CAN 5, USB 6)
+// cfg[6:4]=stuff run length (0 => default 5; CAN 5, USB 6)  cfg[7]=ones_only
 //
 // TX: tx_bit -> [stuff] -> [nrzi] -> [manch] -> tx_wire
 // RX: rx_wire -> [manch] -> [nrzi] -> [stuff] -> rx_bit
@@ -106,9 +106,9 @@ module tb_pe_codec_mux;
       check(rb === 1'b1, "can rx: resumed bit = 1");
     end
 
-    // ============ cfg=0x61: stuff only, run 6 (USB) =================
+    // ============ cfg=0xE1: stuff only, run 6, ones-only (USB) ======
     begin
-      cfg = 8'h61; reset_run();
+      cfg = 8'hE1; reset_run();
       for (int k = 0; k < 6; k++) begin
         tx_step_comb(1'b1, w, st);
         check(st === 1'b0, $sformatf("usb tx: no stuff at %0d", k));
@@ -117,6 +117,30 @@ module tb_pe_codec_mux;
       tx_step_comb(1'b0, w, st);
       check(st === 1'b1, "usb tx: stuff strobe flagged");
       check(w === 1'b0, "usb tx: stuff bit complementary");
+    end
+
+    // ============ cfg=0xE1: a ZERO run must not be stuffed ==========
+    // USB 1.1 7.1.9 stamps a 0 after six ONES only. The symmetric counter saw
+    // the 7th zero as a stuff bit and inserted a 1 (review 2 R2-3). This is a
+    // direct check of the TX wire and the RX validity flag; the round trip in
+    // the big USB section cannot catch it, because a symmetric stuffer and a
+    // symmetric receiver are self-consistent.
+    begin
+      int nstuff;
+      cfg = 8'hE1; reset_run();
+      nstuff = 0;
+      for (int k = 0; k < 12; k++) begin
+        tx_step_comb(1'b0, w, st);
+        if (st) nstuff++;
+        check(w === 1'b0, $sformatf("usb zero tx: wire stays 0 at %0d", k));
+      end
+      check(nstuff == 0, "usb tx: a 12-zero run inserted no stuff bit");
+
+      cfg = 8'hE1; reset_run();
+      for (int k = 0; k < 12; k++) begin
+        rx_step(1'b0, rb, rv);
+        check(rv === 1'b1, $sformatf("usb zero rx: bit %0d valid", k));
+      end
     end
 
     // ================= cfg=0x02: NRZI only ==========================
@@ -177,26 +201,29 @@ module tb_pe_codec_mux;
       check(rx_err === 1'b0, "manch rx: error clears without a strobe");
     end
 
-    // ====== cfg=0x63: stuff(run 6) + NRZI, USB-LS composition =======
+    // ====== cfg=0xE3: stuff(run 6, ones-only) + NRZI, USB-LS =======
     begin
       int nraw; logic rec [64]; bit rbv, rvv;
       logic [79:0] wire_lv;   // level per wire bit
       int nwv; bit lv; bit raw_exp [64]; int nraw_exp;
       logic stuffed [128]; int ns; int run; bit last;
-      cfg = 8'h63; reset_run();
+      cfg = 8'hE3; reset_run();
 
-      // Build the stuffed raw stream (run counter resets after each
-      // inserted bit, exactly like the RTL), then NRZI-encode it.
+      // Build the stuffed raw stream under the USB rule (only a run of ONES
+      // takes a 0), then NRZI-encode it. The data has long one-runs (several
+      // stuff bits) and a 12-bit ZERO run (none) so the rule itself is
+      // exercised. The independent USB wire model here is what the probe in
+      // reviews/2026-09-22/review2/usb_zeros.v checks directly.
       nraw_exp = 0; ns = 0; run = 0; last = 1'b0;
       for (int k = 0; k < 48; k++) begin
         bit b;
-        b = (k % 10 < 7) ? 1'b1 : ((k / 10) % 2);   // long one-runs
+        b = (k < 16) ? 1'b1 : (k < 28) ? 1'b0 : (k % 2);
         raw_exp[nraw_exp] = b; nraw_exp++;
         stuffed[ns] = b; ns++;
         if (b == last) run++; else begin last = b; run = 1; end
-        if (run == 6) begin
-          stuffed[ns] = ~b; ns++;      // stuffed bit
-          last = ~b; run = 1;          // it opens a new run
+        if ((b == 1'b1) && (run == 6)) begin
+          stuffed[ns] = 1'b0; ns++;    // stuffed zero after six ones
+          last = 1'b0; run = 1;        // it opens a new run
         end
       end
       lv = 1'b1; nwv = 0;
