@@ -124,12 +124,19 @@ module pe_fbuf #(
           // from the macro path and the two would diverge silently.
           if (waddr[0]) mem[waddr[AW-1:1]][15:8] <= wdata;
           else          mem[waddr[AW-1:1]][7:0]  <= wdata;
+        end else begin
+          word_rd <= mem[raddr[AW-1:1]];
+          // The lane is captured with the address, at the same edge that
+          // starts the read -- see the header. Registering it later selects
+          // the wrong byte whenever consecutive reads alternate lanes.
+          //
+          // BOTH word and lane are HELD during a write, not just the lane:
+          // the macro has REN deasserted for the write cycle and its A_DOUT
+          // does not move, so a fallback that read anyway returned the new
+          // read address's data where the macro returned the previous word
+          // (measured, review 2 R2-5).
+          rd_lane <= raddr[0];
         end
-        word_rd <= mem[raddr[AW-1:1]];
-        // The lane is captured with the address, at the same edge that starts
-        // the read -- see the header. Registering it later selects the wrong
-        // byte whenever consecutive reads alternate lanes.
-        if (!we) rd_lane <= raddr[0];
       end
     end else begin : g_macro
       logic we_m, re_m;

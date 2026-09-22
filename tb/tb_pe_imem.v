@@ -131,6 +131,26 @@ module tb_pe_imem;
     repeat (2) @(posedge clk); #1;
     check(imem_rdata === 16'hBBBB, "the new word is visible after the write");
 
+    // ============ 3b. a write HOLDS the output across a changing fetch ====
+    // Same contract as the macro: REN is deasserted for the write cycle, so
+    // A_DOUT does not move even when the fetch address changes. The fallback
+    // used to read the new address during the write and diverge. (review 2
+    // R2-5)
+    write_word(10'd0, 16'h1111);
+    write_word(10'd1, 16'h2222);
+    imem_addr = 10'd0;
+    repeat (2) @(posedge clk); #1;
+    check(imem_rdata === 16'h1111, "address 0 is on the read port before the hold test");
+    imem_addr = 10'd1;                       // fetch address changes ...
+    host_we = 1'b1; host_addr = 10'd100; host_wdata = 16'hDEAD;  // ... during a write
+    @(posedge clk); #1;
+    check(imem_rdata === 16'h1111,
+          $sformatf("a write must hold the read output (got 0x%04X, want 0x1111)",
+                    imem_rdata));
+    host_we = 1'b0;
+    repeat (2) @(posedge clk); #1;
+    check(imem_rdata === 16'h2222, "the new fetch address is read after the write");
+
     // ============ 4. the depth that motivated the swap ============
     // Word 1023 must be reachable. The 128-word flop memory could not be
     // addressed above 127 and the 8-bit PC could not name anything above 255,

@@ -92,9 +92,13 @@ module pe_imem #(
       // tb/synth_area.sh measures to price the swap, and what lets a testbench
       // run when the PDK (or the macro's model) is not available.
       logic [15:0] mem [0:WORDS-1];
+      // Reads are disabled during a host write, exactly like the macro's
+      // `re = ~host_we`: the macro deasserts REN for the write cycle and holds
+      // A_DOUT, so a fallback that kept reading would diverge whenever the
+      // fetch address changed across a write (measured, review 2 R2-5).
       always_ff @(posedge clk) begin
         if (host_we) mem[host_addr] <= host_wdata;
-        imem_rdata <= mem[imem_addr];
+        else         imem_rdata <= mem[imem_addr];
       end
     end else begin : g_macro
       // Write-enable decode. MEN is high for either operation; WEN and REN are

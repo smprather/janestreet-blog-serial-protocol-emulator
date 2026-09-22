@@ -198,6 +198,23 @@ module tb_pe_fbuf;
           "a concurrent read did not return the byte being written (write-through leaked)");
     rd(100, got); check(got === 8'h88, $sformatf("byte 100 = %02h after the concurrent access", got));
 
+    // ---- 6b. a WRITE holds the read output across a CHANGING address ------
+    // The macro deasserts REN for a write cycle and its A_DOUT does not move.
+    // The fallback used to keep reading, and the lane register was held while
+    // the word register changed, so the presented byte was not even a
+    // consistent read -- macro and FLOP diverged. (review 2 R2-5)
+    wr(200, 8'hAA); wr(202, 8'hBB);
+    @(negedge clk);
+    raddr = AW'(200);
+    @(negedge clk);                       // word_rd now holds byte 200's word
+    raddr = AW'(202);                     // read address CHANGES ...
+    we = 1'b1; waddr = AW'(50); wdata = 8'h5A;   // ... during a write to elsewhere
+    @(negedge clk);
+    we = 1'b0;
+    check(rdata === 8'hAA,
+          $sformatf("a write must hold the read output (got %02h, want AA)", rdata));
+    rd(202, got); check(got === 8'hBB, $sformatf("byte 202 = %02h after the write", got));
+
     $display("");
     if (errors == 0) $display("PASS: all checks");
     else             $display("FAIL: %0d checks failed", errors);
