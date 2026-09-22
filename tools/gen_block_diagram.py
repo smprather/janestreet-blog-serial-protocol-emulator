@@ -63,6 +63,16 @@ BLOCKS = [
         cells_key="pe_imem_macro",
     ),
     dict(
+        name="pe_eth_mac",
+        source_file="pe_eth_mac.v",
+        role="10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward",
+        # Ties four orphan blocks into a signal path: DRU -> manch -> CRC ->
+        # fbuf. The SoC instance is where 10BASE-T lives, which is the next
+        # milestone's work, so instantiated_in is None for now -- and accurate.
+        instantiated_in=None,
+        tb="tb_pe_eth_mac.v",
+    ),
+    dict(
         name="pe_fbuf",
         source_file="pe_fbuf.v",
         role="frame buffer: 2 KB behind a byte interface, same macro as pe_imem",

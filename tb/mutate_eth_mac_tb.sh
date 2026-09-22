@@ -8,6 +8,12 @@
 # The mutations are chosen to be SUBTLE, not obvious: each is a plausible
 # implementation choice somebody could genuinely write, so detecting it means
 # the TB is testing the property and not the spelling.
+# RESTORE IS A FILE COPY, NOT `git checkout`. The first version of this harness
+# used git and DESTROYED the RTL: rtl/pe_eth_mac.v was untracked, so checkout
+# failed with "did not match any file(s) known to git", every mutation stacked
+# on the last, and the harness reported "8 detected, 0 survived" -- a result
+# that looks like success and means nothing. A harness that cannot restore the
+# file it mutates cannot report anything.
 set -u
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
@@ -15,9 +21,11 @@ RTL="$ROOT/rtl/pe_eth_mac.v"
 TB="$ROOT/tb/tb_pe_eth_mac.v"
 SRCS="../rtl/pe_dru.v ../rtl/pe_line_codec.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v $TB"
 LOG=/tmp/mutate_eth.log
+BAK=$(mktemp /tmp/pe_eth_mac.XXXXXX.v)
 
 cleanup() {
-  git checkout -- "$RTL" 2>/dev/null
+  cp "$BAK" "$RTL" 2>/dev/null
+  rm -f "$BAK"
   rmdir "$ROOT/sim" 2>/dev/null
 }
 trap cleanup EXIT
@@ -25,16 +33,21 @@ trap cleanup EXIT
 mkdir -p "$ROOT/sim"
 cd "$ROOT/sim"
 
+# The pristine copy every restore comes from, verified against the file on
+# disk so a corrupt starting state cannot slip through as a pass.
+cp "$RTL" "$BAK"
+if ! cmp -s "$RTL" "$BAK"; then
+  echo "FATAL: could not snapshot $RTL"
+  exit 2
+fi
+
 pass=0
 fail=0
 survived=0
 
 run_tb() {
-  local tag="$1"
   iverilog -g2012 -s tb_pe_eth_mac -o /tmp/mut_eth.vvp $SRCS >/tmp/mut_eth_cc.log 2>&1
   if [ $? -ne 0 ]; then
-    echo "  [$tag] INCONCLUSIVE: the mutated design does not compile"
-    grep -m2 "error" /tmp/mut_eth_cc.log | sed 's/^/      /'
     return 2
   fi
   timeout 300 vvp /tmp/mut_eth.vvp >"$LOG" 2>&1
@@ -42,24 +55,26 @@ run_tb() {
 }
 
 restore() {
-  git checkout -- "$RTL"
+  cp "$BAK" "$RTL"
 }
 
+# Prove the restore worked, every single time. Without this a stacked-mutation
+# run reports a perfect score.
 verify_restore() {
-  if ! git diff --quiet -- "$RTL"; then
-    echo "  FATAL: rtl/pe_eth_mac.v is still mutated. Refusing to continue."
+  if ! cmp -s "$BAK" "$RTL"; then
+    echo "  FATAL: $RTL does not match the snapshot after restore."
     exit 3
   fi
 }
 
 mutate() {
-  local name="$1" from="$2" to="$3"
+  local from="$1" to="$2"
   python3 - "$RTL" "$from" "$to" <<'PYEOF'
 import sys, pathlib
 p = pathlib.Path(sys.argv[1]); t = p.read_text()
 frm, to = sys.argv[2], sys.argv[3]
 if frm not in t:
-    print("  ANCHOR MISSING:", frm[:70]); sys.exit(4)
+    sys.exit(4)
 p.write_text(t.replace(frm, to, 1))
 PYEOF
 }
@@ -68,11 +83,11 @@ check_mutation() {
   local name="$1"; shift
   local from="$1"; shift
   local to="$1"; shift
-  if ! mutate "$name" "$from" "$to"; then
+  if ! mutate "$from" "$to"; then
     echo "  [$name] HARNESS ERROR: anchor not found"
     restore; fail=$((fail+1)); return
   fi
-  run_tb "$name"
+  run_tb
   local rc=$?
   if [ $rc -eq 0 ]; then
     echo "  [$name] SURVIVED (the TB did not notice -- it is vacuous here)"

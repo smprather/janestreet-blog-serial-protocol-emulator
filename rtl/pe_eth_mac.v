@@ -393,6 +393,11 @@ module pe_eth_mac #(
                   // sized here; a type frame's bound is enforced per byte
                   // below, because its length is not known until the line
                   // goes idle.
+                  //
+                  // The comparison is the RAW field against `room`, with no
+                  // allowance for the FCS -- correct only because a length
+                  // frame does not store its FCS (see the header). Adding 4
+                  // here would reject legal frames that fit exactly.
                   if ({field[15:8], shreg_n} == 16'h0000) begin
                     state <= S_ERR;                 // length 0 is not a frame
                   end else if (({field[15:8], shreg_n} < TYPE_MIN) &&

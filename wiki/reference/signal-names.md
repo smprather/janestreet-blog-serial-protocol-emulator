@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen_signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-14 modules, 160 ports.
+15 modules, 183 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -152,6 +152,34 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_wire` | out | 1 | The latest half-cell sample, for a consumer that wants the raw oversampled level rather than Manchester bits. |
 | `locked` | out | 1 | **Confidence, not a gate.** Asserted after `cfg_lock_bits` well-formed cells; cleared by the first malformed one. `bit_en` is emitted whether or not locked — gating on it would drop the preamble, which is the part every protocol here expects to be dropped. Nothing in this repo gates on it. |
 | `dbg_phase` | out | `[3:0]` | The phase counter (distance from the last transition, mod SPB). Bring-up only; the capture phase is SPB/4 and 3·SPB/4. **SPB's ceiling is 16, not merely a multiple of 4** — this counter is 4 bits and `4'(SPB-1)` truncates above it, which silently kills all capture (SPB=20 emits nothing). Both constraints are elaboration errors in the RTL and are boundary-tested by `tb/param_guards.sh`. |
+
+## `pe_eth_mac`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `rst_n` | inp | 1 | Active-low asynchronous reset. |
+| `bit_en` | inp | 1 | **The strobe** — one-cycle pulse meaning "this is the moment". The only thing that commits state in this block. Supplied by the timing block/DRU. See [[concepts/strobe-and-committing-edge]]. |
+| `rx_raw` | inp | 1 | _no note yet_ |
+| `rx_err` | inp | 1 | _no note yet_ |
+| `rx_first` | inp | 1 | _no note yet_ |
+| `rx_second` | inp | 1 | _no note yet_ |
+| `buf_reset` | inp | 1 | _no note yet_ |
+| `crc_bit_en` | out | 1 | _no note yet_ |
+| `crc_clr` | out | 1 | _no note yet_ |
+| `crc_bit_in` | out | 1 | _no note yet_ |
+| `crc_field_out` | out | 1 | _no note yet_ |
+| `crc_state` | inp | `[31:0]` | _no note yet_ |
+| `fbuf_we` | out | 1 | _no note yet_ |
+| `fbuf_waddr` | out | `[AW-1:0]` | _no note yet_ |
+| `fbuf_wdata` | out | `[7:0]` | _no note yet_ |
+| `frame_valid` | out | 1 | _no note yet_ |
+| `frame_bad` | out | 1 | _no note yet_ |
+| `frame_len` | out | `[15:0]` | _no note yet_ |
+| `frame_field` | out | `[15:0]` | _no note yet_ |
+| `frame_is_type` | out | 1 | _no note yet_ |
+| `frame_ptr` | out | `[AW-1:0]` | _no note yet_ |
+| `dbg_state` | out | `[2:0]` | _no note yet_ |
 
 ## `pe_fbuf`
 

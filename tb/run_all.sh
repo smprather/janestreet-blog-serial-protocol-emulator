@@ -140,6 +140,12 @@ CASES=(
   # macro's bit-mask port and the read lane is a register -- two silent
   # failure modes, both mutation-tested.
   "tb_pe_fbuf|../rtl/pe_fbuf.v|tb_pe_fbuf"
+
+  # The 10BASE-T receive path, end to end on real RTL: raw Manchester
+  # levels into pe_dru, through pe_manch and pe_crc, into pe_fbuf. Every
+  # other Ethernet TB models the framing in the testbench; this drives a
+  # wire, so the bytes checked are the bytes a real receiver recovers.
+  "tb_pe_eth_mac|../rtl/pe_dru.v ../rtl/pe_line_codec.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v|tb_pe_eth_mac"
 )
 
 pass=0; fail=0; failed_names=()
@@ -394,6 +400,14 @@ if ./tb/mutate_fbuf_tb.sh > /tmp/mutate_fbuf.log 2>&1; then
 else
   echo "fbuf TB mutations: FAILED"
   tail -20 /tmp/mutate_fbuf.log
+  stale=1
+fi
+
+if ./tb/mutate_eth_mac_tb.sh > /tmp/mutate_eth_mac.log 2>&1; then
+  echo "eth_mac TB mutations: OK (no unexplained survivors)"
+else
+  echo "eth_mac TB mutations: FAILED"
+  tail -20 /tmp/mutate_eth_mac.log
   stale=1
 fi
 

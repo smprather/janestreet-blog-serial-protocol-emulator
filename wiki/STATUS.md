@@ -12,6 +12,20 @@ Both layers of the thesis now exist and are verified:
   codec mux, all self-checking-TB verified, all synthesized on real IHP sg13g2
   cells, and the SERDES through the full LibreLane place-and-route flow to a
   clean 66 MHz signoff.
+- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (914
+  cells) is the first protocol block that is deliberately NOT firmware, and
+  [[concepts/ethernet-scope]] says why with arithmetic: at a 100 ns bit period
+  the single-cycle core has 48 instructions per byte, and a software CRC-32
+  alone needs ~240. So the bit work is hardware and the firmware sequences
+  frames. The block ties together FOUR previously-orphaned pieces -- `pe_dru`,
+  `pe_manch`, `pe_crc` and `pe_fbuf` -- into one signal path, which is the
+  point of building it here rather than later: an orphan block is a claim that
+  has never been exercised inside a design. It locks on the SFD, assembles
+  bytes, checks the FCS against the RevEng catalogue residue, and
+  store-and-forwards into the 2 KB frame buffer, taking both 802.3 frame kinds
+  (a length field and an EtherType) because the acceptance target is ARP and
+  ARP is an EtherType. `tb/tb_pe_eth_mac.v` drives raw Manchester levels into
+  the real chain, so every byte checked is a byte a real receiver recovers.
 - **Milestone 2 — the programmable core.** A CPU, an assembler, a bit-accurate
   emulator, and **three protocols written entirely in firmware** — UART, SPI
   mode 0, and, as of 2026-09-23, **I2C** (the pin-level grammar: START, one bit
@@ -978,6 +992,65 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
       iteration. Sample mid-cycle (after presenting the next address, before the
       data latches) and check the byte still belongs to the OLD address. A memory
       with one cycle of read latency is only tested by requests that overlap.
+
+63. **A mutation harness that restores with `git checkout` DESTROYS an untracked
+      file.** `tb/mutate_eth_mac_tb.sh` was written that way while
+      `rtl/pe_eth_mac.v` was brand new and untracked, so every restore failed
+      with "did not match any file(s) known to git", all eight mutations stacked
+      on each other, and the harness printed "8 detected, 0 survived" -- a
+      perfect score that meant nothing. Snapshot the file with `cp` into one
+      temp path and restore from that, and verify the restore with `cmp` after
+      EVERY mutation. Commit new RTL before pointing a mutation harness at it.
+
+64. **A preamble is a WIRE BIT PATTERN, not an octet.** The standard says "seven
+      octets of the pattern 10101010", which reads as 0xAA; but a byte helper
+      sends LSB-first, so `send_byte(8'hAA)` puts 01010101 on the wire -- the
+      inverted phase. The junction with the SFD then creates a SECOND, false
+      0xD5 window seven bits early, the receiver locks there, and every byte
+      comes out as a mash of its neighbours. It looks exactly like a broken
+      receiver. The preamble is 1010... starting with 1 (equivalently 0x55 in
+      LSB-first octet terms) and must be driven as a bit pattern. The SFD (0xD5)
+      is the one everyone remembers, which is why only the SFD gets the
+      treatment.
+
+65. **Enumerate an ambiguous window numerically; do not derive it by hand.**
+      The SFD lock was mis-analysed twice. Hand-deriving "which 8-bit windows
+      assemble to 0xD5" produced the opposite conclusion each time; enumerating
+      the 64-bit prelude in code settled it in one line: 0xD5 occurs ONCE, and
+      an alternating preamble can only produce 0x55/0xAA. That also showed an
+      "alternating run must exceed N" guard was not merely unnecessary but
+      harmful -- it would drop frames a receiver that locked late would otherwise
+      catch. A window-matching question is a computation, not a proof sketch.
+
+66. **An unsized `'0` in a ternary arm silently truncates an arithmetic result.**
+      `wptr <= wptr - (is_type ? FCS_BYTES : '0)` made the subtractor's width
+      come from the ternary rather than from `wptr`, because the unsized `'0`
+      elaborated one bit wide. Symptom: `wptr` went X after the first frame and
+      later frames mis-classified. Same family as the out-of-range part-select
+      (`FCS_BYTES[AW:0]` on a 3-bit constant, which Icarus resolves to X and
+      which poisoned `room` from the second frame on). Write arithmetic as a
+      plain `if`/`else` with explicitly sized operands, or zero-extend with a
+      sized replication -- never a mixed-width ternary.
+
+67. **Idle is the equal-halves property, and neither `rx_err` nor `locked` can
+      report it.** Measured on a held line: the DRU emits cells with
+      `rx_first == rx_second`, while BOTH `pe_manch`'s `rx_err` and `pe_dru`'s
+      `locked` stay 0. `rx_err` is strobe-gated and `locked` counts well-formed
+      cells from a counter that equal-half cells do not feed, so neither marks an
+      idle line. A 10BASE-T receiver needs carrier sense to know an
+      inter-frame gap has passed, and the only reliable source is the halves
+      themselves. Three different signals were tried as the idle indicator before
+      measuring; measure the signal before designing around it.
+
+68. **A receiver that aborts a frame must not keep hunting inside it.** Without
+      an inter-frame gate, the aborted frame's remaining payload contains 0xD5
+      windows, one of which locks the receiver into a phantom frame -- measured,
+      and it made a single rejected frame report `frame_bad` twice. IEEE 802.3's
+      96-bit inter-frame gap is the rule the gate implements, so require idle
+      before hunting. The gate must be a LATCH (armed by idle, cleared on lock,
+      not a live `idle_run >= N` comparison), because the preamble is itself 56
+      VALID cells and a live comparison drops to false exactly when the SFD
+      arrives.
 
 
 ## Open questions / risks

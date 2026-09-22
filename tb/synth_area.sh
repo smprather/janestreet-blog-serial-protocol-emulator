@@ -95,6 +95,11 @@ report pe_imem_macro "rtl/pe_imem.v rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v" p
 # the glue around them.
 report pe_fbuf_flop   "rtl/pe_fbuf.v"                            pe_fbuf "-chparam FLOP 1"
 report pe_fbuf_macro  "rtl/pe_fbuf.v rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v" pe_fbuf
+
+  # The 10BASE-T receive path. No macro of its own -- it is logic plus a
+  # write port -- so this is the whole cost of the hardware-vs-firmware
+  # decision wiki/concepts/ethernet-scope.md argues for.
+  report pe_eth_mac "rtl/pe_eth_mac.v" pe_eth_mac
 # Note on the SoC: its IMEM/DMEM are register arrays, and yosys will not map
 # flip-flop arrays to an SRAM macro here. They therefore synthesise as thousands
 # of individual flops (~2,215 at 48.9 um2 each) and the mapped area is huge
