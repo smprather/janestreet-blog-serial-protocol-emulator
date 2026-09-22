@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen_signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-13 modules, 153 ports.
+13 modules, 154 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -240,6 +240,7 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `run` | inp | 1 | _no note yet_ |
 | `pin_in` | inp | `[7:0]` | _no note yet_ |
 | `pin_out` | out | `[7:0]` | _no note yet_ |
+| `pin_oe` | out | `[7:0]` | _no note yet_ |
 | `dbg_pc` | out | `[7:0]` | _no note yet_ |
 | `dbg_a` | out | `[7:0]` | _no note yet_ |
 | `dbg_timer` | out | `[7:0]` | _no note yet_ |

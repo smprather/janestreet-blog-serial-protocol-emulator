@@ -94,9 +94,9 @@ report pe_imem_macro "rtl/pe_imem.v rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v" p
 # (~177k um2) for what it does. That is the expected consequence of flop memory,
 # not a synthesis failure -- see wiki/reference/sram-budget.md and
 # wiki/plans/through-i2c.md (Blocker 3) for the macro that fixes it.
-report pe_uart_soc  "rtl/pe_cpu.v rtl/pe_imem.v rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_uart_soc.v" pe_uart_soc
+report pe_uart_soc  "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_uart_soc.v" pe_uart_soc
 # The deliverable: the only module Tiny Tapeout will instantiate.
-report tt_um_top    "rtl/pe_cpu.v rtl/pe_imem.v rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_uart_soc.v rtl/tt_um_protocol_emulator.v" tt_um_protocol_emulator
+report tt_um_top    "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_uart_soc.v rtl/tt_um_protocol_emulator.v" tt_um_protocol_emulator
 echo "-----------------------------------------------"
 echo "routed reference: pe_serdes = 17,211 um2 cells / 29,164 um2 die @78% util"
 echo "reproduce it with: flow/run_librelane.sh flow/pe_serdes.json"

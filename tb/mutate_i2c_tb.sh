@@ -1,0 +1,317 @@
+#!/usr/bin/env bash
+# Mutation-test tb_pe_i2c_soc.v: it must FAIL when the properties it claims
+# break. A testbench that passes on broken RTL is worse than no testbench,
+# because it manufactures confidence.
+#
+# THREE OUTCOMES, NOT TWO. A mutation is only meaningful if the mutated design
+# actually BUILT. Reporting "not detected" when the compile failed would be a
+# false accusation against the TB -- and would hide a genuinely surviving
+# mutation behind an unrelated build error. So a compile failure is
+# INCONCLUSIVE, reported as such, and fails the run.
+#
+# Usage: tb/mutate_i2c_tb.sh
+set -u
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO"
+
+# The SRAM behavioural model, via the same helper run_all.sh uses, and BEFORE
+# run_case() because the compile line inside it needs the variable. Compiling
+# without it silently falls back to pe_imem's FLOP array, which would mean the
+# mutation test exercised a different memory than the one that ships.
+if ! SRAM_MODEL=$(cd sim && ../tb/sram_model.sh); then
+  echo "FATAL: SRAM behavioural model unavailable; cannot simulate the SoC."
+  exit 2
+fi
+SRAM_FLAGS=$(printf '%s ' $SRAM_MODEL)
+
+detected=0
+inconclusive=0
+survived=0
+
+# Files any mutation may touch, for the snapshot/restore.
+MUTABLE="rtl/pe_uart_soc.v rtl/pe_pinmux.v firmware/i2c_pins.pe"
+
+run_case() {
+  local name="$1"; shift
+  local script="$1"
+
+  echo "=== mutation: $name ==="
+
+  local backup
+  backup=$(mktemp -d)
+  for f in $MUTABLE; do cp "$f" "$backup/"; done
+
+  restore() {
+    for f in $MUTABLE; do cp "$backup/$(basename "$f")" "$f"; done
+    rm -rf "$backup"
+    python3 tools/peasm.py firmware/i2c_pins.pe -o firmware/i2c_pins.hex >/dev/null 2>&1
+  }
+
+  if ! python3 "$script"; then
+    echo "  MUTATION DID NOT APPLY -> INCONCLUSIVE"
+    inconclusive=$((inconclusive+1))
+    restore
+    echo
+    return
+  fi
+
+  python3 tools/peasm.py firmware/i2c_pins.pe -o firmware/i2c_pins.hex >/dev/null 2>&1
+
+  # Compile into a temp dir under a name unique to this case, so a stale vvp
+  # from a previous case can never be executed by accident. -s names the REAL
+  # top module (the TB), not a wrapper.
+  local work; work=$(mktemp -d)
+  local top="tb_pe_i2c_soc"
+  # iverilog prints "sorry:" notices (unsupported-but-tolerated constructs) to
+  # stderr and still exits 0. Gating on the exit code rather than on the
+  # chatter is the difference between "the mutation broke the build" and
+  # "Icarus grumbled".
+  #
+  # The vvp file is the second, independent signal: whatever iverilog says,
+  # there is nothing to run if it did not produce output. Both are checked
+  # explicitly -- the previous shorthand (`if ! compile && [ ! -s vvp ]`)
+  # bound the && to the whole negated expression, so a compile that SUCCEEDED
+  # with a non-empty vvp still took the "did not compile" branch.
+  local cc=0
+  (cd sim && iverilog -g2012 -s "$top" -o "$work/$top.vvp" $SRAM_FLAGS \
+      ../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_uart_soc.v \
+      ../tb/tb_pe_i2c_soc.v) >"$work/compile.log" 2>&1 || cc=$?
+  if [ "$cc" -ne 0 ] || [ ! -s "$work/$top.vvp" ]; then
+    echo "  INCONCLUSIVE: the mutated design did not compile (iverilog exit $cc)"
+    grep -E "error:" "$work/compile.log" | head -4 | sed 's/^/    /'
+    inconclusive=$((inconclusive+1))
+    rm -rf "$work"
+    restore
+    echo
+    return
+  fi
+
+  # RUN FROM sim/. The TB does $readmemh("../firmware/i2c_pins.hex"), which only
+  # resolves from sim/ -- running vvp from the repo root silently loads nothing,
+  # the program is all NOP fill, no pins ever move, and EVERY mutation then
+  # looks "detected" for the same wrong reason. That is what the first version
+  # of this script did: five mutations reported DETECTED with byte-identical
+  # failures, which is the signature of a broken harness, not a good test.
+  local out
+  out=$(cd sim && vvp "$work/$top.vvp" 2>&1)
+  rm -rf "$work"
+
+  if grep -q '^FAIL' <<< "$out"; then
+    echo "  DETECTED (TB failed on the mutated design)"
+    grep -E '^FAIL' <<< "$out" | head -3 | sed 's/^/    /'
+    detected=$((detected+1))
+  else
+    echo "  SURVIVED -- the TB passed on the mutated design (blind spot)"
+    grep -E '^PASS|RESULT' <<< "$out" | head -3 | sed 's/^/    /'
+    survived=$((survived+1))
+  fi
+
+  restore
+  echo
+}
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+# ---------------------------------------------------------------- mutation 1
+# Break the OD gate in pe_pinmux: make pad_oe ignore the od term, so a pin in
+# open-drain mode CAN drive high. tb_pe_i2c_soc asserts this never happens, on
+# the RTL's own pin_oe output.
+cat > "$TMP/m1.py" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path('rtl/pe_pinmux.v')
+t = p.read_text()
+m = re.search(r'assign\s+pad_oe\s*=\s*([^;]+);', t)
+if not m:
+    sys.exit("no pad_oe assignment found")
+print(f"  pad_oe: {m.group(1).strip()!r} -> 'reg_oe' (od term removed)")
+t = t[:m.start()] + "assign pad_oe  = reg_oe;" + t[m.end():]
+p.write_text(t)
+PY
+run_case "pe_pinmux: OD gate ignores od (a pin could drive high)" "$TMP/m1.py"
+
+# ---------------------------------------------------------------- mutation 2
+# Swap the port->register translation so PINOUT writes land in the OE register
+# -- the exact identity-map bug that hung the UART during this refactor.
+cat > "$TMP/m2.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path('rtl/pe_uart_soc.v')
+t = p.read_text()
+old = """      4'h1:    begin pinmux_waddr = A_OUT; pinmux_we = io_we; end
+      4'h2:    begin pinmux_waddr = A_OE;  pinmux_we = io_we; end"""
+if old not in t:
+    sys.exit("port decode anchor not found")
+new = """      4'h1:    begin pinmux_waddr = A_OE;  pinmux_we = io_we; end
+      4'h2:    begin pinmux_waddr = A_OUT; pinmux_we = io_we; end"""
+p.write_text(t.replace(old, new))
+print("  ports 1 and 2 swapped")
+PY
+run_case "pe_uart_soc: PINOUT and PINOE writes swapped" "$TMP/m2.py"
+
+# ---------------------------------------------------------------- mutation 3
+# Break the read-back generalisation: use the OE REGISTER instead of the real
+# drive enable, so a pin released by the OD gate still reads back our written
+# level. That is the bug the generalised pin_rd exists to avoid, and it makes
+# arbitration and clock stretching invisible.
+cat > "$TMP/m3.py" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path('rtl/pe_uart_soc.v')
+t = p.read_text()
+m = re.search(r'assign\s+pin_rd\s*=\s*([^;]+);', t)
+if not m:
+    sys.exit("no pin_rd assignment found")
+# NB: the signal is `pin_out` (the registered output byte), not `pin_driven` --
+# the first version of this mutation used a name that does not exist in the RTL,
+# so it failed to elaborate and the case reported INCONCLUSIVE instead of
+# telling us anything about the TB.
+t = t[:m.start()] + ("assign pin_rd   = (pin_out & pinmux_rdata) | "
+                     "(pin_in & ~pinmux_rdata);") + t[m.end():]
+p.write_text(t)
+PY
+run_case "pe_uart_soc: pin_rd uses the OE register, not the OD gate (I2C TB; expected to survive, see note)" "$TMP/m3.py"
+# ^ EXPECTED SURVIVOR, and it is counted as one: see mutation 3b below for why
+#   the I2C test cannot see this one and which test does.
+
+# ---------------------------------------------------------------- mutation 3b
+# The same mutation, seen from the UART side. This case exists because mutation 3
+# SURVIVES tb_pe_i2c_soc and that needs explaining rather than papering over.
+#
+# WHY IT SURVIVES THERE: on a port-0 read the matrix's raddr defaults to A_IN,
+# so pinmux_rdata IS pin_in. For the I2C firmware -- which releases every pin it
+# reads -- the mutated expression therefore evaluates to the same thing as the
+# real one, and the mutation is near-equivalent for that test.
+#
+# WHY IT IS STILL A REAL BUG, and is caught elsewhere: the UART firmware does
+# read-modify-write on the port while DRIVING its TX pin push-pull, so reading
+# the pad instead of the register breaks its convergence -- tb_pe_uart_soc
+# hangs on the mutation ("watchdog -- firmware still running"). That is a worse
+# failure mode than an assertion, but it is detection.
+cat > "$TMP/m3b.py" <<'PY'
+import pathlib, re
+p = pathlib.Path('rtl/pe_uart_soc.v')
+t = p.read_text()
+m = re.search(r'assign\s+pin_rd\s*=\s*([^;]+);', t)
+if not m:
+    raise SystemExit("no pin_rd assignment found")
+t = t[:m.start()] + ("assign pin_rd   = (pin_out & pinmux_rdata) | "
+                     "(pin_in & ~pinmux_rdata);") + t[m.end():]
+p.write_text(t)
+PY
+
+echo "=== mutation: pin_rd (via the UART, which does read-modify-write) ==="
+backup=$(mktemp -d)
+cp rtl/pe_uart_soc.v firmware/uart_echo.pe "$backup/"
+python3 "$TMP/m3b.py" >/dev/null
+work=$(mktemp -d)
+cc=0
+(cd sim && iverilog -g2012 -s tb_pe_uart_soc -o "$work/u.vvp" $SRAM_FLAGS \
+    ../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_uart_soc.v \
+    ../tb/tb_pe_uart_soc.v) >"$work/c.log" 2>&1 || cc=$?
+if [ "$cc" -ne 0 ]; then
+  echo "  INCONCLUSIVE: did not compile"
+  inconclusive=$((inconclusive+1))
+else
+  if (cd sim && vvp "$work/u.vvp" 2>&1) | grep -qE '^FAIL|watchdog'; then
+    echo "  DETECTED (the UART TB fails or hangs on the mutated read-back)"
+    detected=$((detected+1))
+  else
+    echo "  SURVIVED -- neither SoC test catches this mutation (real blind spot)"
+    survived=$((survived+1))
+  fi
+fi
+rm -rf "$work"
+cp "$backup/pe_uart_soc.v" rtl/; cp "$backup/uart_echo.pe" firmware/
+rm -rf "$backup"
+python3 tools/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex >/dev/null 2>&1
+echo
+
+# ---------------------------------------------------------------- mutation 4
+# Firmware: drop the OD write. The pins then drive push-pull, so a pin holding 1
+# is driven HIGH and the read-back is our own level rather than the pad.
+cat > "$TMP/m4.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path('firmware/i2c_pins.pe')
+t = p.read_text()
+old = """        LDI   A, SDA|SCL           ; 0x30
+        OUT   PINOD, A"""
+if old not in t:
+    sys.exit("PINOD write anchor not found")
+p.write_text(t.replace(old, """        LDI   A, 0x00              ; MUTATED: stays push-pull
+        OUT   PINOD, A""", 1))
+print("  firmware no longer enters open-drain mode")
+PY
+run_case "firmware: never sets OD (stays push-pull)" "$TMP/m4.py"
+
+# ---------------------------------------------------------------- mutation 5
+# Firmware: make the STOP drive SDA low while SCL is high (the spurious-START
+# bug that the pad monitors exist to catch).
+cat > "$TMP/m5.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path('firmware/i2c_pins.pe')
+t = p.read_text()
+old = """        LDI   A, SCL               ; SCL released, SDA held low
+        OUT   TXPIN, A"""
+if old not in t:
+    sys.exit("STOP setup anchor not found")
+# The spurious START is generated in isolation and then undone, so the mutation
+# tests ONE thing: an extra SDA falling edge while SCL is high. Leaving SDA low
+# afterwards would ALSO break the STOP, and the mutation would then be caught by
+# the STOP check rather than by the stray-condition check.
+#
+# This is a genuinely undetected defect in the RTL TB as first written: the
+# standalone timing checker (tools/measure_i2c_timing.py) catches it, but the
+# RTL TB only counts conditions, and the counts stay 1/1 here because the extra
+# START is paired with a spurious STOP. The TB now counts CONDITIONS, which is
+# what this mutation is for.
+new = """        LDI   A, SDA|SCL
+        OUT   TXPIN, A
+        LDI   A, SCL
+        OUT   TXPIN, A
+        LDI   A, SDA|SCL
+        OUT   TXPIN, A
+        LDI   A, SCL
+        OUT   TXPIN, A"""
+p.write_text(t.replace(old, new, 1))
+print("  extra START+STOP pair injected under SCL-high")
+PY
+run_case "firmware: spurious START before the STOP" "$TMP/m5.py"
+
+# ---------------------------------------------------------------- mutation 6
+# Firmware: shorten the bit cell's low period below the tLOW floor. The RTL TB
+# does not measure tLOW (tools/measure_i2c_timing.py does), so this checks
+# whether that division of labour leaves a real gap in the RTL test.
+cat > "$TMP/m6.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path('firmware/i2c_pins.pe')
+t = p.read_text()
+old = "        ADD   A, T_LOW             ; 6 ticks"
+if old not in t:
+    sys.exit("T_LOW anchor not found")
+p.write_text(t.replace(old, "        ADD   A, 2                 ; MUTATED: below the floor"))
+print("  tLOW shortened to 2 ticks")
+PY
+run_case "firmware: tLOW shortened below the spec floor" "$TMP/m6.py"
+
+echo "========================================"
+echo "MUTATION TEST: $detected detected, $survived survived, $inconclusive inconclusive"
+# ONE survivor is EXPECTED and is explained in the comments above mutation 3:
+# the I2C test cannot see a read-back mutation because on a port-0 read the
+# matrix returns pin_in anyway, so the mutated expression is equivalent for a
+# firmware that only reads pins it has released. Mutation 3b shows the UART test
+# does catch it. Asserting the exact expected count keeps this honest: an
+# unexpected survivor still fails, and so does the covered one silently becoming
+# covered (which would mean the I2C path stopped being equivalent, i.e. a real
+# behaviour change nobody intended).
+EXPECTED_SURVIVED=1
+if [ "$survived" -eq "$EXPECTED_SURVIVED" ] && [ "$inconclusive" -eq 0 ]; then
+  echo "no unexplained survivors -- all mutations accounted for"
+  exit 0
+elif [ "$survived" -ne "$EXPECTED_SURVIVED" ]; then
+  echo "SURVIVOR COUNT CHANGED (expected $EXPECTED_SURVIVED, got $survived)"
+  echo "either the TB lost coverage or the design changed behaviour; investigate"
+  exit 1
+else
+  echo "RUN INCONCLUSIVE -- a mutated design failed to build"
+  exit 2
+fi

@@ -92,14 +92,21 @@ module tt_um_protocol_emulator (
 
   // The SoC's pin port carries PROTOCOL pins only -- `run` is a separate
   // control input, not a pin. Under the SoC's "outputs low, inputs high" rule
-  // (see the header of rtl/pe_uart_soc.v) the shared UART/SPI map is:
+  // (see the header of rtl/pe_uart_soc.v) the three baseline protocols share:
   //   bit 0 = TX / SCLK, bit 1 = (spare) / MOSI, bit 2 = (spare) / CS_N,
-  //   bit 3 = RX / MISO
-  // which is why PIN_IN_MASK there is 8'hF8. Only the UART pair is wired to
-  // pads today; the remaining bits are unclaimed until the pin matrix lands.
-  wire [7:0] pin_in_bus  = {4'b0, uart_rx, 3'b0};   // RX on bit 3
+  //   bit 3 = RX / MISO, bit 4 = I2C SDA, bit 5 = I2C SCL
+  // which is why PIN_IN_MASK there is 8'hF8. Bits 0 and 3 are the UART pair on
+  // dedicated pads; I2C lives on `uio` and is attached below.
+  wire [7:0] pin_in_bus;
   wire [7:0] pin_out_bus;
+  wire [7:0] pin_oe_bus;
   wire [7:0] dbg_pc, dbg_a, dbg_timer;
+
+  // UART RX (bit 3) is a dedicated input pad. Bits 4/5 (SDA/SCL) come from
+  // `uio_in` and are attached after the pads are declared -- see below.
+  assign pin_in_bus[3]   = uart_rx;
+  assign pin_in_bus[2:0] = 3'b000;
+  assign pin_in_bus[7:6] = 2'b00;
 
   pe_uart_soc #(
     .IMEM_WORDS(TT_IMEM_WORDS),
@@ -115,6 +122,7 @@ module tt_um_protocol_emulator (
     .run(run),
     .pin_in(pin_in_bus),
     .pin_out(pin_out_bus),
+    .pin_oe(pin_oe_bus),
     .dbg_pc(dbg_pc),
     .dbg_a(dbg_a),
     .dbg_timer(dbg_timer)
@@ -125,37 +133,57 @@ module tt_um_protocol_emulator (
   assign uo_out[1]   = dbg_timer[7];      // heartbeat: ~one edge per 128 ticks
   assign uo_out[7:2] = dbg_pc[5:0];
 
-  // ---- bidirectional pins: open-drain SDA/SCL ---------------------------
-  // Drive low or release, never drive high -- that is what open-drain means,
-  // and an I2C bus with two masters driving high is a short. uio_out is held
-  // at 1 for the released pins so the waveform reads as "not driving" rather
-  // than "driving an unknown".
+  // ---- bidirectional pins: driven by the pin matrix ----------------------
+  // Port bits 4 and 5 are I2C SDA and SCL, and the matrix's per-pin enable
+  // drives the pad's own output-enable. That is open-drain, natively: assert oe
+  // to drive LOW, deassert to release to the board's pull-up. The pad can never
+  // drive high on these pins unless firmware explicitly asks for push-pull by
+  // clearing that pin's OD bit -- which is a firmware decision, made visible in
+  // the waveform, and checked by tb_tt_um_protocol_emulator.
   //
-  // Today both are released and the bus level is simply observable. The pin
-  // matrix takes these over; the point of wiring them now is that uio_oe has a
-  // real path to a pad, which the plan lists as an unverified assumption.
-  wire sda_drive_low = 1'b0;
-  wire scl_drive_low = 1'b0;
+  // The pad does exactly what the matrix says: level from pad_out, enable from
+  // pad_oe. That is the whole point of instantiating the matrix rather than
+  // hardwiring these two pins.
+  //
+  // This was first written as `uio_out = 0` on the reasoning that a released
+  // pin should not present a level. That is wrong twice over: uio_out cannot
+  // reach the pad while uio_oe is low, and forcing it to 0 silently breaks
+  // PUSH-PULL mode -- the matrix can clear a pin's OD bit, in which case
+  // pad_oe=1 and pad_out=1 and the pad must drive HIGH. Hardwiring 0 would have
+  // driven it low instead, and the open-drain check in
+  // tb_tt_um_protocol_emulator would have passed anyway, because uio_oe would
+  // still be set by pad_oe. A check on the wrong signal is how that class of bug
+  // survives.
+  assign uio_out[0]   = pin_out_bus[4];   // SDA level
+  assign uio_out[1]   = pin_out_bus[5];   // SCL level
+  assign uio_oe[0]    = pin_oe_bus[4];    // SDA drive enable (open-drain gate)
+  assign uio_oe[1]    = pin_oe_bus[5];    // SCL drive enable
 
-  assign uio_oe[0]   = sda_drive_low;
-  assign uio_oe[1]   = scl_drive_low;
-  assign uio_oe[7:2] = 6'b000000;         // released
-
-  assign uio_out[0]   = 1'b0;             // only ever driven LOW
-  assign uio_out[1]   = 1'b0;
   assign uio_out[7:2] = 6'b000000;
+  assign uio_oe[7:2]  = 6'b000000;        // released
+
+  // The matrix samples the pad level on the port's input bits. SDA is bit 4 and
+  // SCL is bit 5, so a released SDA is readable by firmware as port bit 4 --
+  // that read-back IS I2C arbitration and clock-stretch detection.
+  assign pin_in_bus[4] = uio_in[0];       // SDA
+  assign pin_in_bus[5] = uio_in[1];       // SCL
 
   // ---- deliberately unused ----------------------------------------------
-  // `ena` is ignored on purpose (see the header). uio_in is readable but not
-  // consumed until the pin matrix lands. pin_out_bus[7:1] are the port bits the
-  // pin matrix will claim; until it exists nothing routes them to a pad, so
-  // they are sunk here rather than left as a silent unused-signal warning.
+  // `ena` is ignored on purpose (see the header). Port bits that no current
+  // firmware claims are sunk here rather than left as a silent unused-signal
+  // warning: the matrix CAN drive them, but the wrapper has no pad for them.
   // Sinking them explicitly is what keeps tb/lint.sh clean without a blanket
   // waiver.
+  //
   // dbg_pc[7:6] are not brought out: only 6 of the 8 uo_out bits are spare
   // after TX and the heartbeat, and the low 6 bits of the program counter are
-  // the ones that move during bring-up.
-  wire _unused = &{ena, uio_in, ui_in[7:2], pin_out_bus[7:1],
+  // the ones that move during bring-up. dbg_a is unused by the wrapper.
+  //
+  // uio_in[7:2] are sunk because the current pin map claims only uio[0] and
+  // uio[1]; a future protocol can claim the rest without touching this line.
+  wire _unused = &{ena, ui_in[7:2], uio_in[7:2],
+                   pin_out_bus[7:6], pin_out_bus[3:1],
+                   pin_oe_bus[7:6], pin_oe_bus[3:0],
                    dbg_a, dbg_timer[6:0], dbg_pc[7:6], 1'b0};
 
 endmodule

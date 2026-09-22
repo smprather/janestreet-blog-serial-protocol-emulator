@@ -63,6 +63,18 @@ printf '%-34s PASS (%s words)\n' "assemble spi_xfer" \
   "$(grep -c . firmware/spi_xfer.hex)"
 pass=$((pass+1))
 
+# i2c_pins.pe is the pin-matrix exerciser: tb_pe_i2c_soc.v $readmemh's the hex
+# it produces, so this assemble step is what keeps the RTL test from simulating
+# a stale image. tools/measure_i2c_timing.py checks its spec compliance.
+if ! $PY tools/peasm.py firmware/i2c_pins.pe -o firmware/i2c_pins.hex >/dev/null 2>&1; then
+  echo "assemble i2c_pins                      FAIL"
+  $PY tools/peasm.py firmware/i2c_pins.pe 2>&1 | head -3 | sed 's/^/    /'
+  exit 1
+fi
+printf '%-34s PASS (%s words)\n' "assemble i2c_pins" \
+  "$(grep -c . firmware/i2c_pins.hex)"
+pass=$((pass+1))
+
 # 2. single byte
 run_case "emulate: one byte" \
   $PY tools/peemu.py firmware/uart_echo.hex --send 41 --max-cycles 900000

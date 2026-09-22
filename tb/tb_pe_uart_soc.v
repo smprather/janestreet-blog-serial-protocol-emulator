@@ -52,6 +52,7 @@ module tb_pe_uart_soc;
   wire  tx_pin;                        // SoC drives this: port bit 0
   wire  [7:0] pin_in_bus  = {4'b0, rx_pin, 3'b0};   // RX on bit 3
   wire  [7:0] pin_out_bus;
+  wire  [7:0] pin_oe_bus;
   assign tx_pin = pin_out_bus[0];
 
   logic [7:0] dbg_pc, dbg_a, dbg_timer;
@@ -63,7 +64,7 @@ module tb_pe_uart_soc;
     .clk(clk), .rst_n(rst_n),
     .host_we(host_we), .host_imem_sel(host_imem_sel),
     .host_addr(host_addr), .host_wdata(host_wdata), .run(run),
-    .pin_in(pin_in_bus), .pin_out(pin_out_bus),
+    .pin_in(pin_in_bus), .pin_out(pin_out_bus), .pin_oe(pin_oe_bus),
     .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_timer(dbg_timer)
   );
 

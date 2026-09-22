@@ -75,15 +75,19 @@ CASES=(
   # $readmemh's firmware/uart_echo.hex, so run_firmware_tests.sh (below) must have
   # assembled a current copy -- it runs first for exactly that reason.
   "tb_pe_cpu|../rtl/pe_cpu.v|tb_pe_cpu"
-  "tb_pe_uart_soc|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_uart_soc.v|tb_pe_uart_soc"
+  "tb_pe_uart_soc|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_uart_soc.v|tb_pe_uart_soc"
   # The STATUS port. Nothing exercised it until firmware/tick_count.pe existed,
   # which is how a two-driver tick_flag survived a green regression: it raced
   # in Icarus and synthesised to a constant 0, and no test read the port.
-  "tb_pe_tick_status|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_uart_soc.v|tb_pe_tick_status"
+  "tb_pe_tick_status|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_uart_soc.v|tb_pe_tick_status"
   # The Tiny Tapeout top level: the pad contract (no X on an output, ena gates
   # nothing, open-drain pins never drive high). This is the only submittable
   # module in the repo.
-  "tb_tt_um_protocol_emulator|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_uart_soc.v ../rtl/tt_um_protocol_emulator.v|tb_tt_um_protocol_emulator"
+  "tb_tt_um_protocol_emulator|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_uart_soc.v ../rtl/tt_um_protocol_emulator.v|tb_tt_um_protocol_emulator"
+  # I2C on the pin matrix: the runtime direction file driven by firmware, and
+  # the open-drain property checked on the RTL's own pin_oe output. This is the
+  # test that makes "the matrix is enough to speak I2C" a measured claim.
+  "tb_pe_i2c_soc|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_uart_soc.v|tb_pe_i2c_soc"
 )
 
 pass=0; fail=0; failed_names=()
@@ -237,6 +241,30 @@ if python3 tools/check_canvas_viewer.py > /tmp/canvas_viewer.log 2>&1; then
 else
   echo "canvas viewer: FAILED"
   cat /tmp/canvas_viewer.log
+  stale=1
+fi
+
+# The I2C pin timing, measured on the wire across all 60 tick phases against the
+# standard-mode table. This is a SPEC check, so it runs every time rather than on
+# request -- a firmware edit that shortens a delay is exactly the change that
+# looks harmless in review.
+if python3 tools/measure_i2c_timing.py > /tmp/i2c_timing.log 2>&1; then
+  echo "i2c pin timing: OK (tLOW/tHIGH/period clear their floors)"
+else
+  echo "i2c pin timing: FAILED"
+  cat /tmp/i2c_timing.log
+  stale=1
+fi
+
+# The I2C testbench's own mutation suite. It is slower than the rest, but a
+# testbench nobody mutation-tests is a testbench that quietly stops testing --
+# and this one has already been caught being vacuous twice (a wrong edge index
+# that made both interval checks unfailable, and a missing interval check).
+if ./tb/mutate_i2c_tb.sh > /tmp/mutate_i2c.log 2>&1; then
+  echo "i2c TB mutations: OK (no unexplained survivors)"
+else
+  echo "i2c TB mutations: FAILED"
+  tail -20 /tmp/mutate_i2c.log
   stale=1
 fi
 

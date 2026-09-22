@@ -49,18 +49,28 @@ PCW = max(8, (IMEM_WORDS - 1).bit_length())      # 10 at 1024 words
 PC_MASK = (1 << PCW) - 1
 
 # ---- IO ports (mirrors rtl/pe_uart_soc.v) --------------------------------
-P_PIN, P_TXPIN, P_TIMER, P_STATUS = 0x0, 0x1, 0x5, 0x7
+P_PIN, P_TXPIN = 0x0, 0x1
+P_PINOE, P_PINOD = 0x2, 0x3
+P_I2CTICK, P_TIMER = 0x4, 0x5
+P_I2CSTAT, P_STATUS = 0x6, 0x7
 
 # The port is 8 bits wide with "outputs low, inputs high" (rtl/pe_uart_soc.v
-# header), and the map is shared between the two baseline protocols:
+# header), and the map is shared between the three baseline protocols:
 #   bit 0 = TX / SCLK (out), bit 1 = (spare) / MOSI (out),
-#   bit 2 = (spare) / CS_N (out), bit 3 = RX / MISO (in)
-# PIN_IN_MASK is where the split falls. The emulator keeps the wire levels
-# separate -- rx_level and tx_level -- exactly as the TB does, and composes the
-# port value on a read.
+#   bit 2 = (spare) / CS_N (out), bit 3 = RX / MISO (in),
+#   bit 4 = I2C SDA, bit 5 = I2C SCL
+# PIN_IN_MASK is the RESET direction, not a permanent one: the RTL seeds the
+# pin matrix's OE register with it, and firmware may change any pin at runtime.
+# That is exactly what the I2C firmware does, so this emulator models the
+# register file rather than the mask. It keeps the wire levels separate --
+# rx_level and tx_level -- exactly as the TB does, and composes the port value
+# on a read.
 PIN_IN_MASK = 0xF8
 PORT_TX_BIT = 0x01
 PORT_RX_BIT = 0x08
+# I2C pins. Both open-drain on a real bus; see firmware/i2c_pins.pe.
+PORT_SDA_BIT = 0x10
+PORT_SCL_BIT = 0x20
 # SPI uses the SAME port. Named here rather than written as literals in the
 # wire model, because "bit 2 is CS_N" is a fact about the pin map, and the pin
 # map is what the two protocols share.
@@ -74,6 +84,9 @@ BAUD = 115_200
 # The timer runs at 2x baud: one tick per HALF bit period, so firmware can
 # sample mid-cell. This must match rtl/pe_uart_soc.v's TICKS_PER_BIT.
 TICKS_PER_BIT = CLK_HZ // BAUD // 2      # 260 (integer division: baud is 115,385)
+# The I2C microsecond tick. 60 MHz / 1 MHz = 60 exactly, so this divider has no
+# rounding error at all -- unlike the UART's 260.42.
+I2C_TICKS = CLK_HZ // 1_000_000
 TICKS_PER_HALF = TICKS_PER_BIT
 TICKS_PER_FULL_BIT = TICKS_PER_BIT * 2   # 521 clocks of real time per bit
 
@@ -97,11 +110,24 @@ class Soc:
         self.run = False
 
         # peripherals
-        self.pin_in = 1                 # RX wire level (port bit 1)
-        self.pin_out = 1                # TX drive level (port bit 0)
+        self.pin_in = 1                 # RX wire level (port bit 3)
+        # The pin matrix register file (mirrors rtl/pe_pinmux.v). Reset seeds
+        # are the RTL's: OE = ~PIN_IN_MASK, OD = 0, OUT = 0x01 (UART TX idle).
+        self.reg_out = 0x01
+        self.reg_oe = (~PIN_IN_MASK) & 0xFF
+        self.reg_od = 0x00
+        # The pad levels the outside world presents on the bidirectional pins,
+        # and the levels an external device may be pulling. i2c_bus_* model the
+        # OTHER devices on the bus: bit set = that device is pulling the line
+        # low. Used by the I2C wire model below.
+        self.pad_in = 0x00
+        self.i2c_pull_low = 0x00
         self.tick_cnt = 0
         self.tick_val = 0
         self.tick_flag = 0
+        self.i2c_cnt = 0
+        self.i2c_val = 0
+        self.i2c_flag = 0
 
         # registered read paths
         self.imem_rdata = 0
@@ -138,19 +164,89 @@ class Soc:
             self.tick_val = m8(self.tick_val + 1)
             self.tick_flag = 1
 
+        # The I2C microsecond divider, same one-process set-beats-clear shape
+        # as the RTL's (see rtl/pe_uart_soc.v).
+        if self.i2c_cnt == I2C_TICKS - 1:
+            self.i2c_cnt = 0
+            self.i2c_val = (self.i2c_val + 1) & 0xFF
+            self.i2c_flag = 1
+        else:
+            self.i2c_cnt += 1
+
+    def pad_oe(self) -> int:
+        """The matrix's drive enable, per pin: reg_oe & ~(reg_od & reg_out).
+
+        This ONE expression is the open-drain safety property (see
+        rtl/pe_pinmux.v): in od mode a pin holding a 1 is RELEASED, so the pad
+        can never drive high. The emulator must model it rather than the OE
+        register, because every observable in the I2C firmware depends on it.
+        """
+        return self.reg_oe & ~(self.reg_od & self.reg_out) & 0xFF
+
+    def wire_bits(self) -> int:
+        """What the outside world sees on the 8 port bits.
+
+        THERE ARE TWO KINDS OF DRIVE and conflating them is a bug this model
+        had on the first attempt (it made a push-pull pin driving 1 read as 0,
+        and the UART stopped echoing):
+
+          * a pin in OD mode (od=1) can only pull LOW or release. Driving with
+            out=1 therefore RELEASES, and the level is whatever the pull-up
+            gives -- unless another device is pulling the line down, which is
+            arbitration.
+          * a pin in PUSH-PULL mode (od=0) drives BOTH ways, so out=1 really
+            does put a high level on the wire and out=0 a low one.
+
+        A released (oe=0) pin does not drive at all; its level is the pull-up's,
+        again unless something else pulls it down.
+        """
+        oe = self.pad_oe()
+
+        # 1. A pin we are DRIVING shows reg_out, full stop. There is no pull-up
+        #    on a driven pin -- that is what "driven" means, and treating it as
+        #    a pull-up plus a pull-down (the first version of this function)
+        #    made a push-pull pin driving 1 read as 0, which stopped the UART
+        #    echoing. In od mode the OD gate has already cleared oe for any pin
+        #    holding 1, so "driven" here only ever means "pulling low" there.
+        level = self.reg_out & oe
+
+        # 2. A RELEASED pin floats to the pull-up. On one of the I2C lines,
+        #    another device may be holding it down -- that is arbitration, and
+        #    it is what the firmware's read-back is looking for.
+        released = ~oe & 0xFF
+        level |= released & ~self.i2c_pull_low & 0xFF
+
+        # RX is an input-only pad in the current pin map, driven by the TB's
+        # UART wire model rather than by any pull-up, so it is not part of the
+        # released-pin story above.
+        rxb = PORT_RX_BIT if self.pin_in else 0
+        level = (level & ~PORT_RX_BIT & 0xFF) | rxb
+        return level & 0xFF
+
     def _port_value(self) -> int:
-        """The 8-bit port as firmware reads it: input bits from the RX wire,
-        output bits from the last write. Same composition as the RTL's pin_rd."""
-        return (self.pin_out & ~PIN_IN_MASK & 0xFF) | \
-               ((PORT_RX_BIT if self.pin_in else 0) & PIN_IN_MASK)
+        """The 8-bit port as firmware reads it: driven pins read back what we
+        wrote, released pins read the pad. Same composition as the RTL's
+        pin_rd, which is (pin_out & pin_oe) | (pin_in & ~pin_oe)."""
+        oe = self.pad_oe()
+        return ((self.reg_out & oe) | (self.wire_bits() & ~oe)) & 0xFF
 
     def _io_read(self, port: int) -> int:
         if port == P_PIN:
             return self._port_value()
         if port == P_TXPIN:
             return self._port_value()
+        if port == P_PINOE:
+            return self.reg_oe
+        if port == P_PINOD:
+            return self.reg_od
+        if port == P_I2CTICK:
+            return self.i2c_val
         if port == P_TIMER:
             return self.tick_val
+        if port == P_I2CSTAT:
+            f = self.i2c_flag
+            self.i2c_flag = 0
+            return f & 1
         if port == P_STATUS:
             f = self.tick_flag
             self.tick_flag = 0
@@ -158,11 +254,16 @@ class Soc:
         return 0
 
     def _io_write(self, port: int, val: int) -> None:
+        # The port -> register mapping is NOT the identity, and the emulator has
+        # to repeat the RTL's translation exactly (see rtl/pe_uart_soc.v):
+        #   port 1 PINOUT -> reg_out, port 2 PINOE -> reg_oe, port 3 -> reg_od
         if port == P_TXPIN:
-            # Only the output bits move; an input bit written here would make
-            # the port disagree with the wire, which is the RTL's rule too.
-            self.pin_out = (self.pin_out & PIN_IN_MASK & 0xFF) | (val & ~PIN_IN_MASK & 0xFF)
-            self.tx_history.append((self.cycles, self.pin_out & PORT_TX_BIT))
+            self.reg_out = val & 0xFF
+            self.tx_history.append((self.cycles, self.reg_out & PORT_TX_BIT))
+        elif port == P_PINOE:
+            self.reg_oe = val & 0xFF
+        elif port == P_PINOD:
+            self.reg_od = val & 0xFF
 
     # -- one clock ---------------------------------------------------------
     cycles = 0
@@ -279,9 +380,13 @@ class Soc:
         delay at all, and it is exactly the property firmware/spi_xfer.pe
         depends on when it reads the pin straight after raising SCLK.
         """
-        sclk = 1 if (self.pin_out & PORT_SCLK_BIT) else 0
-        mosi = 1 if (self.pin_out & PORT_MOSI_BIT) else 0
-        cs_n = 1 if (self.pin_out & PORT_CS_BIT) else 0
+        # Read the PAD level, not the output register. A released pin shows
+        # whatever the wire has, which is what a real slave sees; reading
+        # reg_out directly would claim a level on a pin we have released.
+        _w = self.wire_bits()
+        sclk = 1 if (_w & PORT_SCLK_BIT) else 0
+        mosi = 1 if (_w & PORT_MOSI_BIT) else 0
+        cs_n = 1 if (_w & PORT_CS_BIT) else 0
 
         # CS_N falling edge: selected, start a fresh RX byte.
         #
@@ -359,7 +464,7 @@ class Soc:
         subsequent sample is exactly one bit period later -- which is what the
         firmware guarantees, since it holds every bit for one bit period.
         """
-        lvl = 1 if (self.pin_out & PORT_TX_BIT) else 0
+        lvl = 1 if (self.wire_bits() & PORT_TX_BIT) else 0
         if not self.tx_in_frame:
             if self.sample_prev == 1 and lvl == 0:       # start-bit falling edge
                 self.tx_in_frame = True
@@ -419,7 +524,7 @@ def run(hex_path: Path, send: list[int], max_cycles: int, trace: int,
         if trace and soc.cycles % trace == 0:
             print(f"  cyc {soc.cycles:6d} pc={soc.pc:3d} a={soc.a:02x} "
                   f"x={soc.x:02x} y={soc.y:02x} tick={soc.tick_val:02x} "
-                  f"out={soc.pin_out} in={soc.pin_in}")
+                  f"out={soc.reg_out} oe={soc.pad_oe()} in={soc.pin_in}")
         seg_clock += 1
         if seg_clock >= segments[seg_i][1]:
             seg_clock = 0
@@ -481,9 +586,9 @@ def run_spi(hex_path: Path, response: list[int], max_cycles: int,
         soc.step()
         if trace and soc.cycles % trace == 0:
             print(f"  cyc {soc.cycles:6d} pc={soc.pc:3d} a={soc.a:02x} "
-                  f"out={soc.pin_out:02x} in={soc.pin_in:02x}")
+                  f"out={soc.reg_out:02x} oe={soc.pad_oe():02x} in={soc.pin_in:02x}")
         soc.poll_spi_slave(response)
-        cs_now = 1 if (soc.pin_out & PORT_CS_BIT) else 0
+        cs_now = 1 if (soc.wire_bits() & PORT_CS_BIT) else 0
         if len(soc.spi_words) >= frames and cs_now == 1:
             break
         frames_done = len(soc.spi_words)

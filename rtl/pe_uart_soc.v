@@ -10,11 +10,36 @@
 //
 // Memory map — the CPU's entire 4-bit IO space:
 //
-//   0x0  PIN     r   the port's current levels, one bit per pin
-//   0x1  PINOUT  w   drive the port's OUTPUT bits
-//   0x1  PINOUT  r   readback (same view as PIN, aids firmware debug)
-//   0x5  TIMER   r   free-running 8-bit counter, one increment per bit period
+//   0x0  PIN     r   the port's levels: driven pins read back what we wrote,
+//                    RELEASED pins read the pad (see the matrix note below)
+//   0x1  PINOUT  w   drive the port's output levels
+//   0x1  PINOUT  r   readback of those levels
+//   0x2  PINOE   w/r per-pin output enable: 1 = drive, 0 = RELEASE (high-Z)
+//   0x3  PINOD   w/r per-pin open-drain: with 1, a pin holding 1 is released
+//   0x4  I2CTICK r   free-running 1 microsecond counter, for I2C bit timing
+//   0x5  TIMER   r   free-running 8-bit counter, one increment per half bit
+//   0x6  I2CSTAT r   bit0 = "an I2C tick happened" (cleared by this read)
 //   0x7  STATUS  r   bit0 = "a timer tick happened" (cleared by this read)
+//
+// PORTS 0x2 AND 0x3 ARE THE I2C MILESTONE. Everything before them assumed pin
+// direction was a BUILD-TIME decision, and that was true and cheap: UART and
+// SPI are both push-pull, so every pin is an input or an output for the whole
+// design. I2C breaks that. SDA is driven low, RELEASED (allowed to float up to
+// the board's pull-up), and READ BACK -- often within one bit cell, because
+// arbitration means the master must compare the level it drove against the
+// level the bus actually has. `rtl/pe_pinmux.v` is that register file; it is
+// instantiated HERE rather than in the TT wrapper, and the reason is worth
+// recording because the plan said otherwise:
+//
+//   The plan (wiki/plans/through-i2c.md) and wiki/concepts/pin-matrix.md both
+//   say "the TT wrapper instantiates the matrix in front of the SoC's port".
+//   As written that cannot work: the CPU's IO bus (io_port/io_we/io_wdata/
+//   io_rdata) never crosses this module's boundary, so a matrix living in the
+//   wrapper would have NO way for firmware to write OE or OD. It would be dead
+//   hardware for the one protocol it exists to serve.
+//
+//   So the matrix lives here, where the IO decode is. The wrapper still owns
+//   the pads -- it maps port bits to `uio` and forwards `pad_oe` to `uio_oe`.
 //
 // THE PORT NUMBERING RULE: outputs low, inputs high.
 //
@@ -22,6 +47,13 @@
 // HIGH bits; PIN_IN_MASK records where the split falls. That is the whole rule,
 // and the write path below is exactly it: input bits keep their value, output
 // bits take the written value.
+//
+// PIN_IN_MASK is now the RESET DIRECTION rather than the permanent one. It
+// seeds the matrix's OE register (`RST_OE = ~PIN_IN_MASK`), so the reset state
+// is bit-identical to the fixed-mask SoC this replaces -- which is what lets
+// tb_pe_uart_soc and tb_pe_tick_status keep signing off the same behaviour.
+// Firmware may change any pin's direction at runtime; UART and SPI simply
+// never do.
 //
 // The reason for a rule rather than a per-pin convention is that firmware has
 // to be able to write a pin value with no arithmetic. Under this rule the first
@@ -34,20 +66,20 @@
 // shared input pin below. Every test of a pin is a zero/nonzero test, so the
 // mask is a constant, not a shift.
 //
-// ASSIGNMENT -- ONE MAP THAT SERVES BOTH BASELINE PROTOCOLS:
+// ASSIGNMENT -- ONE MAP THAT SERVES ALL THREE BASELINE PROTOCOLS:
 //
-//   bit 0  out  UART TX      / SPI SCLK
-//   bit 1  out  (spare)      / SPI MOSI
-//   bit 2  out  (spare)      / SPI CS_N
-//   bit 3  in   UART RX      / SPI MISO
-//   7:4    in   unclaimed
+//   bit 0  UART TX      / SPI SCLK
+//   bit 1  (spare)      / SPI MOSI
+//   bit 2  (spare)      / SPI CS_N
+//   bit 3  UART RX      / SPI MISO
+//   bit 4  I2C SDA      (bidirectional, open-drain)
+//   bit 5  I2C SCL      (bidirectional, open-drain)
+//   7:6    unclaimed
 //
-// so PIN_IN_MASK = 8'hF8 (outputs 0-2, inputs 3-7). The two protocols share
-// one build-time mask on purpose. The mask cannot be changed at run time, so a
-// mask that served only one of them would mean the chip could not be
-// reprogrammed from UART to SPI without a rebuild -- which is the one thing
-// this whole design exists to disprove. SPI needs three outputs and one input,
-// and both fit in the three-low-outputs / high-inputs shape.
+// so PIN_IN_MASK = 8'hF8 (outputs 0-2, inputs 3-7). All three protocols share
+// one reset mask on purpose. The mask seeds a register now, so a program can
+// flip any pin at runtime -- which is the one thing this whole design exists
+// to demonstrate, and it is why I2C needed no new chip, only new firmware.
 
 // WHY THE PORT IS 8 BITS WIDE WHEN A UART USES ONE.
 //
@@ -99,11 +131,14 @@ module pe_uart_soc #(
   input  logic        run,
 
   // The protocol pin port. Everything else is software.
-  // Inputs and outputs are separate buses -- there is no tristate and no
-  // per-pin direction register (see the header). PIN_IN_MASK says which bits of
-  // pin_in are real; the rest are ignored.
+  // Inputs and outputs are separate buses -- there is no tristate at THIS
+  // boundary; `pin_oe` carries the per-pin direction out to the wrapper, which
+  // is where the real pads live. PIN_IN_MASK says which bits of pin_in are real
+  // at reset; firmware can change any pin's direction afterwards (see the
+  // header's matrix note).
   input  logic [7:0]  pin_in,
   output logic [7:0]  pin_out,
+  output logic [7:0]  pin_oe,
 
   // Observability
   output logic [7:0]  dbg_pc,
@@ -251,45 +286,183 @@ module pe_uart_soc #(
 
   assign dbg_timer = tick_val;
 
-  // ---- the pin port ------------------------------------------------------
-  // Registered so firmware sees clean levels and the TB can observe them. All
-  // 8 bits are driven; the mask decides which bits come from pin_in rather
-  // than from the last write.
+  // ---- the pin port: pe_pinmux, not a fixed mask -------------------------
+  // This used to be an always_ff holding pin_out, with PIN_IN_MASK deciding
+  // which bits came from the pad and which from the last write. It is now the
+  // matrix register file, and the reset seed makes it EQUIVALENT to that logic:
   //
-  // A write drives ALL the output bits at once -- there is no per-pin set or
-  // clear. That is the natural consequence of one write port, and it is why
-  // firmware keeps the output byte as a single value and composes each change
-  // (OR to raise a pin, AND-mask to lower one) rather than imagining it can
-  // poke a single pin. Reading PINOUT back gives the current byte for
-  // read-modify-write, so no shadow copy is required in dmem.
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) pin_out <= 8'h01;
-      // Reset drives bit 0 high, which is the UART TX idle level -- the safe
-      // state for the protocol that is resident at reset, since a low TX line
-      // reads to a peer as a start bit. It is NOT a sensible SPI idle (mode 0
-      // wants SCLK low and CS_N high) and it does not need to be: SPI firmware
-      // writes the port's idle pattern as its first act, before it asserts CS_N.
-      // A reset value that cannot serve both protocols is the honest
-      // consequence of one shared port, not a defect to paper over with a
-      // value that is wrong for the protocol actually running.
-    else if (io_we && io_port == 4'h1)
-      // A write sets the OUTPUT bits only. Driving an input bit here would
-      // make pin_out disagree with the pad the input comes from, and firmware
-      // reading PINOUT back would see a value the outside world never had.
-      pin_out <= (pin_out & PIN_IN_MASK) | (io_wdata & ~PIN_IN_MASK);
+  //     RST_OE  = ~PIN_IN_MASK   (drive the outputs, release the inputs)
+  //     RST_OD  = 0              (push-pull everywhere, as before)
+  //     RST_OUT = PIN_OUT_RST    (TX idles high; see the note below)
+  //
+  // so with firmware that never writes PINOE or PINOD, the pad behaviour and
+  // the port read-back are IDENTICAL to the old fixed-mask SoC. That is
+  // deliberate: it is what lets tb_pe_uart_soc and tb_pe_tick_status keep
+  // signing off UART and SPI while I2C gets the runtime direction it needs. A
+  // separate, parallel port would have been two mechanisms for one job.
+  //
+  // One honest difference, recorded rather than glossed: the old logic masked
+  // the WRITE (`pin_out <= (pin_out & MASK) | (wdata & ~MASK)`), so pin_out's
+  // input bits kept their reset value forever. The matrix stores the whole byte,
+  // so pin_out[7:3] now carries whatever was last written. Nothing observes it:
+  // those bits are released (so no pad sees the level) and the wrapper routes
+  // only bits 0, 4 and 5. The READ-BACK is unaffected, because a released bit
+  // reads the pad either way -- which is the property the firmware relies on.
+  // If a future protocol routes bit 4/5 while ALSO leaving them released, the
+  // pad level is what matters and that is unchanged.
+  //
+  // Reset OUT is 8'h01 rather than the matrix's own all-ones default: bit 0
+  // high is the UART TX idle level, and the SoC is what knows a UART is
+  // resident at reset. A low TX line reads to a peer as a start bit. (The
+  // matrix cannot guess a protocol from its pins, so it does not try -- see
+  // pe_pinmux's header.)
+  localparam logic [7:0] PIN_OUT_RST = 8'h01;
+
+  logic [7:0] pinmux_rdata;
+  logic       pinmux_we;
+  logic [1:0] pinmux_waddr, pinmux_raddr;
+
+  // THE TWO NUMBERING SCHEMES ARE NOT THE SAME, and assuming they were is a bug
+  // that hung the UART testbench:
+  //
+  //   SoC port       matrix register
+  //   --------       ---------------
+  //   0  PIN   r     A_OUT = 0
+  //   1  PINOUT w    A_OE  = 1
+  //   2  PINOE      A_IN  = 2   (read-only)
+  //   3  PINOD      A_OD  = 3
+  //
+  // Port 1 is where firmware has always written the output LEVEL, and the
+  // matrix keeps that level in register 0. An identity map (`addr = io_port`)
+  // therefore pointed `OUT TXPIN, A` straight at the ENABLE register: the write
+  // set OE instead of the level, the TX pin was released rather than driven, and
+  // tb_pe_uart_soc hung waiting for a start bit that could never be driven.
+  //
+  // The mapping is explicit rather than clever because the constraint is real:
+  // port 0/1 are fixed by the verified UART and SPI firmware (they do
+  // read-modify-write on them), and the matrix's register order is fixed by
+  // tb_pe_pinmux's 7/7 mutation battery. Neither can be renumbered for
+  // cosmetic alignment, so the translation lives here, named.
+  localparam logic [1:0] A_OUT = 2'd0,
+                         A_OE  = 2'd1,
+                         A_IN  = 2'd2,
+                         A_OD  = 2'd3;
+
+  // Write address: only ports 1-3 are writable, and each one names its register.
+  always_comb begin
+    case (io_port)
+      4'h1:    begin pinmux_waddr = A_OUT; pinmux_we = io_we; end
+      4'h2:    begin pinmux_waddr = A_OE;  pinmux_we = io_we; end
+      4'h3:    begin pinmux_waddr = A_OD;  pinmux_we = io_we; end
+      // A write to PIN (0x0) is a no-op, and the read-only ports stay
+      // read-only, so the write port remains total -- which is what the SoC's
+      // IO decode assumes (see pe_pinmux's own note on the same point).
+      default: begin pinmux_waddr = A_IN;  pinmux_we = 1'b0;  end
+    endcase
   end
 
-  // Input bits mirror the pad; output bits read back what was written. That
-  // makes a single read give firmware the whole port state -- inputs it can
-  // act on and outputs it can verify, in one instruction.
-  assign pin_rd = (pin_in & PIN_IN_MASK) | (pin_out & ~PIN_IN_MASK);
+  // Read address: ports 2 and 3 read their own register; the matrix's IN
+  // register is not exposed on its own port because the pad level is already
+  // visible as the released-pin part of port 0.
+  always_comb begin
+    case (io_port)
+      4'h2:    pinmux_raddr = A_OE;
+      4'h3:    pinmux_raddr = A_OD;
+      default: pinmux_raddr = A_IN;
+    endcase
+  end
 
-  // ---- IO read mux ------------------------------------------------------
+  pe_pinmux #(
+    .PINS(8),
+    .RST_OE (~PIN_IN_MASK),
+    .RST_OUT(PIN_OUT_RST),
+    .RST_OD (8'h00)
+  ) u_pinmux (
+    .clk(clk),
+    .rst_n(rst_n),
+    .we(pinmux_we),
+    .addr(pinmux_we ? pinmux_waddr : pinmux_raddr),
+    .wdata(io_wdata),
+    .rdata(pinmux_rdata),
+    .pad_in(pin_in),
+    .pad_out(pin_out),
+    .pad_oe(pin_oe)
+  );
+
+  // ---- the I2C tick: 1 microsecond ---------------------------------------
+  // A SECOND, coarser tick, because I2C's unit is the microsecond and the UART
+  // timer's unit is half a bit period. Reusing TIMER for both is not possible:
+  // 260 clocks is 4.33 us, which is not a Standard-mode interval, and rescaling
+  // it in firmware would put a multiply in every bit cell. One more divider is
+  // ~13 flops and makes every I2C constant a small integer (tLOW = 5, tHIGH =
+  // 6, tSU;STA = 5 -- see wiki/plans/through-i2c.md).
+  //
+  // 60 MHz / 1 MHz = 60 exactly, so this divider has no rounding error at all.
+  // Same one-process, set-beats-clear structure as the UART tick, for the same
+  // reason (two always_ff blocks on one flag is a driver-driver conflict that
+  // Icarus and yosys resolve differently -- see the note below).
+  localparam int I2C_TICKS = CLK_HZ / 1_000_000;
+  localparam int CNTWI     = (I2C_TICKS < 4) ? 2 : $clog2(I2C_TICKS);
+
+  logic [CNTWI-1:0] i2c_cnt;
+  logic [7:0]       i2c_val;
+  logic             i2c_flag;
+  logic             i2c_now, i2cstat_rd;
+
+  assign i2c_now     = (i2c_cnt == CNTWI'(I2C_TICKS - 1));
+  assign i2cstat_rd  = io_re && (io_port == 4'h6);
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      i2c_cnt  <= '0;
+      i2c_val  <= 8'h00;
+      i2c_flag <= 1'b0;
+    end else begin
+      if (i2c_now) begin
+        i2c_cnt <= '0;
+        i2c_val <= i2c_val + 8'd1;
+      end else begin
+        i2c_cnt <= i2c_cnt + 1'b1;
+      end
+
+      if (i2c_now)         i2c_flag <= 1'b1;   // set beats clear
+      else if (i2cstat_rd) i2c_flag <= 1'b0;
+    end
+  end
+
+  // The port 0/1 view: a pin we are DRIVING reads back what we wrote; a pin we
+  // have RELEASED reads the pad. Note the term is `pin_oe` -- the matrix's
+  // actual drive enable -- not the OE register, because in open-drain mode a
+  // pin holding 1 is released even though its OE bit is set. Using the real
+  // enable is what makes arbitration visible on port 0 for free: release SDA
+  // to send a 1, read port 0, and bit 4 IS the bus level.
+  //
+  // This is also EXACTLY the old `(pin_in & PIN_IN_MASK) | (pin_out &
+  // ~PIN_IN_MASK)` whenever od=0 and the OE register still equals
+  // ~PIN_IN_MASK, which is the UART/SPI case. Same expression, generalised.
+  assign pin_rd = (pin_out & pin_oe) | (pin_in & ~pin_oe);
+
+  // The port read mux.
+  //
+  // Port 0/1 keep the OLD combined view -- driven pins read back what firmware
+  // wrote, released pins read the pad -- because SPI firmware does
+  // read-modify-write on port 0 (`IN A, PIN` / `OR` / `OUT TXPIN, A`) and a
+  // view that differed from the old one would break it silently. The matrix's
+  // own IN register is the pure pad level, exposed at port 2 as the enable
+  // register when READ.
+  //
+  //   port 2 read = PINOE, not the pad. The pad level is already available as
+  //   the released-pin part of port 0, and giving firmware a read-modify-write
+  //   of the enable register matters more for I2C than a second pad view.
   always_comb begin
     case (io_port)
       4'h0:    io_rdata = pin_rd;
-      4'h1:    io_rdata = pin_rd;             // same view; writes go to pin_out
+      4'h1:    io_rdata = pin_rd;             // same view; writes go to PINOUT
+      4'h2:    io_rdata = pinmux_rdata;       // PINOE
+      4'h3:    io_rdata = pinmux_rdata;       // PINOD
+      4'h4:    io_rdata = i2c_val;
       4'h5:    io_rdata = tick_val;
+      4'h6:    io_rdata = {7'b0, i2c_flag};
       4'h7:    io_rdata = {7'b0, tick_flag};
       default: io_rdata = 8'h00;
     endcase

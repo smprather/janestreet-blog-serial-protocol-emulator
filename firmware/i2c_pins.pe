@@ -1,0 +1,312 @@
+; i2c_pins.pe — I2C pins on a bus that has no I2C hardware.
+;
+; THERE IS NO I2C CONTROLLER. What the SoC provides is a register file that
+; makes each pin's direction a RUNTIME value, and a 1 us tick. Everything an
+; I2C bus is — START, STOP, bit cells, arbitration, clock stretching — is
+; built from those below.
+;
+; ---------------------------------------------------------------------------
+; THE PINS
+;
+;   bit 4 = SDA   bit 5 = SCL     both on the SoC's port, both open-drain
+;
+; Open-drain is the whole reason this milestone exists. A pin is either DRIVEN
+; LOW or RELEASED; it is never driven high. On a real bus the external pull-up
+; supplies the high level, and a second device may pull the line down at the
+; same time — which is not a fault, it is arbitration.
+;
+; TWO WAYS TO SEND A 1, AND WHY ONLY ONE IS SAFE
+;
+;   (a) push-pull:  out=1, oe=1    <- drives the pin HIGH. Contention if any
+;                                      other device pulls low. Destructive.
+;   (b) open-drain: od=1, out=1    <- the OD gate RELEASES the pin instead of
+;                                      driving it. Pull-up wins. Safe.
+;
+; This program uses (b) everywhere. The OD bit makes (a) unreachable: with
+; od=1 and out=1 the hardware CANNOT drive high, so the hazardous state is not
+; expressible — see rtl/pe_pinmux.v.
+;
+; But note the idiom, because it is the project thesis in one line:
+;
+;   to send 1 or 0, write out=1 or out=0, and never touch oe or od again.
+;
+; The SAME instruction sequence drives a push-pull bus and an open-drain one.
+; Only the od register differs, and it is set once. That is what "swap the
+; program and it speaks I2C, with the gates unchanged" means concretely.
+;
+; THIS PROGRAM CLAIMS EXACTLY TWO PINS. PINOE is written directly with 0x30,
+; which RELEASES the pins the reset default had enabled (TX, and bits 1-2).
+; That is right for an I2C-only program and is the point of a runtime matrix:
+; each program owns the pins it uses. A program MIXING protocols must instead
+; read-modify-write PINOE — IN A, PINOE / OR A, SDA|SCL / OUT PINOE, A — the
+; same idiom spi_xfer.pe uses on the port. Direct writes here are a deliberate
+; claim of the whole port, not an oversight.
+;
+; ---------------------------------------------------------------------------
+; WHAT THIS PROGRAM IS, AND WHAT IT DELIBERATELY IS NOT
+;
+; It is ONE COMPLETE BIT CELL plus a START and a STOP — the pin-level grammar
+; of I2C, with the timing actually measured on the wire. It is NOT a byte
+; transfer: there is no shift register, no ACK bit, no address phase. Those are
+; the transaction layer (plan step 6), and they are built from exactly these
+; primitives. A byte transfer is this bit cell wrapped in an 8-iteration loop
+; with the ACK slot after it.
+;
+; Writing the bit cell as one straight-line pass rather than a loop is also
+; what makes the timing assertable: a testbench can measure tLOW, tHIGH and the
+; period on three edges it can name, instead of measuring a loop.
+;
+; ---------------------------------------------------------------------------
+; TIMING, AND WHY THE DELAY IDIOM HAD TO CHANGE
+;
+; I2CTICK (port 4) increments once per microsecond (60 clocks exactly, so this
+; divider has no rounding error at all). Standard-mode floors are tLOW >= 4.7 us,
+; tHIGH >= 4.0 us, tBUF >= 4.7 us, with a 100 kHz ceiling (period >= 10 us).
+;
+; uart_echo.pe and spi_xfer.pe wait a tick with:
+;
+;     IN A, TICK ; MOV X, A
+; w:  IN A, TICK ; SUB A, X ; JZ w
+;
+; which waits for the counter to CHANGE. The counter is free-running, so that
+; delivers somewhere in (0, 1] ticks — up to a full tick short. Harmless for
+; SPI (synchronous: the slave times off our own edges, so jitter costs
+; nothing) and merely a margin cost for the UART. IT IS NOT SAFE HERE, and the
+; first draft of this file proved it: 1,384 cycles for 28 us of nominal delays,
+; a 0.83x shortfall.
+;
+; So this program waits for an exact TARGET instead:
+;
+;     IN A, I2CTICK ; ADD A, T_LOW ; MOV X, A   ; X = the tick we wait for
+; w:  IN A, I2CTICK ; SUB A, X ; JNZ w          ; spin until the counter IS X
+;
+; SUB's only second operand is an immediate or X — Y is not addressable there —
+; so the target lives in X and Y stays free.
+;
+; THE PHASE RESIDUAL, AND WHY IT SETS THE CONSTANTS. Firmware cannot see where
+; in the 60-cycle window a read lands; call that unknown offset phi, 0 <= phi
+; < 60 cycles. The target tick arrives 60*N - phi cycles later, so an "N-tick"
+; wait delivers (N-1, N] microseconds: STILL UP TO A FULL TICK SHORT. That is
+; unavoidable without aligning to a tick boundary first, and the alignment
+; costs four more instructions per delay for no gain here.
+;
+; What it means for the constants is the part that matters: THE NUMBER THAT HAS
+; TO CLEAR THE FLOOR IS N-1, NOT N. The counts in T_LOW/T_HIGH/T_STA/T_STO/
+; T_BUF (see tools/peasm.py) are chosen so that N-1 clears the floor with
+; margin — e.g. tLOW uses 6 ticks, whose worst case is 5 us against a 4.7 us
+; floor. A nominal-5 us choice would look compliant and be violating half the
+; time, which is exactly the failure a bench test does not catch.
+;
+; Every instruction between two edges spends part of the window, so the
+; measured period is a little LONGER than tLOW + tHIGH. Long is safe here: the
+; binding constraint is the 100 kHz ceiling, and the margin to it is what the
+; testbench measures. See the measured table in wiki/plans/through-i2c.md.
+;
+; The 8-bit wrap is safe because the test is EQUALITY, not magnitude: starting
+; at tick 254 with N=6 the target wraps to 4, and the counter does reach 4
+; (254, 255, 0, 1, 2, 3, 4). The loop also cannot step over the target, because
+; it costs 3 cycles against a 60-cycle tick.
+;
+; ---------------------------------------------------------------------------
+; THE STOP SEQUENCE, WHICH IS NOT THE MIRROR OF START AND IS EASY TO GET WRONG
+;
+; A STOP is SDA RISING while SCL is HIGH. The trap: if SDA is low and you simply
+; release it with SCL already high, you get a STOP — but the way you got SDA low
+; matters. Pulling SDA low while SCL is high is a START, so the SDA falling edge
+; must happen while SCL is LOW. The first draft of this file drove SDA low while
+; SCL was still high and so emitted a spurious second START before the STOP; the
+; wire trace showed it (SDA falling with SCL high at cycle 905).
+;
+; The order that cannot go wrong:
+;
+;   1. SCL low            (SDA may be anything — no condition is defined with
+;                          SCL low)
+;   2. SDA low            (safe now: SCL is low)
+;   3. tSU;STO wait       (SDA set up before SCL rises)
+;   4. release SCL        (SCL rises; SDA still low)
+;   5. tHIGH wait         (the SCL high period before the STOP)
+;   6. release SDA        (SDA rises while SCL is high — THIS is the STOP)
+;   7. tBUF wait          (bus free before the next transaction)
+;
+; ---------------------------------------------------------------------------
+; WHAT THE TESTBENCH ASSERTS (dmem layout — the program's observable output)
+;
+;   dmem[0]  the level of SDA sampled while RELEASED and SCL HIGH — the
+;            arbitration sample point, since I2C masters sample data while SCL
+;            is high
+;   dmem[1]  1 if that read-back was LOW while we were sending a 1 — another
+;            master won the bus
+;   dmem[2]  the level of SCL read back after releasing it (stretch check)
+;   dmem[3]  count of completed START/STOP pairs
+;   dmem[4]  the pin byte last driven (so the TB can cross-check TXPIN)
+
+        ; ---- enter open-drain mode, in the order that cannot glitch ---------
+        ; OD FIRST, and this is the ONLY place od is written. After it, the
+        ; bit-banging below is identical to what a push-pull protocol would run.
+        LDI   A, SDA|SCL           ; 0x30
+        OUT   PINOD, A
+
+        ; THEN the output levels, BEFORE enabling the pins.
+        ;
+        ; The order here is not cosmetic. At reset the output register holds
+        ; 0x01, so bits 4 and 5 are ZERO. If PINOE were written first, those
+        ; two pins would be driven LOW for the two cycles before TXPIN sets
+        ; them to 1 -- and on a real bus, SDA falling while SCL is high IS a
+        ; START condition. The first version of this file did exactly that and
+        ; the wire trace showed the glitch (both lines low at cycles 4-5,
+        ; before anything legitimate had happened).
+        ;
+        ; The OD bit prevents CONTENTION -- it makes "drive high into someone
+        ; else's low" inexpressible. It does not prevent driving LOW at the
+        ; wrong moment, and a spurious START is exactly that. Setting the level
+        ; first means the pins are never enabled while holding the wrong value:
+        ; with od=1, out=1 is a RELEASE, so enabling them after writing 0x30
+        ; connects them to the pull-ups rather than to a driver.
+        LDI   A, SDA|SCL           ; out=1 on both => will read as released
+        OUT   TXPIN, A
+
+        ; THEN claim the two pins (releasing TX and bits 1-2, which the reset
+        ; default had enabled -- see the header note on claiming the port).
+        LDI   A, SDA|SCL           ; 0x30
+        OUT   PINOE, A
+
+        ; ---- clear the result bytes -------------------------------------
+        LDI   A, 0
+        STM   0, A
+        STM   1, A
+        STM   2, A
+        STM   3, A
+        STM   4, A
+
+        ; =================================================================
+        ; START — SDA falls while SCL is HIGH. That is the only definition of
+        ; a START condition; the same edge with SCL low is just data.
+        ; =================================================================
+        ; The bus is idle-high here (both released), which is where a START
+        ; begins. Only SDA is touched: SCL stays released.
+        LDI   A, SCL               ; 0x20 — SCL released, SDA pulled LOW
+        OUT   TXPIN, A
+
+        ; --- tHD;STA >= 4.0 us : hold SDA low before pulling SCL down -----
+        IN    A, I2CTICK
+        ADD   A, T_STA             ; 6 ticks
+        MOV   X, A
+w_sta:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_sta
+
+        ; SCL low now that the START is safely behind us: both pins low.
+        LDI   A, 0x00
+        OUT   TXPIN, A
+
+        ; =================================================================
+        ; BIT CELL — send a 1 by RELEASING SDA, then sample it.
+        ;
+        ; The data line changes while SCL is LOW and is valid while SCL is
+        ; HIGH. So: release SDA (it rises), hold the low period out, release
+        ; SCL (it rises), wait the high period, and SAMPLE WHILE SCL IS HIGH.
+        ; That sample point is not decoration — it is exactly when an I2C
+        ; master reads the data line, and it is therefore also when
+        ; arbitration is decided.
+        ; =================================================================
+        LDI   A, SDA               ; 0x10 — SDA released (rises), SCL still low
+        OUT   TXPIN, A
+
+        ; --- tLOW >= 4.7 us : the low period of this bit cell ------------
+        IN    A, I2CTICK
+        ADD   A, T_LOW             ; 6 ticks
+        MOV   X, A
+w_low:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_low
+
+        ; --- release SCL: it rises, SDA holding 1 ------------------------
+        LDI   A, SDA|SCL           ; both released
+        OUT   TXPIN, A
+
+        ; Read SCL back immediately and record it. On a real bus a slave may be
+        ; holding SCL low (clock stretching) and the rise does not happen; this
+        ; single IN is how a master notices, and it is free with a read-back
+        ; path. In a zero-delay simulation the release is instant, so this reads
+        ; 1; against a real RC it reads whatever the line has reached.
+        IN    A, PIN
+        AND   A, SCL
+        STM   2, A
+
+        ; --- tHIGH >= 4.0 us : the high period of this bit cell ----------
+        IN    A, I2CTICK
+        ADD   A, T_HIGH            ; 7 ticks
+        MOV   X, A
+w_hi:   IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_hi
+
+        ; --- sample SDA while SCL is HIGH --------------------------------
+        ; A released SDA reads the PAD, not our written level — so this read
+        ; IS the arbitration comparison. Note it is a single IN: the matrix
+        ; makes arbitration visible for free, with no extra status bit and no
+        ; comparator. If another master had pulled SDA low, the OD property
+        ; means neither of us is driving it, so nothing is damaged — we simply
+        ; see a 0 and know to back off.
+        IN    A, PIN
+        AND   A, SDA
+        STM   0, A                 ; record the level we actually saw
+        JNZ   arb_ok               ; still high => nobody contended
+        LDI   A, 1
+        STM   1, A                 ; dmem[1] = we lost arbitration
+arb_ok:
+
+        ; --- close the bit cell: SCL back low ----------------------------
+        LDI   A, SDA               ; SCL low, SDA released (data still valid)
+        OUT   TXPIN, A
+
+        ; =================================================================
+        ; STOP — SDA rises while SCL is HIGH. See the sequence note in the
+        ; header; the order below is the one that cannot emit a spurious START.
+        ; =================================================================
+        ; 1+2. SCL is already low here, so SDA may now be pulled low safely.
+        LDI   A, 0x00              ; both pulled low
+        OUT   TXPIN, A
+
+        ; 3. tSU;STO >= 4.0 us — SDA set up before SCL rises
+        IN    A, I2CTICK
+        ADD   A, T_STO             ; 6 ticks
+        MOV   X, A
+w_sto:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_sto
+
+        ; 4. release SCL: it rises while SDA is still low
+        LDI   A, SCL               ; SCL released, SDA held low
+        OUT   TXPIN, A
+
+        ; 5. tHIGH — the SCL high period ahead of the STOP edge
+        IN    A, I2CTICK
+        ADD   A, T_HIGH            ; 7 ticks
+        MOV   X, A
+w_sth:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_sth
+
+        ; 6. release SDA with SCL HIGH -> that rising edge IS the STOP
+        LDI   A, SDA|SCL           ; both released, bus goes idle-high
+        OUT   TXPIN, A
+
+        ; 7. tBUF >= 4.7 us — bus free time before the next transaction
+        IN    A, I2CTICK
+        ADD   A, T_BUF             ; 6 ticks
+        MOV   X, A
+w_buf:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_buf
+
+        ; =================================================================
+        ; DONE — record the completed pair and park the bus idle-high.
+        ; =================================================================
+        LDI   A, 1
+        STM   3, A                 ; dmem[3] = one START/STOP pair completed
+        LDI   A, SDA|SCL           ; idle-high, both released
+        OUT   TXPIN, A
+        STM   4, A                 ; dmem[4] = the byte we are driving
+halt:
+        JMP   halt                 ; the ISA has no HALT; the TB watches dmem[3]

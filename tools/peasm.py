@@ -59,9 +59,13 @@ ALU_SUB = {"ADD": 0, "SUB": 1, "AND": 2, "OR": 3}
 # Symbolic IO port names -> port number. The firmware writes IN A, RXSTAT
 # rather than IN A, 3; the map lives here so it matches the RTL's memory map.
 PORTS: dict[str, int] = {
-    "PIN": 0x0,      # input pin level
-    "TXPIN": 0x1,    # output pin level
-    "TIMER": 0x5,    # free-running tick counter
+    "PIN": 0x0,      # port levels: driven pins read back, released read the pad
+    "TXPIN": 0x1,    # output levels (write)
+    "PINOE": 0x2,    # per-pin output enable: 1 = drive, 0 = release (high-Z)
+    "PINOD": 0x3,    # per-pin open-drain: with 1, a pin holding 1 is released
+    "I2CTICK": 0x4,  # free-running 1 microsecond counter
+    "TIMER": 0x5,    # free-running half-bit tick counter
+    "I2CSTAT": 0x6,  # bit0 = an I2C tick happened (cleared by the read)
     "STATUS": 0x7,   # bit0 = a tick happened (cleared by the read)
 }
 
@@ -78,6 +82,41 @@ CONSTS: dict[str, int] = {
     "RX_START": 0x1, "RX_CLR": 0x2,
     "LSB_FIRST": 0x1,
     "TRUE": 1, "FALSE": 0,
+    # I2C port bits (see rtl/pe_uart_soc.v's map). SDA and SCL are the two
+    # bidirectional pins; both are open-drain on a real bus.
+    "SDA": 0x10, "SCL": 0x20,
+    # Standard-mode tick counts at 1 us per tick. 5/6 rather than 5/5: 5/5 is
+    # exactly 100.0 kHz, which is AT the ceiling and works on a bench while
+    # failing a compliance report. See wiki/plans/through-i2c.md.
+    # I2C standard-mode tick counts, in whole microseconds at 60 MHz (I2CTICK
+    # is exactly 1 us, since 60 MHz / 1 MHz = 60 with no remainder).
+    #
+    # WHY THESE ARE NOT THE SPEC MINIMA. The tick counter is free-running and
+    # firmware cannot see where in its 60-cycle window a read lands. A "wait N
+    # ticks" delay therefore delivers (N-1, N] us -- up to a FULL TICK SHORT of
+    # nominal -- so the number that has to clear the floor is N-1, not N.
+    # Derivation and the measured shortfall: see the TIMING section of
+    # firmware/i2c_pins.pe.
+    #
+    # Standard-mode floors and the counts chosen to clear them worst-case:
+    "T_LOW": 7,    # tLOW   >= 4.7 us -> worst case 6 us (nominal 7)
+    "T_HIGH": 6,   # tHIGH  >= 4.0 us -> worst case 5 us (nominal 6)
+    "T_STA": 6,    # tHD;STA>= 4.0 us -> worst case 5 us (nominal 6)
+    "T_DAT": 2,    # tSU;DAT>= 0.25 us-> worst case 1 us (nominal 2)
+    "T_STO": 6,    # tSU;STO>= 4.0 us -> worst case 5 us (nominal 6)
+    "T_BUF": 6,    # tBUF   >= 4.7 us -> worst case 5 us (nominal 6)
+    #
+    # WHY tLOW GETS THE LARGER SHARE. Both counts are reduced by up to one tick
+    # by the phase residual, and the two floors differ (4.7 vs 4.0), so the
+    # larger count belongs against the larger floor. Giving 7 to tHIGH and 6 to
+    # tLOW -- which the first draft did, reasoning about pull-up rise time --
+    # leaves tLOW with only 0.35 us of margin and tHIGH with 3.05. Swapping them
+    # is free: the PERIOD is exactly tLOW + tHIGH ticks either way (the waits
+    # chain in target form, so no phase is lost between them), so the swap only
+    # rebalances the margins. Measured: 1.35 us on tLOW, 1.05 us on tHIGH.
+    #
+    # Period = 13 ticks + instruction overhead = 13.03 us = 76.7 kHz, against
+    # the 100 kHz standard-mode ceiling.
 }
 
 
@@ -133,7 +172,24 @@ def strip_a(tok: str, what: str) -> str:
 
 
 def parse_imm(tok: str, table: dict[str, int] | None = None) -> int:
+    """Parse an immediate: a named constant, a port, or a number.
+
+    Also accepts `A|B` to OR two or more of those together, which is how the
+    pin-mask constants are written (`SDA|SCL` = 0x30, `TX|RX` etc.). The
+    alternative is a literal 0x30 in the firmware with a comment explaining it,
+    and the comment goes stale the moment a pin moves; the expression cannot.
+    Only `|` is supported -- this is an assembler, not an expression language,
+    and `|` is the only operator bit masks need.
+    """
     tok = tok.strip()
+    if "|" in tok:
+        parts = [parse_imm(part, table) for part in tok.split("|")]
+        if len(parts) < 2:
+            raise AsmError(f"empty operand in immediate expression {tok!r}")
+        val = 0
+        for part in parts:
+            val |= part
+        return val
     if table and tok.upper() in table:
         return table[tok.upper()]
     if tok.upper() in PORTS:
@@ -251,7 +307,14 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
                 # timer-delta idiom, and Y stays free as the snapshot.
                 if key == "X":
                     arg = (ALU_SUB[mnem] << 10) | (1 << 9)
-                elif re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", key):
+                elif re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", key) and \
+                        key not in CONSTS and key not in PORTS:
+                    # A bare identifier that is not a known constant is almost
+                    # always an attempt at register-register, which this ISA
+                    # cannot encode -- so say that rather than "unknown symbol".
+                    # Named constants and masks (T_STA, SDA|SCL) ARE allowed:
+                    # they reduce to the same immediate, and forcing a literal
+                    # would put a magic number in the firmware.
                     raise AsmError(
                         f"{mnem} second operand must be an immediate or X "
                         f"(got {key!r}); register-register is not in this ISA")
