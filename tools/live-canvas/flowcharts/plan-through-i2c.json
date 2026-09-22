@@ -9,7 +9,7 @@
     { "id": "w2", "kind": "process", "text": "2  regression + docs\nTBs into run_all.sh, synth_area, glossary, 174 -> 173", "row": 2, "col": 0, "w": 380 },
     { "id": "w3", "kind": "process", "text": "3  commit milestone 2\nCPU, SoC, assembler, emulator, firmware, TBs", "row": 3, "col": 0, "w": 380 },
     { "id": "w4", "kind": "process", "text": "4  pin matrix / OE\nopen-drain, read-back, tri-state (+ own TB)", "row": 4, "col": 0, "w": 380 },
-    { "id": "w5", "kind": "process", "text": "5  I2C SoC wiring\npin matrix + 1 us tick (40 clocks)", "row": 5, "col": 0, "w": 380 },
+    { "id": "w5", "kind": "process", "text": "5  I2C SoC wiring\npin matrix + 1 us tick (60 clocks)", "row": 5, "col": 0, "w": 380 },
     { "id": "w6", "kind": "process", "text": "6  I2C firmware\nSTART/STOP, byte, ACK, repeated START, read", "row": 6, "col": 0, "w": 380 },
     { "id": "w7", "kind": "process", "text": "7  tb_pe_i2c_soc.v\nchecks timing, not just bits", "row": 7, "col": 0, "w": 380 },
     { "id": "w8", "kind": "end", "text": "DONE: real I2C transaction in firmware\non RTL, timing-checked, emulator parity", "row": 8, "col": 0, "w": 380 },

@@ -118,7 +118,7 @@ emulator. They disagreed once and that disagreement is how the real bug was foun
 ## Current work list
 
 `wiki/plans/through-i2c.md` is authoritative — it has the definition of done for
-the I2C milestone, three blockers with numbers, the tick plan (1 µs tick = 40
+the I2C milestone, three blockers with numbers, the tick plan (1 µs tick = 60
 clocks, tLOW 5 ticks / tHIGH 6 → 90.9 kbit/s), the read-path timing budget
 (40 cycles to sample and arbitrate), and an 8-step ordered work list whose step 1
 is done.
