@@ -275,6 +275,15 @@ module pe_eth_mac #(
   logic [AW-1:0] frame_start;
   logic [AW:0]   room;
   logic [1:0]    settle;
+  // Structural completeness, independent of the CRC. A residue can match on a
+  // frame that never had a complete structure -- the review's 14-byte runt
+  // (preamble + SFD + 10 bytes + 4 FCS, no payload at all) folded to the
+  // catalogue residue and was accepted as a TYPE frame, then wound the write
+  // pointer back 4 bytes that had never been stored: wptr underflowed to 2,044
+  // and `room` grew to 2,052 in a 2,048-byte buffer. CRC residue proves the BITS
+  // are consistent, not that a frame was there.
+  logic          hdr_done;    // the 14-byte header completed for THIS frame
+  logic          fcs_done;    // a length frame's 32 FCS bits completed
 
   assign shreg_n = {bit_d, shreg};
 
@@ -314,6 +323,8 @@ module pe_eth_mac #(
       shreg       <= '0;
       field       <= '0;
       is_type     <= 1'b0;
+      hdr_done    <= 1'b0;
+      fcs_done    <= 1'b0;
       pay_cnt     <= '0;
       pad_cnt     <= '0;
       fcs_cnt     <= '0;
@@ -370,6 +381,8 @@ module pe_eth_mac #(
               byte_cnt    <= '0;
               bit_cnt     <= '0;
               shreg       <= '0;
+              hdr_done    <= 1'b0;
+              fcs_done    <= 1'b0;
               pay_cnt     <= '0;
               pad_cnt     <= '0;
               fcs_cnt     <= '0;
@@ -400,6 +413,7 @@ module pe_eth_mac #(
                   // reads as 1 and runs off the end of the ring.
                   field[7:0] <= shreg_n;
                   is_type    <= ({field[15:8], shreg_n} >= TYPE_MIN);
+                  hdr_done   <= 1'b1;
                   // Reject before writing anything. Only a length frame can be
                   // sized here; a type frame's bound is enforced per byte
                   // below, because its length is not known until the line
@@ -497,8 +511,9 @@ module pe_eth_mac #(
           if (ok) begin
             fcs_cnt <= fcs_cnt + 5'd1;
             if (fcs_cnt == 5'd31) begin
-              state  <= S_SETTLE;
-              settle <= '0;
+              state    <= S_SETTLE;
+              settle   <= '0;
+              fcs_done <= 1'b1;
             end
           end
         end
@@ -510,7 +525,14 @@ module pe_eth_mac #(
         S_SETTLE: begin
           settle <= settle + 2'd1;
           if (settle == 2'd2) begin
-            if (crc_state == CRC_RESIDUE) begin
+            // The CRC residue is necessary but NOT sufficient: the frame must
+            // also have a complete structure. A header that never finished has
+            // no field; a TYPE frame that never stored its four FCS bytes has
+            // nothing to wind back; a LENGTH frame that aborted before its FCS
+            // bits completed is truncated. The runt the review sent had a valid
+            // residue and none of the structure.
+            if ((crc_state == CRC_RESIDUE) && hdr_done &&
+                (is_type ? (pay_cnt >= {{(16-3){1'b0}}, FCS_BYTES}) : fcs_done)) begin
               frame_valid <= 1'b1;
               // Wind back only what the FCS actually occupied in the buffer:
               // 4 bytes for a type frame, NOTHING for a length frame whose FCS

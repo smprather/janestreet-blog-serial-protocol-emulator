@@ -107,6 +107,26 @@ module tb_pe_eth_mac;
     end
   endtask
 
+  // ---- independently timed driver ---------------------------------------
+  // Fixed delays, NOT the DUT clock. The edge-walking driver above cannot
+  // expose a relative frequency error (it tracks the DUT), which is exactly
+  // how a single-latch DDR capture stayed hidden until review 2. These tasks
+  // drive a real wire whose half-cells need not equal 50 ns.
+  task automatic drive_half_async(input logic lvl, input real half_ns);
+    rx_pin = lvl;
+    #(half_ns);
+  endtask
+
+  task automatic drive_cell_async(input bit b, input real half_ns);
+    drive_half_async(lvl_of(b, 1'b1), half_ns);
+    drive_half_async(lvl_of(b, 1'b0), half_ns);
+  endtask
+
+  task automatic send_byte_async(input logic [7:0] v, input real half_ns);
+    for (int i = 0; i < 8; i++) drive_cell_async(v[i], half_ns);
+  endtask
+
+
   localparam int MAXPAY = 4096;  // >= any payload driven here (the
                                  // oversize case pushes past BUF_BYTES)
   logic [7:0] frame [0:MAXPAY+31];   // header + payload, for the reference CRC
@@ -276,6 +296,17 @@ module tb_pe_eth_mac;
       send_byte(fcs[23:16]);
       send_byte(fcs[31:24]);
     end
+  endtask
+
+  task automatic send_frame_async(input real half_ns);
+    for (int i = 0; i < 56; i++)
+      drive_cell_async(i[0] ? 1'b0 : 1'b1, half_ns);   // 101010... wire pattern
+    send_byte_async(8'hD5, half_ns);
+    for (int i = 0; i < nframe; i++) send_byte_async(frame[i], half_ns);
+    send_byte_async(fcs[7:0], half_ns);
+    send_byte_async(fcs[15:8], half_ns);
+    send_byte_async(fcs[23:16], half_ns);
+    send_byte_async(fcs[31:24], half_ns);
   endtask
 
   // Read `n` bytes and require every one to be ZERO -- the evidence that a
@@ -614,6 +645,68 @@ module tb_pe_eth_mac;
       check(last_len === 16'd46, "recovery: len = 46");
       check(frame_ptr === 11'd46, $sformatf("recovery: pointer = %0d, want 46", frame_ptr));
       read_and_check(11'd0, 46, 0, "recovery frame");
+    end
+
+    // ============ frame 10: a valid-CRC RUNT must be REJECTED ============
+    // The header is 14 bytes; this frame is ONLY those 14 bytes plus a correct
+    // FCS, so the FCS bytes are consumed AS the length/type field and no payload
+    // is stored. The folded bits are a complete, self-consistent 14-byte stream,
+    // so the CRC residue matches -- CRC residue proves the bits are consistent,
+    // not that a frame was there. Before structural validation the type-frame
+    // success path then wound the write pointer back 4 bytes that had never been
+    // stored: wptr underflowed to 2,044 and room grew to 2,052 in a 2,048-byte
+    // buffer (measured, reviews/2026-09-22/REVIEW-2.md R2-2). The check that
+    // matters is the ALLOCATION one: a rejected frame must leave room and
+    // pointer exactly as they were.
+    begin
+      buf_reset = 1'b1;
+      repeat (2) @(posedge clk); #1;
+      buf_reset = 1'b0;
+      send_idle(24);
+      repeat (4) @(posedge clk); #1;
+      for (int i = 0; i < 10; i++) frame[i] = 8'h31 + i[7:0];
+      nframe = 10;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24);
+      repeat (6) @(posedge clk); #1;
+      check(nvalid === 5, "runt: frame_valid unchanged");
+      check(nbad === 6,   $sformatf("runt: frame_bad = %0d, want 6", nbad));
+      check(u_mac.room === 12'd2048,
+            $sformatf("runt: room = %0d, want 2048 (untouched)", u_mac.room));
+      check(frame_ptr === 11'd0,
+            $sformatf("runt: pointer = %0d, want 0 (untouched)", frame_ptr));
+    end
+
+    // ============ frame 11: an INDEPENDENTLY timed frame ============
+    // 49.995 ns half-cells (the review's faster-wire case), driven with fixed
+    // delays so the waveform is not tied to the DUT clock at all. A single
+    // transparent-high latch lost the falling-edge sample here whenever the
+    // two captures raced at a rising edge; the review's sweep failed 34 of 102
+    // phase/duration trials, every faster-wire one. The two-latch capture is
+    // what makes this pass, and this is its permanent regression.
+    begin
+      int pay = 46;
+      buf_reset = 1'b1;
+      repeat (2) @(posedge clk); #1;
+      buf_reset = 1'b0;
+      send_idle(24);
+      repeat (4) @(posedge clk); #1;
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'hB0 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'd46);
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe);
+      send_frame_async(49.995);
+      send_idle(24);
+      repeat (6) @(posedge clk); #1;
+      check(nvalid === 6, $sformatf("async: frame_valid = %0d, want 6", nvalid));
+      check(last_len === 16'd46, "async: len = 46");
+      check(frame_ptr === 11'd46,
+            $sformatf("async: pointer = %0d, want 46", frame_ptr));
+      read_and_check(11'd0, pay, 0, "async frame");
     end
 
     if (errors == 0) $display("PASS: all checks");

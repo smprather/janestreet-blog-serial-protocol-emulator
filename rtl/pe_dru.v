@@ -159,28 +159,42 @@ module pe_dru #(
 
   // ---------------- DDR input path ----------------
   logic rx_s0, rx_s1;              // rising-edge sample, 2-flop synchronizer
-  logic rx_nl, rx_nq;              // falling-edge sample: latch + flop
+  logic rx_nl, rx_nl2;             // falling-edge sample: latch pair
+  logic rx_nq;                     // ...captured by the rising-edge flop
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin rx_s0 <= 1'b1; rx_s1 <= 1'b1; end
     else        begin rx_s0 <= rx_pin; rx_s1 <= rx_s0; end
   end
 
-  // Transparent while the clock is HIGH, so it closes on the FALLING edge and
-  // holds through the low phase; the rising-edge flop then takes the
-  // falling-edge sample with half a cycle of metastability settling. No
-  // negedge flop exists in sg13g2 (ADR-002), which is why this is a latch pair
-  // rather than an inverted-clock flop.
+  // TWO latches, not one. The first is transparent while the clock is HIGH,
+  // so it closes on the FALLING edge and holds through the low phase. The
+  // second is transparent while the clock is LOW and holds through the high
+  // phase. The rising-edge flop takes the SECOND one, which is closed at that
+  // edge -- and that is the whole point.
+  //
+  // With a single latch the capture was a simulation race: at the rising edge
+  // the first latch re-opens and its blocking assignment competes with the
+  // flop's read of it in the active region, so the flop could take the NEW pin
+  // level (the rising-edge sample) instead of the value held since the falling
+  // edge. Measured: a frame whose half-cells are slightly faster than the DUT
+  // clock (49.995 ns) lost 10,786 of 12,144 folds and was rejected; 34 of 102
+  // phase/duration/filter trials failed, all faster-wire. The slave latch is
+  // closed at the rising edge, so there is nothing to race. This is also what
+  // ADR-002's two-phase latch-pair DET means; sg13g2 has no negedge flops.
   always_latch
     if (clk) rx_nl = rx_pin;
 
-  // Post-reset priming. The latch is not resettable, so for the first edge
-  // after reset release it can still hold a pre-reset sample; the flop would
+  always_latch
+    if (!clk) rx_nl2 = rx_nl;
+
+  // Post-reset priming. The latches are not resettable, so for the first edge
+  // after reset release they can still hold a pre-reset sample; the flop would
   // inject that stale bit into the falling stream and the first cell could pair
   // it with a reset level (measured: the held-line test saw one unequal-half
   // cell, and the 8-bit lock test counted that cell). Hold the falling path at
-  // idle until the latch has been transparent for two edges. The rising path
-  // needs no equivalent: all of its flops reset to 1.
+  // idle until the latch pair has seen two edges. The rising path needs no
+  // equivalent: all of its flops reset to 1.
   logic [1:0] rst_prime;
 
   always_ff @(posedge clk or negedge rst_n) begin
@@ -191,7 +205,7 @@ module pe_dru #(
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n)         rx_nq <= 1'b1;
     else if (!rst_prime[1]) rx_nq <= 1'b1;   // prime: keep the pair idle
-    else                rx_nq <= rx_nl;
+    else                rx_nq <= rx_nl2;
   end
 
   // 3-tap majority over the INTERLEAVED sample stream, which is the stream the

@@ -2,8 +2,8 @@
 # Mutation-test tb_pe_eth_mac.v: every check it makes must be able to FAIL.
 #
 # The TB passed on its first clean run, which by itself proves only that it
-# agrees with the RTL. This harness breaks the RTL in ten ways that each target
-# one claim the TB makes, and requires the TB to notice every one.
+# agrees with the RTL. This harness breaks the RTL in eleven ways that each
+# target one claim the TB makes, and requires the TB to notice every one.
 #
 # The mutations are chosen to be SUBTLE, not obvious: each is a plausible
 # implementation choice somebody could genuinely write, so detecting it means
@@ -194,6 +194,14 @@ check_mutation "no-pad" \
 check_mutation "truncated-reclaim" \
   "          room      <= room + pay_cnt[AW:0];" \
   "          room      <= room + {1'b0, pay_cnt[AW-1:0]};  // MUTANT: truncated reclaim"
+
+# 11. The structural verdict: accept on the CRC residue alone again. Frame 10
+#     is a valid-residue 14-byte runt, so this mutant accepts it and winds the
+#     pointer back 4 bytes that were never stored.
+check_mutation "crc-only-verdict" \
+  "            if ((crc_state == CRC_RESIDUE) && hdr_done &&
+                (is_type ? (pay_cnt >= {{(16-3){1'b0}}, FCS_BYTES}) : fcs_done)) begin" \
+  "            if (crc_state == CRC_RESIDUE) begin   // MUTANT: CRC alone"
 
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="
