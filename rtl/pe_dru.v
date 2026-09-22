@@ -8,11 +8,27 @@
 // long and the RTL is short.
 //
 // ---------------------------------------------------------------------------
+// TWO SAMPLES PER CORE CLOCK (DDR), WHICH IS WHAT MAKES 60 MHz ENOUGH
+//
+// 10BASE-T's bit period is 100 ns. A 12-sample-per-bit grid therefore samples
+// every 8.33 ns -- 120 MHz -- and the core is 60 MHz. The grid comes from the
+// CLOCK'S TWO EDGES, not from a faster clock: the pin is captured at every
+// rising edge and every falling edge, and the 60 MHz state machine consumes
+// both samples per cycle. ADR-002 chose the latch-pair form of this capture
+// (all flops in sg13g2 are rising-edge only); this file is that front end.
+//
+// MEASURED, and the reason this rewrite exists: the first implementation sampled
+// rising edges only. Its testbenches drove the wire at half the real bit rate
+// (one sample per clock), so they passed while a real 100 ns/bit stimulus was
+// missed entirely at 60 MHz. A grid claim that its test cannot reach is a claim
+// that has not been tested.
+//
+// ---------------------------------------------------------------------------
 // THE SAMPLING GRID: PHASE SPB/4 AND 3*SPB/4, OF A COUNTER THAT RESETS ON EVERY EDGE
 //
 // SPB = samples per bit period (12 by default: an 8.33 ns grid on a 100 ns bit,
-// the ADR-001/ADR-005 design point at the 60 MHz core clock). A half-cell is
-// SPB/2 samples. The phase counter
+// the ADR-001/ADR-005 design point at the 60 MHz core clock, from an edge every
+// 16.67 ns). A half-cell is SPB/2 samples. The phase counter
 //
 //     phase <= edge ? 0 : phase + 1        (mod SPB)
 //
@@ -73,14 +89,25 @@
 // Manchester cell, it is noise or an idle line.
 //
 // ---------------------------------------------------------------------------
-// INPUT PATH
+// INPUT PATH: TWO STREAMS, ALIGNED BY THE TAP COUNTS
 //
-// The 2-flop synchronizer is NOT optional: the pin is asynchronous to the sample
-// clock and this is the block that would sample metastability. cfg_filter_en
-// adds a 3-tap majority vote after it, for a noisy cable; it is off by default
-// because on a clean line it only shifts the detected edge position by a sample.
-// The filter is applied to the SYNCHRONIZED signal, never before it — voting
-// three metastable samples would be worse than not filtering.
+// The rising-edge path keeps the 2-flop synchronizer (the pin is asynchronous
+// and this is the block that would sample metastability). The falling-edge
+// sample is captured by a LATCH TRANSPARENT WHILE clk IS HIGH: it closes at the
+// falling edge, holds through the low phase, and a rising-edge flop takes it
+// with half a cycle of settling — the latch-pair timing ADR-002 specifies.
+//
+// The two streams reach the state machine with DIFFERENT raw latency (the
+// rising path has one more flop than the falling one), so the falling path
+// carries one extra history tap. The pair presented at each rising edge is
+// therefore (rising sample, falling sample) OF THE SAME BIT PERIOD, in time
+// order, and the machine processes them in that order.
+//
+// cfg_filter_en adds a 3-tap majority vote per stream, for a noisy cable. The
+// filter is applied AFTER synchronization and BEFORE the edge detector. Its
+// output is resampled once so it cannot move an edge — see the trap note below.
+// The filter is off by default because on a clean line it only shifts the
+// detected edge noise floor; it is not a substitute for the synchronizer.
 
 module pe_dru #(
   parameter int SPB = 12           // samples per bit period; must be even, >= 8
@@ -128,107 +155,196 @@ module pe_dru #(
 
   localparam int PH_SAMP  = SPB / 4;          // 2  -> a second half, usually
   localparam int PH_FIRST = 3 * SPB / 4;      // 6  -> always a first half
+  localparam logic [3:0] SPB_M1 = 4'(SPB - 1);
 
-  // ---------------- input path ----------------
-  logic rx_s0, rx_s1;
-  logic rx_v0, rx_v1, rx_v2;
-  logic rx_maj;
+  // ---------------- DDR input path ----------------
+  logic rx_s0, rx_s1;              // rising-edge sample, 2-flop synchronizer
+  logic rx_nl, rx_nq;              // falling-edge sample: latch + flop
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin rx_s0 <= 1'b1; rx_s1 <= 1'b1; end
     else        begin rx_s0 <= rx_pin; rx_s1 <= rx_s0; end
   end
 
-  // 3-tap majority over the synchronizer output.
+  // Transparent while the clock is HIGH, so it closes on the FALLING edge and
+  // holds through the low phase; the rising-edge flop then takes the
+  // falling-edge sample with half a cycle of metastability settling. No
+  // negedge flop exists in sg13g2 (ADR-002), which is why this is a latch pair
+  // rather than an inverted-clock flop.
+  always_latch
+    if (clk) rx_nl = rx_pin;
+
+  // Post-reset priming. The latch is not resettable, so for the first edge
+  // after reset release it can still hold a pre-reset sample; the flop would
+  // inject that stale bit into the falling stream and the first cell could pair
+  // it with a reset level (measured: the held-line test saw one unequal-half
+  // cell, and the 8-bit lock test counted that cell). Hold the falling path at
+  // idle until the latch has been transparent for two edges. The rising path
+  // needs no equivalent: all of its flops reset to 1.
+  logic [1:0] rst_prime;
+
   always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin rx_v0 <= 1'b1; rx_v1 <= 1'b1; rx_v2 <= 1'b1; end
-    else        begin rx_v0 <= rx_s1; rx_v1 <= rx_v0; rx_v2 <= rx_v1; end
+    if (!rst_n) rst_prime <= 2'b00;
+    else        rst_prime <= {rst_prime[0], 1'b1};
   end
 
-  assign rx_maj = (rx_v0 & rx_v1) | (rx_v1 & rx_v2) | (rx_v0 & rx_v2);
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n)         rx_nq <= 1'b1;
+    else if (!rst_prime[1]) rx_nq <= 1'b1;   // prime: keep the pair idle
+    else                rx_nq <= rx_nl;
+  end
 
-  // WHY THE FILTER OUTPUT IS RESAMPLED BEFORE IT DRIVES THE PHASE COUNTER.
+  // 3-tap majority over the INTERLEAVED sample stream, which is the stream the
+  // original single-edge design filtered: at 12 samples/bit a half-cell has 6
+  // samples, so a single bad sample is outvoted with room to spare. (The first
+  // DDR draft filtered each edge stream separately; each half then has only 3
+  // samples, the majority window always spans the half's transition, and a
+  // mid-half glitch walks the filtered edge -- measured by tb_pe_dru's
+  // filtered-glitch check.)
   //
-  // A majority vote over three taps is not a transparent delay: at a level
-  // change its output moves ONE SAMPLE LATER than the centre tap does, because
-  // it takes two agreeing taps to flip. Feeding that straight into the edge
-  // detector SHIFTS EVERY EDGE BY A SAMPLE -- and since the phase counter resets
-  // on the detected edge, every capture moves with it. At SPB=8 a one-sample
-  // shift puts the phase-3*SPB/4 capture 3 samples past a half-cell boundary
-  // instead of 2, i.e. inside the NEXT half-cell, and the levels come out wrong.
+  // The trap from the original design still applies and is why the machine
+  // input is NOT simply the majority of the newest three samples: a majority is
+  // not a transparent delay. At a level change its output moves one sample
+  // later than the centre tap, so feeding it straight into the edge detector
+  // shifts every edge by a sample and the captures move with it. The fix is to
+  // give the UNFILTERED path the same latency: the machine takes x[i-2], and
+  // the filtered path takes the majority of x[i-1], x[i-2], x[i-3]. Both then
+  // flip on the same machine sample, so cfg_filter_en cannot move the grid --
+  // including for a glitch next to a real edge, where both paths take the bad
+  // edge together (a majority cannot invent information; it only outvotes
+  // isolated samples on a stable level).
   //
-  // So `rx_eff` is the majority output SAMPLED ONCE (one flop, one sample of
-  // delay, no logic). Measured against the unfiltered path the grid is then
-  // identical -- the filter only removes glitches, it does not move edges.
-  // tb_pe_dru compares filtered and unfiltered captures of the same pattern to
-  // hold that property, and it is the reason cfg_filter_en does not need its own
-  // re-qualification.
-  logic rx_eff;
-  always_ff @(posedge clk or negedge rst_n)
-    if (!rst_n) rx_eff <= 1'b1; else rx_eff <= cfg_filter_en ? rx_maj : rx_v1;
-
-  // ---------------- phase counter + edge detect ----------------
-  localparam logic [3:0] SPB_M1 = 4'(SPB - 1);
-
-  logic [3:0]  phase;
-  logic        prev_lvl, is_edge;
-
-  assign is_edge = (rx_eff != prev_lvl);
-  assign dbg_phase = phase;
+  // h0..h2 are x[i-1]..x[i-3]; x[i] is rx_s1 and x[i+1] is rx_nq at the edge.
+  logic h0, h1, h2;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      phase <= '0; prev_lvl <= 1'b1;
+      h0 <= 1'b1; h1 <= 1'b1; h2 <= 1'b1;
     end else begin
-      prev_lvl <= rx_eff;
-      // Increment first, reset on an edge: `phase` is the sample's distance
-      // from the last transition. Wrapping at SPB keeps the counter free-running
-      // on an idle line, which is what lets a frame be acquired without any
-      // explicit start.
-      if (is_edge)          phase <= '0;
-      else if (phase == SPB_M1) phase <= '0;
-      else                  phase <= phase + 4'd1;
+      h0 <= rx_nq;      // x[i+1]
+      h1 <= rx_s1;      // x[i]
+      h2 <= h0;         // x[i-1]
     end
   end
 
-  // ---------------- capture + bit framing ----------------
-  logic expect_second;      // is the next phase-SPB/4 capture a second half?
-  logic held_first;         // the first half waiting for its partner
+  wire rx_maj_p = (h0 & h1) | (h1 & h2) | (h0 & h2);
+  wire rx_maj_n = (rx_s1 & h0) | (h0 & h1) | (rx_s1 & h1);
+  wire rx_p_in  = cfg_filter_en ? rx_maj_p : h1;
+  wire rx_n_in  = cfg_filter_en ? rx_maj_n : h0;
 
-  always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-      expect_second <= 1'b0;
-      held_first    <= 1'b0;
-      bit_en        <= 1'b0;
-      rx_first      <= 1'b0;
-      rx_second     <= 1'b0;
-      rx_wire       <= 1'b1;
-    end else begin
-      bit_en <= 1'b0;
+  // ---------------- phase counter + capture, two samples per clock --------
+  // The per-sample step is a TASK called twice per clock -- once for the
+  // rising-edge sample and once for the falling-edge one. `phase` counts
+  // SAMPLES (not clocks), so both calls advance it by one and the captures
+  // land on the same phases the single-edge design used. It is a task with
+  // OUTPUT ARGUMENTS, not a function returning a struct: Yosys 0.68 (the
+  // repo's synthesis/lint tool) rejects a function whose return type is a named
+  // packed struct with a bare syntax error, and it has no `ref` ports. The
+  // first draft used structs and passed iverilog and verilator while yosys
+  // could not parse the file at all -- which is also why tb/lint.sh now fails
+  // on ANY yosys ERROR, not just the three diagnostics it used to grep for.
+  task automatic grid_step(input  logic [3:0] g_phase,
+                           input  logic       g_prev_lvl,
+                           input  logic       g_expect_second,
+                           input  logic       g_held_first,
+                           input  logic       lvl,
+                           output logic [3:0] n_phase,
+                           output logic       n_prev_lvl,
+                           output logic       n_expect_second,
+                           output logic       n_held_first,
+                           output logic       bit_now,
+                           output logic       first_now,
+                           output logic       second_now);
+    logic is_edge;
 
-      if (phase == PH_FIRST[3:0]) begin
-        // The counter reached here with no edge at phase 0, so the half-cell
-        // that started SPB/2 ago had no transition — it is a first half.
-        held_first    <= rx_eff;
-        expect_second <= 1'b1;
-        rx_wire       <= rx_eff;
-      end else if (phase == PH_SAMP[3:0]) begin
-        if (expect_second) begin
-          // Both halves of this cell are now known: emit the bit.
-          rx_first      <= held_first;
-          rx_second     <= rx_eff;
-          rx_wire       <= rx_eff;
-          bit_en        <= 1'b1;
-          expect_second <= 1'b0;
-        end else begin
-          // No second half was pending, so this is a first half itself.
-          held_first    <= rx_eff;
-          expect_second <= 1'b1;
-          rx_wire       <= rx_eff;
-        end
+    n_phase = g_phase; n_prev_lvl = g_prev_lvl;
+    n_expect_second = g_expect_second; n_held_first = g_held_first;
+    is_edge = (lvl != g_prev_lvl);
+    n_prev_lvl = lvl;
+
+    bit_now = 1'b0; first_now = 1'b0; second_now = 1'b0;
+
+    if (g_phase == PH_FIRST[3:0]) begin
+      // The counter reached here with no edge at phase 0, so the half-cell
+      // that started SPB/2 ago had no transition — it is a first half.
+      n_held_first    = lvl;
+      n_expect_second = 1'b1;
+    end else if (g_phase == PH_SAMP[3:0]) begin
+      if (g_expect_second) begin
+        // Both halves of this cell are now known: emit the bit.
+        bit_now         = 1'b1;
+        first_now       = g_held_first;
+        second_now      = lvl;
+        n_expect_second = 1'b0;
+      end else begin
+        // No second half was pending, so this is a first half itself.
+        n_held_first    = lvl;
+        n_expect_second = 1'b1;
       end
     end
+
+    if (is_edge)                n_phase = '0;
+    else if (g_phase == SPB_M1) n_phase = '0;
+    else                        n_phase = g_phase + 4'd1;
+  endtask
+
+  logic [3:0] grid_phase;
+  logic       grid_prev_lvl, grid_expect_second, grid_held_first;
+  // The two steps per clock are COMBINATIONAL here and registered below. The
+  // first draft used blocking assignments to shared temporaries inside the
+  // sequential block, which trips the BLKSEQ lint warning; an always_comb makes
+  // the temporaries explicit combinational nodes with no register between the
+  // two samples.
+  logic [3:0] p1_phase, p2_phase;
+  logic       p1_prev, p2_prev, p1_expect, p2_expect, p1_held, p2_held;
+  logic       b1, f1, s1, b2, f2, s2;
+
+  always_comb begin
+    grid_step(grid_phase, grid_prev_lvl, grid_expect_second, grid_held_first,
+              rx_p_in, p1_phase, p1_prev, p1_expect, p1_held, b1, f1, s1);
+    grid_step(p1_phase, p1_prev, p1_expect, p1_held,
+              rx_n_in, p2_phase, p2_prev, p2_expect, p2_held, b2, f2, s2);
   end
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      grid_phase         <= 4'd0;
+      grid_prev_lvl      <= 1'b1;
+      grid_expect_second <= 1'b0;
+      grid_held_first    <= 1'b0;
+      bit_en          <= 1'b0;
+      rx_first        <= 1'b0;
+      rx_second       <= 1'b0;
+      rx_wire         <= 1'b1;
+    end else begin
+      bit_en <= 1'b0;
+      // Rising-edge sample first, then falling-edge: within one bit period the
+      // rising edge comes first in time, and the phase counter's edge reset is
+      // order-dependent, so the order is not interchangeable. The pair is
+      // computed combinationally above from this cycle's state.
+      grid_phase         <= p2_phase;
+      grid_prev_lvl      <= p2_prev;
+      grid_expect_second <= p2_expect;
+      grid_held_first    <= p2_held;
+
+      // At most one bit per clock: captures are SPB/2 samples apart and there
+      // are two samples per clock, so SPB=8 (the smallest legal grid) still
+      // spaces them by two clocks. The priority if-else is belt and braces,
+      // with the earlier sample winning.
+      if (b1) begin
+        bit_en    <= 1'b1;
+        rx_first  <= f1;
+        rx_second <= s1;
+      end else if (b2) begin
+        bit_en    <= 1'b1;
+        rx_first  <= f2;
+        rx_second <= s2;
+      end
+      rx_wire <= rx_n_in;      // the later of the two samples this clock
+    end
+  end
+
+  assign dbg_phase = grid_phase;
 
   // ---------------- lock ----------------
   // A well-formed Manchester cell has two DIFFERENT halves — that is the code,
@@ -240,6 +356,10 @@ module pe_dru #(
   // derive it INDEPENDENTLY from the same two inputs rather than sharing state:
   // the codec already has rx_first/rx_second and needs no help, and a lock
   // indicator that depended on the codec's error flag would be circular.
+  //
+  // The lock update reads the REGISTERED bit_en and halves, exactly as the
+  // original single-edge design did, so `locked` keeps its one-cycle-behind-
+  // the-capture relationship to bit_en.
   logic well_formed;
   assign well_formed = (rx_first != rx_second);
 

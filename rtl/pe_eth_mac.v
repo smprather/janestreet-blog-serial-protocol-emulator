@@ -133,7 +133,10 @@
 // the wind-back is `is_type ? 4 : 0`: a length frame's FCS bytes were never
 // written, so winding back would corrupt the ring.
 
-`timescale 1ns / 1ps
+// No `timescale here on purpose: all RTL in this repo is timescale-free so the
+// unit is the consumer's (the testbenches set their own). pe_eth_mac was the
+// only RTL file that carried one, copied from a TB template, and adding it to
+// the lint gate surfaced it as a TIMESCALEMOD on every other module.
 
 module pe_eth_mac #(
   parameter int BUF_BYTES = 2048,     // pe_fbuf's capacity
@@ -194,14 +197,21 @@ module pe_eth_mac #(
   localparam logic [31:0] CRC_RESIDUE = 32'hDEBB20E3;
   localparam logic [15:0] TYPE_MIN    = 16'h0600;   // 802.3 length/EtherType split
   localparam logic [2:0]  FCS_BYTES   = 3'd4;
+  // Minimum data field for a 64-byte frame: 6 dst + 6 src + 2 length + 46
+  // data + 4 FCS. A length frame declaring fewer than 46 bytes is padded to 46
+  // by its transmitter, and the padding is covered by the FCS, so a receiver
+  // that jumps from the declared length straight to the FCS rejects every such
+  // frame (measured: a length-20 frame padded to 46 failed).
+  localparam logic [15:0] MIN_PAY      = 16'd46;
 
   typedef enum logic [2:0] {
     S_SEARCH  = 3'd0,   // preamble + SFD lock; also the reset state
     S_HEADER  = 3'd1,   // dst(6) + src(6) + field(2)
     S_PAYLOAD = 3'd2,
-    S_FCS     = 3'd3,   // the 32 FCS bits (length frames)
-    S_SETTLE  = 3'd4,   // let the CRC register settle, then read the verdict
-    S_ERR     = 3'd5
+    S_PAD     = 3'd3,   // the 802.3 pad bytes (length frames under 46)
+    S_FCS     = 3'd4,   // the 32 FCS bits (length frames)
+    S_SETTLE  = 3'd5,   // let the CRC register settle, then read the verdict
+    S_ERR     = 3'd6
   } state_t;
 
   state_t state;
@@ -213,8 +223,14 @@ module pe_eth_mac #(
   assign ok = pend && !rx_err;
 
   // ---- SFD search -----------------------------------------------------
-  logic [7:0] sr, sr_n;
-  assign sr_n = {bit_d, sr[7:1]};        // LSB-first assembly
+  // `sr` holds the LAST 7 bits of the LSB-first window and `sr_n` is the full
+  // 8-bit window including the newest bit. Keeping only 7 removes the bit that
+  // would otherwise be shifted out and never read (Verilator's UNUSEDSIGNAL),
+  // while the window itself is still all 8 bits: the next state is sr_n[7:1],
+  // which keeps the newest 7 of those 8 -- the same shift, minus the dead bit.
+  logic [6:0] sr;
+  logic [7:0] sr_n;
+  assign sr_n = {bit_d, sr};            // LSB-first assembly
 
   // ---- idle gate ------------------------------------------------------
   // A frame may only be hunted for after the line has been idle, per 802.3's
@@ -242,21 +258,25 @@ module pe_eth_mac #(
   // ---- assembly -------------------------------------------------------
   logic [7:0]    byte_cnt;    // bytes within the header
   logic [2:0]    bit_cnt;     // bits within the current byte
-  logic [7:0]    shreg, shreg_n;
+  // Same construction as `sr`: `shreg` is the last 7 bits and `shreg_n` is the
+  // current 8-bit byte. The dst/src MAC addresses used to be captured into 12
+  // dead registers that nothing ever read -- folded into the CRC by the bit
+  // path and otherwise unused, with no filter and no handoff that wants them.
+  // Removed rather than suppressed (STATUS: there are no accepted lint
+  // warnings).
+  logic [6:0]    shreg;
+  logic [7:0]    shreg_n;
   logic [15:0]   field;       // the length/EtherType field
   logic          is_type;
   logic [15:0]   pay_cnt;     // bytes written in the payload phase
+  logic [15:0]   pad_cnt;     // pad bytes consumed (length frames under 46)
   logic [4:0]    fcs_cnt;     // FCS bits received
   logic [AW-1:0] wptr;
   logic [AW-1:0] frame_start;
   logic [AW:0]   room;
   logic [1:0]    settle;
-  logic [7:0]    dst [0:5];
-  logic [7:0]    src [0:5];
 
-  // shreg_n, not {bit_d, shreg[6:0]}: the latter drops cell T's bit and reuses
-  // a stale bit 7, returning the byte SHIFTED -- 0xAA where 0xD5 is wanted.
-  assign shreg_n = {bit_d, shreg[7:1]};
+  assign shreg_n = {bit_d, shreg};
 
   assign frame_ptr     = wptr;
   assign frame_field   = field;
@@ -269,7 +289,7 @@ module pe_eth_mac #(
   // the header); S_SEARCH is excluded, which is what keeps the preamble and the
   // SFD itself out of the CRC.
   assign crc_bit_en = ok && (state == S_HEADER || state == S_PAYLOAD ||
-                             state == S_FCS);
+                             state == S_PAD || state == S_FCS);
   assign crc_bit_in = bit_d;
   // The frame boundary is the SFD, one cell before the first folded bit, and
   // pe_crc gives `clr` priority over `bit_en`, so the two never collide.
@@ -280,8 +300,6 @@ module pe_eth_mac #(
                       (room != 0);
   assign fbuf_waddr = wptr;
   assign fbuf_wdata = shreg_n;
-
-  integer k;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -297,6 +315,7 @@ module pe_eth_mac #(
       field       <= '0;
       is_type     <= 1'b0;
       pay_cnt     <= '0;
+      pad_cnt     <= '0;
       fcs_cnt     <= '0;
       wptr        <= '0;
       frame_start <= '0;
@@ -305,10 +324,6 @@ module pe_eth_mac #(
       frame_valid <= 1'b0;
       frame_bad   <= 1'b0;
       frame_len   <= '0;
-      for (k = 0; k < 6; k++) begin
-        dst[k] <= '0;
-        src[k] <= '0;
-      end
     end else begin
       frame_valid <= 1'b0;      // both statuses are one-cycle pulses
       frame_bad   <= 1'b0;
@@ -349,13 +364,14 @@ module pe_eth_mac #(
         // ---------------------------------------------------------------
         S_SEARCH: begin
           if (ok) begin
-            sr <= sr_n;
+            sr <= sr_n[7:1];
             if ((sr_n == SFD_BYTE) && may_hunt) begin
               state       <= S_HEADER;
               byte_cnt    <= '0;
               bit_cnt     <= '0;
               shreg       <= '0;
               pay_cnt     <= '0;
+              pad_cnt     <= '0;
               fcs_cnt     <= '0;
               frame_start <= wptr;
             end
@@ -363,27 +379,22 @@ module pe_eth_mac #(
         end
 
         // ---------------------------------------------------------------
-        // dst + src + the length/EtherType field = 14 bytes. The MAC fields
-        // live in registers: a minimum-size frame is mostly header, and
-        // storing it would push the payload out of a 2 KB ring.
+        // dst + src + the length/EtherType field = 14 bytes. Only the field
+        // is kept: the MAC addresses are covered by the CRC but are not used
+        // by this block (no filtering, no handoff), so capturing them would be
+        // dead hardware. The 14-byte count still has to be walked because the
+        // field arrives last.
         // ---------------------------------------------------------------
         S_HEADER: begin
           if (ok) begin
-            shreg   <= shreg_n;
+            shreg   <= shreg_n[7:1];
             bit_cnt <= bit_cnt + 3'd1;
             if (bit_cnt == 3'd7) begin
               bit_cnt  <= '0;
               byte_cnt <= byte_cnt + 8'd1;
               case (byte_cnt)
-                8'd0, 8'd1, 8'd2, 8'd3, 8'd4, 8'd5:
-                  dst[byte_cnt[2:0]] <= shreg_n;
-                8'd6, 8'd7, 8'd8, 8'd9, 8'd10, 8'd11:
-                  // byte_cnt[2:0] wraps at 8 and the subtraction is 3-bit:
-                  // 8->0, 9->1, ... which is src index 2, 3, ... The wrap is
-                  // load-bearing; re-derive the indices before changing it.
-                  src[byte_cnt[2:0] - 3'd6] <= shreg_n;
-                8'd12:  field[15:8] <= shreg_n;
-                default: begin
+                8'd12: field[15:8] <= shreg_n;
+                8'd13: begin
                   // Byte 12 is the HIGH half, byte 13 the LOW half. The other
                   // order byte-swaps the field, and a 256-byte length then
                   // reads as 1 and runs off the end of the ring.
@@ -408,6 +419,7 @@ module pe_eth_mac #(
                     pay_cnt <= '0;
                   end
                 end
+                default: ;   // dst/src bytes: assembled and dropped
               endcase
             end
           end
@@ -420,7 +432,7 @@ module pe_eth_mac #(
         // ---------------------------------------------------------------
         S_PAYLOAD: begin
           if (ok) begin
-            shreg   <= shreg_n;
+            shreg   <= shreg_n[7:1];
             bit_cnt <= bit_cnt + 3'd1;
             if (bit_cnt == 3'd7) begin
               bit_cnt <= '0;
@@ -438,9 +450,39 @@ module pe_eth_mac #(
                 room    <= room - 1'b1;
                 pay_cnt <= pay_cnt + 16'd1;
                 if (!is_type && (pay_cnt + 16'd1 >= field)) begin
-                  state   <= S_FCS;
-                  fcs_cnt <= '0;
+                  // A length frame ends by count. If the declared length is
+                  // under the 46-byte minimum, the transmitter appended pad
+                  // bytes BEFORE the FCS and the FCS covers them -- so consume
+                  // them next instead of mistaking them for the FCS.
+                  if (field < MIN_PAY) begin
+                    state   <= S_PAD;
+                    pad_cnt <= '0;
+                  end else begin
+                    state   <= S_FCS;
+                    fcs_cnt <= '0;
+                  end
                 end
+              end
+            end
+          end
+        end
+
+        // ---------------------------------------------------------------
+        // The 802.3 pad: 46 minus the declared length bytes, folded as data
+        // (they are covered by the FCS) and NOT stored. `pay_cnt` does not
+        // move, so frame_len stays the declared payload length and the buffer
+        // holds exactly the bytes the client asked for.
+        // ---------------------------------------------------------------
+        S_PAD: begin
+          if (ok) begin
+            shreg   <= shreg_n[7:1];
+            bit_cnt <= bit_cnt + 3'd1;
+            if (bit_cnt == 3'd7) begin
+              bit_cnt <= '0;
+              pad_cnt <= pad_cnt + 16'd1;
+              if (field + pad_cnt + 16'd1 >= MIN_PAY) begin
+                state   <= S_FCS;
+                fcs_cnt <= '0;
               end
             end
           end
@@ -486,7 +528,7 @@ module pe_eth_mac #(
               // measured, and it silently poisoned `room` from the second
               // frame on.
               if (is_type) begin
-                wptr      <= wptr - FCS_BYTES;
+                wptr      <= wptr - AW'(FCS_BYTES);
                 room      <= room + {{(AW-2){1'b0}}, FCS_BYTES};
                 frame_len <= pay_cnt - 16'd4;
               end else begin
@@ -497,7 +539,15 @@ module pe_eth_mac #(
               // A bad frame must not leave bytes that look like one: the
               // pointer rolls back to where the frame started.
               wptr  <= frame_start;
-              room  <= room + {1'b0, pay_cnt[AW-1:0]};
+              // Reclaim EVERY byte that was charged against `room`, and the
+              // width is the whole point: `pay_cnt[AW-1:0]` truncates, and a
+              // full 2,048-byte frame has pay_cnt = 2048 = 11'h000, so the
+              // reclaim added zero and left the receiver with room = 0
+              // FOREVER (every later frame then failed its header check).
+              // `pay_cnt[AW:0]` is AW+1 bits, matching `room`, and the sum
+              // cannot overflow because room + pay_cnt is <= BUF_BYTES: every
+              // byte in pay_cnt was subtracted from room as it was written.
+              room  <= room + pay_cnt[AW:0];
             end
             state <= S_SEARCH;
           end
@@ -512,7 +562,9 @@ module pe_eth_mac #(
         S_ERR: begin
           frame_bad <= 1'b1;
           wptr      <= frame_start;
-          room      <= room + {1'b0, pay_cnt[AW-1:0]};
+          // Full-width reclaim; see the bad-FCS branch for why AW-1:0 was the
+          // permanent-exhaustion bug.
+          room      <= room + pay_cnt[AW:0];
           state     <= S_SEARCH;
         end
 
@@ -530,7 +582,8 @@ module pe_eth_mac #(
       // folded, so the residue will not match and the verdict lands as
       // frame_bad on its own.
       if (ok == 1'b0 && pend == 1'b1 && rx_err == 1'b1 &&
-          (state == S_HEADER || state == S_PAYLOAD || state == S_FCS)) begin
+          (state == S_HEADER || state == S_PAYLOAD || state == S_PAD ||
+           state == S_FCS)) begin
         state  <= S_SETTLE;
         settle <= '0;
       end

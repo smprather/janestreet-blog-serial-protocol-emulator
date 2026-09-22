@@ -2,7 +2,7 @@
 # Mutation-test tb_pe_eth_mac.v: every check it makes must be able to FAIL.
 #
 # The TB passed on its first clean run, which by itself proves only that it
-# agrees with the RTL. This harness breaks the RTL in six ways that each target
+# agrees with the RTL. This harness breaks the RTL in ten ways that each target
 # one claim the TB makes, and requires the TB to notice every one.
 #
 # The mutations are chosen to be SUBTLE, not obvious: each is a plausible
@@ -121,21 +121,24 @@ check_mutation "crc-convention" \
 # 2. The wind-back: skip it, so a type frame's four FCS bytes stay counted as
 #    payload. frame_len and the next frame's start both move.
 check_mutation "no-wind-back" \
-  "                wptr      <= wptr - FCS_BYTES;" \
+  "                wptr      <= wptr - AW'(FCS_BYTES);" \
   "                wptr      <= wptr;             // MUTANT: no wind-back"
 
 # 3. The delayed fold: fold the bit on its OWN strobe instead of one cycle
 #    later, which is the bug the whole delayed-latch design exists to prevent.
 check_mutation "fold-too-early" \
   "  assign crc_bit_en = ok && (state == S_HEADER || state == S_PAYLOAD ||
-                             state == S_FCS);" \
+                             state == S_PAD || state == S_FCS);" \
   "  assign crc_bit_en = bit_en && (state == S_HEADER || state == S_PAYLOAD ||
-                                state == S_FCS);  // MUTANT: no settling delay"
+                                state == S_PAD || state == S_FCS);  // MUTANT: no settling delay"
 
 # 4. The byte assembly: the off-by-one form that returns the SHIFTED byte.
+#    `shreg` is 7 bits and `{bit_d, shreg}` is the full 8-bit window; the
+#    mutant keeps 8 bits but drops the OLDEST one and injects a zero in its
+#    place, so the assembled byte walks.
 check_mutation "shifted-byte" \
-  "  assign shreg_n = {bit_d, shreg[7:1]};" \
-  "  assign shreg_n = {bit_d, shreg[6:0]};   // MUTANT: drops a bit"
+  "  assign shreg_n = {bit_d, shreg};" \
+  "  assign shreg_n = {bit_d, shreg[6:1], 1'b0};   // MUTANT: drops a bit"
 
 # 5. The type/length split: treat every field as a length, which rejects every
 #    ARP frame while passing every hand-made length test.
@@ -161,8 +164,30 @@ check_mutation "no-idle-gate" \
 #    judged on a fold that is missing its last bit.
 check_mutation "no-abort-on-error" \
   "      if (ok == 1'b0 && pend == 1'b1 && rx_err == 1'b1 &&
-          (state == S_HEADER || state == S_PAYLOAD || state == S_FCS)) begin" \
+          (state == S_HEADER || state == S_PAYLOAD || state == S_PAD ||
+           state == S_FCS)) begin" \
   "      if (1'b0) begin   // MUTANT: never abort on an invalid cell"
+
+# 9. The pad: jump straight from the declared length to the FCS, which rejects
+#    every correctly padded short length frame. This is the finding the TB's
+#    frame 8 exists for.
+check_mutation "no-pad" \
+  "                  if (field < MIN_PAY) begin
+                    state   <= S_PAD;
+                    pad_cnt <= '0;
+                  end else begin
+                    state   <= S_FCS;
+                    fcs_cnt <= '0;
+                  end" \
+  "                  state   <= S_FCS;
+                  fcs_cnt <= '0;   // MUTANT: no pad state"
+
+# 10. The reclaim: truncate pay_cnt to AW bits. A frame that fills all 2,048
+#     bytes leaves pay_cnt = 2048 = 11'h000, so the reclaim adds nothing and
+#     `room` stays 0 forever. This is the finding the TB's frame 9 exists for.
+check_mutation "truncated-reclaim" \
+  "          room      <= room + pay_cnt[AW:0];" \
+  "          room      <= room + {1'b0, pay_cnt[AW-1:0]};  // MUTANT: truncated reclaim"
 
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="

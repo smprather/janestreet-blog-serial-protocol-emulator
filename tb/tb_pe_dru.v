@@ -22,10 +22,16 @@
 // per bit) and the test asserts that the DUT recovers exactly the bits that were
 // encoded — from the other end of that, with no knowledge of the pattern.
 //
-// The DRU is single-edge and expects a sample grid; the "sample clock" here is
-// just clk at SPB cycles per bit period. That is the 60 MHz-clocked DRU with a
-// DDR front end (ADR-002) collapsed into one domain for the test — the logic is
-// the same either way.
+// The DRU samples the pin on BOTH edges of the 60 MHz core clock (ADR-002's
+// DDR front end), so this TB drives REAL 10BASE-T timing: a 60 MHz clock and a
+// 100 ns bit period, i.e. 3 clocks / 6 samples per 50 ns half-cell. The first
+// version of this TB collapsed the DDR front end into "one sample per clock"
+// and ran at 100 MHz with 120 ns bits, which passed while a real 100 ns/bit
+// stimulus was missed entirely -- the review finding this TB closes.
+//
+// A `drive_half` holds a level for exactly HALF samples by walking the sample
+// edges explicitly, and sets the level just after an edge so it can never race
+// the sample's capture.
 //
 // ICARUS NOTE: task ports cannot be unpacked arrays, so the vectors below are
 // module-scope. `nvec` says how many entries of the ACTIVE vector are in use.
@@ -35,7 +41,9 @@
 module tb_pe_dru;
 
   localparam int SPB  = 12;      // samples per bit period (60 MHz / ADR-005)
-  localparam int HALF = SPB / 2;
+  localparam int HALF = SPB / 2; // samples per half-cell (6)
+  localparam int CLK_HZ = 60_000_000;
+  localparam real CLK_NS = 1e9 / CLK_HZ;   // 16.667 ns; real, not rounded
   localparam int MAXB = 2048;    // bit cells in the longest vector here
 
   logic       clk = 0, rst_n;
@@ -45,7 +53,7 @@ module tb_pe_dru;
   logic [3:0] dbg_phase;
 
   pe_dru #(.SPB(SPB)) dut (.*);
-  always #5 clk = ~clk;
+  always #(CLK_NS/2) clk = ~clk;
 
   // ---- the integration that matters: DRU -> pe_manch ----
   // The DRU's contract is defined by what the codec wants, so the only test that
@@ -86,6 +94,9 @@ module tb_pe_dru;
   logic cap_f  [0:MAXB-1];
   logic cap_s  [0:MAXB-1];
   logic cap_lk [0:MAXB-1];      // `locked` AS OF each emitted cell
+  logic filt_f [0:MAXB-1];      // filtered-run captures, for the A/B below
+  logic filt_s [0:MAXB-1];
+  int   filt_n;
   int   nvec, nbits;
 
   // `locked` is a level that clears on the first malformed cell, and the line
@@ -113,13 +124,30 @@ module tb_pe_dru;
     return first_half ? ~b : b;      // bit 1 -> L then H ; bit 0 -> H then L
   endfunction
 
+  // One sample per edge, with the edge parity tracked GLOBALLY. The first
+  // draft derived the edge from a per-loop k parity, which assumes every task
+  // returns with the same parity it started with -- true for drive_half but
+  // not something to rely on when a glitch loop interleaves with it. A wrong
+  // parity silently injects TWO-sample glitches, which is exactly what a
+  // filtered-glitch check then reads as a corrupt cell.
+  bit next_pos = 1'b1;             // does the NEXT sample edge rise?
+
+  task automatic drive_sample(input logic lvl);
+    rx_pin = lvl;
+    if (next_pos) @(posedge clk); else @(negedge clk);
+    next_pos = ~next_pos;
+  endtask
+
+  // One half-cell: HALF consecutive samples at one level. The assignment
+  // happens just after the previous edge (or at t=0), and the sample edge is
+  // awaited after it, so the stimulus can never race the DUT's capture.
+  task automatic drive_half(input logic lvl);
+    for (int k = 0; k < HALF; k++) drive_sample(lvl);
+  endtask
+
   task automatic drive_cell(input bit b);
-    for (int k = 0; k < HALF; k++) begin
-      rx_pin = lvl_of(b, 1'b1); @(posedge clk);
-    end
-    for (int k = 0; k < HALF; k++) begin
-      rx_pin = lvl_of(b, 1'b0); @(posedge clk);
-    end
+    drive_half(lvl_of(b, 1'b1));
+    drive_half(lvl_of(b, 1'b0));
   endtask
 
   // Assert the DUT's capture stream contains `vec[0..nvec-1]` somewhere, with
@@ -175,7 +203,7 @@ module tb_pe_dru;
     drive_cell(~n);
     drive_cell(n);
     drive_cell(~n);
-    repeat (SPB * 2) @(posedge clk);
+    repeat (SPB) @(posedge clk);
     check_stream(tag);
     check_dru_to_manch(tag);
   endtask
@@ -261,7 +289,7 @@ module tb_pe_dru;
     check(locked === 1'b0, "starts unlocked");
     nbits = 0;
     for (int i = 0; i < 16; i++) drive_cell(vec[i]);
-    repeat (SPB * 2) @(posedge clk);
+    repeat (SPB) @(posedge clk);
     check(cap_lk[5] === 1'b1, "locks one cell after the 4-cell threshold");
     check(cap_lk[15] === 1'b1, "still locked at the end of the frame");
     check(nbits > 8, "emitted bits while locking (locked is not a gate)");
@@ -271,7 +299,7 @@ module tb_pe_dru;
     cfg_lock_bits = 8'd8;
     nbits = 0;
     for (int i = 0; i < 16; i++) drive_cell(vec[i]);
-    repeat (SPB * 2) @(posedge clk);
+    repeat (SPB) @(posedge clk);
     check(cap_lk[5] === 1'b0, "not locked at the 6th cell with an 8-bit threshold");
     check(cap_lk[7] === 1'b0, "not locked at the 8th cell either");
     check(cap_lk[9] === 1'b1, "locks one cell after the 8-cell threshold");
@@ -285,7 +313,7 @@ module tb_pe_dru;
     reset_dut();
     nbits = 0;
     rx_pin = 1'b1;
-    repeat (SPB * 24) @(posedge clk);
+    repeat (SPB * 12) @(posedge clk);
     check(locked === 1'b0, "a held line never locks");
     begin
       bit all_equal; all_equal = 1'b1;
@@ -303,49 +331,67 @@ module tb_pe_dru;
     cfg_filter_en = 1'b0;
 
     // ================= a single-sample glitch =================
-    // One inverted sample mid-half-cell. The 3-tap majority must swallow it, so
-    // the recovered bits must be exactly the driven ones.
+    // The 3-tap majority's actual job, stated so the test can fail: an isolated
+    // spike on a HELD line (no transition anywhere near it) must be outvoted,
+    // so the line still looks idle -- every cell has equal halves and `locked`
+    // never asserts. The same spike with the filter OFF is a legal-looking
+    // edge pair and produces well-formed cells, which is what makes the claim
+    // falsifiable rather than a tautology.
     //
-    // The lead-in matters here for the same reason it does in run_vec: the first
-    // cell's F/S labels are not knowable until a transition establishes the phase
-    // reference. Drive three alternating cells first, then count.
+    // WHAT THIS DOES NOT CLAIM: a glitch inside the 3-tap window of a real
+    // transition can move the filtered edge by a sample, because a majority
+    // cannot distinguish an early edge from a spike next to one. Measured
+    // during the DDR rewrite; the end-to-end Ethernet TB (real frames, real
+    // FCS) is the coverage for traffic, and one bad cell is what a framing
+    // check rejects anyway.
     reset_dut();
     cfg_filter_en = 1'b1;
-    nvec = 12;
-    for (int i = 0; i < 12; i++) vec[i] = (i % 2 == 0) ? 1'b1 : 1'b0;
+    rx_pin = 1'b0;
+    repeat (SPB) @(posedge clk);        // settle onto the held level
     nbits = 0;
-    for (int p = 0; p < 3; p++) drive_cell(p % 2);      // lead-in cells 0,1,0
-    nbits = 0;                                          // count from the payload
-    for (int i = 0; i < 12; i++) begin
-      for (int k = 0; k < HALF; k++) begin
-        rx_pin = lvl_of(vec[i], 1'b1);
-        if (i == 6 && k == 1) rx_pin = ~rx_pin;          // one bad sample
-        @(posedge clk);
-      end
-      for (int k = 0; k < HALF; k++) begin
-        rx_pin = lvl_of(vec[i], 1'b0);
-        if (i == 6 && k == 3) rx_pin = ~rx_pin;          // and one in the 2nd half
-        @(posedge clk);
-      end
+    // One FALLING-edge sample spikes high. The latch is transparent through the
+    // high phase and takes the spike at the falling edge; the restore happens
+    // in the low phase, so the next rising sample is clean. A falling-edge
+    // spike touches the latch only -- a rising-edge one would be re-taken by
+    // the latch at the next falling edge (two samples).
+    @(posedge clk);
+    rx_pin = 1'b1;
+    @(negedge clk);
+    #(CLK_NS/4) rx_pin = 1'b0;
+    repeat (SPB * 4) @(posedge clk);
+    begin
+      bit all_equal; all_equal = 1'b1;
+      for (int i = 0; i < nbits; i++)
+        if (cap_f[i] !== cap_s[i]) all_equal = 1'b0;
+      check(all_equal, "filtered: a held line with one spike stays idle");
     end
-    drive_cell(~vec[11]); drive_cell(vec[11]);
-    repeat (SPB * 2) @(posedge clk);
-    check_stream("glitch filtered");
+    check(locked === 1'b0, "filtered: a spike on an idle line cannot lock");
+    // Keep the filtered capture stream for the A/B below.
+    filt_n = nbits;
+    for (int i = 0; i < nbits; i++) begin filt_f[i] = cap_f[i]; filt_s[i] = cap_s[i]; end
 
-    // And the filter must NOT move the grid: the same pattern captured with the
-    // filter off must produce the same levels. (It will produce EXTRA cells from
-    // the glitch, which is the documented cost of turning the filter off — so
-    // the comparison is that the clean bits are a subsequence, not that the
-    // streams are equal.)
+    // The same spike, filter OFF. The claim that must be falsifiable is that the
+    // filter CHANGED something: if the two streams are identical the filter is
+    // a no-op and the check above proves nothing. (Stream equality is the right
+    // comparison here; "the unfiltered run must show an unequal cell" is not --
+    // whether the spike lands on a capture instant depends on the free-running
+    // phase, and measured, it sometimes does not.)
     reset_dut();
     cfg_filter_en = 1'b0;
+    rx_pin = 1'b0;
+    repeat (SPB) @(posedge clk);
     nbits = 0;
-    for (int p = 0; p < 3; p++) drive_cell(p % 2);
-    nbits = 0;
-    for (int i = 0; i < 12; i++) drive_cell(vec[i]);
-    drive_cell(~vec[11]); drive_cell(vec[11]);
-    repeat (SPB * 2) @(posedge clk);
-    check_stream("glitch unfiltered");
+    @(posedge clk);
+    rx_pin = 1'b1;
+    @(negedge clk);
+    #(CLK_NS/4) rx_pin = 1'b0;
+    repeat (SPB * 4) @(posedge clk);
+    begin
+      bit differs; differs = (nbits != filt_n);
+      for (int i = 0; i < nbits && i < filt_n; i++)
+        if (cap_f[i] !== filt_f[i] || cap_s[i] !== filt_s[i]) differs = 1'b1;
+      check(differs, "unfiltered: the same spike must change the capture stream");
+    end
     cfg_filter_en = 1'b0;
 
     if (errors == 0) $display("PASS: tb_pe_dru");

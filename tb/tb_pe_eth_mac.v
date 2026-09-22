@@ -31,10 +31,12 @@
 module tb_pe_eth_mac;
 
   localparam int SPB  = 12;        // samples per bit period, 60 MHz / ADR-005
-  localparam int HALF = SPB / 2;
+  localparam int HALF = SPB / 2;   // samples per half-cell (6)
+  localparam int CLK_HZ = 60_000_000;
+  localparam real CLK_NS = 1e9 / CLK_HZ;   // 16.667 ns; real, not rounded
 
   logic clk = 0, rst_n;
-  always #5 clk = ~clk;
+  always #(CLK_NS/2) clk = ~clk;
 
   integer errors = 0;
   localparam int BUF_OVER = 2100;   // > 2048, so the ring must reject
@@ -56,9 +58,20 @@ module tb_pe_eth_mac;
     return first_half ? ~b : b;
   endfunction
 
+  // One half-cell: HALF consecutive samples at one level, walking the sample
+  // edges explicitly (the DDR front end samples both edges of the 60 MHz
+  // clock). The level is set just after the previous edge so it can never race
+  // the DUT's capture.
+  task automatic drive_half(input logic lvl);
+    for (int k = 0; k < HALF; k++) begin
+      rx_pin = lvl;
+      if (k % 2 == 0) @(posedge clk); else @(negedge clk);
+    end
+  endtask
+
   task automatic drive_cell(input bit b);
-    for (int k = 0; k < HALF; k++) begin rx_pin = lvl_of(b, 1'b1); @(posedge clk); end
-    for (int k = 0; k < HALF; k++) begin rx_pin = lvl_of(b, 1'b0); @(posedge clk); end
+    drive_half(lvl_of(b, 1'b1));
+    drive_half(lvl_of(b, 1'b0));
   endtask
 
   // One octet, LSB-first -- the 802.3 convention, and the reason the SFD byte
@@ -90,7 +103,7 @@ module tb_pe_eth_mac;
     // for it and every one has EQUAL halves, which is what pe_manch flags --
     // so this is also how a real end-of-frame is signalled.
     for (int i = 0; i < cells; i++) begin
-      rx_pin = 1'b0; repeat (SPB) @(posedge clk);
+      rx_pin = 1'b0; repeat (SPB/2) @(posedge clk);
     end
   endtask
 
@@ -143,6 +156,10 @@ module tb_pe_eth_mac;
   logic [10:0] frame_ptr;
   logic [2:0]  dbg_state;
 
+  // Buffer reclaim is driven by the TB so the recovery test can return the
+  // ring to empty without a full reset. Everything else treats it as idle.
+  logic        buf_reset = 1'b0;
+
   // The DRU's own lock counter is irrelevant here (it is a confidence
   // indicator, not a gate), but it must be configured to a legal value.
   assign cfg_lock_bits = 8'd4;
@@ -176,7 +193,7 @@ module tb_pe_eth_mac;
     .clk(clk), .rst_n(rst_n),
     .bit_en(bit_en), .rx_raw(rx_bit), .rx_err(rx_err),
     .rx_first(rx_first), .rx_second(rx_second),
-    .buf_reset(1'b0),
+    .buf_reset(buf_reset),
     .crc_bit_en(crc_bit_en), .crc_clr(crc_clr), .crc_bit_in(crc_bit_in),
     .crc_field_out(crc_field_out), .crc_state(crc_state),
     .fbuf_we(fbuf_we), .fbuf_waddr(fbuf_waddr), .fbuf_wdata(fbuf_wdata),
@@ -510,6 +527,93 @@ module tb_pe_eth_mac;
       check(frame_ptr === 11'd74 + FILL_LEN[10:0],
             $sformatf("oversize type: pointer = %0d, want %0d (rolled back)",
                       frame_ptr, 74 + FILL_LEN));
+    end
+
+    // ================= frame 8: a PADDED short LENGTH frame is ACCEPTED ===
+    // 802.3 pads a length field under 46 bytes up to the 64-byte minimum, and
+    // the FCS covers the pad. A receiver that jumps from the declared length
+    // straight to the FCS folds the pad as if it were the FCS and rejects a
+    // correctly formed frame -- measured before the S_PAD state existed: this
+    // exact frame failed while the 46-byte control above passed.
+    begin
+      int pay      = 20;                 // declared length
+      int wire_pay = 46;                 // 20 data + 26 pad = the minimum
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'h40 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      for (int i = pay; i < wire_pay; i++)
+        frame[14+i] = 8'hC0 + i[7:0];    // pad, deliberately distinct from data
+      build_header(48'hFFFFFFFFFFFF, 16'd20);
+      nframe = 14 + wire_pay;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24);
+      repeat (6) @(posedge clk); #1;
+      check(nvalid === 4, $sformatf("padded: frame_valid = %0d, want 4", nvalid));
+      check(nbad === 4,   $sformatf("padded: frame_bad = %0d, want 4 (unchanged)", nbad));
+      check(last_len === 16'd20, "padded: frame_len must be the DECLARED length");
+      check(last_is_type === 1'b0, "padded: a length field");
+      // Only the 20 declared bytes are stored: a receiver that banked the pad
+      // would report 46 and advance the pointer by 46.
+      check(frame_ptr === 11'd74 + FILL_LEN[10:0] + 11'd20,
+            $sformatf("padded: pointer = %0d, want %0d (pad not stored)",
+                      frame_ptr, 74 + FILL_LEN + 20));
+      read_and_check(11'd74 + FILL_LEN[10:0], pay, 0, "padded frame");
+    end
+
+    // ============ frame 9: oversize from EMPTY, then RECOVERY =============
+    // THE BUG THIS CATCHES: the reclaim was `room + {1'b0, pay_cnt[AW-1:0]}`.
+    // A frame that fills the whole 2,048-byte ring leaves pay_cnt = 2048 =
+    // 11'h000, so the truncation added ZERO bytes back: room stayed 0 and every
+    // later frame failed its header check until a reset. The 2,100-byte frame
+    // below is what makes pay_cnt exactly 2,048 at the rejection. Frame 7 could
+    // not catch it -- it starts with only 474 bytes free, so its pay_cnt is 474
+    // and the low 11 bits are non-zero.
+    begin
+      int pay = 2100;                    // > BUF_BYTES
+      buf_reset = 1'b1;
+      repeat (2) @(posedge clk); #1;
+      buf_reset = 1'b0;
+      send_idle(24);                     // re-arm the inter-frame hunt gate
+      repeat (4) @(posedge clk); #1;
+      check(frame_ptr === 11'd0,
+            $sformatf("after reclaim: pointer = %0d, want 0", frame_ptr));
+      check(u_mac.room === 12'd2048,
+            $sformatf("after reclaim: room = %0d, want 2048", u_mac.room));
+
+      for (int i = 0; i < pay; i++) want[i] = 8'h70 + i[7:0];
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);   // a TYPE field: no header bound
+      for (int i = 0; i < pay; i++) frame[14+i] = want[i];
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24);
+      repeat (6) @(posedge clk); #1;
+      check(nvalid === 4, "overflow from empty: frame_valid unchanged");
+      check(nbad === 5,   $sformatf("overflow from empty: frame_bad = %0d, want 5", nbad));
+      check(frame_ptr === 11'd0, "overflow from empty: pointer rolled back to 0");
+      check(u_mac.room === 12'd2048,
+            $sformatf("overflow from empty: room = %0d, want 2048 (reclaimed)",
+                      u_mac.room));
+
+      // RECOVERY: a valid frame immediately after must be accepted and stored.
+      // With the truncating reclaim this frame is rejected at its header, so
+      // the check below is the one that fails on the pre-fix RTL.
+      for (int i = 0; i < 46; i++) begin
+        want[i] = 8'h90 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'd46);
+      nframe = 14 + 46;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24);
+      repeat (6) @(posedge clk); #1;
+      check(nvalid === 5, $sformatf("recovery: frame_valid = %0d, want 5", nvalid));
+      check(last_len === 16'd46, "recovery: len = 46");
+      check(frame_ptr === 11'd46, $sformatf("recovery: pointer = %0d, want 46", frame_ptr));
+      read_and_check(11'd0, 46, 0, "recovery frame");
     end
 
     if (errors == 0) $display("PASS: all checks");
