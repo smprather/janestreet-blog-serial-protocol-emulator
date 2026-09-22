@@ -1,0 +1,13 @@
+pe_serdes 539
+pe_nrzi 15
+pe_manch 7
+pe_bitstuff 84
+pe_codec_mux 115
+pe_crc 209
+pe_dru 121
+pe_cpu 383
+pe_pinmux 111
+pe_imem_flop 60806
+pe_imem_macro 12
+pe_uart_soc 1121
+tt_um_top 1126

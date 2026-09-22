@@ -202,5 +202,15 @@ else
   echo "STALE: wiki/reference/clock-arithmetic.md — run python3 tools/gen_clock_arithmetic.py"
   stale=1
 fi
+# The block diagram is checked against rtl/ and run_all.sh: a block is drawn as
+# instantiated only if some RTL names it, and as verified only if its TB is in
+# run_all.sh. The hand-drawn ASCII version this replaces claimed a pin matrix
+# that did not exist and a flop memory that had been replaced by an SRAM.
+if python3 tools/gen_block_diagram.py --check >/dev/null 2>&1; then
+  echo "block diagram up to date"
+else
+  echo "STALE: wiki/reference/block-diagram.md — run python3 tools/gen_block_diagram.py"
+  stale=1
+fi
 [ "$stale" -eq 0 ] || exit 1
 [ "$lint_rc" -eq 0 ] || { echo "lint gate FAILED (see above)"; exit 1; }

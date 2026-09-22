@@ -47,46 +47,28 @@ exist, so there is a `tt_um_*` top level with a real pad interface
 `uio[1:0]`. Until 2026-09-20 every pin-budget conclusion in the wiki described an
 interface that no RTL in this repo implemented.
 
-Nothing has been taped out. The pin matrix does not exist yet. **[[plans/through-i2c]] has the ordered work list to the next
-milestone** (the I2C transaction); the summary is at the bottom of this file.
+Nothing has been taped out. **The block diagram is now generated and drift-gated:
+see [[reference/block-diagram]]** — the hand-drawn ASCII version that used to sit
+here had rotted in three places at once (it still claimed the pin matrix did not
+exist and that the SoC's memory was flops, both superseded, and listed `pe_dru`/
+`pe_crc` as unbuilt in one place while citing their cell counts in another). A
+diagram is the most-read and least-checked artifact in a repo. **[[plans/through-i2c]]
+has the ordered work list to the next milestone** (the I2C transaction); the
+summary is at the bottom of this file.
+
+The one-line version, for the reader who wants it before clicking through:
 
 ```
-                    +---------------------+
-   firmware  --->   |  pe_cpu             |   BUILT (387 cells) — ISA in its header
-   (.pe -> .hex)    |  16 opcodes, A/Y/X  |
-                    +---------------------+
-                              |
-                    +---------------------+     +------------------+
-                    |   pe_uart_soc       | <-> |  tick timer      |  BUILT
-                    |   (CPU + IMEM/DMEM) |     |  260 clk = half  |  (flop memory —
-                    +---------------------+     |  a 115200 bit    |   see below)
-                              |
-              +---------------+---------------+
-              |                               |
-    +-------------------+           +-------------------+
-    |  pe_serdes        |           |  bit-banged pins  |   BOTH PROVEN
-    |  539 cells routed |           |  (UART today)     |   SERDES by 10 TBs,
-    |  bit_en paced     |           |                   |   bit-bang by UART
-    +-------------------+           +-------------------+
-              |
-    +-------------------+           +-------------------+
-    |  pe_codec_mux     |           |  pe_dru           |   BUILT (116 cells)
-    |  stuff/nrzi/manch |           |  12x oversampling |   + pe_crc (209)
-    +-------------------+           +-------------------+
-              |                               |
-    +-------------------+           +-------------------+
-    |  word FIFO        |           |  pin matrix / OE  |   NOT BUILT
-    |  (not built)      |           |  / tri-state      |   gates I2C + stretch
-    +-------------------+           +-------------------+
-                              |
-                +---------------------------+
-                | tt_um_protocol_emulator   |  BUILT — the deliverable.
-                | ui_in / uo_out / uio_oe   |  Pad contract TB: no X on an
-                | open-drain SDA+SCL        |  output, ena gates nothing,
-                +---------------------------+  uio never drives high.
-                              |
-                        TT GPIO pins
+  tt_um_protocol_emulator (BUILT, the deliverable)
+    └── pe_uart_soc (BUILT) ── pe_cpu ── pe_imem ──[FLOP=0]── SRAM macro
+                             └ tick timer (260 clk = half a 115200 bit)
+                             └ fixed-mask port (PIN_IN_MASK 8'hF8)
+
+  BUILT, TB-verified, INSTANTIATED NOWHERE (5):
+    pe_serdes (539)  pe_dru (121)  pe_crc (209)  pe_pinmux (111)  pe_codec_mux (115)
 ```
+
+
 
 **Two implementation styles now coexist on purpose.** The SERDES is a word
 engine: load 8–32 bits, pace with `bit_en`, collect a word — the right shape for
