@@ -950,5 +950,77 @@
   `flow/pe_uart_soc.json`, `.gitignore`, `diagrams/block-diagram.stamp`,
   `reviews/2026-09-22/`.
 - **Regression:** RTL 26/26, firmware **17/17**, 13 lint tops + 11 elaborations
-  clean, all four mutation suites green, generated-doc drift checks green, and
+  clean (14 verilator tops + 11 yosys elaborations), all four mutation suites
+  green, generated-doc drift checks green, and
   `tb/run_all.sh --fast` exits 0 in a `git archive` clone with no ignored files.
+
+
+## [2026-09-22] review | second pass: seven open findings after the first fixes
+
+- Reviewed `628e309` (`review/fix-invisible-defects`) with the first review used
+  as a regression checklist. The fresh isolated regression reports 26/26 RTL,
+  17/17 firmware, lint/elaboration, documentation gates, and four mutation suites
+  green. Independent directed probes reproduce seven additional defects.
+- **P1:** DDR latch/flop simulation race rejects asynchronous Ethernet traffic;
+  34/102 phase/frequency/filter trials fail. A temporary nonblocking latch
+  assignment removes the sample mismatch and passes the directed frame.
+- **P1:** a valid-CRC fourteen-byte runt is accepted with length 65,532 and makes
+  free space exceed the buffer's capacity; the next valid frame inherits the
+  corrupted accounting.
+- **P2:** USB mode stuffs zero runs; one-clock CPU stop/restart skips instruction
+  zero; SRAM fallback reads differ from the macros during writes; the emulator
+  UART monitor samples too early; interrupted I2C/SPI/fbuf mutation suites leave
+  modified source files behind.
+- Full findings, locations, correction criteria, and commands:
+  `reviews/2026-09-22/REVIEW-2.md`. Reproducers and logs are in its `review2/`
+  directory. The saved runner returns nonzero with seven failed probes at this
+  revision; the temporary DRU experiment passes separately.
+- Updated `HANDOFF.md` and `wiki/STATUS.md` for the context flush. All seven
+  findings remain open. Production RTL, firmware, and tooling were unchanged.
+  No physical flow, DRC, or LVS was run.
+
+## [2026-09-22] review | second-pass findings fixed: DDR capture, frame structure, USB, restart, fallbacks, monitor, traps
+
+- **All seven findings in `REVIEW-2.md` are fixed, each with a permanent test,**
+  and the review's own probe suite now exits 0. The resolution table is appended
+  to `REVIEW-2.md`.
+- **R2-1 (P1):** the falling-edge capture is a two-latch pair now -- the
+  transparent-high master closes at the falling edge and a transparent-low slave
+  holds through the high phase, so the receiving flop samples a closed latch and
+  cannot race the master reopening. `tb_pe_eth_mac` frame 11 drives a real frame
+  with fixed 49.995 ns half-cells, independent of the DUT clock; the review
+  sweep is **102 trials / 0 failures** (it was 34/102).
+- **R2-2 (P1):** `S_SETTLE` requires frame STRUCTURE as well as the CRC residue
+  (`hdr_done`, `fcs_done` for length frames, `pay_cnt >= 4` for type frames).
+  The review's 14-byte runt had a valid residue and no payload: it was accepted
+  with length 65,532 and wound the pointer back 4 bytes that were never stored.
+  Now rejected with `room` and `pointer` untouched; TB frame 10, mutation
+  `crc-only-verdict` (11/11 detected).
+- **R2-3 (P2):** `pe_bitstuff` takes an explicit `ones_only` rule (`cfg[7]`;
+  run length `cfg[6:4]`). USB stuffs only after six ONES, so the USB config byte
+  is `0xE3`; CAN stays symmetric. Counters saturate on non-stuffable runs.
+  Directed TX/RX zero-run tests in `tb_pe_line_codec` and `tb_pe_codec_mux`.
+- **R2-4 (P2):** while `run` is low the fetch address is ZERO, not `pc`, so the
+  registered ROM has `imem[0]` ready after the first stopped edge. A one-clock
+  stop now resumes at instruction 0 (`tb_pe_cpu` test 10).
+- **R2-5 (P2):** both FLOP fallbacks gate their registered read on `!we`
+  (`pe_fbuf` holds word AND lane; `pe_imem` holds `imem_rdata`), matching the
+  macro's deasserted REN. Directed changing-address-across-write checks in both
+  TBs.
+- **R2-6 (P2):** the emulator's UART monitor samples the CENTRE of each bit
+  (1.5 bit periods after the start edge), so an 8N1 A5 at 519/520/521 clocks per
+  bit decodes correctly; `emulate: UART monitor periods` is in the firmware
+  regression (now 18/18).
+- **R2-7 (P2):** the mutation harnesses restore pristine sources and the
+  committed firmware image on EXIT/INT/TERM and exit immediately on a signal.
+  `review2/mutation_interrupt.py` reports `changed=[]` for all three.
+- **Files:** `rtl/pe_dru.v`, `rtl/pe_eth_mac.v`, `rtl/pe_line_codec.v`,
+  `rtl/pe_codec_mux.v`, `rtl/pe_cpu.v`, `rtl/pe_imem.v`, `rtl/pe_fbuf.v`,
+  `tools/peemu.py`, `tb/tb_pe_eth_mac.v`, `tb/tb_pe_line_codec.v`,
+  `tb/tb_pe_codec_mux.v`, `tb/tb_pe_cpu.v`, `tb/tb_pe_imem.v`, `tb/tb_pe_fbuf.v`,
+  `tb/run_firmware_tests.sh`, the four `tb/mutate_*_tb.sh`,
+  `wiki/reference/signal-names.md`, `reviews/2026-09-22/REVIEW-2.md`,
+  `HANDOFF.md`.
+- **Regression:** RTL 26/26, firmware **18/18**, lint 14 tops + 11 elaborations,
+  all four mutation suites green, generated-doc drift green, and the review
+  probe suite exits 0.

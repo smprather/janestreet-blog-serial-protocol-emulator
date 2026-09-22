@@ -1,9 +1,11 @@
 # Project Status — through 10BASE-T receive
 
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
-> Last updated: 2026-09-22, after the nine-finding project review was worked
-> (`reviews/2026-09-22/REVIEW.md`; the log's last entry is the work). Branch
-> `review/fix-invisible-defects`.
+> Last updated: 2026-09-22, after the second project review's seven findings were
+> fixed and verified. Read `reviews/2026-09-22/REVIEW-2.md` (resolution table at
+> the end) and `HANDOFF.md` before resuming. The earlier nine-finding review and
+> fixes remain in `reviews/2026-09-22/REVIEW.md`.
+> Branch `review/fix-invisible-defects`.
 >
 > **Where the work is:** pure RTL functional-simulation development. The standing
 > user ruling is *do not run flow, DRC or LVS* — those are tapeout-prep and are
@@ -16,13 +18,25 @@
 
 ## Where we are
 
-Both layers of the thesis now exist and are verified:
+The regression reports 26/26 RTL and **18/18** firmware checks passing, with
+lint, documentation gates, and all four mutation suites green, and the review's
+directed probe suite (`bash reviews/2026-09-22/review2/run_repros.sh`) exits 0.
+The second review's seven findings are fixed: the DRU's falling-edge capture is
+now a two-latch pair (the async Ethernet sweep is 102 trials / 0 failures), the
+MAC validates frame structure before trusting a valid CRC residue, USB stuffing
+is ones-only by explicit config, the CPU's stopped fetch address is zero on the
+first stopped edge, both SRAM fallbacks hold their read outputs during writes,
+the emulator UART monitor samples bit centres, and the mutation harnesses
+restore on interruption. Resolution detail is in `REVIEW-2.md`; each fix has a
+permanent test in the regression.
+
+Both layers of the thesis now exist and have baseline simulation coverage:
 
 - **Milestone 1 — shared hardware layer.** The SERDES, the line codecs and the
   codec mux, all self-checking-TB verified, all synthesized on real IHP sg13g2
   cells, and the SERDES through the full LibreLane place-and-route flow to a
   clean 66 MHz signoff.
-- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (1,100
+- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (1,121
   cells after the review fixes) is the first protocol block that is deliberately
   NOT firmware, and [[concepts/ethernet-scope]] says why with arithmetic: at a 100 ns bit period
   the single-cycle core has 48 instructions per byte, and a software CRC-32
@@ -109,7 +123,7 @@ The one-line version, for the reader who wants it before clicking through:
                              └ pe_pinmux (111) ── per-pin {out,oe,od}
 
   BUILT, TB-verified, INSTANTIATED NOWHERE (4):
-    pe_serdes (539)  pe_dru (144)  pe_crc (209)  pe_codec_mux (115)
+    pe_serdes (539)  pe_dru (150)  pe_crc (209)  pe_codec_mux (130)
 ```
 
 
@@ -127,15 +141,15 @@ states the reasoning; do not "unify" them without reading it.
 | SERDES (bit engine, 1–32 b, runtime order) | `rtl/pe_serdes.v` | 539 | 11,223 synth → **17,211 routed** | `tb_pe_serdes.v` + 9 protocol TBs |
 | NRZI codec | `rtl/pe_line_codec.v` | 15 | 212 | `tb_pe_nrzi` |
 | Manchester codec | `rtl/pe_line_codec.v` | 7 | 120 | `tb_pe_manch` |
-| Bit stuffer/unstuffer | `rtl/pe_line_codec.v` | 84 | 1,290 | `tb_pe_bitstuff` |
-| Codec pipeline mux | `rtl/pe_codec_mux.v` | 115 | 1,691 (whole pipeline) | `tb_pe_codec_mux` |
+| Bit stuffer/unstuffer | `rtl/pe_line_codec.v` | 99 | 1,417 | `tb_pe_bitstuff` |
+| Codec pipeline mux | `rtl/pe_codec_mux.v` | 130 | 1,811 (whole pipeline) | `tb_pe_codec_mux` |
 | **CRC / LFSR engine** (5-, 8-, 15-, 16-, 32-bit) | `rtl/pe_crc.v` | 209 | 3,354 | `tb_pe_crc` |
-| **DRU** (oversampled Manchester receive, DDR) | `rtl/pe_dru.v` | **144** | **2,315** | `tb_pe_dru` |
-| **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 383 | 4,939 | `tb_pe_cpu` |
+| **DRU** (oversampled Manchester receive, DDR) | `rtl/pe_dru.v` | **150** | **2,360** | `tb_pe_dru` |
+| **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 377 | 4,843 | `tb_pe_cpu` |
 | **Pin matrix** (per-pin OUT/OE/IN/OD, open-drain, read-back) | `rtl/pe_pinmux.v` | **111** | **2,061** | `tb_pe_pinmux` |
 | **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
-| **Software-UART SoC** (CPU + tick timer + pin matrix) | `rtl/pe_uart_soc.v` | **1,261** | **23,294 total** | `tb_pe_uart_soc`, `tb_pe_tick_status` |
-| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **1,294** | **23,382 total** | `tb_tt_um_protocol_emulator` |
+| **Software-UART SoC** (CPU + tick timer + pin matrix) | `rtl/pe_uart_soc.v` | **1,264** | **23,184 total** | `tb_pe_uart_soc`, `tb_pe_tick_status` |
+| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **1,284** | **23,211 total** | `tb_tt_um_protocol_emulator` |
 
 Firmware (no RTL cells — these are programs the CPU runs; see
 [[concepts/spi-as-firmware]]):
@@ -182,8 +196,8 @@ depth: 896 words of addressable-by-nothing SRAM for 79,674 µm². **The PC and t
 jump-target field had to widen in the same change.** Full reasoning and the
 rejected alternatives: [[decisions/adr-004-program-counter-width]].
 
-**Regression: 26/26 testbenches + 17/17 firmware tests pass, and the lint gate is
-clean** (`tb/run_all.sh` runs the firmware regression first, then every TB, then
+**Regression: 26/26 testbenches + 18/18 firmware tests pass, and the lint gate is
+clean** (14 verilator tops + 11 yosys elaborations; `tb/run_all.sh` runs the firmware regression first, then every TB, then
 `tb/lint.sh`, then the generated-doc drift checks, then FOUR mutation harnesses --
 `tb/mutate_i2c_tb.sh`, `tb/mutate_spi_tb.sh`, `tb/mutate_fbuf_tb.sh` and
 `tb/mutate_eth_mac_tb.sh`). The lint gate covers `pe_eth_mac` and `pe_fbuf` as of
@@ -297,7 +311,7 @@ The "still to come" row is the two known remaining consumers: the frame buffer i
 **The design is no longer area-constrained**, which is the whole point of the swap:
 the remaining risk in this project is now verification, not floorplanning.
 
-Gate count is not the constraint: 1,261 cells for the whole SoC against ~24,000 for
+Gate count is not the constraint: 1,264 cells for the whole SoC against ~24,000 for
 24 tiles at the blog's ~1K cells/tile — about 5.3% of the logic budget, with the
 SERDES's 539 and the codecs' 115 on top. (The row above is the SRAM-swap
 measurement; the pin matrix moved inside the SoC afterwards, which is the +178
@@ -1151,7 +1165,17 @@ run as firmware on real RTL, each with a testbench that does not know how the fi
 works. 10BASE-T receive exists as hardware. Nothing below is required to satisfy the
 competition's stated baseline; the list is ordered by what de-risks the *submission*.
 
-### 1. Wire `pe_eth_mac` into the SoC — the next RTL step
+### 0. Resolve the second review findings
+
+`reviews/2026-09-22/REVIEW-2.md` is the open-findings record at `628e309`, with
+source locations, correction criteria, and persistent reproducers. Prioritize
+R2-1/R2-2 (DRU capture and malformed-frame buffer accounting), then R2-3–R2-7
+(USB codec, restart, memory fallback, UART monitor, and mutation cleanup).
+Promote the probes into permanent tests as fixes land and rerun the standard
+regression plus the independent Ethernet phase/frequency sweep. Keep mutation
+runs in isolated copies until R2-7 is resolved. No fixes were applied by the review.
+
+### 1. Wire `pe_eth_mac` into the SoC — after the Ethernet review fixes
 
 `rtl/pe_eth_mac.v` is built, TB-proven (8 mutations, 8 detected) and instantiated
 **nowhere**. 10BASE-T is its consumer, so the instance lands with the receive path:

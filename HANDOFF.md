@@ -1,25 +1,54 @@
 # Handoff — state of the repo (2026-09-22)
 
-Written for whoever picks this up next, human or agent. If you are an agent: read
-this, then `wiki/STATUS.md`, then `reviews/2026-09-22/REVIEW.md` (the nine-finding
-review and how each one was worked). The pair is the orientation, and it is
-current as of the timestamp above.
+Written for whoever picks this up next, human or agent. Read this, then
+`reviews/2026-09-22/REVIEW-2.md`, then `wiki/STATUS.md`. The second review
+(HEAD `628e309`) found seven defects despite a green regression; **all seven are
+now fixed and verified** (see the resolution table at the end of REVIEW-2.md).
+`reviews/2026-09-22/REVIEW.md` records the earlier nine findings and their
+fixes; it is not a current open-findings list.
+
+## Resume after the second review
+
+The user requested a fresh review after implementing fixes, with results saved
+and the handoff prepared for a context flush. That review is complete and its
+seven findings are worked:
+
+| ID | Priority | Finding | Fix |
+|---|---|---|---|
+| R2-1 | P1 | DRU latch/flop simulation race rejects an independently timed Ethernet frame | Two-latch (master/slave) DDR capture; async 49.995 ns frame is now a permanent TB case; sweep 102/0 |
+| R2-2 | P1 | Valid-CRC runt accepted with length 65,532, corrupting buffer accounting | Structural verdict (`hdr_done`/`fcs_done`/`pay_cnt >= 4`) before the residue is trusted; runt is TB frame 10 |
+| R2-3 | P2 | USB stuffing applied to zero runs | Explicit `ones_only` rule (`cfg[7]`, run length `cfg[6:4]`); USB config is `0xE3`; TX/RX zero-run tests |
+| R2-4 | P2 | One-clock CPU stop could resume on a stale instruction | `imem_addr` is zero while stopped; `tb_pe_cpu` test 10 |
+| R2-5 | P2 | SRAM fallbacks read during writes while the macro holds | FLOP reads gated on `!we` (fbuf word+lane, imem rdata); TB checks across a changing address |
+| R2-6 | P2 | Emulator UART monitor sampled bit boundaries, A5 read as 4A | First data sample at 1.5 bit periods; permanent 519/520/521 case |
+| R2-7 | P2 | Interrupted mutation suites left source files changed | EXIT/INT/TERM traps restore pristine sources and image, then exit; probe `changed=[]` |
+
+Evidence, source locations, and commands are in `reviews/2026-09-22/REVIEW-2.md`
+and its `review2/` directory. At the reviewed revision the directed runner
+reported seven failures; on the current tree it exits 0, and the asynchronous
+Ethernet sweep is 102 trials / 0 failures.
+
+**Next:** resume the integration/loader/I2C transaction backlog in
+`wiki/STATUS.md`. Continue the functional simulation loop; the standing user
+ruling is **do not run physical flow, DRC, or LVS**. The mutation suites restore
+on interruption now, so running them in the checkout is safe again (though the
+review probe still isolates its copies).
 
 ## What is verified right now
 
-Run these two and you will see the state, not a claim about it:
+The standard regression and the directed review probes measure different cases:
 
 ```bash
-./tb/run_all.sh            # 26/26 TBs + 17/17 firmware + lint + 4 mutation
+./tb/run_all.sh            # 26/26 TBs + 18/18 firmware + lint + 4 mutation
                            # suites + generated-doc drift, exits 0
 ./tb/run_all.sh --fast     # same verdicts, parallel TB loop, 4-state iverilog
-./tb/synth_area.sh         # mapped cells/area for all blocks; non-zero on
-                           # a yosys driver conflict, ERROR or implicit declaration
+bash reviews/2026-09-22/review2/run_repros.sh
+                           # the seven second-review probes; exits 0 when fixed
 ```
 
-Measured 2026-09-22 after the review work: `run_all.sh --fast` →
-`TOTAL: 26 PASS: 26 FAIL: 0`, `FIRMWARE: 17 PASS: 17 FAIL: 0`, `lint clean`
-(13 verilator tops + 11 yosys elaborations), all four mutation suites green, plus
+Measured after the second-review fixes: `run_all.sh --fast` →
+`TOTAL: 26 PASS: 26 FAIL: 0`, `FIRMWARE: 18 PASS: 18 FAIL: 0`, `lint clean`
+(14 verilator tops + 11 yosys elaborations), all four mutation suites green, plus
 `signal glossary up to date`, `protocol pin budget up to date`,
 `sram budget up to date`, `crc config up to date`, `clock arithmetic up to date`,
 `block diagram up to date`, `canvas viewer: OK`. The `gen_*` docs are generated
@@ -34,14 +63,15 @@ present also exits 0 (the diagram gate is a committed source hash now; see
 It runs on `rtl/pe_cpu.v` inside `rtl/pe_uart_soc.v` (one input pin, one output
 pin, a tick counter). `tb/tb_pe_uart_soc.v` drives a real waveform on RX and
 decodes TX, and passes on 41/42/00/FF with 8.6–8.7 µs bit cells measured at the
-pin. `tools/peemu.py` reproduces the same bytes cycle-accurately, which is the
-fast loop for firmware work (2 s, no iverilog).
+pin. `tools/peemu.py` reproduces the same tested bytes, which is the fast loop for
+firmware work (2 s, no iverilog). R2-4 and R2-6 document remaining restart and
+UART-monitor differences; do not infer general equivalence from those byte tests.
 
 If you change anything in the firmware timing path, run **both** the TB and the
 emulator. They disagreed once and that disagreement is how the real bug was found
 (see below).
 
-## The 2026-09-22 review, in one paragraph
+## The first 2026-09-22 review and fixes
 
 Nine defects were found on a `git archive` clone where every test passed; the
 report is `reviews/2026-09-22/REVIEW.md`. Two change how you should read the
@@ -142,28 +172,20 @@ grepped for three known diagnostics and passed a file yosys could not parse.
 
 ## Current work list
 
-`wiki/plans/through-i2c.md` is authoritative — it has the definition of done for
-the I2C milestone, three blockers with numbers, the tick plan (1 µs tick = 60
-clocks, tLOW 5 ticks / tHIGH 6 → 90.9 kbit/s), the read-path timing budget
-(40 cycles to sample and arbitrate), and an 8-step ordered work list whose step 1
-is done.
+The ordered live backlog is **`wiki/STATUS.md`, "Next steps (ordered)"**.
+Resolve the second review findings before Ethernet SoC integration, then resume
+the loader and I2C transaction work. `wiki/plans/through-i2c.md` is a completed
+implementation plan kept for its timing analysis and findings.
 
-**Updated 2026-09-22: SPI-as-firmware is DONE, and the full SoC routes and times
-clean.** `firmware/spi_xfer.pe` is a mode-0 SPI master running on the same 8-bit
-port (and the same `PIN_IN_MASK`) as the UART; `tools/peemu.py` models a mode-0
-slave so the firmware is exercised end to end ([[concepts/spi-as-firmware]]).
-`RUN_2026-09-22_00-33-59` finished detailed routing with **0 DRC violations** and
-signed off **setup WNS +1.234 ns / hold +0.127 ns / 0 violations at all three
-corners**; the SRAM in-context access is **7.639 ns** against the 16.667 ns
-period (it was signed against 15.15 ns; the target is now 60 MHz — see
-[[reference/clock-arithmetic]])
-([[reference/sram-budget]]). That closes the "SRAM is the critical path and no
-signoff covers it" risk below. What remains of the ordered list is **step 4: the
-pin matrix / OE** (open-drain, read-back, tri-state) for I2C. **Update
-2026-09-20: the CRC LFSR and the DRU were already BUILT** (`rtl/pe_crc.v` 209
-cells, `rtl/pe_dru.v` 116 cells (144 after the DDR front end below), both with
-self-checking TBs and both in
-`run_all.sh`), and the SRAM swap landed on 2026-09-20.
+The pin matrix is already inside `pe_uart_soc`. UART and mode-0 SPI run as
+firmware through it; I2C firmware exercises START, one bit cell, and STOP.
+Byte transfer, ACK/NACK, addressing, and transactions remain future work. The
+Ethernet receive chain and frame buffer exist as tested blocks but are not yet
+integrated into the SoC. R2-1/R2-2 qualify the block-level Ethernet results.
+
+The physical results below are historical records, not checks repeated during
+this review. Follow `wiki/STATUS.md` for their limitations and the standing
+instruction to defer physical flow, DRC, and LVS.
 
 If you touch `pe_crc`: its constants are generated and catalogue-checked
 (`tools/gen_crc_config.py`) — never hand-edit [[reference/crc-config]]. The traps are
@@ -173,7 +195,7 @@ STATUS gotchas 17-19, and they are all of the kind that pass every obvious test.
 `phase` is 4 bits and `4'(SPB-1)` truncates above it, which kills all capture
 silently. Both guards are elaboration errors now, and `tb/param_guards.sh` (run by
 `run_all.sh`) requires them to actually reject. SPB=12 is the 60 MHz grid and
-is verified passing.
+passes the existing nominal-grid tests; R2-1 covers the asynchronous failure.
 
 **Clock plan (ADR-005, 2026-09-21; LOCKED 2026-09-22):** **60 MHz operating
 point** — 66 MHz is *not* usable. It provably fails the 10BASE-T TX jitter
