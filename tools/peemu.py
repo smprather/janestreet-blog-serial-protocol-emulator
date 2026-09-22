@@ -51,6 +51,24 @@ PC_MASK = (1 << PCW) - 1
 # ---- IO ports (mirrors rtl/pe_uart_soc.v) --------------------------------
 P_PIN, P_TXPIN, P_TIMER, P_STATUS = 0x0, 0x1, 0x5, 0x7
 
+# The port is 8 bits wide with "outputs low, inputs high" (rtl/pe_uart_soc.v
+# header), and the map is shared between the two baseline protocols:
+#   bit 0 = TX / SCLK (out), bit 1 = (spare) / MOSI (out),
+#   bit 2 = (spare) / CS_N (out), bit 3 = RX / MISO (in)
+# PIN_IN_MASK is where the split falls. The emulator keeps the wire levels
+# separate -- rx_level and tx_level -- exactly as the TB does, and composes the
+# port value on a read.
+PIN_IN_MASK = 0xF8
+PORT_TX_BIT = 0x01
+PORT_RX_BIT = 0x08
+# SPI uses the SAME port. Named here rather than written as literals in the
+# wire model, because "bit 2 is CS_N" is a fact about the pin map, and the pin
+# map is what the two protocols share.
+PORT_SCLK_BIT = 0x01
+PORT_MOSI_BIT = 0x02
+PORT_CS_BIT = 0x04
+PORT_MISO_BIT = 0x08
+
 CLK_HZ = 60_000_000
 BAUD = 115_200
 # The timer runs at 2x baud: one tick per HALF bit period, so firmware can
@@ -79,8 +97,8 @@ class Soc:
         self.run = False
 
         # peripherals
-        self.pin_in = 1                 # idle high
-        self.pin_out = 1
+        self.pin_in = 1                 # RX wire level (port bit 1)
+        self.pin_out = 1                # TX drive level (port bit 0)
         self.tick_cnt = 0
         self.tick_val = 0
         self.tick_flag = 0
@@ -99,6 +117,19 @@ class Soc:
         self.tx_next_sample = 0
         self.tx_history: list[tuple[int, int]] = []
 
+        # SPI slave model state (see poll_spi_slave). The master is the
+        # firmware; this side is the peripheral it talks to.
+        self.spi_sclk_prev = 0
+        self.spi_cs_prev = 1
+        self.spi_mosi_prev = 0
+        self.spi_miso = 0
+        self.spi_rx_shift = 0
+        self.spi_bit_count = 0
+        self.spi_idx = 0
+        self.spi_waiting = False
+        self.spi_present = 0
+        self.spi_words: list[int] = []
+
     # -- peripherals ------------------------------------------------------
     def _tick(self) -> None:
         self.tick_cnt += 1
@@ -107,11 +138,17 @@ class Soc:
             self.tick_val = m8(self.tick_val + 1)
             self.tick_flag = 1
 
+    def _port_value(self) -> int:
+        """The 8-bit port as firmware reads it: input bits from the RX wire,
+        output bits from the last write. Same composition as the RTL's pin_rd."""
+        return (self.pin_out & ~PIN_IN_MASK & 0xFF) | \
+               ((PORT_RX_BIT if self.pin_in else 0) & PIN_IN_MASK)
+
     def _io_read(self, port: int) -> int:
         if port == P_PIN:
-            return self.pin_in & 1
+            return self._port_value()
         if port == P_TXPIN:
-            return self.pin_out & 1
+            return self._port_value()
         if port == P_TIMER:
             return self.tick_val
         if port == P_STATUS:
@@ -122,8 +159,10 @@ class Soc:
 
     def _io_write(self, port: int, val: int) -> None:
         if port == P_TXPIN:
-            self.pin_out = val & 1
-            self.tx_history.append((self.cycles, self.pin_out))
+            # Only the output bits move; an input bit written here would make
+            # the port disagree with the wire, which is the RTL's rule too.
+            self.pin_out = (self.pin_out & PIN_IN_MASK & 0xFF) | (val & ~PIN_IN_MASK & 0xFF)
+            self.tx_history.append((self.cycles, self.pin_out & PORT_TX_BIT))
 
     # -- one clock ---------------------------------------------------------
     cycles = 0
@@ -219,6 +258,98 @@ class Soc:
     def set_rx_bit(self, bit: int) -> None:
         self.pin_in = bit & 1
 
+    def poll_spi_slave(self, response: list[int]) -> None:
+        """Model a mode-0 (CPOL=0, CPHA=0) SPI slave on the shared port.
+
+        This is the counterpart to the firmware: the firmware is a mode-0
+        MASTER, and a master with no slave is not a protocol, it is a pin
+        toggling. The slave is what makes the test end-to-end, and it is what
+        can catch a master that drives MOSI on the wrong edge.
+
+        A real mode-0 slave, in the order the edges happen:
+
+          CS_N falls        -> selected; present bit 7 of the response on MISO
+          SCLK rises        -> sample MOSI (the master guarantees it is valid
+                               before this edge)
+          SCLK falls        -> shift the response out; present the next bit
+          CS_N rises        -> frame over; the byte is complete
+
+        MISO changes on the FALLING edge, never on the rising one -- that is
+        what makes the master's post-rise sample of MISO safe to take with no
+        delay at all, and it is exactly the property firmware/spi_xfer.pe
+        depends on when it reads the pin straight after raising SCLK.
+        """
+        sclk = 1 if (self.pin_out & PORT_SCLK_BIT) else 0
+        mosi = 1 if (self.pin_out & PORT_MOSI_BIT) else 0
+        cs_n = 1 if (self.pin_out & PORT_CS_BIT) else 0
+
+        # CS_N falling edge: selected, start a fresh RX byte.
+        #
+        # NOTE what is NOT reset here: self.spi_idx. The slave's response
+        # sequence advances ACROSS frames -- frame 1 answers with response[0],
+        # frame 2 with response[1], and so on. Resetting it here was the first
+        # version of this model and it made every frame answer with the same
+        # byte, which the master faithfully reported as A7 A7 A7: a wrong model
+        # producing a confident-looking pass on the slave side (the slave never
+        # cares what it sent) and a failure the firmware got blamed for.
+        if self.spi_cs_prev == 1 and cs_n == 0:
+            self.spi_rx_shift = 0
+            self.spi_bit_count = 0
+            self.spi_waiting = True
+            self.spi_present = self._spi_response_bit(response, self.spi_idx, 0)
+
+        if self.spi_waiting:
+            # SCLK rising edge: the slave samples MOSI. MISO DOES NOT MOVE
+            # here. It was set on the previous falling edge and must stay
+            # stable through this edge, because CPHA=0 puts the master's
+            # sample of MISO just after the rise -- changing it here would
+            # hand the master a bit it never selected.
+            if self.spi_sclk_prev == 0 and sclk == 1:
+                self.spi_rx_shift = ((self.spi_rx_shift << 1) | mosi) & 0xFF
+                self.spi_bit_count += 1
+
+            # SCLK falling edge: NOW advance. Either move to the next bit of
+            # the response, or -- after the 8th bit -- hand the assembled byte
+            # to the slave's receive list and start the next one.
+            elif self.spi_sclk_prev == 1 and sclk == 0:
+                if self.spi_bit_count >= 8:
+                    self.spi_words.append(self.spi_rx_shift)
+                    self.spi_idx += 1
+                    self.spi_rx_shift = 0
+                    self.spi_bit_count = 0
+                self.spi_present = self._spi_response_bit(
+                    response, self.spi_idx, self.spi_bit_count)
+
+        # Drive MISO onto the shared pad. Bit 3 is ONE pad: in UART mode a host
+        # drives it, in SPI mode the slave does. Writing self.pin_in (the same
+        # wire the UART's RX reads) is what keeps the port self-consistent --
+        # two separate levels could disagree, which is the class of bug this
+        # emulator exists to catch.
+        self.pin_in = self.spi_present if self.spi_waiting else 0
+
+        # CS_N rising edge: frame over.
+        if self.spi_cs_prev == 0 and cs_n == 1:
+            self.spi_waiting = False
+
+        self.spi_sclk_prev = sclk
+        self.spi_cs_prev = cs_n
+        self.spi_mosi_prev = mosi
+
+    def _spi_response_bit(self, response: list[int], byte_i: int,
+                          bit_i: int) -> int:
+        """Bit `bit_i` (0 = MSB, MSB-first) of the slave's `byte_i`th response
+        byte, or 0 when the slave has nothing more to say.
+
+        MSB-first is SPI's order and the opposite of the UART's LSB-first, and
+        this is the single line where that difference lives.
+        """
+        if byte_i >= len(response):
+            return 0
+        bitpos = 7 - bit_i
+        if bitpos < 0:
+            return 0
+        return (response[byte_i] >> bitpos) & 1
+
     def poll_tx(self) -> None:
         """Sample the TX pin once per bit period, on a grid anchored to the
         START-BIT EDGE.
@@ -228,7 +359,7 @@ class Soc:
         subsequent sample is exactly one bit period later -- which is what the
         firmware guarantees, since it holds every bit for one bit period.
         """
-        lvl = self.pin_out
+        lvl = 1 if (self.pin_out & PORT_TX_BIT) else 0
         if not self.tx_in_frame:
             if self.sample_prev == 1 and lvl == 0:       # start-bit falling edge
                 self.tx_in_frame = True
@@ -308,6 +439,64 @@ def run(hex_path: Path, send: list[int], max_cycles: int, trace: int,
     return soc.tx_bits, soc
 
 
+def run_spi(hex_path: Path, response: list[int], max_cycles: int,
+            trace: int, frames: int = 4) -> Soc:
+    """Run an SPI-master firmware against the modelled mode-0 slave.
+
+    No RX schedule is needed: SPI is synchronous and the firmware IS the clock.
+    The emulator only has to watch the pins and answer on MISO, which is the
+    real asymmetry between this and run() -- a UART test has to drive a wire at
+    the right baud because the receiver is free-running, while an SPI test just
+    has to be the peripheral that answers.
+
+    `frames` is how many CS_N frames to wait for before stopping; the firmware
+    loops forever, so the run has to end on evidence (a counted frame) rather
+    than on the schedule running out.
+    """
+    words = [int(line, 16) for line in hex_path.read_text().split() if line.strip()]
+    soc = Soc(words)
+    soc.run = True
+    soc.imem_rdata = soc.imem[0]
+
+    # Stop when the slave has CAPTURED `frames` bytes and CS_N is high again.
+    #
+    # Counting CS_N rising edges instead is wrong, and the first version of
+    # this did: pin_out resets to 8'h01, which puts CS_N (bit 2) LOW out of
+    # reset, so the firmware's very first write -- setting the SPI idle pattern
+    # -- registers as a CS_N rising edge with no clock edges in between. That
+    # phantom frame made the run stop one byte early and look like a firmware
+    # bug. Counting captured bytes is anchored to evidence that a transfer
+    # actually happened.
+    #
+    # The reset state is worth stating plainly, because it is not a firmware
+    # bug and it is not harmless-by-accident either: CS_N is asserted for the
+    # first few cycles of every power-up. Nothing shifts, because a mode-0
+    # slave changes state only on SCLK edges and there are none -- which is
+    # exactly why firmware/spi_xfer.pe states its idle pattern as its first
+    # instruction rather than assuming the reset value is the SPI idle state.
+    frames_done = 0
+    cs_now = 1
+
+    while soc.cycles < max_cycles:
+        soc.step()
+        if trace and soc.cycles % trace == 0:
+            print(f"  cyc {soc.cycles:6d} pc={soc.pc:3d} a={soc.a:02x} "
+                  f"out={soc.pin_out:02x} in={soc.pin_in:02x}")
+        soc.poll_spi_slave(response)
+        cs_now = 1 if (soc.pin_out & PORT_CS_BIT) else 0
+        if len(soc.spi_words) >= frames and cs_now == 1:
+            break
+        frames_done = len(soc.spi_words)
+
+    # Drain: the store into the rolling buffer (LDM ptr / MOV X / LDM byte /
+    # STS) follows the CS_N rise by a handful of instructions. Without this the
+    # last frame's byte is simply not in dmem yet when it is read below.
+    for _ in range(64):
+        soc.step()
+        soc.poll_spi_slave(response)
+    return soc
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -323,7 +512,71 @@ def main() -> int:
                          "(dmem[0..]) holds exactly these bytes, in order")
     ap.add_argument("--dump-dmem", action="store_true",
                     help="print the data memory at the end of the run")
+    ap.add_argument("--spi-slave", type=_send_list, default=None,
+                    help="run the SPI-master wire model instead of the UART one, "
+                         "with the slave responding with these bytes")
+    ap.add_argument("--spi-frames", type=int, default=4,
+                    help="how many CS_N frames to run before stopping")
+    ap.add_argument("--expect-spi-rx", type=_send_list, default=None,
+                    help="assert the byte the SLAVE received from the master, "
+                         "per frame (checked against the rolling buffer)")
     args = ap.parse_args()
+
+    # ---- SPI mode -------------------------------------------------------
+    # Selected by --spi-slave rather than by sniffing the firmware, because
+    # the two wire models are genuinely different tests: one drives a
+    # free-running serial line at a baud rate, the other answers a bus whose
+    # clock the firmware itself generates. Guessing which is which from the
+    # hex would be magic; naming it is honest.
+    if args.spi_slave is not None:
+        soc = run_spi(args.hexfile, args.spi_slave, args.max_cycles,
+                      args.trace, args.spi_frames)
+        print(f"cycles: {soc.cycles:,}")
+        print(f"slave responses: "
+              f"{' '.join(f'{b:02X}' for b in args.spi_slave)}")
+        print(f"slave captured:  "
+              f"{' '.join(f'{b:02X}' for b in soc.spi_words)}")
+        if args.dump_dmem:
+            print("dmem:   " + " ".join(f"{v:02X}" for v in soc.dmem))
+
+        ok = True
+        # What the MASTER received: the firmware buffers each received byte at
+        # dmem[ptr], so dmem[0..frames-1] is the master's view of MISO.
+        n = min(args.spi_frames, len(soc.spi_words))
+        master_got = soc.dmem[:n]
+        want_rx = args.spi_slave[:n]
+        print(f"master received: "
+              f"{' '.join(f'{v:02X}' for v in master_got)}")
+        if master_got != want_rx:
+            print(f"FAIL: master received "
+                  f"{[f'{v:02X}' for v in master_got]}, slave sent "
+                  f"{[f'{v:02X}' for v in want_rx]}")
+            ok = False
+        # The slave's view of MOSI is an independent check: it is built from the
+        # MOSI pin, not from the firmware's transmit shift register, so it
+        # catches a master that presents bits on the wrong edge -- and, because
+        # the check byte is not a bit palindrome, a master that shifts the
+        # wrong way.
+        if len(soc.spi_words) < args.spi_frames:
+            print(f"FAIL: only {len(soc.spi_words)} of {args.spi_frames} "
+                  f"frames completed")
+            ok = False
+        if args.expect_spi_rx is not None:
+            want_tx = args.expect_spi_rx * (len(soc.spi_words) //
+                                            max(1, len(args.expect_spi_rx)))
+            want_tx = (want_tx + args.expect_spi_rx)[:len(soc.spi_words)]
+            if soc.spi_words != want_tx:
+                print(f"FAIL: slave captured "
+                      f"{[f'{v:02X}' for v in soc.spi_words]}, expected "
+                      f"{[f'{v:02X}' for v in want_tx]}")
+                ok = False
+            else:
+                print(f"slave captured the master's byte MSB-first "
+                      f"({len(want_tx)} frames)")
+        if ok:
+            print("PASS: SPI frames exchanged correctly")
+            return 0
+        return 1
 
     got, soc = run(args.hexfile, args.send, args.max_cycles, args.trace, args.gap)
     want = args.send

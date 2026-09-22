@@ -40,7 +40,9 @@ module tb_pe_tick_status;
   logic host_we, host_imem_sel, run;
   logic [IAW-1:0] host_addr;
   logic [15:0] host_wdata;
-  logic pin_in = 1, pin_out;
+  logic pin_in_bit = 1;
+  wire [7:0] pin_in_bus  = {4'b0, pin_in_bit, 3'b0};   // port bit 3 = UART RX
+  wire [7:0] pin_out_bus;
   logic [7:0] dbg_pc, dbg_a, dbg_timer;
 
   pe_uart_soc #(.IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES),
@@ -48,7 +50,7 @@ module tb_pe_tick_status;
     .clk(clk), .rst_n(rst_n),
     .host_we(host_we), .host_imem_sel(host_imem_sel),
     .host_addr(host_addr), .host_wdata(host_wdata), .run(run),
-    .pin_in(pin_in), .pin_out(pin_out),
+    .pin_in(pin_in_bus), .pin_out(pin_out_bus),
     .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_timer(dbg_timer)
   );
 

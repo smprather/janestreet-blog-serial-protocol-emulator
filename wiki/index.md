@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-20 | Total pages: 24
+> Last updated: 2026-09-22 | Total pages: 25
 
 ## Start here
 
@@ -28,6 +28,7 @@
 - [[concepts/live-canvas]] — Side-quest tooling: agent→browser live diagram channel (dashboard plugin, file-write publish).
 - [[concepts/ethernet-scope]] — what "10Mbit Ethernet" as a stretch goal actually asks for: the line layer, a 1.5 KB frame, and why 32 KB was never the requirement.
 - [[concepts/strobe-and-committing-edge]] — What the strobe (`bit_en`) and the committing edge are, and the sample-order trap they cause.
+- [[concepts/spi-as-firmware]] — SPI mode 0 as a pure-software master on the shared 8-bit port; the MSB-first/LSB-first asymmetry, the reset-value trap, and the mutations that were (and were not) catchable.
 
 ## Reference
 

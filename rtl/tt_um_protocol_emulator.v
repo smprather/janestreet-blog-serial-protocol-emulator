@@ -89,7 +89,16 @@ module tt_um_protocol_emulator (
 
   wire       uart_rx = ui_in[0];
   wire       run     = ui_in[1];
-  wire       uart_tx;
+
+  // The SoC's pin port carries PROTOCOL pins only -- `run` is a separate
+  // control input, not a pin. Under the SoC's "outputs low, inputs high" rule
+  // (see the header of rtl/pe_uart_soc.v) the shared UART/SPI map is:
+  //   bit 0 = TX / SCLK, bit 1 = (spare) / MOSI, bit 2 = (spare) / CS_N,
+  //   bit 3 = RX / MISO
+  // which is why PIN_IN_MASK there is 8'hF8. Only the UART pair is wired to
+  // pads today; the remaining bits are unclaimed until the pin matrix lands.
+  wire [7:0] pin_in_bus  = {4'b0, uart_rx, 3'b0};   // RX on bit 3
+  wire [7:0] pin_out_bus;
   wire [7:0] dbg_pc, dbg_a, dbg_timer;
 
   pe_uart_soc #(
@@ -105,15 +114,15 @@ module tt_um_protocol_emulator (
     .host_addr(host_addr),
     .host_wdata(host_wdata),
     .run(run),
-    .pin_in(uart_rx),
-    .pin_out(uart_tx),
+    .pin_in(pin_in_bus),
+    .pin_out(pin_out_bus),
     .dbg_pc(dbg_pc),
     .dbg_a(dbg_a),
     .dbg_timer(dbg_timer)
   );
 
   // ---- dedicated outputs -------------------------------------------------
-  assign uo_out[0]   = uart_tx;
+  assign uo_out[0]   = pin_out_bus[0];    // UART TX / protocol pin 0
   assign uo_out[1]   = dbg_timer[7];      // heartbeat: ~one edge per 128 ticks
   assign uo_out[7:2] = dbg_pc[5:0];
 
@@ -139,12 +148,15 @@ module tt_um_protocol_emulator (
 
   // ---- deliberately unused ----------------------------------------------
   // `ena` is ignored on purpose (see the header). uio_in is readable but not
-  // consumed until the pin matrix lands. Sinking them explicitly is what keeps
-  // tb/lint.sh clean without a blanket waiver.
+  // consumed until the pin matrix lands. pin_out_bus[7:1] are the port bits the
+  // pin matrix will claim; until it exists nothing routes them to a pad, so
+  // they are sunk here rather than left as a silent unused-signal warning.
+  // Sinking them explicitly is what keeps tb/lint.sh clean without a blanket
+  // waiver.
   // dbg_pc[7:6] are not brought out: only 6 of the 8 uo_out bits are spare
   // after TX and the heartbeat, and the low 6 bits of the program counter are
   // the ones that move during bring-up.
-  wire _unused = &{ena, uio_in, ui_in[7:2],
+  wire _unused = &{ena, uio_in, ui_in[7:2], pin_out_bus[7:1],
                    dbg_a, dbg_timer[6:0], dbg_pc[7:6], 1'b0};
 
 endmodule

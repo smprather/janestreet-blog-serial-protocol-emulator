@@ -96,9 +96,11 @@ wait_start:
         ; straight through -- which is the correct behaviour.
 wait_idle:
         IN    A, PIN
+        AND   A, 8                 ; the port is 8 bits; bit 3 is RX
         JZ    wait_idle            ; line low -> still in the previous frame
 wait_low:
         IN    A, PIN
+        AND   A, 8
         JNZ   wait_low             ; line high -> not yet a start bit
         ; falling edge seen: the start bit begins here
 
@@ -136,6 +138,7 @@ bit_loop:
         STM   12, A
 
         IN    A, PIN               ; sample at the bit centre
+        AND   A, 8                 ; the port is 8 bits; bit 3 is RX
         JZ    no_bit
         LDM   A, 12
         ADD   A, 0x80              ; set the top bit (ADD is safe: it is 0)
@@ -187,6 +190,7 @@ skip2w:
         ; bit. Wait for idle (high) before taking the line.
 tx_waitidle:
         IN    A, PIN
+        AND   A, 8                 ; the port is 8 bits; bit 3 is RX
         JZ    tx_waitidle
 
         LDI   A, 0

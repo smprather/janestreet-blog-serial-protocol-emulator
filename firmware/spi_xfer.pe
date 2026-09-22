@@ -1,0 +1,199 @@
+; spi_xfer.pe — an SPI mode 0 master implemented entirely in software for pe_cpu.
+;
+; THERE IS NO SPI HARDWARE. No shift register, no clock divider, no baud
+; generator, no bit counter. Four pins and a byte of dmem are the whole
+; interface: SCLK and MOSI are driven by read-modify-write on the output port,
+; MISO is read from the input port, and the frame is a loop.
+;
+; This is the second baseline protocol in the competition's "UART, SPI, and
+; I2C" set, and it is the one that proves the SoC's shared port design: UART
+; and SPI run on the SAME 8-bit port with the SAME PIN_IN_MASK. Nothing in the
+; RTL knows which one is running.
+;
+; ---------------------------------------------------------------------------
+; PIN MAP (see the header of rtl/pe_uart_soc.v for the rule)
+;
+;   bit 0  out  SCLK      bit 1  out  MOSI
+;   bit 2  out  CS_N      bit 3  in   MISO
+;
+; The port is written as a whole byte, so every pin change is a
+; read-modify-write: read PIN, OR to raise a pin, AND-mask to lower it. There
+; is no per-pin set/clear, which is why the masks below are written out rather
+; than named.
+;
+; ---------------------------------------------------------------------------
+; MODE 0 (CPOL=0, CPHA=0), AND WHY IT IS THE EASY ONE FOR SOFTWARE
+;
+;   * SCLK idles LOW.
+;   * MOSI must be valid BEFORE the rising edge (the slave samples on rise).
+;   * MISO is sampled by the master ON or just after the rising edge.
+;   * The slave changes MISO on the FALLING edge.
+;
+; So the loop is: set MOSI while SCLK is low, raise SCLK, sample MISO, lower
+; SCLK, next bit. One pin change and one sample per half period, all on the
+; rising edge -- no edge is ever shared between driving and sampling, which is
+; what would need real hardware.
+;
+; Mode 0 is also why this firmware can be slow without being wrong: SPI is
+; SYNCHRONOUS. The slave times itself off our SCLK, so there is no baud rate to
+; hit and no jitter budget to spend. The clock rate here is set by the shared
+; tick counter (260 clocks at 60 MHz), giving a half period of 1 tick =
+; 4.33 us and an SCK of ~115 kHz. That is deliberately the same tick the UART
+; firmware uses: no new timing hardware, and the number is checkable.
+;
+; ---------------------------------------------------------------------------
+; LSB-FIRST IS THE UART'S PROBLEM, MSB-FIRST IS THIS ONE
+;
+; SPI sends the MSB first. The ISA has SHR and no shift-left, so the UART's
+; receive loop (SHR the accumulator, insert at the top) is exactly backwards
+; here. Two consequences, both handled below:
+;
+;   * SENDING a bit 7: test it with AND 0x80, then shift the working copy LEFT.
+;     Shift-left is `MOV X, A ; ADD A, X` -- A + A. (Register-register ADD is
+;     not in the ISA and tools/peasm.py rejects it, but X is addressable as the
+;     ALU's second operand, which is why this is two instructions and not one.)
+;   * RECEIVING into bit 7 after 8 bits: shift the accumulator LEFT the same
+;     way and OR in the new bit at bit 0. After 8 iterations the first bit
+;     received has walked up to bit 7.
+;
+; The asymmetry with uart_echo.pe is the point: one port, one mask, two
+; protocols whose bit orders are opposite, and the difference is entirely
+; software.
+;
+; ---------------------------------------------------------------------------
+; Data buffer (DMEM, 16 bytes)
+;
+;   0..7   rolling receive buffer (8 entries, wraps with AND 0x07)
+;   8      tick snapshot
+;   12     transmit working copy (shifted left once per bit)
+;   13     bits remaining
+;   14     write pointer
+;   15     last byte received
+
+        ; ---- idle: CS_N high (bit 2), SCLK low, MOSI low ----------------
+        ; Written explicitly rather than assumed, because reset drives bit 0
+        ; HIGH (the UART TX idle level) and that is SCLK high for SPI -- an
+        ; active-edge level, not an idle one. See the reset comment in
+        ; rtl/pe_uart_soc.v: the reset value serves the resident protocol and
+        ; every other protocol's firmware must state its own idle pattern
+        ; before it does anything else.
+        LDI   A, 4
+        OUT   TXPIN, A             ; CS_N = 1, SCLK = 0, MOSI = 0
+        LDI   A, 0
+        STM   14, A                ; write pointer := 0
+        LDI   A, 0
+        STM   15, A                ; last received := 0
+
+; =========================================================== main loop
+main:
+        ; ---- assert CS_N (bit 2 -> 0) -----------------------------------
+        IN    A, PIN
+        AND   A, 0xFB              ; clear bit 2: CS_N low, frame begins
+        OUT   TXPIN, A
+
+        ; ---- set up one byte, MSB first --------------------------------
+        ; 0x5B, NOT 0x5A. This is a test-quality choice and it took a
+        ; deliberate check to find: 0x5A (01011010) is a BIT PALINDROME --
+        ; reversed it is still 0x5A -- so a master that shifted LSB-first would
+        ; put the exact same levels on MOSI and no test could tell the
+        ; difference. The same trap applies to 0x81, 0x3C, 0x00 and 0xFF.
+        ; 0x5B (01011011) reverses to 0xDA, so the pin sequence is unique to
+        ; the bit order and the mutation is catchable.
+        LDI   A, 0x5B
+        STM   12, A
+        LDI   A, 8
+        STM   13, A
+        LDI   A, 0
+        STM   15, A                ; clear the receive accumulator
+
+; ---- one bit: present MOSI, clock it, sample MISO ----------------------
+bit_loop:
+        ; SCLK is low here, which is when mode 0 says data may change.
+        LDM   A, 12
+        MOV   X, A
+        AND   A, 0x80              ; isolate the MSB
+        JZ    mosi_low
+        IN    A, PIN
+        OR    A, 2                 ; MOSI high
+        JMP   mosi_done
+mosi_low:
+        IN    A, PIN
+        AND   A, 0xFD              ; MOSI low
+mosi_done:
+        OUT   TXPIN, A
+
+        ; shift the working copy left for the next bit (A + A)
+        LDM   A, 12
+        MOV   X, A
+        ADD   A, X
+        STM   12, A
+
+        ; ---- SCLK rises: the slave samples MOSI -------------------------
+        IN    A, PIN
+        OR    A, 1
+        OUT   TXPIN, A
+
+        ; ---- sample MISO (bit 3) ---------------------------------------
+        ; Read AFTER the rising edge, which is where mode 0 puts the master's
+        ; sample point. The slave has been driving MISO since the previous
+        ; falling edge, so the value is stable and this read is not a race --
+        ; it is the whole reason CPHA=0 is the easy mode for software.
+        IN    A, PIN
+        AND   A, 8
+        JZ    miso_zero
+        LDM   A, 15
+        MOV   X, A
+        ADD   A, X                 ; acc <<= 1
+        OR    A, 1                 ; insert the new bit at bit 0
+        STM   15, A
+        JMP   miso_done
+miso_zero:
+        LDM   A, 15
+        MOV   X, A
+        ADD   A, X                 ; acc <<= 1, and insert a 0
+        STM   15, A
+miso_done:
+
+        ; ---- SCLK falls: the slave may now change MISO ------------------
+        IN    A, PIN
+        AND   A, 0xFE
+        OUT   TXPIN, A
+
+        ; ---- half a period before the next bit -------------------------
+        ; One tick, via the same poll-the-timer idiom uart_echo.pe uses. The
+        ; wait returns after (0, 1] ticks rather than exactly 1 (the counter is
+        ; free-running and not aligned to anything we control), so the SCLK
+        ; half period varies between ~1 and ~2 ticks. For SPI that is
+        ; harmless and worth saying plainly: a synchronous slave times itself
+        ; off these edges, so duty-cycle jitter costs nothing. It would be
+        ; fatal for the UART, whose receiver has only its own clock.
+        IN    A, TIMER
+        STM   8, A
+tick_wait:
+        IN    A, TIMER
+        LDM   X, 8
+        SUB   A, X
+        JZ    tick_wait
+
+        LDM   A, 13
+        SUB   A, 1
+        STM   13, A
+        JNZ   bit_loop
+
+        ; ---- frame complete -------------------------------------------
+        ; Deassert CS_N and leave SCLK low, which is the mode 0 idle state.
+        IN    A, PIN
+        OR    A, 4                 ; CS_N high
+        OUT   TXPIN, A
+
+        ; ---- buffer the received byte ----------------------------------
+        LDM   A, 14
+        MOV   X, A                 ; X := write pointer
+        LDM   A, 15
+        STS   [X], A               ; buffer[ptr] := received byte
+        LDM   A, 14
+        ADD   A, 1
+        AND   A, 0x07              ; wrap within the 8-entry buffer
+        STM   14, A
+
+        JMP   main

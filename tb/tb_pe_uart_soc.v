@@ -37,8 +37,14 @@ module tb_pe_uart_soc;
   logic [IAW-1:0] host_addr;
   logic [15:0] host_wdata;
 
-  // wire
-  logic rx_pin, tx_pin;
+  // wire. The SoC's port is 8 bits wide with "outputs low, inputs high"
+  // (rtl/pe_uart_soc.v header): bit 0 = UART TX, bit 3 = UART RX. The TB keeps
+  // its own single-bit view of each side and packs/unpacks at the port.
+  logic rx_pin;                        // TB drives this
+  wire  tx_pin;                        // SoC drives this: port bit 0
+  wire  [7:0] pin_in_bus  = {4'b0, rx_pin, 3'b0};   // RX on bit 3
+  wire  [7:0] pin_out_bus;
+  assign tx_pin = pin_out_bus[0];
 
   logic [7:0] dbg_pc, dbg_a, dbg_timer;
 
@@ -49,7 +55,7 @@ module tb_pe_uart_soc;
     .clk(clk), .rst_n(rst_n),
     .host_we(host_we), .host_imem_sel(host_imem_sel),
     .host_addr(host_addr), .host_wdata(host_wdata), .run(run),
-    .pin_in(rx_pin), .pin_out(tx_pin),
+    .pin_in(pin_in_bus), .pin_out(pin_out_bus),
     .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_timer(dbg_timer)
   );
 

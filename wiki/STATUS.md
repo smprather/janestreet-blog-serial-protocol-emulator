@@ -13,11 +13,23 @@ Both layers of the thesis now exist and are verified:
   cells, and the SERDES through the full LibreLane place-and-route flow to a
   clean 66 MHz signoff.
 - **Milestone 2 — the programmable core.** A CPU, an assembler, a bit-accurate
-  emulator, and a **UART written entirely in firmware** running on real RTL.
-  There is no UART state machine in the hardware: the framing and bit timing are
-  a program (`firmware/uart_echo.pe`) that the CPU executes against one input
-  pin, one output pin and a tick counter. That is the competition thesis,
-  demonstrated end to end in simulation.
+  emulator, and **two baseline protocols written entirely in firmware** — UART
+  and, as of 2026-09-22, **SPI mode 0**. Neither has a state machine in the
+  hardware: the framing and bit timing are programs (`firmware/uart_echo.pe`,
+  `firmware/spi_xfer.pe`) the CPU executes against the pad interface and a tick
+  counter. Both protocols share the **same 8-bit port and the same direction
+  mask**, so nothing in the RTL knows which one is running. That is the
+  competition thesis, demonstrated end to end in simulation for two of the
+  blog's three baseline protocols.
+
+**The full SoC now routes and times clean.** On 2026-09-22 the full-SoC
+LibreLane run closed setup and hold at all three corners with **+1.234 ns setup
+slack worst-case** and the instruction-fetch path (SRAM `A_CLK` -> `A_DOUT` ->
+CPU) measured in context at **7.639 ns**, against a 15.15 ns period. The routing
+finished with **zero DRC violations**. See [[reference/sram-budget]] for the
+numbers and `flow/pe_uart_soc.json` for the two flow fixes that got it there
+(the `GRT_ADJUSTMENT` derate and a custom PDN config for the macro's Metal4
+supplies — [[STATUS]] gotcha 33).
 
 **The repo is now submittable**: `rtl/tt_um_protocol_emulator.v` and `info.yaml`
 exist, so there is a `tt_um_*` top level with a real pad interface
@@ -25,7 +37,7 @@ exist, so there is a `tt_um_*` top level with a real pad interface
 `uio[1:0]`. Until 2026-09-20 every pin-budget conclusion in the wiki described an
 interface that no RTL in this repo implemented.
 
-Nothing has been taped out. The pin matrix and the SRAM swap do not exist yet. **[[plans/through-i2c]] has the ordered work list to the next
+Nothing has been taped out. The pin matrix does not exist yet. **[[plans/through-i2c]] has the ordered work list to the next
 milestone** (the I2C transaction); the summary is at the bottom of this file.
 
 ```
@@ -85,8 +97,17 @@ states the reasoning; do not "unify" them without reading it.
 | **DRU** (oversampled Manchester receive) | `rtl/pe_dru.v` | 116 | 2,065 | `tb_pe_dru` |
 | **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 383 | 4,939 | `tb_pe_cpu` |
 | **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
-| **Software-UART SoC** (CPU + tick timer + 2 pins) | `rtl/pe_uart_soc.v` | **1,083** | **19,795 total** | `tb_pe_uart_soc`, `tb_pe_tick_status` |
+| **Software-UART SoC** (CPU + tick timer + 8-bit pin port) | `rtl/pe_uart_soc.v` | **1,083** | **19,795 total** | `tb_pe_uart_soc`, `tb_pe_tick_status` |
 | **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **1,083** | **19,795 total** | `tb_tt_um_protocol_emulator` |
+
+Firmware (no RTL cells — these are programs the CPU runs; see
+[[concepts/spi-as-firmware]]):
+
+| Program | Words | Verified by |
+|---|---|---|
+| `firmware/uart_echo.pe` — 115200 8N1 echo | 118 | `tb_pe_uart_soc.v` (real RTL), `tools/peemu.py` |
+| `firmware/tick_count.pe` — STATUS-port exerciser | 8 | `tb_pe_tick_status.v` (real RTL) |
+| `firmware/spi_xfer.pe` — SPI mode 0 master | 70 | `tools/peemu.py` (mode-0 slave model) |
 
 Numbers from `tb/synth_area.sh` (sg13g2 typ corner, mapped pre-route). The routed
 figure for the SERDES comes from the full LibreLane flow (route+CTS+PDN inflate
@@ -466,6 +487,62 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     uninitialised memory, and it hung like a firmware bug. The `$readmemh`
     warning was in the very output being read. Before diagnosing a design, check
     the run for warnings about the *inputs* it was supposed to load.
+30. **A bit-palindromic test vector cannot catch a bit-order bug.** SPI is
+    MSB-first and the UART is LSB-first, so "does this firmware shift the right
+    way" is the central question for SPI — and the first version of
+    `firmware/spi_xfer.pe` sent `0x5A`, which reversed is still `0x5A`. A master
+    that shifted LSB-first would have put the **identical levels on the wire**.
+    `0x00`, `0xFF`, `0x0F`, `0x3C`, `0x81` and `0xAA` are the same trap. Check
+    the vector: `int('{:08b}'.format(b)[::-1], 2) != b`. This is gotcha 14
+    wearing different clothes — a test that cannot fail is not a test.
+31. **A mutation that cannot change observable behaviour cannot be caught, and
+    demanding that it be caught is demanding a lie.** Three SPI mutations were
+    built: flipping the MOSI bit order *was* caught (slave saw `80 80 80 80`),
+    and driving MOSI after the clock rise *was* caught (slave saw `2D AD AD AD`,
+    the previous bit — the classic CPHA error). Sampling MISO *before* the
+    rising edge was **not** caught, and that is correct: a CPHA=0 slave presents
+    MISO on the falling edge and holds it through the rise, so the sample point
+    can be anywhere in the low phase. Before treating an uncaught mutation as a
+    coverage hole, check whether the mutation is observable at all. Record the
+    ones that are not, so the next person does not re-derive it.
+32. **A free-running tick counter cannot measure a fixed delay, and the error is
+    one whole tick — not a rounding error.** The tick wait in both firmwares
+    snapshots the count and loops until it changes, so it returns after anywhere
+    in (0, 1] ticks. For the **UART** that misalignment is the dominant error
+    term (it is why a sample can land on a bit boundary; see
+    [[concepts/cdr-oversampling]] and `firmware/uart_echo.pe`'s timing note). For
+    **SPI** the same jitter is completely harmless, because the slave times
+    itself off the SCLK edges we generate — a synchronous link has no baud rate
+    to hit. Same code, same jitter, opposite consequences: the protocol decides
+    whether clock jitter is a defect.
+33. **A hardware macro's power pins are on the macro's own layers, and the PDN's
+    straps may be on different ones — `PDN_MACRO_CONNECTIONS` does NOT fix that.**
+    The IHP SRAM's `VDD!`/`VSS!`/`VDDARRAY!` straps are **Metal4** and run the
+    full height of the macro; `pdngen`'s generated grid is **TopMetal1/TopMetal2**
+    with Metal1 rails. `PDN_MACRO_CONNECTIONS` (format `<inst> <vdd_net>
+    <gnd_net> <vdd_pin> <gnd_pin>`, one entry **per power pin** — this macro has
+    two power pins, so two entries) connects the pins **logically**, and it does
+    work: the log prints `<inst> matched with u_imem.g_macro.u_sram`. But a
+    logical connection is not a physical path, so `check_power_grid` still
+    reported ~50 unconnected Metal4 shapes and `PSM-0069`, and the router —
+    free to use Metal4 for signal — **shorted into them**. The fix is a custom
+    `PDN_CFG` that stripes the macro on its own supply layer and steps up:
+    `add_pdn_stripe -grid macro -layer Metal4` + `add_pdn_connect -layers "Metal4
+    $PDN_VERTICAL_LAYER"`. Result, same input ODB: stock config = `PSM-0069
+    FAILED`; custom = **`PSM-0040 All shapes on net VPWR/VGND are connected`**.
+    See `flow/pe_uart_soc_pdn.tcl`. **Check the macro's LEF layers before
+    believing the grid is wrong — and before believing `PDN_MACRO_CONNECTIONS`
+    is enough.**
+34. **Global-routing congestion at low utilization is a CONFIG derate, not a
+    capacity problem.** The full SoC failed `GRT-0116` with 34 overflowed GCells
+    at **4.59% total usage** on the real 6x4 die. The cause was `GRT_ADJUSTMENT`:
+    LibreLane's generic default is **0.3** (the log prints `[INFO GRT-0022]
+    Global adjustment: 30%`) while the IHP PDK ships `GRT_LAYER_ADJUSTMENTS = 0.00`
+    for all 7 routing layers — so the PDK's own stated intent is no derate and
+    the 30% was an inherited default fighting it. Setting `GRT_ADJUSTMENT = 0.0`
+    took the same design to **0 overflow on every layer at 2.88-3.03% usage**.
+    When a router fails at single-digit utilization, read the adjustment numbers
+    it prints before doubting the floorplan.
 
 ## Open questions / risks
 
@@ -502,21 +579,24 @@ of that plan are the housekeeping this file just went through.
 ### The recommended order, and why it is not DRU and LFSR next
 
 The blog's baseline is **"Start with UART, SPI, and I2C"**; USB and 10Mbit Ethernet
-are stretch goals. Only UART exists as firmware today. SPI and I2C are proven at the
-SERDES level by their testbenches but neither has been demonstrated as a *program*,
-which is the thing the whole submission claims. **Finish the baseline before the
-stretch**, and inside the baseline take the cheap one first.
+are stretch goals. **UART and SPI both exist as firmware today** (steps 1-2 below
+are done); I2C is proven at the SERDES level by its testbench but has not been
+demonstrated as a *program*, which is the thing the whole submission claims.
+**Finish the baseline before the stretch**, and inside the baseline take the cheap
+one first.
 
-1. **SRAM swap for instruction memory** ([[decisions/adr-003-memory-plan]]).
-   Highest leverage in the project: it takes the design from 89% of a 4×6 die to
-   54%, and from 128 program words to 1,024. `uart_echo` is already 114 of 128, and
-   `tools/peasm.py` now *hard-fails* past the limit rather than silently aliasing,
-   so the next protocol hits this wall immediately. Independent of everything else.
-2. **SPI as firmware.** The cheapest remaining baseline protocol, because **SPI
-   needs no pin matrix**: it is push-pull on 4 pins with no open-drain, no
-   arbitration and no clock stretching. It needs the SoC's single in/out pin
-   generalised to a multi-bit port, which is a fraction of the matrix. Completes
-   baseline protocol #2 with almost no new hardware.
+1. ~~**SRAM swap for instruction memory**~~ **DONE 2026-09-20**
+   ([[decisions/adr-003-memory-plan]]). Took the design from 89% of a 4x6 die to
+   54%, and from 128 program words to 1,024 via the real `1P_1024x16` macro.
+2. ~~**SPI as firmware.**~~ **DONE 2026-09-22** — `firmware/spi_xfer.pe`, a mode-0
+   master, verified in `tools/peemu.py` against a modelled slave, with three
+   mutations built to prove the test can fail ([[concepts/spi-as-firmware]]).
+   It needed no pin matrix, as predicted: the SoC's single in/out pin became an
+   8-bit port with a build-time direction mask, and **UART and SPI share that one
+   port and mask**. Completes baseline protocol #2.
+   *Still open from this step:* `tb_pe_spi_soc.v` does not exist, so SPI firmware
+   has no RTL testbench — the emulator is currently its only executable
+   specification. UART has the equivalent in `tb_pe_uart_soc.v`.
 3. **Pin matrix / OE**, then **I2C** ([[plans/through-i2c]]). The real new hardware:
    open-drain, read-back for arbitration, clock stretching. It replaces the fixed
    mapping in `rtl/tt_um_protocol_emulator.v` and gates every stretch protocol too.

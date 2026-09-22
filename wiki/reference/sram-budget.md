@@ -157,17 +157,37 @@ before committing to an SRAM-heavy architecture.
 - Macro timing comes with the macros (fast/typ/slow .lib), so SRAM access
   time is fixed and must be budgeted against the 60 MHz system clock
   (16.667 ns period). **This is the tightest path in the SoC, not the logic.**
-  Measured from the `.lib` shipped with the PDK, for the instantiated
+  From the `.lib` shipped with the PDK, for the instantiated
   `RM_IHPSG13_1P_1024x16_c2_bm_bist`: the `A_CLK` -> `A_DOUT` clock-to-output
   is **7.25 ns at the slow corner** (1.08 V, 125 C), 4.34 ns at typ and
   2.67 ns at fast. That is 43% of a 60 MHz period. `pe_imem` deliberately has
   NO output register (it would add a second cycle of latency and break the
   CPU's fetch-ahead, which assumes exactly one), so the whole
-  `A_CLK -> A_DOUT -> CPU` path is combinational after the macro. Before
-  tapeout the SoC needs its own STA run at 15.15 ns: the pe_serdes signoff
-  does not cover this, because that design has no SRAM.
+  `A_CLK -> A_DOUT -> CPU` path is combinational after the macro.
+
+**Now MEASURED in the full SoC, post-route** (this replaces the estimate the
+paragraph above used to end on). The full-SoC LibreLane run reported:
+
+| quantity | value |
+|---|---|
+| SRAM in-context `A_CLK` -> `A_DOUT` | **7.639 ns** (vs 7.25 ns from the .lib table) |
+| total path arrival | 13.356 ns |
+| total path required | 14.590 ns |
+| **setup slack, slow corner** | **+1.234 ns** |
+| hold slack, slow corner | +0.654 ns |
+
+The in-context number is 0.39 ns worse than the standalone .lib table figure,
+which is the clock-tree and routing overhead of actually placing the macro --
+and it is the reason the standalone table was labelled an estimate. Setup and
+hold both close at all three corners with zero violating paths, so the
+instruction-fetch path is no longer a projected risk: it is a signed-off
+  result, with 1.234 ns of margin at 60 MHz.
 - Floorplanning matters: a rotated macro has its pins on a different edge,
   which constrains where the logic around it can go.
+- The macro's power pins are on **Metal4** while the PDN grid is built on
+  TopMetal1/TopMetal2, so the stock PDN config leaves the macro's supplies
+  unconnected (`PSM-0069`). The SoC's flow uses a custom `PDN_CFG` that
+  stripes Metal4 and steps up to the grid; see `flow/pe_uart_soc_pdn.tcl`.
 
 ## Related
 

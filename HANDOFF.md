@@ -92,11 +92,19 @@ clocks, tLOW 5 ticks / tHIGH 6 → 90.9 kbit/s), the read-path timing budget
 (40 cycles to sample and arbitrate), and an 8-step ordered work list whose step 1
 is done.
 
-**Updated 2026-09-20: the CRC LFSR and the DRU are now BUILT** (`rtl/pe_crc.v` 209
+**Updated 2026-09-22: SPI-as-firmware is DONE, and the full SoC routes and times
+clean.** `firmware/spi_xfer.pe` is a mode-0 SPI master running on the same 8-bit
+port (and the same `PIN_IN_MASK`) as the UART; `tools/peemu.py` models a mode-0
+slave so the firmware is exercised end to end ([[concepts/spi-as-firmware]]).
+`RUN_2026-09-22_00-33-59` finished detailed routing with **0 DRC violations** and
+signed off **setup WNS +1.234 ns / hold +0.127 ns / 0 violations at all three
+corners**; the SRAM in-context access is **7.639 ns** against a 15.15 ns period
+([[reference/sram-budget]]). That closes the "SRAM is the critical path and no
+signoff covers it" risk below. What remains of the ordered list is **step 4: the
+pin matrix / OE** (open-drain, read-back, tri-state) for I2C. **Update
+2026-09-20: the CRC LFSR and the DRU were already BUILT** (`rtl/pe_crc.v` 209
 cells, `rtl/pe_dru.v` 116 cells, both with self-checking TBs and both in
-`run_all.sh`) — items 4 and 5 of STATUS's ordered list. That leaves the SRAM swap and
-SPI-as-firmware (items 1 and 2) as the next unstarted work, then **step 4: the pin
-matrix / OE** (open-drain, read-back, tri-state) for I2C.
+`run_all.sh`), and the SRAM swap landed on 2026-09-20.
 
 If you touch `pe_crc`: its constants are generated and catalogue-checked
 (`tools/gen_crc_config.py`) — never hand-edit [[reference/crc-config]]. The traps are
@@ -115,11 +123,21 @@ exact and refines the RX grid 50% (SPB 8 -> 12). 66 MHz survives only as a
 conservative STA signoff target ("close at 66, run at 60"). 40 MHz is no longer the
 default but still passes if selected by parameter.
 
-**The SRAM is now the critical path, and no existing signoff covers it.** The
-1024x16 macro's `A_CLK` -> `A_DOUT` is 7.25 ns at the slow corner = 43% of a
+**The SRAM WAS the critical path, and the SoC now has the signoff that covers it.**
+The 1024x16 macro's `A_CLK` -> `A_DOUT` is 7.25 ns at the slow corner = 43% of a
 16.667 ns period. `pe_imem` has no output register by design (it would add a cycle
 and break the CPU's fetch-ahead). The pe_serdes STA run has no SRAM in it, so the
-SoC needs its own run at 15.15 ns before tapeout.
+SoC needed its own run at 15.15 ns — and that run now exists: the full-SoC
+LibreLane flow closed setup at **+1.234 ns** and hold at **+0.127 ns** worst-case
+with zero violating paths at all three corners, and measured the SRAM access
+**in context** at **7.639 ns**. Numbers and method: [[reference/sram-budget]].
+Two flow settings were needed and both are documented in `flow/pe_uart_soc.json`
+with the reasoning inline: **`GRT_ADJUSTMENT: 0.0`** (the generic 30% derate was
+causing `GRT-0116` congestion at 4.59% utilization) and a custom **`PDN_CFG`**
+(`flow/pe_uart_soc_pdn.tcl`) because the macro's supplies are on **Metal4** while
+the PDN grid is TopMetal1/TopMetal2 — `PDN_MACRO_CONNECTIONS` connects them
+logically but builds no physical path, so the grid check failed with `PSM-0069`.
+STATUS gotchas 33-34.
 
 It now has a top level to plug into. `rtl/tt_um_protocol_emulator.v` (added
 2026-09-20) is the Tiny Tapeout deliverable: before it there was no `tt_um_*`

@@ -224,8 +224,8 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
                  ? ((IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS)) : 8)-1:0]` | _no note yet_ |
 | `host_wdata` | inp | `[15:0]` | _no note yet_ |
 | `run` | inp | 1 | _no note yet_ |
-| `pin_in` | inp | 1 | _no note yet_ |
-| `pin_out` | out | 1 | _no note yet_ |
+| `pin_in` | inp | `[7:0]` | _no note yet_ |
+| `pin_out` | out | `[7:0]` | _no note yet_ |
 | `dbg_pc` | out | `[7:0]` | _no note yet_ |
 | `dbg_a` | out | `[7:0]` | _no note yet_ |
 | `dbg_timer` | out | `[7:0]` | _no note yet_ |

@@ -320,3 +320,88 @@
 - Updated: ADR-005, tx-timing-generation.md, cdr-oversampling.md, STATUS.md, HANDOFF.md,
   index.md, ethernet-scope.md, tiny-tapeout.md, clocking-options.md,
   strobe-and-committing-edge.md, README.md, through-i2c.md, plan-through-i2c.json.
+
+## [2026-09-22] build | SPI as firmware — the second baseline protocol, and two flow fixes
+- **SPI mode 0 as pure software** (`firmware/spi_xfer.pe`, 70 words): no shift
+  register, no baud generator, no bit counter in RTL. SCLK/MOSI/CS_N are driven
+  by read-modify-write on the shared 8-bit port; MISO is read from it. Built on
+  the port that ADR-004's widening enabled.
+- **Emulator gained an SPI wire model** (`tools/peemu.py`): `poll_spi_slave`
+  models a mode-0 slave and `--spi-slave` selects it instead of the UART model.
+  The two directions are checked independently — the master's view from its
+  rolling buffer, the slave's view assembled from the MOSI PIN. A master that
+  drives the wrong edge is caught by the second even when its own receive path
+  looks fine.
+- **A bit-palindrome in the test vector made the first test unfalsifiable.**
+  `0x5A` reversed is still `0x5A`, so an LSB-first master would put identical
+  levels on MOSI. Firmware now sends `0x5B`, slave answers `0xA7 E5 96 C1`;
+  every byte checked `reverse != self`. Recorded as STATUS gotcha 30.
+- **Three mutations built, two caught, one correctly not:** bit-order flip caught
+  (`80 80 80 80`), MOSI-after-rise/CPHA error caught (`2D AD AD AD`), sampling
+  MISO before the rise **not** caught — because a CPHA=0 slave holds MISO from
+  the falling edge, so that mutation is not observable. Recorded as gotcha 31.
+- **Same tick jitter, opposite verdicts** (gotcha 32): the free-running tick wait
+  returns in (0,1] ticks; fatal for the UART's free-running receiver, invisible
+  for SPI's synchronous slave.
+- **Full-SoC flow fixes, both diagnosed to root cause:**
+  - **Global routing congestion was the `GRT_ADJUSTMENT` derate, not capacity.**
+    LibreLane's generic default is 0.3 while the IHP PDK ships per-layer
+    `GRT_LAYER_ADJUSTMENTS = 0.00`; the run log says `[INFO GRT-0022] Global
+    adjustment: 30%`. At the real 6x4 die (1002x432, ADR-003) with logic at 7.6%
+    utilization, 0.3 still overflowed 34 GCells across Metal2-5 and TopMetal1.
+    Set to **0.0** — global routing now finishes with **0 overflow on every
+    layer, 2.88% usage**.
+  - **SRAM macro power: `PDN_MACRO_CONNECTIONS` needs one entry PER POWER PIN**
+    (the macro has `VDD!` AND `VDDARRAY!`), and the macro's supply straps are
+    **Metal4** while pdngen's grid is TopMetal1/TopMetal2 — so ~50 Metal4 shapes
+    are still reported unconnected. Gotcha 33. `PSM-0069` connectivity failures
+    are still open; the flow defers them ("you may ignore these if LVS passes").
+- **Fixed a fabrication of my own** before it reached the repo: a config comment
+  quoted an OpenROAD warning (`GRT-0704`) that does not exist in any run log.
+  Replaced with the message the run actually emits.
+- Verified: **21/21 RTL TBs, 15/15 firmware** (was 13 — the two SPI cases are
+  new), param guards OK, lint clean, 4/4 drift gates.
+- New: `wiki/concepts/spi-as-firmware.md`. Updated: STATUS.md (gotchas 30-33),
+  index.md, firmware/spi_xfer.pe, tools/peemu.py, tb/run_firmware_tests.sh,
+  flow/pe_uart_soc.json.
+
+## [2026-09-22] build | Full SoC routed and timed clean — two flow fixes, both root-caused
+- **The full-SoC flow now closes.** `RUN_2026-09-22_00-33-59` reached
+  detailed routing with **0 DRC violations**, then post-PnR STA signed off
+  **setup WNS +1.234 ns / hold WNS +0.127 ns / 0 violating paths at all three
+  corners**. The instruction-fetch path this run existed to measure:
+  - SRAM `A_CLK` -> `A_DOUT` in context: **7.639 ns** (vs 7.25 ns in the .lib
+    table -- the 0.39 ns is clock-tree + placement overhead, and it is why the
+    table figure was labelled an estimate)
+  - path arrival 13.356 ns vs 14.590 ns required at 15.15 ns period
+  - slow corner hold +0.654 ns
+  Written into [[reference/sram-budget]] (generated; the estimate paragraph is
+  now replaced by the measured table).
+- **Flow fix 1 -- global routing congestion was a config derate, not capacity.**
+  The run failed `GRT-0116` with 34 overflowed GCells at **4.59% total usage**.
+  Cause: `GRT_ADJUSTMENT` defaults to **0.3** (log: `[INFO GRT-0022] Global
+  adjustment: 30%`) while the IHP PDK ships `GRT_LAYER_ADJUSTMENTS = 0.00` for
+  all 7 layers. Setting it to 0.0 gave **0 overflow, 2.88% usage**. Gotcha 34.
+- **Flow fix 2 -- the SRAM's supplies are Metal4 and the PDN grid is
+  TopMetal1/TopMetal2, so `PDN_MACRO_CONNECTIONS` was never enough.** It connects
+  the pins *logically* (the log confirms the instance matches) but creates no
+  physical path: `check_power_grid` kept reporting ~50 unconnected Metal4 shapes
+  and `PSM-0069`, and the router shorted into them. Fixed with a custom
+  `PDN_CFG` (`flow/pe_uart_soc_pdn.tcl`) that stripes the macro on **Metal4** and
+  connects Metal4 -> TopMetal1. **Verified with a standalone pdngen harness
+  against the identical step-19 ODB** so the config could be A/B'd in ~1 minute
+  instead of a 30-minute flow run: stock = `PSM-0069 FAILED`, custom =
+  `PSM-0040 All shapes on net VPWR/VGND are connected`. Then confirmed in the
+  real flow (2x PSM-0040, 0x PSM-0038/0069). Gotcha 33, rewritten now that it is
+  solved rather than open.
+- **Corrected a fabricated quote of my own.** An earlier edit to the flow config
+  cited an OpenROAD warning (`GRT-0704`) that does not appear in ANY run log. It
+  was replaced with the message the run actually emits. A config comment that
+  quotes a tool is a claim about the tool, and it has to be checked like one.
+- Verified: **21/21 RTL TBs, 15/15 firmware**, param guards OK, lint clean,
+  4/4 drift gates.
+- Updated: flow/pe_uart_soc.json (GRT_ADJUSTMENT, PDN_CFG), new
+  flow/pe_uart_soc_pdn.tcl, flow/run_librelane.sh (stages PDN_CFG),
+  tools/gen_sram_budget.py + wiki/reference/sram-budget.md, STATUS.md
+  (milestone header, firmware table, gotchas 33-34, next-steps 1-2 marked done),
+  index.md.

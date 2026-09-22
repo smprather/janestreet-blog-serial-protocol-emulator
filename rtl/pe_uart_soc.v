@@ -2,32 +2,87 @@
 //
 // There is NO protocol hardware in this file. No UART state machine, no shift
 // register, no framing logic, no baud generator that knows what a bit is.
-// There is a CPU, a tick counter, one input pin and one output pin, and the
-// rest is software (firmware/uart_echo.pe).
+// There is a CPU, a tick counter, a generalised pin port, and the rest is
+// software (firmware/uart_echo.pe).
 //
 // That is the whole point: swap the program and this speaks I2C, or SWD, or
 // something nobody has written yet, with the gates unchanged.
 //
 // Memory map — the CPU's entire 4-bit IO space:
 //
-//   0x0  PIN     r   bit0 = the input pin's level (uart_rx)
-//   0x1  TXPIN   w   bit0 = the output pin's level (uart_tx)
+//   0x0  PIN     r   the port's current levels, one bit per pin
+//   0x1  PINOUT  w   drive the port's OUTPUT bits
+//   0x1  PINOUT  r   readback (same view as PIN, aids firmware debug)
 //   0x5  TIMER   r   free-running 8-bit counter, one increment per bit period
 //   0x7  STATUS  r   bit0 = "a timer tick happened" (cleared by this read)
 //
-// Sizing rationale: IMEM 128 x 16 = 2048 bits, DMEM 16 x 8 = 128 bits, plus
-// 8 bits of timer = ~2.2 kbit of memory for a complete UART. Both memories are
-// flops. At 0.9 um^2/flop in sg13g2 that is ~2 kum^2 — comparable to the 539
-// standard cells of pe_serdes, and far below one 256x16 SRAM macro (28 kum^2).
-// Swapping IMEM to an SRAM macro is the documented next step once the program
-// outgrows 128 words; the interface here does not change.
+// THE PORT NUMBERING RULE: outputs low, inputs high.
+//
+// Bit 0 is the lowest OUTPUT, and the INPUTs occupy a contiguous run of the
+// HIGH bits; PIN_IN_MASK records where the split falls. That is the whole rule,
+// and the write path below is exactly it: input bits keep their value, output
+// bits take the written value.
+//
+// The reason for a rule rather than a per-pin convention is that firmware has
+// to be able to write a pin value with no arithmetic. Under this rule the first
+// output is always bit 0, so `LDI A, 1; OUT PINOUT, A` raises it -- no shift,
+// no mask, no table. (The ISA has no shift-LEFT instruction, so "the value
+// lives at bit k" would have cost two instructions per bit to fix up.)
+//
+// The cost of the rule is that firmware must MASK a read, because a read
+// returns all 8 bits. The mask is the pin's own bit -- `AND A, 8` for the
+// shared input pin below. Every test of a pin is a zero/nonzero test, so the
+// mask is a constant, not a shift.
+//
+// ASSIGNMENT -- ONE MAP THAT SERVES BOTH BASELINE PROTOCOLS:
+//
+//   bit 0  out  UART TX      / SPI SCLK
+//   bit 1  out  (spare)      / SPI MOSI
+//   bit 2  out  (spare)      / SPI CS_N
+//   bit 3  in   UART RX      / SPI MISO
+//   7:4    in   unclaimed
+//
+// so PIN_IN_MASK = 8'hF8 (outputs 0-2, inputs 3-7). The two protocols share
+// one build-time mask on purpose. The mask cannot be changed at run time, so a
+// mask that served only one of them would mean the chip could not be
+// reprogrammed from UART to SPI without a rebuild -- which is the one thing
+// this whole design exists to disprove. SPI needs three outputs and one input,
+// and both fit in the three-low-outputs / high-inputs shape.
+
+// WHY THE PORT IS 8 BITS WIDE WHEN A UART USES ONE.
+//
+// It started as a single pin each way, which is all a UART needs. SPI is the
+// second baseline protocol and needs four (SCLK, MOSI, MISO, CS_N) all
+// push-pull -- and it needs no pin matrix, because there is no open-drain, no
+// arbitration and no clock stretching. Widening the port to 8 bits is the
+// smallest change that makes SPI expressible as firmware, and it is what the
+// plan calls for: "the SoC's single in/out pin generalised to a multi-bit
+// port, which is a fraction of the matrix."
+//
+// The direction is deliberately still not a per-pin register. Nothing in the
+// baseline needs one: UART and SPI are both push-pull, so every pin is an
+// input or an output for the whole design and the split is a build-time
+// decision (PIN_IN_MASK). The pin MATRIX, which is the next milestone and
+// needed for open-drain, is where per-pin direction belongs. Adding a
+// direction register now would be hardware nothing exercises -- see
+// STATUS gotcha 14.
+//
+// Sizing rationale: IMEM 1024 x 16 words, DMEM 16 x 8 = 128 bits, plus 8 bits
+// of timer. The instruction memory is the SRAM macro (ADR-003/ADR-004).
 
 module pe_uart_soc #(
   parameter int IMEM_WORDS = 1024,
   parameter int DMEM_BYTES = 16,
   parameter int CLK_HZ     = 60_000_000,
   parameter int BAUD       = 115_200,
-  parameter int IMEM_FLOP  = 0     // 0 = SRAM macro, 1 = register array
+  parameter int IMEM_FLOP  = 0,    // 0 = SRAM macro, 1 = register array
+  // Which of the 8 port bits are INPUTS. Outputs are the low bits starting at
+  // bit 0; inputs are the remaining high bits. Default 8'hF8 = outputs 0-2,
+  // inputs 3-7, which is the shared UART/SPI map (see the header).
+  //
+  // A build-time constant rather than a register on purpose: the baseline
+  // protocols are all push-pull, so direction never changes at runtime.
+  parameter logic [7:0] PIN_IN_MASK = 8'hF8
 ) (
   input  logic        clk,
   input  logic        rst_n,
@@ -44,9 +99,12 @@ module pe_uart_soc #(
   input  logic [15:0] host_wdata,
   input  logic        run,
 
-  // One protocol pin each way. Everything else is software.
-  input  logic        pin_in,
-  output logic        pin_out,
+  // The protocol pin port. Everything else is software.
+  // Inputs and outputs are separate buses -- there is no tristate and no
+  // per-pin direction register (see the header). PIN_IN_MASK says which bits of
+  // pin_in are real; the rest are ignored.
+  input  logic [7:0]  pin_in,
+  output logic [7:0]  pin_out,
 
   // Observability
   output logic [7:0]  dbg_pc,
@@ -147,6 +205,7 @@ module pe_uart_soc #(
   logic [7:0]      tick_val;
   logic            tick_flag;
   logic            tick_now, status_rd;
+  logic [7:0]      pin_rd;        // pad state: inputs from pin_in, outputs read back
 
   assign tick_now  = (tick_cnt == CNTW'(TICKS_PER_BIT - 1));
   assign status_rd = io_re && (io_port == 4'h7);
@@ -171,24 +230,44 @@ module pe_uart_soc #(
 
   assign dbg_timer = tick_val;
 
-  // ---- the pin ----------------------------------------------------------
-  // Registered so firmware sees a clean level and the TB can observe it.
+  // ---- the pin port ------------------------------------------------------
+  // Registered so firmware sees clean levels and the TB can observe them. All
+  // 8 bits are driven; the mask decides which bits come from pin_in rather
+  // than from the last write.
+  //
+  // A write drives ALL the output bits at once -- there is no per-pin set or
+  // clear. That is the natural consequence of one write port, and it is why
+  // firmware keeps the output byte as a single value and composes each change
+  // (OR to raise a pin, AND-mask to lower one) rather than imagining it can
+  // poke a single pin. Reading PINOUT back gives the current byte for
+  // read-modify-write, so no shadow copy is required in dmem.
   always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) pin_out <= 1'b1;                    // idle high
-    else if (io_we && io_port == 4'h1) pin_out <= io_wdata[0];
+    if (!rst_n) pin_out <= 8'h01;
+      // Reset drives bit 0 high, which is the UART TX idle level -- the safe
+      // state for the protocol that is resident at reset, since a low TX line
+      // reads to a peer as a start bit. It is NOT a sensible SPI idle (mode 0
+      // wants SCLK low and CS_N high) and it does not need to be: SPI firmware
+      // writes the port's idle pattern as its first act, before it asserts CS_N.
+      // A reset value that cannot serve both protocols is the honest
+      // consequence of one shared port, not a defect to paper over with a
+      // value that is wrong for the protocol actually running.
+    else if (io_we && io_port == 4'h1)
+      // A write sets the OUTPUT bits only. Driving an input bit here would
+      // make pin_out disagree with the pad the input comes from, and firmware
+      // reading PINOUT back would see a value the outside world never had.
+      pin_out <= (pin_out & PIN_IN_MASK) | (io_wdata & ~PIN_IN_MASK);
   end
 
-  // Only bit 0 of a CPU write reaches a pin today (one output pin, one bit).
-  // Sink the rest explicitly rather than leaving a lint warning that a reader
-  // has to be told is expected. The pin matrix will consume all eight.
-  logic [6:0] _unused_io_wdata;
-  assign _unused_io_wdata = io_wdata[7:1];
+  // Input bits mirror the pad; output bits read back what was written. That
+  // makes a single read give firmware the whole port state -- inputs it can
+  // act on and outputs it can verify, in one instruction.
+  assign pin_rd = (pin_in & PIN_IN_MASK) | (pin_out & ~PIN_IN_MASK);
 
   // ---- IO read mux ------------------------------------------------------
   always_comb begin
     case (io_port)
-      4'h0:    io_rdata = {7'b0, pin_in};
-      4'h1:    io_rdata = {7'b0, pin_out};    // readback, aids firmware debug
+      4'h0:    io_rdata = pin_rd;
+      4'h1:    io_rdata = pin_rd;             // same view; writes go to pin_out
       4'h5:    io_rdata = tick_val;
       4'h7:    io_rdata = {7'b0, tick_flag};
       default: io_rdata = 8'h00;

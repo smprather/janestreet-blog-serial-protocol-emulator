@@ -49,6 +49,20 @@ printf '%-34s PASS (%s words)\n' "assemble tick_count" \
   "$(grep -c . firmware/tick_count.hex)"
 pass=$((pass+1))
 
+# spi_xfer.pe is the second baseline protocol (the blog's set is "UART, SPI and
+# I2C"). It has no RTL testbench yet -- tb_pe_spi.v exercises pe_serdes, which
+# is a different SPI -- so the emulator is the ONLY thing that runs it. That
+# makes this assemble check load-bearing rather than a formality: if the
+# firmware stops assembling, nothing else here would notice.
+if ! $PY tools/peasm.py firmware/spi_xfer.pe -o firmware/spi_xfer.hex >/dev/null 2>&1; then
+  echo "assemble spi_xfer                      FAIL"
+  $PY tools/peasm.py firmware/spi_xfer.pe 2>&1 | head -3 | sed 's/^/    /'
+  exit 1
+fi
+printf '%-34s PASS (%s words)\n' "assemble spi_xfer" \
+  "$(grep -c . firmware/spi_xfer.hex)"
+pass=$((pass+1))
+
 # 2. single byte
 run_case "emulate: one byte" \
   $PY tools/peemu.py firmware/uart_echo.hex --send 41 --max-cycles 900000
@@ -67,6 +81,23 @@ run_case "emulate: three bytes + buffer" \
 #    expose timing slips, because a mis-sampled bit is invisible in 0xAA)
 run_case "emulate: 00 FF 55 AA" \
   $PY tools/peemu.py firmware/uart_echo.hex --send "00 FF 55 AA" --max-cycles 900000
+
+# 4b. SPI, the second baseline protocol. This runs the SAME SoC firmware
+#     against a modelled mode-0 slave: the firmware is the master and generates
+#     its own clock, so the emulator only answers on MISO. Both directions are
+#     checked and they are independent -- the master's view comes from its
+#     rolling buffer (dmem), the slave's view from the MOSI PIN, so a master
+#     that shifts the wrong way is caught by the second even though its own
+#     receive path would look fine.
+#
+#     Every byte here is deliberately NOT a bit palindrome (0x00, 0xFF, 0x0F,
+#     0x3C, 0x5A, 0x81 and 0xAA all are). A palindromic byte puts the same pin
+#     sequence on MOSI/MISO whichever way the shift goes, so it cannot catch a
+#     bit-order swap at all. Each of these reverses to something different:
+#     0xA7->0xE5, 0xE5->0xA7, 0x96->0x69, 0xC1->0x83; the master's 0x5B->0xDA.
+run_case "emulate: spi mode 0, 4 frames" \
+  $PY tools/peemu.py firmware/spi_xfer.hex --spi-slave "A7 E5 96 C1" \
+     --spi-frames 4 --expect-spi-rx "5B" --max-cycles 4000000
 
 # 5. the documented limitation: back-to-back bytes are LOST (half-duplex).
 #    Asserts the failure mode rather than hiding it -- if this ever starts
