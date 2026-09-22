@@ -624,6 +624,13 @@
   `No setup violations found` / `No hold violations found` / `No max slew
   violations found` / `No max cap violations found`, plus Magic DRC clear,
   KLayout DRC clear, LVS clear, XOR clear, 0-byte `error.log`. Setup worst
-  **+8.816 ns** (was +7.6 at 66), hold **+0.116 ns**. Better than the 66 MHz
-  run, as the relaxed period predicts.
+  **+8.816 ns** (was +7.6023 at 66), hold **+0.116 ns** (unchanged). `Flow
+  complete.` at 80/80, GDS written (1.34 MB), die 29,163.7 µm², 78% util.
+- **BUT: the 60 MHz signoff fixed NOTHING here, and saying otherwise would be a
+  false cause.** The old run at `CLOCK_PERIOD` 15.15 (`~/asic-runs/pe-serdes/
+  RUN_2026-09-18_16-53-07`) reports **max slew 0 / max cap 0 too** — identical on
+  every checker. pe_serdes was already clean; closing at 60 only makes the
+  reported slack BE the operating point. The two violations that fire are on the
+  **SoC's SRAM pins**, and whether the relaxed period clears them is the question
+  the SoC run answers, not this one.
 - Verified: 22/22 RTL, 15/15 firmware, guards OK, lint clean, **5/5 drift gates**.
