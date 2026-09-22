@@ -83,6 +83,27 @@ emulator. They disagreed once and that disagreement is how the real bug was foun
 6. **The LibreLane `--dockerized` wrapper cannot auto-enable ihp-sg13g2.** Invoke
    the container with explicit `-p ihp-sg13g2 -s sg13g2_stdcell`. Command is in
    `wiki/STATUS.md` and `README.md`. This cost hours once; do not rediscover it.
+7. **Check a test vector is not a bit palindrome before trusting a bit-order
+   test.** `0x5A` reverses to itself, so an SPI master that shifted LSB-first
+   instead of MSB-first would put the *identical levels on the wire* and no
+   assertion could tell. Same for `0x00`, `0xFF`, `0x0F`, `0x3C`, `0x81`, `0xAA`.
+   `int('{:08b}'.format(b)[::-1], 2) != b` is the check. STATUS gotcha 30.
+8. **Not every mutation is catchable, and an uncaught one is not automatically a
+   hole.** Sampling MISO before rather than after the SCLK rise is *equivalent*
+   for a CPHA=0 slave (MISO is held from the falling edge), so that mutation
+   cannot change observable behaviour and no test can fail on it. The catchable
+   SPI mutations were the bit-order flip and driving MOSI after the rise (the
+   classic CPHA error). Check whether a mutation is observable before treating
+   its survival as a coverage gap. STATUS gotcha 31.
+9. **The flow's PDN and global-routing knobs are in `flow/pe_uart_soc.json`, with
+   the reasoning inline — read those comments before changing them.** The two
+   that were needed: `GRT_ADJUSTMENT: 0.0` (the generic 30% derate caused
+   `GRT-0116` congestion at 4.59% utilization on a design that was 7.6% full) and
+   a custom `PDN_CFG` for the SRAM's **Metal4** supplies, which
+   `PDN_MACRO_CONNECTIONS` alone cannot reach. Both are STATUS gotchas 33-34.
+   The standalone pdngen harness used to A/B the PDN config in ~1 minute instead
+   of a 30-minute flow run is `/home/mylesp/.hermes/cache/scratch/pdn_standalone.sh`
+   (scratch, not repo — but the technique is worth reusing).
 
 ## Current work list
 
