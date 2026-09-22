@@ -140,6 +140,49 @@ module tb_pe_tick_status;
     // "counted 0". Call it out separately so the message names the cause.
     check(observed != 0, "STATUS never reported a tick (flag stuck at 0?)");
 
+    // ================= directed: the read/wrap overlap =================
+    // The one-cycle case a poll loop cannot hit on purpose, and the one the
+    // emulator got wrong (it ticked BEFORE the instruction, so an `IN STATUS`
+    // landing on the wrap read the new flag and cleared it, and `IN TIMER`
+    // read the post-increment value). The RTL rule is: a read is combinational
+    // from the PRE-edge register, and when the wrap and the read share an edge
+    // `tick_now` wins (set beats clear). White-box on purpose -- forcing the
+    // counter onto the wrap cycle is the only way to make the overlap certain.
+    run = 0;
+    @(negedge clk); #1;
+    rst_n = 0;
+    repeat (2) @(negedge clk); #1;
+    rst_n = 1;
+    run = 1;
+
+    // (a) wrap + STATUS read, no prior flag: A must see 0, the event survives.
+    force dut.imem_rdata = 16'h2007;          // IN A, STATUS
+    dut.tick_cnt = 259; dut.tick_val = 8'd7; dut.tick_flag = 1'b0;
+    @(posedge clk); #1;
+    check(dbg_a === 8'd0,
+          $sformatf("wrap+read: A = %0d, want the PRE-edge flag 0", dbg_a));
+    check(dut.tick_flag === 1'b1, "wrap+read: set-beats-clear lost the tick");
+    check(dut.tick_val === 8'd8, "wrap+read: the counter did not advance");
+
+    // (b) wrap + STATUS read with the flag already pending: report it AND keep
+    // it. Clearing here would drop a tick the firmware had not banked.
+    @(negedge clk);
+    dut.tick_cnt = 259; dut.tick_val = 8'd7; dut.tick_flag = 1'b1;
+    @(posedge clk); #1;
+    check(dbg_a === 8'd1, $sformatf("pending flag: A = %0d, want 1", dbg_a));
+    check(dut.tick_flag === 1'b1, "pending flag: the read cleared a same-edge tick");
+
+    // (c) TIMER on the wrap cycle returns the value BEFORE the increment.
+    @(negedge clk);
+    force dut.imem_rdata = 16'h2005;          // IN A, TIMER
+    dut.tick_cnt = 259; dut.tick_val = 8'd7;
+    @(posedge clk); #1;
+    check(dbg_a === 8'd7,
+          $sformatf("TIMER read: A = %0d, want the pre-increment 7", dbg_a));
+    check(dut.tick_val === 8'd8, "TIMER read: the counter did not advance");
+    release dut.imem_rdata;
+    run = 0;
+
     if (errors == 0) $display("PASS: tb_pe_tick_status");
     else $display("FAILURES: %0d", errors);
     $finish;

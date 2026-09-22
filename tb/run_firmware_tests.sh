@@ -111,6 +111,46 @@ run_case "emulate: spi mode 0, 4 frames" \
   $PY tools/peemu.py firmware/spi_xfer.hex --spi-slave "A7 E5 96 C1" \
      --spi-frames 4 --expect-spi-rx "5B" --max-cycles 4000000
 
+# 4c. The timer edge the emulator used to get wrong, asserted directly because
+#     no firmware loop can guarantee landing on the one-cycle overlap. In the
+#     RTL a read samples the PRE-edge register and `tick_now` beats the read
+#     clear on the wrap edge; the emulator must do both. tb_pe_tick_status.v is
+#     the RTL half of this pair (directed, white-box).
+run_case "emulate: timer wrap semantics" \
+  $PY -c "
+import sys
+sys.path.insert(0, 'tools')
+from peemu import Soc
+ok = True
+def check(cond, msg):
+    global ok
+    if not cond:
+        print('FAIL:', msg); ok = False
+# (a) wrap + STATUS read, no prior flag: A sees 0, the event survives.
+s = Soc([0x2007]); s.run = True; s.imem_rdata = 0x2007
+s.tick_cnt = 259; s.tick_val = 7; s.tick_flag = 0
+s.step()
+check(s.a == 0 and s.tick_flag == 1, 'wrap+read lost the event')
+# (b) wrap + STATUS read with the flag pending: report it AND keep it.
+s = Soc([0x2007]); s.run = True; s.imem_rdata = 0x2007
+s.tick_cnt = 259; s.tick_val = 7; s.tick_flag = 1
+s.step()
+check(s.a == 1 and s.tick_flag == 1, 'pending flag was cleared by a same-edge tick')
+# (c) TIMER on the wrap cycle returns the pre-increment value.
+s = Soc([0x2005]); s.run = True; s.imem_rdata = 0x2005
+s.tick_cnt = 259; s.tick_val = 7
+s.step()
+check(s.a == 7 and s.tick_val == 8, 'TIMER read returned the post-increment value')
+# (d) stop -> run: the registered ROM prefetch must be imem[0] on resume.
+s = Soc([0x0055, 0x4001]); s.run = True; s.step(); s.step()
+s.run = False
+for _ in range(3): s.step()
+s.run = True; s.step()
+check(s.a == 0x55, 'resume executed a stale fetched word, not imem[0]')
+print('PASS: timer wrap semantics' if ok else 'FAIL')
+sys.exit(0 if ok else 1)
+"
+
 # 5. the documented limitation: back-to-back bytes are LOST (half-duplex).
 #    Asserts the failure mode rather than hiding it -- if this ever starts
 #    passing, the limitation has been fixed and the wiki page needs updating.

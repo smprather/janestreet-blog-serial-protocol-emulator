@@ -270,10 +270,19 @@ class Soc:
 
     def step(self) -> None:
         self.cycles += 1
-        self._tick()
 
         if not self.run:
+            # While stopped the core is held at PC=0 and -- because the ROM
+            # read is registered -- still fetches word 0 every cycle. Keeping
+            # the prefetch in sync is not cosmetic: on the resume edge the
+            # first instruction executed must be imem[0]. An earlier version
+            # returned without touching imem_rdata, so a stop->run sequence
+            # executed whatever the previous run had registered (measured: a
+            # program starting `LDI A,85` skipped it) while pc was already 0.
             self.pc = 0
+            self.imem_rdata = self.imem[0]
+            # Timers are NOT gated by run in the RTL, so they keep ticking.
+            self._tick()
             return
 
         insn = self.imem_rdata
@@ -354,6 +363,16 @@ class Soc:
         # one executed next cycle. dmem needs no equivalent -- it is read
         # combinationally, in the opcode cases above, exactly as the RTL does.
         self.imem_rdata = self.imem[self.pc % len(self.imem)]
+
+        # The tickers advance AFTER the instruction, and the order is
+        # load-bearing. In the RTL every register updates on the same clock
+        # edge: a read is combinational from the PRE-edge value, and when a
+        # timer wrap and a STATUS read land on that same edge, `tick_now`
+        # sets the flag with set-beats-clear (see rtl/pe_uart_soc.v). Ticking
+        # first -- the first version of this model -- returned the NEW counter
+        # to an `IN TIMER` and could clear a flag that had just arrived: it
+        # lost an event the RTL preserves. Measured mismatch, both timers.
+        self._tick()
 
     # -- wire side ---------------------------------------------------------
     def set_rx_bit(self, bit: int) -> None:
@@ -497,7 +516,9 @@ def run(hex_path: Path, send: list[int], max_cycles: int, trace: int,
     words = [int(line, 16) for line in hex_path.read_text().split() if line.strip()]
     soc = Soc(words)
 
-    # boot: the loader writes memories, then run goes high
+    # boot: the loader writes memories, then run goes high. The prefetch is set
+    # for the first instruction; the model's own stopped-state prefetch keeps
+    # imem[0] registered too, so this is belt-and-braces, not a requirement.
     soc.run = True
     soc.imem_rdata = soc.imem[0]
 
@@ -511,10 +532,6 @@ def run(hex_path: Path, send: list[int], max_cycles: int, trace: int,
             segments.append(((b >> k) & 1, clk_per_bit))         # LSB first
         segments.append((1, clk_per_bit))                        # stop
         segments.append((1, clk_per_bit * gap_bits))             # idle gap
-
-    soc = Soc(words)
-    soc.run = True
-    soc.imem_rdata = soc.imem[0]
 
     seg_i, seg_clock = 0, 0
     soc.set_rx_bit(segments[0][0])
