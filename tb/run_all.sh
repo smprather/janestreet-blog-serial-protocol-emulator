@@ -212,5 +212,20 @@ else
   echo "STALE: wiki/reference/block-diagram.md — run python3 tools/gen_block_diagram.py"
   stale=1
 fi
+# The RENDERED form in diagrams/ is what a reader can actually look at (the page
+# carries mermaid source, which a terminal cannot draw). Timestamp check only:
+# mermaid-cli output embeds a generated id and is not byte-stable across runs.
+# Skipped when npx is absent rather than failing a regression on a tool the repo
+# does not otherwise need -- the page is still correct, just not re-rendered.
+if command -v npx >/dev/null 2>&1; then
+  if python3 tools/render_block_diagram.py --check >/dev/null 2>&1; then
+    echo "rendered block diagrams up to date"
+  else
+    echo "STALE: diagrams/block-diagram-*.svg — run python3 tools/render_block_diagram.py"
+    stale=1
+  fi
+else
+  echo "rendered block diagrams: SKIPPED (no npx for mermaid-cli)"
+fi
 [ "$stale" -eq 0 ] || exit 1
 [ "$lint_rc" -eq 0 ] || { echo "lint gate FAILED (see above)"; exit 1; }
