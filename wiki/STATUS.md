@@ -23,13 +23,23 @@ Both layers of the thesis now exist and are verified:
   blog's three baseline protocols.
 
 **The full SoC now routes and times clean.** On 2026-09-22 the full-SoC
-LibreLane run closed setup and hold at all three corners with **+1.234 ns setup
-slack worst-case** and the instruction-fetch path (SRAM `A_CLK` -> `A_DOUT` ->
-CPU) measured in context at **7.639 ns**, against a 15.15 ns period. The routing
-finished with **zero DRC violations**. See [[reference/sram-budget]] for the
-numbers and `flow/pe_uart_soc.json` for the two flow fixes that got it there
-(the `GRT_ADJUSTMENT` derate and a custom PDN config for the macro's Metal4
-supplies — [[STATUS]] gotcha 33).
+LibreLane run `RUN_2026-09-22_00-33-59` closed setup and hold at all three
+corners with **+1.143 ns setup slack worst-case** and the instruction-fetch path
+(SRAM `A_CLK` -> `A_DOUT` -> CPU) measured in context at **7.635 ns**, against a
+15.15 ns period. It finished detailed routing with **zero DRC violations** and
+reached **step 57 of 80**; the flow's own gates read "Routing DRC errors clear"
+and "power grid violations clear", and worst-case IR drop is **0.30%** (3.56 mV
+of 1.20 V). See [[reference/sram-budget]] for the numbers and
+`flow/pe_uart_soc.json` for the two flow fixes that got it there (the
+`GRT_ADJUSTMENT` derate and a custom PDN config for the macro's Metal4 supplies —
+[[STATUS]] gotchas 33-34).
+
+*What still stops the flow at 80 steps:* step 57, Magic GDS streamout, cannot
+extract a PR boundary from the SRAM's GDSII. The IHP macro ships **no `pblock`
+layer** — its GDS has `189/4` (the IHP map's `DIEAREA`) rather than the
+`prBoundary` layer LibreLane's `get_bbox.tcl` reads `FIXED_BBOX` from. This is a
+PDK-macro-vs-flow-vocabulary mismatch, not a defect in this design, and the die
+size it needs is already declared in the LEF (`SIZE 236.8 BY 336.46`). Gotcha 35.
 
 **The repo is now submittable**: `rtl/tt_um_protocol_emulator.v` and `info.yaml`
 exist, so there is a `tt_um_*` top level with a real pad interface
@@ -543,6 +553,17 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     took the same design to **0 overflow on every layer at 2.88-3.03% usage**.
     When a router fails at single-digit utilization, read the adjustment numbers
     it prints before doubting the floorplan.
+35. **A vendor macro's GDSII may not speak the flow's boundary vocabulary.**
+    LibreLane's Magic streamout extracts the macro's placement bbox by reading
+    the `FIXED_BBOX` property that Magic derives from a **`pblock`** layer, and
+    the IHP SRAM GDS ships none: it has `189/4` (the IHP map's `DIEAREA`)
+    instead. The flow therefore aborts at the GDS-streamout step with "Failed to
+    extract PR boundary from GDSII view of macro ... Ensure that the GDSII view
+    has a PR boundary layer" — after routing, RCX, STA and IR drop have all
+    already passed. The size the flow wants is not actually missing: the macro's
+    **LEF declares `SIZE 236.8 BY 336.46`**. Check the LEF before believing the
+    macro is malformed, and do not edit a vendor GDS to satisfy a flow script's
+    layer name.
 
 ## Open questions / risks
 

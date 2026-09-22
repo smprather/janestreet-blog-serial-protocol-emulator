@@ -366,6 +366,9 @@
   flow/pe_uart_soc.json.
 
 ## [2026-09-22] build | Full SoC routed and timed clean — two flow fixes, both root-caused
+   (**superseded numbers below**: the authoritative run is `RUN_2026-09-22_00-33-59`,
+   which has BOTH fixes and reads setup +1.143 ns / SRAM in-context 7.635 ns /
+   IR drop 0.30%; the +1.234 ns figure in this entry is from the pre-PDN run.)
 - **The full-SoC flow now closes.** `RUN_2026-09-22_00-33-59` reached
   detailed routing with **0 DRC violations**, then post-PnR STA signed off
   **setup WNS +1.234 ns / hold WNS +0.127 ns / 0 violating paths at all three
@@ -405,3 +408,29 @@
   tools/gen_sram_budget.py + wiki/reference/sram-budget.md, STATUS.md
   (milestone header, firmware table, gotchas 33-34, next-steps 1-2 marked done),
   index.md.
+
+## [2026-09-22] build | Final flow state: 57/80 steps, third blocker is a PDK GDS layer name
+- **`RUN_2026-09-22_00-33-59` (both fixes) got the flow from 44/80 to 57/80.**
+  Detailed routing: **0 DRC violations** (from 1160 at the first iteration).
+  Post-PnR STA: setup **+1.143 ns**, hold **+0.121 ns**, **0 violating paths** at
+  all three corners. SRAM in-context access **7.635 ns**. IR drop **0.30%**
+  (3.56 mV of 1.20 V). The flow's own gates: "Routing DRC errors clear",
+  "power grid violations clear", "critical disconnected pins clear",
+  "Lint warnings clear".
+- **The PDN fix is confirmed end to end.** `PSM-0040 All shapes on net
+  VPWR/VGND are connected` now appears in BOTH the pdngen step and the IR-drop
+  step, and `PSM-0069` appears nowhere. The step that previously aborted the
+  whole flow (IR drop, `PSM-0069` -> `LibreLane will now quit`) now completes.
+- **Third blocker, new, and NOT a defect in this design: Magic cannot find a PR
+  boundary in the vendor macro's GDSII.** `get_bbox.tcl` reads the `FIXED_BBOX`
+  property Magic derives from a **`pblock`** layer; the IHP SRAM GDS has
+  **`189/4`** (the IHP map's `DIEAREA`) and no pblock. Error: "Failed to extract
+  PR boundary from GDSII view of macro 'RM_IHPSG13_1P_1024x16_c2_bm_bist'". The
+  size is not actually missing — the macro's LEF says `SIZE 236.8 BY 336.46`.
+  A PDK-vocabulary mismatch, recorded as STATUS gotcha 35. Steps 0-56 all pass.
+- **Numbers discipline:** a measured post-route slack moves ~0.1 ns between
+  runs as placement changes (the pre-PDN run read +1.234 ns, this one +1.143 ns
+  for the same design). [[reference/sram-budget]] and STATUS now carry the run ID
+  with the number and say explicitly that it is a measured figure that moves.
+- Verified: 21/21 RTL TBs, 15/15 firmware, param guards OK, lint clean,
+  4/4 drift gates. Committed: 36f88cb, fd13b02, c70cf70.
