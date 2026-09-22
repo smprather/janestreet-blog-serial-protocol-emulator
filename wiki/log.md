@@ -698,3 +698,63 @@
 - **New gate:** `tools/check_canvas_viewer.py` runs the shipped script in node
   and mutation-tests both fixes; wired into `tb/run_all.sh`. Confirmed it fires
   on both mutations (`iw=100`, width call `1`).
+
+## [2026-09-23] build | The matrix moves inside the SoC, and I2C runs on it
+
+- **The plan had the pin matrix in the wrong place.** It said "the TT wrapper
+  instantiates the matrix". Unimplementable: the CPU's IO bus never leaves
+  `pe_uart_soc`, so a matrix at the wrapper could not have its OE/OD registers
+  reached by any program -- and I2C, the only protocol needing them, would be
+  hardware nothing drives. It now sits between the port decode and the SoC's
+  `pin_in`/`pin_out`/`pin_oe`. [[decisions/adr-006-pin-matrix]]
+- **Two numbering schemes, not one.** The SoC's ports (0=PIN 1=PINOUT 2=PINOE
+  3=PINOD) and the matrix's addresses (0=OUT 1=OE 2=IN 3=OD) differ. An identity
+  map sends PINOUT writes into the OE register; written, and it hung
+  `tb_pe_uart_soc` with an output enable of `0x08`. Now an explicit `case`.
+- **`pin_rd` generalised** from `(pin_out & ~PIN_IN_MASK) | (pin_in & PIN_IN_MASK)`
+  to `(pin_out & pin_oe) | (pin_in & ~pin_oe)` -- the real drive enable, so a
+  pin released by the OD gate reads the pad. Reduces exactly to the old formula
+  when `od=0`, which is why UART and SPI still pass *through* the matrix.
+- **`firmware/i2c_pins.pe`** (79 words): START, one bit cell, STOP. Sends 1 by
+  releasing, reads the pad back for arbitration (one `IN`, one branch).
+- **THREE TIMING TRAPS, all of which cost real rework:**
+  1. The `uart_echo`/`spi_xfer` "wait for the tick to CHANGE" idiom delivers
+     `(0,1]` ticks. Fine for SPI, margin cost for UART, **spec violation for
+     I2C**: the first draft took 1,384 cycles for 28 us of nominal delays
+     (0.83x) and would have passed a bench test. Now an exact-target wait.
+  2. **The phase residual sets the constants.** Firmware cannot see where in the
+     60-cycle window a read lands, so an N-tick wait delivers `(N-1, N]` us --
+     the number that must clear the floor is **N-1**. tLOW gets 7 and tHIGH 6
+     (not the reverse): the floors differ, and the period is `tLOW+tHIGH` either
+     way, so the swap is free.
+  3. **Init order is OD, then OUT, then OE.** Enabling the pins before setting
+     the level drove SDA low for two cycles with SCL high -- **a spurious
+     START**. The OD bit prevents contention, not a wrong-moment drive. Also:
+     pulling SDA low while SCL is high on the way into a STOP is a second START;
+     the STOP order that cannot go wrong is in the concept page.
+- **Measured (all 60 tick phases, worst case):** tLOW **5.917 us** (floor 4.7),
+  tHIGH **6.050 us** (floor 4.0), period **11.967 us** (floor 10.0 for the
+  100 kHz ceiling) => **83.2-83.6 kHz**, deterministic to 0.05 us.
+- **THE TB WAS CAUGHT VACUOUS TWICE.** (a) The RTL TB had **no interval checks
+  at all** -- a bit cell half the length of spec passed it. (b) Once added, the
+  edge indices were wrong, making both checks unfailable: tLOW measured the idle
+  stretch (19 us) and tHIGH was a negative difference that **wraps in the
+  unsigned `%time` type** to a huge number. Both `>=` checks could never fail.
+  There is now a plausibility guard that stops exactly that.
+- **`tb/mutate_i2c_tb.sh`**: 6 mutations, **1 documented equivalent survivor**.
+  On a port-0 read the matrix's raddr defaults to `A_IN`, so `pinmux_rdata` IS
+  `pin_in` -- for firmware that only reads pins it has released, the read-back
+  mutation is equivalent. The UART test does catch it (read-modify-write stops
+  converging and the TB hangs), which is why the survivor is explained and the
+  count asserted exactly. A compile failure reports **INCONCLUSIVE**, never
+  "survived" -- the first version of that script reported 5 mutations DETECTED
+  with byte-identical failures, which was a missing `$readmemh` path, not a
+  good test.
+- **Files:** `rtl/pe_uart_soc.v`, `rtl/tt_um_protocol_emulator.v`,
+  `firmware/i2c_pins.pe`, `tools/peasm.py` (OE/OD/I2CTICK/I2CSTAT, `A|B`
+  immediates), `tools/peemu.py` (mirrors the matrix), `tb/tb_pe_i2c_soc.v`,
+  `tb/mutate_i2c_tb.sh`, `tools/measure_i2c_timing.py`,
+  [[decisions/adr-006-pin-matrix]], [[concepts/i2c-on-the-matrix]],
+  [[concepts/pin-matrix]] (placement corrected), [[plans/through-i2c]].
+- **Regression:** RTL 23/23, firmware 16/16, two new gates in `tb/run_all.sh`.
+  Commit `4ea345a`.

@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-22 | Total pages: 28
+> Last updated: 2026-09-23 | Total pages: 30
 
 ## Start here
 
@@ -30,6 +30,7 @@
 - [[concepts/strobe-and-committing-edge]] — What the strobe (`bit_en`) and the committing edge are, and the sample-order trap they cause.
 - [[concepts/spi-as-firmware]] — SPI mode 0 as a pure-software master on the shared 8-bit port; the MSB-first/LSB-first asymmetry, the reset-value trap, and the mutations that were (and were not) catchable.
 - [[concepts/pin-matrix]] — runtime per-pin direction, open-drain and read-back: the I2C gate. Why the OD bit exists, and the wire model that catches contention instead of hiding it.
+- [[concepts/i2c-on-the-matrix]] — I2C with no I2C controller: START/bit cell/STOP as firmware on the matrix. 83 kHz measured across all 60 tick phases, and the three timing traps that cost real rework.
 
 ## Reference
 
@@ -55,6 +56,7 @@
 - [[decisions/adr-003-memory-plan]] — ADR: two `1P_1024x16` macros (instructions + frame buffer); flop IMEM was 89% of the die, and you cannot buy 1.5 KB. Instruction half IMPLEMENTED.
 - [[decisions/adr-004-program-counter-width]] — ADR: the SRAM swap required widening the PC and jump-target field; the memory alone delivered 128 usable words, not 1024.
 - [[decisions/adr-005-60mhz-turbo]] — ADR: the turbo is **60 MHz, not 66** — 66 provably fails the 10BASE-T TX jitter conformance window at every edge placement; 60 is exact for every hard protocol with a 50%-finer RX grid.
+- [[decisions/adr-006-pin-matrix]] — ADR: the pin matrix is a runtime per-pin `{out,oe,od}` file and it lives **inside** the SoC — the plan's "wrapper instantiates the matrix" is unimplementable, since the CPU's IO bus never leaves `pe_uart_soc`.
 
 ## Queries
 

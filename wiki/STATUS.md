@@ -13,14 +13,24 @@ Both layers of the thesis now exist and are verified:
   cells, and the SERDES through the full LibreLane place-and-route flow to a
   clean 66 MHz signoff.
 - **Milestone 2 — the programmable core.** A CPU, an assembler, a bit-accurate
-  emulator, and **two baseline protocols written entirely in firmware** — UART
-  and, as of 2026-09-22, **SPI mode 0**. Neither has a state machine in the
-  hardware: the framing and bit timing are programs (`firmware/uart_echo.pe`,
-  `firmware/spi_xfer.pe`) the CPU executes against the pad interface and a tick
-  counter. Both protocols share the **same 8-bit port and the same direction
-  mask**, so nothing in the RTL knows which one is running. That is the
-  competition thesis, demonstrated end to end in simulation for two of the
-  blog's three baseline protocols.
+  emulator, and **three protocols written entirely in firmware** — UART, SPI
+  mode 0, and, as of 2026-09-23, **I2C** (the pin-level grammar: START, one bit
+  cell, STOP). None has a state machine in the hardware: the framing and bit
+  timing are programs (`firmware/uart_echo.pe`, `firmware/spi_xfer.pe`,
+  `firmware/i2c_pins.pe`) the CPU executes against the pad interface, a tick
+  counter and — for I2C — the pin matrix. UART, SPI and I2C share the **same
+  8-bit port**, so nothing in the RTL knows which one is running. That is the
+  competition thesis, demonstrated end to end in simulation for all three of the
+  blog's baseline protocols.
+- **I2C is the one that needed new hardware, and it is 111 cells** — the pin
+  matrix, a runtime per-pin `{out, oe, od}` register file
+  ([[concepts/pin-matrix]], [[decisions/adr-006-pin-matrix]]). It went **inside
+  `pe_uart_soc`**, not at the TT wrapper as the plan had it: the CPU's IO bus
+  never leaves the SoC, so a matrix outside it could not be reached by any
+  program. The UART and SPI tests now sign off *through* the matrix, which is
+  stronger than testing it alongside them. Measured: **83.2–83.6 kHz** across
+  all 60 tick phases, every standard-mode floor cleared at worst case
+  ([[concepts/i2c-on-the-matrix]]).
 
 **The full SoC now routes and times clean.** On 2026-09-22 the full-SoC
 LibreLane run `RUN_2026-09-22_00-33-59` closed setup and hold at all three
@@ -138,7 +148,7 @@ depth: 896 words of addressable-by-nothing SRAM for 79,674 µm². **The PC and t
 jump-target field had to widen in the same change.** Full reasoning and the
 rejected alternatives: [[decisions/adr-004-program-counter-width]].
 
-**Regression: 21/21 testbenches + 13/13 firmware tests pass, and the lint gate is
+**Regression: 23/23 testbenches + 16/16 firmware tests pass, and the lint gate is
 clean** (`tb/run_all.sh` runs the firmware regression first, then every TB, then
 `tb/lint.sh`, then the generated-doc drift checks).
 
@@ -824,9 +834,17 @@ one first.
    *Still open from this step:* `tb_pe_spi_soc.v` does not exist, so SPI firmware
    has no RTL testbench — the emulator is currently its only executable
    specification. UART has the equivalent in `tb_pe_uart_soc.v`.
-3. **Pin matrix / OE**, then **I2C** ([[plans/through-i2c]]). The real new hardware:
-   open-drain, read-back for arbitration, clock stretching. It replaces the fixed
-   mapping in `rtl/tt_um_protocol_emulator.v` and gates every stretch protocol too.
+3. ~~**Pin matrix / OE**, then **I2C**~~ **DONE 2026-09-23.** The pin matrix is
+   built (111 cells) and I2C runs on it as firmware
+   ([[concepts/i2c-on-the-matrix]]). A placement correction along the way: the
+   matrix went **inside** `pe_uart_soc` rather than at the TT wrapper, because
+   the CPU's IO bus never leaves the SoC ([[decisions/adr-006-pin-matrix]]).
+   Measured 83.2-83.6 kHz, every standard-mode floor cleared at worst case over
+   all 60 tick phases, with the OD property asserted on the RTL's own `pin_oe`.
+   Completes baseline protocol #3 -- **the blog's baseline is now fully
+   demonstrated in simulation.**
+   *Still open from this step:* the transaction layer (byte transfer, ACK,
+   addressing) -- `firmware/i2c_pins.pe` is the pin-level grammar only.
 4. **CRC LFSR** (~120 cells). Do this before the DRU. It is small, well understood,
    serves *three* protocols (CRC-15 CAN, CRC-5/16 USB, CRC-32 Ethernet), and
    `tb_pe_can.v`, `tb_pe_usb.v` and `tb_pe_eth.v` already compute these CRCs in
@@ -934,3 +952,38 @@ without ever writing.
     phantom backslash through three anchors that could never match. Reading the
     file as **bytes** (`b.find(b"VIEW.mode ===")`) settled it in one command.
     When an anchor will not match, look at raw bytes before rewriting it again.
+50. **A "wait for the counter to change" delay is a PHASE-ROBUSTNESS bug, not a
+    style choice.** `uart_echo.pe` and `spi_xfer.pe` poll a free-running tick
+    counter for a change, which delivers `(0, 1]` ticks -- up to a full tick
+    short. Harmless for SPI (synchronous, the slave times off our edges) and a
+    sampling-margin cost for the UART. For I2C it is a **spec violation**: tLOW
+    is measured at the pin against a 4.7 us floor, and the first draft of
+    `firmware/i2c_pins.pe` took 1,384 cycles for 28 us of nominal delays
+    (0.83x). It would have passed a bench test. Wait for an exact TARGET instead
+    (`IN` / `ADD A, N` / `MOV X, A` / spin `SUB A, X` / `JNZ`).
+51. **An N-tick wait delivers (N-1, N] us, so the number that must clear a floor
+    is N-1.** Firmware cannot see where in the 60-cycle window a read lands
+    (`0 <= phi < 60` cycles), so the target tick is `60*N - phi` cycles away.
+    Constants must be chosen for the worst case: tLOW uses 7 ticks (worst case
+    6 us vs a 4.7 us floor), not the 5 that looks compliant nominally. Also --
+    give the larger count to the larger FLOOR: tLOW (4.7) gets 7 and tHIGH (4.0)
+    gets 6. The period is `tLOW+tHIGH` either way because the waits chain in
+    target form, so the swap costs nothing and rebalances the margins.
+52. **Open-drain prevents CONTENTION, not a wrong-moment drive.** The OD bit
+    makes "drive high into someone else's low" inexpressible, which is the
+    destructive fault. It does not stop the pin driving LOW at a bad moment:
+    the first draft of `i2c_pins.pe` wrote `PINOE` before `TXPIN`, and since the
+    reset output register holds `0x01`, bits 4-5 were still 0 -- SDA pulled low
+    for two cycles with SCL high, which **is a START condition**. So the init
+    order is OD, then OUT, then OE. Same class: pulling SDA low while SCL is
+    high on the way into a STOP emits a second START. Grammar bugs like these
+    leave every timing interval compliant, so a timing-only check cannot see
+    them -- assert the SEQUENCE too.
+53. **In Verilog, a negative `time` difference wraps, and a `>=` check on it
+    passes.** The I2C TB computed `tHIGH` as `scl_fall_t[1] - scl_rise_t[1]`, a
+    NEGATIVE difference; `time` is unsigned, so it wrapped to ~1.8e19 and
+    satisfied `tHIGH >= 4.0` forever. Its partner check was equally unfailable
+    (tLOW measured the idle stretch at 19 us). Two assertions that could never
+    fail, in a TB that passed. Pair every `>=` interval check with a "plausibly
+    the right measurement" upper bound, and mutation-test the TB itself -- that
+    is what surfaced both. See also gotcha 48.

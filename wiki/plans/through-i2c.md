@@ -125,7 +125,7 @@ I2C needs, per pin:
 - **read** — the pin's level, whether we are driving it or not
 
 Tiny Tapeout's `uio` pads have a per-pin output-enable, so open-drain is native to
-the pad; what does not exist yet is the block in front of it. Design:
+the pad; what did not exist at the time was the block in front of it. Design:
 
 ```
         per-pin:                        the matrix adds:
@@ -135,35 +135,48 @@ the pad; what does not exist yet is the block in front of it. Design:
   cfg_prot[i] selects one of 8 protocol wire sets
 ```
 
+**That sketch was the first design and it was wrong on two counts, both
+corrected 2026-09-23** ([[decisions/adr-006-pin-matrix]]):
+
+1. **`cfg_prot[i]` was dropped.** A selector holding a constant per protocol is
+   a build-time map wearing a runtime hat. What I2C actually needs is per-pin
+   direction at runtime, which the `{out, oe, od}` registers already give. See
+   [[concepts/pin-matrix]].
+2. **The matrix does not live at the wrapper.** The plan below said
+   "the TT wrapper instantiates the matrix"; that is unimplementable, because
+   the CPU's IO bus never leaves `pe_uart_soc`. It went *inside* the SoC.
+
 The per-pin registers are the interesting part: a *write* drives `oe`/`out`; a
-*read* returns the pad level. Firmware does `OUT PINSET, mask` / `OUT PINCLR, mask`
-and `IN PINREAD`. Registering the output (as `pe_uart_soc.v` already does for its
-single pin) gives the read-back path a clean 1-cycle answer, which is what the
+*read* returns the pad level when the pin is released and the written value
+when it is driven. Firmware does `OUT PINOUT, mask` / `OUT PINOE, mask` and
+`IN PIN`. Registering the output (as `pe_uart_soc.v` already did for its single
+pin) gives the read-back path a clean 1-cycle answer, which is what the
 arbitration check needs.
 
-I2C-specific semantics to pin down in the design (these are the decisions; the
-gates are easy):
+I2C-specific semantics, now settled:
 
-- **Release means the last output value stops mattering.** Firmware should write
-  `out=1` and `oe=0` for release, or the transition from driving 0 to releasing
-  will glitch — actually *will not* glitch if `oe` gates the pad, but a reviewer
-  will ask, so the ordering rule belongs in the RTL header: `oe` must be cleared
-  before `out` is driven, and the pad's own OE gating is what makes it safe.
-- **Arbitration loss is a first-class signal.** Read back every bit transmitted as
-  a 1: if the pad reads 0, another master won. Firmware needs that as a branch
+- **Release means the last output value stops mattering.** Firmware writes
+  `out=1` and the OD gate releases the pin, so there is no glitch on the
+  transition from driving 0 to releasing. The plan's proposed ordering rule
+  ("`oe` must be cleared before `out` is driven") turned out to be **the wrong
+  rule and a trap**: what actually bites is the *reverse* order at startup, and
+  it bites because it emits a spurious START. See
+  [[concepts/i2c-on-the-matrix]] for the init sequence that cannot glitch.
+- **Arbitration loss is a first-class signal.** Read back every bit transmitted
+  as a 1: if the pad reads 0, another master won. Firmware gets that as a branch
   (one `IN` + one `JNZ` per bit — 2 cycles at µs scale, free). Most bit-bang I2C
   implementations skip this; doing it in firmware is a genuine differentiator.
-- **Clock stretching** (a slave holding SCL low) is *observable* for free with the
-  read-back path: before rising SCL, read it; if low, wait. One `IN`/`JNZ` per
-  clock. Include it — it is the difference between "speaks to a friendly EEPROM"
-  and "speaks I2C".
-- **Two pins, or one?** SDA and SCL both need open-drain; SDA also needs read-back.
-  SCL only needs drive-low/release and an optional read-back for stretching. Budget
-  two pads, both with the full per-pin structure — symmetric and it costs 8 flops.
+- **Clock stretching** (a slave holding SCL low) is *observable* for free with
+  the read-back path: before rising SCL, read it; if low, wait. One `IN`/`JNZ`
+  per clock. Include it — it is the difference between "speaks to a friendly
+  EEPROM" and "speaks I2C".
+- **Two pins, or one?** SDA and SCL both need open-drain; SDA also needs
+  read-back. SCL only needs drive-low/release and an optional read-back for
+  stretching. **Built: two pads, both with the full per-pin structure** —
+  symmetric and it costs 8 flops.
 
-Sizing: 8 pins x (2 out + 1 oe + 1 in + 1 cfg) ≈ 40 flops plus a small mux tree, in
-the low hundreds of cells. Compare against the SERDES's 539 cells — the pin matrix
-should be *smaller*, because it has no datapath.
+Sizing: the built block is **111 cells** ([[concepts/pin-matrix]]) against the
+SERDES's 539 — smaller, as predicted, because it has no datapath.
 
 ## Blocker 3 — instruction memory (sizing, not a wall)
 
@@ -372,9 +385,9 @@ data to settle, which is still far inside `tSU;DAT`.
 | 3b | ~~TT top level + `info.yaml`~~ **DONE 2026-09-20**: `rtl/tt_um_protocol_emulator.v`, `info.yaml`, `tb/tb_tt_um_protocol_emulator.v` (pad contract: no X on an output, `ena` gates nothing, open-drain never drives high) | — | the repo is submittable; `uio_oe` has a real path to a pad |
 | 4 | ~~Pin matrix / OE~~ **DONE 2026-09-22**: `rtl/pe_pinmux.v` (OUT/OE/IN/OD per pin), `tb/tb_pe_pinmux.v`, 7/7 mutations caught ([[concepts/pin-matrix]]) | 3b | open-drain, read-back and tri-state verified |
 | 4b | ~~SPI as firmware~~ **DONE 2026-09-22**: `firmware/spi_xfer.pe` (mode-0 master, 70 words) on the shared 8-bit port; emulator mode-0 slave model; 3 mutations built ([[concepts/spi-as-firmware]]) | 3b | emulator exchanges 4 frames both directions; `run_firmware_tests.sh` green. **Open:** no `tb_pe_spi_soc.v` — SPI firmware has no RTL testbench |
-| 5 | I2C SoC wiring (pin matrix + tick divider for 1 µs) | 4 | TB: pins do what firmware says |
-| 6 | I2C firmware: START/STOP first, then byte, then ACK, then read | 1,5 | emulator decodes a full transaction |
-| 7 | `tb_pe_i2c_soc.v` with timing assertions | 6 | transaction passes with timing checked |
+| 5 | ~~I2C SoC wiring~~ **DONE 2026-09-23**: matrix moved *inside* `pe_uart_soc` (the plan's "wrapper instantiates the matrix" was unimplementable — see [[decisions/adr-006-pin-matrix]]), 1 µs tick divider on ports 4/6, `pin_oe` threaded to the pads, I2C SDA/SCL on `uio[0]`/`uio[1]` | 4 | **DONE** — `tb_pe_i2c_soc` green; UART and SPI still sign off *through* the matrix |
+| 6 | I2C firmware: START/STOP first, then byte, then ACK, then read | 1,5 | START/bit-cell/STOP **DONE 2026-09-23** (`firmware/i2c_pins.pe`, 79 words, spec-compliant across all 60 tick phases — [[concepts/i2c-on-the-matrix]]); byte/ACK/address still open |
+| 7 | `tb_pe_i2c_soc.v` with timing assertions | 6 | **DONE 2026-09-23** for the bit cell, including the timing assertions; 6 mutations, 1 documented equivalent survivor (`tb/mutate_i2c_tb.sh`) |
 | 8 | Fast-mode feasibility check (500 ns tick, 333 kHz) | 7 | written up, not necessarily built |
 
 ### Where this sits in the wider order
@@ -397,9 +410,14 @@ version, and the reasoning for it:
 
 Step 1 is complete (see Blocker 1 for the measured evidence) and steps 2-4 are
 committed; step 4 (the pin matrix) landed 2026-09-22 at 111 cells
-([[concepts/pin-matrix]]). **Step 5 is the next unstarted work** -- I2C SoC wiring,
-i.e. putting the matrix in front of the SoC's fixed-mask port and adding the 1 µs
-tick divider.
+([[concepts/pin-matrix]]). **Step 5 landed 2026-09-23**, with a placement change
+the plan had wrong: the matrix went *inside* `pe_uart_soc` rather than in front
+of it, because the CPU's IO bus never leaves the SoC and a matrix outside it
+would be unreachable from firmware ([[decisions/adr-006-pin-matrix]]). Step 6's
+pin-level half — START, one bit cell, STOP — is also done and measured;
+[[concepts/i2c-on-the-matrix]] has the timing and the three traps that cost real
+rework. **What remains for I2C is the transaction layer:** byte transfer, ACK,
+addressing.
 
 ## The full-SoC flow run, and what actually blocks tapeout (2026-09-22)
 

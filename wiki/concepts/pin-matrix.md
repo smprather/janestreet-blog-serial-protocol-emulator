@@ -104,14 +104,48 @@ would have allocated to it. The cost is that firmware must know its own pin map
 
 ## How it relates to the SoC's port
 
-`pe_uart_soc` keeps its own fixed-mask port. It is the degenerate case of this
-block (`oe = ~PIN_IN_MASK` constant, `od = 0`), and it stays separate on
-purpose: it is what `tb_pe_uart_soc` and `tb_pe_tick_status` sign off, and
-swapping the mechanism underneath a verified path to serve a protocol that path
-does not implement is how a green regression quietly stops meaning anything.
+`pe_uart_soc` used to keep its own fixed-mask port, and the plan was for the
+matrix to sit *outside* it. That placement turned out to be unimplementable and
+was changed — see [[decisions/adr-006-pin-matrix]] for the whole argument. The
+short version: the CPU's IO bus never leaves the SoC, so a matrix at the wrapper
+could not have its OE/OD registers reached by any program, and I2C — the only
+protocol that needs them — would be hardware nothing drives.
 
-The TT wrapper instantiates the matrix **in front of** the SoC's port, so the
-UART keeps its own regression and the matrix is proved by its own testbench.
+The matrix is therefore now **inside** `pe_uart_soc`, between the port decode
+and the SoC's `pin_in`/`pin_out`/`pin_oe`, and the SoC exposes `pin_oe` out to
+the wrapper so the pads get a real per-pin enable. The old fixed-mask path is
+gone rather than sitting beside it: two mechanisms for one job would let the
+unexercised one drift.
+
+What survives of the old concern — "do not swap the mechanism underneath a
+verified path" — is handled by making the swap **behaviour-preserving instead**.
+The reset seeds (`OE = ~PIN_IN_MASK`, `OD = 0`, `OUT = PIN_OUT_RST`) reproduce
+the fixed-mask SoC exactly, and `pin_rd` reduces to the old `PIN_IN_MASK`
+formula whenever `od = 0`. `tb_pe_uart_soc` and `tb_pe_tick_status` therefore
+sign off the UART and SPI **through the matrix**, which is stronger evidence
+than testing the matrix beside them: it shows the new hardware does not disturb
+the verified paths.
+
+The one caveat, stated rather than glossed: a pin firmware has **released** now
+reads the pad instead of the last value written. No UART or SPI program releases
+a pin, so nothing existing changes — the guarantee is "identical for firmware
+that does not write PINOE/PINOD".
+
+### Two numbering schemes, which is a trap
+
+The SoC's port numbers and the matrix's register addresses are **different**:
+
+| SoC port | | matrix register | addr |
+|---|---|---|---|
+| 0 `PIN` | r | `OUT` | 0 |
+| 1 `PINOUT` | w | `OE` | 1 |
+| 2 `PINOE` | | `IN` | 2 |
+| 3 `PINOD` | | `OD` | 3 |
+
+Assuming they were the same — an identity map — sends `PINOUT` writes to the OE
+register. That is not hypothetical: it was written, and it broke the UART by
+giving it an output enable of `0x08`, which is an input bit. The decode is now
+an explicit `case` with this table beside it.
 
 ## How it is verified
 
