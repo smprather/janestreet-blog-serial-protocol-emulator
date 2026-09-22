@@ -482,6 +482,15 @@ class Soc:
         firmware's tick loop and mangles the byte. After latching the edge, each
         subsequent sample is exactly one bit period later -- which is what the
         firmware guarantees, since it holds every bit for one bit period.
+
+        The FIRST data sample is 1.5 bit periods after the edge -- the centre of
+        data bit 0, not the start/data boundary. Sampling at +1.0 read the
+        boundary, so a wire only slightly slower than the monitor's nominal
+        period made every sample read the preceding bit: an independent 8N1 A5
+        at 521 clocks/bit decoded as 4A, while 520 and 519 decoded correctly
+        (measured, review 2 R2-6). The stop sample then lands at 9.5 bit
+        periods, its centre too; the old grid sampled the stop early enough to
+        accept the last data bit as the stop.
         """
         lvl = 1 if (self.wire_bits() & PORT_TX_BIT) else 0
         if not self.tx_in_frame:
@@ -489,7 +498,8 @@ class Soc:
                 self.tx_in_frame = True
                 self.tx_shift = 0
                 self.tx_count = 0
-                self.tx_next_sample = self.cycles + TICKS_PER_FULL_BIT
+                self.tx_next_sample = (self.cycles + TICKS_PER_FULL_BIT
+                                       + TICKS_PER_HALF)
         elif self.cycles >= self.tx_next_sample:
             if self.tx_count < 8:
                 if lvl:

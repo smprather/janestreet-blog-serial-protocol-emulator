@@ -151,6 +151,30 @@ print('PASS: timer wrap semantics' if ok else 'FAIL')
 sys.exit(0 if ok else 1)
 "
 
+# 4d. The TX monitor is a firmware verification oracle, so its sampling grid
+#     has to be right: it latches the start edge, then samples the CENTRE of
+#     each bit (1.5 periods after the edge for data bit 0, 9.5 for the stop).
+#     Sampling at the bit boundary made a wire a few clocks slower than the
+#     monitor's nominal period decode A5 as 4A (review 2 R2-6).
+run_case "emulate: UART monitor periods" \
+  $PY -c "
+import sys
+sys.path.insert(0, 'tools')
+from peemu import Soc
+ok = True
+for period in (519, 520, 521):
+    soc = Soc([])
+    bits = [0] + [(0xA5 >> i) & 1 for i in range(8)] + [1, 1]
+    for cycle in range(10 + len(bits) * period):
+        soc.cycles = cycle
+        soc.reg_out = 1 if cycle < 10 else bits[min((cycle - 10) // period, len(bits) - 1)]
+        soc.poll_tx()
+    if soc.tx_bits != [0xA5]:
+        print('FAIL period', period, soc.tx_bits); ok = False
+print('PASS: UART monitor periods' if ok else 'FAIL')
+sys.exit(0 if ok else 1)
+"
+
 # 5. the documented limitation: back-to-back bytes are LOST (half-duplex).
 #    Asserts the failure mode rather than hiding it -- if this ever starts
 #    passing, the limitation has been fixed and the wiki page needs updating.
