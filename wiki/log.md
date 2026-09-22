@@ -356,9 +356,17 @@
     **Metal4** while pdngen's grid is TopMetal1/TopMetal2 — so ~50 Metal4 shapes
     are still reported unconnected. Gotcha 33. `PSM-0069` connectivity failures
     are still open; the flow defers them ("you may ignore these if LVS passes").
-- **Fixed a fabrication of my own** before it reached the repo: a config comment
-  quoted an OpenROAD warning (`GRT-0704`) that does not exist in any run log.
-  Replaced with the message the run actually emits.
+- **CORRECTED 2026-09-22 (the entry above was WRONG).** It claimed a config
+  comment quoted an OpenROAD warning (`GRT-0704`) "that does not exist in any run
+  log", and I replaced it. **`GRT-0704` is real.** It is in
+  `RUN_2026-09-22_00-07-27/warning.log`, and its text is
+  `[GRT-0704] Try reduce the layer adjustment from 30.000002% to 0%` -- the tool
+  literally recommending the change that fixed the congestion. The check that
+  "proved" it absent was a `grep -rl` run from the REPO root, while the run logs
+  live under `~/asic-runs`; a negative grep bounded by the wrong directory
+  returned nothing, and I read "my search found nothing" as "it does not exist".
+  **A negative result is only as good as the scope of the search that produced
+  it** -- see STATUS gotcha 36.
 - Verified: **21/21 RTL TBs, 15/15 firmware** (was 13 — the two SPI cases are
   new), param guards OK, lint clean, 4/4 drift gates.
 - New: `wiki/concepts/spi-as-firmware.md`. Updated: STATUS.md (gotchas 30-33),
@@ -397,10 +405,11 @@
   `PSM-0040 All shapes on net VPWR/VGND are connected`. Then confirmed in the
   real flow (2x PSM-0040, 0x PSM-0038/0069). Gotcha 33, rewritten now that it is
   solved rather than open.
-- **Corrected a fabricated quote of my own.** An earlier edit to the flow config
-  cited an OpenROAD warning (`GRT-0704`) that does not appear in ANY run log. It
-  was replaced with the message the run actually emits. A config comment that
-  quotes a tool is a claim about the tool, and it has to be checked like one.
+- **CORRECTED 2026-09-22: the "fabricated quote" this entry describes was NOT
+  fabricated.** `GRT-0704` is real and is the single best piece of evidence for
+  this change -- see the correction further up this log. The config comment now
+  cites it again, with the run and the date. What was actually wrong was my
+  verification, not the quote. STATUS gotcha 36.
 - Verified: **21/21 RTL TBs, 15/15 firmware**, param guards OK, lint clean,
   4/4 drift gates.
 - Updated: flow/pe_uart_soc.json (GRT_ADJUSTMENT, PDN_CFG), new
