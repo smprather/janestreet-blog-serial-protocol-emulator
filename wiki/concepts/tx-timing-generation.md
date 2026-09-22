@@ -110,14 +110,18 @@ pre-existing and harmless: `uart_echo.hex` is 114 words and the TB loads into a
 
 One programmable board clock; DDR capture for RX only; integer timing for every hard protocol; tiny NCO for the slow fractional ones. No PLL, no DLL, no on-die multiplication anywhere.
 
-- **Default is 60 MHz** (ADR-005) — +50% core cycles over 40, exact timing
-  throughout, SPB = 12. Switching to it was one parameter change plus a DRU
-  default; 40 MHz remains available by parameter and still passes.
+- **The operating point is 60 MHz, LOCKED** (ADR-005) — +50% core cycles over 40,
+  exact timing throughout, SPB = 12. **It is no longer a parameter.** `CLK_HZ` is
+  a `localparam` in `pe_uart_soc` as of 2026-09-22: nothing ever instantiated the
+  SoC at another rate, so the parameter was a second place for the derived
+  arithmetic to be wrong rather than a real knob. See
+  [[reference/clock-arithmetic]] for the computed constant table.
 - **66 MHz is not a turbo, it is a trap.** It cannot meet the 10BASE-T TX jitter
   conformance window at any edge placement, and it breaks SPI's 10 MHz SCK
-  integer relation. The only reason to keep 66 in view is as **STA margin**: see
-  the signoff policy below. See [[comparisons/clocking-options]] and
-  [[concepts/cdr-oversampling]].
+  integer relation. It also used to be the **STA signoff target**; that is now
+  retired — both flow configs close at `CLOCK_PERIOD` 16.667 ns, so the reported
+  slack IS the operating point with no conversion. See
+  [[comparisons/clocking-options]] and [[concepts/cdr-oversampling]].
 
 ## Post-fabrication protocol ceiling (the Jane Street "arbitrary protocol" question)
 
@@ -127,14 +131,13 @@ Pulse width sets the SPEED floor: capture needs >=1 grid tick (8.33 ns plan grid
 - Async + regular transitions: bounded by tolerance class — 10BASE-T-class (+-100 ppm) tolerates 2500 UI runs; CAN-class (+-0.5%) 100 UI; UART-class (+-4%) only 12.5 UI; typical RC-osc (+-2%) 25 UI.
 - Async + long runs + sloppy clocks (e.g. 30-bit preamble from a +-2% RC device): NOT DRU-coverable; falls back to firmware polling at core speed — same wall every PIO/PRU-class machine (RP2040 included) hits.
 
-## Signoff policy: close at 66, run at 60
+## Signoff policy: close AND run at 60 MHz
 
 Core clock and protocol timing are orthogonal (all timing is strobe-based via NCOs/dividers), so:
 
-- SIGN OFF every block at 66 MHz (15.15 ns), the pad ceiling — pe_serdes already closed there (+7.6 ns setup slack at slow corner). **This is the only remaining role for 66 MHz: a conservative STA target, not an operating point.** Closing at 66 and running at 60 leaves ~10% of the period as free timing margin, and still covers the "real IHP pads top out lower than 66" hedge with no re-signoff.
-- DEFAULT board clock 40 MHz for integer-exact protocol timing; **60 MHz is the documented turbo** (+50% core cycles): still exact for every hard protocol, with a 50%-finer RX grid (SPB 8 → 12). 66 MHz is *not* an available turbo — see the jitter proof above.
-- Robustness hedge: the 66 MHz ceiling is sky130-derived; no IHP-specific figure published. Blocks closed at 66 still close with the board clock turned down if real IHP pads top out lower (50-55) — no re-signoff.
-- Costs: ~50% more dynamic power at 60 than at 40 (no per-tile power wall at TT scale); area delta at 66 was nil for pe_serdes (already closed with margin).
+- **Sign off every block at 60 MHz (16.667 ns), which IS the operating point.** Both flow configs carry this. The signoff was 66 MHz (15.15 ns, the pad-macro ceiling) until 2026-09-22; that target is **retired**, because it made every reported slack number require a conversion by the reader and because a longer period is strictly easier for setup — a design that closes at 66 has already closed at 60. Stating it directly is the clearer claim. The pad-ceiling hedge it used to provide is gone; if real IHP pads turn out to top below 66 MHz that is now a re-signoff rather than free, and the honest position is that no IHP-specific pad figure is published either way.
+- **The operating point is locked at 60 MHz for integer-exact protocol timing**, with a 50%-finer RX grid than 40 (SPB 8 → 12). It is a `localparam` in `pe_uart_soc`, not a parameter — see [[reference/clock-arithmetic]].
+- Costs: ~50% more dynamic power at 60 than at 40 (no per-tile power wall at TT scale).
 
 ## Clock uncertainty spec: 1.0 ns at 66 MHz (not a blanket 5%)
 

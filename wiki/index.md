@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-22 | Total pages: 26
+> Last updated: 2026-09-22 | Total pages: 27
 
 ## Start here
 
@@ -37,6 +37,7 @@
 - [[reference/protocol-pin-budget]] — Per-protocol IO pin counts vs the TT pad budget (26 pads, 24 usable); what the board must add per protocol.
 - [[reference/sram-budget]] — SRAM capacity vs the 8×4 die: every PDK macro's real size, what packs, and the area cost of 1–32 KB.
 - [[reference/crc-config]] — every CRC constant `pe_crc` is loaded with, derived and checked against the RevEng catalogue's published values (generated).
+- [[reference/clock-arithmetic]] — every protocol constant at the LOCKED 60 MHz operating point: what is integer-exact and what is an approximation. `CLK_HZ` is read from the RTL (generated).
 
 ## Comparisons
 

@@ -23,8 +23,16 @@ module tb_pe_uart_soc;
   localparam int IMEM_WORDS = 1024;
   localparam int IAW = $clog2(IMEM_WORDS);
   localparam int DMEM_BYTES = 16;
-  localparam int CLK_HZ     = 60_000_000;
   localparam int BAUD       = 115_200;
+
+  // The TB keeps its OWN copy of the clock rate, because it has to generate a
+  // clock and cannot ask the DUT for one -- CLK_HZ is a localparam inside
+  // pe_uart_soc now, not a parameter (see the header there for why). This copy
+  // is a TEST FACT about the board, not a second configuration: if it ever
+  // disagrees with the RTL, the TB simulates at one rate while the SoC believes
+  // another, and the protocol timing assertions would be measuring nothing.
+  // tb_pe_uart_soc is the check for that -- see reference/clock-arithmetic.md.
+  localparam int CLK_HZ = 60_000_000;
 
   // 60 MHz clock: 16.667 ns period.
   localparam real CLK_NS = 1e9 / CLK_HZ;
@@ -50,7 +58,7 @@ module tb_pe_uart_soc;
 
   pe_uart_soc #(
     .IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES),
-    .CLK_HZ(CLK_HZ), .BAUD(BAUD)
+    .BAUD(BAUD)
   ) dut (
     .clk(clk), .rst_n(rst_n),
     .host_we(host_we), .host_imem_sel(host_imem_sel),

@@ -190,5 +190,17 @@ else
   echo "STALE: wiki/reference/crc-config.md — run python3 tools/gen_crc_config.py"
   stale=1
 fi
+# The clock arithmetic is READ FROM THE RTL by the generator, so this gate is
+# what makes the locked 60 MHz operating point stick: if pe_uart_soc's CLK_HZ
+# moves and the derived constants elsewhere are not updated with it, the page
+# regenerates differently and this fails. It also asserts SPB=12 and
+# TICKS_PER_BIT=260, which are the two constants the DRU and the UART firmware
+# hardcode in other languages.
+if python3 tools/gen_clock_arithmetic.py --check >/dev/null 2>&1; then
+  echo "clock arithmetic up to date"
+else
+  echo "STALE: wiki/reference/clock-arithmetic.md — run python3 tools/gen_clock_arithmetic.py"
+  stale=1
+fi
 [ "$stale" -eq 0 ] || exit 1
 [ "$lint_rc" -eq 0 ] || { echo "lint gate FAILED (see above)"; exit 1; }

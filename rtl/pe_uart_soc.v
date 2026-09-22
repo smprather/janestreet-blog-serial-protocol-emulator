@@ -73,7 +73,6 @@
 module pe_uart_soc #(
   parameter int IMEM_WORDS = 1024,
   parameter int DMEM_BYTES = 16,
-  parameter int CLK_HZ     = 60_000_000,
   parameter int BAUD       = 115_200,
   parameter int IMEM_FLOP  = 0,    // 0 = SRAM macro, 1 = register array
   // Which of the 8 port bits are INPUTS. Outputs are the low bits starting at
@@ -115,14 +114,36 @@ module pe_uart_soc #(
   localparam int IAW = (IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS);
   localparam int DAW = (DMEM_BYTES <= 2) ? 1 : $clog2(DMEM_BYTES);
 
+  // ---- THE OPERATING POINT IS LOCKED AT 60 MHz ---------------------------
+  //
+  // CLK_HZ was a parameter. It is a module-local constant now, and that is a
+  // deliberate downgrade in flexibility, because the flexibility was never
+  // real: NOTHING instantiated this SoC at any other rate. The TT top level
+  // passed 60_000_000 -- the same value as the default it was overriding --
+  // and every testbench passed 60_000_000.
+  //
+  // A parameter nobody varies is not a knob. It is a second place for the
+  // derived arithmetic to disagree with the first, and this project has paid
+  // for that twice already: the 40 -> 60 MHz switch left the tick at 173 in
+  // comments across four files, and the I2C plan carried "1 us = 40 clocks"
+  // long after the tick had become 60.
+  //
+  // 60 MHz is a property of the BOARD and of the protocol arithmetic, not of a
+  // build. It is exact for every hard protocol -- 50 ns half-UI is exactly 3
+  // ticks, USB-LS 666.67 ns is exactly 40 -- and the demo board generates it
+  // directly (ADR-005). There is no configuration in which this number is
+  // different, so it is written once, here, and derived from everywhere else.
+  localparam int CLK_HZ = 60_000_000;
+
   // The timer runs at 2x the baud rate: one increment per HALF bit period.
   // Half-bit resolution is required, not a luxury -- sampling on whole-bit
   // ticks can only land on bit BOUNDARIES, which is the worst place to
   // sample a serial line. Firmware counts 2 ticks per bit to stay mid-cell.
   // 60 MHz / 115200 / 2 = 260.42, so TICKS_PER_BIT is 260 (integer division)
-  // and the delivered baud is 115,385 (+0.16% -- inside the ~2% UART budget,
-  // and half the error the 40 MHz point had, but still an approximation
-  // rather than an exact integer like the 10BASE-T plan).
+  // and the delivered baud is 115,385 (+0.16% -- inside the ~2% UART budget).
+  // Still an approximation rather than an exact integer like the 10BASE-T
+  // plan, and it is the ONE protocol constant here that is not exact at
+  // 60 MHz; see reference/clock-arithmetic.md for the whole table.
   localparam int TICKS_PER_BIT = (CLK_HZ / BAUD) < 4 ? 4 : (CLK_HZ / BAUD / 2);
   localparam int CNTW = $clog2(TICKS_PER_BIT);
 

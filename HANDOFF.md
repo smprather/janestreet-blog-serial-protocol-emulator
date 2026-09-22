@@ -147,12 +147,14 @@ silently. Both guards are elaboration errors now, and `tb/param_guards.sh` (run 
 `run_all.sh`) requires them to actually reject. SPB=12 is the 60 MHz grid and
 is verified passing.
 
-**Clock plan (ADR-005, 2026-09-21):** **60 MHz operating point** — 66 MHz is
-*not* usable. It provably fails the 10BASE-T TX jitter conformance window (8.0/8.5 BT
-±11 ns) at any edge placement, dithered or not; 60 MHz keeps every hard protocol
-exact and refines the RX grid 50% (SPB 8 -> 12). 66 MHz survives only as a
-conservative STA signoff target ("close at 66, run at 60"). 40 MHz is no longer the
-default but still passes if selected by parameter.
+**Clock plan (ADR-005, 2026-09-21; LOCKED 2026-09-22):** **60 MHz operating
+point** — 66 MHz is *not* usable. It provably fails the 10BASE-T TX jitter
+conformance window (8.0/8.5 BT ±11 ns) at any edge placement, dithered or not;
+60 MHz keeps every hard protocol exact and refines the RX grid 50% (SPB 8 -> 12).
+**The 66 MHz STA signoff target is retired** (both flow configs now close at
+`CLOCK_PERIOD` 16.667 ns) and **60 MHz is no longer a parameter** — `CLK_HZ` is a
+`localparam` in `pe_uart_soc`, because nothing ever instantiated the SoC at any
+other rate. `reference/clock-arithmetic.md` is the generated constant table.
 
 **The SRAM WAS the critical path, and the SoC now has the signoff that covers it.**
 The 1024x16 macro's `A_CLK` -> `A_DOUT` is 7.25 ns at the slow corner = 43% of a

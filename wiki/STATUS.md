@@ -277,8 +277,8 @@ the upside case with `tools/gen_sram_budget.py --tiles 8x4`.
 |---|---|
 | **12×** oversampling per bit (6 samples per 50 ns half-UI) = 8.33 ns RX grid at the 60 MHz core | `decisions/adr-001-8x-oversampling.md`, `decisions/adr-005-60mhz-turbo.md` |
 | Std-cell **latch-pair dual-edge flop** for DDR capture; no custom DET | `decisions/adr-002-latch-pair-det-flop.md` |
-| **60 MHz operating point** = exact integers for every hard protocol (50 ns = 3 ticks); 40 MHz still available by parameter | `decisions/adr-005-60mhz-turbo.md` |
-| **Sign off at 66 MHz** (conservative STA target only); 1.0 ns clock uncertainty. 66 is NOT an operating point — it provably fails the 10BASE-T TX jitter window | `concepts/tx-timing-generation.md` |
+| **60 MHz operating point — LOCKED, not a parameter** = exact integers for every hard protocol (50 ns = 3 ticks) | `decisions/adr-005-60mhz-turbo.md`, `reference/clock-arithmetic.md` |
+| **Signed off at 60 MHz** (`CLOCK_PERIOD` 16.667 ns) in both flow configs; the 66 MHz STA target is retired | `flow/pe_uart_soc.json`, `flow/pe_serdes.json` |
 | SERDES words ≤ 32 b; longer fields chunk (SWD parity, CAN/USB/ETH payloads) | `rtl/pe_serdes.v` header |
 | Codec pipeline order fixed (stuff → line-code); cfg selects the **subset** | `rtl/pe_codec_mux.v` header |
 | No elasticity FIFO needed (source-sync protocols + per-edge re-lock) | `concepts/cdr-oversampling.md` |

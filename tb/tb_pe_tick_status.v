@@ -31,6 +31,9 @@ module tb_pe_tick_status;
   // leave this TB simulating at one rate while the SoC thinks it is at another.
   // CLK_NS must be `real`: the period is 16.667 ns, and an integer here would
   // round the half-period to 8 ns and silently simulate at 62.5 MHz instead.
+  // The TB generates the clock, so it keeps its own copy of the rate. It is a
+  // TEST FACT about the board, not a second configuration -- see
+  // tb_pe_uart_soc.v's note and reference/clock-arithmetic.md.
   localparam int  CLK_HZ       = 60_000_000;
   localparam int  BAUD         = 115_200;
   localparam int  TICKS_PER_BIT = CLK_HZ / BAUD / 2;   // 260
@@ -46,7 +49,7 @@ module tb_pe_tick_status;
   logic [7:0] dbg_pc, dbg_a, dbg_timer;
 
   pe_uart_soc #(.IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES),
-                .CLK_HZ(CLK_HZ), .BAUD(BAUD)) dut (
+                .BAUD(BAUD)) dut (
     .clk(clk), .rst_n(rst_n),
     .host_we(host_we), .host_imem_sel(host_imem_sel),
     .host_addr(host_addr), .host_wdata(host_wdata), .run(run),
