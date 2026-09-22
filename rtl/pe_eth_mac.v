@@ -1,0 +1,535 @@
+// pe_eth_mac.v — 10BASE-T receive path: SFD lock, byte assembly, FCS check, and
+// a store-and-forward write into the frame buffer.
+// Signal meanings: wiki/reference/signal-names.md#pe_eth_mac
+//
+// WHY THIS EXISTS RATHER THAN FIRMWARE
+//
+// wiki/concepts/ethernet-scope.md settles this with arithmetic. 10BASE-T's bit
+// period is 100 ns; at 60 MHz the core has 48 clocks per byte and is
+// single-cycle, so 48 instructions is the budget for EVERYTHING. A software
+// CRC-32 costs ~240 instructions per byte, over budget by 5x. For 10BASE-T the
+// firmware sequences frames and never touches bits -- the bit work is hardware.
+//
+// ---------------------------------------------------------------------------
+// WHAT IT CONSUMES, AND WHY EVERY PIECE WAS ALREADY BUILT
+//
+//   pe_dru     -> bit_en strobe + rx_first/rx_second half-cell levels
+//   pe_manch   -> rx_raw (decoded bit) + rx_err (invalid/absent mid-bit transition)
+//   pe_crc     -> the CRC-32 engine, folded one wire bit per strobe
+//   pe_fbuf    -> where the payload lands (2 KB, ADR-003)
+//
+// All four existed and were TB-proven before this block, and three were
+// ORPHANS: built, tested in isolation, instantiated nowhere. Instantiating a
+// block is how its claim stops being untested prose.
+//
+// ---------------------------------------------------------------------------
+// THE FCS: FOLD IT AS TRANSMITTED, COMPARE AGAINST THE CATALOGUE RESIDUE
+//
+// IEEE 802.3 3.2.9 transmits the FCS with x^31 first. It also gives an
+// equivalent formulation -- right-shifting CRC-32, octets LSB-first, FCS
+// emitted LSB-first -- in the standard's own words "resulting in identical
+// transmissions" (quoted in wiki/reference/crc-config.md, which is generated
+// from tools/gen_crc_config.py and drift-gated against the RevEng catalogue).
+// This project uses that formulation, so there is no bit reversal here.
+//
+// The RECEIVER has two self-consistent-looking options and only one is
+// checkable against an outside value. Measured over a 42-byte ARP-shaped frame
+// before this RTL was written:
+//
+//   fold the field EXACTLY AS TRANSMITTED -> R == catalogue residue
+//                                            CRC-32/ISO-HDLC = 0xDEBB20E3
+//   fold the field UN-complemented        -> R == 0, crc_zero asserts
+//
+// This block folds as transmitted and compares against the residue, so
+// crc_field_out is held LOW: pe_crc's field mode is for EMITTING a field (a
+// pure shift so the transmitter's register drains), while a receiver folds the
+// field as ordinary data. The verdict is `crc_state == CRC_RESIDUE` and NEVER
+// `crc_zero` -- crc_zero belongs to the other convention, so writing it here
+// would reject every valid frame while looking exactly like a CRC bug. The
+// residue is also an outside value, so agreeing with it is evidence rather than
+// the engine marking its own homework.
+//
+// ---------------------------------------------------------------------------
+// SFD LOCK: THE 8-BIT WINDOW ALONE. MEASURED, NOT ASSUMED.
+//
+// An earlier draft carried an "alternating run must exceed N bits before
+// accepting 0xD5" test, on the theory that the window alone was ambiguous.
+// Enumerating the 64-bit prelude (56 alternating preamble bits then the SFD
+// 0xD5 LSB-first) settles it:
+//
+//   windows assembling LSB-first to 0xD5 : exactly one, bits 56..63 (the SFD)
+//   every window before the SFD          : 0x55 or 0xAA, alternating only
+//
+// 0xD5 is UNREACHABLE in a well-formed preamble, so the window cannot
+// false-lock. The run test was also actively harmful: a receiver that started
+// listening a few bits into the preamble would see a short run and MISS the
+// frame -- a silent receive failure, in the one part of the design whose whole
+// justification was robustness. The run counter is gone.
+//
+// Because the window shifts only on VALID cells, an idle line leaves it
+// untouched, and a frame that arrives mid-preamble still locks on its SFD.
+//
+// ---------------------------------------------------------------------------
+// EVERY BIT IS HELD ONE CYCLE, AND THE PHASE IS READ FROM `state`
+//
+// A 10BASE-T line signals end-of-frame by going IDLE -- a constant level. The
+// DRU keeps emitting cells for an idle line (its header is explicit that
+// `locked` is a confidence indicator and NOT a gate), and an idle cell has
+// EQUAL halves, which is exactly what pe_manch reports as rx_err. So an invalid
+// cell after a frame IS the end-of-frame marker, and it is also how a truncated
+// frame is caught.
+//
+// pe_manch's rx_err is REGISTERED: on a cell's strobe cycle rx_err still holds
+// the PREVIOUS cell's verdict and only updates on the next edge. A receiver
+// consuming each bit on its own strobe would take in one idle bit before it
+// could see the error, fold it into the CRC, and then reject a good frame --
+// with the residue mismatching, so it would look like a CRC bug.
+//
+// So each bit is latched and acted on one cycle later, when rx_err has caught
+// up:
+//
+//   strobe T   : bit_en=1, rx_raw = cell T's bit   -> latch bit, raise `pend`
+//   cycle T+1  : rx_err now describes cell T
+//                pend && !rx_err -> the bit is real: shift, fold, count
+//                pend &&  rx_err -> invalid cell: drop the bit
+//
+// THE PHASE OF THE DELAYED BIT IS `state`, NOT A SAVED COPY OF IT, and that is
+// worth stating because the obvious alternative is wrong. In this file every
+// state transition is decided on the cycle that consumes a phase's LAST bit, so
+// that bit is consumed while the machine is still in that phase's state; the
+// machine moves on at the same edge the next bit is latched. The invariant is
+// therefore:
+//
+//   during cycle T+1, `state` is the phase cell T belongs to
+//
+// An earlier draft instead latched the state alongside the bit (a `from`
+// register) and qualified the CRC fold and the write strobe with it. That
+// mis-attributes the FIRST bit of every phase: the first body bit after the SFD
+// is strobed on the cycle the SFD is consumed, so `from` records S_SEARCH and
+// the bit would be dropped from the CRC. `state` is correct at that boundary by
+// construction.
+//
+// ---------------------------------------------------------------------------
+// TWO FRAME KINDS, BECAUSE ARP IS NOT A LENGTH FRAME
+//
+// The field after the MAC addresses is a LENGTH below 0x0600 and an EtherType
+// at or above it. Easy to miss and decisive here: the acceptance test for this
+// block is an ARP exchange, ARP is EtherType 0x0806, and reading 0x0806 as a
+// length demands a 2,054-byte payload that cannot fit -- so a length-only
+// receiver rejects every ARP frame while passing any hand-made length-frame
+// test.
+//
+//   length frame (< 0x0600) : payload is that many bytes, then 32 FCS bits
+//                             which are NOT written. Ends by count, and its
+//                             size is known at the header, so it is
+//                             bounds-checked there before any write.
+//   type frame   (>= 0x0600): payload ends when the line does, and the last
+//                             four bytes received before that are the FCS.
+//                             Nothing can distinguish them from payload as
+//                             they arrive, so they ARE written and the pointer
+//                             is wound back 4 at the verdict.
+//
+// That asymmetry is the whole of `is_type`'s effect on storage, and it is why
+// the wind-back is `is_type ? 4 : 0`: a length frame's FCS bytes were never
+// written, so winding back would corrupt the ring.
+
+`timescale 1ns / 1ps
+
+module pe_eth_mac #(
+  parameter int BUF_BYTES = 2048,     // pe_fbuf's capacity
+  parameter int AW        = $clog2(BUF_BYTES),
+  // Idle cells required before an SFD hunt is allowed. IEEE 802.3's
+  // inter-frame gap is 96 bit times, and a frame cannot begin until the line
+  // has been idle -- so requiring idle before hunting is the STANDARD's rule,
+  // not a heuristic. 8 is far below 96 and far above the 1-2 cells a DRU
+  // glitch can produce, which is the whole reason it is small.
+  parameter int IDLE_CELLS = 8
+) (
+  input  logic clk,
+  input  logic rst_n,
+
+  // ---- from the DRU + Manchester codec --------------------------------
+  input  logic bit_en,      // one strobe per recovered wire bit cell
+  input  logic rx_raw,      // the decoded bit for this strobe
+  input  logic rx_err,      // registered: describes the PREVIOUS strobe's cell
+  // The two half-cell samples, straight from pe_dru. They are here to derive
+  // the IDLE indicator, and that is not a convenience: measured on a held line
+  // (tb_idle), the DRU emits cells whose halves are EQUAL while BOTH pe_manch's
+  // rx_err AND pe_dru's locked stay 0. Neither can mark idleness. The
+  // equal-halves property is the one thing that does, and a Manchester cell
+  // guarantees the halves DIFFER, so this is the codec's own definition of a
+  // valid cell, read as a level instead of as a one-cycle pulse.
+  input  logic rx_first,
+  input  logic rx_second,
+
+  // ---- buffer reclaim (firmware) --------------------------------------
+  input  logic buf_reset,   // pulse: reclaim the whole frame buffer
+
+  // ---- CRC engine (external, so the TX path can share it) -------------
+  output logic        crc_bit_en,     // qualified strobe, one cycle behind bit_en
+  output logic        crc_clr,        // pulse at the frame start (the SFD)
+  output logic        crc_bit_in,     // the latched bit, to fold
+  output logic        crc_field_out,  // held 0: a receiver folds the field as data
+  input  logic [31:0] crc_state,      // the engine's register, for the verdict
+
+  // ---- frame buffer write port (pe_fbuf) ------------------------------
+  output logic          fbuf_we,
+  output logic [AW-1:0] fbuf_waddr,
+  output logic [7:0]    fbuf_wdata,
+
+  // ---- status / handoff ----------------------------------------------
+  output logic          frame_valid,     // pulse: complete and FCS-clean
+  output logic          frame_bad,       // pulse: committed, then abandoned
+  output logic [15:0]   frame_len,       // payload bytes stored (with frame_valid)
+  output logic [15:0]   frame_field,     // the length/EtherType field as received
+  output logic          frame_is_type,   // 1 if that field was an EtherType
+  output logic [AW-1:0] frame_ptr,       // next write address = the NEXT frame's start
+  output logic [2:0]    dbg_state
+);
+
+  localparam logic [7:0]  SFD_BYTE    = 8'hD5;   // assembled LSB-first, never matched as a pattern
+  // RevEng catalogue residue for CRC-32/ISO-HDLC, from the generated
+  // wiki/reference/crc-config.md. The outside value the verdict is checked
+  // against; see the header.
+  localparam logic [31:0] CRC_RESIDUE = 32'hDEBB20E3;
+  localparam logic [15:0] TYPE_MIN    = 16'h0600;   // 802.3 length/EtherType split
+  localparam logic [2:0]  FCS_BYTES   = 3'd4;
+
+  typedef enum logic [2:0] {
+    S_SEARCH  = 3'd0,   // preamble + SFD lock; also the reset state
+    S_HEADER  = 3'd1,   // dst(6) + src(6) + field(2)
+    S_PAYLOAD = 3'd2,
+    S_FCS     = 3'd3,   // the 32 FCS bits (length frames)
+    S_SETTLE  = 3'd4,   // let the CRC register settle, then read the verdict
+    S_ERR     = 3'd5
+  } state_t;
+
+  state_t state;
+
+  // ---- the delayed bit ------------------------------------------------
+  logic pend;      // the previous cycle carried a strobe
+  logic bit_d;     // that strobe's bit
+  logic ok;        // and its cell was valid
+  assign ok = pend && !rx_err;
+
+  // ---- SFD search -----------------------------------------------------
+  logic [7:0] sr, sr_n;
+  assign sr_n = {bit_d, sr[7:1]};        // LSB-first assembly
+
+  // ---- idle gate ------------------------------------------------------
+  // A frame may only be hunted for after the line has been idle, per 802.3's
+  // inter-frame gap. Without this the receiver hunts MID-FRAME after an abort,
+  // and a payload containing 0xD5 locks it into a phantom frame -- measured:
+  // it made one rejected frame report frame_bad twice.
+  //
+  // An idle cell is one whose halves are EQUAL, which is exactly what the
+  // codec reports as rx_err. So `idle_run` counts consecutive invalid cells and
+  // resets on any valid one.
+  logic [15:0] idle_run;
+  logic        may_hunt;      // latch: the line has been idle, so hunt is legal
+  // A LATCH, NOT A LIVE CONDITION. The gate means "the line has been quiet since
+  // the last frame ended, so the next SFD is legitimate" -- and the preamble
+  // itself is 56 VALID cells, so a live `idle_run >= IDLE_CELLS` would drop to
+  // false exactly when the SFD arrives and no frame would ever lock. Measured:
+  // that is precisely what the live version did.
+  //
+  // It re-arms only after idle and clears when a frame locks, which is the
+  // standard's rule read directly: an inter-frame gap precedes every frame.
+  //
+  // The idle indicator is the equal-halves property, sampled with the strobe.
+  // See the port comment for why neither rx_err nor locked can serve.
+
+  // ---- assembly -------------------------------------------------------
+  logic [7:0]    byte_cnt;    // bytes within the header
+  logic [2:0]    bit_cnt;     // bits within the current byte
+  logic [7:0]    shreg, shreg_n;
+  logic [15:0]   field;       // the length/EtherType field
+  logic          is_type;
+  logic [15:0]   pay_cnt;     // bytes written in the payload phase
+  logic [4:0]    fcs_cnt;     // FCS bits received
+  logic [AW-1:0] wptr;
+  logic [AW-1:0] frame_start;
+  logic [AW:0]   room;
+  logic [1:0]    settle;
+  logic [7:0]    dst [0:5];
+  logic [7:0]    src [0:5];
+
+  // shreg_n, not {bit_d, shreg[6:0]}: the latter drops cell T's bit and reuses
+  // a stale bit 7, returning the byte SHIFTED -- 0xAA where 0xD5 is wanted.
+  assign shreg_n = {bit_d, shreg[7:1]};
+
+  assign frame_ptr     = wptr;
+  assign frame_field   = field;
+  assign frame_is_type = is_type;
+  assign dbg_state     = state;
+
+  assign crc_field_out = 1'b0;   // a receiver folds the field as ordinary data
+  // The fold is one cycle behind the strobe and skipped for invalid cells, so
+  // no idle bit ever enters the engine. `state` is the delayed bit's phase (see
+  // the header); S_SEARCH is excluded, which is what keeps the preamble and the
+  // SFD itself out of the CRC.
+  assign crc_bit_en = ok && (state == S_HEADER || state == S_PAYLOAD ||
+                             state == S_FCS);
+  assign crc_bit_in = bit_d;
+  // The frame boundary is the SFD, one cell before the first folded bit, and
+  // pe_crc gives `clr` priority over `bit_en`, so the two never collide.
+  assign crc_clr = ok && (state == S_SEARCH) && (sr_n == SFD_BYTE);
+
+  // A byte completes on the last bit of its cell, and only from a valid one.
+  assign fbuf_we    = ok && (state == S_PAYLOAD) && (bit_cnt == 3'd7) &&
+                      (room != 0);
+  assign fbuf_waddr = wptr;
+  assign fbuf_wdata = shreg_n;
+
+  integer k;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      state       <= S_SEARCH;
+      pend        <= 1'b0;
+      bit_d       <= 1'b0;
+      sr          <= '0;
+      idle_run    <= '0;
+      may_hunt    <= 1'b0;
+      byte_cnt    <= '0;
+      bit_cnt     <= '0;
+      shreg       <= '0;
+      field       <= '0;
+      is_type     <= 1'b0;
+      pay_cnt     <= '0;
+      fcs_cnt     <= '0;
+      wptr        <= '0;
+      frame_start <= '0;
+      room        <= BUF_BYTES[AW:0];
+      settle      <= '0;
+      frame_valid <= 1'b0;
+      frame_bad   <= 1'b0;
+      frame_len   <= '0;
+      for (k = 0; k < 6; k++) begin
+        dst[k] <= '0;
+        src[k] <= '0;
+      end
+    end else begin
+      frame_valid <= 1'b0;      // both statuses are one-cycle pulses
+      frame_bad   <= 1'b0;
+
+      // Buffer reclaim. Deliberately independent of the frame machine and NOT
+      // an abort: firmware owns the ring's lifetime, this block only advances
+      // the pointer.
+      if (buf_reset) begin
+        wptr <= '0;
+        room <= BUF_BYTES[AW:0];
+      end
+
+      // ---- latch the strobe -------------------------------------------
+      pend <= bit_en;
+      if (bit_en) bit_d <= rx_raw;
+
+      // ---- idle run ---------------------------------------------------
+      // Counts CONSECUTIVE invalid cells. pe_manch's rx_err is registered, so
+      // on the strobe cycle it still describes the previous cell -- which is
+      // exactly the alignment this counter wants, since it is measuring the
+      // cell that has just been judged.
+      if (bit_en) begin
+        if (rx_first == rx_second) idle_run <= idle_run + 16'd1;  // no transition: idle
+        else                       idle_run <= '0;                // a real cell: live
+      end
+      // Arm on a long-enough idle; disarm the moment a frame locks, so the next
+      // one needs its own inter-frame gap.
+      if (idle_run >= IDLE_CELLS[15:0]) may_hunt <= 1'b1;
+      if (ok && (state == S_SEARCH) && (sr_n == SFD_BYTE) && may_hunt)
+        may_hunt <= 1'b0;
+
+      case (state)
+
+        // ---------------------------------------------------------------
+        // Preamble and SFD. An invalid cell does not shift the window, so an
+        // idle line leaves the search untouched and a frame arriving
+        // mid-preamble still locks on its SFD.
+        // ---------------------------------------------------------------
+        S_SEARCH: begin
+          if (ok) begin
+            sr <= sr_n;
+            if ((sr_n == SFD_BYTE) && may_hunt) begin
+              state       <= S_HEADER;
+              byte_cnt    <= '0;
+              bit_cnt     <= '0;
+              shreg       <= '0;
+              pay_cnt     <= '0;
+              fcs_cnt     <= '0;
+              frame_start <= wptr;
+            end
+          end
+        end
+
+        // ---------------------------------------------------------------
+        // dst + src + the length/EtherType field = 14 bytes. The MAC fields
+        // live in registers: a minimum-size frame is mostly header, and
+        // storing it would push the payload out of a 2 KB ring.
+        // ---------------------------------------------------------------
+        S_HEADER: begin
+          if (ok) begin
+            shreg   <= shreg_n;
+            bit_cnt <= bit_cnt + 3'd1;
+            if (bit_cnt == 3'd7) begin
+              bit_cnt  <= '0;
+              byte_cnt <= byte_cnt + 8'd1;
+              case (byte_cnt)
+                8'd0, 8'd1, 8'd2, 8'd3, 8'd4, 8'd5:
+                  dst[byte_cnt[2:0]] <= shreg_n;
+                8'd6, 8'd7, 8'd8, 8'd9, 8'd10, 8'd11:
+                  // byte_cnt[2:0] wraps at 8 and the subtraction is 3-bit:
+                  // 8->0, 9->1, ... which is src index 2, 3, ... The wrap is
+                  // load-bearing; re-derive the indices before changing it.
+                  src[byte_cnt[2:0] - 3'd6] <= shreg_n;
+                8'd12:  field[15:8] <= shreg_n;
+                default: begin
+                  // Byte 12 is the HIGH half, byte 13 the LOW half. The other
+                  // order byte-swaps the field, and a 256-byte length then
+                  // reads as 1 and runs off the end of the ring.
+                  field[7:0] <= shreg_n;
+                  is_type    <= ({field[15:8], shreg_n} >= TYPE_MIN);
+                  // Reject before writing anything. Only a length frame can be
+                  // sized here; a type frame's bound is enforced per byte
+                  // below, because its length is not known until the line
+                  // goes idle.
+                  if ({field[15:8], shreg_n} == 16'h0000) begin
+                    state <= S_ERR;                 // length 0 is not a frame
+                  end else if (({field[15:8], shreg_n} < TYPE_MIN) &&
+                               ({field[15:8], shreg_n} > {{4{1'b0}}, room})) begin
+                    state <= S_ERR;                 // will not fit
+                  end else begin
+                    state   <= S_PAYLOAD;
+                    pay_cnt <= '0;
+                  end
+                end
+              endcase
+            end
+          end
+        end
+
+        // ---------------------------------------------------------------
+        // Payload. A length frame ends by count; a type frame ends when the
+        // line does, which arrives as an invalid cell -- handled after the
+        // case, since it is a whole-frame rule.
+        // ---------------------------------------------------------------
+        S_PAYLOAD: begin
+          if (ok) begin
+            shreg   <= shreg_n;
+            bit_cnt <= bit_cnt + 3'd1;
+            if (bit_cnt == 3'd7) begin
+              bit_cnt <= '0;
+              // A type frame has no length to bound against, so the bound is
+              // enforced here instead: out of room means the frame cannot fit,
+              // and it is rejected rather than wrapped over the ring. The FCS
+              // transition is nested INSIDE the successful-write branch so a
+              // rejected byte cannot also advance the phase -- written as two
+              // sibling ifs, a length frame's last byte would let the FCS
+              // assignment override the reject.
+              if (room == 0) begin
+                state <= S_ERR;
+              end else begin
+                wptr    <= wptr + 1'b1;
+                room    <= room - 1'b1;
+                pay_cnt <= pay_cnt + 16'd1;
+                if (!is_type && (pay_cnt + 16'd1 >= field)) begin
+                  state   <= S_FCS;
+                  fcs_cnt <= '0;
+                end
+              end
+            end
+          end
+        end
+
+        // ---------------------------------------------------------------
+        // The 32 FCS bits of a length frame, folded as transmitted and not
+        // written (a length frame knows where its payload ends, so its FCS
+        // never has to be guessed at).
+        // ---------------------------------------------------------------
+        S_FCS: begin
+          if (ok) begin
+            fcs_cnt <= fcs_cnt + 5'd1;
+            if (fcs_cnt == 5'd31) begin
+              state  <= S_SETTLE;
+              settle <= '0;
+            end
+          end
+        end
+
+        // ---------------------------------------------------------------
+        // The verdict, three cycles after the last fold. Free: bit cells are
+        // 12 clocks apart at the 60 MHz / SPB=12 grid.
+        // ---------------------------------------------------------------
+        S_SETTLE: begin
+          settle <= settle + 2'd1;
+          if (settle == 2'd2) begin
+            if (crc_state == CRC_RESIDUE) begin
+              frame_valid <= 1'b1;
+              // Wind back only what the FCS actually occupied in the buffer:
+              // 4 bytes for a type frame, NOTHING for a length frame whose FCS
+              // was never written.
+              //
+              // A plain if-else, NOT `is_type ? FCS_BYTES : '0`. The ternary
+              // version silently corrupted wptr: an unsized '0 makes that arm
+              // one bit wide, so the subtractor's width came from the ternary
+              // instead of from wptr, and the result truncated -- measurable as
+              // wptr going X after the first frame and later frames being
+              // mis-classified. Explicit width on every arm, or no ternary.
+              // FCS_BYTES is a 3-bit localparam, so it is zero-extended
+              // EXPLICITLY rather than part-selected: `FCS_BYTES[AW:0]` is a
+              // 12-bit select on a 3-bit value, which Icarus resolves to X --
+              // measured, and it silently poisoned `room` from the second
+              // frame on.
+              if (is_type) begin
+                wptr      <= wptr - FCS_BYTES;
+                room      <= room + {{(AW-2){1'b0}}, FCS_BYTES};
+                frame_len <= pay_cnt - 16'd4;
+              end else begin
+                frame_len <= pay_cnt;
+              end
+            end else begin
+              frame_bad <= 1'b1;
+              // A bad frame must not leave bytes that look like one: the
+              // pointer rolls back to where the frame started.
+              wptr  <= frame_start;
+              room  <= room + {1'b0, pay_cnt[AW-1:0]};
+            end
+            state <= S_SEARCH;
+          end
+        end
+
+        // ---------------------------------------------------------------
+        // Rejected. For a header rejection nothing was written and pay_cnt is
+        // 0, so the reclaim is a no-op; for a payload rejection it reclaims
+        // what landed. Either way the pointer returns to the frame's start, so
+        // a rejected frame leaves no debris in the ring.
+        // ---------------------------------------------------------------
+        S_ERR: begin
+          frame_bad <= 1'b1;
+          wptr      <= frame_start;
+          room      <= room + {1'b0, pay_cnt[AW-1:0]};
+          state     <= S_SEARCH;
+        end
+
+        default: state <= S_SEARCH;
+      endcase
+
+      // ---- the invalid cell, and end-of-frame -------------------------
+      // One copy of a whole-frame rule instead of one per state.
+      //
+      // NOT applied while searching: before the SFD the line is idle and every
+      // idle cell is "invalid", so a search that aborted on rx_err would never
+      // survive its own preamble.
+      //
+      // A truncated frame needs no separate handling: its last bit was never
+      // folded, so the residue will not match and the verdict lands as
+      // frame_bad on its own.
+      if (ok == 1'b0 && pend == 1'b1 && rx_err == 1'b1 &&
+          (state == S_HEADER || state == S_PAYLOAD || state == S_FCS)) begin
+        state  <= S_SETTLE;
+        settle <= '0;
+      end
+    end
+  end
+
+endmodule
