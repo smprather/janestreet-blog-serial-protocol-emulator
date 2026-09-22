@@ -1,7 +1,7 @@
 ---
 title: ADR-006 — The pin matrix is a runtime direction file, and it lives inside the SoC
-created: 2026-09-23
-updated: 2026-09-23
+created: 2026-09-22
+updated: 2026-09-22
 type: decision
 tags: [decision, architecture, protocol-emulation, area-budget]
 sources: [rtl/pe_pinmux.v, rtl/pe_uart_soc.v, rtl/tt_um_protocol_emulator.v, firmware/i2c_pins.pe, tb/tb_pe_i2c_soc.v]

@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-23 | Total pages: 30
+> Last updated: 2026-09-22 | Total pages: 32
 
 ## Start here
 
@@ -27,6 +27,7 @@
 - [[concepts/tx-timing-generation]] — Exact-integer protocol timing at 60 MHz (ADR-005); NCO for fractional bauds; why 66 MHz is infeasible.
 - [[concepts/live-canvas]] — Side-quest tooling: agent→browser live diagram channel (dashboard plugin, file-write publish).
 - [[concepts/ethernet-scope]] — what "10Mbit Ethernet" as a stretch goal actually asks for: the line layer, a 1.5 KB frame, and why 32 KB was never the requirement.
+- [[concepts/ethernet-receive-path]] — `pe_eth_mac` (914 cells): SFD lock, byte assembly, FCS-against-the-catalogue-residue, store-and-forward. Where four orphaned blocks become one signal path. The preamble-is-not-an-octet trap.
 - [[concepts/strobe-and-committing-edge]] — What the strobe (`bit_en`) and the committing edge are, and the sample-order trap they cause.
 - [[concepts/spi-as-firmware]] — SPI mode 0 as a pure-software master on the shared 8-bit port; the MSB-first/LSB-first asymmetry, the reset-value trap, and the mutations that were (and were not) catchable.
 - [[concepts/pin-matrix]] — runtime per-pin direction, open-drain and read-back: the I2C gate. Why the OD bit exists, and the wire model that catches contention instead of hiding it.

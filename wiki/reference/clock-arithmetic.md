@@ -75,8 +75,9 @@ STA report IS the operating point.
 
 ## Related
 
-- [[decisions/adr-005-60mhz-turbo.md]] — why 60 and not 40 or 66.
-- [[concepts/tx-timing-generation.md]] — the jitter proof against 66.
-- [[concepts/cdr-oversampling.md]] — the SPB grid this arithmetic feeds.
-- [[plans/through-i2c.md]] — the I2C tick plan that uses the 60-clock µs.
+- [[decisions/adr-005-60mhz-turbo]] — why 60 and not 40 or 66.
+- [[concepts/tx-timing-generation]] — the jitter proof against 66.
+- [[concepts/cdr-oversampling]] — the SPB grid this arithmetic feeds.
+- [[plans/through-i2c]] — the I2C tick plan that uses the 60-clock µs
+  (a completed plan, kept for its findings; [[STATUS]] has the live work list).
 - [[STATUS]] — the timing margin actually measured at this point.

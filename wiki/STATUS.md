@@ -1,8 +1,17 @@
-# Project Status — Milestone 2
+# Project Status — through 10BASE-T receive
 
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
-> Last updated: 2026-09-20 · branch `main` · plan for the next milestone:
-> **[[plans/through-i2c]]** — read that second, it is the work list.
+> Last updated: 2026-09-22 · branch `review/fix-invisible-defects`
+> (HEAD `76d54f8`) · the log's last entries are the recent work.
+>
+> **Where the work is:** pure RTL functional-simulation development. The standing
+> user ruling is *do not run flow, DRC or LVS* — those are tapeout-prep and are
+> re-checked rarely, not per change. The loop is `iverilog` + `vvp` + the emulator.
+>
+> **The forward work list is the "Next steps" section below** — it is the one place
+> that list lives, and it was stale until 2026-09-22: three of its items had been
+> completed while still shown as pending. `plans/through-i2c` is a COMPLETED plan
+> kept for its findings, not a live work list.
 
 ## Where we are
 
@@ -28,14 +37,14 @@ Both layers of the thesis now exist and are verified:
   the real chain, so every byte checked is a byte a real receiver recovers.
 - **Milestone 2 — the programmable core.** A CPU, an assembler, a bit-accurate
   emulator, and **three protocols written entirely in firmware** — UART, SPI
-  mode 0, and, as of 2026-09-23, **I2C** (the pin-level grammar: START, one bit
+  mode 0, and, as of 2026-09-22, **I2C** (the pin-level grammar: START, one bit
   cell, STOP). None has a state machine in the hardware: the framing and bit
   timing are programs (`firmware/uart_echo.pe`, `firmware/spi_xfer.pe`,
   `firmware/i2c_pins.pe`) the CPU executes against the pad interface, a tick
   counter and — for I2C — the pin matrix. UART, SPI and I2C share the **same
   8-bit port**, so nothing in the RTL knows which one is running.
 
-  **As of 2026-09-24 the frame buffer is BUILT** (`rtl/pe_fbuf.v`, 2 KB behind a
+  **As of 2026-09-22 the frame buffer is BUILT** (`rtl/pe_fbuf.v`, 2 KB behind a
   byte interface on the same 1024x16 macro as the instruction memory, per
   ADR-003). It is TB-proven on BOTH implementations -- the real macro and the
   `FLOP=1` fallback -- with 5 mutations detected and 0 survived. It is **not yet
@@ -1053,6 +1062,41 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
       arrives.
 
 
+69. **A section anchor that appears in your own prose matches the PROSE.** A script
+      rewriting STATUS.md did `t.index("## Next steps (ordered)")` right after
+      inserting a header that *mentioned* that section by name -- so the anchor
+      matched at line 11 instead of the heading at line 1090, and the write deleted
+      **1,149 of 1,171 lines**. Caught by `git diff --stat` before committing. When
+      rewriting a document programmatically: match headings with `^`-anchored regex,
+      assert the matched region is the size you expect, assert the file is still
+      plausibly long before writing, and check the diff stat. `git checkout --` is the
+      recovery, which only works if the file was committed.
+
+70. **Date entries with `date`, never by assumption.** The wiki accumulated pages
+      dated 2026-09-23 and 2026-09-24 while the actual date was 2026-09-22 -- every
+      commit confirms it. Long sessions crossing midnight make "today" feel obvious
+      and be wrong, and a future-dated page sorts as more current than the work it
+      describes. It also broke nothing, which is why it survived: no gate reads a
+      date. Run `date` and paste the answer.
+
+71. **The log is the first artifact to rot, because nothing checks it.** Five commits
+      landed (`ecfd480` through `76d54f8`) with no log entry, each one feeling like
+      "still in progress" at the time. The code, the TBs and the drift gates all
+      stayed honest; only the narrative went stale. The same sweep found `index.md` 10
+      pages behind and the "Next steps" list showing three COMPLETED items as pending
+      -- which is the worst version of the failure, because a resume-here document
+      that lies about what is pending sends the next session to redo finished work.
+
+72. **Fixing a GENERATED page fixes nothing -- edit the generator.** Four wikilinks
+      in `wiki/reference/clock-arithmetic.md` carried a `.md` suffix while 308 of the
+      wiki's 312 links are extensionless. Patching the page appeared to work and then
+      silently reverted on the next regeneration, because the strings live in
+      `tools/gen_clock_arithmetic.py`. Symptom to recognise: a file that is unchanged
+      in `git diff` after you edited it. The drift gate did not catch it either -- a
+      gate compares generated text against generated text, so a wrong constant in the
+      generator is self-consistent and invisible. Generated docs are only as honest as
+      their generator.
+
 ## Open questions / risks
 
 - **IHP-specific max pad clock is unpublished.** The ~66 MHz figure is sky130
@@ -1080,75 +1124,65 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 
 ## Next steps (ordered)
 
-**The work list is [[plans/through-i2c]]** — it has the definition of done, the
-three blockers with numbers, and an 8-step ordered plan to a real I2C transaction.
-Its Blocker 1 (the red UART RTL test) is **fixed as of 2026-09-20**; steps 2 and 3
-of that plan are the housekeeping this file just went through.
+**This is the live work list**, rewritten 2026-09-22: items 4, 5 and 6 of the
+previous revision had all been completed while the list still showed them pending,
+which is exactly the rot that makes a resume-here document untrustworthy.
 
-### The recommended order, and why it is not DRU and LFSR next
+**The blog's baseline is done and demonstrated in simulation.** UART, SPI and I2C all
+run as firmware on real RTL, each with a testbench that does not know how the firmware
+works. 10BASE-T receive exists as hardware. Nothing below is required to satisfy the
+competition's stated baseline; the list is ordered by what de-risks the *submission*.
 
-The blog's baseline is **"Start with UART, SPI, and I2C"**; USB and 10Mbit Ethernet
-are stretch goals. **UART and SPI both exist as firmware today** (steps 1-2 below
-are done); I2C is proven at the SERDES level by its testbench but has not been
-demonstrated as a *program*, which is the thing the whole submission claims.
-**Finish the baseline before the stretch**, and inside the baseline take the cheap
-one first.
+### 1. Wire `pe_eth_mac` into the SoC — the next RTL step
 
-1. ~~**SRAM swap for instruction memory**~~ **DONE 2026-09-20**
-   ([[decisions/adr-003-memory-plan]]). Took the design from 89% of a 4x6 die to
-   54%, and from 128 program words to 1,024 via the real `1P_1024x16` macro.
-2. ~~**SPI as firmware.**~~ **DONE 2026-09-22** — `firmware/spi_xfer.pe`, a mode-0
-   master, verified in `tools/peemu.py` against a modelled slave, with three
-   mutations built to prove the test can fail ([[concepts/spi-as-firmware]]).
-   It needed no pin matrix, as predicted: the SoC's single in/out pin became an
-   8-bit port with a build-time direction mask, and **UART and SPI share that one
-   port and mask**. Completes baseline protocol #2.
-   *Still open from this step:* `tb_pe_spi_soc.v` does not exist, so SPI firmware
-   has no RTL testbench — the emulator is currently its only executable
-   specification. UART has the equivalent in `tb_pe_uart_soc.v`.
-3. ~~**Pin matrix / OE**, then **I2C**~~ **DONE 2026-09-23.** The pin matrix is
-   built (111 cells) and I2C runs on it as firmware
-   ([[concepts/i2c-on-the-matrix]]). A placement correction along the way: the
-   matrix went **inside** `pe_uart_soc` rather than at the TT wrapper, because
-   the CPU's IO bus never leaves the SoC ([[decisions/adr-006-pin-matrix]]).
-   Measured 83.2-83.6 kHz, every standard-mode floor cleared at worst case over
-   all 60 tick phases, with the OD property asserted on the RTL's own `pin_oe`.
-   Completes baseline protocol #3 -- **the blog's baseline is now fully
-   demonstrated in simulation.**
-   *Still open from this step:* the transaction layer (byte transfer, ACK,
-   addressing) -- `firmware/i2c_pins.pe` is the pin-level grammar only.
-4. **CRC LFSR** (~120 cells). Do this before the DRU. It is small, well understood,
-   serves *three* protocols (CRC-15 CAN, CRC-5/16 USB, CRC-32 Ethernet), and
-   `tb_pe_can.v`, `tb_pe_usb.v` and `tb_pe_eth.v` already compute these CRCs in
-   their models — so a golden reference exists to check the hardware against on day
-   one. Lowest risk, immediate payoff.
-5. **DRU** (oversampled phase-picker): edge detect, 3-bit phase counter with
-   re-lock on every edge, mid-bit strobe, preamble lock, majority-vote filter.
-   Spec in [[concepts/cdr-oversampling]]; ~60–100 cells. Needed for 10BASE-T and
-   PS/2 receive, not for I2C. **Last of these, because it is the hardest and it
-   only serves stretch goals** — phase recovery is where designs of this kind
-   actually fail.
-6. **Frame buffer + Ethernet framing**, per [[concepts/ethernet-scope]]. The
-   acceptance test is an ARP request/reply, 42 bytes each way, no IP stack.
-7. **Word FIFO** (16–32 deep) if gapless multi-word streaming is wanted. Size it
-   *after* the SRAM swap: 16 words of 32 bits is another 512 flops.
-8. **Full-chip floorplan** against the real tile allocation; then the flow end to
-   end on the whole design rather than one block.
+`rtl/pe_eth_mac.v` is built, TB-proven (8 mutations, 8 detected) and instantiated
+**nowhere**. 10BASE-T is its consumer, so the instance lands with the receive path:
+instantiate the chain (`pe_dru` -> `pe_manch` -> `pe_eth_mac`, with `pe_crc` and
+`pe_fbuf`) inside `pe_uart_soc`, put the RX pin on the matrix, and give the firmware a
+way to see `frame_valid` / `frame_len` and walk the buffer. Then a TB at the SoC level
+— the block TB drives the wire, but nothing yet proves the firmware can *use* a frame.
+Why first: it is the only thing that retires the last three orphans, and an orphan is
+a claim that has never been exercised inside a design.
+See [[concepts/ethernet-receive-path]].
 
-**The one reason to reorder:** if de-risking matters more than sequencing, pull the
-DRU forward to position 2. It is the highest-uncertainty block in the project and
-there are ~16 months to the 2027-01-18 deadline. That is a defensible choice; it is
-not the default one, because a complete and verified baseline beats a partial
-stretch in a competition that says "verification matters" out loud.
+### 2. `pe_ctrl` — the SPI load path
 
-Done since the last revision of this list: the programmable core exists
-(`rtl/pe_cpu.v`), the assembler and emulator exist (`tools/peasm.py`,
-`tools/peemu.py`), and a UART runs in firmware on real RTL. Then a review pass on
-2026-09-20 fixed four defects that the green regression could not see (the
-two-driver `tick_flag`, the unsynthesisable debug ports, the stuck receive-buffer
-pointer, and the assembler's silent truncation), added the gate that catches that
-class, and built the Tiny Tapeout top level the repo had been reasoning about
-without ever writing.
+**The one blocking a real chip from booting.** There is no way to get a program into
+instruction memory on silicon: `pe_imem` needs a loader, and without it the chip
+powers up holding whatever the macro happens to contain. Every simulation works
+because the TBs preload. **Open question the user has not ruled on:** should
+`pe_ctrl` also be an SPI *master* (reusing the SPI firmware path) or a passive slave
+the host clocks? The slave is simpler; a master would let the chip load itself from a
+flash part.
+
+### 3. I2C transaction layer
+
+`firmware/i2c_pins.pe` is the **pin-level grammar only** (START, one bit cell, STOP).
+Byte transfer, ACK/NACK, 7-bit addressing and a read path are not written. The
+pin-level work was the risky half and it is done; this half is ordinary firmware. The
+read-path turnaround budget is already computed in [[plans/through-i2c]].
+
+### 4. Reclaim or commit the six `uo_out` pins on `dbg_pc[0..5]`
+
+`tt_um_protocol_emulator` burns six of eight `uo_out` pins on a debug program counter.
+A deliberate bring-up choice, but also six pads that could carry a protocol.
+Unresolved, and cheap to decide.
+
+### 5. Full-chip floorplan against the real tile allocation
+
+Everything so far is block-level or one-block-through-the-flow. The tile-size figure
+is itself uncertain (the blog says ~200x150 um/tile, the TT template's `info.yaml`
+says ~167x108 um) — see the open risks. Do this when the RTL stops moving, and per the
+standing ruling, *not* as a routine check.
+
+### Deferred by explicit ruling — do not do these
+
+- **DRC/LVS.** Standing user ruling: final tapeout prep only, checked rarely. Retained
+  facts: `1113909 Magic DRC` + `2672 KLayout DRC`, byte-identical at 60 and 66 MHz,
+  **100% inside the SRAM macro footprint**, with 2,672 of 2,672 SoC KLayout violations
+  reproduced by the macro **alone**. LVS passes.
+- **Max-slew / max-cap / max-fanout** remain WARNINGS (8 / 10 / 7), not gated.
+  Pre-existing, and not worth chasing before the RTL settles.
 
 ## Reading order for a fresh session
 

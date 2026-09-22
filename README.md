@@ -86,17 +86,19 @@ tools/    peasm.py (assembler), peemu.py (bit-accurate emulator),
           gen_*_budget.py (docs generated from RTL/PDK, drift-checked in run_all),
           live-canvas/ (optional dashboard diagram pane)
 sim/      VCD waveforms from the testbenches (regenerated, not tracked)
-wiki/     the design record — read STATUS.md, then plans/through-i2c.md
+wiki/     the design record — read STATUS.md; its Next-steps section is the work list
 ```
 
 The `wiki/` is where the reasoning lives: competition rules and platform
 constraints, protocol physical-layer analysis, timing plans and their arithmetic,
 ADRs, the current work plan, and the toolchain notes (including the failure modes
-worth not rediscovering). `wiki/STATUS.md` is the resume-here page.
+worth not rediscovering). `wiki/STATUS.md` is the resume-here page, and its
+Next-steps section is the live work list (`plans/through-i2c` is a completed plan,
+kept for its findings).
 
 ## Design in one paragraph
 
-Protocol logic belongs in **firmware**. A 387-cell CPU executes a program that
+Protocol logic belongs in **firmware**. A 383-cell CPU executes a program that
 bit-bangs a protocol against pins and a counter; the UART exists only as
 114 words of firmware. For protocols where a byte moves in one operation
 (UART/SPI/CAN/USB) a shared SERDES does the datapath: a programmable divider

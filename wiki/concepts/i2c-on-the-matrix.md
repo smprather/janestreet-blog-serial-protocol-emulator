@@ -1,7 +1,7 @@
 ---
 title: I2C on the pin matrix
-created: 2026-09-23
-updated: 2026-09-23
+created: 2026-09-22
+updated: 2026-09-22
 type: concept
 tags: [protocol, gpio, physical-layer, verification, firmware]
 sources: [firmware/i2c_pins.pe, rtl/pe_pinmux.v, rtl/pe_uart_soc.v, tb/tb_pe_i2c_soc.v, tools/measure_i2c_timing.py, tools/peasm.py]

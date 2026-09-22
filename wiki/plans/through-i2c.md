@@ -136,7 +136,7 @@ the pad; what did not exist at the time was the block in front of it. Design:
 ```
 
 **That sketch was the first design and it was wrong on two counts, both
-corrected 2026-09-23** ([[decisions/adr-006-pin-matrix]]):
+corrected 2026-09-22** ([[decisions/adr-006-pin-matrix]]):
 
 1. **`cfg_prot[i]` was dropped.** A selector holding a constant per protocol is
    a build-time map wearing a runtime hat. What I2C actually needs is per-pin
@@ -385,9 +385,9 @@ data to settle, which is still far inside `tSU;DAT`.
 | 3b | ~~TT top level + `info.yaml`~~ **DONE 2026-09-20**: `rtl/tt_um_protocol_emulator.v`, `info.yaml`, `tb/tb_tt_um_protocol_emulator.v` (pad contract: no X on an output, `ena` gates nothing, open-drain never drives high) | — | the repo is submittable; `uio_oe` has a real path to a pad |
 | 4 | ~~Pin matrix / OE~~ **DONE 2026-09-22**: `rtl/pe_pinmux.v` (OUT/OE/IN/OD per pin), `tb/tb_pe_pinmux.v`, 7/7 mutations caught ([[concepts/pin-matrix]]) | 3b | open-drain, read-back and tri-state verified |
 | 4b | ~~SPI as firmware~~ **DONE 2026-09-22**: `firmware/spi_xfer.pe` (mode-0 master, 70 words) on the shared 8-bit port; emulator mode-0 slave model; 3 mutations built ([[concepts/spi-as-firmware]]) | 3b | emulator exchanges 4 frames both directions; `run_firmware_tests.sh` green. **Open:** no `tb_pe_spi_soc.v` — SPI firmware has no RTL testbench |
-| 5 | ~~I2C SoC wiring~~ **DONE 2026-09-23**: matrix moved *inside* `pe_uart_soc` (the plan's "wrapper instantiates the matrix" was unimplementable — see [[decisions/adr-006-pin-matrix]]), 1 µs tick divider on ports 4/6, `pin_oe` threaded to the pads, I2C SDA/SCL on `uio[0]`/`uio[1]` | 4 | **DONE** — `tb_pe_i2c_soc` green; UART and SPI still sign off *through* the matrix |
-| 6 | I2C firmware: START/STOP first, then byte, then ACK, then read | 1,5 | START/bit-cell/STOP **DONE 2026-09-23** (`firmware/i2c_pins.pe`, 79 words, spec-compliant across all 60 tick phases — [[concepts/i2c-on-the-matrix]]); byte/ACK/address still open |
-| 7 | `tb_pe_i2c_soc.v` with timing assertions | 6 | **DONE 2026-09-23** for the bit cell, including the timing assertions; 6 mutations, 1 documented equivalent survivor (`tb/mutate_i2c_tb.sh`) |
+| 5 | ~~I2C SoC wiring~~ **DONE 2026-09-22**: matrix moved *inside* `pe_uart_soc` (the plan's "wrapper instantiates the matrix" was unimplementable — see [[decisions/adr-006-pin-matrix]]), 1 µs tick divider on ports 4/6, `pin_oe` threaded to the pads, I2C SDA/SCL on `uio[0]`/`uio[1]` | 4 | **DONE** — `tb_pe_i2c_soc` green; UART and SPI still sign off *through* the matrix |
+| 6 | I2C firmware: START/STOP first, then byte, then ACK, then read | 1,5 | START/bit-cell/STOP **DONE 2026-09-22** (`firmware/i2c_pins.pe`, 79 words, spec-compliant across all 60 tick phases — [[concepts/i2c-on-the-matrix]]); byte/ACK/address still open |
+| 7 | `tb_pe_i2c_soc.v` with timing assertions | 6 | **DONE 2026-09-22** for the bit cell, including the timing assertions; 6 mutations, 1 documented equivalent survivor (`tb/mutate_i2c_tb.sh`) |
 | 8 | Fast-mode feasibility check (500 ns tick, 333 kHz) | 7 | written up, not necessarily built |
 
 ### Where this sits in the wider order
@@ -410,7 +410,7 @@ version, and the reasoning for it:
 
 Step 1 is complete (see Blocker 1 for the measured evidence) and steps 2-4 are
 committed; step 4 (the pin matrix) landed 2026-09-22 at 111 cells
-([[concepts/pin-matrix]]). **Step 5 landed 2026-09-23**, with a placement change
+([[concepts/pin-matrix]]). **Step 5 landed 2026-09-22**, with a placement change
 the plan had wrong: the matrix went *inside* `pe_uart_soc` rather than in front
 of it, because the CPU's IO bus never leaves the SoC and a matrix outside it
 would be unreachable from firmware ([[decisions/adr-006-pin-matrix]]). Step 6's

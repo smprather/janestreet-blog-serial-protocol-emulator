@@ -699,7 +699,7 @@
   and mutation-tests both fixes; wired into `tb/run_all.sh`. Confirmed it fires
   on both mutations (`iw=100`, width call `1`).
 
-## [2026-09-23] build | The matrix moves inside the SoC, and I2C runs on it
+## [2026-09-22] build | The matrix moves inside the SoC, and I2C runs on it
 
 - **The plan had the pin matrix in the wrong place.** It said "the TT wrapper
   instantiates the matrix". Unimplementable: the CPU's IO bus never leaves
@@ -758,3 +758,138 @@
   [[concepts/pin-matrix]] (placement corrected), [[plans/through-i2c]].
 - **Regression:** RTL 23/23, firmware 16/16, two new gates in `tb/run_all.sh`.
   Commit `4ea345a`.
+
+## [2026-09-22] build | SPI mode 0 on real RTL, and a measured simulator bake-off
+- **`tb_pe_spi_soc.v`** closes the gap `plans/through-i2c` step 4b left open: SPI
+  firmware had only the emulator as its executable specification. The TB models a
+  **real mode-0 slave** that decodes MOSI on the SCLK rise, so the byte it checks
+  is the byte a real slave captured -- the emulator alone shared the firmware's own
+  assumptions. Buffer matches the emulator byte-for-byte: `A7 E5 96 C1 3D 7B D2 4F`.
+- **Three TB bugs, all recorded as gotchas.** (a) A `posedge clk` trace mixed old
+  and new state because `pc` and the registered ROM `A_DOUT` update on the SAME
+  edge. (b) The TB released `run` before the registered ROM had loaded `imem[0]`,
+  so `LDI A,4` at pc 0 never executed -- `tb_pe_uart_soc`'s undocumented 4-clock gap
+  is the requirement, not a quirk. (c) The slave armed on the CS_N **edge** while
+  the SoC drives CS_N low from reset, so it never armed; model selection as a
+  **level**.
+- **A wrong assertion, caught by the emulator.** The TB asserted `dmem[15]` against
+  the last response byte; the emulator agreed with the RTL on `00`, proving the
+  ASSERTION wrong rather than the design. `dmem[15]` is cleared at the start of
+  every frame -- the assertion compared the wrong window.
+- **`tb/mutate_spi_tb.sh`**: 5 mutations (wrong sample edge, LSB-first shift, CS_N
+  never deasserted, pin read ignoring inputs, no idle pattern), **5 detected, 0
+  survived**, with a `verify_restore` guard.
+- **BAKE-OFF (Icarus 13.0 vs Verilator 5.050)**, both verified PASS on the same TB
+  first: SPI TB **110.3 ms vs 8.7 ms = 12.7x**; I2C TB **283.3 ms vs 15.0 ms =
+  18.9x**; build **9 ms vs 2773 ms**; **break-even ~27 runs**. Verilator is
+  **2-state** and Icarus **4-state** -- an unassigned signal becomes `0` silently
+  under Verilator -- but all 5 SPI mutations give **identical FAIL counts** under
+  both, so no detection power is lost today.
+- **Files:** `tb/tb_pe_spi_soc.v`, `tb/mutate_spi_tb.sh`, `wiki/reference/simulator-bakeoff.md`.
+- **Regression:** RTL 24/24, firmware 16/16. Commit `ecfd480`.
+
+## [2026-09-22] build | `--fast`: parallelism, not a simulator swap
+- `tb/run_all.sh --fast` runs the TB list through `tb/run_one_tb.sh` in parallel.
+  **It is parallel Icarus, NOT a Verilator swap**, and that is a measured decision:
+  Verilator builds per `--top-module` with no shared cache (~2.8 s each), so a naive
+  per-TB swap makes the suite **69.6x SLOWER** (2.4 s -> 167 s) even though each
+  run is 12-19x faster. The per-run win only pays back after ~27 runs of the SAME
+  testbench -- the iteration loop, not the regression suite.
+- **`tb_pe_pinmux` cannot run under Verilator at all** (`DIDNOTCONVERGE`): it models
+  the bus at strength levels (pull-up vs strong 0/1) to test the OD bit's contention
+  property, and 2-state has no weak/strong distinction. A survey of all TBs under
+  both simulators: **21 agree, 1 differs, 3 use X-dependent constructs** -- so the
+  2-state risk is real but now measured rather than assumed.
+- Suite 10.7 -> 9.4 s; verdicts byte-identical serial vs `--fast`; an injected
+  `pin_rd` break is caught identically by both paths.
+- **Mutation contamination, found and fixed.** `firmware/spi_xfer.pe` was left
+  mutated -- traced to an ad-hoc cross-check loop, NOT the committed harness -- after
+  which every later test silently measured the mutant. Both harnesses now verify
+  `git diff --quiet` after every restore. The first `verify_restore` guard was
+  **fake** (it exited 0 with the restore sabotaged): the main success path called
+  `restore` without it, because an earlier regex edit matched nothing.
+- **Files:** `tb/run_one_tb.sh`, `tb/run_all.sh`, `wiki/reference/simulator-bakeoff.md`.
+  Commit `4ce5632`.
+
+## [2026-09-22] build | `pe_fbuf`: the 2 KB frame buffer
+- `rtl/pe_fbuf.v` -- 2 KB behind a byte interface on the SAME `1P_1024x16` macro as
+  the instruction memory, per [[decisions/adr-003-memory-plan]]. This was the last
+  unbuilt hardware block for 10BASE-T: a maximum Ethernet frame is 1,518 bytes and
+  the CPU's data memory is **16**, so a frame has nowhere to go without it.
+- **The design is asymmetric, and that is the finding.** Writes are free -- the
+  macro's bit-mask port IS byte-select in hardware, so there is no
+  read-modify-write. Reads cost a **lane register**, because `A_DOUT` has no
+  byte-select and the lane must be captured WITH the address.
+- **Mutation testing earned its keep twice.** (a) Every read check held its address
+  stable, so replacing the registered lane with the **live** lane passed all of
+  them; real frame walks change the address every cycle. Added a pipelined-read
+  check -- 5/5 mutations now detected. (b) The harness first demanded BOTH
+  implementations fail per mutation, which misreported three genuine detects as
+  "survived": a mutation to one path can only be caught by that path.
+- TB runs BOTH the macro and the `FLOP=1` fallback, because a fallback that can
+  silently diverge is worse than none. Measured area: **48 cells** for the macro
+  build (glue only -- the macro's area is in its LEF) vs **45,368** for flops.
+- **Files:** `rtl/pe_fbuf.v`, `tb/tb_pe_fbuf.v`, `tb/mutate_fbuf_tb.sh`,
+  `tb/synth_area.sh`, `tools/gen_block_diagram.py`. Commit `8e30cb8`.
+
+## [2026-09-22] build | `pe_eth_mac`: the 10BASE-T receive path
+- **`rtl/pe_eth_mac.v`, 914 cells** -- the first protocol block deliberately NOT
+  firmware, and the reason is arithmetic: 48 instructions per byte at 10BASE-T's
+  100 ns bit period against ~240 for a software CRC-32 alone. Full write-up:
+  [[concepts/ethernet-receive-path]].
+- **It retires three orphans.** `pe_dru`, `pe_manch`, `pe_crc` and `pe_fbuf` are
+  instantiated together for the first time; three of them had been in `rtl/` passing
+  their own TBs while driving nothing.
+- **Four real defects, each found by measuring rather than reasoning.** (a) The FCS
+  convention: `pe_crc` has two self-consistent receiver contracts and only the
+  catalogue residue (0xDEBB20E3) is an OUTSIDE value; `crc_zero` would reject every
+  valid frame while looking like a CRC bug. (b) Carrier sense cannot come from
+  `rx_err` OR `locked` -- measured, BOTH stay 0 on a held line; only the
+  equal-halves property reports idle. (c) Without an inter-frame gate the receiver
+  hunts inside an aborted frame and a payload `0xD5` locks a phantom frame --
+  measured, one rejected frame reported `frame_bad` twice. (d) Two width bugs: an
+  out-of-range part-select (`FCS_BYTES[AW:0]` on a 3-bit constant -> X in Icarus)
+  and an unsized `'0` in a ternary that truncated the subtractor.
+- **The cheapest lesson cost the most time: a preamble is a WIRE BIT PATTERN, not
+  an octet.** 802.3 says "seven octets of the pattern 10101010", which reads as
+  `0xAA` -- but a byte helper sends LSB-first, so `send_byte(8'hAA)` puts `01010101`
+  on the wire, the inverted phase, and the junction with the SFD creates a SECOND
+  false `0xD5` window seven bits early. Hand-deriving the window set gave the wrong
+  answer twice; enumerating the 64-bit prelude in code settled it immediately
+  (`0xD5` occurs exactly once, and an alternating preamble can only produce
+  `0x55`/`0xAA`). That also showed an "alternating run must exceed N" guard was
+  HARMFUL, not merely redundant.
+- **The mutation harness destroyed its own target.** It restored with
+  `git checkout` while `rtl/pe_eth_mac.v` was **untracked**, so every restore failed,
+  all eight mutations stacked, and it reported "8 detected, 0 survived" -- a perfect
+  score that meant nothing. Rebuilt from the mutation list, committed first, and the
+  harness now snapshots with `cp` and verifies with `cmp` after every mutation.
+  Honest result afterwards: **8 mutations, 7 detected, 1 survived** -- and the
+  survivor (`no-bounds-check`) was a REAL gap, since the payload's own `room == 0`
+  check produces the same `frame_bad` count. Closing it needed a `0xEE` guard
+  pattern planted past every legitimate frame to assert the buffer was untouched,
+  because the FLOP array starts as `x` and a zero-check fails on a correctly
+  untouched buffer.
+- **Files:** `rtl/pe_eth_mac.v`, `tb/tb_pe_eth_mac.v`, `tb/mutate_eth_mac_tb.sh`,
+  `tb/run_all.sh`, `tb/synth_area.sh`, `tools/gen_block_diagram.py`,
+  [[concepts/ethernet-receive-path]]. Commits `be4511f`, `76d54f8`.
+- **Regression:** RTL **26/26**, firmware 16/16, all four mutation gates green,
+  serial and `--fast` identical.
+
+## [2026-09-22] lint | Wiki drift swept, and it was real
+- **The wiki carried FUTURE DATES.** Several pages said `2026-09-23` and one said
+  `2026-09-24`; `date` reports 2026-09-22 and every commit is 09-21/09-22. Corrected
+  repo-wide. Cause: entries written at the end of a long session, dated by
+  assumption instead of by `date`.
+- **`index.md` was 10 pages stale** (said 30, disk had 40 files including raw). Now
+  32 non-raw pages, counted programmatically rather than by hand.
+- **`STATUS.md` header said branch `main`** while the branch is
+  `review/fix-invisible-defects`, and titled itself "Milestone 2" while Milestone 3
+  had landed. Both corrected.
+- **Four work items were UNLOGGED** -- SPI-on-RTL, the bake-off, `--fast`, `pe_fbuf`,
+  and `pe_eth_mac` -- which is what generated the four entries above. The log now
+  covers the full path from `4ea345a` to `76d54f8`.
+- **Added [[concepts/ethernet-receive-path]]** and put it in the index.
+- **Lesson:** the log is the one artifact that cannot be reconstructed from the
+  code, so it is the first thing to rot. Four commits had landed with no entry
+  because each felt like "still in progress".
