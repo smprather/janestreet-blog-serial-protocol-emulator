@@ -178,11 +178,28 @@ paragraph above used to end on). The full-SoC LibreLane run
 | hold slack, slow corner | +0.656 ns |
 | worst-case IR drop on VPWR | 0.30% (3.56 mV of 1.20 V) |
 
+**One caveat on that 7.635 ns, measured 2026-09-22 and not obvious from
+the summary:** the macro's own `.lib` characterises its input slew axis only
+up to **0.5952** and its output cap axis only up to **0.0640**, and this
+design presents **1.291** slew on `A_DIN[5]` and **0.1169** cap on
+`A_DOUT[4]`. OpenROAD **extrapolates silently** there -- it emits no warning
+-- so the macro's internal delay is a table lookup taken outside the table.
+That is why STA reports 10 max-slew / 8 max-cap / 7 max-fanout violations on
+the macro's pins alongside the clean setup/hold result; those checks are
+separate from setup/hold and an earlier note here wrongly read the clean
+setup/hold as 'zero violations'. The slack on the affected paths is large
+(`A_DIN[5]` +10.27 ns, `A_ADDR[0]` +3.70 ns) and extrapolation usually
+over-estimates delay, so the signoff is not in danger -- but the fix belongs
+in the FLOW (`repair_design` resizes nothing here because it runs with
+`-slew_margin 20 -cap_margin 20`; raising
+`DESIGN_REPAIR_MAX_SLEW_PCT`/`DESIGN_REPAIR_MAX_CAP_PCT` is the lever).
+STATUS gotchas 37-38.
+
 The in-context access is 0.39 ns worse than the standalone .lib table figure,
 which is the clock-tree and routing overhead of actually placing the macro --
 and it is the reason the .lib figure was labelled an estimate. Setup and hold
-both close at all three corners with zero violating paths, so the
-instruction-fetch path is no longer a projected risk: it is a signed-off
+both close at all three corners with zero SETUP/HOLD violating paths (the
+separate max-slew/max-cap checks on the macro do fail -- see the caveat
 result. Note the slack is a *measured post-route* number, so it moves by
 ~0.1 ns between runs as placement changes; an earlier run without the PDN
 fix read +1.234 ns. Quote the run ID with the number.

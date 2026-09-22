@@ -565,6 +565,62 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     **LEF declares `SIZE 236.8 BY 336.46`**. Check the LEF before believing the
     macro is malformed, and do not edit a vendor GDS to satisfy a flow script's
     layer name.
+36. **A negative result is only as good as the SCOPE of the search that produced
+    it.** I claimed a config comment quoted an OpenROAD warning (`GRT-0704`) that
+    "does not exist in any run log", and replaced it. `GRT-0704` is real: it is in
+    `RUN_2026-09-22_00-07-27/warning.log`,
+    `[GRT-0704] Try reduce the layer adjustment from 30.000002% to 0%` — the tool
+    literally recommending the change that fixed the congestion. The check that
+    "proved" it absent was `grep -rl` run from the **repo root**, while the run
+    logs live under **`~/asic-runs`**. A negative grep bounded by the wrong
+    directory returns nothing, and I read "my search found nothing" as "it does
+    not exist". Two consequences: (a) before recording that a quote is fabricated,
+    make the search cover where the evidence WOULD be, and say in the writeup
+    where you looked; (b) a false fabrication-claim is worse than the original
+    quote, because it removes real evidence AND installs a wrong lesson.
+37. **"Setup and hold close" is NOT "no violations" — max-cap / max-slew /
+    max-fanout are SEPARATE checks, and they do fail here.** `RUN_2026-09-22_00-48-35`
+    closes timing (setup WNS +1.143 ns, hold WNS +0.121 ns, 0 setup/hold violating
+    paths at all three corners, TNS 0.0) and simultaneously reports **10 max-slew,
+    8 max-cap and 7 max-fanout violations**, present in every run since the macro
+    landed. An earlier summary of mine said "0 violations" for this run; that was
+    true of setup/hold and false of the STA as a whole. Always state which check
+    you mean.
+38. **Some of those violations sit at slew/cap values the SRAM's .lib was never
+    characterised for, and OpenROAD extrapolates SILENTLY.** This touches the path
+    signed off as closed. Measured axes in
+    `RM_IHPSG13_1P_1024x16_c2_bm_bist_slow_1p08V_125C.lib`:
+
+    | axis | table max | what the design presents |
+    |---|---|---|
+    | input slew (`index_1`) | **0.5952** | `A_DIN[5]` **1.291** (2.2x over), `A_ADDR[0]` 0.961, `A_REN` 0.644 |
+    | output cap (`index_2`) | **0.0640** | `A_DOUT[4]` **0.1169** (+83%), `A_DOUT[12]` 0.0680 (+6%) |
+
+    Consequences and levers:
+
+    - **The macro's internal delay is not trustworthy as characterised** at those
+      points — the 7.635 ns `A_DOUT[12]` figure is a table lookup taken outside
+      the table. Extrapolation usually over-estimates delay and the +1.143 ns
+      margin absorbs a lot, but "probably pessimistic" is not a signoff claim.
+    - **It is fixable in the FLOW, not the silicon.** The over-slewed drivers are
+      `sg13g2_buf_1` (the smallest buffer IHP makes), and `A_DOUT[4]` presents
+      fanout 20 against a limit of 10. `repair_design` runs with
+      `-slew_margin 20.0 -cap_margin 20.0` and its own log shows it resizing
+      **nothing** ("+0.0% ... Resized 0 ... Remaining 1332" all the way down) —
+      the 20% margins tell the resizer these are fine. Raising
+      `DESIGN_REPAIR_MAX_SLEW_PCT` / `DESIGN_REPAIR_MAX_CAP_PCT` and buffering
+      `A_DOUT` is the way to bring the macro back inside its characterisation.
+    - **`A_CLK` is fine, deliberately**: 0.051 ns slew, 11.7x inside the limit,
+      because it comes off the delay-buffer chain. The critical path's *clock*
+      side is well behaved; the *data* and *output* pins are what is over.
+    - **`A_DOUT[4]` is the worst for a reason**: `pe_imem` wires `A_DOUT` straight
+      to `imem_rdata`, which the CPU reads as the instruction word, so that net
+      fans out to every instruction consumer. See [[reference/sram-budget]].
+
+    Slack on the affected paths is comfortable (`A_DIN[5]` +10.27 ns,
+    `A_ADDR[0]` +3.70 ns) so nothing is currently failing timing. The finding is
+    that the instruction-fetch STA number rests on extrapolated macro timing, and
+    the flow has a lever to remove that caveat.
 
 ## Open questions / risks
 
