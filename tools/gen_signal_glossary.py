@@ -66,7 +66,7 @@ NOTES: dict[tuple[str, str], str] = {
     ("pe_serdes", "rx_busy"): "High from start until the final strobe — drops one cycle **before** `rx_valid`.",
     ("pe_serdes", "rx_valid"): "Word complete. Delayed one cycle past the final strobe by design (so `rx_data` can copy the register without a variable-shift path).",
     # ---- pe_codec_mux: the codec pipeline --------------------------------
-    ("pe_codec_mux", "cfg"): "Stage select. `cfg[0]` stuff, `cfg[1]` NRZI, `cfg[2]` Manchester, `cfg[3]` `half_phase`, `cfg[7:4]` `run_cfg` (0 ⇒ default 5).",
+    ("pe_codec_mux", "cfg"): "Stage select. `cfg[0]` stuff, `cfg[1]` NRZI, `cfg[2]` Manchester, `cfg[3]` `half_phase`, `cfg[6:4]` `run_cfg` (0 ⇒ default 5), `cfg[7]` `ones_only` (1 ⇒ stuff only runs of one, USB; 0 ⇒ either polarity, CAN). The USB configuration byte is **`0xE3`** (stuff + NRZI, run 6, ones-only); CAN is `0x05`. Using the old `0x63` selects symmetric stuffing and corrupts USB zero runs.",
     ("pe_codec_mux", "clr"): "Frame/SOF boundary — resets stuffing run tracking.",
     # ---- pe_crc: the CRC / LFSR engine ----------------------------------
     ("pe_crc", "bit_en"): "**The strobe** — one-cycle pulse meaning \"this is the moment\". One strobe per **wire bit**, in transmission order. See [[concepts/strobe-and-committing-edge]].",
@@ -137,6 +137,7 @@ NOTES: dict[tuple[str, str], str] = {
     ("pe_imem", "host_wdata"): "Loader data. The wrapper writes all 16 bits; the macro's `A_BM` is tied high, because `BM=0` with `WEN=1` is a silent no-op rather than an error.",
     ("pe_bitstuff", "bypass"): "1 ⇒ pass the raw bit through untouched (no stuffing).",
     ("pe_bitstuff", "run_cfg"): "Stuff after this many identical bits (5 = CAN, 6 = USB-LS).",
+    ("pe_bitstuff", "ones_only"): "1 ⇒ only a run of ONES is stuffed (USB 1.1 §7.1.9); 0 ⇒ a run of either polarity (CAN). Counters saturate on a run that cannot be stuffed, because a USB zero run is unbounded.",
     ("pe_bitstuff", "tx_raw"): "Raw bit in.",
     ("pe_bitstuff", "tx_wire"): "Bit out, with stuff bits inserted.",
     ("pe_bitstuff", "tx_stuffed"): "A stuff bit is owed on the **next** strobe (`tx_pend`); the raw input is ignored on that strobe.",
