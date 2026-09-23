@@ -1,10 +1,10 @@
 # Project Status — through 10BASE-T receive
 
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
-> Last updated: 2026-09-23, after the verification pass's two follow-ups were
-> fixed. The second review's seven probes, the 102-trial Ethernet sweep, and the
-> F1 boundary checks all pass; there is no open review finding. Read
-> `reviews/2026-09-23/FIX-VERIFICATION.md` and `HANDOFF.md` before resuming.
+> Last updated: 2026-09-23, after the F1/F2/F3 follow-ups were fixed. The
+> original seven probes, the 102-trial Ethernet sweep, the F1 boundary checks,
+> and the codec config reference all pass; there is no open review finding.
+> Read `reviews/2026-09-23/F1-F2-RECHECK.md` and `HANDOFF.md` before resuming.
 > The two earlier reviews and fix records remain under `reviews/2026-09-22/`.
 > Branch `review/fix-invisible-defects`.
 >
@@ -32,9 +32,11 @@ restore on interruption. Resolution detail is in `REVIEW-2.md`; each fix has a
 permanent test in the regression. The verification pass's two follow-ups are
 also fixed: the MAC now rejects undersized type frames (64-byte minimum) and
 frames that end mid-byte (`bit_cnt == 0`), and the generated codec reference
-documents `cfg[6:4]` run length, `cfg[7]` `ones_only`, USB `0xE3`. The F1
-boundary probe and the F2 drift gate are green; detail in
-`FIX-VERIFICATION.md`.
+documents `cfg[6:4]` run length, `cfg[7]` `ones_only`, USB `0xE3`, and CAN
+`0x51` (`0x01` equivalent; `0x05` would enable Manchester). The recheck's F3 is
+closed: `tb_pe_codec_mux` exercises the documented CAN preset on TX and RX.
+The F1 boundary probe, the F2/F3 drift gate, and the CAN preset probe are
+green; detail in `FIX-VERIFICATION.md` and `F1-F2-RECHECK.md`.
 
 Both layers of the thesis now exist and have baseline simulation coverage:
 
@@ -1173,12 +1175,11 @@ competition's stated baseline; the list is ordered by what de-risks the *submiss
 
 ### 0. Review follow-ups — DONE
 
-All three review passes are resolved: `reviews/2026-09-22/REVIEW.md` (nine
-findings), `reviews/2026-09-22/REVIEW-2.md` (seven), and
-`reviews/2026-09-23/FIX-VERIFICATION.md` (F1 structure, F2 config reference).
-The F1 boundary cases are permanent MAC tests (frames 12-15) with mutations
-`no-type-min-size`/`no-byte-align`; the F2 generator notes and the generated
-reference are current. Start at step 1 below.
+All four check passes are resolved: `reviews/2026-09-22/REVIEW.md` (nine
+findings), `reviews/2026-09-22/REVIEW-2.md` (seven), `reviews/2026-09-23/FIX-VERIFICATION.md`
+(F1 structure, F2 USB config), and `reviews/2026-09-23/F1-F2-RECHECK.md` (F3 CAN
+preset, now `0x51`/`0x01` in the generator and reference, with a permanent
+`tb_pe_codec_mux` check). Start at step 1 below.
 
 ### 1. Wire `pe_eth_mac` into the SoC — after the Ethernet review fixes
 

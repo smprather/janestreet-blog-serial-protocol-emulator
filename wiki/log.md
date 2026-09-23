@@ -1067,3 +1067,36 @@
 - **Regression:** RTL 26/26, firmware 18/18, lint clean (14 tops + 11
   elaborations), all four mutation suites green with the eth harness at 13/13,
   the boundary runner exits 0, and the second-review probe suite exits 0.
+
+
+## [2026-09-23] review | recheck F1/F2 fixes at 655c5b7
+
+- F1 passes the valid 64-byte control and all nine malformed-frame rejection
+  assertions. Independent scoped review found no issue in the verdict change.
+- F2 correctly documents the USB bit layout and 0xE3 preset. **F3 (P2):** its
+  new CAN example is 0x05, enabling Manchester. A directed raw-one test produces
+  TX=0/RX=0/error=1; 0x01 and 0x51 both produce TX=1/RX=1/error=0.
+- Fresh isolated regression exits 0: 26/26 RTL, 18/18 firmware, lint and all
+  supporting gates pass. Original seven probes and the 102-trial Ethernet sweep
+  also exit 0. Report and evidence: `reviews/2026-09-23/F1-F2-RECHECK.md`.
+- Updated handoff/status for the one remaining documentation finding. Only review
+  records, evidence, and the CAN reproducer changed; implementation files were
+  untouched. No physical flow, DRC, or LVS ran.
+
+
+## [2026-09-23] build | F3 fixed: the CAN preset is 0x51, not 0x05
+
+- The recheck's one remaining finding was documentation, not RTL: the F2 note
+  added "CAN is `0x05`", and `0x05` sets `cfg[2]` (Manchester) as well as
+  `cfg[0]` (stuffing). A directed raw-one test shows TX=0/RX=0/error=1 at
+  `0x05`, and TX=1/RX=1/error=0 at `0x01` and `0x51`.
+- `tools/gen_signal_glossary.py` now gives CAN as `0x51` (stuff + explicit run
+  5), notes `0x01` as the default-run equivalent, and says plainly that `0x05`
+  is not a CAN preset. `wiki/reference/signal-names.md` regenerated.
+- `tb_pe_codec_mux` adds permanent TX and RX checks for the documented `0x51`
+  preset, so the value the reference recommends is exercised, not just prose.
+- **Files:** `tools/gen_signal_glossary.py`, `wiki/reference/signal-names.md`,
+  `tb/tb_pe_codec_mux.v`, `reviews/2026-09-23/F1-F2-RECHECK.md`,
+  `reviews/2026-09-23/FIX-VERIFICATION.md`, `HANDOFF.md`, `wiki/STATUS.md`.
+- **Regression:** RTL 26/26, firmware 18/18, lint clean, four mutation suites
+  green, F1 boundary runner and the second-review probe suite exit 0.

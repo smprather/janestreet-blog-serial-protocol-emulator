@@ -1,19 +1,19 @@
 # Handoff — state of the repo (2026-09-23)
 
 Written for whoever picks this up next, human or agent. Read this, then
-`reviews/2026-09-23/FIX-VERIFICATION.md`, then `wiki/STATUS.md`. The second
-review's seven findings and the verification pass's two follow-ups are all
-fixed and verified; there is no open review finding. The reports under
-`reviews/2026-09-22/` and `reviews/2026-09-23/` preserve the three passes and
-their resolutions.
+`reviews/2026-09-23/F1-F2-RECHECK.md`, then `wiki/STATUS.md`. Fresh checks
+confirm the original seven fixes, the Ethernet boundary fix, the USB
+configuration reference, and the recheck's CAN preset follow-up (**F3 fixed**:
+CAN is `0x51`, or `0x01`). There is no open review finding; the earlier reports
+preserve the preceding findings and resolutions.
 
 ## Resume after fix verification
 
-The user asked to check the implemented fixes. Fresh verification at `bdd7728`
-passed the standard regression, all seven original probes, and the 102-case
-asynchronous Ethernet sweep. Additional frame-boundary tests exposed F1 and a
-stale generated reference exposed F2; both are now fixed with permanent tests.
-The implementation and verification state is:
+The user asked to check the latest fixes. Fresh verification at `655c5b7`
+passed the standard regression, all seven original probes, the 102-case
+asynchronous Ethernet sweep, and the F1 boundary tests. The recheck that
+followed exposed F3 (the CAN preset in the new reference text); it is now fixed
+and tested. The implementation and verification state is:
 
 | ID | Priority | Finding | Fix |
 |---|---|---|---|
@@ -24,19 +24,19 @@ The implementation and verification state is:
 | R2-5 | P2 | SRAM fallbacks read during writes while the macro holds | FLOP reads gated on `!we` (fbuf word+lane, imem rdata); TB checks across a changing address |
 | R2-6 | P2 | Emulator UART monitor sampled bit boundaries, A5 read as 4A | First data sample at 1.5 bit periods; permanent 519/520/521 case |
 | R2-7 | P2 | Interrupted mutation suites left source files changed | EXIT/INT/TERM traps restore pristine sources and image, then exit; probe `changed=[]` |
+| F3 | P2 | The CAN example in the new reference (`0x05`) enabled Manchester | Reference says CAN `0x51` (`0x01` equivalent; `0x05` is not a preset); `tb_pe_codec_mux` checks `0x51` on TX and RX |
 
 Evidence, source locations, and commands are in `reviews/2026-09-23/FIX-VERIFICATION.md`
 and `reviews/2026-09-22/REVIEW-2.md`. The second-review runner exits 0, the
 asynchronous Ethernet sweep is 102 trials / 0 failures, and the boundary runner
 `reviews/2026-09-23/run-boundaries.sh` exits 0.
 
-**Next:** resolve F1 and F2 before Ethernet SoC integration, then resume the
-integration/loader/I2C transaction backlog in `wiki/STATUS.md`. The new probe
-`bash reviews/2026-09-23/run-boundaries.sh` reports nine failed rejection checks
-at `bdd7728`. Continue the functional simulation loop; the standing user ruling
-is **do not run physical flow, DRC, or LVS**. The three R2-7 mutation harnesses
-restored source bytes in the tested INT/TERM interruptions; the verification
-report states the limits of the additional Ethernet-harness check.
+**Next:** resume the integration/loader/I2C transaction backlog in
+`wiki/STATUS.md`. All review follow-ups (F1/F2/F3) are closed. Continue the
+functional simulation loop; the standing user ruling is **do not run physical
+flow, DRC, or LVS**. The three R2-7 mutation harnesses restored source bytes in
+the tested interruptions; the preceding verification report records the scope of
+those checks.
 
 ## What is verified right now
 
@@ -52,7 +52,7 @@ bash reviews/2026-09-23/run-boundaries.sh
                            # F1 Ethernet structure boundaries; exits 0
 ```
 
-Freshly verified at `bdd7728`: `run_all.sh --fast -j4` →
+Freshly verified at `655c5b7`: `run_all.sh --fast -j4` →
 `TOTAL: 26 PASS: 26 FAIL: 0`, `FIRMWARE: 18 PASS: 18 FAIL: 0`, `lint clean`
 (14 verilator tops + 11 yosys elaborations), all four mutation suites green, plus
 `signal glossary up to date`, `protocol pin budget up to date`,
