@@ -1,0 +1,82 @@
+=== dru_async ===
+SAMPLE MISMATCH t=9757.943000 p=0 want=0 n=1 want=0
+SAMPLE MISMATCH t=9857.939000 p=1 want=1 n=0 want=1
+SAMPLE MISMATCH t=9957.935000 p=0 want=0 n=1 want=0
+SAMPLE MISMATCH t=10057.931000 p=1 want=1 n=0 want=1
+SAMPLE MISMATCH t=10157.927000 p=0 want=0 n=1 want=0
+SAMPLE MISMATCH t=10257.923000 p=1 want=1 n=0 want=1
+SAMPLE MISMATCH t=10357.919000 p=0 want=0 n=1 want=0
+SAMPLE MISMATCH t=10457.915000 p=1 want=1 n=0 want=1
+SAMPLE MISMATCH t=10557.911000 p=0 want=0 n=1 want=0
+SAMPLE MISMATCH t=10657.907000 p=1 want=1 n=0 want=1
+SAMPLE MISMATCH t=10757.903000 p=0 want=0 n=1 want=0
+SAMPLE MISMATCH t=10857.899000 p=1 want=1 n=0 want=1
+INVALID state=2 pay=155 bit=6 folds=1358 crc=4e2b585e time=152002000
+VERDICT valid=0 bad=1 folds=1358 expected=12144 crc=4e2b585e
+FAIL phase=0 half=49.995000 filter=0 valid=0 bad=1 len=x
+ASYNC SWEEP trials=1 failures=1
+FATAL: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/dru_async.v:337: asynchronous DDR capture failed
+       Time: 1240043063  Scope: tb_pe_eth_mac
+FAIL: dru_async
+=== mac_runt ===
+CONTROL valid46: valid=1 bad=0 len=46 room=2002 ptr=46
+PADDED valid20: valid=1 bad=0 len=20 room=2028 ptr=20
+RUNT transmitted tail FCS=c6c847fb, interpreted type=c8c6
+RUNT only14 total: valid=1 bad=0 len=65532 room=2052 ptr=2044 type=1
+FAIL eth_mac: runt must be rejected without changing buffer accounting @190885000
+POSTRUNT valid46: valid=2 bad=0 len=46 room=2006 ptr=42
+FAIL eth_mac: valid frame after runt @258182000
+FATAL: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/mac_runt.v:302: MAC runt checks failed
+       Time: 258182339  Scope: tb_pe_eth_mac
+FAIL: mac_runt
+=== usb_zeros ===
+USB zero bit 0: TX stuff=0 RX valid=1 raw=0
+USB zero bit 1: TX stuff=0 RX valid=1 raw=0
+USB zero bit 2: TX stuff=0 RX valid=1 raw=0
+USB zero bit 3: TX stuff=0 RX valid=1 raw=0
+USB zero bit 4: TX stuff=0 RX valid=1 raw=0
+USB zero bit 5: TX stuff=0 RX valid=1 raw=0
+USB zero bit 6: TX stuff=1 RX valid=0 raw=0
+USB zero bit 7: TX stuff=0 RX valid=1 raw=0
+USB eight zeros: recovered=7 want=8, errors=1 want=0
+FATAL: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/usb_zeros.v:39: USB must not stuff a run of zeroes
+       Time: 190000  Scope: usb_review
+FAIL: usb_zeros
+=== cpu_restart ===
+before stop pc=2 a=aa
+stopped pc=0 fetched=4002
+resumed pc=2 a=aa expected a=55
+FATAL: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/cpu_restart.v:23: restart skipped instruction zero
+       Time: 70000  Scope: review_cpu_stop
+FAIL: cpu_restart
+=== memory_contract ===
+initial fbuf macro=11 flop=11 imem macro=0011 flop=0011
+write fbuf macro=11 flop=22 imem macro=0011 flop=0022
+FATAL: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/memory_contract.v:22: macro and fallback outputs diverged
+       Time: 50000  Scope: review_memory_hold
+FAIL: memory_contract
+=== uart_monitor ===
+wire bit clocks=520, monitor bit clocks=520, transmitted=a5, decoded=['0xa5']
+wire bit clocks=521, monitor bit clocks=520, transmitted=a5, decoded=['0x4a']
+wire bit clocks=519, monitor bit clocks=520, transmitted=a5, decoded=['0xa5']
+FAIL: UART decoder rejected or misdecoded a valid waveform
+FAIL: uart_monitor
+=== mutation_interrupt ===
+i2c: interrupted status=-15; changed=['rtl/pe_pinmux.v']
+=== mutation: pe_pinmux: OD gate ignores od (a pin could drive high) ===
+  pad_oe: 'reg_oe & ~(reg_od & reg_out)' -> 'reg_oe' (od term removed)
+spi: interrupted status=-15; changed=['firmware/spi_xfer.pe', 'firmware/spi_xfer.hex']
+=== mutation: master samples MISO before the SCLK rise ===
+  moved the MISO sample before the SCLK rise
+fbuf: interrupted status=-15; changed=['rtl/pe_fbuf.v']
+=== mutation: write mask pinned to the low lane ===
+  write mask pinned to the low lane
+FAIL: 3 mutation harnesses left source files changed
+FAIL: mutation_interrupt
+=== dru_nba_experiment ===
+INVALID state=2 pay=1504 bit=0 folds=12144 crc=debb20e3 time=1230559000
+VERDICT valid=1 bad=0 folds=12144 expected=12144 crc=debb20e3
+ASYNC SWEEP trials=1 failures=0
+/home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/dru_async.v:338: $finish called at 1240043063 (1ps)
+PASS: dru_nba_experiment
+REVIEW PROBES: 7 failed

@@ -1,0 +1,21 @@
+CONTROL type46: valid=1 bad=0 len=46 room=2002 ptr=46
+RUNT type0: valid=1 bad=0 len=0 room=2048 ptr=0 folds=144 crc=debb20e3
+FAIL eth_mac: 18-byte type runt must be rejected @117121000
+RUNT type45: valid=1 bad=0 len=45 room=2003 ptr=45 folds=504 crc=debb20e3
+FAIL eth_mac: 63-byte type runt must be rejected without consuming space @193285000
+PARTIAL extra=1: valid=1 bad=0 len=46 room=2002 ptr=46 folds=513 expected_folds=513 bit_cnt=1 crc=debb20e3
+FAIL eth_mac: CRC-valid partial byte must be rejected without consuming space @270349000
+PARTIAL extra=2: valid=1 bad=0 len=46 room=2002 ptr=46 folds=514 expected_folds=514 bit_cnt=2 crc=debb20e3
+FAIL eth_mac: CRC-valid partial byte must be rejected without consuming space @347512000
+PARTIAL extra=3: valid=1 bad=0 len=46 room=2002 ptr=46 folds=515 expected_folds=515 bit_cnt=3 crc=debb20e3
+FAIL eth_mac: CRC-valid partial byte must be rejected without consuming space @424776000
+PARTIAL extra=4: valid=1 bad=0 len=46 room=2002 ptr=46 folds=516 expected_folds=516 bit_cnt=4 crc=debb20e3
+FAIL eth_mac: CRC-valid partial byte must be rejected without consuming space @502139000
+PARTIAL extra=5: valid=1 bad=0 len=46 room=2002 ptr=46 folds=517 expected_folds=517 bit_cnt=5 crc=debb20e3
+FAIL eth_mac: CRC-valid partial byte must be rejected without consuming space @579603000
+PARTIAL extra=6: valid=1 bad=0 len=46 room=2002 ptr=46 folds=518 expected_folds=518 bit_cnt=6 crc=debb20e3
+FAIL eth_mac: CRC-valid partial byte must be rejected without consuming space @657166000
+PARTIAL extra=7: valid=1 bad=0 len=46 room=2002 ptr=46 folds=519 expected_folds=519 bit_cnt=7 crc=debb20e3
+FAIL eth_mac: CRC-valid partial byte must be rejected without consuming space @734830000
+FATAL: reviews/2026-09-23/mac_boundaries.v:330: Ethernet structural boundary checks failed: 9
+       Time: 734829939  Scope: tb_pe_eth_mac

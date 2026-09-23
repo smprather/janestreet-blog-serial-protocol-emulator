@@ -1,0 +1,99 @@
+(--fast: parallel testbench loop, 4 jobs, same 4-state simulation)
+=== firmware (assemble + emulator) ===
+assemble uart_echo                 PASS (118 of 128 words)
+assemble tick_count                PASS (8 words)
+assemble spi_xfer                  PASS (70 words)
+assemble i2c_pins                  PASS (79 words)
+emulate: one byte                  PASS
+emulate: three bytes + buffer      PASS
+emulate: 00 FF 55 AA               PASS
+emulate: spi mode 0, 4 frames      PASS
+emulate: timer wrap semantics      PASS
+limitation: gap=1 loses bytes      PASS (emulator err = not delivered)
+
+=== assembler range checks (must be rejected) ===
+reject: program over 1024 words    PASS (rejected)
+reject: jump past imem             PASS (rejected)
+reject: jump past operand field    PASS (rejected)
+accept: jump past word 255         PASS (word 300 reachable)
+reject: LDM A above dmem           PASS (rejected)
+reject: STM above dmem             PASS (rejected)
+reject: IO port above 15           PASS (rejected)
+
+========================================
+FIRMWARE: 17   PASS: 17   FAIL: 0
+all firmware tests pass
+
+=== RTL testbenches ===
+tb_pe_serdes       PASS
+tb_pe_uart         PASS
+tb_pe_spi          PASS
+tb_pe_i2c          PASS
+tb_pe_jtag         PASS
+tb_pe_swd          PASS
+tb_pe_ps2          PASS
+tb_pe_can          PASS
+tb_pe_usb          PASS
+tb_pe_eth          PASS
+tb_pe_nrzi         PASS
+tb_pe_manch        PASS
+tb_pe_bitstuff     PASS
+tb_pe_codec_mux    PASS
+tb_pe_crc          PASS
+tb_pe_imem         PASS
+tb_pe_dru          PASS
+tb_pe_pinmux       PASS
+tb_pe_cpu          PASS
+tb_pe_uart_soc     PASS
+tb_pe_tick_status  PASS
+tb_tt_um_protocol_emulator PASS
+tb_pe_i2c_soc      PASS
+tb_pe_spi_soc      PASS
+tb_pe_fbuf         PASS
+tb_pe_eth_mac      PASS
+
+========================================
+TOTAL: 26   PASS: 26   FAIL: 0
+param guards: OK
+all testbenches pass
+pe_serdes                    lint OK
+pe_nrzi                      lint OK
+pe_manch                     lint OK
+pe_bitstuff                  lint OK
+pe_codec_mux                 lint OK
+pe_crc                       lint OK
+pe_dru                       lint OK
+pe_cpu                       lint OK
+pe_imem                      lint OK
+pe_uart_soc                  lint OK
+pe_pinmux                    lint OK
+pe_eth_mac                   lint OK
+pe_fbuf                      lint OK
+tt_um_protocol_emulator      lint OK
+pe_serdes                    elaborate OK
+pe_codec_mux                 elaborate OK
+pe_crc                       elaborate OK
+pe_dru                       elaborate OK
+pe_cpu                       elaborate OK
+pe_imem                      elaborate OK
+pe_uart_soc                  elaborate OK
+pe_pinmux                    elaborate OK
+pe_eth_mac                   elaborate OK
+pe_fbuf                      elaborate OK
+tt_um_protocol_emulator      elaborate OK
+
+lint clean
+
+signal glossary up to date
+protocol pin budget up to date
+sram budget up to date
+crc config up to date
+clock arithmetic up to date
+block diagram up to date
+rendered block diagrams up to date
+canvas viewer: OK
+i2c pin timing: OK (tLOW/tHIGH/period clear their floors)
+i2c TB mutations: OK (no unexplained survivors)
+spi TB mutations: OK (no unexplained survivors)
+fbuf TB mutations: OK (no unexplained survivors)
+eth_mac TB mutations: OK (no unexplained survivors)

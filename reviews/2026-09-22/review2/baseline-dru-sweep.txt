@@ -1,0 +1,36 @@
+FAIL phase=0 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=1 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=2 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=3 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=4 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=5 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=6 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=7 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=8 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=9 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=10 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=11 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=12 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=13 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=14 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=15 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=16 half=49.995000 filter=0 valid=0 bad=1 len=x
+FAIL phase=0 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=1 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=2 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=3 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=4 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=5 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=6 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=7 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=8 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=9 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=10 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=11 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=12 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=13 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=14 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=15 half=49.995000 filter=1 valid=0 bad=1 len=1500
+FAIL phase=16 half=49.995000 filter=1 valid=0 bad=1 len=1500
+ASYNC SWEEP trials=102 failures=34
+/tmp/protocol-review2-async.v:392: $finish called at 126497765887 (1ps)

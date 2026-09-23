@@ -1,5 +1,12 @@
 # Project review, second pass — 2026-09-22
 
+**Latest verification:** the fix-verification pass at `bdd7728` passed all
+seven original probes and found two follow-ups (Ethernet minimum-size/alignment
+validation and the generated codec configuration reference); both are now fixed
+with permanent tests — see the resolution section of
+[FIX-VERIFICATION.md](../2026-09-23/FIX-VERIFICATION.md). The text below records
+the original review and the subsequent implementation work.
+
 **Reviewed revision:** `628e309`, branch `review/fix-invisible-defects`.
 **Result:** seven reproduced open findings: two P1 and five P2. The existing
 regression is green. Those results do not cover the failures below.
@@ -19,7 +26,7 @@ No physical flow, DRC, or LVS was run, following the standing user instruction.
   `./tb/run_all.sh --fast -j4`: **26/26 RTL testbenches, 17/17 firmware checks**,
   lint/elaboration, parameter guards, generated-document checks, Canvas check,
   I2C timing check, and all four mutation suites reported success. See
-  [baseline-regression.log](review2/baseline-regression.log).
+  [baseline-regression.log](review2/baseline-regression.txt).
 - The manifest fixes and the earlier emulator, padding, reclamation, assembler,
   and documentation-gate fixes were checked against the current implementation.
   Nominal Ethernet and padded short-length frames pass directed controls.
@@ -47,7 +54,7 @@ of the DUT clock, is rejected after 155 payload bytes. It folds only 1,358 of th
 expected 12,144 bits. The nominal/slower controls succeed. A sweep of 17 starting
 phases, three half-cell durations (49.995/50/50.005 ns), and both filter settings
 produced **34 failures in 102 trials**: every faster-wire case failed. See
-[baseline-dru-sweep.log](review2/baseline-dru-sweep.log). The test clock's half-period
+[baseline-dru-sweep.log](review2/baseline-dru-sweep.txt). The test clock's half-period
 rounds to 8.333 ns at 1 ps simulation precision.
 
 The committed Ethernet driver waits on DUT edges, so it cannot expose this
@@ -209,7 +216,7 @@ otherwise snapshot a proposed harness fix before using that probe to verify it.
 The runner returns nonzero while findings remain. At `628e309`, its seven main
 probes fail their behavioral assertions, and the separate temporary DRU
 nonblocking-assignment experiment passes. See
-[directed-results.log](review2/directed-results.log). A compilation failure is
+[directed-results.log](review2/directed-results.txt). A compilation failure is
 reported separately and is not evidence for a finding. The earlier full-sweep log
 predates the addition of fatal assertions to the archived probe; its explicit
 `trials=102 failures=34` result is the evidence, not its process exit status.
@@ -230,7 +237,7 @@ open at the reviewed revision; the DRU experiment exists only in a temporary cop
 
 ---
 
-## Resolution — all seven findings fixed
+## Resolution — original failure cases fixed
 
 Worked after the review; every fix has a permanent test, and the review's own
 probe suite (`review2/run_repros.sh`) now exits 0.
