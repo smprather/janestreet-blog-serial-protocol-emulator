@@ -31,13 +31,13 @@ Path Type: max
   -1.0000   15.6670   clock uncertainty
    0.0000   15.6670   clock reconvergence pessimism
             15.6670 ^ _398_/CLK (sg13g2_dfrbpq_1)
-  -0.1478   15.5192   library recovery time
-            15.5192   data required time
+  -0.2387   15.4283   library recovery time
+            15.4283   data required time
 -------------------------------------------------------------
-            15.5192   data required time
+            15.4283   data required time
             -3.3334   data arrival time
 -------------------------------------------------------------
-            12.1858   slack (MET)
+            12.0949   slack (MET)
 
 
 Startpoint: rst_n (input port clocked by clk)
@@ -59,13 +59,13 @@ Path Type: max
   -1.0000   15.6670   clock uncertainty
    0.0000   15.6670   clock reconvergence pessimism
             15.6670 ^ _399_/CLK (sg13g2_dfrbpq_1)
-  -0.1478   15.5192   library recovery time
-            15.5192   data required time
+  -0.2387   15.4283   library recovery time
+            15.4283   data required time
 -------------------------------------------------------------
-            15.5192   data required time
+            15.4283   data required time
             -3.3334   data arrival time
 -------------------------------------------------------------
-            12.1858   slack (MET)
+            12.0949   slack (MET)
 
 
 Startpoint: rst_n (input port clocked by clk)
@@ -87,13 +87,13 @@ Path Type: max
   -1.0000   15.6670   clock uncertainty
    0.0000   15.6670   clock reconvergence pessimism
             15.6670 ^ _400_/CLK (sg13g2_dfrbpq_1)
-  -0.1478   15.5192   library recovery time
-            15.5192   data required time
+  -0.2387   15.4283   library recovery time
+            15.4283   data required time
 -------------------------------------------------------------
-            15.5192   data required time
+            15.4283   data required time
             -3.3334   data arrival time
 -------------------------------------------------------------
-            12.1858   slack (MET)
+            12.0949   slack (MET)
 
 
 Startpoint: rst_n (input port clocked by clk)
@@ -115,13 +115,13 @@ Path Type: max
   -1.0000   15.6670   clock uncertainty
    0.0000   15.6670   clock reconvergence pessimism
             15.6670 ^ _401_/CLK (sg13g2_dfrbpq_1)
-  -0.1478   15.5192   library recovery time
-            15.5192   data required time
+  -0.2387   15.4283   library recovery time
+            15.4283   data required time
 -------------------------------------------------------------
-            15.5192   data required time
+            15.4283   data required time
             -3.3334   data arrival time
 -------------------------------------------------------------
-            12.1858   slack (MET)
+            12.0949   slack (MET)
 
 
 Startpoint: rst_n (input port clocked by clk)
@@ -143,13 +143,13 @@ Path Type: max
   -1.0000   15.6670   clock uncertainty
    0.0000   15.6670   clock reconvergence pessimism
             15.6670 ^ _402_/CLK (sg13g2_dfrbpq_1)
-  -0.1478   15.5192   library recovery time
-            15.5192   data required time
+  -0.2387   15.4283   library recovery time
+            15.4283   data required time
 -------------------------------------------------------------
-            15.5192   data required time
+            15.4283   data required time
             -3.3334   data arrival time
 -------------------------------------------------------------
-            12.1858   slack (MET)
+            12.0949   slack (MET)
 
 
 Startpoint: run (input port clocked by clk)
@@ -163,9 +163,9 @@ Path Type: max
    0.0000    0.0000   clock network delay (ideal)
    3.3334    3.3334 v input external delay
    0.0000    3.3334 v run (in)
-   0.2011    3.5345 ^ _262_/Y (sg13g2_nor2b_1)
-   0.0000    3.5345 ^ load_active (out)
-             3.5345   data arrival time
+   0.2891    3.6225 ^ _262_/Y (sg13g2_nor2b_1)
+   0.0000    3.6225 ^ load_active (out)
+             3.6225   data arrival time
 
   16.6670   16.6670   clock clk (rise edge)
    0.0000   16.6670   clock network delay (ideal)
@@ -175,9 +175,9 @@ Path Type: max
             12.3336   data required time
 -------------------------------------------------------------
             12.3336   data required time
-            -3.5345   data arrival time
+            -3.6225   data arrival time
 -------------------------------------------------------------
-             8.7991   slack (MET)
+             8.7111   slack (MET)
 
 
 Startpoint: run (input port clocked by clk)
@@ -191,9 +191,9 @@ Path Type: max
    0.0000    0.0000   clock network delay (ideal)
    3.3334    3.3334 v input external delay
    0.0000    3.3334 v run (in)
-   0.1841    3.5175 ^ _395_/Y (sg13g2_nor2_1)
-   0.0000    3.5175 ^ host_we (out)
-             3.5175   data arrival time
+   0.2709    3.6043 ^ _395_/Y (sg13g2_nor2_1)
+   0.0000    3.6043 ^ host_we (out)
+             3.6043   data arrival time
 
   16.6670   16.6670   clock clk (rise edge)
    0.0000   16.6670   clock network delay (ideal)
@@ -203,9 +203,9 @@ Path Type: max
             12.3336   data required time
 -------------------------------------------------------------
             12.3336   data required time
-            -3.5175   data arrival time
+            -3.6043   data arrival time
 -------------------------------------------------------------
-             8.8161   slack (MET)
+             8.7293   slack (MET)
 
 
 Startpoint: run (input port clocked by clk)
@@ -219,25 +219,25 @@ Path Type: max
    0.0000    0.0000   clock network delay (ideal)
    3.3334    3.3334 v input external delay
    0.0000    3.3334 v run (in)
-   0.2011    3.5345 ^ _262_/Y (sg13g2_nor2b_1)
-   0.2665    3.8010 ^ _264_/X (sg13g2_and4_1)
-   0.6771    4.4781 v _352_/Y (sg13g2_nand3_1)
-   0.2620    4.7401 v _367_/X (sg13g2_mux2_1)
-   0.0000    4.7401 v _401_/D (sg13g2_dfrbpq_1)
-             4.7401   data arrival time
+   0.2891    3.6225 ^ _262_/Y (sg13g2_nor2b_1)
+   0.4299    4.0524 ^ _264_/X (sg13g2_and4_1)
+   1.0313    5.0837 v _352_/Y (sg13g2_nand3_1)
+   0.4394    5.5231 v _367_/X (sg13g2_mux2_1)
+   0.0000    5.5231 v _401_/D (sg13g2_dfrbpq_1)
+             5.5231   data arrival time
 
   16.6670   16.6670   clock clk (rise edge)
    0.0000   16.6670   clock network delay (ideal)
   -1.0000   15.6670   clock uncertainty
    0.0000   15.6670   clock reconvergence pessimism
             15.6670 ^ _401_/CLK (sg13g2_dfrbpq_1)
-  -0.1256   15.5414   library setup time
-            15.5414   data required time
+  -0.2057   15.4613   library setup time
+            15.4613   data required time
 -------------------------------------------------------------
-            15.5414   data required time
-            -4.7401   data arrival time
+            15.4613   data required time
+            -5.5231   data arrival time
 -------------------------------------------------------------
-            10.8014   slack (MET)
+             9.9382   slack (MET)
 
 
 Startpoint: run (input port clocked by clk)
@@ -251,25 +251,25 @@ Path Type: max
    0.0000    0.0000   clock network delay (ideal)
    3.3334    3.3334 v input external delay
    0.0000    3.3334 v run (in)
-   0.2011    3.5345 ^ _262_/Y (sg13g2_nor2b_1)
-   0.2665    3.8010 ^ _264_/X (sg13g2_and4_1)
-   0.6771    4.4781 v _352_/Y (sg13g2_nand3_1)
-   0.2620    4.7401 v _366_/X (sg13g2_mux2_1)
-   0.0000    4.7401 v _402_/D (sg13g2_dfrbpq_1)
-             4.7401   data arrival time
+   0.2891    3.6225 ^ _262_/Y (sg13g2_nor2b_1)
+   0.4299    4.0524 ^ _264_/X (sg13g2_and4_1)
+   1.0313    5.0837 v _352_/Y (sg13g2_nand3_1)
+   0.4394    5.5231 v _366_/X (sg13g2_mux2_1)
+   0.0000    5.5231 v _402_/D (sg13g2_dfrbpq_1)
+             5.5231   data arrival time
 
   16.6670   16.6670   clock clk (rise edge)
    0.0000   16.6670   clock network delay (ideal)
   -1.0000   15.6670   clock uncertainty
    0.0000   15.6670   clock reconvergence pessimism
             15.6670 ^ _402_/CLK (sg13g2_dfrbpq_1)
-  -0.1256   15.5414   library setup time
-            15.5414   data required time
+  -0.2057   15.4613   library setup time
+            15.4613   data required time
 -------------------------------------------------------------
-            15.5414   data required time
-            -4.7401   data arrival time
+            15.4613   data required time
+            -5.5231   data arrival time
 -------------------------------------------------------------
-            10.8014   slack (MET)
+             9.9382   slack (MET)
 
 
 Startpoint: run (input port clocked by clk)
@@ -283,25 +283,25 @@ Path Type: max
    0.0000    0.0000   clock network delay (ideal)
    3.3334    3.3334 v input external delay
    0.0000    3.3334 v run (in)
-   0.2011    3.5345 ^ _262_/Y (sg13g2_nor2b_1)
-   0.2665    3.8010 ^ _264_/X (sg13g2_and4_1)
-   0.6771    4.4781 v _352_/Y (sg13g2_nand3_1)
-   0.2620    4.7401 v _365_/X (sg13g2_mux2_1)
-   0.0000    4.7401 v _403_/D (sg13g2_dfrbpq_1)
-             4.7401   data arrival time
+   0.2891    3.6225 ^ _262_/Y (sg13g2_nor2b_1)
+   0.4299    4.0524 ^ _264_/X (sg13g2_and4_1)
+   1.0313    5.0837 v _352_/Y (sg13g2_nand3_1)
+   0.4394    5.5231 v _365_/X (sg13g2_mux2_1)
+   0.0000    5.5231 v _403_/D (sg13g2_dfrbpq_1)
+             5.5231   data arrival time
 
   16.6670   16.6670   clock clk (rise edge)
    0.0000   16.6670   clock network delay (ideal)
   -1.0000   15.6670   clock uncertainty
    0.0000   15.6670   clock reconvergence pessimism
             15.6670 ^ _403_/CLK (sg13g2_dfrbpq_1)
-  -0.1256   15.5414   library setup time
-            15.5414   data required time
+  -0.2057   15.4613   library setup time
+            15.4613   data required time
 -------------------------------------------------------------
-            15.5414   data required time
-            -4.7401   data arrival time
+            15.4613   data required time
+            -5.5231   data arrival time
 -------------------------------------------------------------
-            10.8014   slack (MET)
+             9.9382   slack (MET)
 
 
 Startpoint: rst_n (input port clocked by clk)
@@ -323,13 +323,13 @@ Path Type: min
    0.2500    0.2500   clock uncertainty
    0.0000    0.2500   clock reconvergence pessimism
              0.2500 ^ _398_/CLK (sg13g2_dfrbpq_1)
-  -0.1270    0.1230   library removal time
-             0.1230   data required time
+  -0.2010    0.0490   library removal time
+             0.0490   data required time
 -------------------------------------------------------------
-             0.1230   data required time
+             0.0490   data required time
             -0.0000   data arrival time
 -------------------------------------------------------------
-            -0.1230   slack (VIOLATED)
+            -0.0490   slack (VIOLATED)
 
 
 Startpoint: rst_n (input port clocked by clk)
@@ -351,13 +351,13 @@ Path Type: min
    0.2500    0.2500   clock uncertainty
    0.0000    0.2500   clock reconvergence pessimism
              0.2500 ^ _399_/CLK (sg13g2_dfrbpq_1)
-  -0.1270    0.1230   library removal time
-             0.1230   data required time
+  -0.2010    0.0490   library removal time
+             0.0490   data required time
 -------------------------------------------------------------
-             0.1230   data required time
+             0.0490   data required time
             -0.0000   data arrival time
 -------------------------------------------------------------
-            -0.1230   slack (VIOLATED)
+            -0.0490   slack (VIOLATED)
 
 
 Startpoint: rst_n (input port clocked by clk)
@@ -379,13 +379,13 @@ Path Type: min
    0.2500    0.2500   clock uncertainty
    0.0000    0.2500   clock reconvergence pessimism
              0.2500 ^ _400_/CLK (sg13g2_dfrbpq_1)
-  -0.1270    0.1230   library removal time
-             0.1230   data required time
+  -0.2010    0.0490   library removal time
+             0.0490   data required time
 -------------------------------------------------------------
-             0.1230   data required time
+             0.0490   data required time
             -0.0000   data arrival time
 -------------------------------------------------------------
-            -0.1230   slack (VIOLATED)
+            -0.0490   slack (VIOLATED)
 
 
 Startpoint: rst_n (input port clocked by clk)
@@ -407,13 +407,13 @@ Path Type: min
    0.2500    0.2500   clock uncertainty
    0.0000    0.2500   clock reconvergence pessimism
              0.2500 ^ _401_/CLK (sg13g2_dfrbpq_1)
-  -0.1270    0.1230   library removal time
-             0.1230   data required time
+  -0.2010    0.0490   library removal time
+             0.0490   data required time
 -------------------------------------------------------------
-             0.1230   data required time
+             0.0490   data required time
             -0.0000   data arrival time
 -------------------------------------------------------------
-            -0.1230   slack (VIOLATED)
+            -0.0490   slack (VIOLATED)
 
 
 Startpoint: rst_n (input port clocked by clk)
@@ -435,13 +435,13 @@ Path Type: min
    0.2500    0.2500   clock uncertainty
    0.0000    0.2500   clock reconvergence pessimism
              0.2500 ^ _402_/CLK (sg13g2_dfrbpq_1)
-  -0.1270    0.1230   library removal time
-             0.1230   data required time
+  -0.2010    0.0490   library removal time
+             0.0490   data required time
 -------------------------------------------------------------
-             0.1230   data required time
+             0.0490   data required time
             -0.0000   data arrival time
 -------------------------------------------------------------
-            -0.1230   slack (VIOLATED)
+            -0.0490   slack (VIOLATED)
 
 
 Startpoint: run (input port clocked by clk)
@@ -455,22 +455,22 @@ Path Type: min
    0.0000    0.0000   clock network delay (ideal)
    0.0000    0.0000 ^ input external delay
    0.0000    0.0000 ^ run (in)
-   0.0526    0.0526 v _342_/Y (sg13g2_nor2b_1)
-   0.0000    0.0526 v _399_/D (sg13g2_dfrbpq_1)
-             0.0526   data arrival time
+   0.0716    0.0716 v _342_/Y (sg13g2_nor2b_1)
+   0.0000    0.0716 v _399_/D (sg13g2_dfrbpq_1)
+             0.0716   data arrival time
 
    0.0000    0.0000   clock clk (rise edge)
    0.0000    0.0000   clock network delay (ideal)
    0.2500    0.2500   clock uncertainty
    0.0000    0.2500   clock reconvergence pessimism
              0.2500 ^ _399_/CLK (sg13g2_dfrbpq_1)
-  -0.0404    0.2096   library hold time
-             0.2096   data required time
+  -0.0631    0.1869   library hold time
+             0.1869   data required time
 -------------------------------------------------------------
-             0.2096   data required time
-            -0.0526   data arrival time
+             0.1869   data required time
+            -0.0716   data arrival time
 -------------------------------------------------------------
-            -0.1569   slack (VIOLATED)
+            -0.1153   slack (VIOLATED)
 
 
 Startpoint: run (input port clocked by clk)
@@ -484,22 +484,22 @@ Path Type: min
    0.0000    0.0000   clock network delay (ideal)
    0.0000    0.0000 ^ input external delay
    0.0000    0.0000 ^ run (in)
-   0.0611    0.0611 v _394_/Y (sg13g2_nor3_1)
-   0.0000    0.0611 v _400_/D (sg13g2_dfrbpq_1)
-             0.0611   data arrival time
+   0.0812    0.0812 v _394_/Y (sg13g2_nor3_1)
+   0.0000    0.0812 v _400_/D (sg13g2_dfrbpq_1)
+             0.0812   data arrival time
 
    0.0000    0.0000   clock clk (rise edge)
    0.0000    0.0000   clock network delay (ideal)
    0.2500    0.2500   clock uncertainty
    0.0000    0.2500   clock reconvergence pessimism
              0.2500 ^ _400_/CLK (sg13g2_dfrbpq_1)
-  -0.0382    0.2118   library hold time
-             0.2118   data required time
+  -0.0590    0.1910   library hold time
+             0.1910   data required time
 -------------------------------------------------------------
-             0.2118   data required time
-            -0.0611   data arrival time
+             0.1910   data required time
+            -0.0812   data arrival time
 -------------------------------------------------------------
-            -0.1507   slack (VIOLATED)
+            -0.1098   slack (VIOLATED)
 
 
 Startpoint: run (input port clocked by clk)
@@ -513,22 +513,22 @@ Path Type: min
    0.0000    0.0000   clock network delay (ideal)
    0.0000    0.0000 ^ input external delay
    0.0000    0.0000 ^ run (in)
-   0.0715    0.0715 v _204_/Y (sg13g2_a21oi_1)
-   0.0000    0.0715 v _398_/D (sg13g2_dfrbpq_1)
-             0.0715   data arrival time
+   0.0979    0.0979 v _204_/Y (sg13g2_a21oi_1)
+   0.0000    0.0979 v _398_/D (sg13g2_dfrbpq_1)
+             0.0979   data arrival time
 
    0.0000    0.0000   clock clk (rise edge)
    0.0000    0.0000   clock network delay (ideal)
    0.2500    0.2500   clock uncertainty
    0.0000    0.2500   clock reconvergence pessimism
              0.2500 ^ _398_/CLK (sg13g2_dfrbpq_1)
-  -0.0368    0.2132   library hold time
-             0.2132   data required time
+  -0.0562    0.1938   library hold time
+             0.1938   data required time
 -------------------------------------------------------------
-             0.2132   data required time
-            -0.0715   data arrival time
+             0.1938   data required time
+            -0.0979   data arrival time
 -------------------------------------------------------------
-            -0.1417   slack (VIOLATED)
+            -0.0959   slack (VIOLATED)
 
 
 Startpoint: run (input port clocked by clk)
@@ -542,9 +542,9 @@ Path Type: min
    0.0000    0.0000   clock network delay (ideal)
    0.0000    0.0000 ^ input external delay
    0.0000    0.0000 ^ run (in)
-   0.1138    0.1138 v _395_/Y (sg13g2_nor2_1)
-   0.0000    0.1138 v host_we (out)
-             0.1138   data arrival time
+   0.1565    0.1565 v _395_/Y (sg13g2_nor2_1)
+   0.0000    0.1565 v host_we (out)
+             0.1565   data arrival time
 
    0.0000    0.0000   clock clk (rise edge)
    0.0000    0.0000   clock network delay (ideal)
@@ -554,9 +554,9 @@ Path Type: min
              0.2500   data required time
 -------------------------------------------------------------
              0.2500   data required time
-            -0.1138   data arrival time
+            -0.1565   data arrival time
 -------------------------------------------------------------
-            -0.1362   slack (VIOLATED)
+            -0.0935   slack (VIOLATED)
 
 
 Startpoint: run (input port clocked by clk)
@@ -570,9 +570,9 @@ Path Type: min
    0.0000    0.0000   clock network delay (ideal)
    0.0000    0.0000 ^ input external delay
    0.0000    0.0000 ^ run (in)
-   0.1173    0.1173 v _262_/Y (sg13g2_nor2b_1)
-   0.0000    0.1173 v load_active (out)
-             0.1173   data arrival time
+   0.1608    0.1608 v _262_/Y (sg13g2_nor2b_1)
+   0.0000    0.1608 v load_active (out)
+             0.1608   data arrival time
 
    0.0000    0.0000   clock clk (rise edge)
    0.0000    0.0000   clock network delay (ideal)
@@ -582,9 +582,9 @@ Path Type: min
              0.2500   data required time
 -------------------------------------------------------------
              0.2500   data required time
-            -0.1173   data arrival time
+            -0.1608   data arrival time
 -------------------------------------------------------------
-            -0.1327   slack (VIOLATED)
+            -0.0892   slack (VIOLATED)
 
 
 max fanout
@@ -597,5 +597,5 @@ _206_/Y                                   8     19    -11 (VIOLATED)
 _352_/Y                                   8     17     -9 (VIOLATED)
 _210_/Y                                   8     12     -4 (VIOLATED)
 
-worst slack max 8.80
-worst slack min -0.16
+worst slack max 8.71
+worst slack min -0.12
