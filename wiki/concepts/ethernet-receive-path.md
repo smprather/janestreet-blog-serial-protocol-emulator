@@ -217,10 +217,12 @@ enumerating it in code settled it immediately.
 
 ## Where it stands
 
-`pe_eth_mac` is an **orphan**: built, TB-proven on real RTL, and instantiated
-nowhere. 10BASE-T is its consumer, so the SoC instance lands with the receive path —
-that is the next step, and until then the block diagram correctly reports it as
-unwired ([[reference/block-diagram]]).
+Wired, as of 2026-09-23. `pe_soc` instantiates the whole chain on port bit 7 and
+exposes the frame window on IO `0x8-0xE`; `firmware/eth_rx.pe` consumes an ARP
+frame through it; `tb/tb_pe_soc_eth.v` drives the wire into the SoC and checks
+the dmem evidence, and `regress/mutate_eth_soc_tb.sh` proves that TB's checks
+can fail (7/7). The block diagram no longer marks any of `pe_eth_mac`, `pe_dru`,
+`pe_crc` or `pe_fbuf` as an orphan.
 
 Related: [[concepts/ethernet-scope]] (why this is hardware at all),
 [[concepts/cdr-oversampling]] (the DRU), [[concepts/strobe-and-committing-edge]] (the

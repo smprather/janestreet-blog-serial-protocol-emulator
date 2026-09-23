@@ -1177,3 +1177,39 @@
   Added the missed documentation issue to the refactor review. Checked the
   README's implementation references and `git diff --check`; no RTL changes
   were made for this correction.
+
+## [2026-09-23] integration | the 10BASE-T receive chain is in the SoC
+
+- **`pe_eth_mac` is no longer an orphan.** `pe_soc` instantiates `pe_dru` ->
+  `pe_manch` -> `pe_eth_mac` with `pe_crc` and `pe_fbuf`; the RX pin is port
+  bit 7 (the TT wrapper maps `ui_in[2]` to it); the last two unwired blocks are
+  `pe_serdes` and `pe_codec_mux`.
+- **The frame window is firmware-visible on IO `0x8-0xE`:** `ETHSTAT`
+  ({is_type,bad,valid}, clear-on-read, set beats clear), `ETHLEN`/`ETHLENH`,
+  `ETHFLD`/`ETHFLDH`, `BUFBYTE` (a read advances the window through
+  `pe_fbuf`'s registered read port) and `BUFCTRL` (bit0 pulses the MAC's
+  `buf_reset`). `firmware/eth_rx.pe` (42 words) polls the window, records the
+  header in dmem, sums every payload byte, counts rejected frames and reclaims
+  the ring.
+- **SoC-level proof:** `tb/tb_pe_soc_eth.v` drives a real 56-bit preamble + SFD
+  and two 64-byte ARP frames (plus one bad-FCS frame) as raw Manchester levels
+  on the pin, and checks what the firmware leaves in dmem: len 46, EtherType
+  0x0806, a checksum over every walked byte, and the rejected-frame count.
+  `regress/mutate_eth_soc_tb.sh` breaks the window seven ways; 7 detected,
+  0 survived.
+- **Traps found and fixed:** the firmware must initialise its dmem counters
+  (x survives ADD); the TB must delay `run` release by `#1` or the CPU's PC flop
+  and the imem fetch flop resolve that edge differently and skip the program's
+  first STM; every `pe_soc`-elaborating case and the i2c/spi mutation harnesses
+  needed the chain's source list; empty output connections are Verilator
+  PINCONNECTEMPTY under the no-waiver lint gate.
+- **Regression:** RTL 27/27, firmware 19/19, lint clean (14 tops / 11
+  elaborations), five mutation suites green, generated-doc gates green.
+- **Files:** `rtl/pe_soc.v`, `rtl/tt_um_protocol_emulator.v`,
+  `firmware/eth_rx.pe`, `tb/tb_pe_soc_eth.v`,
+  `regress/mutate_eth_soc_tb.sh`, `regress/run_all.sh`,
+  `regress/run_firmware_tests.sh`, `regress/synth_area.sh`,
+  `regress/mutate_{i2c,spi}_tb.sh`, `tools/fw/peasm.py`,
+  `tools/gen/block_diagram.py`, `flow/pe_soc.json`, `info.yaml`,
+  `wiki/plans/ethernet-soc.md`, `wiki/STATUS.md`,
+  `wiki/concepts/ethernet-receive-path.md`, `HANDOFF.md`.

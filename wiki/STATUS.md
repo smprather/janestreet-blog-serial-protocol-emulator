@@ -31,8 +31,8 @@ firmware images. A fresh archive regression, the original review probes and
 and submission/staged-flow source compilation all pass. Evidence is in
 `reviews/2026-09-23/refactor/`; no physical flow was run.
 
-The regression reports 26/26 RTL and **18/18** firmware checks passing, with
-lint, documentation gates, and all four mutation suites green, and the review's
+The regression reports 27/27 RTL and **19/19** firmware checks passing, with
+lint, documentation gates, and all five mutation suites green, and the review's
 directed probe suite (`bash reviews/2026-09-22/review2/run_repros.sh`) exits 0.
 The second review's original seven failure cases now pass: the DRU's falling-edge capture is
 now a two-latch pair (the async Ethernet sweep is 102 trials / 0 failures), the
@@ -71,6 +71,10 @@ Both layers of the thesis now exist and have baseline simulation coverage:
   (a length field and an EtherType) because the acceptance target is ARP and
   ARP is an EtherType. `tb/tb_pe_eth_mac.v` drives raw Manchester levels into
   the real chain, so every byte checked is a byte a real receiver recovers.
+  As of 2026-09-23 the chain is instantiated in `pe_soc` (port bit 7) with the
+  frame window on IO `0x8-0xE`; `tb/tb_pe_soc_eth.v` drives the same wire into
+  the SoC and checks that `firmware/eth_rx.pe` consumed a real ARP frame, and
+  `regress/mutate_eth_soc_tb.sh` proves those checks can fail (7/7).
 - **Milestone 2 — the programmable core.** A CPU, an assembler, a bit-accurate
   emulator, and **three protocols written entirely in firmware** — UART, SPI
   mode 0, and, as of 2026-09-22, **I2C** (the pin-level grammar: START, one bit
@@ -83,9 +87,10 @@ Both layers of the thesis now exist and have baseline simulation coverage:
   **As of 2026-09-22 the frame buffer is BUILT** (`rtl/pe_fbuf.v`, 2 KB behind a
   byte interface on the same 1024x16 macro as the instruction memory, per
   ADR-003). It is TB-proven on BOTH implementations -- the real macro and the
-  `FLOP=1` fallback -- with 5 mutations detected and 0 survived. It is **not yet
-  wired into the SoC**: 10BASE-T is its consumer, so the instance lands with the
-  receive path. Byte granularity comes free from the macro's bit-mask port; the
+  `FLOP=1` fallback -- with 5 mutations detected and 0 survived. It **landed in
+  the SoC on 2026-09-23**, with the receive chain (`pe_dru` -> `pe_manch` ->
+  `pe_eth_mac`) as its writer and the IO window `0x8-0xE` as firmware's reader.
+  Byte granularity comes free from the macro's bit-mask port; the
   read lane costs a register, and getting that register's timing wrong only
   shows up on pipelined accesses (gotcha 62). That is the
   competition thesis, demonstrated end to end in simulation for all three of the
@@ -142,9 +147,12 @@ The one-line version, for the reader who wants it before clicking through:
                              └ tick timer (260 clk = half a 115200 bit)
                              └ 1 us I2C tick (60 clk, exact)
                              └ pe_pinmux (111) ── per-pin {out,oe,od}
+                             └ 10BASE-T RX (pe_dru -> pe_manch -> pe_eth_mac
+                                            + pe_crc + pe_fbuf)
+                                 └ frame window on IO 0x8-0xE -> firmware
 
-  BUILT, TB-verified, INSTANTIATED NOWHERE (4):
-    pe_serdes (539)  pe_dru (148)  pe_crc (209)  pe_codec_mux (130)
+  BUILT, TB-verified, INSTANTIATED NOWHERE (2):
+    pe_serdes (539)  pe_codec_mux (130)
 ```
 
 
@@ -169,8 +177,8 @@ states the reasoning; do not "unify" them without reading it.
 | **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 377 | 4,843 | `tb_pe_cpu` |
 | **Pin matrix** (per-pin OUT/OE/IN/OD, open-drain, read-back) | `rtl/pe_pinmux.v` | **111** | **2,061** | `tb_pe_pinmux` |
 | **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
-| **Software-UART SoC** (CPU + tick timer + pin matrix) | `rtl/pe_soc.v` | **1,264** | **23,184 total** | `tb_pe_soc_uart`, `tb_pe_soc_tick` |
-| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **1,284** | **23,211 total** | `tb_tt_um_protocol_emulator` |
+| **Software-UART SoC** (CPU + tick timer + pin matrix + 10BASE-T RX) | `rtl/pe_soc.v` | **3,066** | **50,895 total** | `tb_pe_soc_uart`, `tb_pe_soc_tick`, `tb_pe_soc_eth` |
+| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **3,056** | **50,948 total** | `tb_tt_um_protocol_emulator` |
 
 Firmware (no RTL cells — these are programs the CPU runs; see
 [[concepts/spi-as-firmware]]):
@@ -180,6 +188,7 @@ Firmware (no RTL cells — these are programs the CPU runs; see
 | `firmware/uart_echo.pe` — 115200 8N1 echo | 118 | `tb_pe_soc_uart.v` (real RTL), `tools/fw/peemu.py` |
 | `firmware/tick_count.pe` — STATUS-port exerciser | 8 | `tb_pe_soc_tick.v` (real RTL) |
 | `firmware/spi_xfer.pe` — SPI mode 0 master | 70 | `tools/fw/peemu.py` (mode-0 slave model) |
+| `firmware/eth_rx.pe` — 10BASE-T frame-window consumer | 42 | `tb_pe_soc_eth.v` (real RTL, real ARP frame) |
 
 Numbers from `regress/synth_area.sh` (sg13g2 typ corner, mapped pre-route). The routed
 figure for the SERDES comes from the full LibreLane flow (route+CTS+PDN inflate
@@ -217,11 +226,11 @@ depth: 896 words of addressable-by-nothing SRAM for 79,674 µm². **The PC and t
 jump-target field had to widen in the same change.** Full reasoning and the
 rejected alternatives: [[decisions/adr-004-program-counter-width]].
 
-**Regression: 26/26 testbenches + 18/18 firmware tests pass, and the lint gate is
+**Regression: 27/27 testbenches + 19/19 firmware tests pass, and the lint gate is
 clean** (14 verilator tops + 11 yosys elaborations; `regress/run_all.sh` runs the firmware regression first, then every TB, then
-`regress/lint.sh`, then the generated-doc drift checks, then FOUR mutation harnesses --
-`regress/mutate_i2c_tb.sh`, `regress/mutate_spi_tb.sh`, `regress/mutate_fbuf_tb.sh` and
-`regress/mutate_eth_mac_tb.sh`). The lint gate covers `pe_eth_mac` and `pe_fbuf` as of
+`regress/lint.sh`, then the generated-doc drift checks, then FIVE mutation harnesses --
+`regress/mutate_i2c_tb.sh`, `regress/mutate_spi_tb.sh`, `regress/mutate_fbuf_tb.sh`,
+`regress/mutate_eth_mac_tb.sh` and `regress/mutate_eth_soc_tb.sh`). The lint gate covers `pe_eth_mac` and `pe_fbuf` as of
 the 2026-09-22 review, and it now fails on ANY yosys `ERROR:` — it used to grep
 for three known diagnostics and reported "elaborate OK" beside a file yosys
 could not parse at all. Each mutation harness proves its testbench FAILS when the
@@ -1198,17 +1207,19 @@ preset, now `0x51`/`0x01` in the generator and reference, with a permanent
 new functional defect; its fresh verification and source comparisons are in
 `reviews/2026-09-23/REFACTOR-REVIEW.md`. Start at step 1 below.
 
-### 1. Wire `pe_eth_mac` into the SoC — after the Ethernet review fixes
+### 1. Wire `pe_eth_mac` into the SoC — DONE 2026-09-23
 
-`rtl/pe_eth_mac.v` is built, TB-proven (8 mutations, 8 detected) and instantiated
-**nowhere**. 10BASE-T is its consumer, so the instance lands with the receive path:
-instantiate the chain (`pe_dru` -> `pe_manch` -> `pe_eth_mac`, with `pe_crc` and
-`pe_fbuf`) inside `pe_soc`, put the RX pin on the matrix, and give the firmware a
-way to see `frame_valid` / `frame_len` and walk the buffer. Then a TB at the SoC level
-— the block TB drives the wire, but nothing yet proves the firmware can *use* a frame.
-Why first: it is the only thing that retires the last three orphans, and an orphan is
-a claim that has never been exercised inside a design.
-See [[concepts/ethernet-receive-path]].
+The chain (`pe_dru` -> `pe_manch` -> `pe_eth_mac`, with `pe_crc` and `pe_fbuf`)
+is instantiated inside `pe_soc`, the RX pin is port bit 7 (the TT wrapper maps
+`ui_in[2]` to it), and the frame window is firmware-visible on IO `0x8-0xE`:
+`ETHSTAT` (sticky valid/bad, clear-on-read), `ETHLEN(H)`, `ETHFLD(H)`, `BUFBYTE`
+(a read walks the buffer) and `BUFCTRL` (reclaim). `firmware/eth_rx.pe` polls
+the window, records the header in dmem and sums every payload byte. A real FCS
+proves the walk: `tb/tb_pe_soc_eth.v` drives raw Manchester levels for two ARP
+frames and a bad-FCS frame and checks firmware's dmem, and
+`regress/mutate_eth_soc_tb.sh` breaks the window seven ways and requires every
+one to be caught. The frame buffer is no longer an orphan; only `pe_serdes` and
+`pe_codec_mux` remain unwired. See [[concepts/ethernet-receive-path]].
 
 ### 2. `pe_ctrl` — the SPI load path
 

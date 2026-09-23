@@ -195,15 +195,17 @@ grepped for three known diagnostics and passed a file yosys could not parse.
 ## Current work list
 
 The ordered live backlog is **`wiki/STATUS.md`, "Next steps (ordered)"**.
-The review findings are closed; resume Ethernet SoC integration, the loader and
+The review findings are closed; resume the loader and
 I2C transaction work in that order. `wiki/plans/through-i2c.md` is a completed
 implementation plan kept for its timing analysis and findings.
 
 The pin matrix is already inside `pe_soc`. UART and mode-0 SPI run as
 firmware through it; I2C firmware exercises START, one bit cell, and STOP.
 Byte transfer, ACK/NACK, addressing, and transactions remain future work. The
-Ethernet receive chain and frame buffer exist as tested blocks but are not yet
-integrated into the SoC. R2-1/R2-2 qualify the block-level Ethernet results.
+Ethernet receive chain and frame buffer are integrated into the SoC as of
+2026-09-23 (port bit 7, IO window `0x8-0xE`, `firmware/eth_rx.pe`,
+`tb/tb_pe_soc_eth.v` plus its mutation suite). R2-1/R2-2 qualify the block-level
+Ethernet results.
 
 The physical results below are historical records, not checks repeated during
 this review. Follow `wiki/STATUS.md` for their limitations and the standing
