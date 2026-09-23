@@ -59,6 +59,7 @@
 - [[decisions/adr-004-program-counter-width]] — ADR: the SRAM swap required widening the PC and jump-target field; the memory alone delivered 128 usable words, not 1024.
 - [[decisions/adr-005-60mhz-turbo]] — ADR: the turbo is **60 MHz, not 66** — 66 provably fails the 10BASE-T TX jitter conformance window at every edge placement; 60 is exact for every hard protocol with a 50%-finer RX grid.
 - [[decisions/adr-006-pin-matrix]] — ADR: the pin matrix is a runtime per-pin `{out,oe,od}` file and it lives **inside** the SoC — the plan's "wrapper instantiates the matrix" is unimplementable, since the CPU's IO bus never leaves `pe_soc`.
+- [[decisions/adr-007-pe-ctrl-passive-slave]] — ADR: `pe_ctrl` is a **passive SPI slave** at the wrapper boundary (host loads, `run` starts); a master would need a hardwired bootstrap FSM and a flash, because there is no ROM.
 
 ## Queries
 

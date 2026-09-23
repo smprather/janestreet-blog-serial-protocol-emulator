@@ -113,9 +113,12 @@ high — a spurious START. The bus was never damaged and every timing interval
 still met spec; the sequence was simply wrong. See
 [[concepts/i2c-on-the-matrix]] for the init ordering rule.
 
-**Open question, unresolved and recorded as such.** Should `pe_ctrl` also be
-an SPI master (so one host interface can both load the CPU and drive a
-peripheral bus)? That is a control-plane question this ADR does not decide.
+**Open question, now resolved.** Should `pe_ctrl` also be an SPI master (so one
+host interface can both load the CPU and drive a peripheral bus)? **Resolved by
+[[decisions/adr-007-pe-ctrl-passive-slave]]: no — `pe_ctrl` is a passive SPI
+slave.** The no-ROM argument in that ADR decides it: a master would need a
+hardwired bootstrap FSM and a board flash part, because at power-up there is no
+program to run.
 
 ## Alternatives considered
 

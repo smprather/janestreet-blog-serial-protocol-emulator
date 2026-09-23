@@ -1213,3 +1213,18 @@
   `tools/gen/block_diagram.py`, `flow/pe_soc.json`, `info.yaml`,
   `wiki/plans/ethernet-soc.md`, `wiki/STATUS.md`,
   `wiki/concepts/ethernet-receive-path.md`, `HANDOFF.md`.
+
+## [2026-09-23] decision | pe_ctrl is a passive SPI slave (ADR-007)
+
+- The user ruled the loader's role: **passive SPI slave**, not an SPI master.
+  Recorded as [[decisions/adr-007-pe-ctrl-passive-slave]]; resolves the open
+  question left at the end of ADR-006.
+- Decisive argument: there is no ROM and instruction memory is volatile SRAM,
+  so a master would need a hardwired bootstrap FSM plus a board flash — while
+  every environment this chip runs in has a host. The slave is host-clocked
+  hardware at the TT wrapper boundary, driving the SoC's existing `host_*`
+  port.
+- v1 interface recorded: SPI mode 0, MSB-first, 16-bit words; `CS_N` low resets
+  and enables; one word per 16 rising SCLK edges into `imem[addr++]`; accepted
+  only while `run=0`; pads `ui_in[3:5]`; `run` stays `ui_in[1]`; imem only.
+- Next: the `pe_ctrl` implementation plan (`wiki/plans/pe-ctrl.md`).

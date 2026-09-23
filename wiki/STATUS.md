@@ -377,6 +377,7 @@ the upside case with `tools/gen/sram_budget.py --tiles 8x4`.
 | Two SRAM macros: 1024-word instructions + 2 KB frame buffer, both `1P_1024x16` | `decisions/adr-003-memory-plan.md` |
 | **Instruction macro is live; PC width derives from IMEM depth (10 bits at 1024)** | `decisions/adr-004-program-counter-width.md` |
 | 10BASE-T is the LINE LAYER only; the stack is off-chip, and firmware never touches Ethernet bits | `concepts/ethernet-scope.md` |
+| **`pe_ctrl` is a passive SPI slave at the wrapper** (host loads, `run` starts); no master, no flash, no bootstrap FSM | `decisions/adr-007-pe-ctrl-passive-slave.md` |
 | Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | the codec headers (`pe_nrzi`/`pe_manch`/`pe_bitstuff`) |
 | `ena` must never gate logic; every pad output driven in every state | `rtl/tt_um_protocol_emulator.v` header |
 
@@ -1226,10 +1227,10 @@ one to be caught. The frame buffer is no longer an orphan; only `pe_serdes` and
 **The one blocking a real chip from booting.** There is no way to get a program into
 instruction memory on silicon: `pe_imem` needs a loader, and without it the chip
 powers up holding whatever the macro happens to contain. Every simulation works
-because the TBs preload. **Open question the user has not ruled on:** should
-`pe_ctrl` also be an SPI *master* (reusing the SPI firmware path) or a passive slave
-the host clocks? The slave is simpler; a master would let the chip load itself from a
-flash part.
+because the TBs preload. **Ruled 2026-09-23: passive SPI slave**
+([[decisions/adr-007-pe-ctrl-passive-slave]]) — host-clocked hardware at the
+wrapper boundary, SPI mode 0 MSB-first 16-bit words, three pads (`ui_in[3:5]`),
+and `run` stays a separate strap (load, then run).
 
 ### 3. I2C transaction layer
 
