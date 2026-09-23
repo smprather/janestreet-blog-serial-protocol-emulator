@@ -1,5 +1,10 @@
 # Second-review fix verification — 2026-09-23
 
+**Latest recheck:** [F1-F2-RECHECK.md](F1-F2-RECHECK.md) verifies `655c5b7`.
+F1 and the USB configuration reference pass; the recheck's one P2 (F3, the CAN
+example added to the reference) is fixed — the reference now says CAN `0x51`
+(`0x01` equivalent). The text below preserves the preceding pass.
+
 **Revision checked:** `bdd7728`, branch `review/fix-invisible-defects`.
 **Changes examined:** fixes after the reviewed `628e309` baseline.
 

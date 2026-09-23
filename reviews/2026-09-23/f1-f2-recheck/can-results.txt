@@ -1,0 +1,10 @@
+CAN cfg=05: TX=0 RX=0 valid=1 error=1; expected TX=1 RX=1 valid=1 error=0
+FATAL: reviews/2026-09-23/f1-f2-recheck/can_config.v:22: documented CAN configuration enables incorrect codec stages
+       Time: 46000  Scope: verify_can_config
+Documented 0x05 configuration exit: 1
+CAN cfg=01: TX=1 RX=1 valid=1 error=0; expected TX=1 RX=1 valid=1 error=0
+reviews/2026-09-23/f1-f2-recheck/can_config.v:23: $finish called at 46000 (1ps)
+Control decimal 1 configuration exit: 0
+CAN cfg=51: TX=1 RX=1 valid=1 error=0; expected TX=1 RX=1 valid=1 error=0
+reviews/2026-09-23/f1-f2-recheck/can_config.v:23: $finish called at 46000 (1ps)
+Control decimal 81 configuration exit: 0

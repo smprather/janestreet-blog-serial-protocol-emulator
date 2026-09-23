@@ -1,0 +1,11 @@
+CONTROL type46: valid=1 bad=0 len=46 room=2002 ptr=46
+RUNT type0: valid=0 bad=1 len=46 room=2048 ptr=0 folds=144 crc=debb20e3
+RUNT type45: valid=0 bad=1 len=46 room=2048 ptr=0 folds=504 crc=debb20e3
+PARTIAL extra=1: valid=0 bad=1 len=46 room=2048 ptr=0 folds=513 expected_folds=513 bit_cnt=1 crc=debb20e3
+PARTIAL extra=2: valid=0 bad=1 len=46 room=2048 ptr=0 folds=514 expected_folds=514 bit_cnt=2 crc=debb20e3
+PARTIAL extra=3: valid=0 bad=1 len=46 room=2048 ptr=0 folds=515 expected_folds=515 bit_cnt=3 crc=debb20e3
+PARTIAL extra=4: valid=0 bad=1 len=46 room=2048 ptr=0 folds=516 expected_folds=516 bit_cnt=4 crc=debb20e3
+PARTIAL extra=5: valid=0 bad=1 len=46 room=2048 ptr=0 folds=517 expected_folds=517 bit_cnt=5 crc=debb20e3
+PARTIAL extra=6: valid=0 bad=1 len=46 room=2048 ptr=0 folds=518 expected_folds=518 bit_cnt=6 crc=debb20e3
+PARTIAL extra=7: valid=0 bad=1 len=46 room=2048 ptr=0 folds=519 expected_folds=519 bit_cnt=7 crc=debb20e3
+reviews/2026-09-23/mac_boundaries.v:331: $finish called at 734829939 (1ps)
