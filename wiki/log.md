@@ -1597,3 +1597,29 @@
   unchanged (rising-edge update, two frames, 10 MHz with margin).
   [[plans/pe-ctrl-readback]] and [[reviews/2026-09-23/PE-CTRL-REVIEW]] updated.
   Plan-only: no RTL, no regression/STA.
+
+## [2026-09-23] soc | serdes + codec integration plan (awaiting review)
+
+- The last two orphan blocks are planned into `pe_soc`: TX
+  `serdes.tx_ser -> codec.tx_bit -> codec.tx_wire` through a per-pin overlay
+  mux ahead of the matrix's OE/OD; RX through the existing `pe_dru` capture
+  (`rx_wire` for plain/NRZI/stuff, half-cells for Manchester); a programmable
+  bit-strobe divider (bit cadence, doubled with `half_phase` for Manchester);
+  and a 16-entry indexed window on the one free IO port (`0xF`, index write +
+  auto-increment data accesses, no ISA change). Reset default: engine
+  disabled, so every existing TB/firmware is bit-identical.
+- Position recorded: the SoC gains a generic, config-driven word engine, not
+  protocol-specific hardware -- protocol semantics stay firmware; the pe_soc
+  header's "no protocol hardware" claim becomes "no protocol-specific
+  hardware" in the same change.
+- Evidence and gaps: unit TBs exist (`tb_pe_serdes`, `tb_pe_codec_mux`) but
+  there is **no mutation suite for either block** -- the plan adds them, a
+  plain+Manchester loopback SoC TB, and a first-consumer TX test; every
+  existing TB must stay green with the engine disabled.
+- Hardening: `pe_serdes` already has a routed LibreLane signoff (66 MHz: 0
+  DRC/LVS, setup +7.6 ns slow, hold +0.116 ns fast), but the integration's
+  mux/divider/fanout needs the SoC-level yosys+OpenSTA screen; the
+  Manchester cascade has 3 clk/half-cell at 60 MHz.
+- Options and open decisions (scope, IO window vs ISA widening, RX capture,
+  first consumer, registered Manchester stage) are in
+  [[plans/serdes-integration]]. Plan-only: no RTL, no physical flow/DRC/LVS.

@@ -176,6 +176,7 @@ The one-line version, for the reader who wants it before clicking through:
 
   BUILT, TB-verified, INSTANTIATED NOWHERE (2):
     pe_serdes (539)  pe_codec_mux (130)
+    -- integration plan written 2026-09-23: [[plans/serdes-integration]]
 ```
 
 
@@ -1381,6 +1382,16 @@ limit, ~7.5 MHz for A1 and ~7.7 MHz for A2; the 2.5/5 MHz figures are chosen
 guard margins, not the limits. Neither reaches 10 MHz; A3 (update on the
 synchronized rising edge, documented non-mode-0 change edge, two frames) is
 the 10 MHz path. No RTL changed yet.
+
+### 7. SERDES + codec integration — PLAN WRITTEN 2026-09-23 (awaiting review)
+
+The last two orphan blocks (539 + 130 cells) are planned into `pe_soc`:
+`serdes.tx_ser -> codec.tx_bit -> codec.tx_wire` through a per-pin overlay mux
+ahead of the matrix's OE/OD, RX through the existing `pe_dru` capture, a
+programmable bit-strobe divider, and a 16-entry indexed window on the one free
+IO port (`0xF`, no ISA change). Reset default is engine-disabled, so every
+existing TB/firmware stays bit-identical. Options and open decisions:
+[[plans/serdes-integration]]. No RTL yet.
 
 ## Reading order for a fresh session
 

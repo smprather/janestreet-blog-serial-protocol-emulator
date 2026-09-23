@@ -81,9 +81,14 @@ a later run — a TT-top flow config, placement inside a real `CORE_AREA` with t
 pad ring, both macros' PDN connectivity, congestion/DRC and a confirmed tile
 size. SPI's MOSI/CS are now exposed on `uio[2:3]` (2026-09-23,
 [[plans/spi-pads]]; verified pad-level in `tb_tt_um_protocol_emulator`). The
-next candidate, a `pe_ctrl` readback path, is evaluated in
-[[plans/pe-ctrl-readback]] with the interface choice still open (echo vs
-status vs imem peek); no RTL has changed for it. **The I2C review-focus gaps are closed (2026-09-23):** arbitration loss
+`pe_ctrl` readback evaluation is in [[plans/pe-ctrl-readback]]: strict mode-0
+echo options use 2.5 MHz (one frame) or 5 MHz (two frames) guard rates; 10 MHz
+requires the documented rising-edge change variant. Status and memory peek
+remain alternatives. The interface choice is open and no RTL has changed.
+The next independent open block, integrating `pe_serdes` + `pe_codec_mux`
+into `pe_soc`, has a written integration plan awaiting review
+([[plans/serdes-integration]]); no RTL changed.
+**The I2C review-focus gaps are closed (2026-09-23):** arbitration loss
 releases and aborts without a STOP, unexpected NACKs record an outcome and end
 with a STOP, and SCL is read back after every release so stretching is waited
 on; all three are tested on the emulator (60 phases, with a
