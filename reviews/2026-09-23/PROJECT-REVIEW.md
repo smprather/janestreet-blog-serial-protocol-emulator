@@ -32,6 +32,22 @@ The requested removal of obsolete walkthrough entries in `wiki/log.md` is a
 deliberate exception to its append-only convention; unaffected chronological
 history remains.
 
+## Documentation findings closed
+
+An independent cross-check found several stale or mixed-status descriptions.
+The generated RTL inventory had a completed I2C plan described as the live work
+list, an obsolete pin-matrix orphan link, and a planned-integration row that
+named the SERDES but omitted its codec. The generator and generated page now
+describe the integrated matrix, completed plan, live STATUS work list, and the
+joint SERDES/codec loopback milestone.
+
+The plan map now includes the optional `uio[4]` MISO readback path with A1/A2/A3
+still pending, and it distinguishes the DRU Manchester strobe from the timing
+block's plain-mode cell strobe. Both maps mark two codec instances as the current
+recommendation while keeping codec topology and SERDES cadence choices open.
+Generated page titles/dates and the README generator inventory were also
+corrected. The diagrams directory contains source text only.
+
 ## Verification evidence
 
 - `./regress/run_all.sh --fast -j8` exited 0: 29/29 RTL testbenches, 20/20
