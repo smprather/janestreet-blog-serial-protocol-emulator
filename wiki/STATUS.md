@@ -55,7 +55,8 @@ Both layers of the thesis now exist and have baseline simulation coverage:
 - **Milestone 1 — shared hardware layer.** The SERDES, the line codecs and the
   codec mux, all self-checking-TB verified, all synthesized on real IHP sg13g2
   cells, and the SERDES through the full LibreLane place-and-route flow to a
-  clean 66 MHz signoff.
+  clean historical 66 MHz signoff (2026-09-18). The current signoff target is
+  60 MHz (16.667 ns).
 - **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (1,151
   cells after the review fixes) is the first protocol block that is deliberately
   NOT firmware, and [[concepts/ethernet-scope]] says why with arithmetic: at a 100 ns bit period
@@ -289,9 +290,11 @@ drives a real 8N1 waveform on the RX pin and decodes the TX pin: **PASS on
 8.68 µs. `tools/fw/peemu.py` reproduces the same four bytes cycle-accurately, which
 is the fast firmware-development loop (2 s vs a 1 min RTL build).
 
-**Routed signoff of pe_serdes** (full LibreLane Classic on ihp-sg13g2, 66 MHz):
+**Historical routed signoff of pe_serdes** (2026-09-18, full LibreLane Classic
+on ihp-sg13g2, former 66 MHz target):
 0 DRC, 0 LVS, setup WS +7.6 ns (slow corner), hold WS +0.116 ns (fast corner),
 die 161.7 × 180.4 µm, 78 % utilization. Run dir: `~/asic-runs/pe-serdes`.
+The checked-in config now targets 60 MHz (16.667 ns).
 
 ## Area budget — where the die actually goes
 
@@ -358,7 +361,7 @@ the upside case with `tools/gen/sram_budget.py --tiles 8x4`.
 | **12×** oversampling per bit (6 samples per 50 ns half-UI) = 8.33 ns RX grid at the 60 MHz core | `decisions/adr-001-8x-oversampling.md`, `decisions/adr-005-60mhz-turbo.md` |
 | Std-cell **latch-pair dual-edge flop** for DDR capture; no custom DET | `decisions/adr-002-latch-pair-det-flop.md` |
 | **60 MHz operating point — LOCKED, not a parameter** = exact integers for every hard protocol (50 ns = 3 ticks) | `decisions/adr-005-60mhz-turbo.md`, `reference/clock-arithmetic.md` |
-| **Signed off at 60 MHz** (`CLOCK_PERIOD` 16.667 ns) in both flow configs; the 66 MHz STA target is retired | `flow/pe_soc.json`, `flow/pe_serdes.json` |
+| **Signoff target: 60 MHz** (`CLOCK_PERIOD` 16.667 ns) in both flow configs; the 66 MHz STA target is retired | `flow/pe_soc.json`, `flow/pe_serdes.json` |
 | SERDES words ≤ 32 b; longer fields chunk (SWD parity, CAN/USB/ETH payloads) | `rtl/pe_serdes.v` header |
 | Codec pipeline order fixed (stuff → line-code); cfg selects the **subset** | `rtl/pe_codec_mux.v` header |
 | No elasticity FIFO needed (source-sync protocols + per-edge re-lock) | `concepts/cdr-oversampling.md` |

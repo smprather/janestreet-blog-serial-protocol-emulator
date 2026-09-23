@@ -232,10 +232,11 @@ other rate. `reference/clock-arithmetic.md` is the generated constant table.
 The 1024x16 macro's `A_CLK` -> `A_DOUT` is 7.25 ns at the slow corner = 43% of a
 16.667 ns period. `pe_imem` has no output register by design (it would add a cycle
 and break the CPU's fetch-ahead). The pe_serdes STA run has no SRAM in it, so the
-SoC needed its own run at 15.15 ns — and that run now exists: the full-SoC
-LibreLane flow closed setup at **+1.234 ns** and hold at **+0.127 ns** worst-case
-with zero violating paths at all three corners, and measured the SRAM access
-**in context** at **7.639 ns**. Numbers and method: [[reference/sram-budget]].
+SoC needed its own timing run. The recorded post-route result at the current
+**60 MHz / 16.667 ns** target (`RUN_2026-09-22_02-58-32`) has worst-case setup
+slack **+2.6601 ns** and hold slack **+0.1209 ns**, with zero violating timing
+paths across three corners. See `wiki/STATUS.md`, "Timing margin at the 60 MHz
+operating point", for the measured results and remaining slew/cap limitations.
 Two flow settings were needed and both are documented in `flow/pe_soc.json`
 with the reasoning inline: **`GRT_ADJUSTMENT: 0.0`** (the generic 30% derate was
 causing `GRT-0116` congestion at 4.59% utilization) and a custom **`PDN_CFG`**

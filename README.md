@@ -7,9 +7,9 @@ hitting protocol timing precisely, so protocols are implemented in **firmware**
 rather than fixed logic. Target: IHP 130 nm CMOS5L via Tiny Tapeout, 6×4 tiles,
 submission 2027-01-18.
 
-**Status: Milestone 2 (the programmable core) complete — a UART running entirely
-in firmware on real RTL. See [`wiki/STATUS.md`](wiki/STATUS.md), and
-[`wiki/plans/through-i2c.md`](wiki/plans/through-i2c.md) for the work list.**
+**Status: the programmable core runs UART, SPI mode 0, and I2C pin-level
+sequences as firmware on real RTL. See [`wiki/STATUS.md`](wiki/STATUS.md) for
+the current integration status and ordered work list.**
 
 > Picking this up cold (human or agent)? Read **[`HANDOFF.md`](HANDOFF.md)** first
 > — current verified state, the traps worth not rediscovering, and the next step.
@@ -25,16 +25,18 @@ in firmware on real RTL. See [`wiki/STATUS.md`](wiki/STATUS.md), and
 | **DRU** — oversampled Manchester receive (10BASE-T, PS/2), dual-edge | `rtl/pe_dru.v` | 148 cells / 2.4k µm² |
 | CPU — 16-bit insn, 16 opcodes, A/Y/X, PC width from IMEM depth | `rtl/pe_cpu.v` | 383 cells / 4.9k µm² |
 | **Instruction memory** — real SRAM macro + protocol wrapper | `rtl/pe_imem.v` | 12 glue cells (+ the macro's LEF area) |
-| Software-UART SoC — CPU + 1024-word SRAM + ticks + pin matrix | `rtl/pe_soc.v` | 1,264 cells / 23.2k µm² |
+| Programmable protocol SoC — CPU + 1024-word SRAM + ticks + pin matrix | `rtl/pe_soc.v` | 1,264 cells / 23.2k µm² |
 | **Tiny Tapeout top level** — the deliverable | `rtl/tt_um_protocol_emulator.v` | 1,284 cells / 23.2k µm² |
 | Assembler / bit-accurate emulator | `tools/fw/peasm.py`, `tools/fw/peemu.py` | Python |
 | The UART itself — **as firmware** | `firmware/uart_echo.pe` | 114 words |
 
 Verified by **26 self-checking testbenches + 17 firmware tests + a lint gate**
 (`regress/run_all.sh`), including one TB per target protocol: UART, SPI, I2C, JTAG,
-SWD, PS/2, CAN, USB-LS, 10BASE-T. The SERDES has been through the full
-place-and-route flow: **0 DRC, 0 LVS, 66 MHz timing clean** (+7.6 ns setup slack
-at the slow corner), reproducible with `flow/run_librelane.sh`.
+SWD, PS/2, CAN, USB-LS, 10BASE-T. **The operating point and signoff target are
+60 MHz** (`CLOCK_PERIOD` 16.667 ns in both flow configs). The SERDES's historical
+2026-09-18 place-and-route run reported 0 DRC, 0 LVS and +7.6 ns setup slack at
+the slow corner under the former 66 MHz constraint. The current configs use the
+60 MHz target; recorded timing results are in [`wiki/STATUS.md`](wiki/STATUS.md).
 
 `regress/lint.sh` runs Verilator `-Wall` plus a yosys elaboration check on every top,
 and the regression fails if either finds anything. It exists because a green
@@ -42,13 +44,17 @@ testbench says nothing about the netlist: two drivers on one flop raced in Icaru
 and became a constant 0 in yosys, and a hierarchical debug reference simulated
 correctly while synthesising backwards. Neither is reachable from a testbench.
 
-The headline is `tb/tb_pe_soc_uart.v`: **there is no UART in the RTL.** One input
-pin, one output pin, a counter, and a program — 115200 8N1, echoing bytes at
-8.6–8.7 µs per bit cell measured at the pin.
+`tb/tb_pe_soc_uart.v` demonstrates the UART firmware on `pe_soc`: one input
+pin, one output pin, a counter, and a program produce 115200 8N1, echoing bytes
+at 8.6–8.7 µs per bit cell measured at the pin. The same core and pin matrix
+also run SPI mode 0 and I2C START/bit-cell/STOP firmware; I2C byte transfers
+and transactions remain future work.
 
 The instruction memory is a **real SRAM macro** (`1P_1024x16`, 1,024 program words)
-behind `rtl/pe_imem.v`. Not built yet: the pin matrix (open-drain/OE), the word FIFO,
-and the 2 KB frame buffer.
+behind `rtl/pe_imem.v`. The pin matrix (`rtl/pe_pinmux.v`) supplies per-pin
+direction and open-drain control. The 2 KB frame buffer (`rtl/pe_fbuf.v`) is
+also implemented; see [`wiki/STATUS.md`](wiki/STATUS.md) for Ethernet integration
+progress. The word FIFO remains future work.
 
 ## Quick start
 
@@ -63,8 +69,8 @@ python3 tools/fw/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex
 python3 tools/fw/peemu.py firmware/uart_echo.hex --send "41 42" --max-cycles 900000
 ```
 
-Place-and-route (dockerized LibreLane; see `wiki/concepts/pdk-toolchain.md`).
-The config is in the repo, so the signoff result is reproducible from a clone:
+Place-and-route uses dockerized LibreLane and the checked-in **60 MHz**
+constraints (`CLOCK_PERIOD` 16.667 ns; see `wiki/concepts/pdk-toolchain.md`):
 
 ```bash
 flow/run_librelane.sh flow/pe_serdes.json   # results under ~/asic-runs/
@@ -114,7 +120,8 @@ bit-bangs a protocol against pins and a counter; the UART exists only as
 generates a `bit_en` strobe per bit cell, the SERDES converts words to/from bit
 streams, and the codec pipeline applies line coding. A 60 MHz board clock (DDR
 capture) makes every hard protocol's timing an exact integer number of ticks;
-10BASE-T's 50 ns half-bit cell is the binding constraint at 3 ticks. Signoff is at
-66 MHz so the part can be run faster than the protocols require. No PLL, no DLL.
+10BASE-T's 50 ns half-bit cell is the binding constraint at 3 ticks. Signoff
+targets the same **60 MHz** operating point (16.667 ns); the former 66 MHz
+signoff target is retired. No PLL, no DLL.
 The I2C plan picks bit-banging over the SERDES deliberately, because I2C's control
 flow is per-bit — see `wiki/plans/through-i2c.md`.

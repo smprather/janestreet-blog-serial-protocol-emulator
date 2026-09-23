@@ -120,8 +120,9 @@ dual-edge 40 MHz sampling (same 12.5 ns resolution, STA-friendly, zero PVT risk)
 an internal XOR delay-line doubler per [[concepts/clock-doubler]]. The DRU logic is
 identical in all three cases — it is single-edge and counts samples, so whatever
 delivers the 12.5 ns grid is invisible to it. `SPB` is a parameter for exactly that
-reason; a 66 MHz turbo mode gives ~6.6 samples per half-UI and only needs the
-parameter changed.
+reason. Those were the original 40 MHz clock choices. The current operating
+point is **60 MHz with DDR capture**, giving an 8.33 ns sample grid and
+`SPB=12` (six samples per half-UI); see [[decisions/adr-005-60mhz-turbo]].
 
 ## Related
 

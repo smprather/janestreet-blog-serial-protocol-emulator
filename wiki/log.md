@@ -1153,3 +1153,27 @@
   and `wiki/STATUS.md` with the review result, fresh revision and resume path;
   corrected the stale branch note (`main` at `6de2a6a`, review branch at
   `2cc0f03`). No production source changes were needed.
+
+## [2026-09-23] correct | README signoff target is 60 MHz
+
+- The user caught stale README prose after the refactor review: it still
+  claimed a 66 MHz signoff target. Both flow configs already use **16.667 ns
+  (60 MHz)**, matching the locked RTL clock and ADR-005's amendment.
+- Corrected the README target and flow instructions, identified the old SERDES
+  measurements as historical, and synchronized matching metadata comments,
+  clock notes, status and handoff guidance. Added the missed documentation
+  issue and its correction to `reviews/2026-09-23/REFACTOR-REVIEW.md`.
+- Checked both JSON clock periods, RTL/metadata clock values and SoC setup/hold
+  uncertainty against the documentation. `tools/gen/clock_arithmetic.py --check`
+  and `git diff --check` pass. Documentation/comments only; no physical flow,
+  DRC or LVS run.
+
+## [2026-09-23] correct | README uses the programmable protocol SoC name
+
+- Replaced the pre-refactor "Software-UART SoC" label with "Programmable
+  protocol SoC" after user feedback. The status now describes UART, SPI mode 0
+  and I2C pin-level firmware, and points to STATUS for the live work list.
+- Corrected nearby claims that the pin matrix and frame buffer were unbuilt.
+  Added the missed documentation issue to the refactor review. Checked the
+  README's implementation references and `git diff --check`; no RTL changes
+  were made for this correction.

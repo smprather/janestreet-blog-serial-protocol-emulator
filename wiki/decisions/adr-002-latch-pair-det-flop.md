@@ -29,5 +29,5 @@ Build the DDR capture flop from standard cells: transparent-high latch + transpa
 
 ## Consequences
 
-- SERDES/DRU capture path uses the latch-pair cell; half-cycle paths each direction at 66 MHz DDR (7.6 ns) — generous.
+- SERDES/DRU capture path uses the latch-pair cell; the current 60 MHz operating point gives 8.33 ns per half-cycle (ADR-005).
 - Board-clock duty error still lands as uneven sample spacing; absorbed by per-edge phase re-sync per [[concepts/cdr-oversampling]].

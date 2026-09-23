@@ -139,8 +139,14 @@ Core clock and protocol timing are orthogonal (all timing is strobe-based via NC
 - **The operating point is locked at 60 MHz for integer-exact protocol timing**, with a 50%-finer RX grid than 40 (SPB 8 → 12). It is a `localparam` in `pe_soc`, not a parameter — see [[reference/clock-arithmetic]].
 - Costs: ~50% more dynamic power at 60 than at 40 (no per-tile power wall at TT scale).
 
-## Clock uncertainty spec: 1.0 ns at 66 MHz (not a blanket 5%)
+## Clock uncertainty spec at 60 MHz: 1.0 ns setup, 0.25 ns hold
 
 TT's board clock is crystal-derived (RP2040/RP2350 PWM-PIO divided): ~50 ppm period accuracy — ppm-level offset, absorbed by NCOs, NOT STA uncertainty. The 10 ns pad insertion delay is constant skew (hits clock+data alike through the mux, cancels intra-tile), not uncertainty. FS/SF data-pad slew goes to set_input_delay rise/fall skew (SPICE-derived), not clock uncertainty.
 
-Defensible budget: 0.1 ns board PLL jitter + 0.2 ns DDR latch-pair duty penalty + 0.4 ns clock-tree IR derate (PDN-hardened plan) ~= 1.0 ns (6.6% of 15.15 ns). Leaves +6.6 ns of the +7.6 ns pe_serdes slack intact. If silicon disagrees, revisit the IR derate knob first.
+The SoC setup budget rounds 0.1 ns board PLL jitter + 0.2 ns DDR latch-pair
+duty penalty + 0.4 ns clock-tree IR derate up to **1.0 ns**, or **6.0% of the
+16.667 ns period**. `flow/pe_soc.json` supplies that value and
+`flow/pe_soc.sdc` applies it to setup, with **0.25 ns for hold**. Recorded
+post-route margin at 60 MHz is in [[STATUS]]; the older +7.6 ns SERDES result
+used the retired 66 MHz constraint. If silicon disagrees, revisit the IR derate
+knob first.

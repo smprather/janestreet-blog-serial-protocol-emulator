@@ -111,9 +111,9 @@ of 3**. So 66.5 works **only with a purpose-built dither generator**, buying
   `SPB > 16`, and `regress/param_guards.sh` (wired into `run_all.sh`) requires both
   guards to actually reject and both boundaries (16, and the SPB=12 turbo grid)
   to actually compile, so a guard that stops firing fails the build.
-- **66 MHz keeps exactly one role: a conservative STA signoff target.** Closing
-  at 66 and running at 60 leaves ~10% of the period as free margin, and covers
-  the "real IHP pads might top out below 66" hedge without re-signoff.
+- **Signoff targets the 60 MHz operating point (16.667 ns).** The earlier
+  66 MHz margin target was retired on 2026-09-22; both flow configs now use
+  16.667 ns, so reported slack directly describes the operating point.
 - The demo board's own default, 62.5 MHz = 125/2, is **not** 20n MHz and fails
   the same way 66 does. A turbo must be requested explicitly.
 - 10BASE-T **receive** is unaffected either way: the DRU re-locks phase on every

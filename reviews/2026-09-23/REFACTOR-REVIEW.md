@@ -105,3 +105,27 @@ python3 reviews/2026-09-23/refactor/check_layout.py
 The first compares the current checkout against `2cc0f03`. The second requires
 the normal local simulation tools and PDK, and uses temporary output directories.
 The archived `.txt` files describe the reviewed `6de2a6a` checkout.
+
+## Documentation follow-up — retired signoff target corrected
+
+After this review, the user identified stale README prose claiming signoff at
+66 MHz. That documentation issue was missed in the review. Both checked-in
+flow configs already specify `CLOCK_PERIOD: 16.667` (60 MHz), and ADR-005's
+2026-09-22 amendment retires the 66 MHz target.
+
+Corrected the README's current target and reproduction instructions, labelled
+the old SERDES result as historical, and synchronized the matching metadata
+comment, clock notes, status and handoff guidance. Historical measurements
+retain their original frequencies; the handoff points to the recorded 60 MHz
+SoC result. This correction changes documentation/comments only. The source
+preservation and simulation results above still describe the reviewed code;
+no new physical verification was performed.
+
+## Documentation follow-up — SoC naming corrected
+
+The user also identified the README's obsolete "Software-UART SoC" label.
+Changed it to "Programmable protocol SoC" to match `pe_soc` and its UART,
+SPI and I2C firmware use. Updated the nearby status and memory descriptions:
+the pin matrix and frame buffer are implemented, and `wiki/STATUS.md` owns the
+current integration backlog. README source references and whitespace checks
+pass; this follow-up changes documentation only.
