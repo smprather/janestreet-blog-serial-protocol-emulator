@@ -86,8 +86,10 @@ echo options use 2.5 MHz (one frame) or 5 MHz (two frames) guard rates; 10 MHz
 requires the documented rising-edge change variant. Status and memory peek
 remain alternatives. The interface choice is open and no RTL has changed.
 The next independent open block, integrating `pe_serdes` + `pe_codec_mux`
-into `pe_soc`, has a written integration plan awaiting review
-([[plans/serdes-integration]]); no RTL changed.
+into `pe_soc`, has an integration plan amended after its first review (window
+encoding, LENW, strobe split, overlay insertion, TX-consumer scope); findings
+and source-grounded resolutions are in
+`reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`; no RTL changed.
 **The I2C review-focus gaps are closed (2026-09-23):** arbitration loss
 releases and aborts without a STOP, unexpected NACKs record an outcome and end
 with a STOP, and SCL is read back after every release so stretching is waited

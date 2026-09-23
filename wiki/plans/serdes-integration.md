@@ -21,7 +21,11 @@ shared word engine and the line-code pipeline the stretch personas need:
 protocols. The project-plan diagram already draws them inside the SoC with
 `cpu ..> serdes` and `codec ..> pads` as planned.
 
-This plan is **review-only**: no RTL changes until it is accepted.
+This plan is **review-only**: no RTL changes until it is accepted. It was
+amended 2026-09-23 after the first review (window encoding, LENW, strobe split,
+overlay insertion point, TX-consumer scope); the findings and their
+source-grounded resolutions are recorded in
+`reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`.
 
 ## What the blocks actually contract (source-grounded)
 
@@ -85,31 +89,49 @@ line in STATUS must be updated in the same change.
 
 ## Interface and data path (recommended shape)
 
-**TX.** `serdes.tx_ser -> codec.tx_bit`; `codec.tx_wire` goes to a **per-pin
-overlay mux** inside `pe_soc` *before* the matrix's output register:
-`pin_out[i] = overlay_en[i] ? tx_wire : matrix_out[i]`, while `pin_oe[i]` /
-`pin_od[i]` stay entirely under firmware/matrix control. A released pin is
-never driven by the engine; open-drain personas can keep using the matrix path
-or set OE appropriately. Reset default: overlay disabled on every pin — the
-existing bit-banged personas are bit-identical.
+**TX.** `serdes.tx_ser -> codec.tx_bit`; `codec.tx_wire` reaches the pin
+through a per-pin **level override applied at `pe_pinmux`'s level input,
+before its open-drain gate** -- not on the post-matrix `pin_out` wire. The
+matrix's enable equation is
+`pad_oe[i] = reg_oe[i] && (!reg_od[i] || !reg_out[i])` (`rtl/pe_pinmux.v`),
+so an override that only replaced `pin_out` would leave `pad_oe` keyed to the
+un-overridden register level: an engine `0` while the register held `1` on an
+`od=1` pin would release instead of pulling low. The fix is to feed the
+overridden level into both outputs:
+`eff_out[i] = overlay_en[i] ? tx_wire : reg_out[i]`, i.e. extend the matrix
+with a per-pin level override (a SoC-internal signal) rather than muxing after
+it. Firmware still owns `oe`/`od`, so open-drain personas work with the engine.
+Restricting v1 to push-pull pins (`od=0`) is rejected as a firmware footgun;
+the pre-gate override is a small, local change. Reset default: overlay off on
+every pin -- the bit-banged personas are bit-identical.
 
 **RX.** One capture path, not two: route the engine's RX through the existing
 `pe_dru` (`rx_wire`, `rx_first`, `rx_second`, `bit_en`, `locked`), whose input
 is already the synchronized pin. Two modes:
-- **DRU-decoded (Manchester)**: `dru.bit_en` (half-cell cadence) +
-  `rx_first/rx_second` feed the codec; `manch_en = 1`.
+- **DRU-decoded (Manchester)**: `dru.bit_en` is a **per-bit** strobe and the
+  half-cell data arrives as `rx_first`/`rx_second`; that is exactly how the
+  signed-off eth chain drives `pe_manch` (`half_phase = 0`). `manch_en = 1`.
 - **Plain/NRZI/stuffed**: `dru.rx_wire` feeds the codec; the strobe comes from
   the new timing block at the bit rate.
 A later refactor could replace the dedicated `pe_manch` in the eth RX chain
 with `codec_mux`; **not in this change** — the receive chain is signed off and
 must not be disturbed.
 
-**Timing/strobe block (new, small).** A programmable divider:
-`bit_en` every `DIV+1` clk cycles, plus a `half_phase` toggle at twice the rate
-when Manchester is enabled, plus an optional single-shot for firmware-paced
-modes. Sources: the new divider for TX and plain RX; `pe_dru.bit_en` for
-Manchester RX. This is the only new stateful block; it is protocol-agnostic and
-has no notion of baud — the divisor is a register.
+**Timing/strobe block (new, small).** Two strobes, because the serdes and the
+codec run at different cadences:
+- `serdes_bit_en`: once per **logical bit** -- the serdes sides advance on it.
+- `codec_bit_en`: once per **codec cell**. For plain/NRZI/stuffed modes it is
+  the same per-bit cadence; for Manchester TX it runs at **twice the bit
+  rate** with `half_phase` toggling, and `serdes.tx_ser` is held stable across
+  both half-cell strobes (`pe_manch`: `tx_wire = half_phase ? tx_raw : ~tx_raw`).
+- Manchester **RX** does not use the divider: `pe_dru` gives `bit_en` once per
+  decoded bit plus `rx_first`/`rx_second`, which the codec's `pe_manch`
+  consumes directly (as the eth chain does). Plain/NRZI/stuffed RX uses
+  `dru.bit_en` with `dru.rx_wire`.
+The divider register sets the bit period; the Manchester half-cell rate is
+derived from it, not from a second divisor. An optional single-shot mode lets
+firmware pace plain TX by hand. This is the only new stateful block; it is
+protocol-agnostic and has no notion of baud -- the divisor is a register.
 
 ## Control/status semantics and CPU/firmware access
 
@@ -118,10 +140,20 @@ and widening the port field would touch the ISA, `pe_cpu`, `peasm` and every
 firmware. Recommendation: an **indexed register window at `0xF`**, no ISA
 change:
 
-- `OUT 0xF, A` with `A[7] = 1` sets `INDEX <= A[3:0]`.
-- `OUT 0xF, A` with `A[7] = 0` writes `REG[INDEX] <= A[7:0]`; a read returns
-  `REG[INDEX]`. Every access auto-increments `INDEX` (16-entry wrap), so a
-  32-bit word is one index write plus four data accesses.
+- **Latched phase, all 8 data bits intact.** The window has a `phase` bit
+  (reset to INDEX) and a 4-bit `INDEX` pointer:
+  - `OUT 0xF, A` in INDEX phase: `INDEX <= A[3:0]`, `phase <= DATA`. The access
+    carries the index, not data.
+  - `OUT 0xF, A` in DATA phase: `REG[INDEX] <= A[7:0]`, `INDEX <= INDEX+1`,
+    phase stays DATA -- a data burst is one index write plus N full-width
+    writes.
+  - `IN A, 0xF`: returns `REG[INDEX]`, `INDEX <= INDEX+1` (reads always
+    auto-increment), and `phase <= INDEX`. **Any read re-arms index phase**, so
+    the next write is an index write.
+- Firmware sequences: write a word = `IN` (arms; use it for STATUS) + `OUT`
+  index `TXDATA_lo` + 4 `OUT` data bytes; read a word = `OUT` index
+  `RXDATA_lo` + 4 `IN` bytes. Mixing a write burst after a read burst costs
+  the re-arming read, which can be the STATUS read.
 
 Proposed 16-entry map (values are a shape to review, not a freeze):
 
@@ -130,17 +162,26 @@ Proposed 16-entry map (values are a shape to review, not a freeze):
 | 0 | `CTRL` | w | engine enable, `tx_load`, `rx_start`, `clr`, `cfg_lsb_first`, TX-pin select |
 | 1 | `CFG` | w | `codec_mux.cfg` byte (stuff/nrzi/manch/half_phase/run/ones_only) |
 | 2-3 | `DIVL/DIVH` | w | bit-strobe divisor |
-| 4 | `LEN` | w | `tx_len`, `rx_len` (5+5 packed) |
-| 5 | `STATUS` | r | `tx_busy/tx_done/rx_busy/rx_valid/rx_err/dru_locked/engine_en` |
-| 6-9 | `TXDATA` | w | 32-bit TX word (MSB-last or first, per `cfg_lsb_first`) |
-| 10-13 | `RXDATA` | r | 32-bit RX word |
-| 14-15 | spare | - | future personas / status |
+| 4 | `TXLEN` | w | `tx_len[5:0]`, 1..32 (0 invalid); `LENW = 6` |
+| 5 | `RXLEN` | w | `rx_len[5:0]`, 1..32 (0 invalid) |
+| 6 | `STATUS` | r | `tx_busy/tx_done/rx_busy/rx_valid/rx_err/dru_locked/engine_en` |
+| 7-10 | `TXDATA` | w | 32-bit TX word (MSB-last or first, per `cfg_lsb_first`) |
+| 11-14 | `RXDATA` | r | 32-bit RX word |
+| 15 | spare | - | future personas / status |
 
-Reset default: engine disabled, overlay off, `REG` reads 0 — every existing
-TB and firmware is unaffected. Firmware cost: ~5 IO accesses per engine word,
-which is why this is a resource for the paced/stretch personas, not a
-replacement for bit-banging the baseline ones. The alternative (5-bit IO
-space) is a separate, larger decision and is **explicitly out of scope**.
+`TXLEN`/`RXLEN` are separate because the serdes has independent sides (it can
+transmit and receive at once), and a single 8-bit register cannot hold two
+six-bit lengths regardless of encoding. The 6-bit 1..32 encoding follows
+`LENW = $clog2(MAXLEN+1) = 6`; a 5-bit `0 => 32` encoding is an acceptable
+alternative if the reviewer prefers it, but not both fields in one byte.
+
+Reset default: engine disabled, overlay off, `REG` reads 0 -- every existing
+TB and firmware is unaffected. Firmware cost: an index write plus one access
+per byte; bursts amortise the index write, and switching bursts costs one
+re-arming read. This is why the window is a resource for the paced/stretch
+personas, not a replacement for bit-banging the baseline ones. The alternative
+(5-bit IO space) is a separate, larger decision and is **explicitly out of
+scope**.
 
 ## Reset and clocking
 
@@ -168,10 +209,21 @@ signal, never a raw pad.
 3. **Non-regression, on the same run**: `tb_pe_soc_uart`, `tb_pe_soc_spi`,
    `tb_pe_soc_i2c_xfer`, `tb_pe_soc_tick`, `tb_pe_soc_eth` must stay green with
    the engine disabled at reset — the proof that the path is additive.
-4. **First consumer** (recommended): a 10BASE-T TX check driven from
-   `pe_eth_mac`/`pe_fbuf` or firmware, decoded by a Manchester receiver model,
-   which is the actual reason the engine is needed. If the reviewer prefers,
-   the first consumer can instead be an engine-paced plain UART TX.
+4. **First consumer, split in two**:
+   - **Wire-loopback milestone (this plan)**: no frame layer. Engine TX (plain
+     LSB/MSB and Manchester) drives a wire model that loops back into the DRU +
+     codec + serdes RX; the word must match. This proves the engine, the strobe
+     split and the overlay without any Ethernet framing.
+   - **Full 10BASE-T TX consumer (separate plan/block)**: `pe_eth_mac` is
+     receive-only (`rtl/pe_eth_mac.v`: `bit_en`/`rx_raw`/`rx_err`/
+     `rx_first`/`rx_second` in; `fbuf_*`/`frame_*`/`crc_*` out) and `pe_fbuf`
+     is the RX store -- neither can source a TX frame. A transmit path needs
+     preamble/SFD generation, FCS generation (`pe_crc` is currently committed
+     to the RX path, so TX needs a time-shared or duplicated LFSR), IFG/backoff
+     timing, and a frame source (firmware bytes through the window, or a TX
+     buffer + state machine). That is the `eth_tx` block on the progress
+     diagram and gets its own plan; this plan only delivers the engine it will
+     use.
 5. All new TBs self-check, print `PASS`, and are registered in `run_all.sh`;
    every mutation must be independently detected and the source restored.
 
@@ -193,8 +245,10 @@ signal, never a raw pad.
   100 MHz simulation, which proves function, not silicon timing — the
   implementation needs the native yosys + OpenSTA screen (as for pe_ctrl), and
   possibly a registered Manchester output stage if the path is too deep.
-- **Strobe fanout**: one `bit_en` reaches serdes, codec (three stages) and the
-  DRU-derived branch; check max-fanout and skew.
+- **Strobe fanout/skew**: `serdes_bit_en` and `codec_bit_en` (Manchester runs
+  the codec at twice the serdes rate) reach the shift engine, three codec
+  stages and the DRU-derived branch; check max-fanout and the half-cell skew
+  budget.
 - **32-bit shift registers** and the 16x8 window bank are flop-based; the area
   delta is known but the window's read-mux path must be checked for
   timing/depth.
@@ -206,9 +260,9 @@ signal, never a raw pad.
   the loader (`ui[3:5]`), the SPI pads (`uio[2:3]`), I2C (`uio[0:1]`) and the
   debug pins are unchanged. The pin budget is unchanged by the engine itself
   (it is routing, not new IO).
-- **Personas enabled**: 10BASE-T TX, USB-LS (NRZI + ones-only stuffing), CAN
-  (stuffing), and hardware-paced plain protocols. JTAG/SWD/PS/2 remain
-  optional targets.
+- **Personas enabled**: the 10BASE-T **wire** transmit side (the frame layer is
+  a separate block), USB-LS (NRZI + ones-only stuffing), CAN (stuffing), and
+  hardware-paced plain protocols. JTAG/SWD/PS/2 remain optional targets.
 - **Half-duplex note**: 10BASE-T TX and RX share the RX pin (bit 7), so the
   overlay and the DRU are never enabled in opposite directions at once —
   firmware owns the turnaround through OE, and the plan must test it.
@@ -222,7 +276,8 @@ signal, never a raw pad.
 4. Serdes + codec instantiation with the overlay mux and DRU RX routing.
 5. `tb_pe_soc_serdes` (plain + Manchester loopback); keep every existing TB
    green; add the two mutation suites.
-6. First-consumer TX test (10BASE-T or engine-paced UART).
+6. Wire-loopback TB first (plain + Manchester); the full 10BASE-T TX consumer
+   (frame/preamble/FCS/IFG/source) is a separate block and plan.
 7. `synth_area.sh` + native yosys/OpenSTA screen; update STATUS, block diagram
    (orphans retire), log and the progress diagram.
 
@@ -234,8 +289,9 @@ signal, never a raw pad.
    (ISA/CPU/assembler change; out of scope here).
 3. **RX path**: DRU as the single capture path (recommended) vs. a second
    synchronizer for plain modes.
-4. **First consumer**: 10BASE-T TX (recommended, it motivates the engine) vs.
-   an engine-paced plain UART.
+4. **First consumer**: the wire-loopback milestone (recommended; no frame
+   layer) vs. an engine-paced plain UART TX. The full 10BASE-T TX frame path
+   is a separate plan either way.
 5. **Manchester output**: combinational cascade (start) vs. a registered output
    stage (if STA demands it).
 

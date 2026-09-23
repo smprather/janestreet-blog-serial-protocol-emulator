@@ -1383,15 +1383,20 @@ guard margins, not the limits. Neither reaches 10 MHz; A3 (update on the
 synchronized rising edge, documented non-mode-0 change edge, two frames) is
 the 10 MHz path. No RTL changed yet.
 
-### 7. SERDES + codec integration — PLAN WRITTEN 2026-09-23 (awaiting review)
+### 7. SERDES + codec integration — PLAN AMENDED after review 2026-09-23
 
 The last two orphan blocks (539 + 130 cells) are planned into `pe_soc`:
-`serdes.tx_ser -> codec.tx_bit -> codec.tx_wire` through a per-pin overlay mux
-ahead of the matrix's OE/OD, RX through the existing `pe_dru` capture, a
-programmable bit-strobe divider, and a 16-entry indexed window on the one free
-IO port (`0xF`, no ISA change). Reset default is engine-disabled, so every
-existing TB/firmware stays bit-identical. Options and open decisions:
-[[plans/serdes-integration]]. No RTL yet.
+`serdes.tx_ser -> codec.tx_bit -> codec.tx_wire` through a per-pin level
+override at `pe_pinmux`'s level input (before the OD gate), RX through the
+existing `pe_dru` capture, separate serdes/codec strobes (Manchester codec at
+twice the bit rate), and a 16-entry **latched-phase** indexed window on the one
+free IO port (`0xF`, no ISA change; separate `TXLEN`/`RXLEN`). A full 10BASE-T
+TX frame path is a separate block (`pe_eth_mac` is RX-only; `pe_fbuf` is the RX
+store); this plan's first consumer is a wire loopback. Review findings and
+source-grounded resolutions:
+`reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`. Reset default is
+engine-disabled, so every existing TB/firmware stays bit-identical. Open scope
+decisions: [[plans/serdes-integration]]. No RTL yet.
 
 ## Reading order for a fresh session
 

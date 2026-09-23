@@ -1623,3 +1623,22 @@
 - Options and open decisions (scope, IO window vs ISA widening, RX capture,
   first consumer, registered Manchester stage) are in
   [[plans/serdes-integration]]. Plan-only: no RTL, no physical flow/DRC/LVS.
+
+## [2026-09-23] soc | serdes integration plan amended: five review findings
+
+- Window encoding fixed: a latched INDEX/DATA phase preserves all 8 data bits
+  (writes switch on phase; any read auto-increments and re-arms index), with
+  explicit firmware sequences.
+- `TXLEN`/`RXLEN` are separate six-bit registers (`LENW = 6`, 1..32); one byte
+  cannot hold two lengths.
+- Strobe split: `serdes_bit_en` per logical bit, `codec_bit_en` per cell
+  (Manchester TX twice per bit with `half_phase`, `tx_ser` held across halves);
+  Manchester RX uses `dru.bit_en` + `rx_first/rx_second` (the earlier
+  "half-cell cadence" claim was wrong).
+- Overlay moved to `pe_pinmux`'s level input before the OD gate
+  (`pad_oe = reg_oe && (!reg_od || !reg_out)`); the post-matrix mux would have
+  keyed OE to the un-overridden level.
+- First consumer split: wire loopback in this plan; the full 10BASE-T TX frame
+  path is separate (`pe_eth_mac` is RX-only, `pe_fbuf` is the RX store).
+- Evidence: reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md. Plan-only: no RTL,
+  no regression, no physical flow/DRC/LVS.
