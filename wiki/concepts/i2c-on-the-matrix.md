@@ -215,10 +215,18 @@ accumulator — and requires all seven to be caught.
 
 ## Open work
 
-- **Clock stretching and arbitration in the transaction loop.** The pin-level
-firmware proved both; the transaction counts arbitration losses (`dmem[7]`) and
-its TB drives a contention run, but the transaction loop does not yet wait for
-a stretched SCL before counting tHIGH.
+- **Arbitration is detection, not compliance.** A transmitted 1 read back low
+increments `dmem[7]`, but the byte engine keeps shifting and the transaction
+completes. A compliant multi-master master releases the bus and retries after
+the winner finishes; the RTL TB's contention run expects completion, so this is
+the tested behavior.
+- **NACKs are recorded without recovery.** The ACK samples land in `dmem[0..2]`
+and the master dispatches regardless. The read-address-NACK and data-NACK paths
+are neither tested nor defined beyond the record; the emulator's slave model
+can be configured to NACK (`nack_address`/`nack_data`) when they are.
+- **Clock stretching is not handled in the transaction loop.** The pin-level
+firmware proved the SCL read-back; the transaction times tHIGH from its own
+release. Keep the v1 narrowing explicit until the loop waits on SCL.
 - **A real device.** The acceptance test for the writeup is an SSD1306 or a
 24C02 on the board, with real pull-ups.
 - **Pull-up values.** Not modelled: both bus models are ideal. The real RC is

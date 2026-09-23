@@ -59,6 +59,17 @@
 //   uio[1]      SCL              open-drain, for the I2C milestone
 //   uio[7:2]    released         (oe = 0)
 //
+// WHY SIX PADS STILL CARRY THE PROGRAM COUNTER (decision 2026-09-23, STATUS
+// item 4). The pad budget is not the constraint: with UART, the loader, I2C and
+// the heartbeat pinned, 14 pads are free (ui_in[7:6], uio[7:2] and these six),
+// which covers the remaining protocol wires even if all nine run at once. The
+// chip has NO READBACK PATH -- pe_ctrl is a passive slave with no MISO -- so
+// these six pins are the only live observability on silicon: a loaded program
+// walking the PC is how bring-up tells "running" from "silent". Reclaim them
+// when a protocol needs the pads and the free uio/ui pins are gone, or when a
+// readback path lands; the matrix can already drive any free uio pad at
+// runtime, so this is a pinout choice, not a capability limit.
+//
 // The two uio pins are wired as a loopback-capable open-drain pair driven from
 // the SoC's pin today. That is enough to prove the oe path works in silicon,
 // which is the thing wiki/plans/through-i2c.md flags as unverified.

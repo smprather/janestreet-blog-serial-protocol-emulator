@@ -1428,3 +1428,23 @@
   a NACK. The TB now waits four clocks before `run`, as the UART SoC TBs do.
 - No RTL changed in this milestone (firmware, TBs, emulator and docs only), so
   the recorded synthesis/STA screens remain the current ones.
+
+## [2026-09-23] decision | item 4: the debug PC keeps its six pads
+
+- STATUS item 4 is decided: `uo_out[7:2]` stay `dbg_pc[5:0]`. The pad budget is
+  not the constraint (after UART, the loader and I2C, 14 pads are free — enough
+  for the remaining protocol wires even with all nine running at once);
+  `pe_ctrl` has no readback, so the visible PC is the only live observability on
+  silicon; and reclaiming has no consumer yet (the free `uio` bank already gives
+  the matrix six runtime-direction pads).
+- Revisit trigger recorded in the wrapper header and STATUS: reclaim when a
+  protocol needs the pads and the free `ui_in`/`uio` pins are exhausted, when a
+  `pe_ctrl` readback path lands, or at submission pinout freeze. Separately:
+  SPI firmware's MOSI/CS have no pads today; the free `uio` bank is the natural
+  home for them (bidir, per-pin OE).
+- The independent I2C review's open limits are kept visible in STATUS item 3 and
+  the concept page: arbitration loss is counted but the transfer continues;
+  unexpected NACKs are recorded without recovery or negative-path tests; the
+  transaction loop does not wait on a stretched SCL.
+- No RTL logic changed (a wrapper comment only), so the recorded synthesis/STA
+  screens remain current.

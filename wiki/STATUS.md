@@ -404,6 +404,7 @@ the upside case with `tools/gen/sram_budget.py --tiles 8x4`.
 | **Instruction macro is live; PC width derives from IMEM depth (10 bits at 1024)** | `decisions/adr-004-program-counter-width.md` |
 | 10BASE-T is the LINE LAYER only; the stack is off-chip, and firmware never touches Ethernet bits | `concepts/ethernet-scope.md` |
 | **Buffer ownership: `wptr` is the producer, `rptr` the consumer**; BUFCTRL releases consumed bytes and never rebases the ring under an in-flight frame | `rtl/pe_eth_mac.v`, `reviews/2026-09-23/E1-RESOLUTION.md` |
+| **The six `uo_out[7:2]` pads stay `dbg_pc[5:0]` for now**: no readback path, 14 pads free; revisit when a protocol needs them or readback lands | `rtl/tt_um_protocol_emulator.v` header, STATUS item 4 |
 | **Both SRAM macros are placed and power-hooked in the flow config**, and a static netlist-vs-config gate keeps it true | `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`, `reviews/2026-09-23/E2-RESOLUTION.md` |
 | **`pe_ctrl` is a passive SPI slave at the wrapper** (host loads, `run` starts); no master, no flash, no bootstrap FSM | `decisions/adr-007-pe-ctrl-passive-slave.md` |
 | Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | the codec headers (`pe_nrzi`/`pe_manch`/`pe_bitstuff`) |
@@ -1278,11 +1279,35 @@ floors on the pads (tLOW 6.00 us, tHIGH 5.98 us, period 11.98 us).
 caught. The pin-level half remains `firmware/i2c_pins.pe` (79 words); the
 concept page and the traps are in [[concepts/i2c-on-the-matrix]].
 
-### 4. Reclaim or commit the six `uo_out` pins on `dbg_pc[0..5]`
+**Known limits, from the independent review
+(`reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md`) — scope narrowings, not
+happy-path defects:** (1) an arbitration loss is **counted but the transfer
+continues** — detection, not compliant multi-master arbitration; (2) an
+unexpected NACK on an address/data byte is recorded in dmem but there is no
+recovery path and no negative-path test; (3) the transaction loop does **not**
+wait for a stretched SCL. The pin-level firmware proved the pin primitives for
+all three; the transaction layer does not claim them.
 
-`tt_um_protocol_emulator` burns six of eight `uo_out` pins on a debug program counter.
-A deliberate bring-up choice, but also six pads that could carry a protocol.
-Unresolved, and cheap to decide.
+### 4. Reclaim or commit the six `uo_out` pins on `dbg_pc[0..5]` — DECIDED 2026-09-23
+
+**Decision: keep them, for now.** `tt_um_protocol_emulator` leaves `uo_out[7:2]`
+as `dbg_pc[5:0]`. Rationale:
+
+- **The pad budget is not the constraint.** UART, the loader and I2C pin 10
+  pads; 14 remain free (`ui_in[7:6]`, `uio[7:2]`, and these six), enough for the
+  remaining protocol wires even with all nine running at once.
+- **There is no readback path.** `pe_ctrl` is a passive slave with no MISO, so
+  the visible PC is the only live observability on silicon; a loaded program
+  that walks the PC is how bring-up distinguishes running from silent.
+- **Reclaiming has no consumer yet.** It would need a wrapper/pinout redesign;
+  the free `uio` pads already give the matrix six runtime-direction pins.
+
+**Revisit trigger:** reclaim them when a protocol needs the pads and the free
+`ui_in`/`uio` pins are exhausted, when a `pe_ctrl` readback path lands, or at
+submission pinout freeze. The rationale is recorded in the wrapper header.
+Separately noted: SPI firmware's MOSI/CS have no pads today; the free `uio`
+bank is the natural place to bring them out (bidir, per-pin OE), not these
+debug pins.
 
 ### 5. Full-chip floorplan against the real tile allocation
 
