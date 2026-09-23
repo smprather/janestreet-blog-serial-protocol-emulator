@@ -83,6 +83,18 @@ NOTES: dict[tuple[str, str], str] = {
     ("pe_eth_mac", "buf_reset"): "**Whole-ring reclaim**: moves BOTH pointers to zero. Only legal when the ring is empty and nothing is in flight, so it is a testbench/debug control — the SoC does not pulse it in traffic (it caused E1).",
     ("pe_eth_mac", "buf_consume"): "**Consumer-owned reclaim**: a pulse advances the READ pointer to `buf_consume_addr`. It never touches the write pointer, so it is safe while the next frame is arriving — the E1 fix.",
     ("pe_eth_mac", "buf_consume_addr"): "The consumer's current position (the SoC wires the BUFBYTE window pointer). Accepted only as a forward distance no greater than the allocated bytes; a duplicate is a no-op and a backward address is ignored, so `room` cannot be over-credited.",
+    # ---- pe_ctrl: the passive SPI loader (ADR-007) -----------------------
+    ("pe_ctrl", "spi_sclk"): "The loader clock pad. **Asynchronous**: synchronized with 2 flops and sampled on the rising edge (SPI mode 0). ≤ ~10 MHz at the 60 MHz core.",
+    ("pe_ctrl", "spi_mosi"): "Loader data, MSB-first, sampled on the rising SCLK edge while CS_N is low.",
+    ("pe_ctrl", "spi_cs_n"): "Active-low load select. A falling edge resets the word address to 0 and clears the sticky error; a rising edge ends the load and discards a partial word.",
+    ("pe_ctrl", "run"): "The core's run strap. Every receive and write path is gated on `!run`, so a load can never overwrite executing code.",
+    ("pe_ctrl", "host_we"): "One-cycle write pulse, one per completed 16-bit word, into the SoC's host port.",
+    ("pe_ctrl", "host_imem_sel"): "Held 1: v1 loads instruction memory only.",
+    ("pe_ctrl", "host_addr"): "Word address, incremented per completed word (0..WORDS-1).",
+    ("pe_ctrl", "host_wdata"): "The assembled MSB-first 16-bit word.",
+    ("pe_ctrl", "load_active"): "Level: selected (`CS_N` low) and `run` low.",
+    ("pe_ctrl", "load_error"): "Sticky until the next `CS_N` falling edge: a partial word, or a load longer than `WORDS`, was discarded.",
+    ("pe_ctrl", "words_written"): "Count of words handed to the host port since the current `CS_N` fell (debug/observability).",
     # ---- pe_dru: the oversampled Manchester receiver --------------------
     ("pe_dru", "bit_en"): "**The strobe** — one per decoded **bit cell** (not per half-cell: pe_manch is given both halves at once). This is the DRU's whole output contract. See [[concepts/strobe-and-committing-edge]].",
     ("pe_dru", "rx_pin"): "The raw **asynchronous** pin. Synchronized internally (2 flops) before anything else touches it — this is the one place in the design where metastability would actually be sampled.",

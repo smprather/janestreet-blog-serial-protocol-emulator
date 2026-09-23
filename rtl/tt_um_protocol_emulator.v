@@ -46,7 +46,10 @@
 //   ui_in[0]    UART RX          (the protocol input pin)
 //   ui_in[1]    run              1 = execute firmware, 0 = hold at PC 0
 //   ui_in[2]    10BASE-T RX      (Manchester line input; port bit 7)
-//   ui_in[7:3]  unused
+//   ui_in[3]    SPI SCLK         (pe_ctrl loader clock; ADR-007)
+//   ui_in[4]    SPI MOSI         (loader data, MSB-first)
+//   ui_in[5]    SPI CS_N         (active-low loader select)
+//   ui_in[7:6]  unused
 //
 //   uo_out[0]   UART TX          (the protocol output pin)
 //   uo_out[1]   heartbeat        timer bit 7, so a scope shows life
@@ -71,22 +74,34 @@ module tt_um_protocol_emulator (
   input  wire       rst_n
 );
 
-  // ---- firmware load window --------------------------------------------
-  // Not brought out to pads in this revision: the SoC boots from whatever the
-  // host interface last wrote, and the testbench drives that interface
-  // directly. Tying the port off here keeps the pad budget for protocol pins
-  // (wiki/reference/protocol-pin-budget.md: 24 usable, and a load port would
-  // cost 10 of them). A real bring-up loads over a serial shift path; that is
-  // a separate block and a separate decision record.
-  wire        host_we       = 1'b0;
-  wire        host_imem_sel = 1'b0;
+  // ---- firmware load window: pe_ctrl, the passive SPI slave ------------
+  // The host clocks a program into instruction memory before `run` rises.
+  // This was tied off until ADR-007; the loader now owns the SoC's host
+  // write port. Pads: ui_in[3]=SCLK, ui_in[4]=MOSI, ui_in[5]=CS_N. The
+  // protocol bits 0-3, UART/ETH RX and `run` keep their assignments.
+  //
   // Width follows the SoC's loader port, which follows IMEM_WORDS. Written as
   // the same expression the SoC uses so the two cannot drift apart.
   localparam int TT_IMEM_WORDS = 1024;
+
+  wire        host_we;
+  wire        host_imem_sel;
   wire [((((TT_IMEM_WORDS <= 2) ? 1 : $clog2(TT_IMEM_WORDS)) > 8)
          ? ((TT_IMEM_WORDS <= 2) ? 1 : $clog2(TT_IMEM_WORDS)) : 8)-1:0]
-       host_addr = '0;
-  wire [15:0] host_wdata    = 16'h0000;
+       host_addr;
+  wire [15:0] host_wdata;
+  wire        ctrl_load_active, ctrl_load_error;
+  wire [15:0] ctrl_words_written;
+
+  pe_ctrl #(.WORDS(TT_IMEM_WORDS)) u_ctrl (
+    .clk(clk), .rst_n(rst_n),
+    .spi_sclk(ui_in[3]), .spi_mosi(ui_in[4]), .spi_cs_n(ui_in[5]),
+    .run(ui_in[1]),
+    .host_we(host_we), .host_imem_sel(host_imem_sel),
+    .host_addr(host_addr), .host_wdata(host_wdata),
+    .load_active(ctrl_load_active), .load_error(ctrl_load_error),
+    .words_written(ctrl_words_written)
+  );
 
   wire       uart_rx = ui_in[0];
   wire       run     = ui_in[1];
@@ -183,9 +198,10 @@ module tt_um_protocol_emulator (
   //
   // uio_in[7:2] are sunk because the current pin map claims only uio[0] and
   // uio[1]; a future protocol can claim the rest without touching this line.
-  wire _unused = &{ena, ui_in[7:3], uio_in[7:2],
+  wire _unused = &{ena, ui_in[7:6], uio_in[7:2],
                    pin_out_bus[7:6], pin_out_bus[3:1],
                    pin_oe_bus[7:6], pin_oe_bus[3:0],
-                   dbg_a, dbg_timer[6:0], dbg_pc[7:6], 1'b0};
+                   dbg_a, dbg_timer[6:0], dbg_pc[7:6],
+                   ctrl_load_active, ctrl_load_error, ctrl_words_written, 1'b0};
 
 endmodule

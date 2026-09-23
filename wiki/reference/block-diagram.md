@@ -30,7 +30,7 @@ why, and the short version is that control flow is per-bit for I2C
 ```mermaid
 flowchart TB
     subgraph BOARD["off-chip / board"]
-        HOST["host loader<br/><i>a TB today; pe_ctrl later</i>"]
+        HOST["SPI host<br/><i>loads imem through pe_ctrl</i>"]
         WIRE["protocol pins<br/>ui_in / uo_out / uio"]
     end
 
@@ -56,15 +56,17 @@ flowchart TB
             FBUF -.->|FLOP=0| SRAM
         end
         SRAM["SRAM macro<br/>RM_IHPSG13 1P_1024x16"]
+        CTRL["<b>pe_ctrl</b><br/>passive SPI load"]
     end
 
-    HOST -.->|"imem/dmem write port"| IMEM
+    HOST -->|"SCLK/MOSI/CS_N"| CTRL
+    CTRL -->|"host write port"| IMEM
     PORT -->|"drive"| WIRE
     WIRE -->|"sense"| PORT
 
     classDef built fill:#1f4d2e,stroke:#4ade80,color:#fff
     classDef plan fill:#4a1f1f,stroke:#f87171,color:#fff,stroke-dasharray: 5 5
-    class CPU,IMEM,TICK,PORT,SRAM,DRU,MANCH,ETHMAC,ETHCRC,FBUF built
+    class CPU,IMEM,TICK,PORT,SRAM,DRU,MANCH,ETHMAC,ETHCRC,FBUF,CTRL built
 ```
 
 ### Built, verified — and wired to nothing
@@ -86,8 +88,9 @@ flowchart LR
 |---|---|---|---|---|
 | `pe_cpu` | the ISA: 16 opcodes, A/Y/X, 8-bit datapath | pe_soc.v | 377 | `tb_pe_cpu` |
 | `pe_imem` | instruction memory; SRAM macro by default | pe_soc.v | 12 | `tb_pe_imem` |
-| `pe_eth_mac` | 10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward | pe_soc.v | 1151 | `tb_pe_eth_mac` |
+| `pe_eth_mac` | 10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward | pe_soc.v | 1402 | `tb_pe_eth_mac` |
 | `pe_fbuf` | frame buffer: 2 KB behind a byte interface, same macro as pe_imem | pe_soc.v | 48 | `tb_pe_fbuf` |
+| `pe_ctrl` | passive SPI load path: host clocks words into imem | tt_um_protocol_emulator.v | 284 | `tb_pe_ctrl` |
 | `pe_dru` | digital receiver unit: 12x oversampled edge recovery | pe_soc.v | 148 | `tb_pe_dru` |
 | `pe_crc` | CRC/LFSR generator, 8/16/32-bit, catalogue-checked | pe_soc.v | 209 | `tb_pe_crc` |
 | `pe_pinmux` | per-pin direction, open-drain, read-back (the I2C gate) | pe_soc.v | 111 | `tb_pe_pinmux` |
@@ -99,7 +102,7 @@ flowchart LR
 
 ### Orphans: built, tested, and driving nothing
 
-**2 of 12 blocks are instantiated nowhere in `rtl/`.**
+**2 of 13 blocks are instantiated nowhere in `rtl/`.**
 That is not an accident and not a bug in the diagram — it is the project's
 staging: each block was built and verified standalone before anything
 wired it up. But it is worth stating plainly, because it is the single
@@ -117,7 +120,6 @@ in the design, and the difference is exactly what this table shows.
 
 | not built yet | what it unblocks |
 |---|---|
-| **pe_ctrl (SPI load path)** | boot the chip in real silicon; today the loader is a host port driven by the TB, so the chip cannot boot itself |
 | **pe_serdes into the SoC** | the SERDES is routed and TB-proven but no SoC instance drives it |
 | **I2C transaction layer** | byte transfer, ACK, 7-bit addressing; the pin-level grammar (START/bit cell/STOP) landed 2026-09-23 -- [[concepts/i2c-on-the-matrix]] |
 

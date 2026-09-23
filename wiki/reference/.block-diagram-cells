@@ -7,10 +7,11 @@ pe_crc 209
 pe_dru 148
 pe_cpu 377
 pe_pinmux 111
+pe_ctrl 284
 pe_imem_flop 61057
 pe_imem_macro 12
 pe_fbuf_flop 45557
 pe_fbuf_macro 48
-pe_eth_mac 1151
-pe_soc 3066
-tt_um_top 3056
+pe_eth_mac 1402
+pe_soc 3298
+tt_um_top 3606

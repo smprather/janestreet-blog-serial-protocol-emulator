@@ -82,6 +82,10 @@ report pe_cpu       "rtl/pe_cpu.v"                               pe_cpu
 # SMALLER than the SERDES (539) because it has no datapath. The measured figure
 # in STATUS is the test of that claim.
 report pe_pinmux    "rtl/pe_pinmux.v"                            pe_pinmux
+# The passive SPI loader. Small by design: a 16-bit shift register, counters,
+# a synchronizer and a write pulse -- no word-engine generality is needed for a
+# fixed-width load.
+report pe_ctrl      "rtl/pe_ctrl.v"                              pe_ctrl
 # Instruction memory, BOTH ways round. This is the swap's whole argument in one
 # line each: the flop array at the same 1024-word depth is the number the design
 # used to pay, and the macro build has NO synthesised cells at all (yosys keeps
@@ -106,7 +110,7 @@ report pe_fbuf_macro  "rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist
 # the same list flow/pe_soc.json and info.yaml carry.
 report pe_soc  "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_soc.v" pe_soc
 # The deliverable: the only module Tiny Tapeout will instantiate.
-report tt_um_top    "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_soc.v rtl/tt_um_protocol_emulator.v" tt_um_protocol_emulator
+report tt_um_top    "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/pe_ctrl.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_soc.v rtl/tt_um_protocol_emulator.v" tt_um_protocol_emulator
 echo "-----------------------------------------------"
 echo "routed reference: pe_serdes = 17,211 um2 cells / 29,164 um2 die @78% util"
 echo "reproduce it with: flow/run_librelane.sh flow/pe_serdes.json"

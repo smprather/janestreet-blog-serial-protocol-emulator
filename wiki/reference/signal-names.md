@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen/signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-14 modules, 169 ports.
+15 modules, 182 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -132,6 +132,25 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `crc_bit` | out | 1 | The field bit for this strobe: `R[0] ^ cfg_out_inv`. LSB-first of `R` is LSB-first of the CRC for a reflected algorithm and **MSB-first** of it for a non-reflected one, which is correct for both. |
 | `crc_zero` | out | 1 | **A status, not an event.** Asserts after the final field strobe and holds until `clr`. Means "the frame at this boundary is clean" — the register drains to zero for a transmitter and for a receiver that folds the field un-complemented. |
 | `crc_state` | out | `[W-1:0]` | The register, for observability and firmware readback. Reading the CRC a receiver computed means sampling it at the right strobe, which is a firmware-timing decision, not a feature of this port. |
+
+## `pe_ctrl`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `rst_n` | inp | 1 | Active-low asynchronous reset. |
+| `spi_sclk` | inp | 1 | The loader clock pad. **Asynchronous**: synchronized with 2 flops and sampled on the rising edge (SPI mode 0). ≤ ~10 MHz at the 60 MHz core. |
+| `spi_mosi` | inp | 1 | Loader data, MSB-first, sampled on the rising SCLK edge while CS_N is low. |
+| `spi_cs_n` | inp | 1 | Active-low load select. A falling edge resets the word address to 0 and clears the sticky error; a rising edge ends the load and discards a partial word. |
+| `run` | inp | 1 | The core's run strap. Every receive and write path is gated on `!run`, so a load can never overwrite executing code. |
+| `host_we` | out | 1 | One-cycle write pulse, one per completed 16-bit word, into the SoC's host port. |
+| `host_imem_sel` | out | 1 | Held 1: v1 loads instruction memory only. |
+| `host_addr` | out | `[((((WORDS <= 2) ? 1 : $clog2(WORDS)) > 8)
+                 ? ((WORDS <= 2) ? 1 : $clog2(WORDS)) : 8)-1:0]` | Word address, incremented per completed word (0..WORDS-1). |
+| `host_wdata` | out | `[15:0]` | The assembled MSB-first 16-bit word. |
+| `load_active` | out | 1 | Level: selected (`CS_N` low) and `run` low. |
+| `load_error` | out | 1 | Sticky until the next `CS_N` falling edge: a partial word, or a load longer than `WORDS`, was discarded. |
+| `words_written` | out | `[15:0]` | Count of words handed to the host port since the current `CS_N` fell (debug/observability). |
 
 ## `pe_dru`
 

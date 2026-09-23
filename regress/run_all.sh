@@ -125,7 +125,7 @@ CASES=(
   # The Tiny Tapeout top level: the pad contract (no X on an output, ena gates
   # nothing, open-drain pins never drive high). This is the only submittable
   # module in the repo.
-  "tb_tt_um_protocol_emulator|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v ../rtl/tt_um_protocol_emulator.v|tb_tt_um_protocol_emulator"
+  "tb_tt_um_protocol_emulator|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v ../rtl/pe_ctrl.v ../rtl/tt_um_protocol_emulator.v|tb_tt_um_protocol_emulator"
   # I2C on the pin matrix: the runtime direction file driven by firmware, and
   # the open-drain property checked on the RTL's own pin_oe output. This is the
   # test that makes "the matrix is enough to speak I2C" a measured claim.
@@ -145,6 +145,10 @@ CASES=(
   # buffer, and firmware/eth_rx.pe consuming an ARP frame through the frame
   # window. tb_pe_eth_mac proves the chain; this proves a PROGRAM can use it.
   "tb_pe_soc_eth|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_eth"
+
+  # The passive SPI loader: pads in, host write port out. Unit TB first; the
+  # TT top-level TB then proves a program loaded through the pads executes.
+  "tb_pe_ctrl|../rtl/pe_ctrl.v|tb_pe_ctrl"
 
   # The 10BASE-T receive path, end to end on real RTL: raw Manchester
   # levels into pe_dru, through pe_manch and pe_crc, into pe_fbuf. Every

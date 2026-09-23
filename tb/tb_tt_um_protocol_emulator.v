@@ -44,6 +44,25 @@ module tb_tt_um_protocol_emulator;
     if (!c) begin $display("FAIL: %s @%0t", m, $time); errors++; end
   endtask
 
+  // ---- pe_ctrl host-side driver (SPI mode 0) ---------------------------
+  task automatic spi_bit(input logic b);
+    ui_in[4] = b;             // MOSI, held while SCLK is low
+    #(100);
+    ui_in[3] = 1'b1;          // SCLK rise: the loader samples MOSI here
+    #(100);
+    ui_in[3] = 1'b0;
+  endtask
+
+  task automatic spi_word(input logic [15:0] w);
+    for (int k = 15; k >= 0; k--) spi_bit(w[k]);
+  endtask
+
+  bit tx_saw_low = 1'b0, tx_saw_high = 1'b0;
+  always @(posedge clk) begin
+    if (ui_in[1] && uo_out[0] === 1'b0) tx_saw_low  <= 1'b1;
+    if (ui_in[1] && tx_saw_low && uo_out[0] === 1'b1) tx_saw_high <= 1'b1;
+  end
+
   // ---- continuous monitors: these must hold on EVERY cycle --------------
   // Written as always blocks rather than end-of-test samples, because "never
   // drives high" is a property of the whole run, not of one moment.
@@ -73,7 +92,7 @@ module tb_tt_um_protocol_emulator;
     $dumpvars(0, tb_tt_um_protocol_emulator);
 
     ena = 1'b1;
-    ui_in = 8'h00;
+    ui_in = 8'h20;            // CS_N high: the loader is idle
     ui_in[0] = 1'b1;          // UART RX idles high
     uio_in = 8'h00;
     rst_n = 0;
@@ -108,6 +127,31 @@ module tb_tt_um_protocol_emulator;
     ui_in[1] = 1'b1;          // run
     repeat (200) @(posedge clk); #1;
     check(uo_out[7:2] !== 6'b000000, "PC never advanced with run asserted");
+
+    // ---- a program loaded through pe_ctrl actually runs ------------------
+    // Hold the core, clock five words through the loader pads, release it,
+    // and watch the program toggle TX. The words are hand-assembled:
+    //   LDI A,1 / OUT 1,A / LDI A,0 / OUT 1,A / JMP 0
+    ui_in[1] = 1'b0;          // run low: the loader may write
+    #1;
+    repeat (4) @(posedge clk); #1;
+    ui_in[5] = 1'b0;          // CS_N low: a new load at word 0
+    #(200);
+    spi_word(16'h0001);       // LDI A, 1
+    spi_word(16'h1001);       // OUT 1, A    (TX high)
+    spi_word(16'h0000);       // LDI A, 0
+    spi_word(16'h1001);       // OUT 1, A    (TX low)
+    spi_word(16'h4000);       // JMP 0
+    ui_in[5] = 1'b1;          // CS_N high: load done
+    #(200);
+    check(dut.u_ctrl.load_error === 1'b0, "loader flagged an error on a clean load");
+    check(dut.u_ctrl.words_written === 16'd5,
+          $sformatf("loader wrote %0d words, want 5", dut.u_ctrl.words_written));
+    ui_in[1] = 1'b1;          // run the loaded program
+    #1;
+    repeat (200) @(posedge clk); #1;
+    check(tx_saw_low && tx_saw_high,
+          "the program loaded through the pads did not toggle TX");
 
     // ---- released pins float to the pull-up -----------------------------
     check(uio_oe === 8'h00, "all uio pins released in this revision");

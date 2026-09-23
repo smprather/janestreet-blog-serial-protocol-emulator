@@ -85,6 +85,13 @@ BLOCKS = [
         cells_key="pe_fbuf_macro",
     ),
     dict(
+        name="pe_ctrl",
+        source_file="pe_ctrl.v",
+        role="passive SPI load path: host clocks words into imem",
+        instantiated_in="tt_um_protocol_emulator.v",
+        tb="tb_pe_ctrl.v",
+    ),
+    dict(
         name="pe_serdes",
         source_file="pe_serdes.v",
         role="word engine: load 8-32 bits, pace with bit_en",
@@ -149,8 +156,6 @@ BLOCKS = [
 
 # ---- planned, not built -------------------------------------------------------
 PLANNED = [
-    ("pe_ctrl (SPI load path)", "boot the chip in real silicon; today the loader is a "
-                                "host port driven by the TB, so the chip cannot boot itself"),
     ("pe_serdes into the SoC", "the SERDES is routed and TB-proven but no SoC instance drives it"),
     ("I2C transaction layer", "byte transfer, ACK, 7-bit addressing; the pin-level grammar "
                               "(START/bit cell/STOP) landed 2026-09-23 -- "
@@ -320,7 +325,7 @@ def build() -> tuple[str, list[str]]:
         "```mermaid",
         "flowchart TB",
         "    subgraph BOARD[\"off-chip / board\"]",
-        "        HOST[\"host loader<br/><i>a TB today; pe_ctrl later</i>\"]",
+        "        HOST[\"SPI host<br/><i>loads imem through pe_ctrl</i>\"]",
         "        WIRE[\"protocol pins<br/>ui_in / uo_out / uio\"]",
         "    end",
         "",
@@ -346,9 +351,11 @@ def build() -> tuple[str, list[str]]:
         "            FBUF -.->|FLOP=0| SRAM",
         "        end",
         '        SRAM["SRAM macro<br/>RM_IHPSG13 1P_1024x16"]',
+        '        CTRL["<b>pe_ctrl</b><br/>passive SPI load"]',
         "    end",
         "",
-        '    HOST -.->|"imem/dmem write port"| IMEM',
+        '    HOST -->|"SCLK/MOSI/CS_N"| CTRL',
+        '    CTRL -->|"host write port"| IMEM',
         # Two directed edges rather than one <--> : mermaid routes a bidirectional
         # edge the long way round, which made it graze the SRAM box and read as if
         # the SRAM drove the pins. Caught by rendering the diagram and looking.
@@ -357,7 +364,7 @@ def build() -> tuple[str, list[str]]:
         "",
         '    classDef built fill:#1f4d2e,stroke:#4ade80,color:#fff',
         '    classDef plan fill:#4a1f1f,stroke:#f87171,color:#fff,stroke-dasharray: 5 5',
-        "    class CPU,IMEM,TICK,PORT,SRAM,DRU,MANCH,ETHMAC,ETHCRC,FBUF built",
+        "    class CPU,IMEM,TICK,PORT,SRAM,DRU,MANCH,ETHMAC,ETHCRC,FBUF,CTRL built",
         "```",
         "",
         "### Built, verified — and wired to nothing",
