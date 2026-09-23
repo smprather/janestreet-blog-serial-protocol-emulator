@@ -18,8 +18,10 @@ instantiated-nowhere** blocks (`wiki/reference/block-diagram.md`). They are the
 shared word engine and the line-code pipeline the stretch personas need:
 10BASE-T **transmit** (the receive chain is already in `pe_soc`), low-speed USB
 (NRZI + stuffing), CAN (stuffing), and a hardware-paced path for plain
-protocols. The project-plan diagram already draws them inside the SoC with
-`cpu ..> serdes` and `codec ..> pads` as planned.
+protocols. The project-plan diagram records the planned blocks inside the SoC:
+CPU access goes through the indexed window and timing control, while the codec
+drives the pin overlay through the pin matrix. These connections remain planned
+and the integration is not implemented.
 
 This plan is **review-only**: no RTL changes until it is accepted. It was
 amended on 2026-09-23 for the first review's five findings (window encoding,
@@ -139,6 +141,14 @@ is already the synchronized pin. Two modes:
   (`half_phase = 0`).
 - **Plain/NRZI/stuffed**: `dru.rx_wire` feeds `u_rx_codec`; the cell strobe
   comes from the new timing block at the encoded-cell rate.
+
+The plain-mode path has no start-edge phase acquisition: `dru.rx_wire` is only
+the synchronized pin level, and the new timing block supplies a free-running
+cell cadence. That is suitable for the first self-timed wire-loopback milestone
+but does not promise reception from an arbitrarily phased asynchronous sender.
+If asynchronous plain RX is in scope, add a phase-acquisition mechanism or
+constrain the supported source timing before implementation.
+
 A later refactor could replace the dedicated `pe_manch` in the eth RX chain
 with `codec_mux`; **not in this change** — the receive chain is signed off and
 must not be disturbed.
@@ -268,6 +278,20 @@ Proposed 16-entry map (values are a shape to review, not a freeze):
 | 11-14 | `RXDATA` | r | 32-bit RX word |
 | 15 | spare | - | future personas / status |
 
+`tx_load`, `rx_start`, and `clr` must be one-cycle write-triggered strobes (or
+auto-clear control bits), because the current engines treat them as
+level-sensitive inputs and a held bit restarts/reloads the engine or keeps the
+codec cleared. Firmware writes TX/RX data, length and configuration before the
+respective start strobe. Status events such as `tx_done`, `rx_valid`, and
+`rx_err` need latched flags with defined clear semantics so a CPU poll loop
+cannot miss a one-cycle pulse.
+
+The TX completion event also needs to say whether `tx_done` means the last
+payload bit was consumed or the encoded wire is idle. With stuffing, the final
+payload strobe can arm a trailing stuff cell after `pe_serdes.tx_busy` falls;
+the timing block must remain active long enough to emit it. Add a directed
+trailing-stuff case to the loopback test.
+
 `TXLEN`/`RXLEN` are separate because the serdes has independent sides (it can
 transmit and receive at once), and a single 8-bit register cannot hold two
 six-bit lengths regardless of encoding. The 6-bit 1..32 encoding follows
@@ -378,8 +402,9 @@ pad.
   native yosys + OpenSTA screen is still required after implementation. No
   physical flow is part of this plan.
 - **Combinational depth**: the stuff -> NRZI -> Manchester cascade is
-  combinational into the pad-facing overlay; at Manchester's 20 MHz half-cells
-  there are only **3 clk (50 ns) per strobe at 60 MHz**. The unit TB runs at
+  combinational into the pad-facing overlay; Manchester's 20 MHz half-cell
+  interval is **3 clk (50 ns) at 60 MHz**. The half-cell phase is a level, not
+  a strobe. The unit TB runs at
   100 MHz simulation, which proves function, not silicon timing — the
   implementation needs the native yosys + OpenSTA screen (as for pe_ctrl), and
   possibly a registered Manchester output stage if the path is too deep.

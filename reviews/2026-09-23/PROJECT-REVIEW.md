@@ -87,11 +87,21 @@ ns (slow/typical/fast). Fresh reports are byte-identical to the checked-in
 screen, including its expected asynchronous-pin constraints and unplaced
 high-fanout caveats. This did not include placement or routing.
 
+## Follow-up plan review
+
+A fresh read-only audit at `a97b613` found unresolved control/status and
+completion semantics in the SERDES plan, an asynchronous plain-RX scope
+question, and two readback session-boundary requirements. It also corrected
+two stale plan descriptions and clarified the Manchester half-cell interval.
+The details and source checks are in
+`reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md`; no RTL was changed.
+
 No physical flow, DRC, or LVS was run.
 
 ## Review disposition
 
-Keep the two current plan decisions visible in `HANDOFF.md`. Once the user
-selects a readback option and accepts the SERDES integration scope, implement
-one plan at a time and update `project-progress.puml` with verified progress.
+Keep the plan decisions and follow-up requirements visible in `HANDOFF.md`.
+Once the user selects a readback option and accepts the SERDES integration
+scope, implement one plan at a time and update `project-progress.puml` with
+verified progress.
 Update `project-plan.puml` only when the agreed topology or scope changes.

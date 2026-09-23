@@ -26,8 +26,9 @@ tradeoffs, before any RTL changes.
   rising edges writes `imem[addr]`; `run` gates writes; sticky `load_error`;
   `words_written`; `load_active` (selected and stopped).
 - Free pads: `ui_in[6:7]` (inputs only), `uio[7:4]` (bidir, released),
-  `uo_out` fully committed (UART TX / heartbeat / debug PC). The SoC port bits
-  6-7 and their matrix OE are unused.
+  `uo_out` fully committed (UART TX / heartbeat / debug PC). The matrix's
+  output and OE for SoC port bits 6-7 are unused; input bit 7 is already used
+  for the 10BASE-T DRU through `ui_in[2]`.
 
 ## Feasible mapping
 
@@ -54,12 +55,21 @@ generator recomputes on implementation; nothing is regenerated for this plan.
   load contract is **untouched**: every 16 rising edges still writes a word.
 - `spi_miso` changes on the **falling** SCLK edge while selected; released when
   CS_N is high (or `run` is high).
+- Because `load_active` follows the synchronized CS_N, the proposed `uio_oe[4]`
+  may take two `clk` edges to assert or release after the pad-level CS_N edge.
+  The host contract must specify a minimum CS_N-to-first-clock setup time (or
+  the implementation must use a faster OE path); sweep this boundary in the
+  pad-level test.
 - A CS_N falling edge starts a **session**: address 0, `words_written` 0,
   `load_error` clear, and the echo cleared. The trailing frame(s) that read the
   last word(s) back are part of the **same** CS-low session -- `cs_fall` resets
   the address, so a CS toggle between the load and the trailing frames would
   write `imem[0]`/`imem[1]` instead of the tail.
-- Frame 0 presents `16'h0000`. The echo is **commit-latched**: the echo register
+- Frame 0 presents `16'h0000`. Since mode 0 samples on the first rising edge
+  before any falling edge in that session, the CS_N falling-edge handling must
+  preload the first response bit (zero for the empty echo) before that sample;
+  a repeated-session test must ensure the previous session's final bit cannot
+  leak into the first bit. The echo is **commit-latched**: the echo register
   captures the completed word only at the `W_DONE` edge where the imem write
   actually commits (`words_written` increments) -- never at `word_ready` and
   never on the `run`-abort path. **An aborted word must never echo.**

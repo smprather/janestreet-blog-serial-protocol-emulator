@@ -36,7 +36,7 @@
 > `reviews/2026-09-23/pe-ctrl-hardening/`; the async SPI constraint and
 > unplaced high-fanout caveats are unchanged. This is mapped STA only.
 
-> **Context flush state (2026-09-23, `b0c2c7d`): no RTL work is in flight.**
+> **Context flush state (2026-09-23): no RTL work is in flight.**
 > Two written plans are waiting on the user, both plan-only by ruling:
 >
 > - **`pe_ctrl` readback**: pick A1 (one frame, strict mode 0, 2.5 MHz guard),
@@ -57,6 +57,13 @@
 >   stuffed Manchester loopback with TX-hold/RX-skip/doubled-cell/cross-wire
 >   mutations; open scope decisions in `wiki/plans/serdes-integration.md`,
 >   findings in `reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`.
+>   A fresh read-only follow-up found additional interface requirements:
+>   latch one-cycle status events for CPU polling; make `tx_load`, `rx_start`
+>   and `clr` write-triggered strobes; keep the timing block active through a
+>   possible final stuffed cell; and decide whether plain RX needs asynchronous
+>   phase recovery beyond self-timed loopback. Readback also needs a defined
+>   first MISO bit per session and a CS-to-first-clock setup requirement. See
+>   `reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md`; no implementation has started.
 >
 > Do not start either RTL change until the user picks/accepts. The last full
 > regression is `/tmp/run_all_spi_pads.log` (`run_all.sh --fast -j8`: 29/29 RTL,

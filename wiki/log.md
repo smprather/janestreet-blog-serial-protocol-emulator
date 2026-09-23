@@ -1679,3 +1679,17 @@
   violations are unchanged.
 - Fresh logs and netlist: `/tmp/pe-ctrl-hardening-check/`. Mapped STA only; no
   physical flow, DRC, or LVS.
+
+## [2026-09-23] review | follow-up audit of deferred interface plans
+
+- A read-only audit of `wiki/plans/pe-ctrl-readback.md` and
+  `wiki/plans/serdes-integration.md` against current RTL, tests, earlier reviews,
+  and hardening evidence found unresolved CPU status/strobe semantics, a
+  possible trailing stuffed cell after `tx_busy` drops, and no asynchronous
+  phase acquisition in the proposed plain RX path. Readback also needs a
+  defined first MISO bit for each session and a CS-to-first-clock setup
+  requirement for the synchronized output enable.
+- Corrected two stale plan claims (diagram edges and live SoC input bit 7) and
+  clarified that the Manchester half-cell phase is a level with a 50 ns
+  half-cell interval at 60 MHz. Details: `reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md`.
+  No RTL or tests changed; no physical flow, DRC, or LVS.
