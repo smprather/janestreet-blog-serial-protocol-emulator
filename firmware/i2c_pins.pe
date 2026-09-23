@@ -92,7 +92,7 @@
 ;
 ; What it means for the constants is the part that matters: THE NUMBER THAT HAS
 ; TO CLEAR THE FLOOR IS N-1, NOT N. The counts in T_LOW/T_HIGH/T_STA/T_STO/
-; T_BUF (see tools/peasm.py) are chosen so that N-1 clears the floor with
+; T_BUF (see tools/fw/peasm.py) are chosen so that N-1 clears the floor with
 ; margin — e.g. tLOW uses 6 ticks, whose worst case is 5 us against a 4.7 us
 ; floor. A nominal-5 us choice would look compliant and be violating half the
 ; time, which is exactly the failure a bench test does not catch.

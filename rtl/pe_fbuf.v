@@ -114,7 +114,7 @@ module pe_fbuf #(
     if (FLOP == 1) begin : g_flops
       // Fallback: a register array with the SAME one-cycle read latency, so
       // behaviour is identical and only the area differs -- same contract as
-      // pe_imem's FLOP path, which is what tb/synth_area.sh prices.
+      // pe_imem's FLOP path, which is what regress/synth_area.sh prices.
       logic [15:0] mem [0:BYTES/2-1];
 
       always_ff @(posedge clk) begin

@@ -25,14 +25,14 @@ that gates every remaining protocol ([[concepts/physical-layer-gpio]],
 
 ## Definition of done
 
-1. `tb/run_all.sh` green, including the new firmware RTL test and regenerated
-   reference pages (`tools/gen_signal_glossary.py` is currently **stale**).
+1. `regress/run_all.sh` green, including the new firmware RTL test and regenerated
+   reference pages (`tools/gen/signal_glossary.py` is currently **stale**).
 2. A firmware program in `firmware/` that runs an I2C master transaction, with
    timing that meets Standard-mode spec limits **as measured on the pin**, not as
    intended by the source.
 3. An RTL testbench driving an independent I2C slave model (not a re-implementation
    of the firmware's assumptions) with START/repeated-START/ACK/NACK/STOP.
-4. The same program reproduced in `tools/peemu.py`, and the RTL TB and the emulator
+4. The same program reproduced in `tools/fw/peemu.py`, and the RTL TB and the emulator
    agreeing bit-for-bit on the transaction.
 5. All of it committed, with `wiki/log.md` and [[STATUS]] updated.
 
@@ -41,7 +41,7 @@ board-level PHY work (pull-ups, level shifting).
 
 **Changed 2026-09-20: the SRAM swap is now a PREREQUISITE, not out of scope.** An
 earlier revision deferred it on the grounds that the I2C program would probably stay
-under ~120 words. Two things killed that: `tools/peasm.py` now rejects a program
+under ~120 words. Two things killed that: `tools/fw/peasm.py` now rejects a program
 over 128 words outright rather than emitting one the 7-bit program counter silently
 aliases, and flop instruction memory turns out to be 89% of the die. Do the swap
 first — see Blocker 3 and [[decisions/adr-003-memory-plan]].
@@ -51,8 +51,8 @@ first — see Blocker 3 and [[decisions/adr-003-memory-plan]].
 | Piece | Where | Use in this milestone |
 |---|---|---|
 | CPU (16 opcodes, A/Y/X, 8-bit PC) | `rtl/pe_cpu.v` | runs the firmware; unchanged |
-| SoC (CPU + IMEM/DMEM + tick timer) | `rtl/pe_uart_soc.v` | becomes the model for the I2C SoC; generalize, do not fork |
-| Assembler + emulator | `tools/peasm.py`, `tools/peemu.py` | firmware development loop |
+| SoC (CPU + IMEM/DMEM + tick timer) | `rtl/pe_soc.v` | becomes the model for the I2C SoC; generalize, do not fork |
+| Assembler + emulator | `tools/fw/peasm.py`, `tools/fw/peemu.py` | firmware development loop |
 | I2C framing reference | `tb/tb_pe_i2c.v` (PASSES) | its START/STOP/ACK stimulus is the reference behaviour to reproduce in firmware |
 | SERDES | `rtl/pe_serdes.v` | **not used by I2C**. See "Why not the SERDES" below |
 | Pin budget | [[reference/protocol-pin-budget]] | 2 of 24 pads, so no budget risk |
@@ -70,9 +70,9 @@ architecture statement, not a shortcut, and it is worth saying in the writeup.
 
 ## Blocker 1 — the UART RTL test (RESOLVED 2026-09-20; three separate defects)
 
-`tb_pe_uart_soc.v` was red: TX decoded `d0` for `0x41` and `e8` for `0x42`, then
+`tb_pe_soc_uart.v` was red: TX decoded `d0` for `0x41` and `e8` for `0x42`, then
 the watchdog fired. The symptom looked like a CPU/peripheral cycle-model divergence
-between `rtl/pe_cpu.v` and `tools/peemu.py`. It was not. Three defects, none of them
+between `rtl/pe_cpu.v` and `tools/fw/peemu.py`. It was not. Three defects, none of them
 in the CPU:
 
 1. **The testbench lost the echo's start edge — the dominant bug.**
@@ -86,7 +86,7 @@ in the CPU:
    Fix: latch the edge in an `always @(negedge tx_pin)` monitor and anchor the
    sample grid to the *latched* time — the TB comment's own intent ("anchored to
    the START-BIT EDGE") made true, rather than assumed.
-2. **The testbench loaded 112 of the program's 114 words** (`tb_pe_uart_soc.v:70`,
+2. **The testbench loaded 112 of the program's 114 words** (`tb_pe_soc_uart.v:70`,
    `i < 112`, and `$readmemh` warns the same). The program's final `JMP 0` loop-back
    is at word 113. Not the cause of the decode failure, but the program under test
    was not the program that was assembled.
@@ -100,14 +100,14 @@ in the CPU:
    those the target is already `*w` with the snapshot re-taken at the block top, so
    they are correct; the start block is a copy that lost its snapshot label.
 
-Verified after the fixes: `tb_pe_uart_soc` **PASS** on all four bytes (41, 42, 00,
-FF), the emulator PASSes the same four, and `tb/run_firmware_tests.sh` is 5/5.
+Verified after the fixes: `tb_pe_soc_uart` **PASS** on all four bytes (41, 42, 00,
+FF), the emulator PASSes the same four, and `regress/run_firmware_tests.sh` is 5/5.
 TX cell widths measured at the pin: **8.6-8.7 µs**, of which the 8675 ns last cell
 is the firmware's own tick-loop latency, not drift.
 
 A fourth, cosmetic defect is left standing: the tick is **173** clocks
-(`40_000_000 / 115_200 / 2`), but the comment in `rtl/pe_uart_soc.v:58`, the
-`uart_echo.pe` header and `tools/peemu.py:43` all say 174 (real baud is therefore
+(`40_000_000 / 115_200 / 2`), but the comment in `rtl/pe_soc.v:58`, the
+`uart_echo.pe` header and `tools/fw/peemu.py:43` all say 174 (real baud is therefore
 115,607, +0.35%). The code is right, the comments are wrong. Cheap to correct
 alongside step 2; it matters because that number is what a reader will trust when
 they compute their own protocol's tick.
@@ -144,12 +144,12 @@ corrected 2026-09-22** ([[decisions/adr-006-pin-matrix]]):
    [[concepts/pin-matrix]].
 2. **The matrix does not live at the wrapper.** The plan below said
    "the TT wrapper instantiates the matrix"; that is unimplementable, because
-   the CPU's IO bus never leaves `pe_uart_soc`. It went *inside* the SoC.
+   the CPU's IO bus never leaves `pe_soc`. It went *inside* the SoC.
 
 The per-pin registers are the interesting part: a *write* drives `oe`/`out`; a
 *read* returns the pad level when the pin is released and the written value
 when it is driven. Firmware does `OUT PINOUT, mask` / `OUT PINOE, mask` and
-`IN PIN`. Registering the output (as `pe_uart_soc.v` already did for its single
+`IN PIN`. Registering the output (as `pe_soc.v` already did for its single
 pin) gives the read-back path a clean 1-cycle answer, which is what the
 arbitration check needs.
 
@@ -201,7 +201,7 @@ that a registered read requires), so swapping flops for a macro does not change 
 CPU's interface or its cycle model. That was the right call when the SoC was written
 and it pays off exactly here.
 
-**This is now a blocker sooner than the original text implied.** `tools/peasm.py`
+**This is now a blocker sooner than the original text implied.** `tools/fw/peasm.py`
 gained a hard size check on 2026-09-20: a program over the depth is REJECTED rather
 than emitted and silently aliased. That is the right behaviour, and it means the I2C
 program cannot quietly overflow -- it will fail to assemble. With `uart_echo` at 114
@@ -228,7 +228,7 @@ the jump-target field had to widen in the same change, and the assembler's range
 check had to widen with them or the two would have disagreed about the limit
 silently. Full reasoning: [[decisions/adr-004-program-counter-width]].
 
-Verified after the change: `tb_pe_uart_soc` still PASSes on 41/42/00/FF with the
+Verified after the change: `tb_pe_soc_uart` still PASSes on 41/42/00/FF with the
 program in SRAM, and `run_firmware_tests.sh` gained a positive test that word 300 is
 reachable -- which the old 8-bit PC could not express.
 
@@ -362,11 +362,11 @@ data to settle, which is still far inside `tSU;DAT`.
 - **Reference stimulus:** `tb/tb_pe_i2c.v` already generates START, addr+R/W, ACK,
   data, repeated START, read, NACK, STOP against the SERDES, and passes. Reuse
   its shape so the new TB is testing the same bus, not a private dialect.
-- **New TB:** `tb/tb_pe_i2c_soc.v` drives a slave model and captures SDA/SCL
+- **New TB:** `tb/tb_pe_soc_i2c.v` drives a slave model and captures SDA/SCL
   transitions, then **checks the timing, not just the bits** — period, `tLOW`,
   `tHIGH`, setup times — against the table above. A bit-level pass with a 3 µs
   `tHIGH` is a fail that a data-only TB would report as a pass.
-- **Emulator parity:** `tools/peemu.py` gains the pin matrix model; the same
+- **Emulator parity:** `tools/fw/peemu.py` gains the pin matrix model; the same
   transaction must decode identically in the emulator and the RTL TB. This is the
   cheap loop — a 2-second emulator run instead of a minute of `iverilog` — and it
   is what will find the timing bugs.
@@ -379,15 +379,15 @@ data to settle, which is still far inside `tSU;DAT`.
 
 | # | Work | Depends on | Done when |
 |---|---|---|---|
-| 1 | ~~Fix the UART RTL test~~ **DONE 2026-09-20**: TB edge latch + full 114-word load, `JNZ tx_start` in the firmware | — | `tb_pe_uart_soc` 4/4 green, cells 8.6-8.7 µs |
+| 1 | ~~Fix the UART RTL test~~ **DONE 2026-09-20**: TB edge latch + full 114-word load, `JNZ tx_start` in the firmware | — | `tb_pe_soc_uart` 4/4 green, cells 8.6-8.7 µs |
 | 2 | Regenerate the glossary; add both new TBs + `run_firmware_tests.sh` to `run_all.sh`; extend `synth_area.sh`; fix the 174→173 comments | 1 | `run_all.sh` exits 0 with the new tests listed |
 | 3 | Commit milestone 2 (CPU, SoC, assembler, emulator, firmware, TBs) and update [[STATUS]] + `log.md` | 2 | nothing untracked, STATUS describes what exists |
 | 3b | ~~TT top level + `info.yaml`~~ **DONE 2026-09-20**: `rtl/tt_um_protocol_emulator.v`, `info.yaml`, `tb/tb_tt_um_protocol_emulator.v` (pad contract: no X on an output, `ena` gates nothing, open-drain never drives high) | — | the repo is submittable; `uio_oe` has a real path to a pad |
 | 4 | ~~Pin matrix / OE~~ **DONE 2026-09-22**: `rtl/pe_pinmux.v` (OUT/OE/IN/OD per pin), `tb/tb_pe_pinmux.v`, 7/7 mutations caught ([[concepts/pin-matrix]]) | 3b | open-drain, read-back and tri-state verified |
-| 4b | ~~SPI as firmware~~ **DONE 2026-09-22**: `firmware/spi_xfer.pe` (mode-0 master, 70 words) on the shared 8-bit port; emulator mode-0 slave model; 3 mutations built ([[concepts/spi-as-firmware]]) | 3b | emulator exchanges 4 frames both directions; `run_firmware_tests.sh` green. **Open:** no `tb_pe_spi_soc.v` — SPI firmware has no RTL testbench |
-| 5 | ~~I2C SoC wiring~~ **DONE 2026-09-22**: matrix moved *inside* `pe_uart_soc` (the plan's "wrapper instantiates the matrix" was unimplementable — see [[decisions/adr-006-pin-matrix]]), 1 µs tick divider on ports 4/6, `pin_oe` threaded to the pads, I2C SDA/SCL on `uio[0]`/`uio[1]` | 4 | **DONE** — `tb_pe_i2c_soc` green; UART and SPI still sign off *through* the matrix |
+| 4b | ~~SPI as firmware~~ **DONE 2026-09-22**: `firmware/spi_xfer.pe` (mode-0 master, 70 words) on the shared 8-bit port; emulator mode-0 slave model; 3 mutations built ([[concepts/spi-as-firmware]]) | 3b | emulator exchanges 4 frames both directions; `run_firmware_tests.sh` green. **Open:** no `tb_pe_soc_spi.v` — SPI firmware has no RTL testbench |
+| 5 | ~~I2C SoC wiring~~ **DONE 2026-09-22**: matrix moved *inside* `pe_soc` (the plan's "wrapper instantiates the matrix" was unimplementable — see [[decisions/adr-006-pin-matrix]]), 1 µs tick divider on ports 4/6, `pin_oe` threaded to the pads, I2C SDA/SCL on `uio[0]`/`uio[1]` | 4 | **DONE** — `tb_pe_soc_i2c` green; UART and SPI still sign off *through* the matrix |
 | 6 | I2C firmware: START/STOP first, then byte, then ACK, then read | 1,5 | START/bit-cell/STOP **DONE 2026-09-22** (`firmware/i2c_pins.pe`, 79 words, spec-compliant across all 60 tick phases — [[concepts/i2c-on-the-matrix]]); byte/ACK/address still open |
-| 7 | `tb_pe_i2c_soc.v` with timing assertions | 6 | **DONE 2026-09-22** for the bit cell, including the timing assertions; 6 mutations, 1 documented equivalent survivor (`tb/mutate_i2c_tb.sh`) |
+| 7 | `tb_pe_soc_i2c.v` with timing assertions | 6 | **DONE 2026-09-22** for the bit cell, including the timing assertions; 6 mutations, 1 documented equivalent survivor (`regress/mutate_i2c_tb.sh`) |
 | 8 | Fast-mode feasibility check (500 ns tick, 333 kHz) | 7 | written up, not necessarily built |
 
 ### Where this sits in the wider order
@@ -411,7 +411,7 @@ version, and the reasoning for it:
 Step 1 is complete (see Blocker 1 for the measured evidence) and steps 2-4 are
 committed; step 4 (the pin matrix) landed 2026-09-22 at 111 cells
 ([[concepts/pin-matrix]]). **Step 5 landed 2026-09-22**, with a placement change
-the plan had wrong: the matrix went *inside* `pe_uart_soc` rather than in front
+the plan had wrong: the matrix went *inside* `pe_soc` rather than in front
 of it, because the CPU's IO bus never leaves the SoC and a matrix outside it
 would be unreachable from firmware ([[decisions/adr-006-pin-matrix]]). Step 6's
 pin-level half — START, one bit cell, STOP — is also done and measured;
@@ -421,7 +421,7 @@ addressing.
 
 ## The full-SoC flow run, and what actually blocks tapeout (2026-09-22)
 
-`flow/pe_uart_soc.json` reached **76 of 80 steps** in `RUN_2026-09-22_00-48-35`
+`flow/pe_soc.json` reached **76 of 80 steps** in `RUN_2026-09-22_00-48-35`
 and then quit on **deferred** errors. Three of the four blockers found on the way
 were flow-config, not silicon, and all three are fixed and verified:
 

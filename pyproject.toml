@@ -6,7 +6,7 @@
 #
 # What is kept is the interpreter floor and the lint config, because the tools
 # are checked with ruff and they use 3.12 syntax (PEP 604 unions, `list[int]`).
-# They have no third-party dependencies on purpose: tb/run_all.sh must work on a
+# They have no third-party dependencies on purpose: regress/run_all.sh must work on a
 # clean clone with nothing but python3, iverilog, verilator and yosys.
 
 [project]

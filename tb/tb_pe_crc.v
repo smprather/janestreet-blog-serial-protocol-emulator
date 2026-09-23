@@ -16,7 +16,7 @@
 // Two outside facts are used as well, so a transcription error cannot hide:
 //
 //   1. The RevEng catalogue's published `check` value for "123456789", asserted
-//      for all six polynomials (tools/gen_crc_config.py checks the same table).
+//      for all six polynomials (tools/gen/crc_config.py checks the same table).
 //   2. The catalogue's published `residue` — what a register holds after folding
 //      the message AND its field. The TB folds the DUT's OWN EMITTED BITS and
 //      requires that residue. Agreement is independent evidence that the field

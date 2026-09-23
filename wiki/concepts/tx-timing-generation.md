@@ -96,9 +96,9 @@ testbench at SPB = 12: **`PASS: tb_pe_dru`**.
 Note the SPB ceiling is **16**, not merely "a multiple of 4": `phase` is 4 bits
 and `4'(SPB-1)` truncates above it, which silently kills all capture (SPB=20
 emits nothing, with no error). Both constraints are now elaboration errors and
-both are boundary-tested by `tb/param_guards.sh`. SPB=12 is comfortably inside.
+both are boundary-tested by `regress/param_guards.sh`. SPB=12 is comfortably inside.
 
-**Measured end-to-end, not just on paper:** `tb_pe_uart_soc` with `CLK_HZ` set to
+**Measured end-to-end, not just on paper:** `tb_pe_soc_uart` with `CLK_HZ` set to
 60 MHz passes unchanged — the firmware, the tick divider (260 = 60 MHz/115200/2),
 and the whole SoC — with **no RTL or firmware modification**. That is the real
 evidence that the turbo is a one-parameter change. (Both runs print Icarus's
@@ -112,7 +112,7 @@ One programmable board clock; DDR capture for RX only; integer timing for every 
 
 - **The operating point is 60 MHz, LOCKED** (ADR-005) — +50% core cycles over 40,
   exact timing throughout, SPB = 12. **It is no longer a parameter.** `CLK_HZ` is
-  a `localparam` in `pe_uart_soc` as of 2026-09-22: nothing ever instantiated the
+  a `localparam` in `pe_soc` as of 2026-09-22: nothing ever instantiated the
   SoC at another rate, so the parameter was a second place for the derived
   arithmetic to be wrong rather than a real knob. See
   [[reference/clock-arithmetic]] for the computed constant table.
@@ -136,7 +136,7 @@ Pulse width sets the SPEED floor: capture needs >=1 grid tick (8.33 ns plan grid
 Core clock and protocol timing are orthogonal (all timing is strobe-based via NCOs/dividers), so:
 
 - **Sign off every block at 60 MHz (16.667 ns), which IS the operating point.** Both flow configs carry this. The signoff was 66 MHz (15.15 ns, the pad-macro ceiling) until 2026-09-22; that target is **retired**, because it made every reported slack number require a conversion by the reader and because a longer period is strictly easier for setup — a design that closes at 66 has already closed at 60. Stating it directly is the clearer claim. The pad-ceiling hedge it used to provide is gone; if real IHP pads turn out to top below 66 MHz that is now a re-signoff rather than free, and the honest position is that no IHP-specific pad figure is published either way.
-- **The operating point is locked at 60 MHz for integer-exact protocol timing**, with a 50%-finer RX grid than 40 (SPB 8 → 12). It is a `localparam` in `pe_uart_soc`, not a parameter — see [[reference/clock-arithmetic]].
+- **The operating point is locked at 60 MHz for integer-exact protocol timing**, with a 50%-finer RX grid than 40 (SPB 8 → 12). It is a `localparam` in `pe_soc`, not a parameter — see [[reference/clock-arithmetic]].
 - Costs: ~50% more dynamic power at 60 than at 40 (no per-tile power wall at TT scale).
 
 ## Clock uncertainty spec: 1.0 ns at 66 MHz (not a blanket 5%)

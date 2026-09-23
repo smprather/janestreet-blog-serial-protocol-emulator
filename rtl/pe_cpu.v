@@ -14,7 +14,7 @@
 //   * no stack, no interrupts, no subroutine call, no multiply
 //   * single cycle: instruction fetch and IO read are combinational
 //
-// IO is a 4-bit port space; the peripherals hang off it in pe_uart_soc.
+// IO is a 4-bit port space; the peripherals hang off it in pe_soc.
 //
 // Register discipline the firmware relies on:
 //   X  = the long-lived index (line buffer pointer). STS/LDS address through it
@@ -76,7 +76,7 @@ module pe_cpu #(
   input  logic [7:0]       io_rdata,
 
   // Observability. These are real ports, not hierarchical references from the
-  // parent: `assign dbg_pc = u_cpu.pc` in pe_uart_soc.v simulated correctly in
+  // parent: `assign dbg_pc = u_cpu.pc` in pe_soc.v simulated correctly in
   // Icarus but yosys declared `\u_cpu.pc` as an implicit wire and drove it
   // BACKWARDS, leaving the SoC's dbg_pc constant-zero above bit 0 in the
   // netlist. A cross-module reference is not synthesisable; a port is.

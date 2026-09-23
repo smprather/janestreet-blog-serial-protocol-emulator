@@ -4,7 +4,7 @@ created: 2026-09-22
 updated: 2026-09-22
 type: concept
 tags: [protocol, verification, architecture, cdr, signoff]
-sources: [rtl/pe_eth_mac.v, tb/tb_pe_eth_mac.v, tb/mutate_eth_mac_tb.sh, rtl/pe_crc.v, rtl/pe_dru.v, rtl/pe_line_codec.v, rtl/pe_fbuf.v, wiki/reference/crc-config.md]
+sources: [rtl/pe_eth_mac.v, tb/tb_pe_eth_mac.v, regress/mutate_eth_mac_tb.sh, rtl/pe_crc.v, rtl/pe_dru.v, rtl/pe_nrzi.v, rtl/pe_manch.v, rtl/pe_bitstuff.v, rtl/pe_fbuf.v, wiki/reference/crc-config.md]
 confidence: high
 ---
 
@@ -61,7 +61,7 @@ So `crc_field_out` is held **low** (a receiver folds the field as ordinary data;
 drains), and the verdict is `crc_state == CRC_RESIDUE`, never `crc_zero`.
 
 The residue is preferred because it is an **outside** value: it comes from the
-RevEng catalogue and `tools/gen_crc_config.py` re-derives it under the drift gate,
+RevEng catalogue and `tools/gen/crc_config.py` re-derives it under the drift gate,
 so agreeing with it is evidence. Checking `crc_zero` instead would be the engine
 marking its own homework — and would reject every valid frame while looking exactly
 like a CRC bug. Constants: [[reference/crc-config]].
@@ -176,7 +176,7 @@ preamble, header and FCS **in the testbench** and its "preamble" is 58 bits rath
 than 802.3's 64. It is a serdes unit test, not a wire-format reference, and nothing
 in the new TB copies its conventions.
 
-`tb/mutate_eth_mac_tb.sh` breaks the RTL in eight ways — FCS convention, wind-back,
+`regress/mutate_eth_mac_tb.sh` breaks the RTL in eight ways — FCS convention, wind-back,
 the settling delay, byte assembly, the type/length split, the bounds check, the idle
 gate, the abort — and requires the TB to catch all eight. Two findings from it are
 worth carrying forward:

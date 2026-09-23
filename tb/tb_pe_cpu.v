@@ -1,6 +1,6 @@
 // tb_pe_cpu.v — unit test for pe_cpu alone. Instruction-by-instruction.
 //
-// Two implementations of this ISA exist: rtl/pe_cpu.v and tools/peemu.py.
+// Two implementations of this ISA exist: rtl/pe_cpu.v and tools/fw/peemu.py.
 // They WILL drift; this test pins the RTL's behaviour to the documented
 // semantics so a divergence shows up here, at the instruction, rather than as
 // a mysteriously stuck program three layers up.
@@ -47,7 +47,7 @@ module tb_pe_cpu;
   // fetch-ahead depends on this one-cycle latency).
   always_ff @(posedge clk) imem_rdata <= imem[imem_addr];
 
-  // Data scratchpad: COMBINATIONAL read, matching rtl/pe_uart_soc.v. A
+  // Data scratchpad: COMBINATIONAL read, matching rtl/pe_soc.v. A
   // registered read is stale for an immediate-address load.
   assign dmem_rdata = dmem[dmem_addr];
 

@@ -34,7 +34,7 @@ Three consequences worth holding onto:
 - **The strobe's source is outside the block.** In the testbenches the TB drives
   it; in the real chip the core/DRU timing logic does.
 - **One strobe can mean more than one bit.** `pe_bitstuff` consumes a *following*
-  strobe for the inserted stuff bit (`rtl/pe_line_codec.v:16`), which is why
+  strobe for the inserted stuff bit (`rtl/pe_bitstuff.v`), which is why
   `tx_stuffed` exists to tell the timing side "raw input is ignored on this one."
 
 ## The committing edge

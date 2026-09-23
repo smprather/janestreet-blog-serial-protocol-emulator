@@ -1,5 +1,11 @@
 # Project review — 2026-09-22
 
+> **Layout note (2026-09-23):** this report predates the project-layout rework.
+> Paths quoted in the text (`tb/...`, `tools/...`, `rtl/pe_uart_soc.v`,
+> `rtl/pe_line_codec.v`) describe the layout AT THE TIME OF THE REVIEW. The
+> probe scripts in this directory were path-updated during the rework and stay
+> runnable; the reports themselves are kept as historical evidence.
+
 A full review of the design, tests and tooling at HEAD `b935cb8`, run against a
 `git archive` clone so ignored build artifacts could not mask a missing file.
 Every finding below was reproduced before it was fixed; the reproduction scripts

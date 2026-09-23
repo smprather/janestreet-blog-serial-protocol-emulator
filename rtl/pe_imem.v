@@ -9,7 +9,7 @@
 //   1. The macro is a HARD MACRO with a fixed shape (237x336 um, 1024x16). It
 //      cannot be synthesised, only instantiated, so it has to be blackboxed for
 //      yosys and supplied as a PDK model for simulation. Putting that boundary
-//      in one file keeps it out of pe_uart_soc.
+//      in one file keeps it out of pe_soc.
 //   2. The macro's port protocol is not the CPU's. The CPU wants "address in,
 //      data out next cycle, plus a loader write port". The macro wants
 //      MEN/WEN/REN/BM with a specific combination for each operation, and two
@@ -89,7 +89,7 @@ module pe_imem #(
     if (FLOP == 1) begin : g_flops
       // Fallback: a register array with the SAME one-cycle read latency, so
       // behaviour is identical and only the area differs. This is what
-      // tb/synth_area.sh measures to price the swap, and what lets a testbench
+      // regress/synth_area.sh measures to price the swap, and what lets a testbench
       // run when the PDK (or the macro's model) is not available.
       logic [15:0] mem [0:WORDS-1];
       // Reads are disabled during a host write, exactly like the macro's

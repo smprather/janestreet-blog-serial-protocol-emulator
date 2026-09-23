@@ -4,7 +4,7 @@ module test;
     always #5 clk = ~clk;
     reg rst_n = 0, run = 0;
     wire [7:0] a;
-    pe_uart_soc #(.IMEM_FLOP(1)) dut (
+    pe_soc #(.IMEM_FLOP(1)) dut (
         .clk(clk), .rst_n(rst_n), .host_we(1'b0), .host_imem_sel(1'b0),
         .host_addr(10'b0), .host_wdata(16'b0), .run(run), .pin_in(8'b0),
         .pin_out(), .pin_oe(), .dbg_pc(), .dbg_a(a), .dbg_timer()

@@ -4,18 +4,18 @@ created: 2026-09-18
 updated: 2026-09-18
 type: reference
 tags: [architecture, verification]
-sources: [rtl/pe_serdes.v, rtl/pe_codec_mux.v, rtl/pe_line_codec.v]
+sources: [rtl/pe_serdes.v, rtl/pe_codec_mux.v, rtl/pe_nrzi.v, rtl/pe_manch.v, rtl/pe_bitstuff.v]
 confidence: high
 ---
 
 # Signal Names
 
 Every port the RTL exposes, what it means, and when it is valid. **Port
-tables are extracted from the Verilog by `tools/gen_signal_glossary.py`**
+tables are extracted from the Verilog by `tools/gen/signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-15 modules, 184 ports.
+14 modules, 167 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -59,27 +59,23 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_busy` | out | 1 | High from start until the final strobe — drops one cycle **before** `rx_valid`. |
 | `rx_valid` | out | 1 | Word complete. Delayed one cycle past the final strobe by design (so `rx_data` can copy the register without a variable-shift path). |
 
-## `RM_IHPSG13_1P_1024x16_c2_bm_bist`
+## `pe_bitstuff`
 
 | Port | Dir | Width | Meaning |
 |---|---|---|---|
-| `A_CLK` | inp | 1 | _no note yet_ |
-| `A_MEN` | inp | 1 | _no note yet_ |
-| `A_WEN` | inp | 1 | _no note yet_ |
-| `A_REN` | inp | 1 | _no note yet_ |
-| `A_ADDR` | inp | `[9:0]` | _no note yet_ |
-| `A_DIN` | inp | `[15:0]` | _no note yet_ |
-| `A_DLY` | inp | 1 | _no note yet_ |
-| `A_DOUT` | out | `[15:0]` | _no note yet_ |
-| `A_BM` | inp | `[15:0]` | _no note yet_ |
-| `A_BIST_CLK` | inp | 1 | _no note yet_ |
-| `A_BIST_EN` | inp | 1 | _no note yet_ |
-| `A_BIST_MEN` | inp | 1 | _no note yet_ |
-| `A_BIST_WEN` | inp | 1 | _no note yet_ |
-| `A_BIST_REN` | inp | 1 | _no note yet_ |
-| `A_BIST_ADDR` | inp | `[9:0]` | _no note yet_ |
-| `A_BIST_DIN` | inp | `[15:0]` | _no note yet_ |
-| `A_BIST_BM` | inp | `[15:0]` | _no note yet_ |
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `bit_en` | inp | 1 | **The strobe** — one-cycle pulse meaning "this is the moment". The only thing that commits state in this block. Supplied by the timing block/DRU. See [[concepts/strobe-and-committing-edge]]. |
+| `bypass` | inp | 1 | 1 ⇒ pass the raw bit through untouched (no stuffing). |
+| `clr` | inp | 1 | Frame/SOF boundary — reset run tracking. |
+| `run_cfg` | inp | `[3:0]` | Stuff after this many identical bits (5 = CAN, 6 = USB-LS). |
+| `ones_only` | inp | 1 | 1 ⇒ only a run of ONES is stuffed (USB 1.1 §7.1.9); 0 ⇒ a run of either polarity (CAN). Counters saturate on a run that cannot be stuffed, because a USB zero run is unbounded. |
+| `tx_raw` | inp | 1 | Raw bit in. |
+| `tx_wire` | out | 1 | Bit out, with stuff bits inserted. |
+| `tx_stuffed` | out | 1 | A stuff bit is owed on the **next** strobe (`tx_pend`); the raw input is ignored on that strobe. |
+| `rx_wire` | inp | 1 | Wire bit in. |
+| `rx_raw` | out | 1 | Bit out, with stuff bits removed. |
+| `rx_raw_valid` | out | 1 | 0 ⇒ this wire bit was a stuff bit. |
+| `rx_err` | out | 1 | The bit after a full run was not complementary. |
 
 ## `pe_codec_mux`
 
@@ -151,7 +147,7 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_second` | out | 1 | Second half-cell level — **this is the bit value**. H→L is a 0, L→H is a 1, so the codec reads it directly. Fed to `pe_manch.rx_second`. |
 | `rx_wire` | out | 1 | The latest half-cell sample, for a consumer that wants the raw oversampled level rather than Manchester bits. |
 | `locked` | out | 1 | **Confidence, not a gate.** Asserted after `cfg_lock_bits` well-formed cells; cleared by the first malformed one. `bit_en` is emitted whether or not locked — gating on it would drop the preamble, which is the part every protocol here expects to be dropped. Nothing in this repo gates on it. |
-| `dbg_phase` | out | `[3:0]` | The phase counter (distance from the last transition, mod SPB). Bring-up only; the capture phase is SPB/4 and 3·SPB/4. **SPB's ceiling is 16, not merely a multiple of 4** — this counter is 4 bits and `4'(SPB-1)` truncates above it, which silently kills all capture (SPB=20 emits nothing). Both constraints are elaboration errors in the RTL and are boundary-tested by `tb/param_guards.sh`. |
+| `dbg_phase` | out | `[3:0]` | The phase counter (distance from the last transition, mod SPB). Bring-up only; the capture phase is SPB/4 and 3·SPB/4. **SPB's ceiling is 16, not merely a multiple of 4** — this counter is 4 bits and `4'(SPB-1)` truncates above it, which silently kills all capture (SPB=20 emits nothing). Both constraints are elaboration errors in the RTL and are boundary-tested by `regress/param_guards.sh`. |
 
 ## `pe_eth_mac`
 
@@ -203,20 +199,6 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `host_addr` | inp | `[((WORDS <= 2) ? 1 : $clog2(WORDS))-1:0]` | Loader address, one word per cycle. Wide enough to name any instruction word. |
 | `host_wdata` | inp | `[15:0]` | Loader data. The wrapper writes all 16 bits; the macro's `A_BM` is tied high, because `BM=0` with `WEN=1` is a silent no-op rather than an error. |
 
-## `pe_nrzi`
-
-| Port | Dir | Width | Meaning |
-|---|---|---|---|
-| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
-| `bit_en` | inp | 1 | **The strobe** — one-cycle pulse meaning "this is the moment". The only thing that commits state in this block. Supplied by the timing block/DRU. See [[concepts/strobe-and-committing-edge]]. |
-| `bypass` | inp | 1 | 1 ⇒ pass the raw bit through untouched. |
-| `clr` | inp | 1 | Frame/SOF boundary — return both the TX and RX line levels to idle J. A USB packet starts from idle J, and without this the only route there is a chip reset. |
-| `tx_raw` | inp | 1 | Raw bit in. 0 toggles the line, 1 holds it. |
-| `tx_wire` | out | 1 | Line level out. |
-| `rx_wire` | inp | 1 | Line level in. |
-| `rx_raw` | out | 1 | Decoded bit: `wire XNOR previous level` — a transition is a 0, no transition is a 1. |
-| `tx_lvl` | out | 1 | The line level currently being driven. |
-
 ## `pe_manch`
 
 | Port | Dir | Width | Meaning |
@@ -234,23 +216,19 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_raw` | out | 1 | Decoded bit. |
 | `rx_err` | out | 1 | Illegal symbol — equal halves mean there was no mid-bit edge. REGISTERED and strobe-gated: valid for one cycle after the committing edge, like pe_bitstuff's. It was combinational and ungated, which made it true of an idle line too. |
 
-## `pe_bitstuff`
+## `pe_nrzi`
 
 | Port | Dir | Width | Meaning |
 |---|---|---|---|
 | `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
 | `bit_en` | inp | 1 | **The strobe** — one-cycle pulse meaning "this is the moment". The only thing that commits state in this block. Supplied by the timing block/DRU. See [[concepts/strobe-and-committing-edge]]. |
-| `bypass` | inp | 1 | 1 ⇒ pass the raw bit through untouched (no stuffing). |
-| `clr` | inp | 1 | Frame/SOF boundary — reset run tracking. |
-| `run_cfg` | inp | `[3:0]` | Stuff after this many identical bits (5 = CAN, 6 = USB-LS). |
-| `ones_only` | inp | 1 | 1 ⇒ only a run of ONES is stuffed (USB 1.1 §7.1.9); 0 ⇒ a run of either polarity (CAN). Counters saturate on a run that cannot be stuffed, because a USB zero run is unbounded. |
-| `tx_raw` | inp | 1 | Raw bit in. |
-| `tx_wire` | out | 1 | Bit out, with stuff bits inserted. |
-| `tx_stuffed` | out | 1 | A stuff bit is owed on the **next** strobe (`tx_pend`); the raw input is ignored on that strobe. |
-| `rx_wire` | inp | 1 | Wire bit in. |
-| `rx_raw` | out | 1 | Bit out, with stuff bits removed. |
-| `rx_raw_valid` | out | 1 | 0 ⇒ this wire bit was a stuff bit. |
-| `rx_err` | out | 1 | The bit after a full run was not complementary. |
+| `bypass` | inp | 1 | 1 ⇒ pass the raw bit through untouched. |
+| `clr` | inp | 1 | Frame/SOF boundary — return both the TX and RX line levels to idle J. A USB packet starts from idle J, and without this the only route there is a chip reset. |
+| `tx_raw` | inp | 1 | Raw bit in. 0 toggles the line, 1 holds it. |
+| `tx_wire` | out | 1 | Line level out. |
+| `rx_wire` | inp | 1 | Line level in. |
+| `rx_raw` | out | 1 | Decoded bit: `wire XNOR previous level` — a transition is a 0, no transition is a 1. |
+| `tx_lvl` | out | 1 | The line level currently being driven. |
 
 ## `pe_pinmux`
 
@@ -266,7 +244,7 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `pad_out` | out | `[PINS-1:0]` | Level to drive. Only reaches the pad where `pad_oe` is high. |
 | `pad_oe` | out | `[PINS-1:0]` | 1 = this pin may drive. **In OD mode this is `oe & ~out`**, so a pin holding a 1 is RELEASED rather than driven high — that gate is the bus-contention safety property, and it is why the same firmware (`out=1` to send a 1, `out=0` to send a 0) works in both modes. See [[concepts/pin-matrix]].<br>**Open-drain** (I2C, PS/2): never drive high; release and let the board's pull-up do it.<br>**Tristate** (I2C arbitration): read back the pad level to see whether another master won the bit.<br>**Push-pull** (UART, SPI, CAN, USB): `oe=1` and toggle `out`. |
 
-## `pe_uart_soc`
+## `pe_soc`
 
 | Port | Dir | Width | Meaning |
 |---|---|---|---|

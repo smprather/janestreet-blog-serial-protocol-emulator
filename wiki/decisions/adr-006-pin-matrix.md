@@ -4,7 +4,7 @@ created: 2026-09-22
 updated: 2026-09-22
 type: decision
 tags: [decision, architecture, protocol-emulation, area-budget]
-sources: [rtl/pe_pinmux.v, rtl/pe_uart_soc.v, rtl/tt_um_protocol_emulator.v, firmware/i2c_pins.pe, tb/tb_pe_i2c_soc.v]
+sources: [rtl/pe_pinmux.v, rtl/pe_soc.v, rtl/tt_um_protocol_emulator.v, firmware/i2c_pins.pe, tb/tb_pe_soc_i2c.v]
 confidence: high
 ---
 
@@ -25,7 +25,7 @@ The plan this project is executing says, of the pin matrix:
 > the TT wrapper instantiates the matrix
 
 That sentence cannot be implemented as written, and the reason is structural
-rather than an oversight: **the CPU's IO bus never leaves `pe_uart_soc`**. The
+rather than an oversight: **the CPU's IO bus never leaves `pe_soc`**. The
 `io_port`/`io_wdata`/`io_rdata` signals are internal to the SoC, and the TT
 wrapper sees only the SoC's `pin_in`, `pin_out`, `pin_oe` and the host
 programming interface. A matrix instantiated at the wrapper boundary would have
@@ -42,9 +42,9 @@ what is missing from the design is a per-PIN, per-MOMENT direction.
 
 ## Decision
 
-**1. The matrix goes inside `pe_uart_soc`,** between the CPU's port decode and
+**1. The matrix goes inside `pe_soc`,** between the CPU's port decode and
 the SoC's `pin_in`/`pin_out`/`pin_oe`. That is the only placement where
-firmware can set per-pin direction at runtime. `pe_uart_soc` gains a `pin_oe`
+firmware can set per-pin direction at runtime. `pe_soc` gains a `pin_oe`
 output; `tt_um_protocol_emulator` threads it to the pads. The wrapper is a pad
 shell, not a logic layer — which is what a Tiny Tapeout wrapper should be.
 
@@ -98,7 +98,7 @@ read-modify-write is unaffected. The caveat: a pin that firmware has released
 now reads the pad instead of the last value written. Nothing in the UART or SPI
 programs releases a pin, so no existing behaviour changes — but the guarantee
 is "identical for firmware that does not write PINOE/PINOD", not "identical,
-full stop". The header of `rtl/pe_uart_soc.v` states it that way.
+full stop". The header of `rtl/pe_soc.v` states it that way.
 
 **Programs now own their pins.** `firmware/i2c_pins.pe` writes PINOE with a
 literal `SDA|SCL`, which releases TX and bits 1–2 that the reset default had

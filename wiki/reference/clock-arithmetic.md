@@ -4,20 +4,20 @@ created: 2026-09-22
 updated: 2026-09-22
 type: reference
 tags: [clocking, protocol, reference, verification]
-sources: [rtl/pe_uart_soc.v, wiki/decisions/adr-005-60mhz-turbo.md]
+sources: [rtl/pe_soc.v, wiki/decisions/adr-005-60mhz-turbo.md]
 confidence: high
 ---
 
 # Clock arithmetic at 60 MHz
 
-> **Generated** by `tools/gen_clock_arithmetic.py` from `rtl/pe_uart_soc.v`.
+> **Generated** by `tools/gen/clock_arithmetic.py` from `rtl/pe_soc.v`.
 > `CLK_HZ` is read from the RTL, not restated here — if the RTL's clock
 > changes and this page is not regenerated, `--check` fails.
 
 The operating point is **locked at 60 MHz**. It is a `localparam` in
-`pe_uart_soc`, not a parameter: nothing ever instantiated the SoC at any
+`pe_soc`, not a parameter: nothing ever instantiated the SoC at any
 other rate, so the parameter was a second place for the arithmetic to be
-wrong rather than a knob (see the header of `rtl/pe_uart_soc.v`).
+wrong rather than a knob (see the header of `rtl/pe_soc.v`).
 
     CLK_HZ   = 60,000,000 Hz
     period   = 16.667 ns

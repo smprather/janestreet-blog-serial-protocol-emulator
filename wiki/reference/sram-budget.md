@@ -11,7 +11,7 @@ confidence: medium
 # SRAM Budget
 
 How much SRAM fits on the 24-tile die. Macro geometry is parsed from the
-PDK LEFs by `tools/gen_sram_budget.py`
+PDK LEFs by `tools/gen/sram_budget.py`
 (`pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram`), so the numbers are the real
 macros, not the datasheet's bit counts in isolation.
 
@@ -208,7 +208,7 @@ fix read +1.234 ns. Quote the run ID with the number.
 - The macro's power pins are on **Metal4** while the PDN grid is built on
   TopMetal1/TopMetal2, so the stock PDN config leaves the macro's supplies
   unconnected (`PSM-0069`). The SoC's flow uses a custom `PDN_CFG` that
-  stripes Metal4 and steps up to the grid; see `flow/pe_uart_soc_pdn.tcl`.
+  stripes Metal4 and steps up to the grid; see `flow/pe_soc_pdn.tcl`.
 
 ## Related
 

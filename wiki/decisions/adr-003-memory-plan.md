@@ -29,7 +29,7 @@ wrong.
 Two facts arrived together on 2026-09-20 and they decide this jointly.
 
 **1. Flop instruction memory is 89% of the current design.** Measured by
-synthesising `pe_uart_soc` at four depths:
+synthesising `pe_soc` at four depths:
 
 | IMEM depth | Cells | Area (µm²) |
 |---|---|---|
@@ -115,7 +115,7 @@ email. `info.yaml` matches. Verbatim source:
 
 **This decision survives the upside intact.** 6×4 and 8×4 are the same *height*
 (432 µm at the template tile) and differ only in width, so no macro that fits one
-fails on the other. `tools/gen_sram_budget.py --tiles 8x4` re-answers
+fails on the other. `tools/gen/sram_budget.py --tiles 8x4` re-answers
 [[reference/sram-budget]] for the larger die; the committed page is the 6×4 answer.
 
 Worth recording because it nearly went the other way: a **4×6** die — the same 24

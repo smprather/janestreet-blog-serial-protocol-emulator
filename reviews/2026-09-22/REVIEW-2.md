@@ -1,5 +1,11 @@
 # Project review, second pass — 2026-09-22
 
+> **Layout note (2026-09-23):** this report predates the project-layout rework.
+> Paths quoted in the text (`tb/...`, `tools/...`, `rtl/pe_uart_soc.v`,
+> `rtl/pe_line_codec.v`) describe the layout AT THE TIME OF THE REVIEW. The
+> probe scripts in this directory were path-updated during the rework and stay
+> runnable; the reports themselves are kept as historical evidence.
+
 **Latest verification:** the fix-verification pass at `bdd7728` passed all
 seven original probes and found two follow-ups (Ethernet minimum-size/alignment
 validation and the generated codec configuration reference); both are now fixed

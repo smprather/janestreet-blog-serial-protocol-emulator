@@ -35,7 +35,7 @@
 
 ## Reference
 
-- [[reference/signal-names]] — Every RTL port: direction, width, meaning, validity. Port tables generated from the Verilog (drift-checked in `tb/run_all.sh`).
+- [[reference/signal-names]] — Every RTL port: direction, width, meaning, validity. Port tables generated from the Verilog (drift-checked in `regress/run_all.sh`).
 - [[reference/protocol-pin-budget]] — Per-protocol IO pin counts vs the TT pad budget (26 pads, 24 usable); what the board must add per protocol.
 - [[reference/sram-budget]] — SRAM capacity vs the 8×4 die: every PDK macro's real size, what packs, and the area cost of 1–32 KB.
 - [[reference/crc-config]] — every CRC constant `pe_crc` is loaded with, derived and checked against the RevEng catalogue's published values (generated).
@@ -58,7 +58,7 @@
 - [[decisions/adr-003-memory-plan]] — ADR: two `1P_1024x16` macros (instructions + frame buffer); flop IMEM was 89% of the die, and you cannot buy 1.5 KB. Instruction half IMPLEMENTED.
 - [[decisions/adr-004-program-counter-width]] — ADR: the SRAM swap required widening the PC and jump-target field; the memory alone delivered 128 usable words, not 1024.
 - [[decisions/adr-005-60mhz-turbo]] — ADR: the turbo is **60 MHz, not 66** — 66 provably fails the 10BASE-T TX jitter conformance window at every edge placement; 60 is exact for every hard protocol with a 50%-finer RX grid.
-- [[decisions/adr-006-pin-matrix]] — ADR: the pin matrix is a runtime per-pin `{out,oe,od}` file and it lives **inside** the SoC — the plan's "wrapper instantiates the matrix" is unimplementable, since the CPU's IO bus never leaves `pe_uart_soc`.
+- [[decisions/adr-006-pin-matrix]] — ADR: the pin matrix is a runtime per-pin `{out,oe,od}` file and it lives **inside** the SoC — the plan's "wrapper instantiates the matrix" is unimplementable, since the CPU's IO bus never leaves `pe_soc`.
 
 ## Queries
 

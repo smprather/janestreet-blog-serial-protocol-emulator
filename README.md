@@ -19,30 +19,30 @@ in firmware on real RTL. See [`wiki/STATUS.md`](wiki/STATUS.md), and
 | Block | File | Size (mapped, sg13g2 typ) |
 |---|---|---|
 | SERDES — 1–32 b word engine, runtime bit order, strobe-paced | `rtl/pe_serdes.v` | 539 cells / 11.2k µm² (17.2k µm² routed) |
-| NRZI / Manchester / bit-stuffing codecs | `rtl/pe_line_codec.v` | 15 / 7 / 84 cells |
+| NRZI / Manchester / bit-stuffing codecs | `rtl/pe_nrzi.v`, `rtl/pe_manch.v`, `rtl/pe_bitstuff.v` | 15 / 7 / 99 cells |
 | Config-driven codec pipeline mux | `rtl/pe_codec_mux.v` | 115 cells / 1.7k µm² |
 | **CRC / LFSR engine** — CRC-5/8/15/16/32, one datapath | `rtl/pe_crc.v` | 209 cells / 3.4k µm² |
 | **DRU** — oversampled Manchester receive (10BASE-T, PS/2), dual-edge | `rtl/pe_dru.v` | 148 cells / 2.4k µm² |
 | CPU — 16-bit insn, 16 opcodes, A/Y/X, PC width from IMEM depth | `rtl/pe_cpu.v` | 383 cells / 4.9k µm² |
 | **Instruction memory** — real SRAM macro + protocol wrapper | `rtl/pe_imem.v` | 12 glue cells (+ the macro's LEF area) |
-| Software-UART SoC — CPU + 1024-word SRAM + ticks + pin matrix | `rtl/pe_uart_soc.v` | 1,264 cells / 23.2k µm² |
+| Software-UART SoC — CPU + 1024-word SRAM + ticks + pin matrix | `rtl/pe_soc.v` | 1,264 cells / 23.2k µm² |
 | **Tiny Tapeout top level** — the deliverable | `rtl/tt_um_protocol_emulator.v` | 1,284 cells / 23.2k µm² |
-| Assembler / bit-accurate emulator | `tools/peasm.py`, `tools/peemu.py` | Python |
+| Assembler / bit-accurate emulator | `tools/fw/peasm.py`, `tools/fw/peemu.py` | Python |
 | The UART itself — **as firmware** | `firmware/uart_echo.pe` | 114 words |
 
 Verified by **26 self-checking testbenches + 17 firmware tests + a lint gate**
-(`tb/run_all.sh`), including one TB per target protocol: UART, SPI, I2C, JTAG,
+(`regress/run_all.sh`), including one TB per target protocol: UART, SPI, I2C, JTAG,
 SWD, PS/2, CAN, USB-LS, 10BASE-T. The SERDES has been through the full
 place-and-route flow: **0 DRC, 0 LVS, 66 MHz timing clean** (+7.6 ns setup slack
 at the slow corner), reproducible with `flow/run_librelane.sh`.
 
-`tb/lint.sh` runs Verilator `-Wall` plus a yosys elaboration check on every top,
+`regress/lint.sh` runs Verilator `-Wall` plus a yosys elaboration check on every top,
 and the regression fails if either finds anything. It exists because a green
 testbench says nothing about the netlist: two drivers on one flop raced in Icarus
 and became a constant 0 in yosys, and a hierarchical debug reference simulated
 correctly while synthesising backwards. Neither is reachable from a testbench.
 
-The headline is `tb/tb_pe_uart_soc.v`: **there is no UART in the RTL.** One input
+The headline is `tb/tb_pe_soc_uart.v`: **there is no UART in the RTL.** One input
 pin, one output pin, a counter, and a program — 115200 8N1, echoing bytes at
 8.6–8.7 µs per bit cell measured at the pin.
 
@@ -53,14 +53,14 @@ and the 2 KB frame buffer.
 ## Quick start
 
 ```bash
-./tb/run_all.sh             # firmware regression, all 21 TBs, lint, doc drift
-./tb/run_firmware_tests.sh  # just assemble + emulate the firmware
-./tb/lint.sh                # verilator -Wall + yosys elaboration check
-./tb/synth_area.sh          # mapped cell count + area per block (needs yosys + IHP PDK)
+./regress/run_all.sh             # firmware regression, all 21 TBs, lint, doc drift
+./regress/run_firmware_tests.sh  # just assemble + emulate the firmware
+./regress/lint.sh                # verilator -Wall + yosys elaboration check
+./regress/synth_area.sh          # mapped cell count + area per block (needs yosys + IHP PDK)
 
 # the fast firmware loop: 2 seconds instead of a 1-minute RTL build
-python3 tools/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex
-python3 tools/peemu.py firmware/uart_echo.hex --send "41 42" --max-cycles 900000
+python3 tools/fw/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex
+python3 tools/fw/peemu.py firmware/uart_echo.hex --send "41 42" --max-cycles 900000
 ```
 
 Place-and-route (dockerized LibreLane; see `wiki/concepts/pdk-toolchain.md`).
@@ -73,20 +73,29 @@ flow/run_librelane.sh flow/pe_serdes.json   # results under ~/asic-runs/
 ## Layout
 
 ```
-rtl/      synthesizable Verilog (the hardware): pe_serdes, pe_line_codec,
-          pe_codec_mux, pe_crc, pe_dru, pe_cpu, pe_uart_soc, and
-          tt_um_protocol_emulator (the Tiny Tapeout top level — the only
-          submittable module)
-info.yaml Tiny Tapeout project metadata: tiles, clock, pinout
-flow/     LibreLane config + runner, so place-and-route is reproducible
-tb/       self-checking testbenches + run_all.sh / run_firmware_tests.sh /
-          lint.sh / synth_area.sh
-firmware/ protocol programs (.pe source, .hex assembled) — uart_echo is the UART
-tools/    peasm.py (assembler), peemu.py (bit-accurate emulator),
-          gen_*_budget.py (docs generated from RTL/PDK, drift-checked in run_all),
-          live-canvas/ (optional dashboard diagram pane)
-sim/      VCD waveforms from the testbenches (regenerated, not tracked)
-wiki/     the design record — read STATUS.md; its Next-steps section is the work list
+rtl/        synthesizable Verilog (the hardware): one module per file --
+            pe_serdes, pe_nrzi, pe_manch, pe_bitstuff, pe_codec_mux, pe_crc,
+            pe_dru, pe_cpu, pe_imem, pe_fbuf, pe_pinmux, pe_soc, and
+            tt_um_protocol_emulator (the Tiny Tapeout top level -- the only
+            submittable module); rtl/vendor/ holds the SRAM macro's port shell
+info.yaml   Tiny Tapeout project metadata: tiles, clock, pinout
+flow/       LibreLane config + runner (pe_soc.*, pe_serdes.*), reproducible from
+            a clone
+tb/         self-checking testbenches only (tb_*.v)
+regress/    the regression itself: run_all.sh, run_one_tb.sh,
+            run_firmware_tests.sh, lint.sh, synth_area.sh, param_guards.sh,
+            sram_model.sh, and the four mutate_*_tb.sh harnesses
+firmware/   protocol programs (.pe source, .hex assembled) -- uart_echo is the UART
+tools/fw/   peasm.py (assembler), peemu.py (bit-accurate emulator)
+tools/gen/  doc/diagram generators (block diagram, clock arithmetic, CRC config,
+            pin budget, signal glossary, SRAM budget, diagram render), all
+            drift-checked in the regression
+tools/checks/  standalone checkers (canvas viewer, I2C pin timing)
+tools/live-canvas/  optional dashboard diagram pane
+reviews/    the external review passes and their evidence (historical; the probe
+            scripts are kept runnable)
+sim/        VCD waveforms from the testbenches (regenerated, not tracked)
+wiki/       the design record -- read STATUS.md; its Next-steps section is the work list
 ```
 
 The `wiki/` is where the reasoning lives: competition rules and platform

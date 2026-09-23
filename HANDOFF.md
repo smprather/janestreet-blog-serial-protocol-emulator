@@ -1,11 +1,12 @@
 # Handoff — state of the repo (2026-09-23)
 
 Written for whoever picks this up next, human or agent. Read this, then
-`reviews/2026-09-23/F1-F2-RECHECK.md`, then `wiki/STATUS.md`. Fresh checks
-confirm the original seven fixes, the Ethernet boundary fix, the USB
-configuration reference, and the recheck's CAN preset follow-up (**F3 fixed**:
-CAN is `0x51`, or `0x01`). There is no open review finding; the earlier reports
-preserve the preceding findings and resolutions.
+`reviews/2026-09-23/F1-F2-RECHECK.md`, then `wiki/STATUS.md`. All review
+findings are closed (three passes, F1/F2/F3). The project layout was reworked
+afterwards with no functional change: `tb/` is testbenches only, `regress/`
+holds the harnesses, `tools/{fw,gen,checks}/` the Python, the SoC is
+`rtl/pe_soc.v`, the line codecs are one module per file, and the SRAM shell is
+under `rtl/vendor/`. Commands in this file use the new paths.
 
 ## Resume after fix verification
 
@@ -43,9 +44,9 @@ those checks.
 The standard regression and the directed review probes measure different cases:
 
 ```bash
-./tb/run_all.sh            # 26/26 TBs + 18/18 firmware + lint + 4 mutation
+./regress/run_all.sh            # 26/26 TBs + 18/18 firmware + lint + 4 mutation
                            # suites + generated-doc drift, exits 0
-./tb/run_all.sh --fast     # same verdicts, parallel TB loop, 4-state iverilog
+./regress/run_all.sh --fast     # same verdicts, parallel TB loop, 4-state iverilog
 bash reviews/2026-09-22/review2/run_repros.sh
                            # the seven second-review probes; exits 0
 bash reviews/2026-09-23/run-boundaries.sh
@@ -66,10 +67,10 @@ present also exits 0 (the diagram gate is a committed source hash now; see
 ## The thing that actually works
 
 `firmware/uart_echo.pe` is a complete 115200 8N1 half-duplex UART. It is not RTL.
-It runs on `rtl/pe_cpu.v` inside `rtl/pe_uart_soc.v` (one input pin, one output
-pin, a tick counter). `tb/tb_pe_uart_soc.v` drives a real waveform on RX and
+It runs on `rtl/pe_cpu.v` inside `rtl/pe_soc.v` (one input pin, one output
+pin, a tick counter). `tb/tb_pe_soc_uart.v` drives a real waveform on RX and
 decodes TX, and passes on 41/42/00/FF with 8.6–8.7 µs bit cells measured at the
-pin. `tools/peemu.py` reproduces the same tested bytes, which is the fast loop for
+pin. `tools/fw/peemu.py` reproduces the same tested bytes, which is the fast loop for
 firmware work (2 s, no iverilog). The R2-4 restart and R2-6 UART-monitor probes
 now pass; their fixes and additional independent checks are recorded in the
 2026-09-23 verification report.
@@ -114,7 +115,7 @@ grepped for three known diagnostics and passed a file yosys could not parse.
      by `tb_pe_imem`, and both are mutation-checked. Do not "simplify" the
      wrapper's `re = ~host_we` without re-reading `rtl/pe_imem.v`'s header.
    - **Simulation needs the PDK's behavioural model, which lives outside the
-     repo.** `tb/sram_model.sh` locates it and FAILS LOUDLY if absent — never fall
+     repo.** `regress/sram_model.sh` locates it and FAILS LOUDLY if absent — never fall
      back to `pe_imem`'s `FLOP=1` array silently, because a testbench that runs
      against the fallback has verified nothing about the memory that will ship.
 3. **The tick is 260 clocks, not 173** (integer division of 60 MHz/115200/2).
@@ -122,10 +123,10 @@ grepped for three known diagnostics and passed a file yosys could not parse.
    60 MHz on 2026-09-21 and the real baud is 115,385 (+0.16%). If you see 173
    or 174 in a *current* claim it is stale — 173 survives only inside historical
    narration (the ADR-004 load-window story), where it is accurate.
-4. **`tb_pe_uart_soc.v` `$readmemh`s an assembled `.hex`.** `run_all.sh` now runs
+4. **`tb_pe_soc_uart.v` `$readmemh`s an assembled `.hex`.** `run_all.sh` now runs
    `run_firmware_tests.sh` first so it can never simulate a stale image. If you add
    another SoC TB that loads firmware, keep that ordering.
-5. **The lint gate is load-bearing; do not route around it.** `tb/lint.sh` runs
+5. **The lint gate is load-bearing; do not route around it.** `regress/lint.sh` runs
    Verilator `-Wall` and a yosys elaboration check on every top, and `run_all.sh`
    fails if either finds anything. An earlier revision of this file called those
    warnings "intentional". Two of them were real defects that NO testbench can
@@ -140,7 +141,7 @@ grepped for three known diagnostics and passed a file yosys could not parse.
 5b. **Hardware that no firmware exercises is untested hardware.** The STATUS port
    had no program reading it for an entire milestone, which is exactly why its
    flop could be a constant and the regression stayed green.
-   `firmware/tick_count.pe` + `tb/tb_pe_tick_status.v` exist to close that.
+   `firmware/tick_count.pe` + `tb/tb_pe_soc_tick.v` exist to close that.
    When you add a peripheral, add the program that uses it in the same change.
 6. **The LibreLane `--dockerized` wrapper cannot auto-enable ihp-sg13g2.** Invoke
    the container with explicit `-p ihp-sg13g2 -s sg13g2_stdcell`. Command is in
@@ -157,7 +158,7 @@ grepped for three known diagnostics and passed a file yosys could not parse.
    SPI mutations were the bit-order flip and driving MOSI after the rise (the
    classic CPHA error). Check whether a mutation is observable before treating
    its survival as a coverage gap. STATUS gotcha 31.
-9. **The flow's PDN and global-routing knobs are in `flow/pe_uart_soc.json`, with
+9. **The flow's PDN and global-routing knobs are in `flow/pe_soc.json`, with
    the reasoning inline — read those comments before changing them.** The two
    that were needed: `GRT_ADJUSTMENT: 0.0` (the generic 30% derate caused
    `GRT-0116` congestion at 4.59% utilization on a design that was 7.6% full) and
@@ -184,7 +185,7 @@ Resolve the second review findings before Ethernet SoC integration, then resume
 the loader and I2C transaction work. `wiki/plans/through-i2c.md` is a completed
 implementation plan kept for its timing analysis and findings.
 
-The pin matrix is already inside `pe_uart_soc`. UART and mode-0 SPI run as
+The pin matrix is already inside `pe_soc`. UART and mode-0 SPI run as
 firmware through it; I2C firmware exercises START, one bit cell, and STOP.
 Byte transfer, ACK/NACK, addressing, and transactions remain future work. The
 Ethernet receive chain and frame buffer exist as tested blocks but are not yet
@@ -195,12 +196,12 @@ this review. Follow `wiki/STATUS.md` for their limitations and the standing
 instruction to defer physical flow, DRC, and LVS.
 
 If you touch `pe_crc`: its constants are generated and catalogue-checked
-(`tools/gen_crc_config.py`) — never hand-edit [[reference/crc-config]]. The traps are
+(`tools/gen/crc_config.py`) — never hand-edit [[reference/crc-config]]. The traps are
 STATUS gotchas 17-19, and they are all of the kind that pass every obvious test.
 
 **If you touch `pe_dru`'s `SPB`:** the ceiling is **16**, not "any multiple of 4".
 `phase` is 4 bits and `4'(SPB-1)` truncates above it, which kills all capture
-silently. Both guards are elaboration errors now, and `tb/param_guards.sh` (run by
+silently. Both guards are elaboration errors now, and `regress/param_guards.sh` (run by
 `run_all.sh`) requires them to actually reject. SPB=12 is the 60 MHz grid and
 passes the existing nominal-grid tests; R2-1 covers the asynchronous failure.
 
@@ -210,7 +211,7 @@ conformance window (8.0/8.5 BT ±11 ns) at any edge placement, dithered or not;
 60 MHz keeps every hard protocol exact and refines the RX grid 50% (SPB 8 -> 12).
 **The 66 MHz STA signoff target is retired** (both flow configs now close at
 `CLOCK_PERIOD` 16.667 ns) and **60 MHz is no longer a parameter** — `CLK_HZ` is a
-`localparam` in `pe_uart_soc`, because nothing ever instantiated the SoC at any
+`localparam` in `pe_soc`, because nothing ever instantiated the SoC at any
 other rate. `reference/clock-arithmetic.md` is the generated constant table.
 
 **The SRAM WAS the critical path, and the SoC now has the signoff that covers it.**
@@ -221,10 +222,10 @@ SoC needed its own run at 15.15 ns — and that run now exists: the full-SoC
 LibreLane flow closed setup at **+1.234 ns** and hold at **+0.127 ns** worst-case
 with zero violating paths at all three corners, and measured the SRAM access
 **in context** at **7.639 ns**. Numbers and method: [[reference/sram-budget]].
-Two flow settings were needed and both are documented in `flow/pe_uart_soc.json`
+Two flow settings were needed and both are documented in `flow/pe_soc.json`
 with the reasoning inline: **`GRT_ADJUSTMENT: 0.0`** (the generic 30% derate was
 causing `GRT-0116` congestion at 4.59% utilization) and a custom **`PDN_CFG`**
-(`flow/pe_uart_soc_pdn.tcl`) because the macro's supplies are on **Metal4** while
+(`flow/pe_soc_pdn.tcl`) because the macro's supplies are on **Metal4** while
 the PDN grid is TopMetal1/TopMetal2 — `PDN_MACRO_CONNECTIONS` connects them
 logically but builds no physical path, so the grid check failed with `PSM-0069`.
 STATUS gotchas 33-34.
@@ -247,7 +248,7 @@ enforces both continuously.
 - Every TB is self-checking and prints `PASS: <name>` on success; `run_all.sh`
   greps for that. Add new TBs to its `CASES` array or they are not in the
   regression.
-- Numbers in wiki pages are generated where possible (`tools/gen_*.py --check` is
+- Numbers in wiki pages are generated where possible (`tools/gen/*.py --check` is
   in the regression). Hand-typed numbers rot; generated ones cannot.
 - The wiki is the design record, not documentation-by-afterthought:
   `wiki/STATUS.md` + `wiki/log.md` are updated as work lands. Keep them current or

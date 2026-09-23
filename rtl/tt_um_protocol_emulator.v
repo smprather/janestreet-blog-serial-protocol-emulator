@@ -92,7 +92,7 @@ module tt_um_protocol_emulator (
 
   // The SoC's pin port carries PROTOCOL pins only -- `run` is a separate
   // control input, not a pin. Under the SoC's "outputs low, inputs high" rule
-  // (see the header of rtl/pe_uart_soc.v) the three baseline protocols share:
+  // (see the header of rtl/pe_soc.v) the three baseline protocols share:
   //   bit 0 = TX / SCLK, bit 1 = (spare) / MOSI, bit 2 = (spare) / CS_N,
   //   bit 3 = RX / MISO, bit 4 = I2C SDA, bit 5 = I2C SCL
   // which is why PIN_IN_MASK there is 8'hF8. Bits 0 and 3 are the UART pair on
@@ -108,7 +108,7 @@ module tt_um_protocol_emulator (
   assign pin_in_bus[2:0] = 3'b000;
   assign pin_in_bus[7:6] = 2'b00;
 
-  pe_uart_soc #(
+  pe_soc #(
     .IMEM_WORDS(TT_IMEM_WORDS),
     .DMEM_BYTES(16),
     .BAUD(115_200)
@@ -172,7 +172,7 @@ module tt_um_protocol_emulator (
   // `ena` is ignored on purpose (see the header). Port bits that no current
   // firmware claims are sunk here rather than left as a silent unused-signal
   // warning: the matrix CAN drive them, but the wrapper has no pad for them.
-  // Sinking them explicitly is what keeps tb/lint.sh clean without a blanket
+  // Sinking them explicitly is what keeps regress/lint.sh clean without a blanket
   // waiver.
   //
   // dbg_pc[7:6] are not brought out: only 6 of the 8 uo_out bits are spare

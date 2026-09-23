@@ -7,7 +7,7 @@ WORK=$(mktemp -d /tmp/eth-boundaries.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 cd "$ROOT"
 if ! iverilog -g2012 -s tb_pe_eth_mac -o "$WORK/probe.vvp" \
-    rtl/pe_dru.v rtl/pe_line_codec.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v \
+    rtl/pe_dru.v rtl/pe_nrzi.v rtl/pe_manch.v rtl/pe_bitstuff.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v \
     reviews/2026-09-23/mac_boundaries.v >"$WORK/compile.txt" 2>&1; then
     cat "$WORK/compile.txt"
     exit 2

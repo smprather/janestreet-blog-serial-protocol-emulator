@@ -4,7 +4,7 @@ created: 2026-09-22
 updated: 2026-09-22
 type: concept
 tags: [protocol, architecture, verification]
-sources: [rtl/pe_uart_soc.v, firmware/spi_xfer.pe, tools/peemu.py]
+sources: [rtl/pe_soc.v, firmware/spi_xfer.pe, tools/fw/peemu.py]
 confidence: high
 ---
 
@@ -26,7 +26,7 @@ UART needs one input pin and one output pin. SPI needs **three outputs** (SCLK,
 MOSI, CS_N) and one input (MISO). The SoC's port was a single bit, so before any
 SPI firmware could exist the port had to become a multi-bit one.
 
-That change is in `rtl/pe_uart_soc.v`, and the rule it settled on is stated
+That change is in `rtl/pe_soc.v`, and the rule it settled on is stated
 there in full: **outputs low, inputs high**. Outputs start at bit 0; inputs are
 the contiguous high run; the build-time parameter `PIN_IN_MASK` (currently
 `8'hF8`) records where the split falls. The shared UART/SPI map is:
@@ -44,7 +44,7 @@ project showing up in the pin map, and it is why the SPI firmware lives in the
 same SoC as the UART one rather than needing a mode select.
 
 Bit 3 is ONE pad. In UART mode a host drives it; in SPI mode the slave does.
-`tools/peemu.py` models it as a single wire level for exactly that reason (see
+`tools/fw/peemu.py` models it as a single wire level for exactly that reason (see
 Testing below) — two separate levels could disagree with each other, which is
 the class of bug the emulator exists to catch.
 
@@ -90,7 +90,7 @@ insert at the top) is exactly backwards for SPI. Two consequences:
   and OR the new bit in at bit 0.
 
 Shift-left is `MOV X, A ; ADD A, X` — A + A. Register-register `ADD` is not in
-the ISA and `tools/peasm.py` rejects it, but **X is addressable as the ALU's
+the ISA and `tools/fw/peasm.py` rejects it, but **X is addressable as the ALU's
 second operand** (operand bit 9), which is why this is two instructions and not
 one. That was already true for the timer-delta idiom; SPI is the first place it
 is used for arithmetic rather than address bookkeeping.
@@ -112,7 +112,7 @@ state. Any second protocol on this port inherits the same rule.
 
 `tb_pe_spi.v` already existed, but it exercises **`pe_serdes`** — a different SPI
 that shifts under hardware `bit_en` strobes. The firmware master talks to the
-port, so it needed a different counterpart: `tools/peemu.py` now models a mode-0
+port, so it needed a different counterpart: `tools/fw/peemu.py` now models a mode-0
 slave (`poll_spi_slave`), and `--spi-slave` selects that wire model instead of
 the UART one.
 
@@ -159,9 +159,9 @@ mutation 3's territory on the output side.
 
 ## Follow-ups
 
-- `tb_pe_spi_soc.v` does not exist. SPI firmware is verified **only** in the
+- `tb_pe_soc_spi.v` does not exist. SPI firmware is verified **only** in the
   emulator and by the `run_firmware_tests.sh` assemble check — there is no RTL
-  testbench driving the port as a slave. UART has `tb_pe_uart_soc.v`; SPI
+  testbench driving the port as a slave. UART has `tb_pe_soc_uart.v`; SPI
   should get the equivalent, and until it does the emulator is the sole
   executable specification of the pin timing. (The emulator mirrors the RTL's
   cycle model, but a mirror is not the thing.)

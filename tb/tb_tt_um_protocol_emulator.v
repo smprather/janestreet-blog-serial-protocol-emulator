@@ -1,6 +1,6 @@
 // tb_tt_um_protocol_emulator.v — the Tiny Tapeout pad contract.
 //
-// This testbench does not test the UART. tb_pe_uart_soc.v does that, against
+// This testbench does not test the UART. tb_pe_soc_uart.v does that, against
 // the SoC directly. What this checks is the part that only exists at the top
 // level, where the mistakes are made once and discovered after tapeout:
 //

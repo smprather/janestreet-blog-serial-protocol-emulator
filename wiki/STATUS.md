@@ -1,12 +1,14 @@
 # Project Status — through 10BASE-T receive
 
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
-> Last updated: 2026-09-23, after the F1/F2/F3 follow-ups were fixed. The
-> original seven probes, the 102-trial Ethernet sweep, the F1 boundary checks,
-> and the codec config reference all pass; there is no open review finding.
+> Last updated: 2026-09-23, after the project-layout rework. All review findings
+> are closed (three passes, F1/F2/F3), and the code is reorganized: `tb/` holds
+> testbenches only, `regress/` the harnesses, `tools/{fw,gen,checks}/` the
+> Python, `rtl/pe_soc.v` is the SoC (was `pe_uart_soc`), the line codecs are one
+> module per file (`pe_nrzi`/`pe_manch`/`pe_bitstuff`), and the SRAM shell is
+> under `rtl/vendor/`. Functional behavior is unchanged and verified.
 > Read `reviews/2026-09-23/F1-F2-RECHECK.md` and `HANDOFF.md` before resuming.
-> The two earlier reviews and fix records remain under `reviews/2026-09-22/`.
-> Branch `review/fix-invisible-defects`.
+> Branch `main` (the review branch is at the same commit).
 >
 > **Where the work is:** pure RTL functional-simulation development. The standing
 > user ruling is *do not run flow, DRC or LVS* — those are tapeout-prep and are
@@ -80,7 +82,7 @@ Both layers of the thesis now exist and have baseline simulation coverage:
 - **I2C is the one that needed new hardware, and it is 111 cells** — the pin
   matrix, a runtime per-pin `{out, oe, od}` register file
   ([[concepts/pin-matrix]], [[decisions/adr-006-pin-matrix]]). It went **inside
-  `pe_uart_soc`**, not at the TT wrapper as the plan had it: the CPU's IO bus
+  `pe_soc`**, not at the TT wrapper as the plan had it: the CPU's IO bus
   never leaves the SoC, so a matrix outside it could not be reached by any
   program. The UART and SPI tests now sign off *through* the matrix, which is
   stronger than testing it alongside them. Measured: **83.2–83.6 kHz** across
@@ -95,7 +97,7 @@ corners with **+1.143 ns setup slack worst-case** and the instruction-fetch path
 reached **step 57 of 80**; the flow's own gates read "Routing DRC errors clear"
 and "power grid violations clear", and worst-case IR drop is **0.30%** (3.56 mV
 of 1.20 V). See [[reference/sram-budget]] for the numbers and
-`flow/pe_uart_soc.json` for the two flow fixes that got it there (the
+`flow/pe_soc.json` for the two flow fixes that got it there (the
 `GRT_ADJUSTMENT` derate and a custom PDN config for the macro's Metal4 supplies —
 [[STATUS]] gotchas 33-34).
 
@@ -125,7 +127,7 @@ The one-line version, for the reader who wants it before clicking through:
 
 ```
   tt_um_protocol_emulator (BUILT, the deliverable)
-    └── pe_uart_soc (BUILT) ── pe_cpu ── pe_imem ──[FLOP=0]── SRAM macro
+    └── pe_soc (BUILT) ── pe_cpu ── pe_imem ──[FLOP=0]── SRAM macro
                              └ tick timer (260 clk = half a 115200 bit)
                              └ 1 us I2C tick (60 clk, exact)
                              └ pe_pinmux (111) ── per-pin {out,oe,od}
@@ -147,16 +149,16 @@ states the reasoning; do not "unify" them without reading it.
 | Block | File | Cells | Area (µm²) | TBs |
 |---|---|---|---|---|
 | SERDES (bit engine, 1–32 b, runtime order) | `rtl/pe_serdes.v` | 539 | 11,223 synth → **17,211 routed** | `tb_pe_serdes.v` + 9 protocol TBs |
-| NRZI codec | `rtl/pe_line_codec.v` | 15 | 212 | `tb_pe_nrzi` |
-| Manchester codec | `rtl/pe_line_codec.v` | 7 | 120 | `tb_pe_manch` |
-| Bit stuffer/unstuffer | `rtl/pe_line_codec.v` | 99 | 1,417 | `tb_pe_bitstuff` |
+| NRZI codec | `rtl/pe_nrzi.v` | 15 | 212 | `tb_pe_nrzi` |
+| Manchester codec | `rtl/pe_manch.v` | 7 | 120 | `tb_pe_manch` |
+| Bit stuffer/unstuffer | `rtl/pe_bitstuff.v` | 99 | 1,417 | `tb_pe_bitstuff` |
 | Codec pipeline mux | `rtl/pe_codec_mux.v` | 130 | 1,811 (whole pipeline) | `tb_pe_codec_mux` |
 | **CRC / LFSR engine** (5-, 8-, 15-, 16-, 32-bit) | `rtl/pe_crc.v` | 209 | 3,354 | `tb_pe_crc` |
 | **DRU** (oversampled Manchester receive, DDR) | `rtl/pe_dru.v` | **148** | **2,398** | `tb_pe_dru` |
 | **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 377 | 4,843 | `tb_pe_cpu` |
 | **Pin matrix** (per-pin OUT/OE/IN/OD, open-drain, read-back) | `rtl/pe_pinmux.v` | **111** | **2,061** | `tb_pe_pinmux` |
 | **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
-| **Software-UART SoC** (CPU + tick timer + pin matrix) | `rtl/pe_uart_soc.v` | **1,264** | **23,184 total** | `tb_pe_uart_soc`, `tb_pe_tick_status` |
+| **Software-UART SoC** (CPU + tick timer + pin matrix) | `rtl/pe_soc.v` | **1,264** | **23,184 total** | `tb_pe_soc_uart`, `tb_pe_soc_tick` |
 | **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **1,284** | **23,211 total** | `tb_tt_um_protocol_emulator` |
 
 Firmware (no RTL cells — these are programs the CPU runs; see
@@ -164,11 +166,11 @@ Firmware (no RTL cells — these are programs the CPU runs; see
 
 | Program | Words | Verified by |
 |---|---|---|
-| `firmware/uart_echo.pe` — 115200 8N1 echo | 118 | `tb_pe_uart_soc.v` (real RTL), `tools/peemu.py` |
-| `firmware/tick_count.pe` — STATUS-port exerciser | 8 | `tb_pe_tick_status.v` (real RTL) |
-| `firmware/spi_xfer.pe` — SPI mode 0 master | 70 | `tools/peemu.py` (mode-0 slave model) |
+| `firmware/uart_echo.pe` — 115200 8N1 echo | 118 | `tb_pe_soc_uart.v` (real RTL), `tools/fw/peemu.py` |
+| `firmware/tick_count.pe` — STATUS-port exerciser | 8 | `tb_pe_soc_tick.v` (real RTL) |
+| `firmware/spi_xfer.pe` — SPI mode 0 master | 70 | `tools/fw/peemu.py` (mode-0 slave model) |
 
-Numbers from `tb/synth_area.sh` (sg13g2 typ corner, mapped pre-route). The routed
+Numbers from `regress/synth_area.sh` (sg13g2 typ corner, mapped pre-route). The routed
 figure for the SERDES comes from the full LibreLane flow (route+CTS+PDN inflate
 area ~1.54× over mapped), reproducible from a clean clone with
 `flow/run_librelane.sh flow/pe_serdes.json`.
@@ -205,17 +207,17 @@ jump-target field had to widen in the same change.** Full reasoning and the
 rejected alternatives: [[decisions/adr-004-program-counter-width]].
 
 **Regression: 26/26 testbenches + 18/18 firmware tests pass, and the lint gate is
-clean** (14 verilator tops + 11 yosys elaborations; `tb/run_all.sh` runs the firmware regression first, then every TB, then
-`tb/lint.sh`, then the generated-doc drift checks, then FOUR mutation harnesses --
-`tb/mutate_i2c_tb.sh`, `tb/mutate_spi_tb.sh`, `tb/mutate_fbuf_tb.sh` and
-`tb/mutate_eth_mac_tb.sh`). The lint gate covers `pe_eth_mac` and `pe_fbuf` as of
+clean** (14 verilator tops + 11 yosys elaborations; `regress/run_all.sh` runs the firmware regression first, then every TB, then
+`regress/lint.sh`, then the generated-doc drift checks, then FOUR mutation harnesses --
+`regress/mutate_i2c_tb.sh`, `regress/mutate_spi_tb.sh`, `regress/mutate_fbuf_tb.sh` and
+`regress/mutate_eth_mac_tb.sh`). The lint gate covers `pe_eth_mac` and `pe_fbuf` as of
 the 2026-09-22 review, and it now fails on ANY yosys `ERROR:` — it used to grep
 for three known diagnostics and reported "elaborate OK" beside a file yosys
 could not parse at all. Each mutation harness proves its testbench FAILS when the
 property it claims is broken, because a testbench that passes on broken RTL
 manufactures confidence.
 
-**`tb/lint.sh` is not optional, and the reason is the most useful thing in this
+**`regress/lint.sh` is not optional, and the reason is the most useful thing in this
 file.** A previous revision said the Verilator warnings were "intentional". They
 were not. Two of them were real defects that no testbench could ever have caught,
 because a testbench only ever sees the *simulator's* resolution of illegal RTL:
@@ -224,18 +226,18 @@ because a testbench only ever sees the *simulator's* resolution of illegal RTL:
   100 ticks silently dropped by a two-instruction poll loop) and **yosys resolved the
   driver-driver conflict to a constant 0**, so the STATUS port worked in simulation
   and was dead in the netlist. Nothing caught it because no firmware read the port —
-  `firmware/tick_count.pe` and `tb/tb_pe_tick_status.v` now do.
+  `firmware/tick_count.pe` and `tb/tb_pe_soc_tick.v` now do.
 - `assign dbg_pc = u_cpu.pc` is a cross-module reference. Icarus accepts it; yosys
   declared an implicit wire and drove it *backwards*, leaving `dbg_pc[7:1]` tied low
   in the netlist. They are real ports on `pe_cpu` now.
 
-Both were printed by the tools on every run and discarded: `tb/synth_area.sh`
+Both were printed by the tools on every run and discarded: `regress/synth_area.sh`
 captured yosys's output and grepped it only for numbers. It now surfaces them and
 exits non-zero. **An area report that hides correctness warnings looks like a check
 and is not one.**
 
 **The CRC block is checked against an outside authority, not against itself.**
-`tools/gen_crc_config.py` derives every constant, asserts the RevEng catalogue's
+`tools/gen/crc_config.py` derives every constant, asserts the RevEng catalogue's
 published `check` value for "123456789" for six polynomials, and refuses to write
 [[reference/crc-config]] unless the derived constants reproduce it. `tb_pe_crc`
 re-checks the same numbers in the RTL, using the TEXTBOOK datapath as the reference
@@ -270,11 +272,11 @@ PS/2 11-bit odd-parity · CAN classic + stuffing + CRC-15 · USB-LS NRZI+stuffin
 10BASE-T Manchester + CRC-32.
 
 **The software-UART demonstration** (Milestone 2's headline): `firmware/uart_echo.pe`
-is a half-duplex 115200 8N1 echo, assembled by `tools/peasm.py` to 114 words,
-executed by `rtl/pe_cpu.v` inside `rtl/pe_uart_soc.v`. `tb/tb_pe_uart_soc.v`
+is a half-duplex 115200 8N1 echo, assembled by `tools/fw/peasm.py` to 114 words,
+executed by `rtl/pe_cpu.v` inside `rtl/pe_soc.v`. `tb/tb_pe_soc_uart.v`
 drives a real 8N1 waveform on the RX pin and decodes the TX pin: **PASS on
 41/42/00/FF**, TX cell width 8.6–8.7 µs measured at the pin against the nominal
-8.68 µs. `tools/peemu.py` reproduces the same four bytes cycle-accurately, which
+8.68 µs. `tools/fw/peemu.py` reproduces the same four bytes cycle-accurately, which
 is the fast firmware-development loop (2 s vs a 1 min RTL build).
 
 **Routed signoff of pe_serdes** (full LibreLane Classic on ihp-sg13g2, 66 MHz):
@@ -336,7 +338,7 @@ rectangle. TT notation is WIDTH × HEIGHT:
 
 The 6×4 and 8×4 dice are the same height, so **nothing in the macro analysis
 changes if 8×4 arrives** — it is pure extra width. Re-answer the whole SRAM page for
-the upside case with `tools/gen_sram_budget.py --tiles 8x4`.
+the upside case with `tools/gen/sram_budget.py --tiles 8x4`.
 
 
 ## Design decisions in force
@@ -346,14 +348,14 @@ the upside case with `tools/gen_sram_budget.py --tiles 8x4`.
 | **12×** oversampling per bit (6 samples per 50 ns half-UI) = 8.33 ns RX grid at the 60 MHz core | `decisions/adr-001-8x-oversampling.md`, `decisions/adr-005-60mhz-turbo.md` |
 | Std-cell **latch-pair dual-edge flop** for DDR capture; no custom DET | `decisions/adr-002-latch-pair-det-flop.md` |
 | **60 MHz operating point — LOCKED, not a parameter** = exact integers for every hard protocol (50 ns = 3 ticks) | `decisions/adr-005-60mhz-turbo.md`, `reference/clock-arithmetic.md` |
-| **Signed off at 60 MHz** (`CLOCK_PERIOD` 16.667 ns) in both flow configs; the 66 MHz STA target is retired | `flow/pe_uart_soc.json`, `flow/pe_serdes.json` |
+| **Signed off at 60 MHz** (`CLOCK_PERIOD` 16.667 ns) in both flow configs; the 66 MHz STA target is retired | `flow/pe_soc.json`, `flow/pe_serdes.json` |
 | SERDES words ≤ 32 b; longer fields chunk (SWD parity, CAN/USB/ETH payloads) | `rtl/pe_serdes.v` header |
 | Codec pipeline order fixed (stuff → line-code); cfg selects the **subset** | `rtl/pe_codec_mux.v` header |
 | No elasticity FIFO needed (source-sync protocols + per-edge re-lock) | `concepts/cdr-oversampling.md` |
 | Two SRAM macros: 1024-word instructions + 2 KB frame buffer, both `1P_1024x16` | `decisions/adr-003-memory-plan.md` |
 | **Instruction macro is live; PC width derives from IMEM depth (10 bits at 1024)** | `decisions/adr-004-program-counter-width.md` |
 | 10BASE-T is the LINE LAYER only; the stack is off-chip, and firmware never touches Ethernet bits | `concepts/ethernet-scope.md` |
-| Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | `rtl/pe_line_codec.v` header |
+| Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | the codec headers (`pe_nrzi`/`pe_manch`/`pe_bitstuff`) |
 | `ena` must never gate logic; every pad output driven in every state | `rtl/tt_um_protocol_emulator.v` header |
 
 ## Timing margin at the 60 MHz operating point (measured, post-route)
@@ -416,28 +418,28 @@ pins as driven by our routing. Setup/hold are clean; these two are not.
 
 ```bash
 # EVERYTHING: firmware regression (assemble + emulator) then all 24 RTL TBs.
-# Runs the firmware first because tb_pe_uart_soc $readmemh's the .hex it builds.
-cd ~/janestreet-blog-serial-protocol-emulator && ./tb/run_all.sh
+# Runs the firmware first because tb_pe_soc_uart $readmemh's the .hex it builds.
+cd ~/janestreet-blog-serial-protocol-emulator && ./regress/run_all.sh
 
 # same suite, parallel testbench loop (same 4-state iverilog, not Verilator --
 # a simulator swap would make it 69.6x SLOWER, see reference/simulator-bakeoff)
-./tb/run_all.sh --fast
-./tb/run_all.sh --fast -j8      # explicit job count
+./regress/run_all.sh --fast
+./regress/run_all.sh --fast -j8      # explicit job count
 
 # firmware only (assemble firmware/*.pe -> .hex, run the emulator cases)
-./tb/run_firmware_tests.sh
+./regress/run_firmware_tests.sh
 
 # one program by hand, with a cycle trace
-python3 tools/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex
-python3 tools/peemu.py firmware/uart_echo.hex --send "41 42" --max-cycles 900000
+python3 tools/fw/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex
+python3 tools/fw/peemu.py firmware/uart_echo.hex --send "41 42" --max-cycles 900000
 
 # mapped area per block (native yosys + IHP liberty). Exits non-zero if yosys
 # reports a driver conflict or an implicit declaration -- it used to swallow them.
-./tb/synth_area.sh
+./regress/synth_area.sh
 
 # the static gate on its own: verilator -Wall + a yosys elaboration check.
 # run_all.sh runs this; there are no accepted warnings in this RTL.
-./tb/lint.sh
+./regress/lint.sh
 
 # live diagram pane (side-quest): start the dashboard once, write SVG/HTML into
 # diagrams/ and it renders live in the Canvas tab (~1s, no reload)
@@ -489,14 +491,14 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 9. Non-interactive shells emit `stty`/`tcsetattr` noise and a bashrc `sort -hn`
    error — cosmetic; check the payload's real exit status.
 10. **A testbench that "waits for" an event it may have already missed tests
-    nothing.** `tb_pe_uart_soc.v` sat red for hours because `@(negedge tx_pin)`
+    nothing.** `tb_pe_soc_uart.v` sat red for hours because `@(negedge tx_pin)`
     ran after the echo was already in flight (the firmware answers the moment it
     has the byte, and RX/TX are separate pins), so it anchored on the *last data
     bit* and every byte decoded shifted. Latch the edge in an `always` monitor,
     then anchor the sample grid to the latched time. Same class of bug as the
     sticky-flag lesson (gotcha 6) from Milestone 1.
 11. **The emulator is the fast loop, and it must mirror the RTL's cycle model —
-    including when they disagree.** `tools/peemu.py` reproduced the UART byte
+    including when they disagree.** `tools/fw/peemu.py` reproduced the UART byte
     correctly while the RTL TB failed; that asymmetry was the clue that the bug
     was in the TB/firmware, not the CPU. Keep both, and treat a disagreement as
     a signal, not an inconvenience.
@@ -504,7 +506,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     green testbench says NOTHING about the netlist.** Two drivers on one flop
     raced in Icarus and became a constant 0 in yosys. A hierarchical reference
     (`assign dbg_pc = u_cpu.pc`) simulated fine and was driven backwards into an
-    implicit wire by yosys. Neither is reachable by any testbench. `tb/lint.sh`
+    implicit wire by yosys. Neither is reachable by any testbench. `regress/lint.sh`
     is the only thing that can catch this class, which is why it is in
     `run_all.sh` and not a thing you remember to run.
 13. **A tool whose warnings you discard is not a check.** `synth_area.sh`
@@ -524,7 +526,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 16. **Silent truncation is the assembler's worst failure mode.** Every field in
     this ISA is narrower than the immediate that fits in it, so `JMP 200`,
     `LDM A, 128` (which re-encoded as `LDM X`) and a 129-word program all
-    assembled clean and ran wrong. `tools/peasm.py` now rejects all of them.
+    assembled clean and ran wrong. `tools/fw/peasm.py` now rejects all of them.
 
 17. **A 3-tap majority is not a delay, and the difference is a whole sample.**
     Its output moves one sample later than the centre tap at a level change (it takes
@@ -566,7 +568,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 22. **A longer load window is not free, and a test can be passing by accident.**
     Deepening instruction memory from 128 to 1024 words made the loader take 1024
     cycles instead of 128. The timer free-runs from reset, so it now advances ~6
-    ticks before the core starts — and `tb_pe_tick_status` began failing, because
+    ticks before the core starts — and `tb_pe_soc_tick` began failing, because
     its "observed ticks == free-running timer" comparison had been true only
     because the old load window (128 cycles) was *shorter than one 173-cycle tick*.
     The test was right by luck, not by construction. When a change alters how long
@@ -588,12 +590,12 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     **emits nothing at all** — no error, no output, no failing signal. Every
     testbench pinned SPB at its default, so a sweep of the parameter boundary
     (8/12/16 pass, 20/24/32 fail) was the only thing that found it. The bound is
-    now an elaboration error and `tb/param_guards.sh` (in `run_all.sh`) requires
+    now an elaboration error and `regress/param_guards.sh` (in `run_all.sh`) requires
     both guards to actually *reject* and both boundaries to actually *compile*,
     so a guard that stops firing fails the build.
 25. **A gate invoked mid-script must resolve its paths from a captured absolute
     root.** `run_all.sh` cds into `sim/` and then back to the repo root, and `$0`
-    may itself be relative (`./tb/run_all.sh`) — so `$(dirname "$0")` after the
+    may itself be relative (`./regress/run_all.sh`) — so `$(dirname "$0")` after the
     cd resolved to `.` and `/param_guards.sh`, and the new gate failed while
     passing perfectly when run by hand. The script now captures `REPO_ROOT` once
     at the top and every later gate uses it. **A tool that works standalone and
@@ -621,7 +623,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     same expression the RTL uses, so a clock change cannot leave the TB
     simulating one rate while the SoC thinks it is at another.
 29. **Never trust a failing test until you have read the failure's own output.**
-    A 60 MHz run of `tb_pe_uart_soc` "failed" during this change, and the cause
+    A 60 MHz run of `tb_pe_soc_uart` "failed" during this change, and the cause
     was the harness: `vvp` was invoked from `/tmp`, so the TB's relative
     `$readmemh ../firmware/uart_echo.hex` resolved to nothing, the core executed
     uninitialised memory, and it hung like a firmware bug. The `$readmemh`
@@ -670,7 +672,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     `add_pdn_stripe -grid macro -layer Metal4` + `add_pdn_connect -layers "Metal4
     $PDN_VERTICAL_LAYER"`. Result, same input ODB: stock config = `PSM-0069
     FAILED`; custom = **`PSM-0040 All shapes on net VPWR/VGND are connected`**.
-    See `flow/pe_uart_soc_pdn.tcl`. **Check the macro's LEF layers before
+    See `flow/pe_soc_pdn.tcl`. **Check the macro's LEF layers before
     believing the grid is wrong — and before believing `PDN_MACRO_CONNECTIONS`
     is enough.**
 34. **Global-routing congestion at low utilization is a CONFIG derate, not a
@@ -892,8 +894,8 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 
     Both are fixed (`px()` accepts a bare number or an `px` suffix only;
     `paneW() <= 1` refuses to size, plus a `ResizeObserver` on the wrap), and
-    both are **mutation-tested** in `tools/check_canvas_viewer.py`, wired into
-    `tb/run_all.sh` as a gate.
+    both are **mutation-tested** in `tools/checks/canvas_viewer.py`, wired into
+    `regress/run_all.sh` as a gate.
 
     **The measurement lesson is the real one.** Nothing outside could see the
     problem: the iframe is sandboxed with an opaque origin, so the parent page
@@ -905,7 +907,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     `lc-fit` messages: `0.465` = 741/1593.7, the correct ratio, where the
     pre-fix value had been `7.41`.
 48. **A checker that re-implements the code under test cannot detect its bugs.**
-    The first draft of `check_canvas_viewer.py` re-derived the *fixed* arithmetic
+    The first draft of `tools/checks/canvas_viewer.py` re-derived the *fixed* arithmetic
     in Python and passed -- while the JS could have regressed underneath it and
     it would still have passed. Rewritten to extract the shipped `FRAME_SCRIPT`
     and run it in node against a DOM stub, then **mutate it back to each pre-fix
@@ -974,7 +976,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
       instruction never executes and the PC lands on `imem[1]` with the reset
       value still in `A`. The symptom was two misleading failures at once (an
       INIT write landing as 0x00, and a slave counting frames it should not
-      have). `tb_pe_uart_soc` already had the required four-clock gap -- its
+      have). `tb_pe_soc_uart` already had the required four-clock gap -- its
       comment never said why, which is how the requirement stayed invisible.
 
 56. **A slave model needs a LEVEL, not an edge, and the pin may already be
@@ -1026,7 +1028,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
       truncation rather than reading -- the reported lines are symptoms.
 
 61. **A mutation touching ONE implementation can only be caught by that
-      implementation.** `tb/mutate_fbuf_tb.sh` first required both the macro and
+      implementation.** `regress/mutate_fbuf_tb.sh` first required both the macro and
       the FLOP path to fail, which reported three genuine detects as "survived".
       What matters is that a mutation is caught SOMEWHERE, plus that the TB is
       non-vacuous on each path (which a baseline PASS establishes). But keep the
@@ -1043,7 +1045,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
       with one cycle of read latency is only tested by requests that overlap.
 
 63. **A mutation harness that restores with `git checkout` DESTROYS an untracked
-      file.** `tb/mutate_eth_mac_tb.sh` was written that way while
+      file.** `regress/mutate_eth_mac_tb.sh` was written that way while
       `rtl/pe_eth_mac.v` was brand new and untracked, so every restore failed
       with "did not match any file(s) known to git", all eight mutations stacked
       on each other, and the harness printed "8 detected, 0 survived" -- a
@@ -1131,7 +1133,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
       in `wiki/reference/clock-arithmetic.md` carried a `.md` suffix while 308 of the
       wiki's 312 links are extensionless. Patching the page appeared to work and then
       silently reverted on the next regeneration, because the strings live in
-      `tools/gen_clock_arithmetic.py`. Symptom to recognise: a file that is unchanged
+      `tools/gen/clock_arithmetic.py`. Symptom to recognise: a file that is unchanged
       in `git diff` after you edited it. The drift gate did not catch it either -- a
       gate compares generated text against generated text, so a wrong constant in the
       generator is self-consistent and invisible. Generated docs are only as honest as
@@ -1186,7 +1188,7 @@ preset, now `0x51`/`0x01` in the generator and reference, with a permanent
 `rtl/pe_eth_mac.v` is built, TB-proven (8 mutations, 8 detected) and instantiated
 **nowhere**. 10BASE-T is its consumer, so the instance lands with the receive path:
 instantiate the chain (`pe_dru` -> `pe_manch` -> `pe_eth_mac`, with `pe_crc` and
-`pe_fbuf`) inside `pe_uart_soc`, put the RX pin on the matrix, and give the firmware a
+`pe_fbuf`) inside `pe_soc`, put the RX pin on the matrix, and give the firmware a
 way to see `frame_valid` / `frame_len` and walk the buffer. Then a TB at the SoC level
 — the block TB drives the wire, but nothing yet proves the firmware can *use* a frame.
 Why first: it is the only thing that retires the last three orphans, and an orphan is

@@ -27,8 +27,8 @@ effective grid), so a 60 MHz core gives a 12-sample-per-bit grid. ADR-005 raised
 core to 60 MHz and the grid from 8 to 12 samples/bit.
 
 **IMPLEMENTED as `rtl/pe_dru.v`** (2026-09-20): **116 cells / 2,065 µm² mapped**
-(`tb/synth_area.sh`), against the ~50-100 cell estimate below. Verified by
-`tb/tb_pe_dru` and `tb/tb_pe_dru` is registered in `tb/run_all.sh`.
+(`regress/synth_area.sh`), against the ~50-100 cell estimate below. Verified by
+`tb/tb_pe_dru` and `tb/tb_pe_dru` is registered in `regress/run_all.sh`.
 
 ## DRU structure, as built
 

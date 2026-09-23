@@ -3,7 +3,7 @@
 import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / 'tools'))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / 'tools' / 'fw'))
 from peemu import Soc, TICKS_PER_FULL_BIT
 
 failures = 0

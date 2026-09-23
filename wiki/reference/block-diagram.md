@@ -10,14 +10,14 @@ confidence: high
 
 # Block diagram
 
-> **Generated** by `tools/gen_block_diagram.py`. The built/orphan split is
-> checked against `rtl/` and `tb/run_all.sh` on every regression, so a block
+> **Generated** by `tools/gen/block_diagram.py`. The built/orphan split is
+> checked against `rtl/` and `regress/run_all.sh` on every regression, so a block
 > cannot be drawn as a signal path unless something instantiates it.
 
 **Rendered copies you can open without a Mermaid viewer:**
 `diagrams/block-diagram-chip.svg` (below) and
 `diagrams/block-diagram-orphans.svg` (the orphans). They are produced from
-the blocks on this page by `tools/render_block_diagram.py`, so the rendering
+the blocks on this page by `tools/gen/render_block_diagram.py`, so the rendering
 cannot drift from the source here.
 
 ## What is in the chip today
@@ -35,8 +35,8 @@ flowchart TB
     end
 
     subgraph TT["tt_um_protocol_emulator — the deliverable"]
-        subgraph SOC["pe_uart_soc"]
-            CPU["<b>pe_cpu</b><br/>the ISA: 16 opcodes, A/Y/X, 8-bit datapath<br/><i>383 cells</i>"]
+        subgraph SOC["pe_soc"]
+            CPU["<b>pe_cpu</b><br/>the ISA: 16 opcodes, A/Y/X, 8-bit datapath<br/><i>377 cells</i>"]
             IMEM["<b>pe_imem</b><br/>instruction memory; SRAM macro by default<br/><i>12 cells</i>"]
             TICK["tick timer<br/><b>260</b> clk = half a 115200 bit"]
             PORT["fixed-mask port<br/>PIN_IN_MASK = 8'hF8"]
@@ -64,12 +64,12 @@ Drawn as detached, because that is what they are:
 
 ```mermaid
 flowchart LR
-    pe_eth_mac["<b>pe_eth_mac</b><br/>10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward<br/><i>914 cells</i>"]
+    pe_eth_mac["<b>pe_eth_mac</b><br/>10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward<br/><i>1151 cells</i>"]
     pe_fbuf["<b>pe_fbuf</b><br/>frame buffer: 2 KB behind a byte interface, same macro as pe_imem<br/><i>48 cells</i>"]
     pe_serdes["<b>pe_serdes</b><br/>word engine: load 8-32 bits, pace with bit_en<br/><i>539 cells</i>"]
-    pe_dru["<b>pe_dru</b><br/>digital receiver unit: 12x oversampled edge recovery<br/><i>121 cells</i>"]
+    pe_dru["<b>pe_dru</b><br/>digital receiver unit: 12x oversampled edge recovery<br/><i>148 cells</i>"]
     pe_crc["<b>pe_crc</b><br/>CRC/LFSR generator, 8/16/32-bit, catalogue-checked<br/><i>209 cells</i>"]
-    pe_codec_mux["<b>pe_codec_mux</b><br/>stuff -> nrzi/manchester; cfg selects the subset<br/><i>115 cells</i>"]
+    pe_codec_mux["<b>pe_codec_mux</b><br/>stuff -> nrzi/manchester; cfg selects the subset<br/><i>130 cells</i>"]
     classDef orphan fill:#3a2f0f,stroke:#facc15,color:#fff,stroke-dasharray: 5 5
     class pe_eth_mac,pe_fbuf,pe_serdes,pe_dru,pe_crc,pe_codec_mux orphan
 ```
@@ -78,18 +78,18 @@ flowchart LR
 
 | block | role | instantiated in | cells | TB |
 |---|---|---|---|---|
-| `pe_cpu` | the ISA: 16 opcodes, A/Y/X, 8-bit datapath | pe_uart_soc.v | 383 | `tb_pe_cpu` |
-| `pe_imem` | instruction memory; SRAM macro by default | pe_uart_soc.v | 12 | `tb_pe_imem` |
-| `pe_pinmux` | per-pin direction, open-drain, read-back (the I2C gate) | pe_uart_soc.v | 111 | `tb_pe_pinmux` |
+| `pe_cpu` | the ISA: 16 opcodes, A/Y/X, 8-bit datapath | pe_soc.v | 377 | `tb_pe_cpu` |
+| `pe_imem` | instruction memory; SRAM macro by default | pe_soc.v | 12 | `tb_pe_imem` |
+| `pe_pinmux` | per-pin direction, open-drain, read-back (the I2C gate) | pe_soc.v | 111 | `tb_pe_pinmux` |
 | `pe_nrzi` | NRZI encode/decode | pe_codec_mux.v | 15 | `tb_pe_codec_mux` |
 | `pe_manch` | Manchester encode/decode | pe_codec_mux.v | 7 | `tb_pe_codec_mux` |
-| `pe_bitstuff` | bit stuffing (CAN/USB style) | pe_codec_mux.v | 84 | `tb_pe_codec_mux` |
-| `pe_eth_mac` | 10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward | **nowhere — orphan** | 914 | `tb_pe_eth_mac` |
+| `pe_bitstuff` | bit stuffing (CAN/USB style) | pe_codec_mux.v | 99 | `tb_pe_codec_mux` |
+| `pe_eth_mac` | 10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward | **nowhere — orphan** | 1151 | `tb_pe_eth_mac` |
 | `pe_fbuf` | frame buffer: 2 KB behind a byte interface, same macro as pe_imem | **nowhere — orphan** | 48 | `tb_pe_fbuf` |
 | `pe_serdes` | word engine: load 8-32 bits, pace with bit_en | **nowhere — orphan** | 539 | `tb_pe_serdes` |
-| `pe_dru` | digital receiver unit: 12x oversampled edge recovery | **nowhere — orphan** | 121 | `tb_pe_dru` |
+| `pe_dru` | digital receiver unit: 12x oversampled edge recovery | **nowhere — orphan** | 148 | `tb_pe_dru` |
 | `pe_crc` | CRC/LFSR generator, 8/16/32-bit, catalogue-checked | **nowhere — orphan** | 209 | `tb_pe_crc` |
-| `pe_codec_mux` | stuff -> nrzi/manchester; cfg selects the subset | **nowhere — orphan** | 115 | `tb_pe_codec_mux` |
+| `pe_codec_mux` | stuff -> nrzi/manchester; cfg selects the subset | **nowhere — orphan** | 130 | `tb_pe_codec_mux` |
 
 ### Orphans: built, tested, and driving nothing
 
@@ -138,12 +138,12 @@ mapped separately by `synth_area.sh`; it is **not** what the SoC uses.
 
 ## Refreshing the cell counts
 
-Counts come from `tb/synth_area.sh` (mapped, typ corner). To refresh:
+Counts come from `regress/synth_area.sh` (mapped, typ corner). To refresh:
 
 ```bash
-./tb/synth_area.sh | awk 'NF>=3 && $2 ~ /^[0-9]+$/ {print $1, $2}' \
+./regress/synth_area.sh | awk 'NF>=3 && $2 ~ /^[0-9]+$/ {print $1, $2}' \
   > wiki/reference/.block-diagram-cells
-python3 tools/gen_block_diagram.py
+python3 tools/gen/block_diagram.py
 ```
 
 ## Related

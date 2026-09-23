@@ -40,7 +40,7 @@ project:
   top_module: "tt_um_protocol_emulator"
 
   # Order matters only in that every module must be present; the TT precheck
-  # compiles these together. pe_uart_soc instantiates pe_imem (the SRAM
+  # compiles these together. pe_soc instantiates pe_imem (the SRAM
   # wrapper), pe_pinmux (the per-pin matrix), and -- through pe_imem -- the
   # SRAM macro. The .bb.v is the macro's empty port shell, which is what lets
   # an iverilog/verilator compile of these sources resolve the instance; the
@@ -51,8 +51,8 @@ project:
     - "rtl/pe_cpu.v"
     - "rtl/pe_imem.v"
     - "rtl/pe_pinmux.v"
-    - "rtl/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v"
-    - "rtl/pe_uart_soc.v"
+    - "rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v"
+    - "rtl/pe_soc.v"
     - "rtl/tt_um_protocol_emulator.v"
 
 # Pin map. Keep this in step with the header comment of the wrapper: this file

@@ -29,7 +29,7 @@
 // equivalent formulation -- right-shifting CRC-32, octets LSB-first, FCS
 // emitted LSB-first -- in the standard's own words "resulting in identical
 // transmissions" (quoted in wiki/reference/crc-config.md, which is generated
-// from tools/gen_crc_config.py and drift-gated against the RevEng catalogue).
+// from tools/gen/crc_config.py and drift-gated against the RevEng catalogue).
 // This project uses that formulation, so there is no bit reversal here.
 //
 // The RECEIVER has two self-consistent-looking options and only one is

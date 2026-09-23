@@ -13,8 +13,8 @@ I2C TB was checked the same way. Five runs each, median reported.
 
 | testbench | Icarus 13.0 | Verilator 5.050 | ratio |
 |---|---|---|---|
-| `tb_pe_spi_soc` (8 frames) | 110.3 ms | 8.7 ms | **12.7x** |
-| `tb_pe_i2c_soc` (longest) | 283.3 ms | 15.0 ms | **18.9x** |
+| `tb_pe_soc_spi` (8 frames) | 110.3 ms | 8.7 ms | **12.7x** |
+| `tb_pe_soc_i2c` (longest) | 283.3 ms | 15.0 ms | **18.9x** |
 
 Verilator's run-to-run spread was also much tighter — 15, 15, 15, 15, 15 ms on
 the I2C TB against 279–286 ms for Icarus. A testbench suite that runs in a
@@ -32,7 +32,7 @@ Verilator's build is **~300x** Icarus's, and it is paid once per source change
 
 - **One-off debugging run** — Icarus. Nine milliseconds to a running simulation
   beats three seconds of C++ compilation every time.
-- **The regression loop** (`tb/run_all.sh`, 23 testbenches + 2 mutation
+- **The regression loop** (`regress/run_all.sh`, 23 testbenches + 2 mutation
   harnesses) — Verilator, comfortably. At 12–19x per test the build is repaid
   within a couple of full passes.
 
@@ -50,8 +50,8 @@ it stays `0` silently. Two consequences for this project:
 
 1. **`=== x` checks do not work under Verilator.** This suite uses `===` in
    places precisely because `x` is a real failure mode here — the accumulator
-   in `tb_pe_spi_soc` is `xx` until the firmware first writes it, and the
-   reset-seed equivalence argument in `rtl/pe_uart_soc.v` depends on comparing
+   in `tb_pe_soc_spi` is `xx` until the firmware first writes it, and the
+   reset-seed equivalence argument in `rtl/pe_soc.v` depends on comparing
    against a known seed rather than an unknown. A 2-state simulator cannot
    express "this was never driven", so a bug that manifests as *uninitialised*
    reads as a valid 0 instead.
@@ -95,7 +95,7 @@ back only after ~27 runs of the SAME testbench — which is exactly the loop
 Verilator is good for (iterating on one TB, or a long randomized soak) and
 exactly what a regression suite is not.
 
-So `tb/run_all.sh --fast` does NOT swap simulators. It runs the same 4-state
+So `regress/run_all.sh --fast` does NOT swap simulators. It runs the same 4-state
 Icarus simulation in parallel across the testbenches, which is where the suite's
 headroom actually is.
 
@@ -117,9 +117,9 @@ the X problem again, in a form that stops the run instead of hiding in it.
 
 What is actually wired up:
 
-- **`tb/run_all.sh` (default) — Icarus, serial.** The signoff path, because it is
+- **`regress/run_all.sh` (default) — Icarus, serial.** The signoff path, because it is
   4-state and this suite's honesty depends on that.
-- **`tb/run_all.sh --fast [-jN]` — Icarus, parallel across testbenches.** The same
+- **`regress/run_all.sh --fast [-jN]` — Icarus, parallel across testbenches.** The same
   simulation, so it cannot weaken verification by being 2-state. Measured 10.7 s
   → 9.4 s on the full suite; the testbench loop itself drops from ~2.4 s to
   ~0.5 s, and the remainder is dominated by the two mutation harnesses

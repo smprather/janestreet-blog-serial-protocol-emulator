@@ -11,7 +11,7 @@
     { "id": "w4", "kind": "process", "text": "4  pin matrix / OE\nopen-drain, read-back, tri-state (+ own TB)", "row": 4, "col": 0, "w": 380 },
     { "id": "w5", "kind": "process", "text": "5  I2C SoC wiring\npin matrix + 1 us tick (60 clocks)", "row": 5, "col": 0, "w": 380 },
     { "id": "w6", "kind": "process", "text": "6  I2C firmware\nSTART/STOP, byte, ACK, repeated START, read", "row": 6, "col": 0, "w": 380 },
-    { "id": "w7", "kind": "process", "text": "7  tb_pe_i2c_soc.v\nchecks timing, not just bits", "row": 7, "col": 0, "w": 380 },
+    { "id": "w7", "kind": "process", "text": "7  tb_pe_soc_i2c.v\nchecks timing, not just bits", "row": 7, "col": 0, "w": 380 },
     { "id": "w8", "kind": "end", "text": "DONE: real I2C transaction in firmware\non RTL, timing-checked, emulator parity", "row": 8, "col": 0, "w": 380 },
 
     { "id": "r0", "kind": "decision", "text": "why I2C last of the baseline three?", "row": 1, "col": 1, "w": 260 },

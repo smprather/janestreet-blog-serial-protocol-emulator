@@ -13,7 +13,7 @@ confidence: high
 - Status: accepted
 - Date: 2026-09-21
 - **Amended 2026-09-22:** the operating point is now **locked** — `CLK_HZ` is a
-  `localparam` in `pe_uart_soc`, not a parameter, because nothing ever
+  `localparam` in `pe_soc`, not a parameter, because nothing ever
   instantiated the SoC at another rate. The 66 MHz STA signoff target is retired;
   both flow configs close at `CLOCK_PERIOD` 16.667 ns. See
   [[reference/clock-arithmetic]].
@@ -45,7 +45,7 @@ is generated exactly by the demo board (RP2040 120 MHz / even divisor 2), and it
 is exact for every hard protocol at once.
 
 The repo was switched over on 2026-09-21: `CLK_HZ` defaults to 60 MHz in
-`pe_uart_soc` and the TT top level, `pe_dru`'s default grid is SPB = 12,
+`pe_soc` and the TT top level, `pe_dru`'s default grid is SPB = 12,
 `info.yaml` declares 60000000 and the emulator/assembler tick tables follow.
 The switch required **no RTL restructuring and no firmware edit** — only
 parameters, comments, and the derived tick arithmetic.
@@ -84,10 +84,10 @@ of 3**. So 66.5 works **only with a purpose-built dither generator**, buying
   every hard protocol stays exact, USB-LS becomes exact (40.000 ticks) instead of
   26.667, UART's quantization improves (+0.353% → +0.160%), and the receive grid
   refines by 50% (12.5 ns → 8.333 ns, SPB 8 → 12).
-- **The switch is verified end to end, not argued.** `tb_pe_uart_soc` at
+- **The switch is verified end to end, not argued.** `tb_pe_soc_uart` at
   `CLK_HZ = 60_000_000` passes with no RTL or firmware change, `tb_pe_dru` passes
   at SPB = 12, and the full regression is 21/21 RTL + 13/13 firmware with the
-  drift gates and `tb/param_guards.sh` green.
+  drift gates and `regress/param_guards.sh` green.
 - **The SRAM macro is now the tightest path in the design, and it is worth
   stating because it changes what the flow must check.** At the slow corner
   (1.08 V, 125 °C) the 1024x16 `_c2_bm_bist` macro's clock-to-output is
@@ -108,7 +108,7 @@ of 3**. So 66.5 works **only with a purpose-built dither generator**, buying
   **truncates above 16**. At SPB=20 the counter wraps at phase 3 instead of 19,
   never reaches either capture phase, and the block emits *nothing* — no error,
   no output, no failing signal. `pe_dru` now raises an elaboration error for
-  `SPB > 16`, and `tb/param_guards.sh` (wired into `run_all.sh`) requires both
+  `SPB > 16`, and `regress/param_guards.sh` (wired into `run_all.sh`) requires both
   guards to actually reject and both boundaries (16, and the SPB=12 turbo grid)
   to actually compile, so a guard that stops firing fails the build.
 - **66 MHz keeps exactly one role: a conservative STA signoff target.** Closing

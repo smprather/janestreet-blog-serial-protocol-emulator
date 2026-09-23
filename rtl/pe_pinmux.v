@@ -66,10 +66,10 @@
 // must know its own pin map, which it must anyway, since it writes the values.
 // See wiki/concepts/pin-matrix.md.
 //
-// RELATION TO THE SOC'S PORT. pe_uart_soc has a fixed PIN_IN_MASK and a masked
+// RELATION TO THE SOC'S PORT. pe_soc has a fixed PIN_IN_MASK and a masked
 // write; this generalises exactly that (the SoC's port is the degenerate case,
 // oe = ~PIN_IN_MASK constant, od = 0). They stay separate on purpose: the SoC's
-// is what tb_pe_uart_soc and tb_pe_tick_status sign off, and swapping the
+// is what tb_pe_soc_uart and tb_pe_soc_tick sign off, and swapping the
 // mechanism underneath a verified path to serve a protocol that path does not
 // implement is how a green regression stops meaning anything.
 //
@@ -104,7 +104,7 @@ module pe_pinmux #(
   // Elaboration guards. PINS is bounded because the register file is addressed
   // by 2 bits and the vectors go to [-1:0] at PINS=0, which iverilog accepts as
   // a reversed range without complaint. A guard that never fires is
-  // indistinguishable from a guard that passes, so tb/param_guards.sh compiles
+  // indistinguishable from a guard that passes, so regress/param_guards.sh compiles
   // this module at PINS=0 and at PINS=9 and requires a hard failure.
   //
   // NOTE: Icarus supports only a SINGLE STRING argument to $error at

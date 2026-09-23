@@ -255,7 +255,7 @@ module pe_dru #(
   // repo's synthesis/lint tool) rejects a function whose return type is a named
   // packed struct with a bare syntax error, and it has no `ref` ports. The
   // first draft used structs and passed iverilog and verilator while yosys
-  // could not parse the file at all -- which is also why tb/lint.sh now fails
+  // could not parse the file at all -- which is also why regress/lint.sh now fails
   // on ANY yosys ERROR, not just the three diagnostics it used to grep for.
   task automatic grid_step(input  logic [3:0] g_phase,
                            input  logic       g_prev_lvl,

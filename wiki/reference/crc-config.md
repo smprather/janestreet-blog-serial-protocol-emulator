@@ -11,8 +11,8 @@ confidence: high
 # CRC Configuration
 
 Every constant `rtl/pe_crc.v` has to be loaded with, for every CRC this
-project targets. **Generated and checked by `tools/gen_crc_config.py`**
-(`--check` runs in `tb/run_all.sh`), so nothing here is typed by hand.
+project targets. **Generated and checked by `tools/gen/crc_config.py`**
+(`--check` runs in `regress/run_all.sh`), so nothing here is typed by hand.
 
 Each row's `check` and `residue` are the RevEng catalogue's published
 values — an independent authority's numbers, not ours. The script DERIVES

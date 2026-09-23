@@ -31,8 +31,8 @@
 // emitted; that is what cfg_out_inv is for, below.)
 //
 // Every constant this project needs was checked against the RevEng catalogue's
-// published check value; tools/gen_crc_config.py re-derives and re-checks them
-// and tb/run_all.sh drift-checks the generated page:
+// published check value; tools/gen/crc_config.py re-derives and re-checks them
+// and regress/run_all.sh drift-checks the generated page:
 //
 //     CRC-32/ISO-HDLC   0xCBF43926      CRC-15/CAN       0x059E
 //     CRC-16/USB        0xB4C8          CRC-16/ARC       0xBB3D
@@ -85,7 +85,7 @@
 //
 // It latches and holds until `clr` starts the next frame. That is deliberately
 // different from the codecs' rx_err, which is a one-cycle pulse
-// (rtl/pe_line_codec.v header): a pulse is right for an error a consumer is
+// (the codec headers, e.g. rtl/pe_manch.v): a pulse is right for an error a consumer is
 // already sampling every cycle, but a frame-valid indication that vanished
 // after one cycle would force a sticky flag into every consumer — the bug class
 // wiki/STATUS.md gotcha 6 is about. A level needs no flag.

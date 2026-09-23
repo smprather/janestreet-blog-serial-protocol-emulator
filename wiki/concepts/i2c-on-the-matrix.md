@@ -4,7 +4,7 @@ created: 2026-09-22
 updated: 2026-09-22
 type: concept
 tags: [protocol, gpio, physical-layer, verification, firmware]
-sources: [firmware/i2c_pins.pe, rtl/pe_pinmux.v, rtl/pe_uart_soc.v, tb/tb_pe_i2c_soc.v, tools/measure_i2c_timing.py, tools/peasm.py]
+sources: [firmware/i2c_pins.pe, rtl/pe_pinmux.v, rtl/pe_soc.v, tb/tb_pe_soc_i2c.v, tools/checks/i2c_timing.py, tools/fw/peasm.py]
 confidence: high
 ---
 
@@ -36,7 +36,7 @@ time — which is not a fault, it is arbitration.
 To send a 1, the firmware writes `out=1` with `od=1`. The OD gate turns that
 into a *release*. The dangerous state — driving high into someone else's low —
 is not expressible, so the firmware never has to remember not to do it. That is
-the structural safety property, and `tb/tb_pe_i2c_soc.v` checks it on the RTL's
+the structural safety property, and `tb/tb_pe_soc_i2c.v` checks it on the RTL's
 own `pin_oe` output rather than on the pad, so a forgiving bus model cannot mask
 it.
 
@@ -155,11 +155,11 @@ check to catch, not a timing check.
 
 Two checks in two places, deliberately:
 
-- **`tools/measure_i2c_timing.py`** sweeps all 60 tick phases and reports the
+- **`tools/checks/i2c_timing.py`** sweeps all 60 tick phases and reports the
   worst case of each interval against the standard-mode table, and asserts the
   bus *grammar* (exactly one START, one bit cell, one STOP, no SDA move under
   SCL-high).
-- **`tb/tb_pe_i2c_soc.v`** runs it on real RTL with an open-drain bus model on
+- **`tb/tb_pe_soc_i2c.v`** runs it on real RTL with an open-drain bus model on
   the TB side, checks the OD property on `pin_oe` itself, and re-runs with
   another device pulling SDA low so the arbitration branch is not dead code
   ([[STATUS]] gotcha 14).
@@ -176,7 +176,7 @@ Two checks in two places, deliberately:
    that could never fail. There is now a plausibility guard (< 20 µs) that fails
    on a wrong index or a wrapped subtraction.
 
-`tb/mutate_i2c_tb.sh` runs six mutations. One is a documented **equivalent
+`regress/mutate_i2c_tb.sh` runs six mutations. One is a documented **equivalent
 survivor**: on a port-0 read the matrix's `raddr` defaults to `A_IN`, so
 `pinmux_rdata` *is* `pin_in` — for firmware that only reads pins it has
 released, the read-back mutation is equivalent. The UART test does catch it (its

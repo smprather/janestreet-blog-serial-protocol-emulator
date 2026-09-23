@@ -21,7 +21,7 @@ Every protocol before this one assumed direction was fixed. That assumption was
 cheap and it was true:
 
 - UART TX is an output for the whole design; UART RX is an input for the whole
-  design. `PIN_IN_MASK` in `rtl/pe_uart_soc.v` says which, once, at
+  design. `PIN_IN_MASK` in `rtl/pe_soc.v` says which, once, at
   elaboration ([[reference/signal-names]] has the generated port list).
 - SPI is the same, with three outputs and one input. Still push-pull, still
   fixed, still a constant.
@@ -104,14 +104,14 @@ would have allocated to it. The cost is that firmware must know its own pin map
 
 ## How it relates to the SoC's port
 
-`pe_uart_soc` used to keep its own fixed-mask port, and the plan was for the
+`pe_soc` used to keep its own fixed-mask port, and the plan was for the
 matrix to sit *outside* it. That placement turned out to be unimplementable and
 was changed — see [[decisions/adr-006-pin-matrix]] for the whole argument. The
 short version: the CPU's IO bus never leaves the SoC, so a matrix at the wrapper
 could not have its OE/OD registers reached by any program, and I2C — the only
 protocol that needs them — would be hardware nothing drives.
 
-The matrix is therefore now **inside** `pe_uart_soc`, between the port decode
+The matrix is therefore now **inside** `pe_soc`, between the port decode
 and the SoC's `pin_in`/`pin_out`/`pin_oe`, and the SoC exposes `pin_oe` out to
 the wrapper so the pads get a real per-pin enable. The old fixed-mask path is
 gone rather than sitting beside it: two mechanisms for one job would let the
@@ -121,7 +121,7 @@ What survives of the old concern — "do not swap the mechanism underneath a
 verified path" — is handled by making the swap **behaviour-preserving instead**.
 The reset seeds (`OE = ~PIN_IN_MASK`, `OD = 0`, `OUT = PIN_OUT_RST`) reproduce
 the fixed-mask SoC exactly, and `pin_rd` reduces to the old `PIN_IN_MASK`
-formula whenever `od = 0`. `tb_pe_uart_soc` and `tb_pe_tick_status` therefore
+formula whenever `od = 0`. `tb_pe_soc_uart` and `tb_pe_soc_tick` therefore
 sign off the UART and SPI **through the matrix**, which is stronger evidence
 than testing the matrix beside them: it shows the new hardware does not disturb
 the verified paths.
@@ -188,7 +188,7 @@ fault it exists to expose.
 | reset does not release pins | 3 |
 
 The `pe_dru` lesson applies to the PINS guard: a guard that never fires is
-indistinguishable from one that passes, so `tb/param_guards.sh` compiles the
+indistinguishable from one that passes, so `regress/param_guards.sh` compiles the
 module at `PINS=0` (reversed vector range) and `PINS=9` and requires a hard
 failure, and at `PINS=1`/`PINS=8` and requires acceptance. See
 [[STATUS]] gotcha 14.

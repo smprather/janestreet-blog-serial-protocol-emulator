@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix='review2-interrupt-') as temporary:
                    for p in (checkout / directory).glob('*') if p.is_file()]
         before = {p: p.read_bytes() for p in tracked}
         marker.unlink(missing_ok=True)
-        process = subprocess.Popen(['bash', f'tb/mutate_{name}_tb.sh'], cwd=checkout,
+        process = subprocess.Popen(['bash', f'regress/mutate_{name}_tb.sh'], cwd=checkout,
                                    env=env, start_new_session=True,
                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         try:

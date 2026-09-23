@@ -61,10 +61,15 @@ def stage(src, why):
 
 for entry in spec.get("VERILOG_FILES", []) + spec.get("EXTRA_VERILOG_MODELS", []):
     name = pathlib.Path(entry).name
-    src = pathlib.Path("rtl") / name
-    if not src.is_file():
-        raise SystemExit(f"config names {entry}, but rtl/{name} does not exist")
-    stage(src, "a source file the config names")
+    # rtl/ is flat for our modules, with vendor hard-macro shells under
+    # rtl/vendor/, so resolve by name anywhere in the tree. Config entries stay
+    # "./src/<basename>" because the staged copy is flat.
+    hits = [h for h in pathlib.Path("rtl").rglob(name) if h.is_file()]
+    if len(hits) != 1:
+        raise SystemExit(
+            f"config names {entry}, but rtl/**/{name} has {len(hits)} matches "
+            f"(expected exactly 1)")
+    stage(hits[0], "a source file the config names")
 
 # Any SDC the config names (PNR_SDC_FILE / SIGNOFF_SDC_FILE). These live in
 # flow/, not rtl/, and they source the LibreLane base template by absolute path,

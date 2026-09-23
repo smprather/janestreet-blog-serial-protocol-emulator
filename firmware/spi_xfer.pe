@@ -11,7 +11,7 @@
 ; RTL knows which one is running.
 ;
 ; ---------------------------------------------------------------------------
-; PIN MAP (see the header of rtl/pe_uart_soc.v for the rule)
+; PIN MAP (see the header of rtl/pe_soc.v for the rule)
 ;
 ;   bit 0  out  SCLK      bit 1  out  MOSI
 ;   bit 2  out  CS_N      bit 3  in   MISO
@@ -50,7 +50,7 @@
 ;
 ;   * SENDING a bit 7: test it with AND 0x80, then shift the working copy LEFT.
 ;     Shift-left is `MOV X, A ; ADD A, X` -- A + A. (Register-register ADD is
-;     not in the ISA and tools/peasm.py rejects it, but X is addressable as the
+;     not in the ISA and tools/fw/peasm.py rejects it, but X is addressable as the
 ;     ALU's second operand, which is why this is two instructions and not one.)
 ;   * RECEIVING into bit 7 after 8 bits: shift the accumulator LEFT the same
 ;     way and OR in the new bit at bit 0. After 8 iterations the first bit
@@ -74,7 +74,7 @@
         ; Written explicitly rather than assumed, because reset drives bit 0
         ; HIGH (the UART TX idle level) and that is SCLK high for SPI -- an
         ; active-edge level, not an idle one. See the reset comment in
-        ; rtl/pe_uart_soc.v: the reset value serves the resident protocol and
+        ; rtl/pe_soc.v: the reset value serves the resident protocol and
         ; every other protocol's firmware must state its own idle pattern
         ; before it does anything else.
         LDI   A, 4

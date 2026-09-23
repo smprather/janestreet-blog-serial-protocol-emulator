@@ -26,7 +26,7 @@
 ; The obvious way to wait for a tick is to read STATUS and loop until bit 0 is
 ; set. That DOES NOT WORK here: reading STATUS clears the flag, so the very
 ; read that would exit the loop destroys the evidence, and the loop spins
-; forever. (This was the first bug found by tools/peemu.py, and it is exactly
+; forever. (This was the first bug found by tools/fw/peemu.py, and it is exactly
 ; the kind of thing a bit-accurate emulator is for.)
 ;
 ; Instead the code polls the TIMER VALUE and waits for it to CHANGE:

@@ -129,17 +129,17 @@ easier** — no PC change. That is the reason to record the alternative.
 
 - The CPU change is small but touches the ISA's encoding, so **every testbench
   that hand-assembles instructions must be re-checked**. The `JMP/JZ/JNZ`
-  encoders in `tb_pe_cpu.v`, `tb_pe_uart_soc.v` and `tb_pe_tick_status.v` write
+  encoders in `tb_pe_cpu.v`, `tb_pe_soc_uart.v` and `tb_pe_soc_tick.v` write
   targets into `arg[7:0]`; they keep working (targets < 256 are unchanged) but the
   fixtures stop demonstrating the wider field.
-- `tools/peasm.py`'s `IMEM_WORDS` must move with the RTL, or the assembler and
+- `tools/fw/peasm.py`'s `IMEM_WORDS` must move with the RTL, or the assembler and
   the memory disagree about the limit and the wrong one wins silently.
-- `tools/peemu.py` mirrors the ISA, so it changes in the same commit or the
+- `tools/fw/peemu.py` mirrors the ISA, so it changes in the same commit or the
   emulator stops being the fast loop (gotcha 11).
 - The SoC's load path has to write through `A_BM` with `A_REN=0`, one word per
   cycle. That is 1,024 cycles of load, which is fine for a bench and worth
   recording as a bring-up cost.
-- **The flop-memory area claim gets its first measurement.** `pe_uart_soc`'s
+- **The flop-memory area claim gets its first measurement.** `pe_soc`'s
   182,650 µm² and the projected 54% occupancy were computed from a flop array;
   this is where the projection becomes a synthesis number.
 

@@ -28,13 +28,13 @@ run_verilog() {
     fi
 }
 
-ETH=(rtl/pe_line_codec.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v)
+ETH=(rtl/pe_nrzi.v rtl/pe_manch.v rtl/pe_bitstuff.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v)
 run_verilog dru_async tb_pe_eth_mac dru_async.v rtl/pe_dru.v "${ETH[@]}"
 run_verilog mac_runt tb_pe_eth_mac mac_runt.v rtl/pe_dru.v "${ETH[@]}"
-run_verilog usb_zeros usb_review usb_zeros.v rtl/pe_line_codec.v rtl/pe_codec_mux.v
+run_verilog usb_zeros usb_review usb_zeros.v rtl/pe_nrzi.v rtl/pe_manch.v rtl/pe_bitstuff.v rtl/pe_codec_mux.v
 run_verilog cpu_restart review_cpu_stop cpu_restart.v rtl/pe_cpu.v
 
-mapfile -t SRAM < <(tb/sram_model.sh)
+mapfile -t SRAM < <(regress/sram_model.sh)
 run_verilog memory_contract review_memory_hold memory_contract.v "${SRAM[@]}" rtl/pe_imem.v rtl/pe_fbuf.v
 
 for probe in uart_monitor mutation_interrupt; do
