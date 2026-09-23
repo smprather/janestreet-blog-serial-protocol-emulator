@@ -80,6 +80,13 @@ cells / 1,300,811.665 µm², `pe_soc` at 3,298 cells / 53,730.697 µm², and
 `/tmp/synth_area_run.log`. This is mapped synthesis only; no STA or physical
 flow was launched.
 
+The mapped `pe_ctrl` three-corner screen was also repeated on 2026-09-23 with
+Yosys 0.69+post and OpenSTA 3.1.0: zero synthesis problems, 292 cells / 75
+flops, 5,791.149 µm²; setup +8.71/+8.80/+8.86 ns and hold −0.12/−0.16/−0.19
+ns (slow/typical/fast). Fresh reports are byte-identical to the checked-in
+screen, including its expected asynchronous-pin constraints and unplaced
+high-fanout caveats. This did not include placement or routing.
+
 No physical flow, DRC, or LVS was run.
 
 ## Review disposition

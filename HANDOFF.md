@@ -28,6 +28,14 @@
 > intentionally unconstrained. Evidence: `PE-CTRL-RESOLUTION.md` and
 > `reviews/2026-09-23/pe-ctrl-hardening/`. Physical flow, DRC and LVS deferred.
 
+> **Three-corner STA repeat (2026-09-23):** reran the mapped `pe_ctrl` screen
+> with Yosys 0.69+post and OpenSTA 3.1.0. Synthesis reports zero problems,
+> 292 cells / 75 flops, and 5,791.149 µm². Setup slack slow/typical/fast is
+> +8.71/+8.80/+8.86 ns; hold is −0.12/−0.16/−0.19 ns. All three fresh OpenSTA
+> reports are byte-identical to the checked-in reports under
+> `reviews/2026-09-23/pe-ctrl-hardening/`; the async SPI constraint and
+> unplaced high-fanout caveats are unchanged. This is mapped STA only.
+
 > **Context flush state (2026-09-23, `b0c2c7d`): no RTL work is in flight.**
 > Two written plans are waiting on the user, both plan-only by ruling:
 >

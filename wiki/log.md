@@ -1667,3 +1667,15 @@
   cache. The 2026-09-20 SRAM figures remain historical and are labeled by date.
 - Full output: `/tmp/synth_area_run.log`. Pure synthesis only; no STA, physical
   flow, DRC, or LVS.
+
+## [2026-09-23] sta | pe_ctrl three-corner hardening screen repeated
+
+- Re-ran `reviews/2026-09-23/pe-ctrl-hardening/synth.ys` and its slow/typical/fast
+  OpenSTA TCLs with Yosys 0.69+post and OpenSTA 3.1.0. Synthesis: zero problems,
+  292 cells / 75 flops, 5,791.149 µm².
+- Setup slack slow/typical/fast: +8.71/+8.80/+8.86 ns; hold:
+  −0.12/−0.16/−0.19 ns. All three fresh OpenSTA logs are byte-identical to
+  the committed reports; asynchronous SPI input paths and unplaced fanout
+  violations are unchanged.
+- Fresh logs and netlist: `/tmp/pe-ctrl-hardening-check/`. Mapped STA only; no
+  physical flow, DRC, or LVS.
