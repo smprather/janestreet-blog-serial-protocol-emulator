@@ -63,9 +63,10 @@
 // item 4). Not because pads are free: the committed pinout uses 16 of 24
 // usable pads, and a literal "all nine protocols at once" needs 22 disjoint
 // wires (10 out, 5 in, 7 bidir). It does NOT fit even if these six were
-// reclaimed -- 14 free against 17 remaining wires, and the 5 bidir wires take
-// 5 of the 6 free uio, leaving 1 for the 9 outputs while uo_out supplies 6.
-// What the budget does not threaten is every realistic case: the baseline
+// reclaimed -- 14 free against 17 remaining wires: the 3 remaining inputs
+// take the 2 free ui_in pads and one uio, the 5 bidir wires take the other 5
+// uio, so none is left for outputs and uo_out's 6 supply only 6 of the 9
+// (short 3). What the budget does not threaten is every realistic case: the baseline
 // (UART/SPI/I2C) and any single- or two-protocol persona. The direction-aware
 // table is in wiki/reference/protocol-pin-budget.md. The chip has NO READBACK
 // PATH -- pe_ctrl is a passive slave with no MISO -- so these six pins are the
