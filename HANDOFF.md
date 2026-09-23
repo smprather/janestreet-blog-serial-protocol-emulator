@@ -53,8 +53,9 @@
 > Do not start either RTL change until the user picks/accepts. The last full
 > regression is `/tmp/run_all_spi_pads.log` (`run_all.sh --fast -j8`: 29/29 RTL,
 > 20/20 firmware, lint clean, all seven mutation suites, gates current).
-> No functional RTL has changed since; the only RTL edit in this worktree is a
-> comment clarifying the readback timing limit. The plan
+> No functional RTL has changed since. A comment-only correction in `pe_ctrl.v`
+> now records that 10 MHz gives six clocks per full period and leaves no margin
+> for the synchronized readback response. The plan
 > amendment, both editable PlantUML diagrams and the touched wiki/handoff docs
 > are committed. The project-wide diagrams now live as text in `diagrams/`;
 > retired diagram-preview instructions are removed. Current review:

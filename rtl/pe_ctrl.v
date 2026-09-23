@@ -30,7 +30,10 @@
 //      detector compares the synchronized level against its own delayed copy.
 //      Do not feed `spi_sclk` to anything else: this is the only place in the
 //      design that samples a pad without the DRU-style capture. At 60 MHz a
-//      10 MHz SCLK gives six clocks per half period — the documented ceiling.
+//      10 MHz SCLK gives six clocks per full period (three per half period) —
+//      the documented ceiling. That leaves no margin for a synchronized MISO
+//      response before the next host sample, so readback may need a slower
+//      SCLK ceiling than write-only loading.
 //
 //   2. THE LOADER MUST NOT WRITE WHILE THE CORE RUNS. `run` is an input, every
 //      receive path is gated on it, and `host_we` is MASKED by it at the pin.
