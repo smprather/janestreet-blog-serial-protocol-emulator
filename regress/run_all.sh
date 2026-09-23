@@ -416,5 +416,15 @@ else
   stale=1
 fi
 
+# The SoC-level Ethernet TB is the only proof a PROGRAM can consume a frame,
+# so it gets the same treatment the block TBs get.
+if ./regress/mutate_eth_soc_tb.sh > /tmp/mutate_eth_soc.log 2>&1; then
+  echo "eth_soc TB mutations: OK (no unexplained survivors)"
+else
+  echo "eth_soc TB mutations: FAILED"
+  tail -20 /tmp/mutate_eth_soc.log
+  stale=1
+fi
+
 [ "$stale" -eq 0 ] || exit 1
 [ "$lint_rc" -eq 0 ] || { echo "lint gate FAILED (see above)"; exit 1; }
