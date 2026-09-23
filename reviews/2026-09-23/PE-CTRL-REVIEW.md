@@ -115,19 +115,24 @@ status frame (`load_error`/`words_written`), and an imem peek/poke that would
 need a read port.
 
 **Timing audit of the echo option (derived from `rtl/pe_ctrl.v`, worst-case
-SCLK phase).** The two-flop synchronizer and edge detector register the
-completed word at **+3 clk** after the SCLK pad edge; the write engine commits
-the imem write and runs `W_DONE` at **+5..6 clk (83-100 ns at 60 MHz)**; a
-registered falling-edge MISO update appears at **+3 clk** after the fall. A
-10 MHz half period is only 3 clk, so strict mode-0 readback has zero or
-negative setup margin at that rate; a combinational fall-gated update leaves
-~17 ns for the pad and host setup. Because the echo must be commit-latched
-(never `word_ready`; an aborted word must never echo), a one-frame echo needs a
-half period >= 6 clk -- computed bound ~4 MHz, **2.5 MHz recommended** -- while
-a two-frame echo fits the full **10 MHz** (1.5 periods >= 6 clk). Trailing
-frames are the cost of reading the last word(s). Test requirements: host SCLK
-phase sweep, commit-latch probes, aborted-word-no-echo, one- vs two-frame
-latency; see [[plans/pe-ctrl-readback]].
+SCLK phase).** Two independent paths set the readback rate. (1) *Per-bit MISO
+update*: the synchronizer, edge detector and register put a falling-edge
+update ~3 clk (50 ns) plus pad and host setup after the fall, while the host's
+next rising sample is one half period later -- at 10 MHz that is also 3 clk, so
+a registered falling-edge update cannot meet setup at *any* frame latency.
+Computed limit ~7.7 MHz (3 clk + ~5 ns pad + ~10 ns host setup); **A2's
+two-frame echo only relaxes the commit path and reaches ~7.7 MHz, not 10 MHz**
+(documented 5 MHz). (2) *Echo commit*: the write commits and `W_DONE` runs at
++5..6 clk (83-100 ns); because the echo must be commit-latched (never
+`word_ready`; aborted words must never echo), a one-frame echo needs a half
+period >= 6 clk -- **computed limit 5.0 MHz, documented 2.5 MHz (2x margin)**.
+Combined: A1 = min(5.0, 7.7) = 5.0 MHz; A2 = 7.7 MHz. Reaching 10 MHz needs a
+different implementation -- A3, updating MISO on the synchronized **rising**
+edge (next sample a full period later: `T >= 3 clk + pad + setup` ≈ 65 ns)
+with a two-frame echo, and a documented non-mode-0 change edge. Test
+requirements: host SCLK phase sweep at each ceiling, per-bit setup checks,
+commit-latch probes, aborted-word-no-echo, one- vs two-frame latency; see
+[[plans/pe-ctrl-readback]].
 
 The budget delta (one free `uio`; shortfall 9 -> 10 kept / 3 -> 4 reclaimed) and
 the pad mapping remain in [[plans/pe-ctrl-readback]]. No RTL changed; no new

@@ -1564,3 +1564,19 @@
   the commit/abort/trailing-frame semantics, and the phase-sweep and
   commit-latch probes; [[reviews/2026-09-23/PE-CTRL-REVIEW]] with the audit
   evidence. No RTL changed; no new regression or STA was run.
+
+## [2026-09-23] loader | readback audit correction: two ceilings, A2 is not 10 MHz
+
+- The per-bit MISO path binds at every frame latency: synchronizer + fall
+  detect + register is ~3 clk (50 ns), and the falling-to-next-rising half
+  period at 10 MHz is also 3 clk, so A2's frame delay does not fix it.
+- Computed limits: per-bit ~7.7 MHz (3 clk + ~5 ns pad + ~10 ns host setup);
+  the commit path at one frame is 5.0 MHz (`T/2 >= 6 clk`). Combined: A1
+  5.0 MHz (documented 2.5 MHz, 2x margin), A2 7.7 MHz (documented 5 MHz).
+  Neither reaches 10 MHz. A3 (update on the synchronized *rising* edge, two
+  frames, `T >= 3 clk + pad + setup`) is the safe 10 MHz variant, with a
+  documented non-mode-0 change edge.
+- The 2.5/5 MHz figures are deliberate margins, not computed limits.
+  Corrected [[plans/pe-ctrl-readback]] and
+  [[reviews/2026-09-23/PE-CTRL-REVIEW]]. Plan-only: no RTL changed, no
+  regression or STA run.
