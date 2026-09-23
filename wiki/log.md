@@ -1693,3 +1693,16 @@
   clarified that the Manchester half-cell phase is a level with a 50 ns
   half-cell interval at 60 MHz. Details: `reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md`.
   No RTL or tests changed; no physical flow, DRC, or LVS.
+
+## [2026-09-23] review | E1/E2 fix follow-up
+
+- Independent source review found two remaining E1 buffer-accounting issues:
+  wrapped consumer releases are rejected by the AW+1-bit difference, and a
+  same-cycle consumer release plus producer room update drops one delta. Both
+  are reproduced with directed temporary simulations; the current regression
+  misses these alignments.
+- The current E2 config passes the static macro gate, but its checks do not
+  validate mapped power/ground nets or require the Metal4-to-grid connect
+  clause; other lower-priority coverage gaps are documented. No source/config
+  fix or physical flow was run. Details:
+  `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md`.

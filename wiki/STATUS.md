@@ -1,16 +1,16 @@
 # Project Status — through 10BASE-T receive
 
-> **Latest review follow-up (2026-09-23): E1 and E2 are FIXED.** E1: the ring
-> now has a producer write pointer and a consumer read pointer; firmware's
-> BUFCTRL release is non-destructive, so a reclaim during the next frame's
-> reception cannot corrupt it. The review's reproducer passes all three cases,
-> the schedule is a permanent regression (`tb/tb_pe_soc_eth.v`), and the
-> mutation gates are 16/16 (block) and 8/8 (SoC). E2: `flow/pe_soc.json` now
-> places both SRAM instances and hooks all three supplies of each, and
-> `tools/checks/macro_flow_config.py` (run by the regression) re-derives the
-> requirement from the netlist. See `reviews/2026-09-23/ETHERNET-SOC-REVIEW.md`,
-> `E1-RESOLUTION.md` and `E2-RESOLUTION.md` for evidence, including the
-> synthesis/STA recheck. Physical flow, DRC and LVS remain deferred.
+> **Latest E1/E2 review follow-up (2026-09-23): original findings fixed, but
+> residual issues remain.** E1's producer/consumer pointer split prevents the
+> original destructive mid-frame rebase; a fresh review found that ring-wrapped
+> releases are rejected and same-edge consumer/producer room updates can leak
+> capacity. E2's current two-macro entries pass the static check, but that gate
+> does not validate supply-to-net mappings or require the Metal4-to-grid PDN
+> connection. Details and reproductions:
+> `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md`. The original fixes and
+> regression evidence remain in `ETHERNET-SOC-REVIEW.md`, `E1-RESOLUTION.md`
+> and `E2-RESOLUTION.md`. No fix for these follow-up findings has landed;
+> physical flow, DRC and LVS remain deferred.
 >
 > **Also done 2026-09-23: the SPI loader.** `rtl/pe_ctrl.v` is a passive SPI
 > slave at the TT wrapper (ADR-007) that clocks 16-bit words into `pe_imem`
@@ -406,9 +406,9 @@ the upside case with `tools/gen/sram_budget.py --tiles 8x4`.
 | Two SRAM macros: 1024-word instructions + 2 KB frame buffer, both `1P_1024x16` | `decisions/adr-003-memory-plan.md` |
 | **Instruction macro is live; PC width derives from IMEM depth (10 bits at 1024)** | `decisions/adr-004-program-counter-width.md` |
 | 10BASE-T is the LINE LAYER only; the stack is off-chip, and firmware never touches Ethernet bits | `concepts/ethernet-scope.md` |
-| **Buffer ownership: `wptr` is the producer, `rptr` the consumer**; BUFCTRL releases consumed bytes and never rebases the ring under an in-flight frame | `rtl/pe_eth_mac.v`, `reviews/2026-09-23/E1-RESOLUTION.md` |
+| **Buffer ownership: `wptr` is the producer, `rptr` the consumer**; releases do not rebase an in-flight frame, but wrap and same-edge accounting gaps remain under review | `rtl/pe_eth_mac.v`, `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md` |
 | **The six `uo_out[7:2]` pads stay `dbg_pc[5:0]` for now**: no readback path, 6 usable pads free (12 if debug is reclaimed); revisit when a protocol needs them or readback lands | `rtl/tt_um_protocol_emulator.v` header, STATUS item 4 |
-| **Both SRAM macros are placed and power-hooked in the flow config**, and a static netlist-vs-config gate keeps it true | `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`, `reviews/2026-09-23/E2-RESOLUTION.md` |
+| **Both SRAM macros are currently placed and have supply hooks**; the gate checks instances and pin names but not supply-to-net mapping or the full PDN ladder | `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`, `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md` |
 | **`pe_ctrl` is a passive SPI slave at the wrapper** (host loads, `run` starts); no master, no flash, no bootstrap FSM | `decisions/adr-007-pe-ctrl-passive-slave.md` |
 | Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | the codec headers (`pe_nrzi`/`pe_manch`/`pe_bitstuff`) |
 | `ena` must never gate logic; every pad output driven in every state | `rtl/tt_um_protocol_emulator.v` header |

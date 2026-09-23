@@ -1,17 +1,16 @@
 # Handoff — state of the repo (2026-09-23)
 
-> **Latest follow-up (2026-09-23): E1 and E2 (P1) are FIXED.** The review at
-> `9a84c6e` found that reclaiming frame 1 during reception of frame 2 could
-> publish frame 2 with a corrupt window; the fix splits the ring into a producer
-> write pointer and a consumer read pointer (`buf_consume`), so a release never
-> touches an in-flight frame. It also found that the flow config placed and
-> power-hooked only the instruction SRAM; `flow/pe_soc.json` now configures both
-> macro instances with all three supplies each, and
-> `tools/checks/macro_flow_config.py` re-derives that from the netlist on every
-> regression. Read `reviews/2026-09-23/E1-RESOLUTION.md` and `E2-RESOLUTION.md`;
-> the original findings and reproducer are in `ETHERNET-SOC-REVIEW.md`. The user
-> requested 15-minute progress checks, and permits periodic synthesis/STA to
-> catch RTL that cannot be hardened; physical flow, DRC and LVS remain deferred.
+> **E1/E2 follow-up (2026-09-23): the original P1 fixes are in, but a new review
+> found remaining gaps.** E1's producer/consumer pointer split fixes destructive
+> mid-frame rebasing, but wrapped releases are rejected by the current distance
+> arithmetic, and a consume coincident with a producer room update can leak
+> capacity. E2's current two-macro placements and supply entries pass the static
+> gate, but the gate does not validate the supply-to-net mapping or require the
+> Metal4-to-grid connect clause. Findings and evidence:
+> `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md`. The original findings,
+> resolutions and regressions remain in `ETHERNET-SOC-REVIEW.md`,
+> `E1-RESOLUTION.md` and `E2-RESOLUTION.md`. No RTL/config fixes have been made
+> for this follow-up yet. No physical flow, DRC or LVS was run.
 
 > **pe_ctrl run-transition P1 FIXED and verified (`ef4041d`).** The independent
 > test had found a word could write during `run`

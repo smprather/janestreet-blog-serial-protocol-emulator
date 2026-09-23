@@ -98,6 +98,16 @@ The details and source checks are in
 found two wording errors in the amended SERDES plan; both were corrected and
 verified against the diagram and RTL. No RTL was changed.
 
+## Ethernet frame-buffer and macro-flow follow-up
+
+A fresh source review of the E1/E2 fixes found a functional ring-wrap release
+failure and a simultaneous accounting-update capacity leak in E1, plus gaps in
+the static E2 regression gate. Directed temporary simulations reproduce both
+E1 cases. The current macro-flow gate still passes for both present SRAMs; the
+E2 findings concern what it fails to detect. Full findings and limits are in
+`reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md`. No RTL/config fixes or physical
+checks were run.
+
 No physical flow, DRC, or LVS was run.
 
 ## Review disposition
