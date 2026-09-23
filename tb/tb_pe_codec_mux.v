@@ -106,6 +106,33 @@ module tb_pe_codec_mux;
       check(rb === 1'b1, "can rx: resumed bit = 1");
     end
 
+    // ============ cfg=0x51: the DOCUMENTED CAN preset ==================
+    // The generated reference recommends 0x51 (explicit run 5; 0x01 is the
+    // equivalent default-run form). 0x05 is NOT one: it sets cfg[2] and
+    // enables Manchester (measured, reviews/2026-09-23/f1-f2-recheck).
+    begin
+      cfg = 8'h51; reset_run();
+      for (int k = 0; k < 5; k++) begin
+        tx_step_comb(1'b1, w, st);
+        check(w === 1'b1, $sformatf("can51 tx: data 1 at %0d", k));
+        check(st === 1'b0, $sformatf("can51 tx: no early stuff at %0d", k));
+      end
+      check(tx_stuffed === 1'b1, "can51 tx: stuff owed after 5 ones");
+      tx_step_comb(1'b0, w, st);
+      check(st === 1'b1, "can51 tx: stuff strobe flagged");
+      check(w === 1'b0, "can51 tx: stuff bit complementary");
+      // And the same run on RX: five valid ones, then the stuff slot.
+      cfg = 8'h51; reset_run();
+      for (int k = 0; k < 5; k++) begin
+        rx_step(1'b1, rb, rv);
+        check(rv === 1'b1 && rb === 1'b1,
+              $sformatf("can51 rx: bit %0d valid and 1", k));
+      end
+      rx_step(1'b0, rb, rv);
+      check(rv === 1'b0, "can51 rx: stuff slot flagged invalid");
+      check(rx_err === 1'b0, "can51 rx: complementary stuff accepted");
+    end
+
     // ============ cfg=0xE1: stuff only, run 6, ones-only (USB) ======
     begin
       cfg = 8'hE1; reset_run();

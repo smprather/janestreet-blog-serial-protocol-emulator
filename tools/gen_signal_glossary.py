@@ -66,7 +66,7 @@ NOTES: dict[tuple[str, str], str] = {
     ("pe_serdes", "rx_busy"): "High from start until the final strobe — drops one cycle **before** `rx_valid`.",
     ("pe_serdes", "rx_valid"): "Word complete. Delayed one cycle past the final strobe by design (so `rx_data` can copy the register without a variable-shift path).",
     # ---- pe_codec_mux: the codec pipeline --------------------------------
-    ("pe_codec_mux", "cfg"): "Stage select. `cfg[0]` stuff, `cfg[1]` NRZI, `cfg[2]` Manchester, `cfg[3]` `half_phase`, `cfg[6:4]` `run_cfg` (0 ⇒ default 5), `cfg[7]` `ones_only` (1 ⇒ stuff only runs of one, USB; 0 ⇒ either polarity, CAN). The USB configuration byte is **`0xE3`** (stuff + NRZI, run 6, ones-only); CAN is `0x05`. Using the old `0x63` selects symmetric stuffing and corrupts USB zero runs.",
+    ("pe_codec_mux", "cfg"): "Stage select. `cfg[0]` stuff, `cfg[1]` NRZI, `cfg[2]` Manchester, `cfg[3]` `half_phase`, `cfg[6:4]` `run_cfg` (0 ⇒ default 5), `cfg[7]` `ones_only` (1 ⇒ stuff only runs of one, USB; 0 ⇒ either polarity, CAN). The USB configuration byte is **`0xE3`** (stuff + NRZI, run 6, ones-only); CAN is **`0x51`** (stuff + run 5 — `0x01` is equivalent, its run nibble 0 means the default 5). `0x05` would set `cfg[2]` and enable Manchester, so it is not a CAN preset. Using the old `0x63` selects symmetric stuffing and corrupts USB zero runs.",
     ("pe_codec_mux", "clr"): "Frame/SOF boundary — resets stuffing run tracking.",
     # ---- pe_crc: the CRC / LFSR engine ----------------------------------
     ("pe_crc", "bit_en"): "**The strobe** — one-cycle pulse meaning \"this is the moment\". One strobe per **wire bit**, in transmission order. See [[concepts/strobe-and-committing-edge]].",

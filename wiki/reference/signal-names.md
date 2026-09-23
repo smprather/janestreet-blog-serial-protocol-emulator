@@ -86,7 +86,7 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | Port | Dir | Width | Meaning |
 |---|---|---|---|
 | `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
-| `cfg` | inp | `[7:0]` | Stage select. `cfg[0]` stuff, `cfg[1]` NRZI, `cfg[2]` Manchester, `cfg[3]` `half_phase`, `cfg[6:4]` `run_cfg` (0 ⇒ default 5), `cfg[7]` `ones_only` (1 ⇒ stuff only runs of one, USB; 0 ⇒ either polarity, CAN). The USB configuration byte is **`0xE3`** (stuff + NRZI, run 6, ones-only); CAN is `0x05`. Using the old `0x63` selects symmetric stuffing and corrupts USB zero runs. |
+| `cfg` | inp | `[7:0]` | Stage select. `cfg[0]` stuff, `cfg[1]` NRZI, `cfg[2]` Manchester, `cfg[3]` `half_phase`, `cfg[6:4]` `run_cfg` (0 ⇒ default 5), `cfg[7]` `ones_only` (1 ⇒ stuff only runs of one, USB; 0 ⇒ either polarity, CAN). The USB configuration byte is **`0xE3`** (stuff + NRZI, run 6, ones-only); CAN is **`0x51`** (stuff + run 5 — `0x01` is equivalent, its run nibble 0 means the default 5). `0x05` would set `cfg[2]` and enable Manchester, so it is not a CAN preset. Using the old `0x63` selects symmetric stuffing and corrupts USB zero runs. |
 | `bit_en` | inp | 1 | **The strobe** — one-cycle pulse meaning "this is the moment". The only thing that commits state in this block. Supplied by the timing block/DRU. See [[concepts/strobe-and-committing-edge]]. |
 | `clr` | inp | 1 | Frame/SOF boundary — resets stuffing run tracking. |
 | `tx_bit` | inp | 1 | Raw bit in from the SM/SERDES. |
