@@ -87,8 +87,9 @@ There are two memories in the ADRs, and both are in the RTL now:
   memory (ADR-003), and the 10BASE-T receive chain is its writer as of
   2026-09-23. The `FLOP=1` path is the register-array fallback.
 
-The `FLOP=1` path in `pe_imem` synthesises a register array instead of the
-macro (60,806 cells vs 12). It exists for tests and area experiments and is
+The `FLOP=1` path in `pe_imem` maps to 61,057 cells.
+The macro build has 12 glue cells plus the black-box SRAM.
+The register-array path exists for tests and area experiments and is
 mapped separately by `synth_area.sh`; it is **not** what the SoC uses.
 
 ## Refreshing the cell counts

@@ -79,7 +79,7 @@ Both layers of the thesis now exist and have baseline simulation coverage:
   cells, and the SERDES through the full LibreLane place-and-route flow to a
   clean historical 66 MHz signoff (2026-09-18). The current signoff target is
   60 MHz (16.667 ns).
-- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (1,151
+- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (1,402
   cells after the review fixes) is the first protocol block that is deliberately
   NOT firmware, and [[concepts/ethernet-scope]] says why with arithmetic: at a 100 ns bit period
   the single-cycle core has 48 instructions per byte, and a software CRC-32
@@ -338,7 +338,8 @@ been through real place-and-route (`pe_serdes`: 11,223 mapped → 17,211 routed 
 → 29,164 µm² die at 78% utilisation). Macros place as-is and take no inflation.
 
 **The swap is DONE and measured** (2026-09-20, [[decisions/adr-004-program-counter-width]]).
-The historical per-word figure stands and the new build confirms it:
+The historical 2026-09-20 per-word figure reproduced ADR-003's estimate at that
+revision:
 
 | | Cells | Area (µm²) | Note |
 |---|---|---|---|
@@ -347,10 +348,12 @@ The historical per-word figure stands and the new build confirms it:
 | Whole SoC before the swap (128 flop words) | 8,744 | 182,650 | |
 | **Whole SoC after the swap (1,024 SRAM words)** | **1,083** | **19,795** | **9.2× smaller, 8× the program** |
 
-The flop figure reproduces ADR-003's 1,271 µm²/word exactly (60,806 cells × 21.4 µm²
-/ 1,024 words), which cross-checks two measurements taken months apart. The macro
-contributes **no** synthesised cells — its area comes from the LEF, and it is
-79,674 µm² per [[reference/sram-budget]].
+That baseline's flop figure reproduced ADR-003's 1,271 µm²/word estimate
+(60,806 cells × 21.4 µm² / 1,024 words). A fresh 2026-09-23 mapped screen with
+Yosys 0.69+post, after the read-hold fix in `pe_imem`, reports 61,057 cells /
+1,300,811.665 µm² (about 1,270.3 µm² per word); the generated RTL inventory
+uses the current count. The macro contributes **no** synthesised cells — its
+area comes from the LEF, and it is 79,674 µm² per [[reference/sram-budget]].
 
 **The allocation is 6×4 = 24 tiles**, not 8×4. The blog says so three times, and
 `info.yaml` now matches. 8×4 is described only as "the possibility of scaling up

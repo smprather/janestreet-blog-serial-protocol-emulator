@@ -78,6 +78,14 @@
 > readback interface choice as pending. Physical flow, DRC and LVS remain
 > deferred.
 
+> **Fresh mapped synthesis check (2026-09-23):** `./regress/synth_area.sh` exited
+> 0 under Yosys 0.69+post. All 17 hierarchy checks passed and no Yosys
+> diagnostics were emitted. Current highlights: `pe_eth_mac` 1,402 cells;
+> `pe_imem` flop fallback 61,057 cells / 1,300,811.665 µm²; `pe_soc` 3,298
+> cells / 53,730.697 µm²; `tt_um_top` 3,613 cells / 59,547.852 µm². Full log:
+> `/tmp/synth_area_run.log`. The historical 2026-09-20 SRAM flop figures in the
+> area budget remain labeled by date. No routed flow, DRC, or LVS was run.
+
 The consolidated current project review is
 `reviews/2026-09-23/PROJECT-REVIEW.md`. It records the plan-only status of the
 readback and SERDES work, the latest regression results, and the source-only

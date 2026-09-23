@@ -1655,3 +1655,15 @@
   guards and A3's ~15 MHz computed / hold analysis. Review and HANDOFF/STATUS
   wording corrected to match. Plan-only: no RTL, tests, synthesis/STA,
   physical flow, DRC or LVS.
+
+## [2026-09-23] synth | mapped hardening screen refreshed
+
+- `./regress/synth_area.sh` with Yosys 0.69+post: exit 0, no surfaced Yosys
+  diagnostics, all 17 hierarchy checks passed. Current key counts: `pe_eth_mac`
+  1,402; `pe_imem` flop fallback 61,057 cells / 1,300,811.665 µm²; `pe_soc`
+  3,298 / 53,730.697 µm²; TT top 3,613 / 59,547.852 µm².
+- Corrected the current Ethernet MAC count in STATUS and made the generated
+  block inventory take the instruction-memory flop count from the mapped-count
+  cache. The 2026-09-20 SRAM figures remain historical and are labeled by date.
+- Full output: `/tmp/synth_area_run.log`. Pure synthesis only; no STA, physical
+  flow, DRC, or LVS.

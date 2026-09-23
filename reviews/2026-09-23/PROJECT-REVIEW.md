@@ -48,6 +48,11 @@ recommendation while keeping codec topology and SERDES cadence choices open.
 Generated page titles/dates and the README generator inventory were also
 corrected. The diagrams directory contains source text only.
 
+The mapped synthesis rerun also found stale current counts in the MAC summary
+and generated SRAM fallback prose. STATUS and the generator now use the fresh
+counts; dated 2026-09-20 area-budget numbers remain historical with a note
+distinguishing the newer memory read-hold implementation and tool version.
+
 ## Verification evidence
 
 - `./regress/run_all.sh --fast -j8` exited 0: 29/29 RTL testbenches, 20/20
@@ -62,11 +67,18 @@ corrected. The diagrams directory contains source text only.
 - `README.md`, `HANDOFF.md`, `wiki/`, and `diagrams/` have no stale viewer setup
   instructions; current retirement notes remain. `diagrams/` has no rendered
   leftovers.
-- Existing synthesis evidence remains 3,298 mapped cells for `pe_soc` and
-  3,613 for `tt_um_top`; the SPI pad aliases add no sequential timing path.
-  Existing `pe_ctrl` hardening evidence is 5,791 µm², zero Yosys problems,
+- The SPI pad aliases add no sequential timing path. Existing `pe_ctrl`
+  hardening evidence is 5,791 µm², zero Yosys problems,
   slow-corner setup slack +8.71 ns and hold slack −0.12/−0.16/−0.19 ns
   (slow/typical/fast). These are prior screens, not new runs in this review.
+
+The later 2026-09-23 pure synthesis rerun (`./regress/synth_area.sh`) exited 0
+with Yosys 0.69+post and no surfaced diagnostics across 17 hierarchy checks.
+It measured `pe_eth_mac` at 1,402 cells, `pe_imem`'s flop fallback at 61,057
+cells / 1,300,811.665 µm², `pe_soc` at 3,298 cells / 53,730.697 µm², and
+`tt_um_top` at 3,613 cells / 59,547.852 µm². The source log is
+`/tmp/synth_area_run.log`. This is mapped synthesis only; no STA or physical
+flow was launched.
 
 No physical flow, DRC, or LVS was run.
 

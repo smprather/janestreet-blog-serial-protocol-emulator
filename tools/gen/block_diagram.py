@@ -271,6 +271,10 @@ def build() -> tuple[str, list[str]]:
         tail = f"<br/><i>{c} cells</i>" if c else ""
         return f'["<b>{b["name"]}</b><br/>{b["role"]}{tail}"]'
 
+    def cell_count(name: str) -> str:
+        value = cells.get(name, "—")
+        return f"{int(value):,}" if value.isdigit() else value
+
     cpu = next(b for b in BLOCKS if b["name"] == "pe_cpu")
     imem = next(b for b in BLOCKS if b["name"] == "pe_imem")
 
@@ -386,8 +390,9 @@ def build() -> tuple[str, list[str]]:
         "  memory (ADR-003), and the 10BASE-T receive chain is its writer as of",
         "  2026-09-23. The `FLOP=1` path is the register-array fallback.",
         "",
-        "The `FLOP=1` path in `pe_imem` synthesises a register array instead of the",
-        "macro (60,806 cells vs 12). It exists for tests and area experiments and is",
+        f"The `FLOP=1` path in `pe_imem` maps to {cell_count('pe_imem_flop')} cells.",
+        f"The macro build has {cell_count('pe_imem_macro')} glue cells plus the black-box SRAM.",
+        "The register-array path exists for tests and area experiments and is",
         "mapped separately by `synth_area.sh`; it is **not** what the SoC uses.",
         "",
         "## Refreshing the cell counts",
