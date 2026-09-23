@@ -513,6 +513,161 @@ class Soc:
         self.sample_prev = lvl
 
 
+class I2CSlaveModel:
+    """A byte-level I2C slave on the emulator's open-drain bus.
+
+    THE COUNTERPART TO THE FIRMWARE. The firmware is an I2C master; a master
+    with no slave is a pin toggling. This model decodes the wire the way a real
+    device does -- START/STOP conditions, bits sampled on the SCL rising edge,
+    the 9th clock as ACK -- and it is deliberately NOT told what the firmware
+    intends. Its records (`address_bytes`, `writes`, `acks`) are what the
+    checker asserts against.
+
+    The model drives SDA only by pulling it LOW (`soc.i2c_pull_low`), which is
+    the open-drain rule: it can never drive a high level, so a released line
+    lets the pull-up win. That is the same property the RTL pin matrix enforces,
+    and modelling it here is what makes the emulator a real bus rather than a
+    scripted stimulus.
+
+    One transaction per instance is supported for the read path: address, one
+    write, repeated START, one read, NACK. An ACKed read byte would repeat it.
+    """
+
+    SDA_BIT, SCL_BIT = 4, 5
+
+    def __init__(self, address: int = 0x50, read_byte: int = 0x5A,
+                 nack_address: bool = False, nack_data: bool = False):
+        self.address = address & 0x7F
+        self.read_byte = read_byte & 0xFF
+        self.nack_address = nack_address
+        self.nack_data = nack_data
+
+        self.prev_sda = 1
+        self.prev_scl = 1
+        self.mode = None          # None | 'addr' | 'write' | 'read'
+        self.bitpos = 0           # clocks within the current byte, 0..8
+        self.shift = 0            # the byte being received
+        self.pull = False         # this slave is holding SDA low
+        self.pending = None       # mode to enter after an address ACK
+        # The SCL fall that CAPTURES a START is not a data bit: the master
+        # lowers SCL after the condition, before the first clock. Counting it
+        # shifted every received byte by one bit (0xA0 decoded as 0x50).
+        self.ignore_first_fall = False
+
+        self.hold = 0              # cycles left in the tHD;DAT SDA hold
+        self.pull_next = False     # the pull value the hold is counting down to
+
+        # observations the checker asserts on
+        self.address_bytes: list[int] = []
+        self.writes: list[int] = []
+        self.acks: list[int] = []     # master's 9th-bit level after a read byte
+        self.starts = 0
+        self.stops = 0
+
+    HOLD_CYCLES = 18   # >= the 300 ns tHD;DAT hold a transmitter owes after SCL falls
+
+    def _schedule_pull(self, value: bool) -> None:
+        """Change SDA only AFTER the falling edge, never on it.
+
+        A real transmitter holds SDA for tHD;DAT after SCL falls. Applying the
+        change in the same cycle as the edge is unrealistic AND a grammar
+        violation (SDA moving at an SCL-high boundary). The first model did it,
+        and the checker caught every ACK release and every read bit it drove.
+        """
+        self.pull_next = value
+        self.hold = self.HOLD_CYCLES
+
+    def _present_read_bit(self, pos: int) -> None:
+        bit = (self.read_byte >> (7 - pos)) & 1
+        self._schedule_pull(bit == 0)
+
+    def poll(self, soc) -> None:
+        """One bus sample. Call after every `soc.step()`."""
+        w = soc.wire_bits()
+        sda = (w >> self.SDA_BIT) & 1
+        scl = (w >> self.SCL_BIT) & 1
+
+        # START: SDA falls while SCL is high.
+        if self.prev_scl and scl and self.prev_sda and not sda:
+            self.starts += 1
+            self.mode = 'addr'
+            self.bitpos = 0
+            self.shift = 0
+            self._schedule_pull(False)
+            self.pending = None
+            self.ignore_first_fall = True
+
+        # STOP: SDA rises while SCL is high.
+        if self.prev_scl and scl and not self.prev_sda and sda:
+            self.stops += 1
+            self.mode = None
+            self._schedule_pull(False)
+
+        # SCL rising edge: sample, unless the SLAVE owns this data bit.
+        if not self.prev_scl and scl:
+            if self.mode == 'read':
+                if self.bitpos >= 8:
+                    self.acks.append(sda)      # the master's ACK/NACK
+            elif self.mode in ('addr', 'write') and self.bitpos < 8:
+                self.shift = ((self.shift << 1) | sda) & 0xFF
+
+        # SCL falling edge: advance the byte. The ACK is asserted on the fall
+        # after the 8th data bit, so it is already low when the master samples
+        # it on the 9th rise; it is released on the 9th fall.
+        if self.prev_scl and not scl:
+            if self.ignore_first_fall:
+                # the SCL fall that captures the START: not a data bit
+                self.ignore_first_fall = False
+            elif self.mode == 'read':
+                if self.bitpos < 8:
+                    self.bitpos += 1
+                    if self.bitpos < 8:
+                        self._present_read_bit(self.bitpos)
+                    else:
+                        self._schedule_pull(False)   # the ACK slot is the master's
+                else:
+                    if self.acks and self.acks[-1] == 0:
+                        self.bitpos = 0        # ACKed: another byte (repeats)
+                        self._present_read_bit(0)
+                    else:
+                        self.mode = None
+                        self._schedule_pull(False)
+            elif self.mode in ('addr', 'write'):
+                if self.bitpos < 8:
+                    self.bitpos += 1
+                    if self.bitpos == 8:
+                        if self.mode == 'addr':
+                            self.address_bytes.append(self.shift)
+                            if (self.shift >> 1) == self.address \
+                                    and not self.nack_address:
+                                self.pending = 'read' if (self.shift & 1) else 'write'
+                                self._schedule_pull(True)
+                            else:
+                                self.pending = None
+                                self._schedule_pull(False)
+                        else:
+                            self.writes.append(self.shift)
+                            self._schedule_pull(not self.nack_data)
+                else:
+                    # the 9th clock just fell: release and enter the next phase
+                    self._schedule_pull(False)
+                    self.bitpos = 0
+                    self.shift = 0
+                    if self.mode == 'addr':
+                        self.mode = self.pending
+                        self.pending = None
+                        if self.mode == 'read':
+                            self._present_read_bit(0)
+
+        if self.hold > 0:
+            self.hold -= 1
+            if self.hold == 0:
+                self.pull = self.pull_next
+        soc.i2c_pull_low = (1 << self.SDA_BIT) if self.pull else 0x00
+        self.prev_sda = sda
+        self.prev_scl = scl
+
+
 def run(hex_path: Path, send: list[int], max_cycles: int, trace: int,
         gap_bits: int = 24) -> tuple[list[int], Soc]:
     """gap_bits: idle bit periods between bytes.

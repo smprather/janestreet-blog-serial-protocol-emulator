@@ -390,6 +390,18 @@ else
   stale=1
 fi
 
+# The I2C TRANSACTION, end to end on the emulator against an independent slave
+# model: address, ACKs, the read path, the repeated START, timing and grammar,
+# across all 60 tick phases. The RTL TB is the same claim on real RTL; these
+# must agree, and a disagreement is a signal (STATUS gotcha 11).
+if python3 tools/checks/i2c_xfer_check.py > /tmp/i2c_xfer.log 2>&1; then
+  echo "i2c transaction: OK (bytes, ACKs, read path, timing, grammar)"
+else
+  echo "i2c transaction: FAILED"
+  cat /tmp/i2c_xfer.log
+  stale=1
+fi
+
 # The I2C testbench's own mutation suite. It is slower than the rest, but a
 # testbench nobody mutation-tests is a testbench that quietly stops testing --
 # and this one has already been caught being vacuous twice (a wrong edge index

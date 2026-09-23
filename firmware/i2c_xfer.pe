@@ -1,0 +1,395 @@
+; i2c_xfer.pe — an I2C master transaction, entirely in firmware.
+;
+; There is no I2C controller in this design. rtl/pe_pinmux.v makes each pin's
+; direction a runtime value and pe_soc provides a 1 us tick; everything below
+; is the transaction layer built from the pin-level grammar that
+; firmware/i2c_pins.pe proved (START, bit cell, STOP) and
+; wiki/concepts/i2c-on-the-matrix.md measured.
+;
+; THE TRANSACTION (fixed by tools/checks/i2c_xfer_check.py's independent slave):
+;
+;   START . 0xA0 (addr 0x50 + W) . ACK . 0xA5 . ACK
+;         . repeated START . 0xA1 (addr 0x50 + R) . ACK . read 0x5A . NACK . STOP
+;
+; ---------------------------------------------------------------------------
+; dmem IS THE OBSERVABLE INTERFACE (the checker and the RTL TB assert on it)
+;
+;   dmem[0]  write-address ACK  (0x00 = ACKed, 0x10 = NACKed)
+;   dmem[1]  write-data ACK
+;   dmem[2]  read-address ACK
+;   dmem[3]  the byte read from the slave
+;   dmem[4]  1 once the master has NACKed the read byte
+;   dmem[5]  0xA5 when the transaction completes
+;   dmem[7]  arbitration-loss count (a transmitted 1 read back low)
+;   dmem[8]  byte being sent                 dmem[9]  bit counter
+;   dmem[10] transaction state               dmem[11] read accumulator
+;   dmem[12] "this bit was a 1" flag         dmem[13] this byte's ACK slot
+;   dmem[14] scratch
+;
+; ---------------------------------------------------------------------------
+; WHY THE BIT ENGINE IS SHARED: THE ISA HAS NO CALL AND NO ROTATE
+;
+; There is no stack and no `JMP (X)`, and the ISA has no rotate or shift-left
+; (plan reconciliation: the old plan's "a rotate is 8 cycles, one instruction"
+; does not exist in this tree). Two consequences shape this program:
+;
+;   1. THE BYTE ENGINE AND THE READ ENGINE ARE EACH WRITTEN ONCE, and a little
+;      state dispatcher jumps to them. Inlining the ~250-word send path three
+;      times would not fit 1,024 words.
+;   2. SHIFT-LEFT IS `MOV X,A ; ADD A,X` (A := 2A), two instructions. The
+;      assembler rejects `ADD A,A` because register-register is not in the ISA;
+;      X is the copy register, and the tick wait's own use of X happens after
+;      the copy is no longer needed.
+;
+; The wait idiom is i2c_pins.pe's exact-target wait, not the UART's
+; wait-for-change: the free-running 1 us tick delivers (N-1, N] us for an
+; N-tick wait, so T_LOW is 7 and T_HIGH is 6 (see the concept page). Do not
+; "simplify" these waits.
+;
+; THE INIT ORDER IS OD -> OUT -> OE and it is load-bearing: writing OE first
+; enables the pins while the output register still holds 0x01, pulling SDA low
+; with SCL high, which IS a START. See wiki/concepts/i2c-on-the-matrix.md.
+
+        ; ---- enter open-drain mode, in the order that cannot glitch ---------
+        LDI   A, SDA|SCL
+        OUT   PINOD, A
+        LDI   A, SDA|SCL           ; levels first: both released (bus idle)
+        OUT   TXPIN, A
+        LDI   A, SDA|SCL           ; then claim the pins
+        OUT   PINOE, A
+
+        ; ---- clear the observables -----------------------------------------
+        LDI   A, 0
+        STM   0, A
+        STM   1, A
+        STM   2, A
+        STM   3, A
+        STM   4, A
+        STM   5, A
+        STM   7, A
+        STM   10, A                ; state 0: START
+        STM   11, A
+
+; ===========================================================================
+; The dispatcher. dmem[10] names the next action; each handler sets up the
+; byte/slot/next-state and jumps into a shared engine, which jumps back here.
+; ===========================================================================
+main:   LDM   A, 10
+        JZ    s0
+        SUB   A, 7                 ; state 7 is terminal: park
+        JZ    park
+        LDM   A, 10
+        SUB   A, 1
+        JZ    s1
+        LDM   A, 10
+        SUB   A, 2
+        JZ    s2
+        LDM   A, 10
+        SUB   A, 3
+        JZ    s3
+        LDM   A, 10
+        SUB   A, 4
+        JZ    s4
+        LDM   A, 10
+        SUB   A, 5
+        JZ    s5
+        LDM   A, 10
+        SUB   A, 6
+        JZ    s6
+        JMP   park                 ; unreachable state: park rather than wander
+
+; ---- state 0 and 3: START, then continue --------------------------------
+s0:     LDI   A, 1
+        STM   10, A
+        JMP   do_start
+s3:     LDI   A, 4
+        STM   10, A
+        JMP   do_start
+
+; ---- state 1: send the write address (0xA0), ACK into dmem[0] ------------
+s1:     LDI   A, 0xA0
+        STM   8, A
+        LDI   A, 0
+        STM   13, A
+        LDI   A, 2
+        STM   10, A
+        JMP   send_byte
+
+; ---- state 2: send the data byte (0xA5), ACK into dmem[1] ----------------
+s2:     LDI   A, 0xA5
+        STM   8, A
+        LDI   A, 1
+        STM   13, A
+        LDI   A, 3
+        STM   10, A
+        JMP   send_byte
+
+; ---- state 4: send the read address (0xA1), ACK into dmem[2] -------------
+s4:     LDI   A, 0xA1
+        STM   8, A
+        LDI   A, 2
+        STM   13, A
+        LDI   A, 5
+        STM   10, A
+        JMP   send_byte
+
+; ---- state 5: read one byte, then NACK -----------------------------------
+s5:     JMP   read_byte
+
+; ---- state 6: STOP -------------------------------------------------------
+; A STOP is SDA rising while SCL is high, and the order matters: SCL low,
+; SDA low, tSU;STO, SCL released, tHIGH, SDA released -> the rising edge is
+; the STOP. (i2c_pins.pe's header explains the spurious-START trap this
+; avoids.)
+s6:     LDI   A, 0x00             ; SCL already low; pull SDA low safely
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_STO
+        MOV   X, A
+w_sto:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_sto
+        LDI   A, SCL               ; release SCL while SDA is still low
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_HIGH
+        MOV   X, A
+w_sth:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_sth
+        LDI   A, SDA|SCL           ; release SDA with SCL high: the STOP
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_BUF
+        MOV   X, A
+w_buf:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_buf
+        LDI   A, 7
+        STM   10, A
+        JMP   main
+
+; ---- terminal state: the completion flag, then park ----------------------
+park:   LDI   A, 0xA5
+        STM   5, A
+        JMP   park
+
+; ===========================================================================
+; do_start: drive a (repeated) START and return to the dispatcher.
+;
+; Entered with SCL low and SDA released (the end of every byte) or with the bus
+; idle-high. Releasing both first makes the two cases identical: SCL rises,
+; SDA stays high through T_STA, then SDA falls while SCL is high -- the START
+; definition. The second wait is tHD;STA before SCL may fall.
+; ===========================================================================
+do_start:
+        ; If the previous clock left SCL low -- always, coming out of a byte --
+        ; this rise ends the ACK clock's LOW phase, so it must still meet tLOW.
+        ; Without this wait a repeated START raised SCL 22 cycles after the
+        ; ACK fell (0.37 us of tLOW, measured by the checker). At the initial
+        ; START the wait is harmless: SCL is already high and no edge results.
+        IN    A, I2CTICK
+        ADD   A, T_LOW
+        MOV   X, A
+w_ds:   IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_ds
+        LDI   A, SDA|SCL           ; SCL high (or stays high), SDA released
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_STA
+        MOV   X, A
+w_sta:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_sta
+        LDI   A, SCL               ; SDA driven low with SCL high: START
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_STA
+        MOV   X, A
+w_hst:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_hst
+        LDI   A, 0x00              ; SCL low: the bus is captured
+        OUT   TXPIN, A
+        JMP   main
+
+; ===========================================================================
+; send_byte: clock dmem[8] out MSB-first, then sample the ACK into the slot
+; named by dmem[13]. The byte is shifted left after every bit, so the MSB is
+; the bit under test each iteration. Every transmitted 1 is read back while
+; SCL is high: a 0 is arbitration loss and dmem[7] counts it.
+; ===========================================================================
+send_byte:
+        LDI   A, 8
+        STM   9, A
+sb_bit: LDM   A, 9
+        JZ    sb_ack
+        LDM   A, 8
+        MOV   X, A
+        AND   A, 0x80              ; the MSB is the bit to send
+        JZ    sb_zero
+        LDI   A, 1
+        STM   12, A                ; remember: a 1 is being sent
+        LDI   A, SDA               ; out=1 in OD is a RELEASE
+        JMP   sb_drive
+sb_zero:
+        LDI   A, 0
+        STM   12, A
+sb_drive:
+        OUT   TXPIN, A             ; SDA set while SCL is low
+        IN    A, I2CTICK
+        ADD   A, T_LOW
+        MOV   X, A
+sb_w1:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   sb_w1
+        ; Release SCL HOLDING SDA. `SDA|SCL` would also release a driven 0,
+        ; which makes SDA rise in the same cycle SCL does -- an illegal data
+        ; move under a rising clock, and the first version did exactly that.
+        LDM   A, 12
+        JZ    sb_rel0
+        LDI   A, SDA|SCL           ; bit 1: SDA released, SCL released
+        JMP   sb_rel
+sb_rel0:
+        LDI   A, SCL               ; bit 0: SDA stays driven low
+sb_rel:
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_HIGH
+        MOV   X, A
+sb_w2:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   sb_w2
+        ; arbitration: only a transmitted 1 can lose, and a released SDA
+        ; reads the pad. dmem[12] gates the check so a driven 0 is not read.
+        LDM   A, 12
+        JZ    sb_noarb
+        IN    A, PIN
+        AND   A, SDA
+        JNZ   sb_noarb
+        LDM   A, 7
+        ADD   A, 1
+        STM   7, A
+sb_noarb:
+        ; Pull SCL low HOLDING SDA too: the next change happens with the
+        ; clock low, which is where data is allowed to move.
+        LDM   A, 12
+        JZ    sb_pl0
+        LDI   A, SDA               ; bit 1: SCL low, SDA released
+        JMP   sb_pl
+sb_pl0:
+        LDI   A, 0x00              ; bit 0: SCL low, SDA held low
+sb_pl:
+        OUT   TXPIN, A
+        LDM   A, 8                 ; shift the byte left: A = 2A via X
+        MOV   X, A
+        ADD   A, X
+        STM   8, A
+        LDM   A, 9
+        SUB   A, 1
+        STM   9, A
+        JMP   sb_bit
+
+; ---- the ACK slot: release SDA, clock it, sample while SCL is high --------
+sb_ack:
+        LDI   A, SDA
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_LOW
+        MOV   X, A
+sb_w3:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   sb_w3
+        LDI   A, SDA|SCL
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_HIGH
+        MOV   X, A
+sb_w4:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   sb_w4
+        IN    A, PIN
+        AND   A, SDA               ; 0x00 = ACKed, 0x10 = NACKed
+        STM   14, A
+        LDI   A, SDA
+        OUT   TXPIN, A             ; SCL low for the next phase
+        LDM   X, 13                ; dynamic ACK slot: STS is X-indexed
+        LDM   A, 14
+        STS   [X], A
+        JMP   main
+
+; ===========================================================================
+; read_byte: release SDA and sample eight bits MSB-first into dmem[11], then
+; clock the NACK slot. The accumulator shifts left each bit and ORs in a 1.
+; ===========================================================================
+read_byte:
+        LDI   A, 0
+        STM   11, A
+        LDI   A, 8
+        STM   9, A
+rb_bit: LDM   A, 9
+        JZ    rb_nack
+        LDI   A, SDA
+        OUT   TXPIN, A             ; SDA released (the slave drives it)
+        IN    A, I2CTICK
+        ADD   A, T_LOW
+        MOV   X, A
+rb_w1:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   rb_w1
+        LDI   A, SDA|SCL
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_HIGH
+        MOV   X, A
+rb_w2:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   rb_w2
+        IN    A, PIN
+        AND   A, SDA
+        STM   14, A
+        LDI   A, SDA
+        OUT   TXPIN, A             ; SCL low before anything else changes
+        LDM   A, 11
+        MOV   X, A
+        ADD   A, X                 ; acc <<= 1
+        STM   11, A
+        LDM   A, 14
+        JZ    rb_skip
+        LDM   A, 11
+        OR    A, 1
+        STM   11, A
+rb_skip:
+        LDM   A, 9
+        SUB   A, 1
+        STM   9, A
+        JMP   rb_bit
+
+; ---- the NACK slot: the master releases SDA and records the byte ----------
+rb_nack:
+        LDI   A, SDA
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_LOW
+        MOV   X, A
+rb_w3:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   rb_w3
+        LDI   A, SDA|SCL
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_HIGH
+        MOV   X, A
+rb_w4:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   rb_w4
+        LDI   A, SDA
+        OUT   TXPIN, A             ; SCL low, SDA released (NACK is a release)
+        LDM   A, 11
+        STM   3, A                 ; the read byte
+        LDI   A, 1
+        STM   4, A                 ; NACK sent
+        LDI   A, 6
+        STM   10, A                ; next: STOP
+        JMP   main

@@ -1384,3 +1384,26 @@
   fell (CS still low)`.
 - `mutate_ctrl_tb.sh` remains 11 detected / 0 survived against the corrected
   TB. `PE-CTRL-RESOLUTION.md` carries the corrected claim.
+
+## [2026-09-23] i2c | the transaction layer runs in the emulator
+
+- `firmware/i2c_xfer.pe` (267 words): START, 0xA0, ACK, 0xA5, ACK, repeated
+  START, 0xA1, ACK, read 0x5A, NACK, STOP — written as a state dispatcher over
+  one shared send engine and one shared read engine, because the ISA has no
+  call and no rotate (left shift is `MOV X,A; ADD A,X`). All 60 tick phases
+  decode identically and clear the standard-mode floors: tLOW 6.00 us,
+  tHIGH 5.98 us, period 11.98 us, 52.5–83.5 kHz.
+- `tools/fw/peemu.py` gains `I2CSlaveModel`: a byte-level open-drain slave that
+  decodes the wire independently (START/STOP, bits on SCL rises, ACK on the
+  9th clock) and holds SDA for tHD;DAT after each falling edge. The checker
+  caught two model bugs: the post-START SCL fall was counted as a data bit
+  (addresses decoded 0x50), and pull changes landed on the falling edge
+  (grammar violations).
+- `tools/checks/i2c_xfer_check.py` asserts the slave's decode, the firmware's
+  dmem observables, the timing floors and the grammar across all 60 phases.
+  Registered in `run_all.sh`; the assemble step is in `run_firmware_tests.sh`
+  (now 20/20).
+- Two firmware traps fixed on the way: releasing SCL must HOLD SDA (`SDA|SCL`
+  released a driven 0 together with the clock), and the repeated START must
+  wait tLOW before raising SCL (the ACK clock's low phase measured 0.37 us).
+- Next: the RTL TB with its own Verilog slave model, then docs + screen.
