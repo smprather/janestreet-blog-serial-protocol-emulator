@@ -1340,3 +1340,34 @@
   `run` has −0.158 ns hold slack under a zero-min input assumption, and
   unplaced high-fanout nets exceed limits. Async SPI synchronizer inputs are
   intentionally false-pathed. See `reviews/2026-09-23/pe-ctrl-hardening/`.
+
+## [2026-09-23] fix | pe_ctrl aborts a queued word when run rises
+
+- `ef4041d` fixes the independent P1: `host_we` is masked by `run`; W_IDLE,
+  W_PULSE and W_DONE discard/flag a pending word when execution starts so it
+  cannot write during run or reappear after run falls.
+- The permanent `tb_pe_ctrl` test exercises the W_PULSE transition, verifies no
+  host write/count, expects `load_error`, then checks no stale write after run
+  falls. I independently verified it passes on the fix and fails against
+  `39c0eb4` with six assertions; standalone lint is clean. Mutation harness and
+  full post-fix regression are in progress.
+- Fresh mapped Yosys/OpenSTA recheck on `ef4041d`: 0 synthesis problems,
+  ~5,791.1 µm² area, +8.71 ns worst setup slack across three corners. Hold
+  remains −0.19/−0.16/−0.12 ns (fast/typical/slow) on the direct `run` input
+  under a zero-min-delay screen assumption; pre-layout
+  high-fanout violations remain. No physical flow, DRC or LVS ran.
+
+## [2026-09-23] finalize | pe_ctrl mutation guard and full post-fix regression
+
+- `regress/mutate_ctrl_tb.sh` added: 11 mutations, **11 detected, 0 survived**.
+  Beyond the eight protocol mutations it guards the three run-transition
+  windows (`idle-abort`, `host-we-mask`, `done-run-check`); the W_PULSE abort
+  itself is documented as defence-in-depth with no independently observable
+  mutation. The `run-gate` mutation exposed one missing assertion (an attempted
+  load while running must be *ignored*, not flagged); case 5 now checks it.
+- Full post-fix `./regress/run_all.sh --fast -j8`: **RTL 28/28, firmware
+  19/19**, lint clean (15 Verilator tops / 12 Yosys elaborations), **six**
+  mutation suites green (i2c, spi, fbuf, eth_mac, eth_soc, ctrl), the new
+  macro-flow gate and every generated-doc gate green.
+- The loader is therefore complete at the plan's Task 1+2 boundary:
+  `PE-CTRL-RESOLUTION.md` records the semantics and evidence.

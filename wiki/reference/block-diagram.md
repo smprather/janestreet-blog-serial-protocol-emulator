@@ -90,7 +90,7 @@ flowchart LR
 | `pe_imem` | instruction memory; SRAM macro by default | pe_soc.v | 12 | `tb_pe_imem` |
 | `pe_eth_mac` | 10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward | pe_soc.v | 1402 | `tb_pe_eth_mac` |
 | `pe_fbuf` | frame buffer: 2 KB behind a byte interface, same macro as pe_imem | pe_soc.v | 48 | `tb_pe_fbuf` |
-| `pe_ctrl` | passive SPI load path: host clocks words into imem | tt_um_protocol_emulator.v | 284 | `tb_pe_ctrl` |
+| `pe_ctrl` | passive SPI load path: host clocks words into imem | tt_um_protocol_emulator.v | 292 | `tb_pe_ctrl` |
 | `pe_dru` | digital receiver unit: 12x oversampled edge recovery | pe_soc.v | 148 | `tb_pe_dru` |
 | `pe_crc` | CRC/LFSR generator, 8/16/32-bit, catalogue-checked | pe_soc.v | 209 | `tb_pe_crc` |
 | `pe_pinmux` | per-pin direction, open-drain, read-back (the I2C gate) | pe_soc.v | 111 | `tb_pe_pinmux` |

@@ -11,6 +11,14 @@
 > requirement from the netlist. See `reviews/2026-09-23/ETHERNET-SOC-REVIEW.md`,
 > `E1-RESOLUTION.md` and `E2-RESOLUTION.md` for evidence, including the
 > synthesis/STA recheck. Physical flow, DRC and LVS remain deferred.
+>
+> **Also done 2026-09-23: the SPI loader.** `rtl/pe_ctrl.v` is a passive SPI
+> slave at the TT wrapper (ADR-007) that clocks 16-bit words into `pe_imem`
+> through the SoC's host port; its independent run-transition P1 (a queued word
+> could write while `run` was high) is fixed with abort semantics and a masked
+> `host_we`, and `regress/mutate_ctrl_tb.sh` guards it 11/11. Regression is now
+> RTL 28/28, firmware 19/19, six mutation suites. See
+> `reviews/2026-09-23/PE-CTRL-RESOLUTION.md`.
 
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
 > Last updated: 2026-09-23, after reviewing the project-layout rework at
@@ -45,8 +53,8 @@ firmware images. A fresh archive regression, the original review probes and
 and submission/staged-flow source compilation all pass. Evidence is in
 `reviews/2026-09-23/refactor/`; no physical flow was run.
 
-The regression reports 27/27 RTL and **19/19** firmware checks passing, with
-lint, documentation gates, and all five mutation suites green, and the review's
+The regression reports 28/28 RTL and **19/19** firmware checks passing, with
+lint, documentation gates, and all six mutation suites green, and the review's
 directed probe suite (`bash reviews/2026-09-22/review2/run_repros.sh`) exits 0.
 The second review's original seven failure cases now pass: the DRU's falling-edge capture is
 now a two-latch pair (the async Ethernet sweep is 102 trials / 0 failures), the
@@ -164,6 +172,7 @@ The one-line version, for the reader who wants it before clicking through:
                              └ 10BASE-T RX (pe_dru -> pe_manch -> pe_eth_mac
                                             + pe_crc + pe_fbuf)
                                  └ frame window on IO 0x8-0xE -> firmware
+    └── pe_ctrl (292) ── passive SPI load into imem
 
   BUILT, TB-verified, INSTANTIATED NOWHERE (2):
     pe_serdes (539)  pe_codec_mux (130)
@@ -190,6 +199,7 @@ states the reasoning; do not "unify" them without reading it.
 | **DRU** (oversampled Manchester receive, DDR) | `rtl/pe_dru.v` | **148** | **2,398** | `tb_pe_dru` |
 | **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 377 | 4,843 | `tb_pe_cpu` |
 | **Pin matrix** (per-pin OUT/OE/IN/OD, open-drain, read-back) | `rtl/pe_pinmux.v` | **111** | **2,061** | `tb_pe_pinmux` |
+| **SPI loader** (passive slave; 16-bit words to imem, abort on run) | `rtl/pe_ctrl.v` | **292** | **5,791** | `tb_pe_ctrl` |
 | **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
 | **Software-UART SoC** (CPU + tick timer + pin matrix + 10BASE-T RX) | `rtl/pe_soc.v` | **3,066** | **50,895 total** | `tb_pe_soc_uart`, `tb_pe_soc_tick`, `tb_pe_soc_eth` |
 | **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **3,056** | **50,948 total** | `tb_tt_um_protocol_emulator` |
@@ -240,7 +250,7 @@ depth: 896 words of addressable-by-nothing SRAM for 79,674 µm². **The PC and t
 jump-target field had to widen in the same change.** Full reasoning and the
 rejected alternatives: [[decisions/adr-004-program-counter-width]].
 
-**Regression: 27/27 testbenches + 19/19 firmware tests pass, and the lint gate is
+**Regression: 28/28 testbenches + 19/19 firmware tests pass, and the lint gate is
 clean** (14 verilator tops + 11 yosys elaborations; `regress/run_all.sh` runs the firmware regression first, then every TB, then
 `regress/lint.sh`, then the generated-doc drift checks, then FIVE mutation harnesses --
 `regress/mutate_i2c_tb.sh`, `regress/mutate_spi_tb.sh`, `regress/mutate_fbuf_tb.sh`,
@@ -1238,15 +1248,20 @@ frames and a bad-FCS frame and checks firmware's dmem, and
 one to be caught. The frame buffer is no longer an orphan; only `pe_serdes` and
 `pe_codec_mux` remain unwired. See [[concepts/ethernet-receive-path]].
 
-### 2. `pe_ctrl` — the SPI load path
+### 2. `pe_ctrl` — the SPI load path — DONE 2026-09-23
 
-**The one blocking a real chip from booting.** There is no way to get a program into
-instruction memory on silicon: `pe_imem` needs a loader, and without it the chip
-powers up holding whatever the macro happens to contain. Every simulation works
-because the TBs preload. **Ruled 2026-09-23: passive SPI slave**
-([[decisions/adr-007-pe-ctrl-passive-slave]]) — host-clocked hardware at the
-wrapper boundary, SPI mode 0 MSB-first 16-bit words, three pads (`ui_in[3:5]`),
-and `run` stays a separate strap (load, then run).
+Ruled and built: a **passive SPI slave**
+([[decisions/adr-007-pe-ctrl-passive-slave]]) in `rtl/pe_ctrl.v`, between the
+three loader pads (`ui_in[3]=SCLK`, `[4]=MOSI`, `[5]=CS_N`) and the SoC's
+existing host write port. Mode 0, MSB-first 16-bit words; `CS_N` low resets the
+word address and enables, every 16 rising SCLK edges writes `imem[addr++]`,
+`CS_N` high ends the load and discards a partial word. All receive and write
+paths are `run`-gated: a word queued when `run` rises is **aborted** (discarded,
+`load_error` latched, `host_we` masked), so it cannot write during execution or
+reappear stale when `run` falls. `tb_pe_ctrl` proves the protocol and the three
+run-transition windows; `tb_tt_um_protocol_emulator` loads five words through
+the pads and executes them; `regress/mutate_ctrl_tb.sh` is 11/11. See
+`reviews/2026-09-23/PE-CTRL-RESOLUTION.md`.
 
 ### 3. I2C transaction layer
 
