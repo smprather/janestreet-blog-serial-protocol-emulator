@@ -1448,3 +1448,27 @@
   transaction loop does not wait on a stretched SCL.
 - No RTL logic changed (a wrapper comment only), so the recorded synthesis/STA
   screens remain current.
+
+## [2026-09-23] planning | item 5: floorplan feasibility, read-only
+
+- STATUS item 5 is documented in the generated
+  [[reference/floorplan-feasibility]]: two `1P_1024x16` macros (236.8×336.46 µm
+  each, 159,347 µm² total) plus `tt_um_top`'s 59,548 µm² of logic (3,613 cells)
+  fit the template 6×4 die at ~60% occupancy (36% at the blog tile; 45% on the
+  8×4 upside). **Area is not the risk.**
+- The finding that matters: the existing signoff is a PADLESS core (`DIE_AREA`
+  only, no `CORE_AREA`), while the TT deliverable's pad ring shrinks the usable
+  core. The recorded macro placements are proven against the die, not a padded
+  floorplan; macro `y=10` may sit under the ring.
+- Assumption differences tabulated: blog tile 200×150 vs template 167×108 µm
+  (+66% area), die 1200×600 vs 1002×432, and the blog's ~24k-cell logic figure
+  against the template's own ~8k; this design's 3,613 cells clears both, so the
+  tile size decides the macro rectangle, not the budget.
+- Evidence deferred and listed there: a TT-top flow config, `CORE_AREA`
+  placement with the ring, both macros' PDN connectivity, congestion and
+  detailed-route DRC, a routed utilisation report, macro-alone DRC provenance,
+  a confirmed tile size, and the full-chip hold/high-fanout items.
+- `tools/gen/floorplan_feasibility.py` generates the page from the LEF,
+  `flow/pe_soc.json` and `wiki/reference/.floorplan-areas` (measured mapped
+  areas), drift-gated in `run_all.sh`. No LibreLane/OpenROAD, DRC or LVS was
+  launched.

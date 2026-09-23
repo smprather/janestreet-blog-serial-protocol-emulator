@@ -1309,12 +1309,34 @@ Separately noted: SPI firmware's MOSI/CS have no pads today; the free `uio`
 bank is the natural place to bring them out (bidir, per-pin OE), not these
 debug pins.
 
-### 5. Full-chip floorplan against the real tile allocation
+### 5. Full-chip floorplan against the real tile allocation — FEASIBILITY DONE 2026-09-23
 
-Everything so far is block-level or one-block-through-the-flow. The tile-size figure
-is itself uncertain (the blog says ~200x150 um/tile, the TT template's `info.yaml`
-says ~167x108 um) — see the open risks. Do this when the RTL stops moving, and per the
-standing ruling, *not* as a routine check.
+Read-only feasibility is documented in [[reference/floorplan-feasibility]],
+generated from the PDK LEF, `flow/pe_soc.json` and the measured synthesis cache
+(`tools/gen/floorplan_feasibility.py`, drift-gated in the regression):
+
+- The design is two `1P_1024x16` macros (236.8×336.46 µm each, 159,347 µm²
+  total) plus `tt_um_top`'s 59,548 µm² of logic (3,613 cells). With the
+  SERDES-derived ×1.69 routing inflation that is ~260,000 µm²: **60.1%
+  occupancy on the template 6×4 die**, 36.1% at the blog's larger tile, 45.1%
+  on the 8×4 upside.
+- **Area is not the open question; the pad ring is.** The existing signoff is a
+  padless core (`DIE_AREA` only, no `CORE_AREA`), while the TT deliverable's
+  pads occupy the perimeter of the same outline, so its usable core is smaller.
+  The recorded placements are proven legal against the *die* (E2's gate), not
+  against a padded floorplan; macro `y=10` may sit under the ring.
+- The blog vs template assumptions are tabulated on the page: tile 200×150 vs
+  167×108 µm (+66% area), die 1200×600 vs 1002×432, and the blog's ~24,000-cell
+  logic figure against the template's own ~8,000-cell fit. This design's 3,613
+  cells clears both, so the tile size decides the macro rectangle, not the
+  budget.
+- **Evidence needed later** (deferred, and not run here): a TT-top flow config;
+  placement inside a real `CORE_AREA` with the ring; both macros' PDN
+  connectivity (PSM-0040, no PDN-0189/PSM-0069); congestion and detailed-route
+  DRC; a routed utilisation report to replace the ×1.69 estimate; macro-alone
+  DRC provenance; a confirmed tile size; and the full-chip hold/high-fanout
+  items from the reviews. Per the standing ruling, no LibreLane/OpenROAD, DRC
+  or LVS was launched.
 
 ### Deferred by explicit ruling — do not do these
 

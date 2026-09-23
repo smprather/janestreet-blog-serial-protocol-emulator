@@ -308,6 +308,14 @@ if [ -d "$HOME/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram/lef" ]; then
     echo "STALE: wiki/reference/sram-budget.md — run python3 tools/gen/sram_budget.py"
     stale=1
   fi
+  # The floorplan feasibility page is arithmetic over the LEF, the flow config
+  # and the measured synthesis cache (STATUS item 5). It never runs the flow.
+  if python3 tools/gen/floorplan_feasibility.py --check >/dev/null 2>&1; then
+    echo "floorplan feasibility up to date"
+  else
+    echo "STALE: wiki/reference/floorplan-feasibility.md — run python3 tools/gen/floorplan_feasibility.py"
+    stale=1
+  fi
 else
   echo "sram budget: SKIPPED (PDK not at ~/pdk/IHP-Open-PDK)"
 fi

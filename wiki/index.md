@@ -38,6 +38,7 @@
 - [[reference/signal-names]] — Every RTL port: direction, width, meaning, validity. Port tables generated from the Verilog (drift-checked in `regress/run_all.sh`).
 - [[reference/protocol-pin-budget]] — Per-protocol IO pin counts vs the TT pad budget (26 pads, 24 usable); what the board must add per protocol.
 - [[reference/sram-budget]] — SRAM capacity vs the 8×4 die: every PDK macro's real size, what packs, and the area cost of 1–32 KB.
+- [[reference/floorplan-feasibility]] — the actual two-macro + logic fit on the real tile allocations, the blog-vs-template assumption differences, and the evidence a later floorplan run must produce (read-only; generated).
 - [[reference/crc-config]] — every CRC constant `pe_crc` is loaded with, derived and checked against the RevEng catalogue's published values (generated).
 - [[reference/clock-arithmetic]] — every protocol constant at the LOCKED 60 MHz operating point: what is integer-exact and what is an approximation. `CLK_HZ` is read from the RTL (generated).
 - [[reference/block-diagram]] — Mermaid block diagram: what is in the chip, and which built blocks are wired to nothing. Built/orphan split checked against `rtl/` + `run_all.sh` (generated).

@@ -1,0 +1,4 @@
+# mapped cells and area (um2) from the last regress/synth_area.sh run.
+# Refresh: ./regress/synth_area.sh | awk 'NF>=4 && $2 ~ /^[0-9]+$/ {print $1, $2, $4}'
+pe_soc 3298 53730.6966
+tt_um_top 3613 59547.8520

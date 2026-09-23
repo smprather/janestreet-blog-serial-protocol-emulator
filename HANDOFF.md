@@ -74,12 +74,14 @@ The second-review runner exits 0, the
 asynchronous Ethernet sweep is 102 trials / 0 failures, and the boundary runner
 `reviews/2026-09-23/run-boundaries.sh` exits 0.
 
-**Next:** resume at `wiki/STATUS.md` item 5 (the full-chip floorplan against the
-real tile allocation), which the RTL settling now allows to be planned. Item 4
-(the six debug pins) is **decided: keep them** — the pad budget is not the
-constraint, there is no loader readback path, and the rationale plus a revisit
-trigger are in `wiki/STATUS.md` item 4 and the wrapper header. The I2C
-happy-path transaction is implemented; see
+**Next:** STATUS item 5's read-only floorplan feasibility is documented in
+[[reference/floorplan-feasibility]] (generated; no flow launched). The remaining
+*physical* work is deferred by standing ruling and listed there as evidence for
+a later run — a TT-top flow config, placement inside a real `CORE_AREA` with the
+pad ring, both macros' PDN connectivity, congestion/DRC and a confirmed tile
+size. The live software candidates now are bringing SPI's MOSI/CS out on the
+free `uio` bank, the I2C negative-path/stretch work, and a `pe_ctrl` readback
+path. The I2C happy-path transaction is implemented; see
 `reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md` for its clean-path verification
 and remaining protocol limits (arbitration counts but continues, NACKs are
 recorded without recovery, no clock stretching in the transaction loop). All
@@ -249,8 +251,11 @@ ACK, data, ACK, repeated START, address+R, ACK, read, NACK, STOP — verified on
 the emulator across all 60 tick phases and on real RTL against an independent
 Verilog slave FSM. **Item 4 is decided: the six `uo_out[7:2]` pads stay
 `dbg_pc[5:0]` for now** (no readback path; 14 pads free; revisit trigger in
-STATUS). The next ordered item is the full-chip floorplan, deferred until the
-RTL settles. `wiki/plans/through-i2c.md` is kept for its timing analysis;
+STATUS). **Item 5's read-only feasibility is documented in
+[[reference/floorplan-feasibility]]**: the two macros plus logic fit the
+template 6×4 die at ~60% occupancy, the open question is the pad ring
+(`CORE_AREA` vs `DIE_AREA`), and the physical-flow evidence is deferred and
+listed. `wiki/plans/through-i2c.md` is kept for its timing analysis;
 `wiki/plans/i2c-transaction.md` is the completed transaction plan.
 
 **I2C review limits:** the transaction verifies the fixed ACK-success case and
