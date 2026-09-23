@@ -1,7 +1,7 @@
 ---
 title: Protocol Pin Budget
 created: 2026-09-18
-updated: 2026-09-18
+updated: 2026-09-23
 type: reference
 tags: [physical-layer, gpio, protocol, constraint]
 sources: [raw/articles/tinytapeout-multiplexer.md, wiki/concepts/physical-layer-gpio.md]
@@ -102,15 +102,15 @@ bidirectional wire needs a `uio` pad, an input needs `ui_in` or a released
 | Bank | committed | free |
 |---|---|---|
 | `ui_in` | 6 (UART RX, run, 10BASE-T RX, loader SCLK, loader MOSI, loader CS_N) | 2 |
-| `uo_out` | 8 (UART TX, heartbeat, dbg_pc[5:0]) | 0 |
-| `uio` | 2 (I2C SDA, I2C SCL) | 6 |
-| **total** | 16 | **8** |
+| `uo_out` | 8 (UART TX / SPI SCLK, heartbeat, dbg_pc[5:0]) | 0 |
+| `uio` | 4 (I2C SDA, I2C SCL, SPI MOSI, SPI CS_N) | 4 |
+| **total** | 18 | **6** |
 
-After the pinned UART, I2C and 10BASE-T-RX wires, the remaining protocols
-need 9 outputs, 3 inputs and 5 bidir:
+After the pinned UART, SPI MOSI/CS_N, I2C and 10BASE-T-RX wires, the remaining protocols
+need 7 outputs, 3 inputs and 5 bidir:
 
-- **Debug pins kept** (the item-4 decision): 8 free pads against 17 remaining wires — short 9. The 3 inputs and 5 bidir wires alone consume every free pad (2 `ui_in` + 1 `uio` + 5 `uio`), leaving nothing for the 9 outputs.
-- **Debug pins reclaimed:** 14 free pads, short 3: the 3 remaining inputs take the 2 free `ui_in` and 1 `uio`; the 5 bidir wires take the other 5; 0 `uio` are left for the 9 outputs, and `uo_out` supplies 6 — so only 6 of 9 outputs can be placed.
+- **Debug pins kept** (the item-4 decision): 6 free pads against 15 remaining wires — short 9. The 3 inputs take 2 `ui_in` + 1 `uio`; the 5 bidir wires need 5 `uio` but only 3 remain, so 2 bidir pads are missing; every `uo_out` pad is taken, so all 7 outputs are missing.
+- **Debug pins reclaimed:** 12 free pads, short 3: the 3 remaining inputs take the 2 free `ui_in` and 1 `uio`; the 5 bidir wires need 5 `uio` but only 3 remain, so 2 bidir pads are missing; `uo_out` supplies 6 of the 7 outputs, so 1 output is missing.
 
 **Even shedding every overhead** — the run strap, the heartbeat, the debug
 pads and the loader's three pads reused at runtime — leaves 10 outputs

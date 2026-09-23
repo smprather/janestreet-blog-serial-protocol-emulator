@@ -51,22 +51,32 @@
 //   ui_in[5]    SPI CS_N         (active-low loader select)
 //   ui_in[7:6]  unused
 //
-//   uo_out[0]   UART TX          (the protocol output pin)
+//   uo_out[0]   UART TX / SPI SCLK  shared port bit 0, one persona at a time
 //   uo_out[1]   heartbeat        timer bit 7, so a scope shows life
 //   uo_out[7:2] dbg_pc[5:0]      visible program counter, for bring-up
 //
 //   uio[0]      SDA              open-drain, for the I2C milestone
 //   uio[1]      SCL              open-drain, for the I2C milestone
-//   uio[7:2]    released         (oe = 0)
+//   uio[2]      SPI MOSI         push-pull, port bit 1
+//   uio[3]      SPI CS_N         push-pull, port bit 2
+//   uio[7:4]    released         (oe = 0)
+//
+// SCLK (port bit 0) and MISO (port bit 3) are NOT remapped: SCLK already has
+// its pad on uo_out[0] and MISO on ui_in[0], shared with UART TX/RX because the
+// two protocols share the SoC's port bits and only one firmware image runs at
+// a time. Only the two output bits with no pad -- MOSI and CS_N -- are added.
+// A second SCLK pad would duplicate uo_out[0]; there is no input mux for a
+// dedicated MISO. See wiki/plans/spi-pads.md.
 //
 // WHY SIX PADS STILL CARRY THE PROGRAM COUNTER (decision 2026-09-23, STATUS
-// item 4). Not because pads are free: the committed pinout uses 16 of 24
+// item 4). Not because pads are free: the committed pinout uses 18 of 24
 // usable pads, and a literal "all nine protocols at once" needs 22 disjoint
 // wires (10 out, 5 in, 7 bidir). It does NOT fit even if these six were
-// reclaimed -- 14 free against 17 remaining wires: the 3 remaining inputs
-// take the 2 free ui_in pads and one uio, the 5 bidir wires take the other 5
-// uio, so none is left for outputs and uo_out's 6 supply only 6 of the 9
-// (short 3). What the budget does not threaten is every realistic case: the baseline
+// reclaimed -- 12 free against 15 remaining wires (SPI MOSI/CS_N are pinned):
+// the 3 remaining inputs take the 2 free ui_in pads and one uio, the 5 bidir
+// wires need 5 uio but only 3 are left, so 2 bidir pads are missing, and
+// uo_out's 6 supply only 6 of the 7 outputs (short 1) -- 3 in total. What the
+// budget does not threaten is every realistic case: the baseline
 // (UART/SPI/I2C) and any single- or two-protocol persona. The direction-aware
 // table is in wiki/reference/protocol-pin-budget.md. The chip has NO READBACK
 // PATH -- pe_ctrl is a passive slave with no MISO -- so these six pins are the
@@ -76,9 +86,10 @@
 // the matrix can already drive any free uio pad at runtime, so this is a
 // pinout choice, not a capability limit.
 //
-// The two uio pins are wired as a loopback-capable open-drain pair driven from
-// the SoC's pin today. That is enough to prove the oe path works in silicon,
-// which is the thing wiki/plans/through-i2c.md flags as unverified.
+// The two I2C uio pins are wired as a loopback-capable open-drain pair driven
+// from the SoC's pin today. That is enough to prove the oe path works in
+// silicon, which is the thing wiki/plans/through-i2c.md flags as unverified.
+// uio[2:3] add the SPI MOSI/CS_N output pair; uio[7:4] stay released.
 
 module tt_um_protocol_emulator (
   input  wire [7:0] ui_in,      // dedicated inputs
@@ -163,7 +174,7 @@ module tt_um_protocol_emulator (
   );
 
   // ---- dedicated outputs -------------------------------------------------
-  assign uo_out[0]   = pin_out_bus[0];    // UART TX / protocol pin 0
+  assign uo_out[0]   = pin_out_bus[0];    // UART TX / SPI SCLK, port bit 0
   assign uo_out[1]   = dbg_timer[7];      // heartbeat: ~one edge per 128 ticks
   assign uo_out[7:2] = dbg_pc[5:0];
 
@@ -193,8 +204,16 @@ module tt_um_protocol_emulator (
   assign uio_oe[0]    = pin_oe_bus[4];    // SDA drive enable (open-drain gate)
   assign uio_oe[1]    = pin_oe_bus[5];    // SCL drive enable
 
-  assign uio_out[7:2] = 6'b000000;
-  assign uio_oe[7:2]  = 6'b000000;        // released
+  // SPI MOSI and CS_N are push-pull outputs: the matrix's per-pin enable gates
+  // the pad, so releasing bits 1/2 releases the pads (the default UART/I2C
+  // images leave them driven low per the SoC's outputs-low rule).
+  assign uio_out[2]   = pin_out_bus[1];   // SPI MOSI level
+  assign uio_oe[2]    = pin_oe_bus[1];    // SPI MOSI drive enable
+  assign uio_out[3]   = pin_out_bus[2];   // SPI CS_N level
+  assign uio_oe[3]    = pin_oe_bus[2];    // SPI CS_N drive enable
+
+  assign uio_out[7:4] = 4'b0000;
+  assign uio_oe[7:4]  = 4'b0000;          // released
 
   // The matrix samples the pad level on the port's input bits. SDA is bit 4 and
   // SCL is bit 5, so a released SDA is readable by firmware as port bit 4 --
@@ -213,11 +232,12 @@ module tt_um_protocol_emulator (
   // after TX and the heartbeat, and the low 6 bits of the program counter are
   // the ones that move during bring-up. dbg_a is unused by the wrapper.
   //
-  // uio_in[7:2] are sunk because the current pin map claims only uio[0] and
-  // uio[1]; a future protocol can claim the rest without touching this line.
+  // uio_in[7:2] are sunk: the uio pins are outputs only in the current map --
+  // none of them is read back. A future protocol can claim the rest without
+  // touching this line.
   wire _unused = &{ena, ui_in[7:6], uio_in[7:2],
-                   pin_out_bus[7:6], pin_out_bus[3:1],
-                   pin_oe_bus[7:6], pin_oe_bus[3:0],
+                   pin_out_bus[7:6], pin_out_bus[3],
+                   pin_oe_bus[7:6], pin_oe_bus[3], pin_oe_bus[0],
                    dbg_a, dbg_timer[6:0], dbg_pc[7:6],
                    ctrl_load_active, ctrl_load_error, ctrl_words_written, 1'b0};
 

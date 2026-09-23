@@ -1298,13 +1298,14 @@ mode. See [[concepts/i2c-on-the-matrix]] and
 as `dbg_pc[5:0]`. Rationale:
 
 - **The pad budget does not threaten the realistic cases — but "all nine at
-  once" does NOT fit.** UART, the loader, `run`, the heartbeat and these six
-  debug pins commit **16 of 24** usable pads. All nine protocols need **22
-  disjoint wires (10 out, 5 in, 7 bidir)**; with the debug pins kept only 8
-  pads are free (short 9), and even reclaiming them leaves 14 free against the
-  17 remaining wires — short 3: the 3 remaining inputs take the 2 free `ui_in`
-  pads plus one `uio`, the 5 bidirectional wires take the other five `uio`, so
-  no `uio` is left for outputs and `uo_out`'s 6 supply only 6 of the 9.
+  once" does NOT fit.** UART, the loader, `run`, the heartbeat, I2C and the SPI
+  MOSI/CS pads and these six debug pins commit **18 of 24** usable pads. All
+  nine protocols need **22 disjoint wires (10 out, 5 in, 7 bidir)**; with the
+  debug pins kept only 6 pads are free (short 9), and even reclaiming them
+  leaves 12 free against the 15 remaining wires — short 3: the 3 remaining
+  inputs take the 2 free `ui_in` pads plus one `uio`, the 5 bidirectional wires
+  need 5 `uio` but only 3 are left (2 bidir pads missing), and `uo_out`'s 6
+  supply 6 of the 7 outputs (1 missing).
   Shedding `run`, the heartbeat and debug *and* reusing the loader's pads still
   leaves 10 outputs for `uo_out`'s 8 plus one spare `uio`: **one output
   short**. The direction-aware table is in [[reference/protocol-pin-budget]];
@@ -1314,14 +1315,16 @@ as `dbg_pc[5:0]`. Rationale:
   the visible PC is the only live observability on silicon; a loaded program
   that walks the PC is how bring-up distinguishes running from silent.
 - **Reclaiming has no consumer yet.** It would need a wrapper/pinout redesign;
-  the free `uio` pads already give the matrix six runtime-direction pins.
+  the free `uio` pads already give the matrix four runtime-direction pins
+  (`uio[7:4]`).
 
 **Revisit trigger:** reclaim them when a protocol needs the pads and the free
 `ui_in`/`uio` pins are exhausted, when a `pe_ctrl` readback path lands, or at
 submission pinout freeze. The rationale is recorded in the wrapper header.
-Separately noted: SPI firmware's MOSI/CS have no pads today; the free `uio`
-bank is the natural place to bring them out (bidir, per-pin OE), not these
-debug pins.
+Resolved 2026-09-23: SPI's MOSI and CS_N now have pads on `uio[2]`/`uio[3]`
+(matrix-gated, push-pull), verified pad-level in `tb_tt_um_protocol_emulator`
+([[plans/spi-pads]]); `uio[7:4]` remain free. The debug pins are still not the
+place to reclaim from first.
 
 ### 5. Full-chip floorplan against the real tile allocation — FEASIBILITY DONE 2026-09-23
 

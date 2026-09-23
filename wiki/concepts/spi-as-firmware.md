@@ -48,6 +48,11 @@ Bit 3 is ONE pad. In UART mode a host drives it; in SPI mode the slave does.
 Testing below) — two separate levels could disagree with each other, which is
 the class of bug the emulator exists to catch.
 
+On the wrapper (`rtl/tt_um_protocol_emulator.v`) the port bits land as
+`uo_out[0]` (bit 0, SCLK/UART TX), `uio[2]` (bit 1, MOSI), `uio[3]` (bit 2,
+CS_N) and `ui_in[0]` (bit 3, MISO/UART RX), with the matrix gating the two new
+output pads; see [[plans/spi-pads]].
+
 **SPI is push-pull on dedicated pins, so it needs NO pin matrix.** I2C, being
 open-drain and multi-drop, does — and it needs the direction to change at
 runtime, which this build-time mask deliberately does not do. The pin matrix

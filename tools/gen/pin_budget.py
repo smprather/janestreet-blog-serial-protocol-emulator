@@ -99,10 +99,10 @@ PROTOCOLS = [
 DESIGN_PINOUT = {
     "ui_in": {0: "UART RX", 1: "run", 2: "10BASE-T RX",
               3: "loader SCLK", 4: "loader MOSI", 5: "loader CS_N"},
-    "uo_out": {0: "UART TX", 1: "heartbeat",
+    "uo_out": {0: "UART TX / SPI SCLK", 1: "heartbeat",
                2: "dbg_pc[0]", 3: "dbg_pc[1]", 4: "dbg_pc[2]",
                5: "dbg_pc[3]", 6: "dbg_pc[4]", 7: "dbg_pc[5]"},
-    "uio": {0: "I2C SDA", 1: "I2C SCL"},
+    "uio": {0: "I2C SDA", 1: "I2C SCL", 2: "SPI MOSI", 3: "SPI CS_N"},
 }
 
 
@@ -138,7 +138,7 @@ def build() -> tuple[str, list[str]]:
         "---",
         "title: Protocol Pin Budget",
         "created: 2026-09-18",
-        "updated: 2026-09-18",
+        "updated: 2026-09-23",
         "type: reference",
         "tags: [physical-layer, gpio, protocol, constraint]",
         "sources: [raw/articles/tinytapeout-multiplexer.md, wiki/concepts/physical-layer-gpio.md]",
@@ -193,9 +193,13 @@ def build() -> tuple[str, list[str]]:
             "uo_out": BUDGET["uo_out"] - len(DESIGN_PINOUT["uo_out"]),
             "uio": BUDGET["uio"] - len(DESIGN_PINOUT["uio"])}
     committed = sum(len(v) for v in DESIGN_PINOUT.values())
-    # Remaining demand after the pinned UART (1 out, 1 in), I2C (2 bidir) and
-    # 10BASE-T RX (1 in) wires.
-    rem_out, rem_in, rem_bi = n_out - 1, n_in - 2, n_bi - 2
+    # Remaining demand after the pinned wires: UART (tx out, rx in), SPI (mosi
+    # and cs_n are pinned; sclk/miso share the UART pads and are not counted
+    # separately), I2C (2 bidir) and 10BASE-T RX (in).
+    pinned_out, pinned_in, pinned_bi = 3, 2, 2
+    rem_out = n_out - pinned_out
+    rem_in = n_in - pinned_in
+    rem_bi = n_bi - pinned_bi
     # Reclaiming the six debug pins frees those uo_out pads and only those
     # (UART TX and the heartbeat stay committed).
     debug_pins = sum(1 for v in DESIGN_PINOUT["uo_out"].values()
@@ -204,14 +208,24 @@ def build() -> tuple[str, list[str]]:
                 "uo_out": free["uo_out"] + debug_pins,
                 "uio": free["uio"]}
     free_total = sum(free_rec.values())
-    short_kept = (rem_out + rem_in + rem_bi) - (free["ui_in"] + free["uio"])
-    short_reclaimed = (rem_out + rem_in + rem_bi) - free_total
-    # With the debug pins reclaimed, the inputs beyond the free ui_in take uio
-    # pads FIRST; the bidir wires take the rest; only then can uio serve an
-    # output. Forgetting that input was an arithmetic error the review caught.
-    uio_for_in = max(0, rem_in - free_rec["ui_in"])
-    uio_for_out = free_rec["uio"] - uio_for_in - rem_bi
-    out_avail = free_rec["uo_out"] + max(0, uio_for_out)
+
+    # Allocate by direction: inputs first on uio, then bidir, then outputs.
+    # Forgetting the input step was an arithmetic error the review caught.
+    def shortfall(free_ui: int, free_uo: int, free_uio: int) \
+            -> tuple[int, int, int, int]:
+        uio_for_in = max(0, rem_in - free_ui)
+        uio_left_bi = max(0, free_uio - uio_for_in)
+        bi_short = max(0, rem_bi - uio_left_bi)
+        uio_for_out = max(0, free_uio - uio_for_in - rem_bi)
+        out_short = max(0, rem_out - free_uo - uio_for_out)
+        return uio_for_in, uio_left_bi, bi_short, out_short
+
+    k_in, k_bi_left, k_bi_short, k_out_short = shortfall(
+        free["ui_in"], free["uo_out"], free["uio"])
+    r_in, r_bi_left, r_bi_short, r_out_short = shortfall(
+        free_rec["ui_in"], free_rec["uo_out"], free_rec["uio"])
+    short_kept = k_bi_short + k_out_short
+    short_reclaimed = r_bi_short + r_out_short
 
     lines += [
         "## The answer",
@@ -249,26 +263,29 @@ def build() -> tuple[str, list[str]]:
         f"| `ui_in` | {len(DESIGN_PINOUT['ui_in'])} "
         f"({', '.join(DESIGN_PINOUT['ui_in'].values())}) | {free['ui_in']} |",
         f"| `uo_out` | {len(DESIGN_PINOUT['uo_out'])} "
-        f"(UART TX, heartbeat, dbg_pc[5:0]) | {free['uo_out']} |",
+        f"(UART TX / SPI SCLK, heartbeat, dbg_pc[5:0]) | {free['uo_out']} |",
         f"| `uio` | {len(DESIGN_PINOUT['uio'])} "
         f"({', '.join(DESIGN_PINOUT['uio'].values())}) | {free['uio']} |",
         f"| **total** | {committed} | **{free['ui_in']+free['uo_out']+free['uio']}** |",
         "",
-        "After the pinned UART, I2C and 10BASE-T-RX wires, the remaining protocols",
+        "After the pinned UART, SPI MOSI/CS_N, I2C and 10BASE-T-RX wires, the "
+        "remaining protocols",
         f"need {rem_out} outputs, {rem_in} inputs and {rem_bi} bidir:",
         "",
         f"- **Debug pins kept** (the item-4 decision): "
         f"{free['ui_in']+free['uio']} free pads against "
         f"{rem_out+rem_in+rem_bi} remaining wires — short {short_kept}. The "
-        f"{rem_in} inputs and {rem_bi} bidir wires alone consume every free pad "
-        f"(2 `ui_in` + 1 `uio` + {rem_bi} `uio`), leaving nothing for the "
-        f"{rem_out} outputs.",
+        f"{rem_in} inputs take {free['ui_in']} `ui_in` + {k_in} `uio`; the "
+        f"{rem_bi} bidir wires need {rem_bi} `uio` but only {k_bi_left} "
+        f"remain, so {k_bi_short} bidir pads are missing; every `uo_out` pad "
+        f"is taken, so all {k_out_short} outputs are missing.",
         f"- **Debug pins reclaimed:** {free_total} free pads, short "
         f"{short_reclaimed}: the {rem_in} remaining inputs take the "
-        f"{free_rec['ui_in']} free `ui_in` and {uio_for_in} `uio`; the {rem_bi} "
-        f"bidir wires take the other {rem_bi}; {uio_for_out} `uio` are left for "
-        f"the {rem_out} outputs, and `uo_out` supplies {free_rec['uo_out']} — so "
-        f"only {out_avail} of {rem_out} outputs can be placed.",
+        f"{free_rec['ui_in']} free `ui_in` and {r_in} `uio`; the {rem_bi} "
+        f"bidir wires need {rem_bi} `uio` but only {r_bi_left} remain, so "
+        f"{r_bi_short} bidir pads are missing; `uo_out` supplies "
+        f"{free_rec['uo_out']} of the {rem_out} outputs, so {r_out_short} "
+        f"output is missing.",
         "",
         "**Even shedding every overhead** — the run strap, the heartbeat, the debug",
         f"pads and the loader's three pads reused at runtime — leaves {n_out} outputs",

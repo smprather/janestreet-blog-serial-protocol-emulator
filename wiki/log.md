@@ -1498,3 +1498,33 @@
   — 22 protocol wires (10 out, 5 in, 7 bidir) do not fit; debug kept is short 9
   and debug reclaimed short 3 (the third input takes the last free `uio`). The
   wrapper header, STATUS and the generated page agree.
+
+## [2026-09-23] spi | MOSI and CS_N exposed on the free uio bank
+
+- `rtl/tt_um_protocol_emulator.v` maps port bit 1 -> `uio[2]` (MOSI) and bit 2
+  -> `uio[3]` (CS_N), gated by the matrix's per-pin enable and push-pull. SCLK
+  stays on `uo_out[0]` (shared with UART TX) and MISO on `ui_in[0]` (shared
+  with UART RX); no SCLK mirror is added, and there is no input mux, so a
+  dedicated MISO pad would need a new route plus a firmware pin-contract
+  change -- documented in [[plans/spi-pads]]. `uio[7:4]` stay released.
+- `info.yaml` labels the shared pad `uo[0]` as "UART TX / SPI SCLK (shared port
+  bit 0)"; `tools/gen/pin_budget.py`'s `DESIGN_PINOUT` matches and still
+  counts one physical pad. Budget: **18 of 24** committed, 6 free; short 9
+  (debug kept) / 3 (reclaimed), direction mix recomputed by the generator.
+- `tb/tb_tt_um_protocol_emulator.v` loads `firmware/spi_xfer.hex` through the
+  loader pads and models a mode-0 slave on the pads (SCLK `uo_out[0]`, MOSI
+  `uio_out[2]`/`uio_oe[2]`, CS_N `uio_out[3]`/`uio_oe[3]`, MISO `ui_in[0]`):
+  8 frames, `0x5B` captured per frame, exactly 8 clocks each, and the rolling
+  buffer `dut.u_soc.dmem[0..7]` == A7 E5 96 C1 3D 7B D2 4F. The unclaimed-pin
+  monitors narrow to `uio[7:4]`; `uio[3:2]` must be driven during the run.
+- Mutation evidence: four probes (MOSI source -> bit 0; `uio_oe[2]` low; CS_N
+  source -> bit 1; `uio_oe[3]` low) each fail the pad-level phase; the wrapper
+  was restored byte-identically after every probe.
+- Regression: RTL 29/29, firmware 20/20, lint clean, every gate current, seven
+  mutation suites OK (`/tmp/run_all_spi_pads.log`). `regress/synth_area.sh`:
+  `tt_um_top` 3613 cells / 59,547.852 um2; HEAD-vs-current Yosys `stat` output
+  is identical apart from the log path/hash -- **wire-only, zero gates, zero
+  state**, so no sequential path is added. No wrapper-level SDC exists
+  (`flow/pe_soc.sdc` is the pe_soc core), so there is no pad timing for OpenSTA
+  to sign off; the recorded screens stay pe_ctrl/E1/E2. No physical flow, DRC
+  or LVS was run.

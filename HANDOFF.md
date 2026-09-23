@@ -79,9 +79,9 @@ asynchronous Ethernet sweep is 102 trials / 0 failures, and the boundary runner
 *physical* work is deferred by standing ruling and listed there as evidence for
 a later run — a TT-top flow config, placement inside a real `CORE_AREA` with the
 pad ring, both macros' PDN connectivity, congestion/DRC and a confirmed tile
-size. The live software candidates now are bringing SPI's MOSI/CS out on the
-free `uio` bank and a `pe_ctrl` readback
-path. **The I2C review-focus gaps are closed (2026-09-23):** arbitration loss
+size. SPI's MOSI/CS are now exposed on `uio[2:3]` (2026-09-23,
+[[plans/spi-pads]]; verified pad-level in `tb_tt_um_protocol_emulator`), so the
+live software candidate is a `pe_ctrl` readback path. **The I2C review-focus gaps are closed (2026-09-23):** arbitration loss
 releases and aborts without a STOP, unexpected NACKs record an outcome and end
 with a STOP, and SCL is read back after every release so stretching is waited
 on; all three are tested on the emulator (60 phases, with a
@@ -124,11 +124,14 @@ deleted TB fails the run. A `git archive` clone with none of the ignored diagram
 present also exits 0 (the diagram gate is a committed source hash now; see
 `reviews/2026-09-22/REVIEW.md` finding 7).
 
-**Current regression (2026-09-23, after the I2C gap fixes and the pin-budget
-correction):** `run_all.sh --fast -j8` exit 0 — **29/29 RTL, 20/20 firmware**,
-param guards OK, lint clean, every generated-doc/macro-flow gate current, the
-I2C transaction checker passing, and **all seven mutation suites OK** (i2c,
-spi, fbuf, eth_mac, eth_soc, ctrl, i2c_xfer). I2C gap evidence is in
+**Current regression (2026-09-23, after the SPI pad exposure):**
+`run_all.sh --fast -j8` exit 0 — **29/29 RTL, 20/20 firmware**, param guards
+OK, lint clean, every generated-doc/macro-flow gate current, the I2C
+transaction checker passing, and **all seven mutation suites OK** (i2c, spi,
+fbuf, eth_mac, eth_soc, ctrl, i2c_xfer). SPI MOSI/CS_N are now on
+`uio[2:3]`, verified pad-level in `tb_tt_um_protocol_emulator` (4/4 probes
+detected; [[plans/spi-pads]]); the synthesis screen shows a wire-only zero-gate
+delta. I2C gap evidence is in
 `reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md`'s resolution section. The
 earlier `56ba1a9` numbers below are the historical baseline for that commit.
 

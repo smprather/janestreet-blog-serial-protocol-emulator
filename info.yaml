@@ -78,7 +78,7 @@ pinout:
   ui[6]: ""
   ui[7]: ""
 
-  uo[0]: "UART TX (protocol output pin)"
+  uo[0]: "UART TX / SPI SCLK (shared port bit 0; one persona at a time)"
   uo[1]: "heartbeat (timer bit 7)"
   uo[2]: "dbg_pc[0]"
   uo[3]: "dbg_pc[1]"
@@ -89,8 +89,8 @@ pinout:
 
   uio[0]: "SDA (open-drain; needs an external pull-up)"
   uio[1]: "SCL (open-drain; needs an external pull-up)"
-  uio[2]: ""
-  uio[3]: ""
+  uio[2]: "SPI MOSI (push-pull, port bit 1)"
+  uio[3]: "SPI CS_N (push-pull, active low, port bit 2)"
   uio[4]: ""
   uio[5]: ""
   uio[6]: ""

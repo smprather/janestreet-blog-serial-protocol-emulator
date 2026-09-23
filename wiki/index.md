@@ -51,6 +51,7 @@
 ## Plans
 
 - [[plans/through-i2c]] — Plan to the I2C milestone: definition of done, the three blockers, the tick/bit timings, test strategy, ordered work list.
+- [[plans/spi-pads]] — Plan: expose SPI MOSI/CS_N on `uio[2:3]` (SCLK/MISO already share the UART pads), with the budget delta and pad-level verification.
 
 ## Decisions
 
