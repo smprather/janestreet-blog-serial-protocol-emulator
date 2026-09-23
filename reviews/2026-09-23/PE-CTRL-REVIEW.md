@@ -134,8 +134,10 @@ fall, so data is needed before the next rising sample only. Computed limits:
 **A1 ~7.5 MHz, A2 ~7.7 MHz**; the 2.5/5 MHz figures are chosen guard margins.
 Reaching 10 MHz needs a different implementation -- A3, updating MISO on the
 synchronized **rising** edge (next sample a full period later:
-`T >= 3 clk + pad + setup` ≈ 65 ns) with a two-frame echo, and a documented
-non-mode-0 change edge. Test
+`T >= 3 clk + pad + setup` ≈ 65 ns, computed ~15 MHz; the change arrives
+2..3 clk after the sampled edge, giving ~2 clk of hold minus pad and host
+hold, ~23 ns with an assumed 5 ns host hold) with a two-frame echo, and a
+documented non-mode-0 change edge. Test
 requirements: host SCLK phase sweep at each ceiling, per-bit setup checks,
 commit-latch probes, aborted-word-no-echo, one- vs two-frame latency; see
 [[plans/pe-ctrl-readback]].

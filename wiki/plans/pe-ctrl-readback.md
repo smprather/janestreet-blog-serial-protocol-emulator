@@ -64,9 +64,10 @@ generator recomputes on implementation; nothing is regenerated for this plan.
   - **A2, two frames**: frame k presents the word committed at frame k-2;
     readback SCLK **<= 5 MHz** (a guard margin; the computed limits are
     ~7.5 MHz for A1 and ~7.7 MHz for A2 -- A2 buys commit slack, not rate).
-  - **A3, rising-edge update + two frames**: readback SCLK **<= 10 MHz** --
-    the only variant that reaches the loader rate; MISO changes ~3 clk after
-    each *rising* edge (documented, non-mode-0 change timing).
+  - **A3, rising-edge update + two frames**: readback SCLK **<= 10 MHz** (guard;
+    computed ~15 MHz) -- the only variant that reaches the loader rate; MISO
+    changes 2..3 clk after each *rising* edge and holds ~2 clk after the host's
+    sampled edge (documented, non-mode-0 change timing).
 - A write-only host that ignores MISO is bit-identical to today.
 - Reading the last word(s) costs one (A1) or two (A2) trailing frames, which
   write `16'h0000` to `imem[N]`/`imem[N+1]`; the tail past the image is already
@@ -100,9 +101,11 @@ the commit flag) -> `H >= 4 clk`. The next host sample is at `2H`, giving
 (~17 ns) for the stated ~5 + ~10 ns pad+setup -- **essentially zero margin** --
 so the commit path lands on the same ~7.5 MHz limit as the per-bit path.
 
-- **A2 (two frames)**: the first bit is presented by the following frame's
-  16th fall, `1.5T` after the completing rise; the commit constraint becomes
-  `1.5T >= 6 clk`, i.e. `T >= 4 clk`, which the per-bit term already dominates.
+- **A2 (two frames)**: the first bit is presented at the 16th fall of the
+  *following* frame, **16.5 * T_sclk** after the completing rise (one frame
+  plus one half bit; `T_frame = 16 * T_sclk`), not 1.5 bit periods. The
+  commit constraint becomes `16.5 * T_sclk >= 6 clk`, which the per-bit term
+  already dominates.
 
 **Computed limits: A1 ~7.5 MHz, A2 ~7.7 MHz** -- effectively the same rate;
 A2 buys commit slack, not bandwidth. Every lower figure is a **chosen guard
@@ -111,18 +114,24 @@ before the sample); H = 6 clk (5 MHz) leaves ~3 clk (~50 ns) at either latency;
 H = 8 clk (2.5 MHz) leaves ~5 clk (~83 ns) and is the conservative A1 default.
 
 **A3, the safe 10 MHz variant (different implementation).** Update MISO on the
-synchronized *rising*-edge detector instead: the bit changes ~3 clk after the
-edge the host just sampled with, so the next sample is a full period away:
-`T >= 3 clk + t_pad + t_setup` ≈ 65 ns (limit ~15 MHz), and the commit
-(<= 6 clk) fits before the first echo bit one frame later. At 10 MHz the
-margins are ~35 ns per bit and ~50 ns on the commit. The cost is a documented
-deviation from strict mode-0 change timing (MISO changes ~50 ns after each
+synchronized *rising*-edge detector instead: the bit changes 2..3 clk after the
+edge the host just sampled with (worst async phase: ~2 clk minimum response),
+so the next sample is a full period away:
+`T >= 3 clk + t_pad + t_setup` ≈ 65 ns -- a **computed limit ~15 MHz; 10 MHz
+is the chosen guard**. A3 must meet **hold** as well as setup: the guaranteed
+hold after the sampled edge is `2 clk - t_pad - t_hold` (with an assumed
+~5 ns host hold, ~33 - 5 - 5 = ~23 ns), and the setup before the next rising
+edge is `T - (3 clk + t_pad + t_setup)`, ~35 ns at 10 MHz. The commit
+(<= 6 clk) fits before the first echo bit one frame later. The cost is a
+documented deviation from strict mode-0 change timing (MISO changes after each
 rising edge, not on the fall), which must be written into the contract and
 tested.
 
-The pad/host terms assume `t_pad ~ 5 ns` and `t_setup ~ 10 ns`; the ceilings
-scale with what a board actually adds (the formula is the record, the numbers
-are the assumption).
+The pad/host terms assume `t_pad ~ 5 ns`, `t_setup ~ 10 ns` and
+`t_hold ~ 5 ns`; the ceilings scale with what a board actually adds (the
+formula is the record, the numbers are the assumption). Computed limits and
+guard frequencies are kept separate throughout: 7.5/7.7/15 MHz computed vs
+2.5/5/10 MHz guards.
 
 ## Options and tradeoffs
 
@@ -130,7 +139,7 @@ are the assumption).
 |---|---|---|---|
 | **A1. One-frame echo** (recommended default) | 1 `uio`, ~17 flops | every committed word bit-exact, through the shift and write path | readback SCLK <= 2.5 MHz (guard; computed ~7.5 MHz); one trailing frame; no status channel |
 | **A2. Two-frame echo** | same + frame tracking | same (commit-latched) | readback SCLK <= 5 MHz (guard; computed ~7.7 MHz); two trailing frames |
-| **A3. Rising-edge update, two frames** | same, update on `sclk_rise` | same (commit-latched) | readback SCLK <= 10 MHz; non-mode-0 change edge; two trailing frames |
+| **A3. Rising-edge update, two frames** | same, update on `sclk_rise` | same (commit-latched) | readback SCLK <= 10 MHz (guard; computed ~15 MHz); non-mode-0 change edge; two trailing frames |
 | **B. Status frame** | 1 `uio`, ~20 flops | framing, `load_error`, `words_written` live | not the data; `load_error` is cleared at CS fall, so a previous-load status needs a retained copy |
 | **C. Peek/poke** | 1 pad + `pe_imem`/`pe_soc` read mux | actual memory contents (imem, later dmem) | the imem macro's one read port is shared with the CPU; a mux/arbiter crosses module boundaries; a command bit breaks "16 rises = a write" |
 | **D. Reuse pads** | 0 | -- | impossible: no free `uo_out`; `ui_in` cannot drive; matrix pads are chip-owned at reset |
