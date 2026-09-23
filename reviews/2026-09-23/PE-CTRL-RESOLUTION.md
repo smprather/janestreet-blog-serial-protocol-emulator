@@ -44,8 +44,16 @@ mutation rather than demanding a lie.
 | case | window | pre-fix result |
 |---|---|---|
 | 7a | `run` rises in `W_PULSE` (the review's window) | FAIL: 1 write, 1 while running, word counted, not flagged, reappears |
-| 7b | `run` rises with the word queued in `W_IDLE` | FAIL: not flagged; the stale word writes when `run` falls |
+| 7b | `run` rises with the word queued in `W_IDLE`; **CS_N held low** | FAIL: not flagged, and the queued word writes after `run` falls (`cap_n=1`, `words_written=1`) |
 | 7c | `run` rises inside `W_DONE` | FAIL: 1 write while running |
+
+7b's first version raised `CS_N` before the stale check, and the CS rising edge
+clears `word_ready` — so it proved the flag but not the deferred write. The
+review caught that. The case now keeps `CS_N` low, drops `run`, waits 16 clocks
+(the write pipeline is three), asserts `cap_n == 0`, and only then raises
+`CS_N`. On the pre-fix RTL it reports `7b: queued word written after run fell
+(CS still low)`; the `idle-abort` mutant reports that same assertion directly,
+not merely the flag.
 
 **Post-fix:** all cases pass. The TB observes post-edge state (`@(posedge clk);
 #1`) so each window is hit deterministically, not by scheduling luck.
@@ -53,7 +61,8 @@ mutation rather than demanding a lie.
 **Mutation guards** (`regress/mutate_ctrl_tb.sh`, 11 mutations, 11 detected,
 0 survived): the eight protocol mutations plus
 
-- `idle-abort` — remove the `W_IDLE` abort → 7b catches the stale reappearance;
+- `idle-abort` — remove the `W_IDLE` abort → 7b catches the deferred write
+  with `CS_N` still low, and the missing flag;
 - `host-we-mask` — remove `& ~run` → 7c catches the write while running;
 - `done-run-check` — remove the `W_DONE` abort → 7c catches the false count.
 

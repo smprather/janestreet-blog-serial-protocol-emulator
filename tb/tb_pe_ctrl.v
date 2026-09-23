@@ -196,6 +196,10 @@ module tb_pe_ctrl;
     check(words_written === 16'd0, "7a: stale word counted");
 
     // ---- 7b: run rises in W_IDLE with a word queued ----
+    // CS_N STAYS LOW through the release. A CS rising edge clears `word_ready`,
+    // which would mask a deferred write: the stale window must be observed
+    // while the load is still selected, so the check below is a real
+    // "does a queued word write late" test and not just a flag check.
     cap_n = 0; writes_while_run = 0; run = 1'b0;
     cs_low;
     fork
@@ -208,16 +212,16 @@ module tb_pe_ctrl;
       end
       spi_word(16'hA55A);
     join
-    cs_high;
-    settle;
     check(cap_n === 0, $sformatf("7b: %0d writes, want 0", cap_n));
     check(writes_while_run === 0, "7b: host_we pulsed while run=1");
     check(words_written === 16'd0, "7b: word counted");
     check(load_error === 1'b1, "7b: abort not flagged");
     run = 1'b0;                     // must NOT release a stale queued write
     repeat (16) @(posedge clk); #1;
-    check(cap_n === 0, "7b: queued word reappeared after run fell");
+    check(cap_n === 0, "7b: queued word written after run fell (CS still low)");
     check(words_written === 16'd0, "7b: stale word counted");
+    cs_high;
+    settle;
 
     // ---- 7c: run rises inside W_DONE (the host_we mask stops the write) ----
     cap_n = 0; writes_while_run = 0; run = 1'b0;

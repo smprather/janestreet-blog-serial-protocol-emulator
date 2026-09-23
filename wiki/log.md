@@ -1371,3 +1371,16 @@
   macro-flow gate and every generated-doc gate green.
 - The loader is therefore complete at the plan's Task 1+2 boundary:
   `PE-CTRL-RESOLUTION.md` records the semantics and evidence.
+
+## [2026-09-23] review correction | 7b must hold CS_N low
+
+- The independent review found that case 7b raised `CS_N` before its stale-write
+  check; the CS rising edge clears `word_ready`, so the case proved only the
+  `load_error` flag, not that a deferred word never writes. Against pre-fix
+  `39c0eb4` it reported 7b as a flag-only failure.
+- Corrected: `CS_N` stays low; `run` falls; 16 clocks (a 3-cycle write pipeline)
+  elapse; `cap_n == 0` is asserted; only then is `CS_N` raised. Pre-fix RTL and
+  the `idle-abort` mutant now both fail on `7b: queued word written after run
+  fell (CS still low)`.
+- `mutate_ctrl_tb.sh` remains 11 detected / 0 survived against the corrected
+  TB. `PE-CTRL-RESOLUTION.md` carries the corrected claim.
