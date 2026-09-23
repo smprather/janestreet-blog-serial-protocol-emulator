@@ -1,0 +1,8 @@
+E1 recheck screen summary (fixed RTL, unplaced, ideal clock)
+
+yosys check -assert: 2 x 0 problems
+worst min slack: slow -0.87  typ -0.61  fast -0.48
+baseline (review): slow -0.8692  typ -0.6065  fast -0.4778
+
+pe_eth_mac mapped area: baseline 1.73E+04 -> fixed 2.02E+04 um2
+pe_soc mapped area: baseline 50895.17 -> fixed 53730.70 um2

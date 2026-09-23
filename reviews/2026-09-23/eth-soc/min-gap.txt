@@ -1,0 +1,12 @@
+WARNING: ../tb/tb_pe_soc_eth.v:66: $readmemh(../firmware/eth_rx.hex): Not enough words in the file for the requested range [0:1023].
+ACCEPT len=200 ptr=200 start=0 at=199850000
+RECLAIM state=2 pay_cnt=12 wptr=212 room=1836 at=236866000
+COMPLETE 1 sum=3c expected=3c at=236899000
+ACCEPT len=200 ptr=188 start=2036 at=390243000
+RECLAIM state=0 pay_cnt=204 wptr=188 room=1860 at=427325000
+COMPLETE 2 sum=xx expected=04 at=427358000
+FAIL: payload sum differs @427358000
+WINDOW RESULT len=200 gap=96 errors=1 valid=2 bad=0
+FAILURES: 1
+FATAL: ../tb/tb_pe_soc_eth.v:237: payload corruption
+       Time: 532870351  Scope: tb_pe_soc_eth

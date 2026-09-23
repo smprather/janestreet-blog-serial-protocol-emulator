@@ -1,0 +1,21 @@
+read_liberty -lib /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+read_verilog -sv rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_soc.v
+hierarchy -check -top pe_soc
+proc
+opt
+fsm
+opt
+memory
+opt
+techmap
+opt
+dfflibmap -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+abc -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+clean
+stat -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+flatten
+clean
+check -assert
+write_verilog -noattr -noexpr ./mapped.v
+write_json ./mapped.json
+check

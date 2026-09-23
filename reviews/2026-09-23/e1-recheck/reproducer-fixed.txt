@@ -1,0 +1,27 @@
+### default
+ACCEPT len=200 ptr=200 start=0 at=199850000
+RECLAIM state=2 pay_cnt=12 wptr=212 room=1836 at=236866000
+COMPLETE 1 sum=3c expected=3c at=236899000
+ACCEPT len=200 ptr=400 start=200 at=390243000
+RECLAIM state=0 pay_cnt=204 wptr=400 room=1848 at=427325000
+COMPLETE 2 sum=04 expected=04 at=427358000
+WINDOW RESULT len=200 gap=96 errors=0 valid=2 bad=0
+PASS: tb_pe_soc_eth
+### +GAP=600
+ACCEPT len=200 ptr=200 start=0 at=199850000
+RECLAIM state=0 pay_cnt=204 wptr=200 room=1848 at=236866000
+COMPLETE 1 sum=3c expected=3c at=236899000
+ACCEPT len=200 ptr=400 start=200 at=440641000
+RECLAIM state=0 pay_cnt=204 wptr=400 room=1848 at=477723000
+COMPLETE 2 sum=04 expected=04 at=477756000
+WINDOW RESULT len=200 gap=600 errors=0 valid=2 bad=0
+PASS: tb_pe_soc_eth
+### +LEN=46
+ACCEPT len=46 ptr=46 start=0 at=76655000
+RECLAIM state=0 pay_cnt=50 wptr=46 room=2002 at=85438000
+COMPLETE 1 sum=ab expected=ab at=85472000
+ACCEPT len=46 ptr=92 start=46 at=143803000
+RECLAIM state=0 pay_cnt=50 wptr=92 room=2002 at=152586000
+COMPLETE 2 sum=59 expected=59 at=152619000
+WINDOW RESULT len=46 gap=96 errors=0 valid=2 bad=0
+PASS: tb_pe_soc_eth

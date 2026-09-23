@@ -1,0 +1,10 @@
+WARNING: ../tb/tb_pe_soc_eth.v:66: $readmemh(../firmware/eth_rx.hex): Not enough words in the file for the requested range [0:1023].
+ACCEPT len=200 ptr=200 start=0 at=199850000
+RECLAIM state=0 pay_cnt=204 wptr=200 room=1848 at=236866000
+COMPLETE 1 sum=3c expected=3c at=236899000
+ACCEPT len=200 ptr=200 start=0 at=440641000
+RECLAIM state=0 pay_cnt=204 wptr=200 room=1848 at=477723000
+COMPLETE 2 sum=04 expected=04 at=477756000
+WINDOW RESULT len=200 gap=600 errors=0 valid=2 bad=0
+PASS: tb_pe_soc_eth
+../tb/tb_pe_soc_eth.v:238: $finish called at 633666319 (1ps)
