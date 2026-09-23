@@ -9,7 +9,8 @@
 > module per file (`pe_nrzi`/`pe_manch`/`pe_bitstuff`), and the SRAM shell is
 > under `rtl/vendor/`. Functional behavior is unchanged and verified.
 > Read `reviews/2026-09-23/REFACTOR-REVIEW.md` and `HANDOFF.md` before resuming.
-> Branch `main` at `6de2a6a`; `review/fix-invisible-defects` remains at `2cc0f03`.
+> Branch `main` (reviewed code at `6de2a6a`; later commits only add review
+> evidence/docs); `review/fix-invisible-defects` remains at `2cc0f03`.
 >
 > **Where the work is:** pure RTL functional-simulation development. The standing
 > user ruling is *do not run flow, DRC or LVS* — those are tapeout-prep and are

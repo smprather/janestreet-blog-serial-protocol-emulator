@@ -23,8 +23,9 @@ sets compile. Only the flow's file-copy block was executed, with outputs under
 `/tmp`; no physical tools were run. Evidence and replay scripts are under
 `reviews/2026-09-23/refactor/`.
 
-Current branch: `main` at `6de2a6a`; `review/fix-invisible-defects` remains at
-`2cc0f03`. This review adds documentation/evidence without production changes.
+Current branch: `main` (the reviewed CODE revision is `6de2a6a`; the
+handoff/docs commit above it only adds this report and its evidence).
+`review/fix-invisible-defects` remains at `2cc0f03`.
 The implementation and verification state is:
 
 | ID | Priority | Finding | Fix |
