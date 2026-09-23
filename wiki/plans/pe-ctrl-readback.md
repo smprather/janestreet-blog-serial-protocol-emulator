@@ -62,8 +62,8 @@ generator recomputes on implementation; nothing is regenerated for this plan.
   - **A1, one frame** (recommended default): frame k presents the word
     committed at frame k-1; readback SCLK **<= 2.5 MHz**.
   - **A2, two frames**: frame k presents the word committed at frame k-2;
-    readback SCLK **<= 5 MHz** (the per-bit MISO path still binds; two frames
-    only relaxes the commit path).
+    readback SCLK **<= 5 MHz** (a guard margin; the computed limits are
+    ~7.5 MHz for A1 and ~7.7 MHz for A2 -- A2 buys commit slack, not rate).
   - **A3, rising-edge update + two frames**: readback SCLK **<= 10 MHz** --
     the only variant that reaches the loader rate; MISO changes ~3 clk after
     each *rising* edge (documented, non-mode-0 change timing).
@@ -74,63 +74,51 @@ generator recomputes on implementation; nothing is regenerated for this plan.
   receive path stops, so trailing frames assemble and write nothing; the host
   may skip them when the program's own output is the proof.
 
-## Timing audit (2026-09-23): two independent ceilings (mode 0 at 10 MHz cannot meet setup)
+## Timing audit (2026-09-23): the per-bit path sets a single ~7.5 MHz limit
 
 Derived from `rtl/pe_ctrl.v` at the worst-case SCLK phase relative to the
-60 MHz `clk` (the pad edge lands just after a clk edge; 16.67 ns per cycle).
-Two paths set the readback rate, and they are independent:
+60 MHz `clk` (raw edge just after a clk edge; 16.67 ns per cycle). Let H be the
+SCLK half period. The chosen architecture updates MISO **after** the
+synchronized fall detector, so data is required before the **next rising
+sample**, not before the raw falling pad edge -- the earlier A1 claim
+(`T/2 >= 6 clk`) got that wrong and is reconciled below.
 
-**A. The per-bit MISO update path (binds every bit, at every frame latency).**
-A registered update triggered by the synchronized falling edge:
+**A. Per-bit MISO update (every bit).** Raw fall at t = 0; `sclk_s0` at
++1 clk; `sclk_s1` and the fall detector at +2 clk; the MISO register samples
+the detector at +3 clk (worst phase) and the pad follows after `t_pad`. The
+host samples at the next rise, H later:
+`H >= 3 clk + t_pad + t_setup` (~65 ns with ~5 ns pad + ~10 ns setup) -> a
+**computed limit of ~7.7 MHz**.
 
-| Event | Delay from the SCLK falling pad edge |
-|---|---|
-| `sclk_s0` captures | +1 clk (16.7 ns) |
-| `sclk_s1` captures; the fall detector is valid for one clk cycle | +2 clk (33.3 ns) |
-| the MISO register samples the detector | +3 clk (50 ns) |
-| pad output + host setup | +t_pad + t_setup (~5 + ~10 ns) |
+**B. Echo commit (the first bit of the carried word).** The completed word is
+registered at +3 clk, but the imem write commits and `W_DONE` runs at **+5..6
+clk (worst 6)**. The fall that presents the first echo bit occurs H after the
+completing rise; its synchronized register update is at **H + 3 clk** and must
+see the commit, so `H + 3 clk >= 6 clk + 1 edge` (the one-edge separation from
+the commit flag) -> `H >= 4 clk`. The next host sample is at `2H`, giving
+`2H >= H + 3 clk + t_pad + t_setup`. At `H = 4 clk` that leaves about one clk
+(~17 ns) for the stated ~5 + ~10 ns pad+setup -- **essentially zero margin** --
+so the commit path lands on the same ~7.5 MHz limit as the per-bit path.
 
-The host samples at the next rising edge, one half period later:
-`T/2 >= 3 clk + t_pad + t_setup` ≈ 65 ns -> a **computed limit of ~7.7 MHz**.
-This cap is independent of how many frames the echo is delayed, which is why
-A2's frame delay does not fix it. A combinational fall-gated update
-(2 clk + logic) would reach ~9-11 MHz but puts the pad on an asynchronous
-gate; it is not proposed.
+- **A2 (two frames)**: the first bit is presented by the following frame's
+  16th fall, `1.5T` after the completing rise; the commit constraint becomes
+  `1.5T >= 6 clk`, i.e. `T >= 4 clk`, which the per-bit term already dominates.
 
-**B. The echo-commit path (binds the first bit; frame latency relaxes it).**
-The completed word is registered at +3 clk, but the imem write commits and
-`W_DONE` runs at **+5..6 clk (83-100 ns)**; the echo must be commit-latched
-(never `word_ready`; an aborted word must never echo). The first echo bit must
-be present before the host's first sample of the frame that carries it:
-
-- **A1 (one frame)**: first bit at the frame's 16th fall, `T/2` after the
-  completing rise -> `T/2 >= 6 clk`, a **computed limit of 5.0 MHz** (no
-  margin). The per-bit limit (7.7 MHz) is not binding here; the earlier
-  6-clk half-period derivation is this term, and it remains the A1 maximum.
-- **A2 (two frames)**: first bit at the following frame's 16th fall, `1.5T`
-  after the rise -> `T >= 4 clk`, limit ~15 MHz; the **per-bit limit
-  (7.7 MHz) is binding**, not the commit.
-
-**Combined**: A1 = min(5.0, 7.7) = **5.0 MHz computed**; A2 = min(15, 7.7) =
-**7.7 MHz computed**. Neither reaches 10 MHz with a registered falling-edge
-update: **A2 does not support 10 MHz** -- the earlier version of this plan
-claimed it did by solving only the commit path.
-
-The documented ceilings are the computed limits **with deliberate margin**, not
-the limits themselves: A1 -> 2.5 MHz (half period 200 ns vs the 6-clk commit,
-2x margin); A2 -> 5 MHz (half period 100 ns vs the 65 ns per-bit latency,
-~2 clk of pad/setup/jitter margin).
+**Computed limits: A1 ~7.5 MHz, A2 ~7.7 MHz** -- effectively the same rate;
+A2 buys commit slack, not bandwidth. Every lower figure is a **chosen guard
+margin**, not a computed limit: H = 4 clk (7.5 MHz) is marginal at A1 (~1 clk
+before the sample); H = 6 clk (5 MHz) leaves ~3 clk (~50 ns) at either latency;
+H = 8 clk (2.5 MHz) leaves ~5 clk (~83 ns) and is the conservative A1 default.
 
 **A3, the safe 10 MHz variant (different implementation).** Update MISO on the
 synchronized *rising*-edge detector instead: the bit changes ~3 clk after the
 edge the host just sampled with, so the next sample is a full period away:
-`T >= 3 clk + t_pad + t_setup` ≈ 65 ns (limit ~15 MHz), and with a two-frame
-echo the commit (<=6 clk) fits `1.5T` comfortably (limit ~15 MHz). At 10 MHz
-the margins are ~35 ns per bit and ~50 ns on the commit. The cost is a
-documented deviation from strict mode-0 change timing (MISO changes ~50 ns
-after each rising edge, not on the fall); a mode-0 host only requires setup
-before its sampling edge, so this is safe, but it must be written into the
-contract and tested.
+`T >= 3 clk + t_pad + t_setup` ≈ 65 ns (limit ~15 MHz), and the commit
+(<= 6 clk) fits before the first echo bit one frame later. At 10 MHz the
+margins are ~35 ns per bit and ~50 ns on the commit. The cost is a documented
+deviation from strict mode-0 change timing (MISO changes ~50 ns after each
+rising edge, not on the fall), which must be written into the contract and
+tested.
 
 The pad/host terms assume `t_pad ~ 5 ns` and `t_setup ~ 10 ns`; the ceilings
 scale with what a board actually adds (the formula is the record, the numbers
@@ -140,8 +128,8 @@ are the assumption).
 
 | Option | Logic/pads | Verifies | Cost |
 |---|---|---|---|
-| **A1. One-frame echo** (recommended default) | 1 `uio`, ~17 flops | every committed word bit-exact, through the shift and write path | readback SCLK <= 2.5 MHz; one trailing frame; no status channel |
-| **A2. Two-frame echo** | same + frame tracking | same (commit-latched) | readback SCLK <= 5 MHz (per-bit bound); two trailing frames |
+| **A1. One-frame echo** (recommended default) | 1 `uio`, ~17 flops | every committed word bit-exact, through the shift and write path | readback SCLK <= 2.5 MHz (guard; computed ~7.5 MHz); one trailing frame; no status channel |
+| **A2. Two-frame echo** | same + frame tracking | same (commit-latched) | readback SCLK <= 5 MHz (guard; computed ~7.7 MHz); two trailing frames |
 | **A3. Rising-edge update, two frames** | same, update on `sclk_rise` | same (commit-latched) | readback SCLK <= 10 MHz; non-mode-0 change edge; two trailing frames |
 | **B. Status frame** | 1 `uio`, ~20 flops | framing, `load_error`, `words_written` live | not the data; `load_error` is cleared at CS fall, so a previous-load status needs a retained copy |
 | **C. Peek/poke** | 1 pad + `pe_imem`/`pe_soc` read mux | actual memory contents (imem, later dmem) | the imem macro's one read port is shared with the CPU; a mux/arbiter crosses module boundaries; a command bit breaks "16 rises = a write" |
@@ -181,11 +169,12 @@ frame is possible but not minimal.
 
 ## Open decisions for the reviewer
 
-1. **A1 (one-frame, strict mode 0, readback <= 2.5 MHz) vs A2 (two-frame,
-   strict mode 0, readback <= 5 MHz) vs A3 (rising-edge update, two frames,
-   readback <= 10 MHz)** -- A1 is the simplest protocol; A2 does not reach
-   10 MHz because the per-bit MISO path binds at every frame latency; A3 is
-   the only 10 MHz path and it documents a non-mode-0 change edge.
+1. **A1 (one-frame, strict mode 0, readback <= 2.5 MHz guard) vs A2
+   (two-frame, strict mode 0, readback <= 5 MHz guard) vs A3 (rising-edge
+   update, two frames, readback <= 10 MHz)** -- the computed fall-update
+   limits are ~7.5 MHz (A1) and ~7.7 MHz (A2), so the 2.5/5 MHz figures are
+   chosen margins; A3 is the only path that reaches 10 MHz, and it documents
+   a non-mode-0 change edge.
 2. **Trailing frames**: A1 needs one, A2/A3 two (writing `0x0000` into the
    undefined tail); skip them when the program's own output is the proof.
 3. **Release condition**: `load_active` (recommended; `run` high also releases)

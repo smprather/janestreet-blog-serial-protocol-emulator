@@ -121,15 +121,21 @@ update ~3 clk (50 ns) plus pad and host setup after the fall, while the host's
 next rising sample is one half period later -- at 10 MHz that is also 3 clk, so
 a registered falling-edge update cannot meet setup at *any* frame latency.
 Computed limit ~7.7 MHz (3 clk + ~5 ns pad + ~10 ns host setup); **A2's
-two-frame echo only relaxes the commit path and reaches ~7.7 MHz, not 10 MHz**
-(documented 5 MHz). (2) *Echo commit*: the write commits and `W_DONE` runs at
-+5..6 clk (83-100 ns); because the echo must be commit-latched (never
-`word_ready`; aborted words must never echo), a one-frame echo needs a half
-period >= 6 clk -- **computed limit 5.0 MHz, documented 2.5 MHz (2x margin)**.
-Combined: A1 = min(5.0, 7.7) = 5.0 MHz; A2 = 7.7 MHz. Reaching 10 MHz needs a
-different implementation -- A3, updating MISO on the synchronized **rising**
-edge (next sample a full period later: `T >= 3 clk + pad + setup` ≈ 65 ns)
-with a two-frame echo, and a documented non-mode-0 change edge. Test
+two-frame echo only relaxes the commit path and reaches the same ~7.7 MHz,
+not 10 MHz** (documented 5 MHz guard). (2) *Echo commit*: the write commits
+and `W_DONE` runs at +5..6 clk (83-100 ns), and the echo must be
+commit-latched (never `word_ready`; aborted words must never echo). The fall
+that presents the first echo bit updates the MISO register H + 3 clk after the
+completing rise, so it needs the commit by then (H >= 4 clk) and the host
+samples at 2H: the same ~7.5 MHz limit as the per-bit path. **A1's earlier
+"half period >= 6 clk / computed 5.0 MHz" wrongly required the response by
+the raw falling pad edge**; the architecture updates after the synchronized
+fall, so data is needed before the next rising sample only. Computed limits:
+**A1 ~7.5 MHz, A2 ~7.7 MHz**; the 2.5/5 MHz figures are chosen guard margins.
+Reaching 10 MHz needs a different implementation -- A3, updating MISO on the
+synchronized **rising** edge (next sample a full period later:
+`T >= 3 clk + pad + setup` ≈ 65 ns) with a two-frame echo, and a documented
+non-mode-0 change edge. Test
 requirements: host SCLK phase sweep at each ceiling, per-bit setup checks,
 commit-latch probes, aborted-word-no-echo, one- vs two-frame latency; see
 [[plans/pe-ctrl-readback]].

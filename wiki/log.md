@@ -1580,3 +1580,20 @@
   Corrected [[plans/pe-ctrl-readback]] and
   [[reviews/2026-09-23/PE-CTRL-REVIEW]]. Plan-only: no RTL changed, no
   regression or STA run.
+
+## [2026-09-23] loader | readback audit arithmetic: A1 and A2 share the ~7.5 MHz limit
+
+- The earlier A1 "T/2 >= 6 clk / computed 5.0 MHz" bound wrongly required the
+  MISO response by the raw falling pad edge. The chosen architecture updates
+  MISO after the synchronized fall detector, so the data is needed before the
+  next rising sample, not before the fall.
+- Exact worst-phase discrete bound: fall response at H + 3 clk; commit and
+  `W_DONE` at +5..6 clk; next sample at 2H. The first echo bit needs the
+  commit before the H+3 update (H >= 4 clk) and pad/setup before 2H -- the
+  same ~7.5 MHz limit as the per-bit path (A2 ~7.7 MHz). At H = 4 clk the
+  margin is ~1 clk for pad+setup, essentially zero.
+- Corrected labeling: computed limits A1 ~7.5 MHz / A2 ~7.7 MHz; the
+  documented 2.5 MHz (A1) and 5 MHz (A2) are chosen guard margins. A3 is
+  unchanged (rising-edge update, two frames, 10 MHz with margin).
+  [[plans/pe-ctrl-readback]] and [[reviews/2026-09-23/PE-CTRL-REVIEW]] updated.
+  Plan-only: no RTL, no regression/STA.

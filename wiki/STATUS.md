@@ -1375,13 +1375,12 @@ the last word), a **status** frame (`load_error`/`words_written`), or an imem
 **peek/poke** (needs a read port shared with the CPU — much larger). Budget if
 implemented: committed 18 -> 19, free `uio` 4 -> 3, all-nine shortfall 9 -> 10
 (kept) / 3 -> 4 (reclaimed); the readback is loader overhead, not one of the
-nine protocols. Timing audit (2026-09-23): two independent ceilings -- the per-bit MISO update
-(registered on the synchronized fall; ~7.7 MHz computed limit) caps every
-frame latency, and the commit latch (+5..6 clk) caps a one-frame echo at
-5.0 MHz (computed; 2.5 MHz documented with 2x margin). A two-frame echo
-reaches only ~7.7 MHz, not 10; A3 (update on the synchronized rising edge,
-documented non-mode-0 change edge, two frames) is the 10 MHz path. No RTL
-changed yet.
+nine protocols. Timing audit (2026-09-23): the per-bit MISO path (synchronized fall + 3 clk,
+then pad/setup) and the commit-latched first bit land on the same computed
+limit, ~7.5 MHz for A1 and ~7.7 MHz for A2; the 2.5/5 MHz figures are chosen
+guard margins, not the limits. Neither reaches 10 MHz; A3 (update on the
+synchronized rising edge, documented non-mode-0 change edge, two frames) is
+the 10 MHz path. No RTL changed yet.
 
 ## Reading order for a fresh session
 
