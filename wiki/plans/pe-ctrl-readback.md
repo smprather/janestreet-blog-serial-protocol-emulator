@@ -54,6 +54,11 @@ generator recomputes on implementation; nothing is regenerated for this plan.
   load contract is **untouched**: every 16 rising edges still writes a word.
 - `spi_miso` changes on the **falling** SCLK edge while selected; released when
   CS_N is high (or `run` is high).
+- A CS_N falling edge starts a **session**: address 0, `words_written` 0,
+  `load_error` clear, and the echo cleared. The trailing frame(s) that read the
+  last word(s) back are part of the **same** CS-low session -- `cs_fall` resets
+  the address, so a CS toggle between the load and the trailing frames would
+  write `imem[0]`/`imem[1]` instead of the tail.
 - Frame 0 presents `16'h0000`. The echo is **commit-latched**: the echo register
   captures the completed word only at the `W_DONE` edge where the imem write
   actually commits (`words_written` increments) -- never at `word_ready` and
@@ -66,8 +71,9 @@ generator recomputes on implementation; nothing is regenerated for this plan.
     ~7.5 MHz for A1 and ~7.7 MHz for A2 -- A2 buys commit slack, not rate).
   - **A3, rising-edge update + two frames**: readback SCLK **<= 10 MHz** (guard;
     computed ~15 MHz) -- the only variant that reaches the loader rate; MISO
-    changes 2..3 clk after each *rising* edge and holds ~2 clk after the host's
-    sampled edge (documented, non-mode-0 change timing).
+    changes 2..3 clk after each *rising* edge and holds at least
+    `2 clk - t_pad - t_hold` (~23 ns) after the host's sampled edge
+    (documented, non-mode-0 change timing).
 - A write-only host that ignores MISO is bit-identical to today.
 - Reading the last word(s) costs one (A1) or two (A2) trailing frames, which
   write `16'h0000` to `imem[N]`/`imem[N+1]`; the tail past the image is already
@@ -75,7 +81,7 @@ generator recomputes on implementation; nothing is regenerated for this plan.
   receive path stops, so trailing frames assemble and write nothing; the host
   may skip them when the program's own output is the proof.
 
-## Timing audit (2026-09-23): the per-bit path sets a single ~7.5 MHz limit
+## Timing audit (2026-09-23): per-bit ~7.7 MHz; A1's commit latch binds at ~7.5 MHz
 
 Derived from `rtl/pe_ctrl.v` at the worst-case SCLK phase relative to the
 60 MHz `clk` (raw edge just after a clk edge; 16.67 ns per cycle). Let H be the
@@ -99,24 +105,29 @@ see the commit, so `H + 3 clk >= 6 clk + 1 edge` (the one-edge separation from
 the commit flag) -> `H >= 4 clk`. The next host sample is at `2H`, giving
 `2H >= H + 3 clk + t_pad + t_setup`. At `H = 4 clk` that leaves about one clk
 (~17 ns) for the stated ~5 + ~10 ns pad+setup -- **essentially zero margin** --
-so the commit path lands on the same ~7.5 MHz limit as the per-bit path.
+so A1's commit latch is the binding term at ~7.5 MHz; the per-bit path alone
+is ~7.7 MHz.
 
-- **A2 (two frames)**: the first bit is presented at the 16th fall of the
-  *following* frame, **16.5 * T_sclk** after the completing rise (one frame
-  plus one half bit; `T_frame = 16 * T_sclk`), not 1.5 bit periods. The
-  commit constraint becomes `16.5 * T_sclk >= 6 clk`, which the per-bit term
-  already dominates.
+- **A2 (two frames)**: the first bit is presented at the fall that follows the
+  *next* frame's 16th rise (the first fall of the second frame after the
+  commit frame), **16.5 * T_sclk** after the completing rise (one frame plus
+  one half bit; `T_frame = 16 * T_sclk`), not 1.5 bit periods and not the
+  following frame's 16th fall (31 half-periods = 15.5 * T_sclk). The commit
+  constraint becomes `16.5 * T_sclk + 3 clk >= 6 clk + 1 edge` (i.e.
+  `16.5 * T_sclk >= 4 clk`), which the per-bit term already dominates.
 
 **Computed limits: A1 ~7.5 MHz, A2 ~7.7 MHz** -- effectively the same rate;
 A2 buys commit slack, not bandwidth. Every lower figure is a **chosen guard
 margin**, not a computed limit: H = 4 clk (7.5 MHz) is marginal at A1 (~1 clk
-before the sample); H = 6 clk (5 MHz) leaves ~3 clk (~50 ns) at either latency;
-H = 8 clk (2.5 MHz) leaves ~5 clk (~83 ns) and is the conservative A1 default.
+before the pad+setup budget); H = 6 clk (5 MHz) leaves ~3 clk (~50 ns) before
+it at either latency; **H = 12 clk (2.5 MHz)** leaves ~9 clk (~150 ns) and is
+the conservative A1 default. (H = 8 clk would be 3.75 MHz, not 2.5 MHz: at
+60 MHz, 2.5 MHz is a 400 ns period = 24 clk, i.e. H = 12 clk.)
 
 **A3, the safe 10 MHz variant (different implementation).** Update MISO on the
 synchronized *rising*-edge detector instead: the bit changes 2..3 clk after the
-edge the host just sampled with (worst async phase: ~2 clk minimum response),
-so the next sample is a full period away:
+edge the host just sampled with (the earliest change is ~2 clk; the setup
+bound below uses the worst 3 clk), so the next sample is a full period away:
 `T >= 3 clk + t_pad + t_setup` ≈ 65 ns -- a **computed limit ~15 MHz; 10 MHz
 is the chosen guard**. A3 must meet **hold** as well as setup: the guaranteed
 hold after the sampled edge is `2 clk - t_pad - t_hold` (with an assumed
@@ -152,8 +163,8 @@ frame is possible but not minimal.
 
 1. `tb_pe_ctrl.v`: the host model samples MISO on rising edges and checks
    frame 0 is zero, the echo is the committed word at the chosen latency, bits
-   change on falls (A1/A2) or within ~3 clk after each rise (A3), and MISO
-   releases on CS high / `run` high. The host SCLK is **phase-swept relative
+   change within ~3 clk after falls (A1/A2) or within ~3 clk after each rise
+   (A3), and MISO releases on CS high / `run` high. The host SCLK is **phase-swept relative
    to `clk`** (worst case: an SCLK edge just after a clk edge) at each
    candidate's documented ceiling (A1 2.5 MHz, A2 5 MHz, A3 10 MHz), checking
    MISO is stable at least a clk before every sampling edge. Every existing

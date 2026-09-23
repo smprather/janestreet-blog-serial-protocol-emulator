@@ -127,7 +127,8 @@ and `W_DONE` runs at +5..6 clk (83-100 ns), and the echo must be
 commit-latched (never `word_ready`; aborted words must never echo). The fall
 that presents the first echo bit updates the MISO register H + 3 clk after the
 completing rise, so it needs the commit by then (H >= 4 clk) and the host
-samples at 2H: the same ~7.5 MHz limit as the per-bit path. **A1's earlier
+samples at 2H: so A1's binding limit is ~7.5 MHz, just below the per-bit
+path's ~7.7 MHz. **A1's earlier
 "half period >= 6 clk / computed 5.0 MHz" wrongly required the response by
 the raw falling pad edge**; the architecture updates after the synchronized
 fall, so data is needed before the next rising sample only. Computed limits:
@@ -145,3 +146,28 @@ commit-latch probes, aborted-word-no-echo, one- vs two-frame latency; see
 The budget delta (one free `uio`; shortfall 9 -> 10 kept / 3 -> 4 reclaimed) and
 the pad mapping remain in [[plans/pe-ctrl-readback]]. No RTL changed; no new
 regression or STA was run.
+
+## Independent plan-only audit (2026-09-23)
+
+Re-derived the readback timing against `rtl/pe_ctrl.v` and `tb/tb_pe_ctrl.v`.
+Two plan-only errors were found and corrected in [[plans/pe-ctrl-readback]]:
+
+- the guard sentence labelled `H = 8 clk` as 2.5 MHz; at 60 MHz, `H = 8 clk`
+  is 3.75 MHz (`H = 12 clk` is 2.5 MHz, with ~9 clk of pre-pad margin).
+- A2's first echo bit was described as "the 16th fall of the following frame";
+  it is the fall after the next frame's 16th rise, 33 half-periods =
+  16.5*T_sclk after the completing rise (the following frame's 16th fall is
+  31H = 15.5*T_sclk).
+
+Also added to the contract: a CS falling edge starts a session (address 0,
+`words_written` 0, `load_error` clear, echo clear), and A1/A2 trailing
+readback frames must stay in the same CS-low session (`cs_fall` re-addresses
+to 0).
+
+Re-checked and unchanged: the mode-0 rise-sample/fall-update ordering
+(`sclk_rise`/`mosi_s1`; a `sclk_fall` detector updates the MISO register at
++3 clk worst phase), the commit latch at the `W_DONE`/`words_written` edge
+(worst +6 clk after the completing rise), A1's discrete `H >= 4 clk`
+(~7.5 MHz) and A2's per-bit ~7.7 MHz, the 2.5/5/10 MHz guards, and A3's
+~15 MHz computed limit and `2 clk - t_pad - t_hold` hold. No RTL, tests,
+synthesis/STA, physical flow, DRC or LVS.

@@ -32,9 +32,10 @@
 > Two written plans are waiting on the user, both plan-only by ruling:
 >
 > - **`pe_ctrl` readback**: pick A1 (one frame, strict mode 0, 2.5 MHz guard),
->   A2 (two frames, strict mode 0, 5 MHz guard; the per-bit MISO path caps the
->   computed limit at ~7.5 MHz for both) or A3 (rising-edge update, two frames,
->   10 MHz guard, documented non-mode-0 change edge). Plan and timing audit:
+>   A2 (two frames, strict mode 0, 5 MHz guard) or A3 (rising-edge update,
+>   two frames, 10 MHz guard, documented non-mode-0 change edge). Computed
+>   limits: A1 ~7.5 MHz (commit-bound), A2 ~7.7 MHz (per-bit-bound); the
+>   2.5/5 MHz figures are guards, not limits. Plan and timing audit:
 >   `wiki/plans/pe-ctrl-readback.md`.
 > - **`pe_serdes` + `pe_codec_mux` integration**: plan amended after the first
 >   review's five findings (window latched phase, separate `TXLEN`/`RXLEN`,

@@ -1675,3 +1675,26 @@
 - Evidence: `reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md` (findings 6-7);
   plan confidence `medium` until the topology and scope decisions are
   accepted. Plan-only: no RTL, no regression, no physical flow/DRC/LVS.
+
+## [2026-09-23] plan | pe_ctrl readback audit: guard label and A2 frame event corrected
+
+- Independent plan-only audit of [[plans/pe-ctrl-readback]] and
+  [[reviews/2026-09-23/PE-CTRL-REVIEW]] against `rtl/pe_ctrl.v` and
+  `tb/tb_pe_ctrl.v`: mode-0 sampling, CS/frame boundaries, exact per-bit vs
+  discrete limits, guard rates, and hold/readback pipeline.
+- Corrected in the plan: `H = 8 clk` is 3.75 MHz at 60 MHz, not 2.5 MHz
+  (2.5 MHz is `H = 12 clk`, ~9 clk of pre-pad margin); A2's first echo bit is
+  the fall after the next frame's 16th rise (33 half-periods = 16.5*T_sclk),
+  not "the 16th fall of the following frame" (31H = 15.5*T_sclk); the A2
+  commit bound is written discretely; the A3 hold bullet now says
+  `2 clk - t_pad - t_hold`, not "~2 clk".
+- Added to the contract: a CS falling edge starts a session (address 0,
+  `words_written` 0, `load_error` clear, echo clear), and A1/A2 trailing
+  readback frames must stay in that same CS-low session (a CS toggle
+  re-addresses to 0).
+- Re-checked and unchanged: mode-0 rise-sample/fall-update ordering, the
+  commit latch at the `W_DONE`/`words_written` edge (worst +6 clk), A1's
+  discrete `H >= 4 clk` (~7.5 MHz), A2's per-bit ~7.7 MHz, the 2.5/5/10 MHz
+  guards and A3's ~15 MHz computed / hold analysis. Review and HANDOFF/STATUS
+  wording corrected to match. Plan-only: no RTL, tests, synthesis/STA,
+  physical flow, DRC or LVS.

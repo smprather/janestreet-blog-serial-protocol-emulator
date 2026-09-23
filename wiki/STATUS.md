@@ -1331,11 +1331,13 @@ the last word), a **status** frame (`load_error`/`words_written`), or an imem
 implemented: committed 18 -> 19, free `uio` 4 -> 3, all-nine shortfall 9 -> 10
 (kept) / 3 -> 4 (reclaimed); the readback is loader overhead, not one of the
 nine protocols. Timing audit (2026-09-23): the per-bit MISO path (synchronized fall + 3 clk,
-then pad/setup) and the commit-latched first bit land on the same computed
-limit, ~7.5 MHz for A1 and ~7.7 MHz for A2; the 2.5/5 MHz figures are chosen
-guard margins, not the limits. Neither reaches 10 MHz; A3 (update on the
-synchronized rising edge, documented non-mode-0 change edge, two frames) is
-the 10 MHz path. No RTL changed yet.
+then pad/setup) gives ~7.7 MHz; A1's commit-latched first bit is the binding
+term at ~7.5 MHz, and A2's two-frame echo is per-bit-bound at ~7.7 MHz. The
+2.5/5 MHz figures are chosen guard margins, not the limits. Neither reaches
+10 MHz; A3 (update on the synchronized rising edge, documented non-mode-0
+change edge, two frames) is the 10 MHz path. The trailing A1/A2 readback
+frames must stay in the same CS-low session (a CS toggle re-addresses to 0).
+No RTL changed yet.
 
 ### 7. SERDES + codec integration — PLAN AMENDED (two reviews) 2026-09-23
 
