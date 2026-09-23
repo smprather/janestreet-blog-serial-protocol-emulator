@@ -1,10 +1,11 @@
 # Project Status — through 10BASE-T receive
 
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
-> Last updated: 2026-09-22, after the second project review's seven findings were
-> fixed and verified. Read `reviews/2026-09-22/REVIEW-2.md` (resolution table at
-> the end) and `HANDOFF.md` before resuming. The earlier nine-finding review and
-> fixes remain in `reviews/2026-09-22/REVIEW.md`.
+> Last updated: 2026-09-23, after the verification pass's two follow-ups were
+> fixed. The second review's seven probes, the 102-trial Ethernet sweep, and the
+> F1 boundary checks all pass; there is no open review finding. Read
+> `reviews/2026-09-23/FIX-VERIFICATION.md` and `HANDOFF.md` before resuming.
+> The two earlier reviews and fix records remain under `reviews/2026-09-22/`.
 > Branch `review/fix-invisible-defects`.
 >
 > **Where the work is:** pure RTL functional-simulation development. The standing
@@ -21,14 +22,19 @@
 The regression reports 26/26 RTL and **18/18** firmware checks passing, with
 lint, documentation gates, and all four mutation suites green, and the review's
 directed probe suite (`bash reviews/2026-09-22/review2/run_repros.sh`) exits 0.
-The second review's seven findings are fixed: the DRU's falling-edge capture is
+The second review's original seven failure cases now pass: the DRU's falling-edge capture is
 now a two-latch pair (the async Ethernet sweep is 102 trials / 0 failures), the
-MAC validates frame structure before trusting a valid CRC residue, USB stuffing
+MAC prevents the reported runt underflow, USB stuffing
 is ones-only by explicit config, the CPU's stopped fetch address is zero on the
 first stopped edge, both SRAM fallbacks hold their read outputs during writes,
 the emulator UART monitor samples bit centres, and the mutation harnesses
 restore on interruption. Resolution detail is in `REVIEW-2.md`; each fix has a
-permanent test in the regression.
+permanent test in the regression. The verification pass's two follow-ups are
+also fixed: the MAC now rejects undersized type frames (64-byte minimum) and
+frames that end mid-byte (`bit_cnt == 0`), and the generated codec reference
+documents `cfg[6:4]` run length, `cfg[7]` `ones_only`, USB `0xE3`. The F1
+boundary probe and the F2 drift gate are green; detail in
+`FIX-VERIFICATION.md`.
 
 Both layers of the thesis now exist and have baseline simulation coverage:
 
@@ -36,7 +42,7 @@ Both layers of the thesis now exist and have baseline simulation coverage:
   codec mux, all self-checking-TB verified, all synthesized on real IHP sg13g2
   cells, and the SERDES through the full LibreLane place-and-route flow to a
   clean 66 MHz signoff.
-- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (1,121
+- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (1,151
   cells after the review fixes) is the first protocol block that is deliberately
   NOT firmware, and [[concepts/ethernet-scope]] says why with arithmetic: at a 100 ns bit period
   the single-cycle core has 48 instructions per byte, and a software CRC-32
@@ -123,7 +129,7 @@ The one-line version, for the reader who wants it before clicking through:
                              └ pe_pinmux (111) ── per-pin {out,oe,od}
 
   BUILT, TB-verified, INSTANTIATED NOWHERE (4):
-    pe_serdes (539)  pe_dru (150)  pe_crc (209)  pe_codec_mux (130)
+    pe_serdes (539)  pe_dru (148)  pe_crc (209)  pe_codec_mux (130)
 ```
 
 
@@ -144,7 +150,7 @@ states the reasoning; do not "unify" them without reading it.
 | Bit stuffer/unstuffer | `rtl/pe_line_codec.v` | 99 | 1,417 | `tb_pe_bitstuff` |
 | Codec pipeline mux | `rtl/pe_codec_mux.v` | 130 | 1,811 (whole pipeline) | `tb_pe_codec_mux` |
 | **CRC / LFSR engine** (5-, 8-, 15-, 16-, 32-bit) | `rtl/pe_crc.v` | 209 | 3,354 | `tb_pe_crc` |
-| **DRU** (oversampled Manchester receive, DDR) | `rtl/pe_dru.v` | **150** | **2,360** | `tb_pe_dru` |
+| **DRU** (oversampled Manchester receive, DDR) | `rtl/pe_dru.v` | **148** | **2,398** | `tb_pe_dru` |
 | **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 377 | 4,843 | `tb_pe_cpu` |
 | **Pin matrix** (per-pin OUT/OE/IN/OD, open-drain, read-back) | `rtl/pe_pinmux.v` | **111** | **2,061** | `tb_pe_pinmux` |
 | **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
@@ -1165,15 +1171,14 @@ run as firmware on real RTL, each with a testbench that does not know how the fi
 works. 10BASE-T receive exists as hardware. Nothing below is required to satisfy the
 competition's stated baseline; the list is ordered by what de-risks the *submission*.
 
-### 0. Resolve the second review findings
+### 0. Review follow-ups — DONE
 
-`reviews/2026-09-22/REVIEW-2.md` is the open-findings record at `628e309`, with
-source locations, correction criteria, and persistent reproducers. Prioritize
-R2-1/R2-2 (DRU capture and malformed-frame buffer accounting), then R2-3–R2-7
-(USB codec, restart, memory fallback, UART monitor, and mutation cleanup).
-Promote the probes into permanent tests as fixes land and rerun the standard
-regression plus the independent Ethernet phase/frequency sweep. Keep mutation
-runs in isolated copies until R2-7 is resolved. No fixes were applied by the review.
+All three review passes are resolved: `reviews/2026-09-22/REVIEW.md` (nine
+findings), `reviews/2026-09-22/REVIEW-2.md` (seven), and
+`reviews/2026-09-23/FIX-VERIFICATION.md` (F1 structure, F2 config reference).
+The F1 boundary cases are permanent MAC tests (frames 12-15) with mutations
+`no-type-min-size`/`no-byte-align`; the F2 generator notes and the generated
+reference are current. Start at step 1 below.
 
 ### 1. Wire `pe_eth_mac` into the SoC — after the Ethernet review fixes
 

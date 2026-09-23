@@ -1024,3 +1024,46 @@
 - **Regression:** RTL 26/26, firmware **18/18**, lint 14 tops + 11 elaborations,
   all four mutation suites green, generated-doc drift green, and the review
   probe suite exits 0.
+
+
+## [2026-09-23] review | verify second-review fixes at bdd7728
+
+- Fresh isolated regression: exit 0, 26/26 RTL, 18/18 firmware, lint and all
+  supporting gates green. Original review probes plus the asynchronous Ethernet
+  sweep: exit 0, seven probes pass, 102/102 sweep trials pass.
+- The original P1 MAC underflow is fixed. **F1 (P2) remains:** CRC-valid type
+  frames below 64 bytes or ending in partial bytes are still accepted. A valid
+  64-byte control passes; nine independent rejection assertions fail.
+- **F2 (P2) remains:** the codec glossary generator and generated reference
+  still describe cfg[7:4] as run length. RTL uses cfg[7] for ones_only and
+  cfg[6:4] for run length; the USB configuration is now 0xE3.
+- Independent USB/CAN model: 524 streams, 4,822 cells, zero errors. Additional
+  UART checks cover valid/invalid stop bits and consecutive frames at nearby
+  periods. R2-7's three harnesses restore source bytes under tested interruptions.
+- Report and persistent evidence: `reviews/2026-09-23/FIX-VERIFICATION.md`.
+  Added `run-boundaries.sh` and its failing fixture, saved fresh output as `.txt`,
+  and rescued earlier review logs from the global `*.log` ignore rule by copying
+  them to `.txt` and updating the report links.
+- Updated HANDOFF/STATUS for the two remaining follow-ups. Production RTL,
+  firmware, harnesses, and generators were unchanged. No physical flow, DRC,
+  or LVS ran.
+
+## [2026-09-23] build | fix verification follow-ups F1 and F2
+
+- **F1 (Ethernet structure):** the verdict now requires a complete-byte ending
+  (`bit_cnt == 0`) and, for type frames, the 64-byte 802.3 minimum (46 data/pad
+  + the 4 stored FCS). The valid 64-byte control passes; the 18-byte and
+  63-byte valid-residue runts and the 1–7 extra-bit partial frames are rejected
+  with room 2048 and pointer 0. The committed ARP acceptance test is now a
+  conformant padded 64-byte frame (frame 2), and frames 12–15 hold the
+  boundary cases. New mutations `no-type-min-size` and `no-byte-align`; 13
+  detected, 0 survived. `reviews/2026-09-23/run-boundaries.sh` exits 0.
+- **F2 (codec config reference):** `tools/gen_signal_glossary.py` now documents
+  `cfg[6:4]` as run length, `cfg[7]` as `ones_only`, the USB byte `0xE3`, and
+  the `ones_only` port; `wiki/reference/signal-names.md` regenerated.
+- **Files:** `rtl/pe_eth_mac.v`, `tb/tb_pe_eth_mac.v`,
+  `tb/mutate_eth_mac_tb.sh`, `tools/gen_signal_glossary.py`,
+  `wiki/reference/signal-names.md`, `reviews/2026-09-23/`.
+- **Regression:** RTL 26/26, firmware 18/18, lint clean (14 tops + 11
+  elaborations), all four mutation suites green with the eth harness at 13/13,
+  the boundary runner exits 0, and the second-review probe suite exits 0.

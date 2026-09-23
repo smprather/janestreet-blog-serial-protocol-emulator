@@ -1,38 +1,42 @@
-# Handoff — state of the repo (2026-09-22)
+# Handoff — state of the repo (2026-09-23)
 
 Written for whoever picks this up next, human or agent. Read this, then
-`reviews/2026-09-22/REVIEW-2.md`, then `wiki/STATUS.md`. The second review
-(HEAD `628e309`) found seven defects despite a green regression; **all seven are
-now fixed and verified** (see the resolution table at the end of REVIEW-2.md).
-`reviews/2026-09-22/REVIEW.md` records the earlier nine findings and their
-fixes; it is not a current open-findings list.
+`reviews/2026-09-23/FIX-VERIFICATION.md`, then `wiki/STATUS.md`. The second
+review's seven findings and the verification pass's two follow-ups are all
+fixed and verified; there is no open review finding. The reports under
+`reviews/2026-09-22/` and `reviews/2026-09-23/` preserve the three passes and
+their resolutions.
 
-## Resume after the second review
+## Resume after fix verification
 
-The user requested a fresh review after implementing fixes, with results saved
-and the handoff prepared for a context flush. That review is complete and its
-seven findings are worked:
+The user asked to check the implemented fixes. Fresh verification at `bdd7728`
+passed the standard regression, all seven original probes, and the 102-case
+asynchronous Ethernet sweep. Additional frame-boundary tests exposed F1 and a
+stale generated reference exposed F2; both are now fixed with permanent tests.
+The implementation and verification state is:
 
 | ID | Priority | Finding | Fix |
 |---|---|---|---|
 | R2-1 | P1 | DRU latch/flop simulation race rejects an independently timed Ethernet frame | Two-latch (master/slave) DDR capture; async 49.995 ns frame is now a permanent TB case; sweep 102/0 |
-| R2-2 | P1 | Valid-CRC runt accepted with length 65,532, corrupting buffer accounting | Structural verdict (`hdr_done`/`fcs_done`/`pay_cnt >= 4`) before the residue is trusted; runt is TB frame 10 |
-| R2-3 | P2 | USB stuffing applied to zero runs | Explicit `ones_only` rule (`cfg[7]`, run length `cfg[6:4]`); USB config is `0xE3`; TX/RX zero-run tests |
+| R2-2 | P1 | Valid-CRC runt accepted with length 65,532, corrupting buffer accounting | Structural verdict (`hdr_done`, `fcs_done`, `bit_cnt == 0`, type min 64 bytes) before the residue is trusted; runts and partial bytes are TB frames 10 and 12-15 (F1 closed) |
+| R2-3 | P2 | USB stuffing applied to zero runs | Explicit `ones_only` rule (`cfg[7]`, run length `cfg[6:4]`); USB config is `0xE3`; TX/RX zero-run tests; the generated reference now matches (F2 closed) |
 | R2-4 | P2 | One-clock CPU stop could resume on a stale instruction | `imem_addr` is zero while stopped; `tb_pe_cpu` test 10 |
 | R2-5 | P2 | SRAM fallbacks read during writes while the macro holds | FLOP reads gated on `!we` (fbuf word+lane, imem rdata); TB checks across a changing address |
 | R2-6 | P2 | Emulator UART monitor sampled bit boundaries, A5 read as 4A | First data sample at 1.5 bit periods; permanent 519/520/521 case |
 | R2-7 | P2 | Interrupted mutation suites left source files changed | EXIT/INT/TERM traps restore pristine sources and image, then exit; probe `changed=[]` |
 
-Evidence, source locations, and commands are in `reviews/2026-09-22/REVIEW-2.md`
-and its `review2/` directory. At the reviewed revision the directed runner
-reported seven failures; on the current tree it exits 0, and the asynchronous
-Ethernet sweep is 102 trials / 0 failures.
+Evidence, source locations, and commands are in `reviews/2026-09-23/FIX-VERIFICATION.md`
+and `reviews/2026-09-22/REVIEW-2.md`. The second-review runner exits 0, the
+asynchronous Ethernet sweep is 102 trials / 0 failures, and the boundary runner
+`reviews/2026-09-23/run-boundaries.sh` exits 0.
 
-**Next:** resume the integration/loader/I2C transaction backlog in
-`wiki/STATUS.md`. Continue the functional simulation loop; the standing user
-ruling is **do not run physical flow, DRC, or LVS**. The mutation suites restore
-on interruption now, so running them in the checkout is safe again (though the
-review probe still isolates its copies).
+**Next:** resolve F1 and F2 before Ethernet SoC integration, then resume the
+integration/loader/I2C transaction backlog in `wiki/STATUS.md`. The new probe
+`bash reviews/2026-09-23/run-boundaries.sh` reports nine failed rejection checks
+at `bdd7728`. Continue the functional simulation loop; the standing user ruling
+is **do not run physical flow, DRC, or LVS**. The three R2-7 mutation harnesses
+restored source bytes in the tested INT/TERM interruptions; the verification
+report states the limits of the additional Ethernet-harness check.
 
 ## What is verified right now
 
@@ -43,10 +47,12 @@ The standard regression and the directed review probes measure different cases:
                            # suites + generated-doc drift, exits 0
 ./tb/run_all.sh --fast     # same verdicts, parallel TB loop, 4-state iverilog
 bash reviews/2026-09-22/review2/run_repros.sh
-                           # the seven second-review probes; exits 0 when fixed
+                           # the seven second-review probes; exits 0
+bash reviews/2026-09-23/run-boundaries.sh
+                           # F1 Ethernet structure boundaries; exits 0
 ```
 
-Measured after the second-review fixes: `run_all.sh --fast` →
+Freshly verified at `bdd7728`: `run_all.sh --fast -j4` →
 `TOTAL: 26 PASS: 26 FAIL: 0`, `FIRMWARE: 18 PASS: 18 FAIL: 0`, `lint clean`
 (14 verilator tops + 11 yosys elaborations), all four mutation suites green, plus
 `signal glossary up to date`, `protocol pin budget up to date`,
@@ -64,8 +70,9 @@ It runs on `rtl/pe_cpu.v` inside `rtl/pe_uart_soc.v` (one input pin, one output
 pin, a tick counter). `tb/tb_pe_uart_soc.v` drives a real waveform on RX and
 decodes TX, and passes on 41/42/00/FF with 8.6–8.7 µs bit cells measured at the
 pin. `tools/peemu.py` reproduces the same tested bytes, which is the fast loop for
-firmware work (2 s, no iverilog). R2-4 and R2-6 document remaining restart and
-UART-monitor differences; do not infer general equivalence from those byte tests.
+firmware work (2 s, no iverilog). The R2-4 restart and R2-6 UART-monitor probes
+now pass; their fixes and additional independent checks are recorded in the
+2026-09-23 verification report.
 
 If you change anything in the firmware timing path, run **both** the TB and the
 emulator. They disagreed once and that disagreement is how the real bug was found
