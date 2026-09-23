@@ -1,0 +1,64 @@
+=== dru_async ===
+INVALID state=2 pay=1504 bit=0 folds=12144 crc=debb20e3 time=1230559000
+VERDICT valid=1 bad=0 folds=12144 expected=12144 crc=debb20e3
+ASYNC SWEEP trials=1 failures=0
+/home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/dru_async.v:338: $finish called at 1240043063 (1ps)
+PASS: dru_async
+=== mac_runt ===
+CONTROL valid46: valid=1 bad=0 len=46 room=2002 ptr=46
+PADDED valid20: valid=1 bad=0 len=20 room=2028 ptr=20
+RUNT transmitted tail FCS=c6c847fb, interpreted type=c8c6
+RUNT only14 total: valid=0 bad=1 len=20 room=2048 ptr=0 type=0
+POSTRUNT valid46: valid=1 bad=1 len=46 room=2002 ptr=46
+/home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/mac_runt.v:303: $finish called at 258182339 (1ps)
+PASS: mac_runt
+=== usb_zeros ===
+USB zero bit 0: TX stuff=0 RX valid=1 raw=0
+USB zero bit 1: TX stuff=0 RX valid=1 raw=0
+USB zero bit 2: TX stuff=0 RX valid=1 raw=0
+USB zero bit 3: TX stuff=0 RX valid=1 raw=0
+USB zero bit 4: TX stuff=0 RX valid=1 raw=0
+USB zero bit 5: TX stuff=0 RX valid=1 raw=0
+USB zero bit 6: TX stuff=0 RX valid=1 raw=0
+USB zero bit 7: TX stuff=0 RX valid=1 raw=0
+USB eight zeros: recovered=8 want=8, errors=0 want=0
+/home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/usb_zeros.v:43: $finish called at 190000 (1ps)
+PASS: usb_zeros
+=== cpu_restart ===
+before stop pc=2 a=aa
+stopped pc=0 fetched=0055
+resumed pc=1 a=55 expected a=55
+/home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/cpu_restart.v:24: $finish called at 70000 (1ps)
+PASS: cpu_restart
+=== memory_contract ===
+initial fbuf macro=11 flop=11 imem macro=0011 flop=0011
+write fbuf macro=11 flop=11 imem macro=0011 flop=0011
+/home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/memory_contract.v:23: $finish called at 50000 (1ps)
+PASS: memory_contract
+=== uart_monitor ===
+wire bit clocks=520, monitor bit clocks=520, transmitted=a5, decoded=['0xa5']
+wire bit clocks=521, monitor bit clocks=520, transmitted=a5, decoded=['0xa5']
+wire bit clocks=519, monitor bit clocks=520, transmitted=a5, decoded=['0xa5']
+PASS: uart_monitor
+=== mutation_interrupt ===
+i2c: interrupted status=143; changed=[]
+=== mutation: pe_pinmux: OD gate ignores od (a pin could drive high) ===
+  pad_oe: 'reg_oe & ~(reg_od & reg_out)' -> 'reg_oe' (od term removed)
+spi: interrupted status=143; changed=[]
+=== mutation: master samples MISO before the SCLK rise ===
+  moved the MISO sample before the SCLK rise
+fbuf: interrupted status=143; changed=[]
+=== mutation: write mask pinned to the low lane ===
+  write mask pinned to the low lane
+PASS: mutation_interrupt
+=== dru_nba_experiment ===
+INVALID state=2 pay=1504 bit=0 folds=12144 crc=debb20e3 time=1230559000
+VERDICT valid=1 bad=0 folds=12144 expected=12144 crc=debb20e3
+ASYNC SWEEP trials=1 failures=0
+/home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/dru_async.v:338: $finish called at 1240043063 (1ps)
+PASS: dru_nba_experiment
+=== dru_sweep ===
+ASYNC SWEEP trials=102 failures=0
+/home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-22/review2/dru_sweep.v:303: $finish called at 126497765887 (1ps)
+PASS: dru_sweep
+REVIEW PROBES: 0 failed

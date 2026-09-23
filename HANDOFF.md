@@ -1,20 +1,31 @@
 # Handoff — state of the repo (2026-09-23)
 
 Written for whoever picks this up next, human or agent. Read this, then
-`reviews/2026-09-23/F1-F2-RECHECK.md`, then `wiki/STATUS.md`. All review
-findings are closed (three passes, F1/F2/F3). The project layout was reworked
-afterwards with no functional change: `tb/` is testbenches only, `regress/`
+`reviews/2026-09-23/REFACTOR-REVIEW.md`, then `wiki/STATUS.md`. The refactor at
+`6de2a6a` was reviewed against `2cc0f03`: no new functional defect found, and
+the earlier review findings (including F1/F2/F3) remain closed. The source
+comparisons and fresh regression support the functional no-op claim:
+`tb/` is testbenches only, `regress/`
 holds the harnesses, `tools/{fw,gen,checks}/` the Python, the SoC is
 `rtl/pe_soc.v`, the line codecs are one module per file, and the SRAM shell is
 under `rtl/vendor/`. Commands in this file use the new paths.
 
-## Resume after fix verification
+## Resume after refactor review
 
-The user asked to check the latest fixes. Fresh verification at `655c5b7`
-passed the standard regression, all seven original probes, the 102-case
-asynchronous Ethernet sweep, and the F1 boundary tests. The recheck that
-followed exposed F3 (the CAN preset in the new reference text); it is now fixed
-and tested. The implementation and verification state is:
+The user asked to review the large layout refactor. Fresh verification at
+`6de2a6a` passed the standard regression, all seven original probes, the
+102-case asynchronous Ethernet sweep, and the F1 boundary tests. All 15 RTL
+and 26 TB module token streams match the pre-refactor revision after the
+intended renames; file-level directives/attributes, firmware tool executable
+ASTs and four firmware images are preserved. Relocated generators/checkers
+work from outside the repo; submission sources and both staged flow source
+sets compile. Only the flow's file-copy block was executed, with outputs under
+`/tmp`; no physical tools were run. Evidence and replay scripts are under
+`reviews/2026-09-23/refactor/`.
+
+Current branch: `main` at `6de2a6a`; `review/fix-invisible-defects` remains at
+`2cc0f03`. This review adds documentation/evidence without production changes.
+The implementation and verification state is:
 
 | ID | Priority | Finding | Fix |
 |---|---|---|---|
@@ -27,8 +38,10 @@ and tested. The implementation and verification state is:
 | R2-7 | P2 | Interrupted mutation suites left source files changed | EXIT/INT/TERM traps restore pristine sources and image, then exit; probe `changed=[]` |
 | F3 | P2 | The CAN example in the new reference (`0x05`) enabled Manchester | Reference says CAN `0x51` (`0x01` equivalent; `0x05` is not a preset); `tb_pe_codec_mux` checks `0x51` on TX and RX |
 
-Evidence, source locations, and commands are in `reviews/2026-09-23/FIX-VERIFICATION.md`
-and `reviews/2026-09-22/REVIEW-2.md`. The second-review runner exits 0, the
+Earlier finding details and source locations are in
+`reviews/2026-09-23/FIX-VERIFICATION.md` and `reviews/2026-09-22/REVIEW-2.md`;
+fresh refactor evidence is in `reviews/2026-09-23/REFACTOR-REVIEW.md`.
+The second-review runner exits 0, the
 asynchronous Ethernet sweep is 102 trials / 0 failures, and the boundary runner
 `reviews/2026-09-23/run-boundaries.sh` exits 0.
 
@@ -53,12 +66,12 @@ bash reviews/2026-09-23/run-boundaries.sh
                            # F1 Ethernet structure boundaries; exits 0
 ```
 
-Freshly verified at `655c5b7`: `run_all.sh --fast -j4` →
+Freshly verified at `6de2a6a` in a `git archive` copy: `run_all.sh --fast -j4` →
 `TOTAL: 26 PASS: 26 FAIL: 0`, `FIRMWARE: 18 PASS: 18 FAIL: 0`, `lint clean`
 (14 verilator tops + 11 yosys elaborations), all four mutation suites green, plus
 `signal glossary up to date`, `protocol pin budget up to date`,
 `sram budget up to date`, `crc config up to date`, `clock arithmetic up to date`,
-`block diagram up to date`, `canvas viewer: OK`. The `gen_*` docs are generated
+`block diagram up to date`, `canvas viewer: OK`. The reference docs are generated
 from the RTL/PDK and drift-checked inside the regression, so a renamed port or
 deleted TB fails the run. A `git archive` clone with none of the ignored diagrams
 present also exits 0 (the diagram gate is a committed source hash now; see
@@ -181,8 +194,8 @@ grepped for three known diagnostics and passed a file yosys could not parse.
 ## Current work list
 
 The ordered live backlog is **`wiki/STATUS.md`, "Next steps (ordered)"**.
-Resolve the second review findings before Ethernet SoC integration, then resume
-the loader and I2C transaction work. `wiki/plans/through-i2c.md` is a completed
+The review findings are closed; resume Ethernet SoC integration, the loader and
+I2C transaction work in that order. `wiki/plans/through-i2c.md` is a completed
 implementation plan kept for its timing analysis and findings.
 
 The pin matrix is already inside `pe_soc`. UART and mode-0 SPI run as

@@ -1130,3 +1130,26 @@
 - **Regression:** RTL 26/26, firmware 18/18, lint clean (14 tops + 11
   elaborations), four mutation suites green, doc drift green, review probes and
   boundary checks exit 0.
+
+## [2026-09-23] review | verify the layout refactor at 6de2a6a
+
+- Reviewed `6de2a6a` against its parent `2cc0f03`. **No new functional defect
+  found.** All 15 RTL and 26 TB module token streams match after the intended
+  renames; file-level directives/attributes, executable assembler/emulator
+  ASTs, and all four firmware images are preserved.
+- Fresh `git archive` regression: **26/26 RTL, 18/18 firmware**, 14 Verilator
+  tops, 11 Yosys elaborations, all four mutation suites, generated-doc gates,
+  Canvas viewer and I2C timing pass. All seven previous probes pass; Ethernet
+  sweep **102 trials / 0 failures**; F1 boundary runner exits 0. Prior F1/F2/F3
+  fixes remain covered by the regression and directed checks.
+- All seven relocated generators and both checkers also pass from `/tmp`.
+  The six submission sources compile; the actual Python staging block from
+  `flow/run_librelane.sh` stages both configs, including the renamed SDC/PDN
+  files and vendor macro collateral, and both staged designs compile. This
+  exercises file copying and Verilog compilation only; **no physical flow,
+  DRC, or LVS** was run.
+- Added `reviews/2026-09-23/REFACTOR-REVIEW.md`, five evidence transcripts and
+  two replay scripts in `reviews/2026-09-23/refactor/`. Updated `HANDOFF.md`
+  and `wiki/STATUS.md` with the review result, fresh revision and resume path;
+  corrected the stale branch note (`main` at `6de2a6a`, review branch at
+  `2cc0f03`). No production source changes were needed.

@@ -1,0 +1,83 @@
+From /tmp: tools/gen/block_diagram.py --check
+block diagram up to date
+From /tmp: tools/gen/clock_arithmetic.py --check
+clock arithmetic up to date
+From /tmp: tools/gen/crc_config.py --check
+crc config up to date
+From /tmp: tools/gen/pin_budget.py --check
+protocol pin budget up to date
+From /tmp: tools/gen/render_block_diagram.py --check
+rendered block diagrams up to date
+From /tmp: tools/gen/signal_glossary.py --check
+signal glossary up to date
+note: 54 port(s) have no note: pe_cpu.run, pe_cpu.imem_addr, pe_cpu.imem_rdata, pe_cpu.dmem_addr, pe_cpu.dmem_we, pe_cpu.dmem_wdata …
+From /tmp: tools/gen/sram_budget.py --check
+sram budget up to date
+From /tmp: tools/checks/canvas_viewer.py
+  pane 741px; running the shipped viewer script per diagram
+    bitcell-anatomy.svg          fit=0.7264705882352941   implies iw=1020.0    viewBox=1020  ok
+    block-diagram-chip.svg       fit=0.4649639688220011   implies iw=1593.7    viewBox=1594  ok
+    block-diagram-orphans.svg    fit=2.6847826086956523   implies iw=276.0     viewBox=276  ok
+    block-status.svg             fit=0.5357917570498916   implies iw=1383.0    viewBox=1383  ok
+    plan-through-i2c.svg         fit=0.8800475059382423   implies iw=842.0     viewBox=842  ok
+    serdes-rx-flow.svg           fit=0.9853723404255319   implies iw=752.0     viewBox=752  ok
+    strobe-flow.svg              fit=0.9014598540145985   implies iw=822.0     viewBox=822  ok
+    uart-byte.svg                fit=0.17600950118764846  implies iw=4210.0    viewBox=4210  ok
+    unmeasured-pane run: width calls=[]  ok (refused)
+    mutation A (num instead of px): implies iw=100.0  DETECTED
+    mutation B (1px floor, no guard): width calls=['1']  DETECTED
+
+canvas viewer: OK — measures every diagram correctly, survives neither mutation
+From /tmp: tools/checks/i2c_timing.py
+I2C pin timing, worst case over all 60 tick phases
+  firmware: firmware/i2c_pins.pe  (79 words)
+
+  tLOW      5.917 us   floor  4.70   margin +1.217  OK
+  tHIGH     6.050 us   floor  4.00   margin +2.050  OK
+  period   11.967 us   floor 10.00   margin +1.967  OK
+
+  period range      : 11.967 .. 12.017 us
+  => bus rate       : 83.22 .. 83.57 kHz   (standard mode: <= 100 kHz)
+
+  dmem observables across phases (must be CONSTANT):
+    STABLE SDA sampled while released   ['0x10']
+    STABLE arbitration loss             ['0x00']
+    STABLE SCL read back after release  ['0x20']
+    STABLE pairs completed              ['0x01']
+    STABLE last driven byte             ['0x30']
+  (dmem[0] is the arbitration sample with the SDA mask applied, so
+   0x10 = line still HIGH, no contention; 0x00 = another master won.)
+
+  bus grammar (exactly one START, then the bit cell, then one STOP):
+    all 60 phases: [START, bit cell, STOP] with no stray edges
+
+  RESULT: PASS
+/home/mylesp/janestreet-blog-serial-protocol-emulator/rtl/pe_cpu.v:166: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'arg[11:0]').
+/home/mylesp/janestreet-blog-serial-protocol-emulator/rtl/pe_cpu.v:167: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'arg[11:0]').
+/home/mylesp/janestreet-blog-serial-protocol-emulator/rtl/pe_cpu.v:168: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'arg[11:0]').
+/home/mylesp/janestreet-blog-serial-protocol-emulator/rtl/pe_cpu.v:225: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'arg[11:0]').
+Tiny Tapeout: 6 sources; compile PASS
+Stage only: flow/pe_serdes.json
+  staged pe_serdes.v
+pe_serdes.json: 1 sources; staged bytes identical; compile PASS
+Stage only: flow/pe_soc.json
+  staged pe_cpu.v
+  staged pe_imem.v
+  staged pe_pinmux.v
+  staged pe_soc.v
+  staged RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v
+  staged pe_soc.sdc
+  staged pe_soc.sdc
+  staged pe_soc_pdn.tcl
+  SRAM macro files from /home/mylesp/.ciel/ciel/ihp-sg13g2/versions/c4b8b4e5e7a05f375cca3815d51b3a37721fbf5c/ihp-sg13g2/libs.ref/sg13g2_sram
+  staged RM_IHPSG13_1P_1024x16_c2_bm_bist.gds
+  staged RM_IHPSG13_1P_1024x16_c2_bm_bist.lef
+  staged RM_IHPSG13_1P_1024x16_c2_bm_bist_fast_1p32V_m55C.lib
+  staged RM_IHPSG13_1P_1024x16_c2_bm_bist_slow_1p08V_125C.lib
+  staged RM_IHPSG13_1P_1024x16_c2_bm_bist_typ_1p20V_25C.lib
+/tmp/refactor-layout-wq9ghzz4/pe_soc/src/pe_cpu.v:166: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'arg[11:0]').
+/tmp/refactor-layout-wq9ghzz4/pe_soc/src/pe_cpu.v:167: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'arg[11:0]').
+/tmp/refactor-layout-wq9ghzz4/pe_soc/src/pe_cpu.v:168: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'arg[11:0]').
+/tmp/refactor-layout-wq9ghzz4/pe_soc/src/pe_cpu.v:225: sorry: constant selects in always_* processes are not fully supported (the process will be sensitive to all bits in 'arg[11:0]').
+pe_soc.json: 5 sources; staged bytes identical; compile PASS
+Layout checks PASS; no physical flow, DRC, or LVS invoked.

@@ -1,14 +1,15 @@
 # Project Status — through 10BASE-T receive
 
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
-> Last updated: 2026-09-23, after the project-layout rework. All review findings
-> are closed (three passes, F1/F2/F3), and the code is reorganized: `tb/` holds
+> Last updated: 2026-09-23, after reviewing the project-layout rework at
+> `6de2a6a` against `2cc0f03`. No new functional defect found; earlier review
+> findings (including F1/F2/F3) remain closed. The code is reorganized: `tb/` holds
 > testbenches only, `regress/` the harnesses, `tools/{fw,gen,checks}/` the
 > Python, `rtl/pe_soc.v` is the SoC (was `pe_uart_soc`), the line codecs are one
 > module per file (`pe_nrzi`/`pe_manch`/`pe_bitstuff`), and the SRAM shell is
 > under `rtl/vendor/`. Functional behavior is unchanged and verified.
-> Read `reviews/2026-09-23/F1-F2-RECHECK.md` and `HANDOFF.md` before resuming.
-> Branch `main` (the review branch is at the same commit).
+> Read `reviews/2026-09-23/REFACTOR-REVIEW.md` and `HANDOFF.md` before resuming.
+> Branch `main` at `6de2a6a`; `review/fix-invisible-defects` remains at `2cc0f03`.
 >
 > **Where the work is:** pure RTL functional-simulation development. The standing
 > user ruling is *do not run flow, DRC or LVS* — those are tapeout-prep and are
@@ -20,6 +21,14 @@
 > kept for its findings, not a live work list.
 
 ## Where we are
+
+The refactor review found matching token streams for all 15 RTL modules and
+26 TB modules after the intended renames, preserved compilation directives and
+attributes, identical executable assembler/emulator ASTs, and four unchanged
+firmware images. A fresh archive regression, the original review probes and
+102-case Ethernet sweep, boundary tests, relocated entrypoints from `/tmp`,
+and submission/staged-flow source compilation all pass. Evidence is in
+`reviews/2026-09-23/refactor/`; no physical flow was run.
 
 The regression reports 26/26 RTL and **18/18** firmware checks passing, with
 lint, documentation gates, and all four mutation suites green, and the review's
@@ -1177,11 +1186,13 @@ competition's stated baseline; the list is ordered by what de-risks the *submiss
 
 ### 0. Review follow-ups — DONE
 
-All four check passes are resolved: `reviews/2026-09-22/REVIEW.md` (nine
+The earlier check passes are resolved: `reviews/2026-09-22/REVIEW.md` (nine
 findings), `reviews/2026-09-22/REVIEW-2.md` (seven), `reviews/2026-09-23/FIX-VERIFICATION.md`
 (F1 structure, F2 USB config), and `reviews/2026-09-23/F1-F2-RECHECK.md` (F3 CAN
 preset, now `0x51`/`0x01` in the generator and reference, with a permanent
-`tb_pe_codec_mux` check). Start at step 1 below.
+`tb_pe_codec_mux` check). The subsequent refactor review at `6de2a6a` found no
+new functional defect; its fresh verification and source comparisons are in
+`reviews/2026-09-23/REFACTOR-REVIEW.md`. Start at step 1 below.
 
 ### 1. Wire `pe_eth_mac` into the SoC — after the Ethernet review fixes
 
