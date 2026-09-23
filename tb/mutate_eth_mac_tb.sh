@@ -2,7 +2,7 @@
 # Mutation-test tb_pe_eth_mac.v: every check it makes must be able to FAIL.
 #
 # The TB passed on its first clean run, which by itself proves only that it
-# agrees with the RTL. This harness breaks the RTL in eleven ways that each
+# agrees with the RTL. This harness breaks the RTL in thirteen ways that each
 # target one claim the TB makes, and requires the TB to notice every one.
 #
 # The mutations are chosen to be SUBTLE, not obvious: each is a plausible
@@ -199,9 +199,21 @@ check_mutation "truncated-reclaim" \
 #     is a valid-residue 14-byte runt, so this mutant accepts it and winds the
 #     pointer back 4 bytes that were never stored.
 check_mutation "crc-only-verdict" \
-  "            if ((crc_state == CRC_RESIDUE) && hdr_done &&
-                (is_type ? (pay_cnt >= {{(16-3){1'b0}}, FCS_BYTES}) : fcs_done)) begin" \
+  "            if ((crc_state == CRC_RESIDUE) && hdr_done && (bit_cnt == 3'd0) &&
+                (is_type ? (pay_cnt >= MIN_TYPE_PAY) : fcs_done)) begin" \
   "            if (crc_state == CRC_RESIDUE) begin   // MUTANT: CRC alone"
+
+# 12. The 64-byte minimum for a type frame: drop it and the 18-byte and
+#     63-byte valid-residue runts are accepted (boundary cases (a) and (b)).
+check_mutation "no-type-min-size" \
+  "                (is_type ? (pay_cnt >= MIN_TYPE_PAY) : fcs_done)) begin" \
+  "                (is_type ? 1'b1 : fcs_done)) begin   // MUTANT: no min size"
+
+# 13. Byte alignment: drop it and a frame ending 1-7 bits into a byte is
+#     accepted (boundary cases (c)/(d)).
+check_mutation "no-byte-align" \
+  "            if ((crc_state == CRC_RESIDUE) && hdr_done && (bit_cnt == 3'd0) &&" \
+  "            if ((crc_state == CRC_RESIDUE) && hdr_done &&   // MUTANT: no byte alignment"
 
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="

@@ -298,6 +298,35 @@ module tb_pe_eth_mac;
     end
   endtask
 
+  // A type frame with `extra` (1-7) bits past the final byte boundary, and an
+  // FCS recomputed so the CRC residue STILL MATCHES. The residue is not a
+  // frame-length check: only byte alignment distinguishes this from a valid
+  // frame. (F1 of reviews/2026-09-23/FIX-VERIFICATION.md.)
+  task automatic partial_frame(input integer extra);
+    logic [31:0] c;
+    bit b;
+    build_header(48'hFFFFFFFFFFFF, 16'h0806);
+    for (int i = 0; i < 46; i++) frame[14+i] = 8'h31 + i[7:0];
+    nframe = 60;
+    c = ~ref_crc32(nframe);
+    for (int k = 0; k < extra; k++) begin
+      b = k[0];
+      c = (c[0] ^ b) ? ((c >> 1) ^ 32'hEDB88320) : (c >> 1);
+    end
+    fcs = ~c;
+    send_preamble;
+    send_byte(8'hD5);
+    for (int i = 0; i < nframe; i++) send_byte(frame[i]);
+    for (int k = 0; k < extra; k++) drive_cell(k[0]);
+    send_byte(fcs[7:0]);
+    send_byte(fcs[15:8]);
+    send_byte(fcs[23:16]);
+    send_byte(fcs[31:24]);
+    send_idle(24);
+    repeat (6) @(posedge clk); #1;
+  endtask
+
+
   task automatic send_frame_async(input real half_ns);
     for (int i = 0; i < 56; i++)
       drive_cell_async(i[0] ? 1'b0 : 1'b1, half_ns);   // 101010... wire pattern
@@ -418,15 +447,21 @@ module tb_pe_eth_mac;
     end
 
     // ================= frame 2: an ARP reply (EtherType) ================
-    // THE ACCEPTANCE TEST. 28-byte ARP payload, field 0x0806 -- a TYPE, not a
+    // THE ACCEPTANCE TEST. A 28-byte ARP payload, padded to 46 data bytes so
+    // the frame meets 802.3's 64-byte minimum, field 0x0806 -- a TYPE, not a
     // length. A receiver that read it as a length would demand 2,054 bytes and
     // reject this frame, so this is the case that proves the two-kind handling.
+    // (The pad is real: a TYPE frame's receiver cannot tell data from pad, so
+    // frame_len reports the padded length, which is exactly what the wire
+    // carried.)
     begin
-      int pay = 28;
-      for (int i = 0; i < pay; i++) want[i] = 8'h10 + i[7:0];
+      int pay  = 28;
+      int data = 46;                 // 28 ARP + 18 pad = the 64-byte minimum
+      for (int i = 0; i < pay; i++)  want[i] = 8'h10 + i[7:0];
+      for (int i = pay; i < data; i++) want[i] = 8'hC0 + i[7:0];   // pad
       build_header(48'h020000000001, 16'h0806);          // ARP EtherType
-      for (int i = 0; i < pay; i++) frame[14+i] = want[i];
-      nframe = 14 + pay;
+      for (int i = 0; i < data; i++) frame[14+i] = want[i];
+      nframe = 14 + data;            // 60 bytes + 4 FCS = 64
       fcs = ref_crc32(nframe);
       send_frame(1'b1);
       send_idle(24);
@@ -434,9 +469,9 @@ module tb_pe_eth_mac;
       check(nvalid === 2, $sformatf("ARP: frame_valid count = %0d, want 2", nvalid));
       check(nbad === 0,   $sformatf("ARP: frame_bad count = %0d, want 0", nbad));
       check(last_is_type === 1'b1, "ARP: frame_is_type must be 1");
-      check(last_len === 16'd28, $sformatf("ARP: len = %0d, want 28", last_len));
+      check(last_len === 16'd46, $sformatf("ARP: len = %0d, want 46 (data+pad)", last_len));
       // The payload starts where frame 1's payload ended.
-      read_and_check(11'd46, pay, 0, "ARP");
+      read_and_check(11'd46, data, 0, "ARP");
     end
 
     // ================= frame 3: a corrupted FCS must be REJECTED ========
@@ -484,7 +519,7 @@ module tb_pe_eth_mac;
     // Fills the ring so the next test can reach the header bounds check. A
     // TYPE frame is used because it is the only kind that can be large: a
     // LENGTH field is below 0x0600, so a legal length frame tops out at 1,535
-    // bytes and always fits a 2,048-byte ring that is only 74 bytes used.
+    // bytes and always fits a 2,048-byte ring that is only 92 bytes used.
     begin
       int pay = FILL_LEN;            // 1500
       for (int i = 0; i < pay; i++) want[i] = 8'h90 + i[7:0];
@@ -498,16 +533,16 @@ module tb_pe_eth_mac;
       check(nvalid === 3, $sformatf("fill frame: frame_valid = %0d, want 3", nvalid));
       check(nbad === 2,   $sformatf("fill frame: frame_bad = %0d, want 2 (unchanged)", nbad));
       // A type frame DOES store its FCS then wind back, so the start of the
-      // next frame is header-less payload only: 74 + 1500.
-      check(frame_ptr === 11'd74 + FILL_LEN[10:0],
-            $sformatf("fill frame: pointer = %0d, want %0d", frame_ptr, 74 + FILL_LEN));
-      read_and_check(11'd74, 32, 0, "fill frame (head)");
-      read_and_check(FILL_LEN[10:0] + 11'd74 - 11'd32, 32, FILL_LEN - 32,
+      // next frame is header-less payload only: 92 + 1500.
+      check(frame_ptr === 11'd92 + FILL_LEN[10:0],
+            $sformatf("fill frame: pointer = %0d, want %0d", frame_ptr, 92 + FILL_LEN));
+      read_and_check(11'd92, 32, 0, "fill frame (head)");
+      read_and_check(FILL_LEN[10:0] + 11'd92 - 11'd32, 32, FILL_LEN - 32,
                      "fill frame (tail)");
     end
 
     // ================= frame 6: an oversize LENGTH frame is REJECTED =====
-    // Now the ring is nearly full (74 + 1500 = 1574 used, 474 free), so a
+    // Now the ring is nearly full (92 + 1500 = 1592 used, 456 free), so a
     // legal 1,500-byte LENGTH frame cannot fit. It must be rejected AT THE
     // HEADER, before a single byte is written.
     //
@@ -529,9 +564,9 @@ module tb_pe_eth_mac;
       repeat (6) @(posedge clk); #1;
       check(nvalid === 3, $sformatf("oversize len: frame_valid = %0d, want 3 (unchanged)", nvalid));
       check(nbad === 3,   $sformatf("oversize len: frame_bad = %0d, want 3", nbad));
-      check(frame_ptr === 11'd74 + FILL_LEN[10:0],
+      check(frame_ptr === 11'd92 + FILL_LEN[10:0],
             $sformatf("oversize len: pointer = %0d, want %0d (untouched)",
-                      frame_ptr, 74 + FILL_LEN));
+                      frame_ptr, 92 + FILL_LEN));
       // THE ASSERTION THAT MATTERS: the region the rejected frame WOULD have
       // written must still hold the marker. With the header check removed, this
       // frame is accepted there and overwrites it -- which is exactly the
@@ -555,9 +590,9 @@ module tb_pe_eth_mac;
       repeat (6) @(posedge clk); #1;
       check(nvalid === 3, $sformatf("oversize type: frame_valid = %0d, want 3 (unchanged)", nvalid));
       check(nbad === 4,   $sformatf("oversize type: frame_bad = %0d, want 4", nbad));
-      check(frame_ptr === 11'd74 + FILL_LEN[10:0],
+      check(frame_ptr === 11'd92 + FILL_LEN[10:0],
             $sformatf("oversize type: pointer = %0d, want %0d (rolled back)",
-                      frame_ptr, 74 + FILL_LEN));
+                      frame_ptr, 92 + FILL_LEN));
     end
 
     // ================= frame 8: a PADDED short LENGTH frame is ACCEPTED ===
@@ -587,10 +622,10 @@ module tb_pe_eth_mac;
       check(last_is_type === 1'b0, "padded: a length field");
       // Only the 20 declared bytes are stored: a receiver that banked the pad
       // would report 46 and advance the pointer by 46.
-      check(frame_ptr === 11'd74 + FILL_LEN[10:0] + 11'd20,
+      check(frame_ptr === 11'd92 + FILL_LEN[10:0] + 11'd20,
             $sformatf("padded: pointer = %0d, want %0d (pad not stored)",
-                      frame_ptr, 74 + FILL_LEN + 20));
-      read_and_check(11'd74 + FILL_LEN[10:0], pay, 0, "padded frame");
+                      frame_ptr, 92 + FILL_LEN + 20));
+      read_and_check(11'd92 + FILL_LEN[10:0], pay, 0, "padded frame");
     end
 
     // ============ frame 9: oversize from EMPTY, then RECOVERY =============
@@ -599,7 +634,7 @@ module tb_pe_eth_mac;
     // 11'h000, so the truncation added ZERO bytes back: room stayed 0 and every
     // later frame failed its header check until a reset. The 2,100-byte frame
     // below is what makes pay_cnt exactly 2,048 at the rejection. Frame 7 could
-    // not catch it -- it starts with only 474 bytes free, so its pay_cnt is 474
+    // not catch it -- it starts with only 456 bytes free, so its pay_cnt is 456
     // and the low 11 bits are non-zero.
     begin
       int pay = 2100;                    // > BUF_BYTES
@@ -707,6 +742,53 @@ module tb_pe_eth_mac;
       check(frame_ptr === 11'd46,
             $sformatf("async: pointer = %0d, want 46", frame_ptr));
       read_and_check(11'd0, pay, 0, "async frame");
+    end
+
+    // ====== frames 12-15: 802.3 minimum size and byte alignment ==========
+    // F1 of reviews/2026-09-23/FIX-VERIFICATION.md. The CRC residue matches on
+    // all of these because the FCS was computed for them; what makes them
+    // invalid is STRUCTURE. A type frame under 64 bytes total (14 header + 46
+    // data + 4 FCS) is a runt, and a frame ending 1-7 bits into a byte is not
+    // a frame. Rejected frames must leave the allocation untouched.
+    begin
+      // (a) 18 bytes total: header + FCS only.
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);
+      nframe = 14;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nvalid === 6, "18-byte type runt: no frame_valid");
+      check(nbad === 7,   $sformatf("18-byte type runt: frame_bad = %0d, want 7", nbad));
+      check(u_mac.room === 12'd2048 && frame_ptr === 11'd0,
+            "18-byte type runt: allocation untouched");
+
+      // (b) 63 bytes total: header + 45 data + FCS, one byte under.
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+      for (int i = 0; i < 45; i++) frame[14+i] = 8'h31 + i[7:0];
+      nframe = 14 + 45;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nvalid === 6, "63-byte type runt: no frame_valid");
+      check(nbad === 8,   $sformatf("63-byte type runt: frame_bad = %0d, want 8", nbad));
+      check(u_mac.room === 12'd2048 && frame_ptr === 11'd0,
+            "63-byte type runt: allocation untouched");
+
+      // (c/d) a full-size TYPE frame that ends 1 and 7 bits into a byte.
+      for (int extra = 1; extra <= 7; extra += 6) begin
+        buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+        send_idle(24); repeat (4) @(posedge clk); #1;
+        partial_frame(extra);
+        check(nvalid === 6,
+              $sformatf("partial byte +%0d: no frame_valid", extra));
+        check(nbad === 9 + ((extra == 1) ? 0 : 1),
+              $sformatf("partial byte +%0d: rejected", extra));
+        check(u_mac.room === 12'd2048 && frame_ptr === 11'd0,
+              $sformatf("partial byte +%0d: allocation untouched", extra));
+      end
     end
 
     if (errors == 0) $display("PASS: all checks");

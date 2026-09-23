@@ -203,6 +203,12 @@ module pe_eth_mac #(
   // that jumps from the declared length straight to the FCS rejects every such
   // frame (measured: a length-20 frame padded to 46 failed).
   localparam logic [15:0] MIN_PAY      = 16'd46;
+  // The type-frame minimum, in STORED bytes: 46 data/pad + the 4 FCS bytes,
+  // which for a type frame are indistinguishable from payload. 802.3's minimum
+  // frame is 64 bytes total (14 header + 46 data + 4 FCS); a receiver that only
+  // checks the CRC accepts an 18-byte header+FCS frame or a 63-byte short one
+  // (measured, reviews/2026-09-23/FIX-VERIFICATION.md F1).
+  localparam logic [15:0] MIN_TYPE_PAY = MIN_PAY + {{13{1'b0}}, FCS_BYTES};
 
   typedef enum logic [2:0] {
     S_SEARCH  = 3'd0,   // preamble + SFD lock; also the reset state
@@ -526,13 +532,14 @@ module pe_eth_mac #(
           settle <= settle + 2'd1;
           if (settle == 2'd2) begin
             // The CRC residue is necessary but NOT sufficient: the frame must
-            // also have a complete structure. A header that never finished has
-            // no field; a TYPE frame that never stored its four FCS bytes has
-            // nothing to wind back; a LENGTH frame that aborted before its FCS
-            // bits completed is truncated. The runt the review sent had a valid
+            // also have a complete STRUCTURE. A header that never finished has
+            // no field; a TYPE frame under 64 bytes total (46 data + 4 stored
+            // FCS) is a runt; a frame that ends 1-7 bits into a byte is not a
+            // frame at all; a LENGTH frame that aborted before its FCS bits
+            // completed is truncated. The runt the review sent had a valid
             // residue and none of the structure.
-            if ((crc_state == CRC_RESIDUE) && hdr_done &&
-                (is_type ? (pay_cnt >= {{(16-3){1'b0}}, FCS_BYTES}) : fcs_done)) begin
+            if ((crc_state == CRC_RESIDUE) && hdr_done && (bit_cnt == 3'd0) &&
+                (is_type ? (pay_cnt >= MIN_TYPE_PAY) : fcs_done)) begin
               frame_valid <= 1'b1;
               // Wind back only what the FCS actually occupied in the buffer:
               // 4 bytes for a type frame, NOTHING for a length frame whose FCS
