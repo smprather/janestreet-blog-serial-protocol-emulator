@@ -185,7 +185,7 @@ is explained rather than papered over, and why the count is asserted exactly.
 
 ## The transaction layer (built 2026-09-23)
 
-`firmware/i2c_xfer.pe` (267 words) runs one full master transaction: START,
+`firmware/i2c_xfer.pe` (311 words) runs one full master transaction: START,
 `0xA0` (addr 0x50 + W), ACK, `0xA5`, ACK, repeated START, `0xA1`, ACK, read
 `0x5A`, NACK, STOP. There is still no I2C hardware: the program is a state
 dispatcher over one shared send engine and one shared read engine, because the
@@ -209,24 +209,40 @@ low phase is 0.37 us (measured) against a 4.7 us floor.
 post-START SCL fall was counted as a data bit (addresses decoded 0x50), and
 SDA changes landed on the falling edge instead of after the tHD;DAT hold.
 
-`regress/mutate_i2c_xfer_tb.sh` mutates the FIRMWARE (the TB's DUT) seven ways
+`regress/mutate_i2c_xfer_tb.sh` mutates the FIRMWARE (the TB's DUT) eleven ways
 — bit order, repeated START, tLOW, STOP, arbitration, the hold, the read
-accumulator — and requires all seven to be caught.
+accumulator, arbitration-continues, NACK-ignored, NACK-no-stop and
+no-stretch-wait — and requires all eleven to be caught.
+
+## Review-focus gaps, closed 2026-09-23
+
+The transaction layer now defines all three behaviours the independent review
+flagged, each with a test on both models:
+
+- **Arbitration loss releases and aborts.** A transmitted 1 read back low
+increments `dmem[7]`, sets outcome `dmem[6]=1`, releases BOTH lines
+immediately, and never
+issues a STOP (the winner owns the transaction). It parks with `dmem[5]=0x55`.
+There is **no STOP-qualified bus-free wait** (a single both-high sample cannot
+prove idle) and no retry. The RTL TB's contention case asserts no
+master STOP and that no complete address/data byte was recorded; its stimulus
+is **transient contention** and does not model a winner's continuing clocks or
+STOP, which the testbench states.
+- **Unexpected NACKs are defined.** Any NACK in an address or data ACK slot
+maps the slot to an outcome (`2` write address, `3` data, `4` read address),
+issues a STOP and aborts with `dmem[5]=0x55`; no data follows an address NACK
+and no read follows a read-address NACK. The emulator checker runs all three
+negative cases across all 60 phases, and the RTL TB runs all three.
+- **Clock stretching is waited on.** After releasing SCL the firmware polls
+the pad until SCL actually reads high before timing tHIGH, at every site that
+releases SCL. Both slave models can hold SCL low; the checker and the RTL TB
+run a stretched transaction and assert the high period still clears its floor.
 
 ## Open work
 
-- **Arbitration is detection, not compliance.** A transmitted 1 read back low
-increments `dmem[7]`, but the byte engine keeps shifting and the transaction
-completes. A compliant multi-master master releases the bus and retries after
-the winner finishes; the RTL TB's contention run expects completion, so this is
-the tested behavior.
-- **NACKs are recorded without recovery.** The ACK samples land in `dmem[0..2]`
-and the master dispatches regardless. The read-address-NACK and data-NACK paths
-are neither tested nor defined beyond the record; the emulator's slave model
-can be configured to NACK (`nack_address`/`nack_data`) when they are.
-- **Clock stretching is not handled in the transaction loop.** The pin-level
-firmware proved the SCL read-back; the transaction times tHIGH from its own
-release. Keep the v1 narrowing explicit until the loop waits on SCL.
+- **No automatic retry.** A loss or a NACK parks with its outcome code; a retry
+policy (back off until the bus is idle, re-issue) is firmware's next step, not
+implemented.
 - **A real device.** The acceptance test for the writeup is an SSD1306 or a
 24C02 on the board, with real pull-ups.
 - **Pull-up values.** Not modelled: both bus models are ideal. The real RC is

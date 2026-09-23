@@ -10,11 +10,13 @@
 
 **Spec:** `wiki/plans/through-i2c.md` (steps 6–7 and the firmware design sections) reconciled below, plus `wiki/concepts/i2c-on-the-matrix.md` (the measured timing and the three traps). `wiki/STATUS.md` item 3 is the work item.
 
-> **Status 2026-09-23: COMPLETE.** Tasks 1–4 are done: the emulator checker and
-> the RTL TB are both in the regression (RTL 29/29, firmware 20/20, seven
-> mutation suites), and the docs are updated. Clock stretching and arbitration
-> inside the transaction loop remain open items on the concept page, by design
-> for v1. No RTL changed, so the recorded synthesis/STA screens stand.
+> **Status 2026-09-23: COMPLETE, including the review-focus gaps.** Tasks 1–4
+> are done: the emulator checker and the RTL TB are both in the regression
+> (RTL 29/29, firmware 20/20, eleven firmware mutation guards), and the docs
+> are updated. The three review-focus behaviours — arbitration release/abort,
+> defined unexpected-NACK aborts, and SCL-stretch waiting — are implemented and
+> tested on both models; an abort parks (no automatic retry). No RTL changed, so
+> the recorded synthesis/STA screens stand.
 
 ## Reconciliation — the plan vs the current tree
 

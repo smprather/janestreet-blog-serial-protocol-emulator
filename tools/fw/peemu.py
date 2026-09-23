@@ -536,11 +536,22 @@ class I2CSlaveModel:
     SDA_BIT, SCL_BIT = 4, 5
 
     def __init__(self, address: int = 0x50, read_byte: int = 0x5A,
-                 nack_address: bool = False, nack_data: bool = False):
+                 nack_address: bool = False, nack_data: bool = False,
+                 nack_read_address: bool = False,
+                 stretch_fall: int = -1, stretch_cycles: int = 0):
         self.address = address & 0x7F
         self.read_byte = read_byte & 0xFF
         self.nack_address = nack_address
         self.nack_data = nack_data
+        self.nack_read_address = nack_read_address
+        # Clock stretching: after the Nth SCL falling edge (1-based), hold SCL
+        # low for `stretch_cycles` polls. A slave may hold SCL low at any time;
+        # the master must read it back and wait.
+        self.stretch_fall = stretch_fall
+        self.stretch_cycles = stretch_cycles
+        self.scl_pull = False
+        self.stretch_left = 0
+        self.fall_count = 0
 
         self.prev_sda = 1
         self.prev_scl = 1
@@ -615,6 +626,10 @@ class I2CSlaveModel:
         # after the 8th data bit, so it is already low when the master samples
         # it on the 9th rise; it is released on the 9th fall.
         if self.prev_scl and not scl:
+            self.fall_count += 1
+            if self.fall_count == self.stretch_fall:
+                self.scl_pull = True
+                self.stretch_left = self.stretch_cycles
             if self.ignore_first_fall:
                 # the SCL fall that captures the START: not a data bit
                 self.ignore_first_fall = False
@@ -638,9 +653,11 @@ class I2CSlaveModel:
                     if self.bitpos == 8:
                         if self.mode == 'addr':
                             self.address_bytes.append(self.shift)
+                            read_addr = bool(self.shift & 1)
                             if (self.shift >> 1) == self.address \
-                                    and not self.nack_address:
-                                self.pending = 'read' if (self.shift & 1) else 'write'
+                                    and not self.nack_address \
+                                    and not (self.nack_read_address and read_addr):
+                                self.pending = 'read' if read_addr else 'write'
                                 self._schedule_pull(True)
                             else:
                                 self.pending = None
@@ -663,7 +680,12 @@ class I2CSlaveModel:
             self.hold -= 1
             if self.hold == 0:
                 self.pull = self.pull_next
-        soc.i2c_pull_low = (1 << self.SDA_BIT) if self.pull else 0x00
+        if self.stretch_left > 0:
+            self.stretch_left -= 1
+            if self.stretch_left == 0:
+                self.scl_pull = False
+        soc.i2c_pull_low = ((1 << self.SDA_BIT) if self.pull else 0x00) \
+            | ((1 << self.SCL_BIT) if self.scl_pull else 0x00)
         self.prev_sda = sda
         self.prev_scl = scl
 

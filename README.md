@@ -58,7 +58,10 @@ pin, one output pin, a counter, and a program produce 115200 8N1, echoing bytes
 at 8.6–8.7 µs per bit cell measured at the pin. The same core and pin matrix
 run SPI mode 0 and a complete I2C write/repeated-START/read transaction. The
 I2C transaction is checked against independent emulator and RTL slave models;
-clock stretching and NACK recovery remain outside the current firmware scope.
+it also handles arbitration loss (release both lines, no STOP), unexpected
+NACKs (record the phase, issue a STOP and abort) and SCL stretching (poll the
+pad before timing tHIGH). An abort parks with an outcome code — there is no
+STOP-qualified bus-free wait and no retry.
 
 The instruction memory is a **real SRAM macro** (`1P_1024x16`, 1,024 program
 words) behind `rtl/pe_imem.v`; `pe_ctrl` loads it through the wrapper's SPI pads

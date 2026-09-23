@@ -96,7 +96,7 @@ Both layers of the thesis now exist and have baseline simulation coverage:
   As of 2026-09-23 the chain is instantiated in `pe_soc` (port bit 7) with the
   frame window on IO `0x8-0xE`; `tb/tb_pe_soc_eth.v` drives the same wire into
   the SoC and checks that `firmware/eth_rx.pe` consumed a real ARP frame, and
-  `regress/mutate_eth_soc_tb.sh` proves those checks can fail (7/7).
+  `regress/mutate_eth_soc_tb.sh` proves those checks can fail (8/8).
 - **Milestone 2 — the programmable core.** A CPU, an assembler, a bit-accurate
   emulator, and **three protocols written entirely in firmware** — UART, SPI
   mode 0, and, as of 2026-09-22, **I2C** (the pin-level grammar: START, one bit
@@ -214,7 +214,7 @@ Firmware (no RTL cells — these are programs the CPU runs; see
 | `firmware/spi_xfer.pe` — SPI mode 0 master | 70 | `tools/fw/peemu.py` (mode-0 slave model) |
 | `firmware/eth_rx.pe` — 10BASE-T frame-window consumer | 42 | `tb_pe_soc_eth.v` (real RTL, real ARP frame) |
 | `firmware/i2c_pins.pe` — I2C pin grammar (START/bit cell/STOP) | 79 | `tb_pe_soc_i2c.v` (real RTL), `tools/checks/i2c_timing.py` |
-| `firmware/i2c_xfer.pe` — I2C master transaction (addr, ACK, read, NACK) | 267 | `tb_pe_soc_i2c_xfer.v` (real RTL, slave FSM), `tools/checks/i2c_xfer_check.py` (60 phases) |
+| `firmware/i2c_xfer.pe` — I2C master transaction (addr, ACK, read, NACK) | 311 | `tb_pe_soc_i2c_xfer.v` (real RTL, slave FSM), `tools/checks/i2c_xfer_check.py` (60 phases) |
 
 Numbers from `regress/synth_area.sh` (sg13g2 typ corner, mapped pre-route). The routed
 figure for the SERDES comes from the full LibreLane flow (route+CTS+PDN inflate
@@ -1247,7 +1247,7 @@ is instantiated inside `pe_soc`, the RX pin is port bit 7 (the TT wrapper maps
 the window, records the header in dmem and sums every payload byte. A real FCS
 proves the walk: `tb/tb_pe_soc_eth.v` drives raw Manchester levels for two ARP
 frames and a bad-FCS frame and checks firmware's dmem, and
-`regress/mutate_eth_soc_tb.sh` breaks the window seven ways and requires every
+`regress/mutate_eth_soc_tb.sh` breaks the window eight ways and requires every
 one to be caught. The frame buffer is no longer an orphan; only `pe_serdes` and
 `pe_codec_mux` remain unwired. See [[concepts/ethernet-receive-path]].
 
@@ -1268,25 +1268,29 @@ the pads and executes them; `regress/mutate_ctrl_tb.sh` is 11/11. See
 
 ### 3. I2C transaction layer — DONE 2026-09-23
 
-`firmware/i2c_xfer.pe` (267 words) runs **one full master transaction**: START,
+`firmware/i2c_xfer.pe` (311 words) runs **one full master transaction**: START,
 `0xA0` (addr 0x50 + W), ACK, `0xA5`, ACK, repeated START, `0xA1`, ACK, read
 `0x5A`, NACK, STOP. Verified twice, independently: `tools/checks/i2c_xfer_check.py`
 runs it on the emulator against a byte-level slave model across all 60 tick
 phases, and `tb/tb_pe_soc_i2c_xfer.v` runs it on real RTL against a Verilog
 slave FSM, asserting the bytes, the ACKs, the grammar and the standard-mode
 floors on the pads (tLOW 6.00 us, tHIGH 5.98 us, period 11.98 us).
-`regress/mutate_i2c_xfer_tb.sh` mutates the firmware seven ways; all seven are
+`regress/mutate_i2c_xfer_tb.sh` mutates the firmware eleven ways; all eleven are
 caught. The pin-level half remains `firmware/i2c_pins.pe` (79 words); the
 concept page and the traps are in [[concepts/i2c-on-the-matrix]].
 
-**Known limits, from the independent review
-(`reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md`) — scope narrowings, not
-happy-path defects:** (1) an arbitration loss is **counted but the transfer
-continues** — detection, not compliant multi-master arbitration; (2) an
-unexpected NACK on an address/data byte is recorded in dmem but there is no
-recovery path and no negative-path test; (3) the transaction loop does **not**
-wait for a stretched SCL. The pin-level firmware proved the pin primitives for
-all three; the transaction layer does not claim them.
+**Review-focus gaps closed 2026-09-23:** arbitration loss now releases both
+lines immediately and aborts **without a STOP** (outcome `dmem[6]=1`; there is
+no STOP-qualified bus-free wait and no retry); an
+unexpected address/data NACK records an outcome code (`2`/`3`/`4`), issues a
+STOP and aborts; and SCL is read back after every release so a stretching slave
+is waited on. All three have emulator (60-phase, plus a transient-contention
+arbitration case) and RTL tests, and
+`regress/mutate_i2c_xfer_tb.sh` is **11/11**. The remaining I2C limit is that
+an abort parks — there is no automatic retry or bus-free qualification — plus
+no real device or fast
+mode. See [[concepts/i2c-on-the-matrix]] and
+`reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md`.
 
 ### 4. Reclaim or commit the six `uo_out` pins on `dbg_pc[0..5]` — DECIDED 2026-09-23
 

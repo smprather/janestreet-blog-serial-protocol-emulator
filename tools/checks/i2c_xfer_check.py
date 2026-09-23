@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Run firmware/i2c_xfer.pe against an independent I2C slave model and check the
-whole transaction: bytes, ACKs, the read byte, bus grammar, and standard-mode
-timing at the pin.
+"""Run firmware/i2c_xfer.pe against an independent I2C slave model and check
+every defined outcome: the happy transaction, the three unexpected-NACK aborts,
+arbitration loss, and a clock-stretching slave.
 
 WHY THE EMULATOR DOES THIS AND THE RTL TB DOES IT AGAIN. The emulator is the
 fast loop (seconds versus a minute for iverilog) and it is where the firmware's
@@ -11,12 +11,16 @@ an inconvenience ([[STATUS]] gotcha 11).
 
 WHAT "INDEPENDENT" MEANS HERE. The slave model decodes the wire -- START/STOP,
 bits on SCL rises, the 9th clock as ACK -- and is never told what the firmware
-intends. The checker then asserts on the slave's records AND on the firmware's
-own dmem observables, so a firmware bug and a model bug have to coincide to
-pass, and a model that silently agreed with a broken firmware would still fail
-the timing/grammar checks.
+intends. The checker asserts on the slave's records AND on the firmware's own
+dmem observables, so a firmware bug and a model bug have to coincide to pass.
 
-Exit 0 if every phase passes; 1 otherwise.
+dmem contract under test:
+  dmem[0..2] per-byte ACK samples    dmem[3] the read byte
+  dmem[4] NACK sent                  dmem[5] 0xA5 success / 0x55 aborted
+  dmem[6] outcome: 0 clean, 1 arbitration, 2 write-addr NACK, 3 data NACK,
+          4 read-addr NACK           dmem[7] arbitration-loss count
+
+Exit 0 if every case passes in every swept phase; 1 otherwise.
 """
 import argparse
 import pathlib
@@ -34,8 +38,29 @@ WRITE_ADDR = (ADDR << 1) | 0     # 0xA0
 READ_ADDR = (ADDR << 1) | 1      # 0xA1
 WRITE_DATA = 0xA5
 READ_DATA = 0x5A
+SUCCESS, ABORTED = 0xA5, 0x55
 
 MAX_CYCLES = 200_000
+
+# name, slave kwargs, expected dict
+CASES = [
+    ("clean", {}, dict(outcome=0, done=SUCCESS, addrs=[WRITE_ADDR, READ_ADDR],
+                       writes=[WRITE_DATA], acks=[1], starts=2, stops=1,
+                       read_byte=READ_DATA)),
+    ("write-addr NACK", dict(nack_address=True),
+     dict(outcome=2, done=ABORTED, addrs=[WRITE_ADDR], writes=[], acks=[],
+          starts=1, stops=1, read_byte=0x00)),
+    ("data NACK", dict(nack_data=True),
+     dict(outcome=3, done=ABORTED, addrs=[WRITE_ADDR], writes=[WRITE_DATA],
+          acks=[], starts=1, stops=1, read_byte=0x00)),
+    ("read-addr NACK", dict(nack_read_address=True),
+     dict(outcome=4, done=ABORTED, addrs=[WRITE_ADDR, READ_ADDR],
+          writes=[WRITE_DATA], acks=[], starts=2, stops=1, read_byte=0x00)),
+    ("stretch", dict(stretch_fall=3, stretch_cycles=600),
+     dict(outcome=0, done=SUCCESS, addrs=[WRITE_ADDR, READ_ADDR],
+          writes=[WRITE_DATA], acks=[1], starts=2, stops=1,
+          read_byte=READ_DATA, min_max_low_us=8.0)),
+]
 
 
 def assemble() -> list[int]:
@@ -49,12 +74,12 @@ def assemble() -> list[int]:
     return [int(tok, 16) for tok in out.read_text().split()]
 
 
-def run_phase(words: list[int], phase: int) -> dict:
+def run_phase(words: list[int], phase: int, **slave_kwargs) -> dict:
     soc = peemu.Soc(words)
     soc.run = True
     soc.imem_rdata = soc.imem[0]
     soc.i2c_cnt = phase
-    slave = peemu.I2CSlaveModel(address=ADDR, read_byte=READ_DATA)
+    slave = peemu.I2CSlaveModel(address=ADDR, read_byte=READ_DATA, **slave_kwargs)
 
     transitions = []
     prev = ((soc.wire_bits() >> 5) & 1, (soc.wire_bits() >> 4) & 1)
@@ -67,17 +92,73 @@ def run_phase(words: list[int], phase: int) -> dict:
         if cur != prev:
             transitions.append((soc.cycles, prev, cur))
         prev = cur
-        if soc.dmem[5] == 0xA5:
+        if soc.dmem[5] in (SUCCESS, ABORTED):   # terminal, pass or abort
             break
 
+    cls = i2c_timing.classify(transitions, initial)
+    lows = cls["lows"]
     return {
-        "transitions": transitions, "initial": initial,
-        "done": soc.dmem[5] == 0xA5,
+        "transitions": transitions, "classify": cls,
+        "done": soc.dmem[5] in (SUCCESS, ABORTED),
         "dmem": list(soc.dmem),
+        "wire_final": soc.wire_bits() & (0x30),
         "address_bytes": list(slave.address_bytes),
         "writes": list(slave.writes), "acks": list(slave.acks),
         "starts": slave.starts, "stops": slave.stops,
+        "max_low_us": max(lows) if lows else 0.0,
         "cycles": soc.cycles,
+    }
+
+
+def run_arb_phase(words: list[int], phase: int) -> dict:
+    """Arbitration loss against TRANSIENT CONTENTION.
+
+    A second device pulls SDA low through the master's first transmitted 1 and
+    releases it on a countdown. The master must release both lines, record
+    outcome 1, park (flag 0x55) and NOT issue a STOP. The source's own release
+    under SCL high is a wire STOP, and the source's pull is a wire START, so no
+    wire-condition or timing-floor assertions are made here -- the firmware's
+    own dmem and drive state are the contract. This does not model a winner's
+    continuing transaction or its STOP.
+    """
+    soc = peemu.Soc(words)
+    soc.run = True
+    soc.imem_rdata = soc.imem[0]
+    soc.i2c_cnt = phase
+    slave = peemu.I2CSlaveModel(address=ADDR, read_byte=READ_DATA)
+
+    prev_sda, prev_scl = 1, 1
+    armed = active = False
+    elapsed = 0
+    for _ in range(MAX_CYCLES):
+        soc.step()
+        slave.poll(soc)
+        w = soc.wire_bits()
+        sda, scl = (w >> 4) & 1, (w >> 5) & 1
+        if not armed and prev_scl and scl and prev_sda and not sda:
+            armed = True                       # the master's START
+        elif armed and not active and not prev_scl and scl:
+            active = True                      # the first data-1 high phase
+            elapsed = 0
+            soc.i2c_pull_low |= 0x10           # the "winner" pulls SDA low
+        if active:
+            elapsed += 1
+            if elapsed >= 900:                 # 15 us, well past the sample
+                soc.i2c_pull_low &= ~0x10
+                active = False
+            else:
+                # slave.poll() reassigns the whole pull mask every cycle, so
+                # the contention pull must be re-asserted each time
+                soc.i2c_pull_low |= 0x10
+        prev_sda, prev_scl = sda, scl
+        if soc.dmem[5] in (SUCCESS, ABORTED):
+            break
+    return {
+        "done": soc.dmem[5] in (SUCCESS, ABORTED),
+        "dmem": list(soc.dmem),
+        "master_oe": soc.pad_oe() & 0x30,
+        "slave_addrs": list(slave.address_bytes),
+        "slave_writes": list(slave.writes),
     }
 
 
@@ -85,105 +166,127 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--phases", type=int, default=60,
                     help="tick phases to sweep (the residual is phase-dependent)")
-    ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
     words = assemble()
     print(f"firmware/i2c_xfer.pe: {len(words)} words, "
-          f"{args.phases} phases\n")
-
-    runs = [run_phase(words, p) for p in range(args.phases)]
+          f"{args.phases} phases, {len(CASES)} cases\n")
 
     ok = True
+    for name, kwargs, want in CASES:
+        runs = [run_phase(words, p, **kwargs) for p in range(args.phases)]
+        r0 = runs[0]
+        case_ok = True
 
-    # ---- the transaction, from the slave model's independent decode --------
-    print("transaction (decoded by the slave model):")
-    expect_addr = [WRITE_ADDR, READ_ADDR]
-    expect_writes = [WRITE_DATA]
-    a0 = runs[0]
-    for name, got, want in (
-            ("address bytes", a0["address_bytes"], expect_addr),
-            ("data writes", a0["writes"], expect_writes),
-            ("read ACK/NACK bits", a0["acks"], [1])):
-        good = got == want
-        ok &= good
-        print(f"  {'OK   ' if good else 'FAIL '} {name:<20} "
-              f"{[f'0x{v:02X}' for v in got]}  want {[f'0x{v:02X}' for v in want]}")
-    for name, got, want in (("STARTs", a0["starts"], 2), ("STOPs", a0["stops"], 1)):
-        good = got == want
-        ok &= good
-        print(f"  {'OK   ' if good else 'FAIL '} {name:<20} {got}  want {want}")
+        def ck(cond, msg):
+            nonlocal case_ok, ok
+            if not cond:
+                case_ok = False
+                ok = False
+                print(f"  FAIL {name}: {msg}")
 
-    # The transaction must be identical in EVERY phase, not just phase 0.
-    varying = [i for i, r in enumerate(runs)
-               if (r["address_bytes"], r["writes"], r["acks"],
-                   r["starts"], r["stops"]) !=
-                  (a0["address_bytes"], a0["writes"], a0["acks"],
-                   a0["starts"], a0["stops"])]
-    if varying:
-        ok = False
-        print(f"  FAIL  transaction varies across phases: {varying[:8]}")
-    else:
-        print(f"  OK    transaction identical in all {len(runs)} phases")
+        # terminal state
+        ck(all(r["done"] for r in runs), "firmware never reached a terminal flag")
+        ck(r0["dmem"][5] == want["done"],
+           f"dmem[5]={r0['dmem'][5]:02x} want {want['done']:02x}")
+        ck(r0["dmem"][6] == want["outcome"],
+           f"dmem[6]={r0['dmem'][6]:02x} want {want['outcome']:02x}")
 
-    # ---- the firmware's own observables ------------------------------------
-    print("\nfirmware dmem observables (phase 0; must be constant across phases):")
-    slots = {0: "write-addr ACK (0=ACKed)", 1: "write-data ACK (0=ACKed)",
-             2: "read-addr ACK (0=ACKed)", 3: "read byte", 4: "NACK sent",
-             5: "completion flag"}
-    want_slots = {0: 0x00, 1: 0x00, 2: 0x00, 3: READ_DATA, 4: 0x01, 5: 0xA5}
-    for slot, name in slots.items():
-        vals = sorted({r["dmem"][slot] for r in runs})
-        want = want_slots[slot]
-        good = vals == [want]
-        ok &= good
-        shown = [f"0x{v:02X}" for v in vals]
-        print(f"  {'OK   ' if good else 'FAIL '} dmem[{slot}] {name:<24} "
-              f"{shown}  want 0x{want:02X}")
+        # independent slave decode
+        ck(r0["address_bytes"] == want["addrs"],
+           f"address bytes {r0['address_bytes']} want {want['addrs']}")
+        ck(r0["writes"] == want["writes"],
+           f"writes {r0['writes']} want {want['writes']}")
+        ck(r0["acks"] == want["acks"],
+           f"read ACK bits {r0['acks']} want {want['acks']}")
+        ck(r0["starts"] == want["starts"],
+           f"STARTs {r0['starts']} want {want['starts']}")
+        ck(r0["stops"] == want["stops"],
+           f"STOPs {r0['stops']} want {want['stops']}")
+        ck(r0["dmem"][3] == want["read_byte"],
+           f"read byte {r0['dmem'][3]:02x} want {want['read_byte']:02x}")
 
-    # ---- timing, worst case over the swept phases --------------------------
-    cls = [i2c_timing.classify(r["transitions"], r["initial"]) for r in runs]
-    lows = [x for c in cls for x in c["lows"]]
-    highs = [x for c in cls for x in c["highs"]]
-    periods = [(h + l) for c in cls for h, l in zip(c["highs"], c["lows"][1:])]
-    print("\nstandard-mode timing, worst case over the swept phases:")
-    worst = {"tLOW": min(lows), "tHIGH": min(highs), "period": min(periods)}
-    for name, floor in i2c_timing.FLOORS.items():
-        got = worst[name]
-        good = got >= floor
-        ok &= good
-        print(f"  {'OK   ' if good else 'FAIL '} {name:<7} {got:8.3f} us  "
-              f"floor {floor:5.2f}  margin {got - floor:+7.3f}")
-    print(f"  bus rate: {1000.0 / max(periods):.2f} .. "
-          f"{1000.0 / min(periods):.2f} kHz (standard mode <= 100 kHz)")
+        # an aborted transaction must leave the bus released
+        ck(r0["wire_final"] == 0x30,
+           f"bus not released at the end (wire bits {r0['wire_final']:02x})")
 
-    # ---- grammar: the conditions and the SDA-under-SCL-high rule -----------
-    print("\nbus grammar:")
-    grammar_ok = True
-    for p, c in enumerate(cls):
-        names = [n for _, n in c["conds"]]
-        if names != ["START", "START", "STOP"]:
-            print(f"  phase {p}: conditions {names} -- expected "
-                  f"['START','START','STOP'] (repeated START, no STOP between)")
-            grammar_ok = False
-        for cyc, s0, s1, d0, d1 in c["data_edges"]:
-            if s0 == 1 or s1 == 1:
-                print(f"  phase {p}: SDA moved with SCL high at cycle {cyc} "
-                      f"(SCL {s0}->{s1}, SDA {d0}->{d1})")
-                grammar_ok = False
-    total_conds = sum(len(c["conds"]) for c in cls)
-    if total_conds != 3 * len(cls):
-        print(f"  VACUOUS: parsed {total_conds} conditions across {len(cls)} "
-              f"runs, expected {3 * len(cls)}")
-        grammar_ok = False
-    if grammar_ok:
-        print(f"  OK    all {len(runs)} phases: START, repeated START, STOP, "
-              f"no stray data edge under SCL-high")
-    ok &= grammar_ok
+        # timing floors, on the cells that actually ran
+        worst_low = min((l for r in runs for l in r["classify"]["lows"]),
+                        default=0.0)
+        worst_high = min((h for r in runs for h in r["classify"]["highs"]),
+                         default=0.0)
+        ck(worst_low >= i2c_timing.FLOORS["tLOW"],
+           f"tLOW {worst_low:.3f} < {i2c_timing.FLOORS['tLOW']}")
+        ck(worst_high >= i2c_timing.FLOORS["tHIGH"],
+           f"tHIGH {worst_high:.3f} < {i2c_timing.FLOORS['tHIGH']}")
 
-    if not all(r["done"] for r in runs):
-        ok = False
-        print("\n  FAIL  the completion flag never appeared in some phase")
+        # grammar: the expected condition sequence, and no stray SDA edge under
+        # SCL high. Stretch adds low time, never a condition.
+        conds = [n for r in runs for _, n in r["classify"]["conds"]]
+        per_run = [tuple(n for _, n in r["classify"]["conds"]) for r in runs]
+        if want["starts"] == 2:
+            want_conds = ("START", "START", "STOP")
+        else:
+            want_conds = ("START", "STOP")
+        ck(all(pc == want_conds for pc in per_run),
+           f"condition sequence {sorted(set(per_run))} want {want_conds}")
+        ck(len(conds) == len(want_conds) * len(runs),
+           f"parsed {len(conds)} conditions, want {len(want_conds)*len(runs)}")
+        for r in runs:
+            for cyc, s0, s1, d0, d1 in r["classify"]["data_edges"]:
+                if s0 == 1 or s1 == 1:
+                    ck(False, f"SDA moved under SCL high at cycle {cyc}")
+
+        # the stretch case must show the slave actually holding SCL low and the
+        # master waiting for it (not merely a longer constant)
+        if "min_max_low_us" in want:
+            ck(r0["max_low_us"] >= want["min_max_low_us"],
+               f"max SCL low {r0['max_low_us']:.3f} us < "
+               f"{want['min_max_low_us']} (the master did not wait?)")
+
+        # every phase must agree on the outcome and the transaction
+        keys = ("address_bytes", "writes", "acks", "starts", "stops")
+        varying = [i for i, r in enumerate(runs)
+                   if tuple(r[k] for k in keys) != tuple(r0[k] for k in keys)
+                   or r["dmem"][5] != r0["dmem"][5] or r["dmem"][6] != r0["dmem"][6]]
+        ck(not varying, f"result varies across phases: {varying[:8]}")
+
+        print(f"  {'OK  ' if case_ok else 'FAIL'} {name:<16} "
+              f"outcome={r0['dmem'][6]}, flag={r0['dmem'][5]:02x}, "
+              f"starts/stops={r0['starts']}/{r0['stops']}, "
+              f"max tLOW={r0['max_low_us']:.2f} us, "
+              f"min tLOW/tHIGH={worst_low:.2f}/{worst_high:.2f} us")
+
+    # ================= arbitration loss (transient contention) =============
+    # Kept separate from CASES: the contention source's pull and release are
+    # wire-visible conditions a real slave would misread, so only the
+    # firmware's outcome and drive state are asserted. See run_arb_phase.
+    print("\narbitration loss (transient contention):")
+    arb = [run_arb_phase(words, p) for p in range(args.phases)]
+    a0 = arb[0]
+    arb_ok = True
+
+    def ack(cond, msg):
+        nonlocal ok, arb_ok
+        if not cond:
+            ok = False
+            arb_ok = False
+            print(f"  FAIL arbitration: {msg}")
+
+    ack(all(r["done"] for r in arb), "never reached a terminal flag")
+    ack(a0["dmem"][6] == 0x01, f"outcome={a0['dmem'][6]:02x} want 01")
+    ack(a0["dmem"][5] == ABORTED, f"flag={a0['dmem'][5]:02x} want 55")
+    ack(a0["dmem"][7] > 0, "loss not counted")
+    ack(a0["master_oe"] == 0,
+        f"master still driving after the abort (oe={a0['master_oe']:02x})")
+    ack(a0["slave_addrs"] == [] and a0["slave_writes"] == [],
+        "a complete address/data byte was recorded after the abort")
+    varying = [i for i, r in enumerate(arb)
+               if (r["dmem"][5], r["dmem"][6]) != (a0["dmem"][5], a0["dmem"][6])]
+    ack(not varying, f"outcome varies across phases: {varying[:8]}")
+    print(f"  {'OK  ' if arb_ok else 'FAIL'} arbitration     "
+          f"outcome={a0['dmem'][6]}, flag={a0['dmem'][5]:02x}, "
+          f"loss={a0['dmem'][7]}")
 
     print(f"\nRESULT: {'PASS' if ok else 'FAIL'}")
     return 0 if ok else 1

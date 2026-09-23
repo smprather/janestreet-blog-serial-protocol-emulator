@@ -66,6 +66,7 @@
         STM   3, A
         STM   4, A
         STM   5, A
+        STM   6, A                 ; outcome code: 0 = clean
         STM   7, A
         STM   10, A                ; state 0: START
         STM   11, A
@@ -140,8 +141,19 @@ s5:     JMP   read_byte
 ; A STOP is SDA rising while SCL is high, and the order matters: SCL low,
 ; SDA low, tSU;STO, SCL released, tHIGH, SDA released -> the rising edge is
 ; the STOP. (i2c_pins.pe's header explains the spurious-START trap this
-; avoids.)
-s6:     LDI   A, 0x00             ; SCL already low; pull SDA low safely
+; avoids.) SHARED with the NACK abort: both paths end with a STOP.
+s6:     JMP   do_stop
+
+; ---- terminal state: dmem[5] is already set (0xA5 or 0x55) ---------------
+park:   JMP   park
+
+; ===========================================================================
+; do_stop: the STOP sequence, then mark success (dmem[6]==0) or failure and
+; enter the terminal state. Entered with SCL low; SDA may be low or released.
+; The first write pulls SDA low with SCL low, which is always legal.
+; ===========================================================================
+do_stop:
+        LDI   A, 0x00
         OUT   TXPIN, A
         IN    A, I2CTICK
         ADD   A, T_STO
@@ -151,6 +163,11 @@ w_sto:  IN    A, I2CTICK
         JNZ   w_sto
         LDI   A, SCL               ; release SCL while SDA is still low
         OUT   TXPIN, A
+        ; a stretching slave may hold SCL low: wait for the real level before
+        ; timing tHIGH from it
+w_sth0: IN    A, PIN
+        AND   A, SCL
+        JZ    w_sth0
         IN    A, I2CTICK
         ADD   A, T_HIGH
         MOV   X, A
@@ -165,12 +182,34 @@ w_sth:  IN    A, I2CTICK
 w_buf:  IN    A, I2CTICK
         SUB   A, X
         JNZ   w_buf
+        LDM   A, 6
+        JNZ   stop_fail
+        LDI   A, 0xA5              ; clean transaction
+        JMP   stop_mark
+stop_fail:
+        LDI   A, 0x55              ; aborted: arbitration or an unexpected NACK
+stop_mark:
+        STM   5, A
         LDI   A, 7
         STM   10, A
         JMP   main
 
-; ---- terminal state: the completion flag, then park ----------------------
-park:   LDI   A, 0xA5
+; ===========================================================================
+; arb_abort: arbitration was lost, so this master is no longer the bus owner.
+; Release BOTH lines immediately and do NOT issue a STOP -- the winner owns the
+; transaction and a STOP from the loser would corrupt it. Then park with the
+; failure flag.
+;
+; THERE IS NO BUS-FREE WAIT, deliberately. A single sample of {SDA,SCL}==11
+; cannot distinguish an idle bus from a winner's data-1 high phase, so an
+; "idle" loop would exit early and claim something it did not establish. A
+; correct stop-qualified detector (observe a STOP edge, then tBUF) belongs
+; with a retry policy, which this firmware does not have yet: it parks.
+; ===========================================================================
+arb_abort:
+        LDI   A, SDA|SCL
+        OUT   TXPIN, A
+        LDI   A, 0x55
         STM   5, A
         JMP   park
 
@@ -196,6 +235,9 @@ w_ds:   IN    A, I2CTICK
         JNZ   w_ds
         LDI   A, SDA|SCL           ; SCL high (or stays high), SDA released
         OUT   TXPIN, A
+ds_hi:  IN    A, PIN
+        AND   A, SCL
+        JZ    ds_hi
         IN    A, I2CTICK
         ADD   A, T_STA
         MOV   X, A
@@ -255,6 +297,9 @@ sb_rel0:
         LDI   A, SCL               ; bit 0: SDA stays driven low
 sb_rel:
         OUT   TXPIN, A
+sb_hi:  IN    A, PIN
+        AND   A, SCL
+        JZ    sb_hi
         IN    A, I2CTICK
         ADD   A, T_HIGH
         MOV   X, A
@@ -268,9 +313,13 @@ sb_w2:  IN    A, I2CTICK
         IN    A, PIN
         AND   A, SDA
         JNZ   sb_noarb
+        ; lost arbitration: count it, mark the outcome, release the bus
         LDM   A, 7
         ADD   A, 1
         STM   7, A
+        LDI   A, 1
+        STM   6, A
+        JMP   arb_abort
 sb_noarb:
         ; Pull SCL low HOLDING SDA too: the next change happens with the
         ; clock low, which is where data is allowed to move.
@@ -303,6 +352,9 @@ sb_w3:  IN    A, I2CTICK
         JNZ   sb_w3
         LDI   A, SDA|SCL
         OUT   TXPIN, A
+sk_hi:  IN    A, PIN
+        AND   A, SCL
+        JZ    sk_hi
         IN    A, I2CTICK
         ADD   A, T_HIGH
         MOV   X, A
@@ -317,6 +369,25 @@ sb_w4:  IN    A, I2CTICK
         LDM   X, 13                ; dynamic ACK slot: STS is X-indexed
         LDM   A, 14
         STS   [X], A
+        JZ    sb_ack_ok            ; A still holds the sample
+        ; Unexpected NACK: map the ACK slot (0/1/2) to the outcome code and
+        ; end the transaction with a STOP. Sending data after an address NACK,
+        ; or reading after one, is what a broken master does.
+        LDM   A, 13
+        JZ    nk_addr
+        SUB   A, 1
+        JZ    nk_data
+        LDI   A, 4                 ; slot 2: the read address
+        JMP   nk_go
+nk_addr:
+        LDI   A, 2
+        JMP   nk_go
+nk_data:
+        LDI   A, 3
+nk_go:
+        STM   6, A
+        JMP   do_stop
+sb_ack_ok:
         JMP   main
 
 ; ===========================================================================
@@ -340,6 +411,9 @@ rb_w1:  IN    A, I2CTICK
         JNZ   rb_w1
         LDI   A, SDA|SCL
         OUT   TXPIN, A
+rb_hi:  IN    A, PIN
+        AND   A, SCL
+        JZ    rb_hi
         IN    A, I2CTICK
         ADD   A, T_HIGH
         MOV   X, A
@@ -378,6 +452,9 @@ rb_w3:  IN    A, I2CTICK
         JNZ   rb_w3
         LDI   A, SDA|SCL
         OUT   TXPIN, A
+rk_hi:  IN    A, PIN
+        AND   A, SCL
+        JZ    rk_hi
         IN    A, I2CTICK
         ADD   A, T_HIGH
         MOV   X, A

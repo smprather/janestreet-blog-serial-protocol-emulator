@@ -154,6 +154,37 @@ check_mutation "read-no-shift" \
         ADD   A, 0                 ; MUTANT: accumulator never shifts
         STM   11, A"
 
+# 8. Arbitration abort: continuing like the old build leaves the transaction
+#    completing after a loss, which the contention run forbids.
+check_mutation "arb-continues" \
+  "        JMP   arb_abort
+sb_noarb:" \
+  "        JMP   sb_noarb   ; MUTANT: continue after losing arbitration
+sb_noarb:"
+
+# 9. Unexpected NACK handling: ignoring it sends data / reads after an address
+#    was refused, and the NACK runs fail on the outcome and STOP checks.
+check_mutation "nack-ignored" \
+  "        JZ    sb_ack_ok            ; A still holds the sample" \
+  "        JMP   sb_ack_ok            ; MUTANT: unexpected NACK ignored"
+
+# 10. A NACK abort must end with a STOP, not a silent park.
+check_mutation "nack-no-stop" \
+  "        STM   6, A
+        JMP   do_stop
+sb_ack_ok:" \
+  "        STM   6, A
+        JMP   park   ; MUTANT: abort without a STOP
+sb_ack_ok:"
+
+# 11. The SCL stretch read-back: without it the master times tHIGH while the
+#     slave is still holding SCL low, and the stretched run breaks.
+check_mutation "no-stretch-wait" \
+  "sb_hi:  IN    A, PIN
+        AND   A, SCL
+        JZ    sb_hi" \
+  "        ; MUTANT: no SCL stretch wait after releasing the clock"
+
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="
 [ $survived -gt 0 ] && { echo "SURVIVORS: the TB does not test what it claims."; exit 1; }

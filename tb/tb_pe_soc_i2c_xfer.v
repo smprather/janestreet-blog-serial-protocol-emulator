@@ -48,9 +48,10 @@ module tb_pe_soc_i2c_xfer;
   wire sda_driven_low = pin_oe_bus[SDA_BIT] & ~pin_out_bus[SDA_BIT];
   wire scl_driven_low = pin_oe_bus[SCL_BIT] & ~pin_out_bus[SCL_BIT];
   logic slave_pull_sda;                 // the slave's open-drain pull
+  logic slave_pull_scl;                 // the slave's clock stretch
   logic other_pulls_sda_low = 1'b0;     // the contention run's second device
   wire sda_line = (sda_driven_low | slave_pull_sda | other_pulls_sda_low) ? 1'b0 : 1'b1;
-  wire scl_line = scl_driven_low ? 1'b0 : 1'b1;
+  wire scl_line = (scl_driven_low | slave_pull_scl) ? 1'b0 : 1'b1;
   assign pin_in_bus = {2'b0, scl_line, sda_line, 1'b1, 3'b0};
 
   logic [7:0] dbg_pc, dbg_a, dbg_timer;
@@ -105,6 +106,13 @@ module tb_pe_soc_i2c_xfer;
   logic [7:0]  sl_data [0:3];
   integer      sl_naddr, sl_ndata;
   logic        sl_nack, sl_nack_seen;
+  // Test configuration: which byte to NACK (0 none, 1 write address, 2 data,
+  // 3 read address) and clock stretching on the Nth SCL fall.
+  logic [1:0]  nack_mode;
+  logic        stretch_enable;
+  logic [3:0]  stretch_at;
+  logic [9:0]  stretch_len, scl_hold;
+  logic [7:0]  sl_fall_count;
 
   task automatic sl_sched_pull(input logic v);
     sl_pull_next = v;
@@ -117,11 +125,20 @@ module tb_pe_soc_i2c_xfer;
       sl_prev_sda <= 1'b1; sl_prev_scl <= 1'b1; sl_ignore_first_fall <= 1'b0;
       sl_pull <= 1'b0; sl_pull_next <= 1'b0; sl_hold <= 0;
       sl_naddr <= 0; sl_ndata <= 0; sl_nack <= 1'b1; sl_nack_seen <= 1'b0;
+      nack_mode <= 2'd0; stretch_enable <= 1'b0; stretch_at <= 0;
+      stretch_len <= 0; scl_hold <= 0; sl_fall_count <= 0;
+      slave_pull_scl <= 1'b0;
     end else begin
       // tHD;DAT hold: SDA changes only after the falling edge, never on it.
       if (sl_hold != 0) begin
         sl_hold <= sl_hold - 1'b1;
         if (sl_hold == 6'd1) sl_pull <= sl_pull_next;
+      end
+      // Clock stretch: hold SCL low for `stretch_len` clocks after the
+      // configured fall.
+      if (scl_hold != 0) begin
+        scl_hold <= scl_hold - 1'b1;
+        if (scl_hold == 10'd1) slave_pull_scl <= 1'b0;
       end
 
       // START / STOP
@@ -144,6 +161,13 @@ module tb_pe_soc_i2c_xfer;
 
       // SCL falling: advance.
       if (sl_prev_scl && !scl_line) begin
+        if (stretch_enable && !slave_pull_scl) begin
+          sl_fall_count <= sl_fall_count + 1'b1;
+          if (sl_fall_count + 1'b1 == stretch_at) begin
+            slave_pull_scl <= 1'b1;
+            scl_hold <= stretch_len;
+          end
+        end
         if (sl_ignore_first_fall) begin
           sl_ignore_first_fall <= 1'b0;
         end else begin
@@ -156,13 +180,20 @@ module tb_pe_soc_i2c_xfer;
                   if (st == ST_ADDR) begin
                     sl_addr[sl_naddr] <= sl_shift;
                     sl_naddr <= sl_naddr + 1;
-                    if (sl_shift[7:1] == 7'h50 && sl_shift[0])
-                      st <= ST_RARM;            // read address
-                    sl_sched_pull(1'b1);
+                    if (nack_mode == 2'd1 ||
+                        (nack_mode == 2'd3 && sl_shift[0])) begin
+                      st <= ST_IDLE;            // NACK: no ACK, no read arm
+                      sl_sched_pull(1'b0);
+                    end else begin
+                      if (sl_shift[7:1] == 7'h50 && sl_shift[0])
+                        st <= ST_RARM;          // read address
+                      sl_sched_pull(1'b1);
+                    end
                   end else begin
                     sl_data[sl_ndata] <= sl_shift;
                     sl_ndata <= sl_ndata + 1;
-                    sl_sched_pull(1'b1);
+                    // a data-phase NACK leaves SDA released on the 9th clock
+                    sl_sched_pull(nack_mode == 2'd2 ? 1'b0 : 1'b1);
                   end
                 end
               end else begin
@@ -213,18 +244,20 @@ module tb_pe_soc_i2c_xfer;
   // =========================================================================
   logic sda_now, scl_now, m_sda_prev = 1'b1, m_scl_prev = 1'b1;
   integer n_start, n_stop, n_grammar;
-  integer min_low_ns, min_high_ns;
+  integer min_low_ns, min_high_ns, max_low_ns;
   time    last_fall, last_rise;
-  logic   arm_contend, contend_active, contend_done, contend_enable;
+  logic   arm_contend, contend_done, contend_enable, contend_released, contend_asserted;
+  logic [15:0] contend_left;
 
   always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       m_sda_prev <= 1'b1; m_scl_prev <= 1'b1;
       n_start <= 0; n_stop <= 0; n_grammar <= 0;
-      min_low_ns <= 1_000_000; min_high_ns <= 1_000_000;
+      min_low_ns <= 1_000_000; min_high_ns <= 1_000_000; max_low_ns <= 0;
       last_fall <= 0; last_rise <= 0;
-      arm_contend <= 1'b0; contend_active <= 1'b0;
+      arm_contend <= 1'b0; contend_left <= 0;
       contend_done <= 1'b0; other_pulls_sda_low <= 1'b0;
+      contend_released <= 1'b0; contend_asserted <= 1'b0;
     end else begin
       sda_now = sda_line;
       scl_now = scl_line;
@@ -233,12 +266,21 @@ module tb_pe_soc_i2c_xfer;
       // it IS a condition (START = falling, STOP = rising).
       if (scl_now && (sda_now !== m_sda_prev)) begin
         if (m_scl_prev && m_sda_prev && !sda_now) begin
-          n_start <= n_start + 1;
-          if (contend_enable && !contend_done) begin
-            arm_contend <= 1'b1; contend_done <= 1'b1;
+          // The contention source's OWN pull is also a wire START; tag and skip
+          // it, so the counts below are the master's.
+          if (contend_asserted) contend_asserted <= 1'b0;
+          else begin
+            n_start <= n_start + 1;
+            if (contend_enable && !contend_done) begin
+              arm_contend <= 1'b1; contend_done <= 1'b1;
+            end
           end
         end else if (m_scl_prev && !m_sda_prev && sda_now) begin
-          n_stop <= n_stop + 1;
+          // A STOP the CONTENTION SOURCE makes by releasing SDA under SCL
+          // high is wire-visible but is not the master's: tag and skip it so
+          // n_stop==0 below really means "the losing master did not STOP".
+          if (contend_released) contend_released <= 1'b0;
+          else                  n_stop <= n_stop + 1;
         end else begin
           n_grammar <= n_grammar + 1;
         end
@@ -251,20 +293,33 @@ module tb_pe_soc_i2c_xfer;
         last_fall <= $time;
       end
       if (!m_scl_prev && scl_now) begin
-        if (last_fall != 0 && ($time - last_fall) < min_low_ns)
-          min_low_ns <= $time - last_fall;
+        if (last_fall != 0) begin
+          if (($time - last_fall) < min_low_ns) min_low_ns <= $time - last_fall;
+          if (($time - last_fall) > max_low_ns) max_low_ns <= $time - last_fall;
+        end
         last_rise <= $time;
         if (arm_contend) begin
-          // pull SDA low through the whole first transmitted 1's high phase:
-          // the firmware's arbitration sample happens before this fall.
+          // TRANSIENT CONTENTION, not a second master: the source pulls SDA
+          // low through the master's arbitration sample (~6 us into the high
+          // phase) and releases it on a countdown. The release happens under
+          // SCL high, so the WIRE shows a STOP; the monitor tags that one as
+          // stimulus (see contend_released), so the TB can still require that
+          // the losing MASTER generates none. The firmware releases and parks
+          // immediately -- there is no bus-free wait to exercise, because a
+          // single both-high sample cannot prove idle -- and this stimulus
+          // does not model a winner's continuing clocks or STOP.
           other_pulls_sda_low <= 1'b1;
-          contend_active <= 1'b1;
+          contend_asserted <= 1'b1;
+          contend_left <= 16'd900;      // 15 us at 60 MHz
           arm_contend <= 1'b0;
         end
       end
-      if (contend_active && m_scl_prev && !scl_now) begin
-        other_pulls_sda_low <= 1'b0;
-        contend_active <= 1'b0;
+      if (contend_left != 0) begin
+        contend_left <= contend_left - 1'b1;
+        if (contend_left == 16'd1) begin
+          other_pulls_sda_low <= 1'b0;
+          contend_released <= 1'b1;
+        end
       end
 
       m_sda_prev <= sda_now;
@@ -275,27 +330,44 @@ module tb_pe_soc_i2c_xfer;
   // =========================================================================
   // Stimulus.
   // =========================================================================
+  // =========================================================================
+  // Stimulus. Each case configures the slave and the contention source, then
+  // resets, reloads and runs; reset_and_load is the one place that sequencing
+  // lives (including the four-clock SRAM read-at-zero gap before run rises).
+  // =========================================================================
+  logic [1:0] cfg_nack_mode;
+  logic       cfg_stretch_enable, cfg_contend;
+  logic [3:0] cfg_stretch_at;
+  logic [9:0] cfg_stretch_len;
+
+  task automatic reset_and_load;
+    run = 1'b0; rst_n = 1'b0;
+    repeat (4) @(posedge clk); #1;
+    nack_mode      = cfg_nack_mode;
+    stretch_enable = cfg_stretch_enable;
+    stretch_at     = cfg_stretch_at;
+    stretch_len    = cfg_stretch_len;
+    contend_enable = cfg_contend;
+    rst_n = 1'b1;
+    repeat (2) @(posedge clk); #1;
+    load_firmware();
+    repeat (4) @(posedge clk); #1;
+    run = 1'b1;
+    repeat (45_000) @(posedge clk); #1;
+  endtask
+
   initial begin
     $dumpfile("tb_pe_soc_i2c_xfer.vcd");
     $dumpvars(0, tb_pe_soc_i2c_xfer);
 
     rst_n = 1'b0; run = 1'b0; host_we = 1'b0; host_imem_sel = 1'b0;
-    host_addr = '0; host_wdata = '0; contend_enable = 1'b0;
-    repeat (4) @(posedge clk);
-    rst_n = 1'b1;
-    repeat (2) @(posedge clk);
+    host_addr = '0; host_wdata = '0;
+    cfg_nack_mode = 2'd0; cfg_stretch_enable = 1'b0; cfg_contend = 1'b0;
+    cfg_stretch_at = 4'd0; cfg_stretch_len = 10'd0;
 
-    load_firmware();
-    $display("\n=== I2C transaction on the matrix: the clean run ===\n");
-    // Let the macro perform a READ at address 0 before run rises. The SRAM's
-    // read port is disabled while the loader owns it (REN = ~host_we), so the
-    // first A_DOUT after a load is still X; releasing run immediately made the
-    // CPU execute an X instruction at pc=0 and silently skip `LDI A,0x30`,
-    // which left the OD register at 0 for the whole transaction (the ACKs read
-    // back as NACKs). The UART SoC TBs have always put this gap here.
-    repeat (4) @(posedge clk); #1;
-    run = 1'b1;
-    repeat (45_000) @(posedge clk);
+    // ================= 1. the clean transaction =========================
+    $display("\n=== clean transaction ===");
+    reset_and_load();
 
     check(n_start == 2, $sformatf("two STARTs (repeated START), got %0d", n_start));
     check(n_stop == 1, $sformatf("one STOP, got %0d", n_stop));
@@ -319,6 +391,7 @@ module tb_pe_soc_i2c_xfer;
           $sformatf("read byte 0x5A (got %02h)", dut.dmem[3]));
     check(dut.dmem[4] == 8'h01, $sformatf("NACK recorded (got %02h)", dut.dmem[4]));
     check(dut.dmem[5] == 8'hA5, $sformatf("transaction completed (got %02h)", dut.dmem[5]));
+    check(dut.dmem[6] == 8'h00, $sformatf("clean outcome (got %02h)", dut.dmem[6]));
     check(dut.dmem[7] == 8'h00, $sformatf("no arbitration loss (got %02h)", dut.dmem[7]));
 
     $display("    measured on the pads: min tLOW=%0d ns  min tHIGH=%0d ns",
@@ -331,25 +404,84 @@ module tb_pe_soc_i2c_xfer;
           $sformatf("plausible cells, not idle (tLOW=%0d tHIGH=%0d)",
                     min_low_ns, min_high_ns));
 
-    // ---- a second run, WITH contention on the first transmitted 1 ---------
-    $display("\n=== re-run with another device pulling SDA low ===\n");
-    run = 1'b0;
-    rst_n = 1'b0;
-    repeat (4) @(posedge clk);
-    contend_enable = 1'b1;
-    rst_n = 1'b1;
-    repeat (2) @(posedge clk);
-    load_firmware();
-    repeat (4) @(posedge clk); #1;
-    run = 1'b1;
-    repeat (45_000) @(posedge clk);
-
+    // ================= 2. arbitration loss: release, do NOT complete =====
+    // Transient contention, not a second master: the source pulls SDA low
+    // through the sample and releases it on a countdown. Its own release under
+    // SCL high is a WIRE STOP that the monitor tags as stimulus, so the
+    // n_stop==0 check below is about the MASTER. No STOP-qualified bus-free
+    // wait or retry is implemented, so there is no live-winner path to
+    // exercise; this stimulus does not model a winner's continuing clocks or
+    // STOP.
+    $display("\n=== arbitration lost to transient contention ===");
+    cfg_contend = 1'b1;
+    reset_and_load();
+    cfg_contend = 1'b0;
     check(dut.dmem[7] > 8'h00,
-          $sformatf("arbitration loss counted when SDA held low (got %02h)",
-                    dut.dmem[7]));
+          $sformatf("arbitration loss counted (got %02h)", dut.dmem[7]));
+    check(dut.dmem[6] == 8'h01,
+          $sformatf("outcome = arbitration (got %02h)", dut.dmem[6]));
+    check(dut.dmem[5] == 8'h55,
+          $sformatf("aborted, not completed (got %02h)", dut.dmem[5]));
+    check(n_start == 1, $sformatf("one START only, got %0d", n_start));
+    check(n_stop == 0,
+          $sformatf("a losing master generates NO STOP, got %0d", n_stop));
+    check(sl_naddr == 0 && sl_ndata == 0,
+          "no complete address or data byte is recorded after the abort");
+    check(sda_line === 1'b1 && scl_line === 1'b1,
+          "bus released after losing arbitration");
+
+    // ================= 3. write-address NACK ============================
+    $display("\n=== write-address NACK: abort with a STOP ===");
+    cfg_nack_mode = 2'd1;
+    reset_and_load();
+    check(dut.dmem[6] == 8'h02,
+          $sformatf("outcome = write-addr NACK (got %02h)", dut.dmem[6]));
+    check(dut.dmem[5] == 8'h55,
+          $sformatf("aborted (got %02h)", dut.dmem[5]));
+    check(n_stop == 1, $sformatf("a STOP ends the abort, got %0d", n_stop));
+    check(sl_naddr == 1 && sl_ndata == 0,
+          "no data byte is sent after an address NACK");
+    check(sda_line === 1'b1 && scl_line === 1'b1, "bus released");
+
+    // ================= 4. write-data NACK ===============================
+    $display("\n=== data NACK: record, then STOP ===");
+    cfg_nack_mode = 2'd2;
+    reset_and_load();
+    check(dut.dmem[6] == 8'h03,
+          $sformatf("outcome = data NACK (got %02h)", dut.dmem[6]));
+    check(dut.dmem[5] == 8'h55,
+          $sformatf("aborted (got %02h)", dut.dmem[5]));
+    check(n_stop == 1, $sformatf("a STOP ends the abort, got %0d", n_stop));
+    check(sl_naddr == 1 && sl_ndata == 1 && sl_data[0] == WRITE_DATA,
+          "the data byte reached the slave before its NACK");
+
+    // ================= 5. read-address NACK =============================
+    $display("\n=== read-address NACK: no read attempt ===");
+    cfg_nack_mode = 2'd3;
+    reset_and_load();
+    check(dut.dmem[6] == 8'h04,
+          $sformatf("outcome = read-addr NACK (got %02h)", dut.dmem[6]));
+    check(dut.dmem[5] == 8'h55,
+          $sformatf("aborted (got %02h)", dut.dmem[5]));
+    check(n_stop == 1, $sformatf("a STOP ends the abort, got %0d", n_stop));
+    check(sl_naddr == 2 && sl_ndata == 1 && !sl_nack_seen,
+          "the read byte is never clocked after a read-address NACK");
+
+    // ================= 6. clock stretching ==============================
+    $display("\n=== a slave holding SCL low (clock stretch) ===");
+    cfg_nack_mode = 2'd0;
+    cfg_stretch_enable = 1'b1; cfg_stretch_at = 4'd3; cfg_stretch_len = 10'd600;
+    reset_and_load();
+    cfg_stretch_enable = 1'b0;
     check(dut.dmem[5] == 8'hA5,
-          "the contention run still completes (the firmware counts the loss)");
-    other_pulls_sda_low = 1'b0;
+          $sformatf("stretched transaction completes (got %02h)", dut.dmem[5]));
+    check(dut.dmem[3] == READ_DATA,
+          $sformatf("read byte 0x5A across the stretch (got %02h)", dut.dmem[3]));
+    check(max_low_ns > 8000,
+          $sformatf("the slave really stretched (max tLOW=%0d ns)", max_low_ns));
+    check(min_high_ns >= 4000,
+          $sformatf("tHIGH still meets the floor after the stretch (got %0d ns)",
+                    min_high_ns));
 
     $display("");
     if (errors == 0) $display("PASS: tb_pe_soc_i2c_xfer");
@@ -358,7 +490,7 @@ module tb_pe_soc_i2c_xfer;
   end
 
   initial begin
-    #5_000_000;
+    #20_000_000;
     $display("FAIL: watchdog — the transaction did not complete");
     $display("  pc=%0d state=%0d dmem5=%02h", dbg_pc, dut.dmem[10], dut.dmem[5]);
     $finish;

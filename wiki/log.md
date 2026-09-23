@@ -1472,3 +1472,29 @@
   `flow/pe_soc.json` and `wiki/reference/.floorplan-areas` (measured mapped
   areas), drift-gated in `run_all.sh`. No LibreLane/OpenROAD, DRC or LVS was
   launched.
+
+## [2026-09-23] i2c | the review-focus gaps: abort, NACK, stretch
+
+- Arbitration loss now **releases and aborts**: outcome `dmem[6]=1`, both lines
+  released immediately, **no STOP** (the winner owns the bus), park with
+  `dmem[5]=0x55`. There is no STOP-qualified bus-free wait and no retry: a
+  single both-high sample cannot prove idle, so the earlier idle check was
+  removed. The RTL contention case asserts no master STOP and that no
+  complete address/data byte was recorded; its stimulus is transient contention
+  and the testbench says so. The emulator checker adds a transient-contention
+  arbitration case across all 60 phases.
+- Unexpected NACKs are defined and tested: a write-address/data/read-address
+  NACK maps to outcome 2/3/4, issues a STOP and aborts. The emulator checker
+  runs all three negative cases across all 60 phases; the RTL TB runs all three.
+- SCL stretching is waited on: after every SCL release the firmware polls the
+  pad until it reads high before timing tHIGH. Both slave models can hold SCL
+  low; the checker and the TB run a stretched transaction (~10 µs held) and
+  assert the floors still pass.
+- `firmware/i2c_xfer.pe` is 311 words (was 267). The checker runs 5 cases × 60
+  phases in ~9 s; `regress/mutate_i2c_xfer_tb.sh` is **11/11** with four new
+  mutations (`arb-continues`, `nack-ignored`, `nack-no-stop`,
+  `no-stretch-wait`).
+- Same-day pin-budget correction: the all-nine analysis is direction-aware now
+  — 22 protocol wires (10 out, 5 in, 7 bidir) do not fit; debug kept is short 9
+  and debug reclaimed short 3 (the third input takes the last free `uio`). The
+  wrapper header, STATUS and the generated page agree.

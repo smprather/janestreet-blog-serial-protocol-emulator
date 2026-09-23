@@ -80,11 +80,16 @@ asynchronous Ethernet sweep is 102 trials / 0 failures, and the boundary runner
 a later run — a TT-top flow config, placement inside a real `CORE_AREA` with the
 pad ring, both macros' PDN connectivity, congestion/DRC and a confirmed tile
 size. The live software candidates now are bringing SPI's MOSI/CS out on the
-free `uio` bank, the I2C negative-path/stretch work, and a `pe_ctrl` readback
-path. The I2C happy-path transaction is implemented; see
-`reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md` for its clean-path verification
-and remaining protocol limits (arbitration counts but continues, NACKs are
-recorded without recovery, no clock stretching in the transaction loop). All
+free `uio` bank and a `pe_ctrl` readback
+path. **The I2C review-focus gaps are closed (2026-09-23):** arbitration loss
+releases and aborts without a STOP, unexpected NACKs record an outcome and end
+with a STOP, and SCL is read back after every release so stretching is waited
+on; all three are tested on the emulator (60 phases, with a
+transient-contention arbitration case) and real RTL, with
+`regress/mutate_i2c_xfer_tb.sh` at 11/11. The remaining I2C limit is that an
+abort parks — no STOP-qualified bus-free wait and no retry — plus a real
+device/fast mode. See `reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md` for the
+original clean path and the limits this work closes. All
 review follow-ups (F1/F2/F3) are closed. Continue the functional simulation loop. The user explicitly permits **periodic synthesis
 and STA to catch RTL that cannot be hardened** (2026-09-23): check mapped logic,
 clock/latch structures, constraints, SRAM timing coverage and timing failures.
@@ -119,13 +124,19 @@ deleted TB fails the run. A `git archive` clone with none of the ignored diagram
 present also exits 0 (the diagram gate is a committed source hash now; see
 `reviews/2026-09-22/REVIEW.md` finding 7).
 
-**Current regression at `56ba1a9`:** Pi reports `run_all.sh --fast -j8` exit 0,
-29/29 RTL, 20/20 firmware, lint clean, all seven mutation suites, macro-flow
-configuration and generated-doc gates green. Independent I2C checks and the
-7/7 I2C mutation suite are recorded in
-`reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md`. The testbench/mutation/docs
-change is commit `56ba1a9`; a log-path cleanup to its mutation script and the
-review/handoff/README updates are currently uncommitted.
+**Current regression (2026-09-23, after the I2C gap fixes and the pin-budget
+correction):** `run_all.sh --fast -j8` exit 0 — **29/29 RTL, 20/20 firmware**,
+param guards OK, lint clean, every generated-doc/macro-flow gate current, the
+I2C transaction checker passing, and **all seven mutation suites OK** (i2c,
+spi, fbuf, eth_mac, eth_soc, ctrl, i2c_xfer). I2C gap evidence is in
+`reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md`'s resolution section. The
+earlier `56ba1a9` numbers below are the historical baseline for that commit.
+
+An independent restore of the `TYPE_MIN` mutant in `rtl/pe_eth_mac.v` happened
+while a regression may have been active: the source is clean now, and after the
+restore `regress/mutate_eth_mac_tb.sh` was rerun standalone (**16 detected, 0
+survived**, source pristine); the full rerun also started pristine and reports
+eth_mac green.
 
 ## The thing that actually works
 
@@ -246,7 +257,7 @@ grepped for three known diagnostics and passed a file yosys could not parse.
 The ordered live backlog is **`wiki/STATUS.md`, "Next steps (ordered)"**.
 The review findings are closed, the passive SPI loader (`pe_ctrl`) is
 implemented, tested and recorded, and the **I2C transaction layer is built**
-(as of 2026-09-23): `firmware/i2c_xfer.pe` (267 words) runs START, address+W,
+(as of 2026-09-23): `firmware/i2c_xfer.pe` (311 words) runs START, address+W,
 ACK, data, ACK, repeated START, address+R, ACK, read, NACK, STOP — verified on
 the emulator across all 60 tick phases and on real RTL against an independent
 Verilog slave FSM. **Item 4 is decided: the six `uo_out[7:2]` pads stay
@@ -258,13 +269,14 @@ template 6×4 die at ~60% occupancy, the open question is the pad ring
 listed. `wiki/plans/through-i2c.md` is kept for its timing analysis;
 `wiki/plans/i2c-transaction.md` is the completed transaction plan.
 
-**I2C review limits:** the transaction verifies the fixed ACK-success case and
-records arbitration-loss observations. It does not abort after losing
-arbitration, poll SCL for clock stretching, or take a recovery branch on an
-unexpected NACK. The original `through-i2c.md` plan called for stretching and
-specified NACK handling; the implementation narrowed v1 scope without those
-negative-path tests. Treat those behaviors as open follow-up work, not as
-verified I2C support. No RTL changed in this milestone, so no new synthesis/STA
+**I2C review baseline (historical, at `56ba1a9`):** the first review verified
+the fixed ACK-success transaction and left three limits open — arbitration loss
+recorded but continued, unexpected NACKs recorded without recovery, and SCL
+stretching unhandled. **All three are closed (2026-09-23)**; the concept page
+and the review's resolution section carry the evidence. What remains open is
+not a recovery path but the absence of one: an abort releases and parks with an
+outcome code, with **no STOP-qualified bus-free wait and no retry**. No RTL
+changed in this milestone, so no new synthesis/STA
 screen was needed; the previous hardening screens remain the latest evidence.
 
 The pin matrix is already inside `pe_soc`. UART, mode-0 SPI and I2C all run as
