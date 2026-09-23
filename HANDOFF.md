@@ -28,6 +28,45 @@
 > intentionally unconstrained. Evidence: `PE-CTRL-RESOLUTION.md` and
 > `reviews/2026-09-23/pe-ctrl-hardening/`. Physical flow, DRC and LVS deferred.
 
+> **Context flush state (2026-09-23, `6f97c95`): no RTL work is in flight.**
+> Two written plans are waiting on the user, both plan-only by ruling:
+>
+> - **`pe_ctrl` readback**: pick A1 (one frame, strict mode 0, 2.5 MHz guard),
+>   A2 (two frames, strict mode 0, 5 MHz guard; the per-bit MISO path caps the
+>   computed limit at ~7.5 MHz for both) or A3 (rising-edge update, two frames,
+>   10 MHz guard, documented non-mode-0 change edge). Plan and timing audit:
+>   `wiki/plans/pe-ctrl-readback.md`.
+> - **`pe_serdes` + `pe_codec_mux` integration**: plan amended after the five
+>   review findings (window latched phase, separate `TXLEN`/`RXLEN`,
+>   serdes/codec strobe split, pre-OD overlay, wire-loopback first consumer);
+>   open scope decisions in `wiki/plans/serdes-integration.md`, findings in
+>   `reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`.
+>
+> Do not start either RTL change until the user picks/accepts. The last full
+> regression is `/tmp/run_all_spi_pads.log` (`run_all.sh --fast -j8`: 29/29 RTL,
+> 20/20 firmware, lint clean, all seven mutation suites, gates current), and no
+> RTL has changed since -- only plans, review evidence and docs. The reviewer's
+> uncommitted diagram/live-canvas work (and the comment-only `rtl/pe_ctrl.v`
+> edit) is preserved unstaged; do not stage or clobber it. The progress-diagram
+> notes for both plans are also unstaged by instruction. No physical flow, DRC
+> or LVS was run.
+
+> **SPI pad exposure and project diagrams (2026-09-23).** The SPI firmware now
+> has MOSI on uio[2] and CS_N on uio[3]; SCLK/MISO share uo_out[0]/ui_in[0]
+> with UART TX/RX. The pad-level test covers eight frames and four wrapper
+> mutations; the full run passed 29/29 RTL tests, 20/20 firmware tests, lint,
+> and all seven mutation suites. The synthesis-area screen completed with
+> 3,298 cells for pe_soc and 3,613 for tt_um_top. Review:
+> reviews/2026-09-23/SPI-PAD-REVIEW.md. Project plan and progress diagrams are
+> editable PlantUML text in diagrams/project-plan.puml and
+> diagrams/project-progress.puml. Refresh the progress map when implementation
+> status changes and the plan map when scope or topology changes. No STA rerun
+> was needed for the combinational pad aliases. The plan map now distinguishes
+> the first SERDES/codec wire-loopback milestone from the separate 10BASE-T TX
+> frame consumer; the progress map records the integration as open and the
+> readback interface choice as pending. Physical flow, DRC and LVS remain
+> deferred.
+
 Written for whoever picks this up next, human or agent. Read this, then
 `reviews/2026-09-23/REFACTOR-REVIEW.md`, then `wiki/STATUS.md`. The refactor at
 `6de2a6a` was reviewed against `2cc0f03`: no new functional defect found, and
