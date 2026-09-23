@@ -1298,8 +1298,9 @@ as `dbg_pc[5:0]`. Rationale:
   debug pins commit **16 of 24** usable pads. All nine protocols need **22
   disjoint wires (10 out, 5 in, 7 bidir)**; with the debug pins kept only 8
   pads are free (short 9), and even reclaiming them leaves 14 free against the
-  17 remaining wires — short 3, and the 5 bidirectional wires alone take 5 of
-  the 6 free `uio` (leaving 1 for the 9 outputs while `uo_out` supplies 6).
+  17 remaining wires — short 3: the 3 remaining inputs take the 2 free `ui_in`
+  pads plus one `uio`, the 5 bidirectional wires take the other five `uio`, so
+  no `uio` is left for outputs and `uo_out`'s 6 supply only 6 of the 9.
   Shedding `run`, the heartbeat and debug *and* reusing the loader's pads still
   leaves 10 outputs for `uo_out`'s 8 plus one spare `uio`: **one output
   short**. The direction-aware table is in [[reference/protocol-pin-budget]];

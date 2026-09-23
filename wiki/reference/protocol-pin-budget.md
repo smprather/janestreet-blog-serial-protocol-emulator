@@ -109,8 +109,8 @@ bidirectional wire needs a `uio` pad, an input needs `ui_in` or a released
 After the pinned UART, I2C and 10BASE-T-RX wires, the remaining protocols
 need 9 outputs, 3 inputs and 5 bidir:
 
-- **Debug pins kept** (the item-4 decision): 8 free pads against 17 remaining wires — short 9, and mostly outputs.
-- **Debug pins reclaimed:** 14 free pads, still short 3: the 5 bidirectional wires force 5 of the 6 free `uio` pads, leaving 1 for the 9 outputs while `uo_out` supplies 6.
+- **Debug pins kept** (the item-4 decision): 8 free pads against 17 remaining wires — short 9. The 3 inputs and 5 bidir wires alone consume every free pad (2 `ui_in` + 1 `uio` + 5 `uio`), leaving nothing for the 9 outputs.
+- **Debug pins reclaimed:** 14 free pads, short 3: the 3 remaining inputs take the 2 free `ui_in` and 1 `uio`; the 5 bidir wires take the other 5; 0 `uio` are left for the 9 outputs, and `uo_out` supplies 6 — so only 6 of 9 outputs can be placed.
 
 **Even shedding every overhead** — the run strap, the heartbeat, the debug
 pads and the loader's three pads reused at runtime — leaves 10 outputs

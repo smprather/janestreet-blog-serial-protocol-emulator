@@ -193,6 +193,25 @@ def build() -> tuple[str, list[str]]:
             "uo_out": BUDGET["uo_out"] - len(DESIGN_PINOUT["uo_out"]),
             "uio": BUDGET["uio"] - len(DESIGN_PINOUT["uio"])}
     committed = sum(len(v) for v in DESIGN_PINOUT.values())
+    # Remaining demand after the pinned UART (1 out, 1 in), I2C (2 bidir) and
+    # 10BASE-T RX (1 in) wires.
+    rem_out, rem_in, rem_bi = n_out - 1, n_in - 2, n_bi - 2
+    # Reclaiming the six debug pins frees those uo_out pads and only those
+    # (UART TX and the heartbeat stay committed).
+    debug_pins = sum(1 for v in DESIGN_PINOUT["uo_out"].values()
+                     if v.startswith("dbg_pc"))
+    free_rec = {"ui_in": free["ui_in"],
+                "uo_out": free["uo_out"] + debug_pins,
+                "uio": free["uio"]}
+    free_total = sum(free_rec.values())
+    short_kept = (rem_out + rem_in + rem_bi) - (free["ui_in"] + free["uio"])
+    short_reclaimed = (rem_out + rem_in + rem_bi) - free_total
+    # With the debug pins reclaimed, the inputs beyond the free ui_in take uio
+    # pads FIRST; the bidir wires take the rest; only then can uio serve an
+    # output. Forgetting that input was an arithmetic error the review caught.
+    uio_for_in = max(0, rem_in - free_rec["ui_in"])
+    uio_for_out = free_rec["uio"] - uio_for_in - rem_bi
+    out_avail = free_rec["uo_out"] + max(0, uio_for_out)
 
     lines += [
         "## The answer",
@@ -236,14 +255,20 @@ def build() -> tuple[str, list[str]]:
         f"| **total** | {committed} | **{free['ui_in']+free['uo_out']+free['uio']}** |",
         "",
         "After the pinned UART, I2C and 10BASE-T-RX wires, the remaining protocols",
-        f"need {n_out-1} outputs, {n_in-2} inputs and {n_bi-2} bidir:",
+        f"need {rem_out} outputs, {rem_in} inputs and {rem_bi} bidir:",
         "",
         f"- **Debug pins kept** (the item-4 decision): "
-        f"{free['ui_in']+free['uio']} free pads against 17 remaining wires — short 9, "
-        "and mostly outputs.",
-        f"- **Debug pins reclaimed:** 14 free pads, still short 3: the {n_bi-2} "
-        f"bidirectional wires force {n_bi-2} of the {free['uio']} free `uio` pads, "
-        f"leaving 1 for the {n_out-1} outputs while `uo_out` supplies 6.",
+        f"{free['ui_in']+free['uio']} free pads against "
+        f"{rem_out+rem_in+rem_bi} remaining wires — short {short_kept}. The "
+        f"{rem_in} inputs and {rem_bi} bidir wires alone consume every free pad "
+        f"(2 `ui_in` + 1 `uio` + {rem_bi} `uio`), leaving nothing for the "
+        f"{rem_out} outputs.",
+        f"- **Debug pins reclaimed:** {free_total} free pads, short "
+        f"{short_reclaimed}: the {rem_in} remaining inputs take the "
+        f"{free_rec['ui_in']} free `ui_in` and {uio_for_in} `uio`; the {rem_bi} "
+        f"bidir wires take the other {rem_bi}; {uio_for_out} `uio` are left for "
+        f"the {rem_out} outputs, and `uo_out` supplies {free_rec['uo_out']} — so "
+        f"only {out_avail} of {rem_out} outputs can be placed.",
         "",
         "**Even shedding every overhead** — the run strap, the heartbeat, the debug",
         f"pads and the loader's three pads reused at runtime — leaves {n_out} outputs",
