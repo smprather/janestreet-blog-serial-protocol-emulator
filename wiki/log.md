@@ -58,28 +58,9 @@
 - Verified state: 14/14 TBs pass; pe_serdes 539 cells/11.2k um2 mapped, 17.2k um2 routed, 66 MHz signoff clean; codecs 110 cells total
 - Corrected: pe_serdes cell count is 539 (measured), not the 583 previously derived in a commit message
 - Not built yet: DRU, SM/sequencer, pin matrix/OE, word FIFO, assembler — next milestone per STATUS.md
-## [2026-09-18] create | Live Canvas: agent -> browser diagram channel (side-quest)
-- Built tools/live-canvas/ — a Hermes dashboard plugin (user plugin, symlinked at ~/.hermes/plugins/live-canvas) that watches diagram dirs and pushes HTML/SVG to a Canvas tab over a WebSocket; publishing is just a file write (no credentials)
-- Verified live against dashboard 0.21.3 on :9119: write -> push in ~1s with no reload, in-place edit -> re-render in ~1s, unauthenticated /state 401, /slide outside roots 404, sandbox escape probe blocked (SecurityError, no token leak)
-- Surfaced two Hermes contracts worth remembering: user plugin backends only import when the plugin is in plugins.enabled, and pane code must use SDK.buildWsUrl/SDK.fetchJSON (loopback token is absent in gated OAuth mode)
-- Created: wiki/concepts/live-canvas.md, tools/live-canvas/ (plugin + README + canvas-publish.sh), diagrams/ (git-ignored publish target + README)
-- Alternatives considered and not chosen: Hermes Desktop preview rail (needs Electron build), tldraw-offline optional skill (AUR, complementary), community browser extension (Chromium side panel)
-- Added tools/live-canvas/gen_block_status.py: renders the STATUS.md "what is built and verified" table as an SVG into diagrams/ (single source of truth; atomic write). Verified live in the pane.
-- Fixed live-canvas contrast bug (reported from a screenshot): text slides inherited the dashboard's dark-theme foreground on the paper-white stage — light-on-light, unreadable. Pinned explicit colors on .lc-stage pre / .lc-empty / .lc-warn (15.8:1, 6.4:1, 4.9:1 vs #fff). Pitfall recorded in tools/live-canvas/README.md.
-## [2026-09-18] tooling | flowchart generator + three layout bugs it exposed
-- Added tools/live-canvas/gen_flowchart.py: JSON spec -> SVG flowchart (grid layout, geometry-routed edges) + flowcharts/rx-path.json; pushed to the Canvas pane as diagrams/serdes-rx-flow.svg
-- Rasterized with rsvg-convert and inspected at full size, which caught what the pane preview hid: (1) loop-back edge drawn as one line straight across the chart, (2) a self-loop reaching for the far gutter lane, (3) side-branch arrows entering the FAR vertex so the arrowhead crossed its target box, (4) em-dash mojibake from srcdoc delivery
-- Fixes: self-loops become local hooks; cross-row edges enter the facing vertex; every text emission goes through esc() (non-ASCII -> numeric refs); added find_crossings() so a segment through a shape fails the build (exit 3) instead of shipping. Checker negative-tested: caught 5 crossings in a deliberately bad spec
-- Pane change: SVG slides now fit width and scroll vertically (letterboxing made a tall chart's labels unreadable)
-- Logged pitfalls in tools/live-canvas/README.md (contrast, encoding, rasterize-to-verify, routing)
 ## [2026-09-18] concept | strobe + committing edge explained, with real capture
 - Created wiki/concepts/strobe-and-committing-edge.md — defines the two terms from the RTL's own contract (pe_serdes.v:12, pe_bitstuff.v (the stuff-bit strobe note)) and the combinational-vs-registered sampling rule (tb_pe_codec_mux.v:10-13)
-- Added tools/live-canvas/gen_vcd_view.py: renders a VCD window as a labelled timing diagram (per-signal sampling at each rising edge; clock drawn as real transitions, not sampled)
-- Three teaching diagrams pushed to the pane: diagrams/bitcell-anatomy.svg (one bit cell, strobe marked), diagrams/uart-byte.svg (all 8 bits of 0x55), diagrams/strobe-flow.svg (control flow, spec in flowcharts/strobe-flow.json)
 - Real numbers from sim/tb_pe_uart.vcd: tx_load @206ns, first strobe @217ns, cells 160ns apart (16 clk @ 10ns)
-- Generator bugs caught by rasterizing: clk row drew flat (sampling a clock at its own edges always reads 1), a tick label clipped at the canvas edge, and the loop-back label landed on the diamond text (moved to the source end of the lane). find_crossings() caught 8 spec errors across three layout attempts before any were drawn
-- Note: the flowchart checker rejected the first two layouts I wrote — worth the 3 exits
-- Added zoom/pan to the live-canvas viewer (wide diagrams were unreadable at fit): +/- steps 25-800%, 100% = authored pixel size, Fit, Ctrl/Cmd+wheel, drag-to-pan; text slides zoom by font size. Two bugs found and fixed while building it: (1) an SVG with width+height+viewBox scales its CONTENT to fit the box, so setting only style.width left the height pinned and "150%" rendered at 100% — must set width+height+attributes together; (2) driving zoom by remounting the iframe (a key that changed with zoom) blanked the stage and dropped scroll — the frame doc is now memoised on the slide only and view changes go over postMessage. Sandbox unchanged (allow-scripts, no same-origin); viewer talks to the pane only via postMessage, source-checked.
 ## [2026-09-18] reference | signal-names.md — every RTL port documented
 - Created wiki/reference/signal-names.md: all 60 ports across the 5 modules, plus the naming conventions (tx_/rx_, *_en, *_valid, *_raw vs *_wire, *_lvl, *_err, cfg_* snapshots) and the internal signals the RTL comments refer to (tx_rd_idx, rx_pos, rx_fin, tx_pend …)
 - Port tables are EXTRACTED from the Verilog by tools/gen/signal_glossary.py, not hand-typed; --check exits 1 on drift, and regress/run_all.sh now runs it, so a renamed port cannot leave the page describing a dead interface. Verified: renaming rx_valid->rx_done made the gate fail, then restored
@@ -98,12 +79,6 @@
 - Practical answer: 1 KB = 8% of die, 2 KB = 14%, 4 KB = 24%, 8 KB = 45%, 16 KB = 89%; 32 KB unreachable with a single macro type. 1-2 KB comfortable, 4 KB ceiling for a design that also needs logic
 - Also corrected the record: the wiki's "256x16 … 2048x64" macro list was incomplete (4096/8192 classes, 2P variants, non-BIST 64x16/64x32 exist). STATUS open risk updated with the real numbers
 - Gate: gen_sram_budget --check joins run_all.sh, skipped loudly if the PDK is absent (external dependency, not repo state). Drift-verified by perturbing the tile size
-## [2026-09-19] tooling | layout renders in the Canvas pane (+ raster slide support)
-- Extracted the routed pe_serdes GDS: /raw only knew how to serve TEXT, so a KLayout PNG was invisible to the pane. Added a raster slide kind (png/jpg/jpeg/gif/webp), a /raw byte endpoint, and an <img> viewer path with the same zoom model as SVG
-- Two subtleties worth keeping: (1) /raw stays behind normal dashboard auth and the pane fetches it with SDK.authedFetch into a blob URL, because an <img src> cannot carry the session header and the alternative would be punching a hole in core's PUBLIC_API_PATHS allowlist; (2) the 4 MB slide cap rejected the first montage at 10 MB — images got their own 32 MB ceiling since /raw streams them rather than pushing them down a WS frame
-- Image compression lesson: magick montage emitted 16-bit RGBA (10.3 MB) for a lossless-looking layout render; -depth 8 PNG24 took it to 3.4 MB with no visible change. Check bit depth before blaming resolution
-- Verified: /raw with token -> 200 image/png, bytes identical to source; without token -> 401; with token but a non-slide path -> 404. Pane shows blob: URL, natural 1800x1920, fit-scaled to the stage
-- diagrams/pe_serdes-layouts.png: 2x2 contact sheet (placement / upper-stack PDN / detailed-routing zoom / full stack). Renders generated with a KLayout batch script (layer-separated views; the LibreLane default render stacks every layer opaquely and is unreadable)
 ## [2026-09-20] plan | through-i2c.md — plan to the I2C milestone
 - Created wiki/plans/through-i2c.md (new 'plan' page type + tag added to SCHEMA.md, new index section): definition of done, what already exists that it reuses, three blockers with the numbers, firmware design (tick plan, per-bit cost, transaction structure), test strategy, ordered work list, risks
 - Key architectural statements: I2C is bit-banged, NOT SERDES-driven (per-bit conditional control flow — ACK, arbitration read-back, stretch — is the shape a word engine cannot express; keeps the SERDES for UART/SPI/CAN/USB where it already works); the pin matrix / open-drain is the real new hardware and the last thing gating the stretch protocols
@@ -673,32 +648,6 @@
   `resolved.json`. To make them gates: set both to `["*"]`.
 - Verified: 22/22 RTL, 15/15 firmware, guards OK, lint clean, 7/7 drift gates.
 
-## [2026-09-22] fix | The Canvas pane showed every mermaid diagram blank
-- **Symptom:** `diagrams/block-diagram-*.svg` rendered fine in `mermaid-cli` and
-  in a browser, but the Canvas pane showed a white stage until **Fit** was
-  clicked. Reported from a screenshot.
-- **Two independent bugs in `tools/live-canvas/dashboard/dist/index.js`:**
-  1. `parseFloat('100%')` = **100** (truthy), so the viewBox fallback never
-     fired: a 1593 px diagram was treated as 100 px wide. Fit ratio reported
-     **7.41** instead of 0.465; the `100%` button drew it into a 100x583 box,
-     i.e. a ~100x36 px sliver = invisible.
-  2. The initial apply **raced layout**: the iframe is created by the pane and
-     React commits its geometry after the srcdoc parses, so `wrap.clientWidth||1`
-     sized the SVG to **1 px**. Only the WINDOW resize was observed, and that
-     does not fire when a parent resizes an iframe -- so nothing re-measured.
-- **Fixes:** `px()` (bare number or `px` suffix only) for the intrinsic size;
-  `paneW() <= 1` refuses to size and returns early; a `ResizeObserver` on the
-  wrap re-applies when the pane gets a real size.
-- **Verified:** the pane's own `lc-fit` messages now report **0.4650** =
-  741/1593.7. Visually confirmed at Fit and at 100% in the live dashboard.
-- **Method that worked, after reasoning failed twice:** the iframe is sandboxed
-  with an opaque origin, so neither the parent page nor CDP can read into it.
-  Reconstructed the pane's exact frame document in scratch, ran the **shipped**
-  FRAME_SCRIPT (extracted from source), and measured in a real browser.
-- **New gate:** `tools/checks/canvas_viewer.py` runs the shipped script in node
-  and mutation-tests both fixes; wired into `regress/run_all.sh`. Confirmed it fires
-  on both mutations (`iw=100`, width call `1`).
-
 ## [2026-09-22] build | The matrix moves inside the SoC, and I2C runs on it
 
 - **The plan had the pin matrix in the wrong place.** It said "the TT wrapper
@@ -926,11 +875,9 @@
   now executes then ticks; the stopped path still ticks and now keeps
   `imem_rdata = imem[0]`, so stop→run cannot skip instruction 0. Directed RTL
   cases in `tb_pe_soc_tick` and a new `emulate: timer wrap semantics` case.
-- **[P2] The regression could not pass on a fresh clone.** The block-diagram gate
-  compared timestamps against git-ignored SVGs and the Canvas check crashed on
-  the missing file. `diagrams/block-diagram.stamp` (a committed hash of the
-  mermaid source) is now the gate, and the Canvas check uses a built-in fixture.
-  Verified in a no-SVG clone, including that mermaid drift still fails.
+- **[P2] The diagram gate depended on ignored render files.** A clean clone had
+  no generated images to compare. The current reference is a checked RTL
+  inventory, and the project diagrams are editable PlantUML source files.
 - **[P2] The lint gate omitted `pe_eth_mac` and `pe_fbuf`.** Direct `verilator
   -Wall` on the MAC produced five findings, two of them 12 dead `dst`/`src`
   registers; joining the file list surfaced a `TIMESCALEMOD` too. Fixed in RTL
@@ -946,9 +893,7 @@
   `tb/tb_pe_eth_mac.v`, `tb/tb_pe_soc_tick.v`, `regress/mutate_eth_mac_tb.sh`,
   `regress/mutate_fbuf_tb.sh`, `regress/lint.sh`, `regress/run_all.sh`,
   `regress/run_firmware_tests.sh`, `tools/fw/peasm.py`, `tools/fw/peemu.py`,
-  `tools/gen/render_block_diagram.py`, `tools/checks/canvas_viewer.py`, `info.yaml`,
-  `flow/pe_soc.json`, `.gitignore`, `diagrams/block-diagram.stamp`,
-  `reviews/2026-09-22/`.
+  `info.yaml`, `flow/pe_soc.json`, `.gitignore`, `reviews/2026-09-22/`.
 - **Regression:** RTL 26/26, firmware **17/17**, 13 lint tops + 11 elaborations
   clean (14 verilator tops + 11 yosys elaborations), all four mutation suites
   green, generated-doc drift checks green, and
@@ -1117,8 +1062,8 @@
   `run_one_tb`, `run_firmware_tests`, `lint`, `synth_area`, `param_guards`,
   `sram_model`, four `mutate_*`) moved to `regress/`.
 - **Tools:** `tools/fw/peasm.py` + `peemu.py`; `tools/gen/` for the seven
-  generators (prefixes dropped inside the directory); `tools/checks/` for the
-  canvas-viewer and I2C-timing checkers; `tools/live-canvas/` unchanged.
+  generators (prefixes dropped inside the directory); `tools/checks/` for
+  repository and I2C-timing checks.
 - **Flow/metadata:** `flow/pe_soc.json` / `pe_soc.sdc` / `pe_soc_pdn.tcl`,
   `DESIGN_NAME: pe_soc`; the LibreLane stager resolves staged sources under
   `rtl/` recursively so `rtl/vendor/` works. `info.yaml` lists the new paths.
@@ -1139,7 +1084,7 @@
   ASTs, and all four firmware images are preserved.
 - Fresh `git archive` regression: **26/26 RTL, 18/18 firmware**, 14 Verilator
   tops, 11 Yosys elaborations, all four mutation suites, generated-doc gates,
-  Canvas viewer and I2C timing pass. All seven previous probes pass; Ethernet
+  and I2C timing pass. All seven previous probes pass; Ethernet
   sweep **102 trials / 0 failures**; F1 boundary runner exits 0. Prior F1/F2/F3
   fixes remain covered by the regression and directed checks.
 - All seven relocated generators and both checkers also pass from `/tmp`.
@@ -1642,6 +1587,18 @@
   path is separate (`pe_eth_mac` is RX-only, `pe_fbuf` is the RX store).
 - Evidence: reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md. Plan-only: no RTL,
   no regression, no physical flow/DRC/LVS.
+
+## [2026-09-23] docs | project block diagrams use editable PlantUML
+
+- Simplified `diagrams/` to two tracked text sources: `project-plan.puml` for
+  planned topology and `project-progress.puml` for implementation state.
+- Updated both diagrams against the amended SERDES integration plan: the first
+  consumer is wire loopback, while a complete 10BASE-T TX frame path stays a
+  separate future block. The progress view keeps standalone engines amber and
+  open integration work red.
+- Removed the retired viewer setup material and updated the handoff, wiki index,
+  and diagram README. PlantUML syntax/render, generated RTL inventory, and
+  `git diff --check` pass.
 
 ## [2026-09-23] soc | serdes topology amended again: per-direction enables and payload handshake
 

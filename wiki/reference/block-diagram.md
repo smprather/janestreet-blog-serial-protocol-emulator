@@ -12,75 +12,26 @@ confidence: high
 
 > **Generated** by `tools/gen/block_diagram.py`. The built/orphan split is
 > checked against `rtl/` and `regress/run_all.sh` on every regression, so a block
-> cannot be drawn as a signal path unless something instantiates it.
+> cannot be listed as integrated unless something instantiates it.
 
-**Rendered copies you can open without a Mermaid viewer:**
-`diagrams/block-diagram-chip.svg` (below) and
-`diagrams/block-diagram-orphans.svg` (the orphans). They are produced from
-the blocks on this page by `tools/gen/render_block_diagram.py`, so the rendering
-cannot drift from the source here.
+The project-wide plan and progress views are the editable PlantUML source
+files `diagrams/project-plan.puml` and `diagrams/project-progress.puml`.
+Update the progress view when implementation or verification status changes,
+and the plan view when an architecture or scope decision changes.
 
 ## What is in the chip today
 
-Read this as **two styles coexisting on purpose**. The firmware core
-bit-bangs pins; the SERDES is a word engine. [[plans/through-i2c]] argues
-why, and the short version is that control flow is per-bit for I2C
-(ACK, arbitration, clock stretch) and per-word for UART/SPI/CAN/USB.
-
-```mermaid
-flowchart TB
-    subgraph BOARD["off-chip / board"]
-        HOST["SPI host<br/><i>loads imem through pe_ctrl</i>"]
-        WIRE["protocol pins<br/>ui_in / uo_out / uio"]
-    end
-
-    subgraph TT["tt_um_protocol_emulator — the deliverable"]
-        subgraph SOC["pe_soc"]
-            CPU["<b>pe_cpu</b><br/>the ISA: 16 opcodes, A/Y/X, 8-bit datapath<br/><i>377 cells</i>"]
-            IMEM["<b>pe_imem</b><br/>instruction memory; SRAM macro by default<br/><i>12 cells</i>"]
-            TICK["tick timer<br/><b>260</b> clk = half a 115200 bit"]
-            PORT["the pin matrix<br/>per-pin out/oe/od"]
-            DRU["pe_dru<br/>oversampled Manchester RX"]
-            MANCH["pe_manch<br/>Manchester decode"]
-            ETHMAC["pe_eth_mac<br/>SFD lock, FCS, store-and-forward"]
-            ETHCRC["pe_crc<br/>CRC-32, catalogue-checked"]
-            FBUF["pe_fbuf<br/>2 KB frame buffer"]
-            CPU --> IMEM
-            CPU --> TICK
-            CPU --> PORT
-            CPU -->|"frame window (IO 0x8-0xE)"| ETHMAC
-            DRU --> MANCH --> ETHMAC
-            ETHMAC --> ETHCRC
-            ETHMAC --> FBUF
-            IMEM -.->|FLOP=0| SRAM
-            FBUF -.->|FLOP=0| SRAM
-        end
-        SRAM["SRAM macro<br/>RM_IHPSG13 1P_1024x16"]
-        CTRL["<b>pe_ctrl</b><br/>passive SPI load"]
-    end
-
-    HOST -->|"SCLK/MOSI/CS_N"| CTRL
-    CTRL -->|"host write port"| IMEM
-    PORT -->|"drive"| WIRE
-    WIRE -->|"sense"| PORT
-
-    classDef built fill:#1f4d2e,stroke:#4ade80,color:#fff
-    classDef plan fill:#4a1f1f,stroke:#f87171,color:#fff,stroke-dasharray: 5 5
-    class CPU,IMEM,TICK,PORT,SRAM,DRU,MANCH,ETHMAC,ETHCRC,FBUF,CTRL built
-```
+Two implementation styles coexist on purpose. The firmware core
+bit-bangs pins; the SERDES is a word engine. [[plans/through-i2c]] explains
+why control flow is per-bit for I2C (ACK, arbitration, clock stretch) and
+per-word for UART/SPI/CAN/USB.
 
 ### Built, verified — and wired to nothing
 
-These blocks pass their own testbenches but no SoC instance drives them.
-Drawn as detached, because that is what they are:
+These blocks pass their own testbenches but no SoC instance drives them:
 
-```mermaid
-flowchart LR
-    pe_serdes["<b>pe_serdes</b><br/>word engine: load 8-32 bits, pace with bit_en<br/><i>539 cells</i>"]
-    pe_codec_mux["<b>pe_codec_mux</b><br/>stuff -> nrzi/manchester; cfg selects the subset<br/><i>130 cells</i>"]
-    classDef orphan fill:#3a2f0f,stroke:#facc15,color:#fff,stroke-dasharray: 5 5
-    class pe_serdes,pe_codec_mux orphan
-```
+- `pe_serdes` — word engine: load 8-32 bits, pace with bit_en
+- `pe_codec_mux` — stuff -> nrzi/manchester; cfg selects the subset
 
 ## The built blocks, and where they actually live
 
@@ -121,7 +72,6 @@ in the design, and the difference is exactly what this table shows.
 | not built yet | what it unblocks |
 |---|---|
 | **pe_serdes into the SoC** | the SERDES is routed and TB-proven but no SoC instance drives it |
-| **I2C transaction layer** | byte transfer, ACK, 7-bit addressing; the pin-level grammar (START/bit cell/STOP) landed 2026-09-23 -- [[concepts/i2c-on-the-matrix]] |
 
 ## The two memory stories
 

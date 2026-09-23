@@ -28,7 +28,7 @@
 > intentionally unconstrained. Evidence: `PE-CTRL-RESOLUTION.md` and
 > `reviews/2026-09-23/pe-ctrl-hardening/`. Physical flow, DRC and LVS deferred.
 
-> **Context flush state (2026-09-23, `6f97c95`): no RTL work is in flight.**
+> **Context flush state (2026-09-23, `b0c2c7d`): no RTL work is in flight.**
 > Two written plans are waiting on the user, both plan-only by ruling:
 >
 > - **`pe_ctrl` readback**: pick A1 (one frame, strict mode 0, 2.5 MHz guard),
@@ -53,13 +53,14 @@
 > Do not start either RTL change until the user picks/accepts. The last full
 > regression is `/tmp/run_all_spi_pads.log` (`run_all.sh --fast -j8`: 29/29 RTL,
 > 20/20 firmware, lint clean, all seven mutation suites, gates current), and no
-> RTL has changed since -- only plans, review evidence and docs. The plan
+> No functional RTL has changed since; the only RTL edit in this worktree is a
+> comment clarifying the readback timing limit. The plan
 > amendment, both editable PlantUML diagrams and the touched wiki/handoff docs
-> are committed; the rest of the project-diagram docs rework (`README.md`,
-> `diagrams/README.md`, the live-canvas page, the RTL inventory page), the
-> tooling half (`tools/gen/block_diagram.py`, `regress/run_all.sh`,
-> `.gitignore`) and the comment-only `rtl/pe_ctrl.v` edit remain unstaged --
-> do not stage or clobber them. No physical flow, DRC or LVS was run.
+> are committed. The project-wide diagrams now live as text in `diagrams/`;
+> retired viewer documentation is removed. Current review:
+> `reviews/2026-09-23/PROJECT-REVIEW.md`. The diagram cleanup checks pass, and
+> the full fast regression passes 29/29 RTL, 20/20 firmware, lint, generated
+> gates and all seven mutation suites. No physical flow, DRC or LVS was run.
 
 > **SPI pad exposure and project diagrams (2026-09-23).** The SPI firmware now
 > has MOSI on uio[2] and CS_N on uio[3]; SCLK/MISO share uo_out[0]/ui_in[0]
@@ -76,6 +77,11 @@
 > frame consumer; the progress map records the integration as open and the
 > readback interface choice as pending. Physical flow, DRC and LVS remain
 > deferred.
+
+The consolidated current project review is
+`reviews/2026-09-23/PROJECT-REVIEW.md`. It records the plan-only status of the
+readback and SERDES work, the latest regression results, and the source-only
+diagram checks.
 
 Written for whoever picks this up next, human or agent. Read this, then
 `reviews/2026-09-23/REFACTOR-REVIEW.md`, then `wiki/STATUS.md`. The refactor at

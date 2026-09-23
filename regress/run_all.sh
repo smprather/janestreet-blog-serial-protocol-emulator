@@ -363,26 +363,9 @@ else
   echo "STALE: wiki/reference/block-diagram.md — run python3 tools/gen/block_diagram.py"
   stale=1
 fi
-# The RENDERED form in diagrams/ is what a reader can actually look at (the page
-# carries mermaid source, which a terminal cannot draw). Timestamp check only:
-# mermaid-cli output embeds a generated id and is not byte-stable across runs.
-# Skipped when npx is absent rather than failing a regression on a tool the repo
-# does not otherwise need -- the page is still correct, just not re-rendered.
-if command -v npx >/dev/null 2>&1; then
-  if python3 tools/gen/render_block_diagram.py --check >/dev/null 2>&1; then
-    echo "rendered block diagrams up to date"
-  else
-    echo "STALE: the block-diagram mermaid source has changed since diagrams/block-diagram.stamp — run python3 tools/gen/render_block_diagram.py"
-    stale=1
-  fi
-else
-  echo "rendered block diagrams: SKIPPED (no npx for mermaid-cli)"
-fi
-
-# The Canvas viewer's own arithmetic. It renders every diagram in diagrams/, so
-# a sizing bug there makes a correct diagram look broken -- which is exactly what
-# happened: width="100%" was parsed as an intrinsic 100 px. This checks the
-# shipped FRAME_SCRIPT by running it, and mutation-tests both fixes.
+# The local presentation viewer's fit arithmetic has its own focused check.
+# This uses an embedded SVG fixture and does not consume the project diagrams,
+# which are maintained as PlantUML source in diagrams/.
 if python3 tools/checks/canvas_viewer.py > /tmp/canvas_viewer.log 2>&1; then
   echo "canvas viewer: OK"
 else

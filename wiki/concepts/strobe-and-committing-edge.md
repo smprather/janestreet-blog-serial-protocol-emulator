@@ -70,12 +70,6 @@ tx_ser   ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾ 0 ‾‾�
 Measured from the dump: `tx_load` rises at 206 ns, the first strobe at 217 ns, and
 strobes repeat every 160 ns (16 × 10 ns) after that.
 
-Rendered versions of both (generated, not hand-drawn):
-
-    tools/live-canvas/gen_vcd_view.py  → diagrams/bitcell-anatomy.svg (one cell, zoomed)
-                                       → diagrams/uart-byte.svg        (all 8 bits)
-    tools/live-canvas/gen_flowchart.py → diagrams/strobe-flow.svg       (the control flow)
-
 ## Why the RX side is "delayed one cycle"
 
 `rx_valid` does not rise on the committing edge of the final strobe — `rx_busy`
@@ -92,4 +86,3 @@ same edge as the last strobe will fail against a correct design.
   (the DRU's mid-bit pick), versus the TB driving it at cell boundaries here.
 - [[concepts/tx-timing-generation]] — how the strobe spacing is generated at 60 MHz.
 - [[concepts/factored-hardware-blocks]] — the block the strobe drives.
-- [[concepts/live-canvas]] — the generator that rendered the diagrams above.

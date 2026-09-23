@@ -47,8 +47,8 @@
 - Modify: `regress/lint.sh` (`RTL_ALL`, both top lists)
 - Modify: `regress/synth_area.sh` (`report pe_ctrl`; TT source list)
 - Modify: `info.yaml` (`source_files`; pinout `ui[3..5]`)
-- Modify: `tools/gen/block_diagram.py` (`pe_ctrl` built; remove it from PLANNED; mermaid)
-- Regenerate: `wiki/reference/block-diagram.md`, `wiki/reference/.block-diagram-cells`, `wiki/reference/signal-names.md`, `diagrams/block-diagram.stamp`
+- Modify: `tools/gen/block_diagram.py` (`pe_ctrl` built; remove it from PLANNED; keep the RTL inventory current)
+- Regenerate: `wiki/reference/block-diagram.md`, `wiki/reference/.block-diagram-cells`, and `wiki/reference/signal-names.md`
 
 **Interfaces:**
 - Consumes: `pe_soc`'s host port — `host_we`, `host_imem_sel`, `host_addr[9:0]`, `host_wdata[15:0]` (see `rtl/pe_soc.v`); the `ui_in` pads.
@@ -625,7 +625,7 @@ In `tools/gen/block_diagram.py`:
 
 (b) delete the `("pe_ctrl (SPI load path)", ...)` tuple from `PLANNED` and its adjacent `# Removed as BUILT` comment line if it names pe_ctrl.
 
-(c) in the hand-written mermaid: update the `HOST` node label and add the loader between host and instruction memory:
+(c) in `diagrams/project-plan.puml`: show the host loader between the host and instruction memory; update `project-progress.puml` after the pad-level verification lands.
 
 ```
         HOST["SPI host<br/><i>loads imem through pe_ctrl</i>"]
@@ -649,7 +649,6 @@ replacing the old `HOST -.->|"imem/dmem write port"| IMEM` edge, and add `CTRL` 
 
 Run: `./regress/synth_area.sh | awk 'NF>=3 && $2 ~ /^[0-9]+$/ {print $1, $2}' > wiki/reference/.block-diagram-cells`
 Then: `python3 tools/gen/block_diagram.py && python3 tools/gen/signal_glossary.py`
-If `npx` is available: `python3 tools/gen/render_block_diagram.py`
 Expected: every command exits 0; the diagram shows `pe_ctrl` as built and the orphan list shrinks to `pe_serdes`/`pe_codec_mux`.
 
 - [ ] **Step 10: Run the task's verification**
@@ -664,7 +663,7 @@ git add rtl/pe_ctrl.v tb/tb_pe_ctrl.v rtl/tt_um_protocol_emulator.v \
         tb/tb_tt_um_protocol_emulator.v regress/run_all.sh regress/lint.sh \
         regress/synth_area.sh info.yaml tools/gen/block_diagram.py \
         wiki/reference/block-diagram.md wiki/reference/.block-diagram-cells \
-        wiki/reference/signal-names.md diagrams/block-diagram.stamp
+        wiki/reference/signal-names.md
 git commit -m "pe_ctrl: a host can clock a program into imem through the pads"
 ```
 

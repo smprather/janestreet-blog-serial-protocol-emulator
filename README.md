@@ -109,13 +109,13 @@ regress/    the regression itself: run_all.sh, run_one_tb.sh,
             sram_model.sh, and the seven mutate_*_tb.sh harnesses
 firmware/   protocol programs (.pe source, .hex assembled) -- uart_echo is the UART
 tools/fw/   peasm.py (assembler), peemu.py (bit-accurate emulator)
-tools/gen/  doc/diagram generators (block diagram, clock arithmetic, CRC config,
-            pin budget, signal glossary, SRAM budget, diagram render), all
-            drift-checked in the regression
-tools/checks/  standalone checkers (canvas viewer, I2C pin timing, macro flow config)
-tools/live-canvas/  optional dashboard diagram pane
+tools/gen/  documentation generators (block inventory, clock arithmetic, CRC
+            config, pin budget, signal glossary, SRAM budget), drift-checked
+            in the regression
+tools/checks/  standalone validation helpers
 reviews/    the external review passes and their evidence (historical; the probe
             scripts are kept runnable)
+diagrams/   editable PlantUML text: project plan and implementation progress
 sim/        VCD waveforms from the testbenches (regenerated, not tracked)
 wiki/       the design record -- read STATUS.md; its Next-steps section is the work list
 ```

@@ -48,7 +48,7 @@ Input classes and failure modes the spec implies but the tasks' tests may not ex
 - Modify: `flow/pe_soc.json` (`VERILOG_FILES`)
 - Modify: `info.yaml` (`source_files`, `pinout.ui[2]`)
 - Modify: `tools/gen/block_diagram.py` (mark the five blocks instantiated, draw the chain, fix the stale "frame buffer NOT BUILT" prose)
-- Regenerate: `wiki/reference/block-diagram.md` (+ `diagrams/block-diagram.stamp` if `npx` is available)
+- Regenerate: `wiki/reference/block-diagram.md`
 
 **Interfaces:**
 - Consumes: `pe_dru` (`.rx_pin`, `.bit_en`, `.rx_first`, `.rx_second`, `.rx_wire`), `pe_manch` (`.bit_en`, `.rx_first`, `.rx_second` -> `.rx_raw`, `.rx_err`), `pe_crc` (`.crc_bit_en`, `.crc_clr`, `.crc_bit_in`, `.crc_field_out`, `.crc_state`), `pe_eth_mac` (`.buf_reset`, `.fbuf_we/waddr/wdata`, `.frame_valid/bad/len/field/is_type/ptr`), `pe_fbuf` (byte port, registered read).
@@ -786,7 +786,7 @@ In `tools/gen/block_diagram.py`:
 
 (a) set `instantiated_in="pe_soc.v"` for `pe_dru`, `pe_crc`, `pe_eth_mac` and `pe_fbuf` (and update each one's now-stale comment to say the SoC instance landed with the receive path).
 
-(b) in the hand-written "What is in the chip today" mermaid, add the chain inside the `SOC` subgraph after the `PORT` node:
+(b) update `diagrams/project-plan.puml` with the receive chain and its frame-buffer connection; update `project-progress.puml` when the SoC integration and RTL test pass.
 
 ```
             DRU["<b>pe_dru</b><br/>oversampled Manchester RX"]
@@ -806,7 +806,7 @@ add `DRU,MANCH,ETHMAC,ETHCRC,FBUF` to the `class ... built` line, and replace th
 - [ ] **Step 11: Regenerate the gated docs**
 
 Run: `python3 tools/gen/block_diagram.py && python3 tools/gen/signal_glossary.py && python3 tools/gen/clock_arithmetic.py && python3 tools/gen/pin_budget.py`
-Expected: every command exits 0 and writes its page. If `npx` is installed, also run `python3 tools/gen/render_block_diagram.py`.
+Expected: every command exits 0 and writes its page.
 
 - [ ] **Step 12: Run the task's verification**
 
@@ -819,7 +819,7 @@ Expected: `TOTAL: 27   PASS: 27   FAIL: 0`, `FIRMWARE: 19 PASS: 19 FAIL: 0`, `li
 git add firmware/eth_rx.pe firmware/eth_rx.hex tb/tb_pe_soc_eth.v rtl/pe_soc.v \
         rtl/tt_um_protocol_emulator.v tools/fw/peasm.py regress/run_firmware_tests.sh \
         regress/run_all.sh regress/synth_area.sh flow/pe_soc.json info.yaml \
-        tools/gen/block_diagram.py wiki/reference/block-diagram.md diagrams/block-diagram.stamp
+        tools/gen/block_diagram.py wiki/reference/block-diagram.md
 git commit -m "SoC: wire the 10BASE-T receive chain and the firmware frame window"
 ```
 

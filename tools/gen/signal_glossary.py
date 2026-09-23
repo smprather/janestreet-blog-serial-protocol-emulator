@@ -316,7 +316,6 @@ def build() -> str:
         "",
         "- [[concepts/strobe-and-committing-edge]] — the two terms used throughout.",
         "- [[concepts/factored-hardware-blocks]] — why these blocks are factored this way.",
-        "- [[concepts/live-canvas]] — where the generated timing diagrams come from.",
         "",
     ]
 
