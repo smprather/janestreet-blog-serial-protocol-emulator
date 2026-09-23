@@ -63,20 +63,29 @@ output.
 
 ### Run-transition race resolution recheck
 
-**Fixed at `ef4041d`.** `host_we` is now masked by `run`, and the write FSM
-discards and flags a queued word if `run` rises before the host write is
-accepted. The permanent `tb_pe_ctrl` case raises `run` in the W_PULSE window,
-checks that the word is not written or counted, checks `load_error`, then drops
-`run` and verifies the stale word does not reappear.
+**Fixed in `ef4041d`; test coverage corrected and fully verified at `e448c09`.**
+`host_we` is masked by `run`, and the write FSM discards and flags a queued
+word if `run` rises before the host write is accepted. The permanent
+`tb_pe_ctrl` test exercises three transitions: `run` rising in W_PULSE (the
+original finding), while a word is queued in W_IDLE, and at W_DONE sampling.
+It checks no write while running, no count, `load_error`, and no stale write
+after `run` falls.
 
-I independently confirmed the permanent regression distinguishes the fix:
-the new `tb_pe_ctrl` passes against the current RTL, while running the same TB
-against archived `39c0eb4` reports six run-race assertion failures (write
-while running, count/flag errors, and stale reappearance). My original
-standalone reproduction against the fixed design also observes zero writes;
-the zero-write result is expected, so its old “must reproduce” assertion
-trips. Standalone lint is clean. The mutation guard and full post-fix
-regression were still being added/run at this review update.
+Independent comparison confirms the regression distinguishes the fix. The
+final `tb_pe_ctrl` passes on the fixed RTL and fails on archived pre-fix
+`39c0eb4`. I caught a gap in the first version of case 7b: it raised CS_N
+before dropping `run`, which cleared `word_ready` and masked the late-write
+behavior. At `e448c09`, case 7b keeps CS_N low through `run` falling, waits 16
+clocks, verifies no write, then raises CS_N. Running that corrected TB against
+`39c0eb4` independently shows the queued word is written after `run` falls;
+the fixed RTL passes. Full explanation is in
+[the pe_ctrl resolution](PE-CTRL-RESOLUTION.md).
+
+The new mutation suite detects **11/11** injected faults, including the
+W_IDLE abort, host write mask, W_DONE accounting, and original protocol cases.
+The post-fix full regression at `e448c09` passes **28/28 RTL** and **19/19
+firmware** tests, clean lint/elaboration, all six mutation suites, macro-flow
+configuration, and generated-doc gates; see `/tmp/run_all_pe_ctrl4.log`.
 
 ## Preliminary synthesis and STA screen
 

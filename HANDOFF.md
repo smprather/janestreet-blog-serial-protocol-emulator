@@ -19,9 +19,9 @@
 > before host-port sampling. The fix masks `host_we`, aborts and flags queued
 > words in `W_IDLE`/`W_PULSE`/`W_DONE`, so nothing writes during execution or
 > reappears when `run` falls. `tb_pe_ctrl` fails on the pre-fix RTL and passes
-> on the fix; `regress/mutate_ctrl_tb.sh` is 11 detected / 0 survived; the full
-> regression is 28/28 RTL, 19/19 firmware, six mutation suites and the macro
-> gate, lint clean. The three-corner screen reports 0 synthesis problems,
+> on the fix; `regress/mutate_ctrl_tb.sh` is 11 detected / 0 survived. The full
+> regression at `e448c09` was 28/28 RTL, 19/19 firmware, six mutation suites
+> and the macro gate, lint clean. The three-corner screen reports 0 synthesis problems,
 > +8.71 ns worst setup (slow), and −0.19/−0.16/−0.12 ns hold (fast/typical/slow)
 > on the direct `run` input under a 0 ns minimum input-delay assumption, with
 > unplaced high-fanout violations. The async SPI first-stage endpoints are
@@ -74,9 +74,11 @@ The second-review runner exits 0, the
 asynchronous Ethernet sweep is 102 trials / 0 failures, and the boundary runner
 `reviews/2026-09-23/run-boundaries.sh` exits 0.
 
-**Next:** resume the integration/loader/I2C transaction backlog in
-`wiki/STATUS.md`. All review follow-ups (F1/F2/F3) are closed. Continue the
-functional simulation loop. The user explicitly permits **periodic synthesis
+**Next:** resume at `wiki/STATUS.md` item 4 (the six debug pins), then the
+full-chip floorplan when RTL work settles. The I2C happy-path transaction is
+implemented; see `reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md` for its clean-path
+verification and remaining protocol limits. All review follow-ups (F1/F2/F3)
+are closed. Continue the functional simulation loop. The user explicitly permits **periodic synthesis
 and STA to catch RTL that cannot be hardened** (2026-09-23): check mapped logic,
 clock/latch structures, constraints, SRAM timing coverage and timing failures.
 The standing restriction is **do not run physical flow, DRC, or LVS**.
@@ -89,7 +91,7 @@ those checks.
 The standard regression and the directed review probes measure different cases:
 
 ```bash
-./regress/run_all.sh            # 26/26 TBs + 18/18 firmware + lint + 4 mutation
+./regress/run_all.sh            # 29/29 TBs + 20/20 firmware + lint + 7 mutation
                            # suites + generated-doc drift, exits 0
 ./regress/run_all.sh --fast     # same verdicts, parallel TB loop, 4-state iverilog
 bash reviews/2026-09-22/review2/run_repros.sh
@@ -98,7 +100,8 @@ bash reviews/2026-09-23/run-boundaries.sh
                            # F1 Ethernet structure boundaries; exits 0
 ```
 
-Freshly verified at `6de2a6a` in a `git archive` copy: `run_all.sh --fast -j4` →
+Historical refactor baseline at `6de2a6a`, verified in a `git archive` copy:
+`run_all.sh --fast -j4` →
 `TOTAL: 26 PASS: 26 FAIL: 0`, `FIRMWARE: 18 PASS: 18 FAIL: 0`, `lint clean`
 (14 verilator tops + 11 yosys elaborations), all four mutation suites green, plus
 `signal glossary up to date`, `protocol pin budget up to date`,
@@ -108,6 +111,14 @@ from the RTL/PDK and drift-checked inside the regression, so a renamed port or
 deleted TB fails the run. A `git archive` clone with none of the ignored diagrams
 present also exits 0 (the diagram gate is a committed source hash now; see
 `reviews/2026-09-22/REVIEW.md` finding 7).
+
+**Current regression at `56ba1a9`:** Pi reports `run_all.sh --fast -j8` exit 0,
+29/29 RTL, 20/20 firmware, lint clean, all seven mutation suites, macro-flow
+configuration and generated-doc gates green. Independent I2C checks and the
+7/7 I2C mutation suite are recorded in
+`reviews/2026-09-23/I2C-TRANSACTION-REVIEW.md`. The testbench/mutation/docs
+change is commit `56ba1a9`; a log-path cleanup to its mutation script and the
+review/handoff/README updates are currently uncommitted.
 
 ## The thing that actually works
 
@@ -235,6 +246,15 @@ Verilog slave FSM. Resume at the next ordered item in `wiki/STATUS.md`
 (reclaim or commit the `uo_out[7:2]` debug pins, then the full-chip
 floorplan). `wiki/plans/through-i2c.md` is kept for its timing analysis;
 `wiki/plans/i2c-transaction.md` is the completed transaction plan.
+
+**I2C review limits:** the transaction verifies the fixed ACK-success case and
+records arbitration-loss observations. It does not abort after losing
+arbitration, poll SCL for clock stretching, or take a recovery branch on an
+unexpected NACK. The original `through-i2c.md` plan called for stretching and
+specified NACK handling; the implementation narrowed v1 scope without those
+negative-path tests. Treat those behaviors as open follow-up work, not as
+verified I2C support. No RTL changed in this milestone, so no new synthesis/STA
+screen was needed; the previous hardening screens remain the latest evidence.
 
 The pin matrix is already inside `pe_soc`. UART, mode-0 SPI and I2C all run as
 firmware through it; `i2c_xfer.pe` exercises the full transaction (byte
