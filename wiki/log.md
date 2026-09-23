@@ -1547,3 +1547,20 @@
   shortfall 9 -> 10 (kept) / 3 -> 4 (reclaimed) -- the readback is loader
   overhead, not one of the nine protocols. No RTL changed, so no regression or
   synthesis/STA screen was warranted.
+
+## [2026-09-23] loader | readback timing audit: commit latch and the SCLK ceiling
+
+- Derived from `rtl/pe_ctrl.v` at the worst-case SCLK phase: the synchronizer
+  and edge detector register the completed word at +3 clk; the imem write
+  commits and `W_DONE` runs at +5..6 clk (83-100 ns at 60 MHz); a registered
+  falling-edge MISO update appears at +3 clk after the fall. At 10 MHz the half
+  period is 3 clk, so strict mode-0 readback cannot meet setup (even a
+  combinational fall-gated update leaves only ~17 ns for pad + host setup).
+- The echo must be commit-latched (never `word_ready`; an aborted word must not
+  echo), so a one-frame echo is bounded by the commit: ~4 MHz computed,
+  **2.5 MHz recommended** (A1); a two-frame echo fits **10 MHz** (A2, one more
+  trailing frame). Load-only transactions keep the existing 10 MHz ceiling.
+- Updated [[plans/pe-ctrl-readback]] with the derivation, the A1/A2 contract,
+  the commit/abort/trailing-frame semantics, and the phase-sweep and
+  commit-latch probes; [[reviews/2026-09-23/PE-CTRL-REVIEW]] with the audit
+  evidence. No RTL changed; no new regression or STA was run.

@@ -1375,7 +1375,10 @@ the last word), a **status** frame (`load_error`/`words_written`), or an imem
 **peek/poke** (needs a read port shared with the CPU — much larger). Budget if
 implemented: committed 18 -> 19, free `uio` 4 -> 3, all-nine shortfall 9 -> 10
 (kept) / 3 -> 4 (reclaimed); the readback is loader overhead, not one of the
-nine protocols. No RTL changed yet.
+nine protocols. Timing audit (2026-09-23): the echo must latch at the imem
+commit (+5..6 clk) and MISO updates are registered, so a one-frame echo is
+limited to a readback-only SCLK of ~2.5 MHz (computed bound ~4 MHz) and a
+two-frame echo fits 10 MHz. No RTL changed yet.
 
 ## Reading order for a fresh session
 

@@ -110,9 +110,25 @@ pre-layout checks, not hardening signoff. Scripts and full logs are in
 
 v1 remains write-only by decision (ADR-007). The host/pad mapping for a MISO
 response is feasible -- `uio[4]`, driven only while the loader is active -- but
-the interface is still an open choice between echoing the completed word
-(write verification), a status frame (`load_error`/`words_written`), and an
-imem peek/poke that would need a read port. The options, the recommended
-minimal contract, the budget delta (one free `uio`; the all-nine shortfall goes
-9 -> 10 kept / 3 -> 4 reclaimed) and the test/mutation plan are in
-[[plans/pe-ctrl-readback]]. No RTL changed; no new regression or STA was run.
+the interface is still an open choice between echoing the completed word, a
+status frame (`load_error`/`words_written`), and an imem peek/poke that would
+need a read port.
+
+**Timing audit of the echo option (derived from `rtl/pe_ctrl.v`, worst-case
+SCLK phase).** The two-flop synchronizer and edge detector register the
+completed word at **+3 clk** after the SCLK pad edge; the write engine commits
+the imem write and runs `W_DONE` at **+5..6 clk (83-100 ns at 60 MHz)**; a
+registered falling-edge MISO update appears at **+3 clk** after the fall. A
+10 MHz half period is only 3 clk, so strict mode-0 readback has zero or
+negative setup margin at that rate; a combinational fall-gated update leaves
+~17 ns for the pad and host setup. Because the echo must be commit-latched
+(never `word_ready`; an aborted word must never echo), a one-frame echo needs a
+half period >= 6 clk -- computed bound ~4 MHz, **2.5 MHz recommended** -- while
+a two-frame echo fits the full **10 MHz** (1.5 periods >= 6 clk). Trailing
+frames are the cost of reading the last word(s). Test requirements: host SCLK
+phase sweep, commit-latch probes, aborted-word-no-echo, one- vs two-frame
+latency; see [[plans/pe-ctrl-readback]].
+
+The budget delta (one free `uio`; shortfall 9 -> 10 kept / 3 -> 4 reclaimed) and
+the pad mapping remain in [[plans/pe-ctrl-readback]]. No RTL changed; no new
+regression or STA was run.
