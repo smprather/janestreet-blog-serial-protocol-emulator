@@ -442,5 +442,16 @@ else
   stale=1
 fi
 
+# The loader is how a program reaches silicon; its TB gets the same gate. The
+# run-transition cases (run rising in W_IDLE, W_PULSE or W_DONE) are the ones
+# the independent review found missing.
+if ./regress/mutate_ctrl_tb.sh > /tmp/mutate_ctrl.log 2>&1; then
+  echo "ctrl TB mutations: OK (no unexplained survivors)"
+else
+  echo "ctrl TB mutations: FAILED"
+  tail -20 /tmp/mutate_ctrl.log
+  stale=1
+fi
+
 [ "$stale" -eq 0 ] || exit 1
 [ "$lint_rc" -eq 0 ] || { echo "lint gate FAILED (see above)"; exit 1; }

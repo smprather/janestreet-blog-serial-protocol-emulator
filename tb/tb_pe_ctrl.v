@@ -146,6 +146,8 @@ module tb_pe_ctrl;
     settle;
     check(cap_n === 0, "run gate: no write while run=1");
     check(words_written === 16'd0, "run gate: no word counted");
+    check(load_error === 1'b0,
+          "run gate: an attempted load while running is ignored, not flagged");
     run = 1'b0;
 
     // ================= 6: words past WORDS are refused ==================
@@ -160,35 +162,85 @@ module tb_pe_ctrl;
     check_write(WORDS-1, 16'h1000 + (WORDS - 1), WORDS-1, "oversize");
     check(load_error === 1'b1, "oversize: flagged");
 
-    // ================= 7: run rising after the word queues aborts =======
-    // The one-cycle window the review reproduced: a complete word moves the
-    // FSM to W_PULSE, then run rises before the pulse is sampled. host_we must
-    // never pulse while run is high, and the queued word must not reappear
-    // later as stale program data.
-    cap_n = 0;
-    writes_while_run = 0;
-    run = 1'b0;
+    // ================= 7: run transitions abort the queued word =========
+    // Three windows, one requirement: a word queued when run rises must be
+    // discarded, flagged, and must not write while run is high or reappear
+    // when run falls. 7a is the review's W_PULSE window; 7b keeps a
+    // queued-but-unstarted word from waiting for run to fall; 7c has run rise
+    // inside W_DONE, where the run mask is what stops the write. The branch
+    // waits `@(posedge clk); #1` so it observes the post-edge state, not the
+    // pre-edge value the active region still holds.
+
+    // ---- 7a: run rises in W_PULSE ----
+    cap_n = 0; writes_while_run = 0; run = 1'b0;
     cs_low;
     fork
       begin
-        while (dut.wstate !== 2'd1) @(posedge clk);   // W_PULSE
-        #1;
+        forever begin
+          @(posedge clk); #1;
+          if (dut.wstate === 2'd1) break;
+        end
         run = 1'b1;                                   // before the next edge
       end
       spi_word(16'hA55A);
     join
     cs_high;
     settle;
-    check(cap_n === 0, $sformatf("run-race: %0d writes, want 0", cap_n));
-    check(writes_while_run === 0, "run-race: host_we pulsed while run=1");
-    check(words_written === 16'd0, "run-race: word counted");
-    check(load_error === 1'b1, "run-race: abort not flagged");
-    // Drop run and let the FSM settle: the queued word must be gone, not
-    // written late.
+    check(cap_n === 0, $sformatf("7a: %0d writes, want 0", cap_n));
+    check(writes_while_run === 0, "7a: host_we pulsed while run=1");
+    check(words_written === 16'd0, "7a: word counted");
+    check(load_error === 1'b1, "7a: abort not flagged");
     run = 1'b0;
     repeat (16) @(posedge clk); #1;
-    check(cap_n === 0, "run-race: queued word reappeared after run fell");
-    check(words_written === 16'd0, "run-race: stale word counted");
+    check(cap_n === 0, "7a: queued word reappeared after run fell");
+    check(words_written === 16'd0, "7a: stale word counted");
+
+    // ---- 7b: run rises in W_IDLE with a word queued ----
+    cap_n = 0; writes_while_run = 0; run = 1'b0;
+    cs_low;
+    fork
+      begin
+        forever begin
+          @(posedge clk); #1;
+          if (dut.word_ready === 1'b1) break;
+        end
+        run = 1'b1;                                   // before the FSM starts
+      end
+      spi_word(16'hA55A);
+    join
+    cs_high;
+    settle;
+    check(cap_n === 0, $sformatf("7b: %0d writes, want 0", cap_n));
+    check(writes_while_run === 0, "7b: host_we pulsed while run=1");
+    check(words_written === 16'd0, "7b: word counted");
+    check(load_error === 1'b1, "7b: abort not flagged");
+    run = 1'b0;                     // must NOT release a stale queued write
+    repeat (16) @(posedge clk); #1;
+    check(cap_n === 0, "7b: queued word reappeared after run fell");
+    check(words_written === 16'd0, "7b: stale word counted");
+
+    // ---- 7c: run rises inside W_DONE (the host_we mask stops the write) ----
+    cap_n = 0; writes_while_run = 0; run = 1'b0;
+    cs_low;
+    fork
+      begin
+        forever begin
+          @(posedge clk); #1;
+          if (dut.wstate === 2'd2) break;
+        end
+        run = 1'b1;                                   // before the sample edge
+      end
+      spi_word(16'hA55A);
+    join
+    cs_high;
+    settle;
+    check(cap_n === 0, $sformatf("7c: %0d writes, want 0", cap_n));
+    check(writes_while_run === 0, "7c: host_we pulsed while run=1");
+    check(words_written === 16'd0, "7c: masked word counted");
+    check(load_error === 1'b1, "7c: abort not flagged");
+    run = 1'b0;
+    repeat (16) @(posedge clk); #1;
+    check(cap_n === 0, "7c: queued word reappeared after run fell");
 
     if (errors == 0) $display("PASS: tb_pe_ctrl");
     else             $display("FAILURES: %0d", errors);
