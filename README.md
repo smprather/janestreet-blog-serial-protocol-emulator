@@ -110,8 +110,8 @@ regress/    the regression itself: run_all.sh, run_one_tb.sh,
 firmware/   protocol programs (.pe source, .hex assembled) -- uart_echo is the UART
 tools/fw/   peasm.py (assembler), peemu.py (bit-accurate emulator)
 tools/gen/  documentation generators (block inventory, clock arithmetic, CRC
-            config, pin budget, signal glossary, SRAM budget), drift-checked
-            in the regression
+            config, floorplan feasibility, pin budget, signal glossary, SRAM
+            budget), drift-checked in the regression
 tools/checks/  standalone validation helpers
 reviews/    the external review passes and their evidence (historical; the probe
             scripts are kept runnable)

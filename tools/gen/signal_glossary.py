@@ -249,7 +249,7 @@ def build() -> str:
         "---",
         "title: Signal Names",
         "created: 2026-09-18",
-        "updated: 2026-09-18",
+        "updated: 2026-09-23",
         "type: reference",
         "tags: [architecture, verification]",
         "sources: [rtl/pe_serdes.v, rtl/pe_codec_mux.v, rtl/pe_nrzi.v, rtl/pe_manch.v, rtl/pe_bitstuff.v]",

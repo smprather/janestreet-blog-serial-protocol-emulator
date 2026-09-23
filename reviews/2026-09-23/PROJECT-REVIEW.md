@@ -17,13 +17,20 @@ the SERDES plan's open scope decisions still need acceptance before RTL work.
 `diagrams/` now contains only `README.md`, `project-plan.puml`, and
 `project-progress.puml`. The first is the full intended topology; the second
 marks completed, standalone, and open work separately. The SERDES plan and both
-maps agree on two codec instances, independent half-cell phase, separate SERDES
-TX/RX enables, and a stuffed-cell handshake. Wire loopback is the first planned
-consumer; a complete Ethernet TX frame path is a separate future block.
+maps show the recommended two-codec shape, independent half-cell phase, separate
+SERDES TX/RX enables, and a stuffed-cell handshake while keeping codec topology
+and SERDES cadence decisions open. Wire loopback is the first planned consumer;
+a complete Ethernet TX frame path is a separate future block.
 
-The retired viewer walkthrough and live-canvas concept page are removed from the
-project documentation. The generated `wiki/reference/block-diagram.md` remains
-an RTL inventory, not the project-wide architecture diagram.
+The retired viewer setup instructions and live-canvas concept page are removed
+from the project documentation. Historical review material and the independent
+viewer utility code remain outside the diagram sources. The generated
+`wiki/reference/block-diagram.md` remains an RTL inventory, not the project-wide
+architecture diagram.
+
+The requested removal of obsolete walkthrough entries in `wiki/log.md` is a
+deliberate exception to its append-only convention; unaffected chronological
+history remains.
 
 ## Verification evidence
 
@@ -32,12 +39,13 @@ an RTL inventory, not the project-wide architecture diagram.
   suites reported no unexplained survivors. This run was in progress while the
   docs cleanup was being prepared; it covered the RTL/regression state, while
   the documentation-specific checks below were run after the edits.
-- `python3 tools/gen/block_diagram.py --check` passed.
+- `python3 tools/gen/block_diagram.py --check` and `python3 tools/gen/signal_glossary.py --check` passed.
 - PlantUML syntax checks passed for both maps, and both rendered to PNG under
   `/tmp`.
 - `bash -n regress/run_all.sh` and `git diff --check` passed.
-- `README.md`, `HANDOFF.md`, `wiki/`, and `diagrams/` have no remaining
-  Hermes/live-canvas/viewer references. `diagrams/` has no rendered leftovers.
+- `README.md`, `HANDOFF.md`, `wiki/`, and `diagrams/` have no stale viewer setup
+  instructions; current retirement notes remain. `diagrams/` has no rendered
+  leftovers.
 - Existing synthesis evidence remains 3,298 mapped cells for `pe_soc` and
   3,613 for `tt_um_top`; the SPI pad aliases add no sequential timing path.
   Existing `pe_ctrl` hardening evidence is 5,791 µm², zero Yosys problems,

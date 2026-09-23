@@ -53,7 +53,7 @@ package "10BASE-T receive — integrated" {
 
 package "Built and verified standalone; integration open" {
   component "pe_serdes\n32-bit word engine" as serdes <<standalone>>
-  component "pe_codec_mux\none instance per direction (TX / RX)\nNRZI / Manchester / stuffing" as codec <<standalone>>
+  component "pe_codec_mux standalone\nrecommended: 2 instances (TX / RX)\ntopology choice open" as codec <<standalone>>
   serdes --> codec : TX bits / RX bits
   codec --> serdes : tx_stuffed hold / rx_bit_valid skip
 }
@@ -76,17 +76,19 @@ package "Planned integration and future consumers" {
   serdes --> loopback
   rx_front --> loopback
   serdes --> eth_tx
-  cpu --> readback
+  loader --> readback : optional extension; choice pending
 }
 
 note bottom of loopback
   The amended integration plan separates this wire-loopback milestone from a
-  complete Ethernet TX frame consumer. The second review round resolved the
-  shared enables: two codec instances (TX/RX), split pe_serdes tx_bit_en /
+  complete Ethernet TX frame consumer. The second review round found shared-
+  enable and stuffed-cell handshake defects; its recommended design uses two
+  codec instances (TX/RX), split pe_serdes tx_bit_en /
   rx_bit_en, codec bit_en per encoded cell (never 2x half-cell), an independent
   half_phase toggle, and a directed stuffed Manchester loopback checking the TX
   hold on tx_stuffed and the RX skip of received stuff cells, with mutations
-  for each. No integration RTL is implemented yet.
+  for each. Codec topology and SERDES cadence remain open decisions; no
+  integration RTL is implemented yet.
   See wiki/plans/serdes-integration and reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md.
 end note
 

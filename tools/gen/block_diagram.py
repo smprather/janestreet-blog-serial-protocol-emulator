@@ -156,17 +156,16 @@ BLOCKS = [
 
 # ---- planned, not built -------------------------------------------------------
 PLANNED = [
-    ("pe_serdes into the SoC", "the SERDES is routed and TB-proven but no SoC instance drives it"),
+    (
+        "pe_serdes + pe_codec_mux into the SoC",
+        "the standalone word engine and codecs are verified, but unconnected; the wire loopback is their first planned SoC consumer",
+    ),
 ]
 # Removed as BUILT: "pe_pinmux into the SoC" and "I2C 1 us tick divider"
 # (2026-09-23, adr-006-pin-matrix), and "frame buffer (2nd SRAM)" -- that is
 # rtl/pe_fbuf.v, the 1024x16 macro at 2 KB per ADR-003. A "planned" table is a
 # claim about the design like any other, so it is maintained with the same
 # intent as the orphan table: an entry that has shipped is a stale claim.
-# divider" (plan step 5, decisions/adr-006-pin-matrix). A "planned" table is a
-# claim about the design like any other, so it is maintained with the same
-# intent as the orphan table -- an entry that has shipped is a stale claim, not
-# a leftover.
 
 
 def check_instantiated(blocks: list[dict], problems: list[str]) -> None:
@@ -291,16 +290,16 @@ def build() -> tuple[str, list[str]]:
     L: list[str] = []
     L += [
         "---",
-        'title: "Block diagram"',
+        'title: "RTL block inventory"',
         "created: 2026-09-22",
-        "updated: 2026-09-22",
+        "updated: 2026-09-23",
         "type: reference",
         "tags: [architecture, reference, verification]",
         "sources: [rtl/, tools/synth_area.sh, wiki/plans/through-i2c.md]",
         "confidence: high",
         "---",
         "",
-        "# Block diagram",
+        "# RTL block inventory",
         "",
         "> **Generated** by `tools/gen/block_diagram.py`. The built/orphan split is",
         "> checked against `rtl/` and `regress/run_all.sh` on every regression, so a block",
@@ -314,9 +313,9 @@ def build() -> tuple[str, list[str]]:
         "## What is in the chip today",
         "",
         "Two implementation styles coexist on purpose. The firmware core",
-        "bit-bangs pins; the SERDES is a word engine. [[plans/through-i2c]] explains",
-        "why control flow is per-bit for I2C (ACK, arbitration, clock stretch) and",
-        "per-word for UART/SPI/CAN/USB.",
+        "bit-bangs pins; the SERDES is a word engine. The completed I2C plan",
+        "([[plans/through-i2c]]) explains why control flow is per-bit for I2C",
+        "(ACK, arbitration, clock stretch) and per-word for UART/SPI/CAN/USB.",
         "",
         "### Built, verified — and wired to nothing",
         "",
@@ -406,9 +405,9 @@ def build() -> tuple[str, list[str]]:
         "- [[reference/clock-arithmetic]] — the 60 MHz constants every block derives from.",
         "- [[reference/signal-names]] — the port list, generated from the RTL.",
         "- [[concepts/factored-hardware-blocks]] — why these blocks are factored this way.",
-        "- [[concepts/pin-matrix]] — the orphan that gates I2C.",
-        "- [[plans/through-i2c]] — the ordered work list.",
-        "- [[STATUS]] — what is built and verified, in prose.",
+        "- [[concepts/pin-matrix]] — the integrated per-pin interface used by I2C.",
+        "- [[plans/through-i2c]] — the completed I2C plan and its design rationale.",
+        "- [[STATUS]] — current implementation status and the ordered work list.",
         "",
     ]
 

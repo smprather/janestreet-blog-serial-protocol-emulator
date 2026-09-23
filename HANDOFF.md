@@ -52,12 +52,12 @@
 >
 > Do not start either RTL change until the user picks/accepts. The last full
 > regression is `/tmp/run_all_spi_pads.log` (`run_all.sh --fast -j8`: 29/29 RTL,
-> 20/20 firmware, lint clean, all seven mutation suites, gates current), and no
+> 20/20 firmware, lint clean, all seven mutation suites, gates current).
 > No functional RTL has changed since; the only RTL edit in this worktree is a
 > comment clarifying the readback timing limit. The plan
 > amendment, both editable PlantUML diagrams and the touched wiki/handoff docs
 > are committed. The project-wide diagrams now live as text in `diagrams/`;
-> retired viewer documentation is removed. Current review:
+> retired diagram-preview instructions are removed. Current review:
 > `reviews/2026-09-23/PROJECT-REVIEW.md`. The diagram cleanup checks pass, and
 > the full fast regression passes 29/29 RTL, 20/20 firmware, lint, generated
 > gates and all seven mutation suites. No physical flow, DRC or LVS was run.
