@@ -32,10 +32,14 @@
 //      design that samples a pad without the DRU-style capture. At 60 MHz a
 //      10 MHz SCLK gives six clocks per half period — the documented ceiling.
 //
-//   2. THE LOADER MUST NOT WRITE WHILE THE CORE RUNS. `run` is an input and
-//      every receive and write path is gated on it. The host loads with
-//      `run=0`, then raises it; a stray SCLK edge during execution cannot
-//      corrupt instruction memory.
+//   2. THE LOADER MUST NOT WRITE WHILE THE CORE RUNS. `run` is an input, every
+//      receive path is gated on it, and `host_we` is MASKED by it at the pin.
+//      If run rises with a word already queued in the write pipeline, the
+//      loader ABORTS that word -- it is discarded, `load_error` latches, and
+//      it does NOT reappear when run falls again. The review reproduced the
+//      earlier version writing one word while run was high (E in
+//      reviews/2026-09-23/PE-CTRL-REVIEW.md); the abort is the fix, and
+//      tb_pe_ctrl raises run inside the exact W_PULSE window.
 //
 // No `timescale` here (repo convention: RTL is timescale-free).
 
@@ -62,7 +66,8 @@ module pe_ctrl #(
 
   // Observability
   output logic        load_active,     // level: selected and run is low
-  output logic        load_error,      // sticky until the next CS falling edge
+  output logic        load_error,      // sticky: partial word, oversize load,
+                                       // or a run-abort of a queued word
   output logic [15:0] words_written
 );
 
@@ -114,7 +119,11 @@ module pe_ctrl #(
   logic [1:0]    wstate;
   localparam logic [1:0] W_IDLE = 2'd0, W_PULSE = 2'd1, W_DONE = 2'd2;
 
-  assign host_we       = we_r;
+  // host_we is MASKED by run as well as gated by the state machine: even if a
+  // pipeline window put we_r high while run is high, pe_imem must not commit a
+  // host write during execution. The state machine independently aborts the
+  // queued word (below), so the mask is belt-and-braces, not the only gate.
+  assign host_we       = we_r & ~run;
   assign host_imem_sel = 1'b1;        // v1: instruction memory only
   assign host_addr     = addr;
   assign host_wdata    = word_data;
@@ -167,25 +176,53 @@ module pe_ctrl #(
       // Write engine: one host_we cycle per completed word. host_addr and
       // host_wdata are registered and stable through W_PULSE/W_DONE, so the
       // single-cycle pulse is sampled by pe_imem exactly once.
+      //
+      // run is checked in EVERY state, not just when the write starts: a word
+      // that has queued when run rises is ABORTED (discarded, flagged) rather
+      // than written late. The reviewer's probe raised run after word_ready
+      // moved the FSM to W_PULSE; the W_PULSE branch is what closes that
+      // window, and the W_IDLE branch keeps a queued-but-unstarted word from
+      // reappearing when run falls again.
       case (wstate)
         W_IDLE: begin
           we_r <= 1'b0;
-          if (word_ready && !run) wstate <= W_PULSE;
+          if (word_ready) begin
+            if (run) begin
+              word_ready <= 1'b0;
+              load_error <= 1'b1;      // aborted: the image is incomplete
+            end else begin
+              wstate <= W_PULSE;
+            end
+          end
         end
         W_PULSE: begin
-          we_r   <= 1'b1;
-          wstate <= W_DONE;
-        end
-        W_DONE: begin
-          we_r          <= 1'b0;
-          word_ready    <= 1'b0;
-          words_written <= words_written + 16'd1;
-          if (addr == AW'(WORDS - 1)) begin
-            load_error <= 1'b1;      // more words than instruction memory
+          if (run) begin
+            we_r       <= 1'b0;
+            word_ready <= 1'b0;
+            load_error <= 1'b1;        // abort before the pulse is sampled
             wstate     <= W_IDLE;
           end else begin
-            addr   <= addr + 1'b1;
-            wstate <= W_IDLE;
+            we_r   <= 1'b1;
+            wstate <= W_DONE;
+          end
+        end
+        W_DONE: begin
+          we_r       <= 1'b0;
+          word_ready <= 1'b0;
+          if (run) begin
+            // run rose at the sampling edge: host_we was masked, so nothing
+            // was written and nothing is counted.
+            load_error <= 1'b1;
+            wstate     <= W_IDLE;
+          end else begin
+            words_written <= words_written + 16'd1;
+            if (addr == AW'(WORDS - 1)) begin
+              load_error <= 1'b1;      // more words than instruction memory
+              wstate     <= W_IDLE;
+            end else begin
+              addr   <= addr + 1'b1;
+              wstate <= W_IDLE;
+            end
           end
         end
         default: wstate <= W_IDLE;

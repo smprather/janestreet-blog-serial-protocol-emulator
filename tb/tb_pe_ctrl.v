@@ -43,7 +43,9 @@ module tb_pe_ctrl;
   logic [15:0] cap_data [0:63];
   int          cap_addr [0:63];
   int          cap_n;
+  int          writes_while_run;
   always @(posedge clk) if (host_we) begin
+    if (run) writes_while_run = writes_while_run + 1;
     cap_data[cap_n] = host_wdata;
     cap_addr[cap_n] = host_addr;
     cap_n = cap_n + 1;
@@ -86,6 +88,7 @@ module tb_pe_ctrl;
 
     spi_sclk = 1'b0; spi_mosi = 1'b0; spi_cs_n = 1'b1; run = 1'b0;
     cap_n = 0;
+    writes_while_run = 0;
     rst_n = 0;
     repeat (4) @(posedge clk); #1;
     rst_n = 1;
@@ -156,6 +159,36 @@ module tb_pe_ctrl;
                                      cap_n, WORDS));
     check_write(WORDS-1, 16'h1000 + (WORDS - 1), WORDS-1, "oversize");
     check(load_error === 1'b1, "oversize: flagged");
+
+    // ================= 7: run rising after the word queues aborts =======
+    // The one-cycle window the review reproduced: a complete word moves the
+    // FSM to W_PULSE, then run rises before the pulse is sampled. host_we must
+    // never pulse while run is high, and the queued word must not reappear
+    // later as stale program data.
+    cap_n = 0;
+    writes_while_run = 0;
+    run = 1'b0;
+    cs_low;
+    fork
+      begin
+        while (dut.wstate !== 2'd1) @(posedge clk);   // W_PULSE
+        #1;
+        run = 1'b1;                                   // before the next edge
+      end
+      spi_word(16'hA55A);
+    join
+    cs_high;
+    settle;
+    check(cap_n === 0, $sformatf("run-race: %0d writes, want 0", cap_n));
+    check(writes_while_run === 0, "run-race: host_we pulsed while run=1");
+    check(words_written === 16'd0, "run-race: word counted");
+    check(load_error === 1'b1, "run-race: abort not flagged");
+    // Drop run and let the FSM settle: the queued word must be gone, not
+    // written late.
+    run = 1'b0;
+    repeat (16) @(posedge clk); #1;
+    check(cap_n === 0, "run-race: queued word reappeared after run fell");
+    check(words_written === 16'd0, "run-race: stale word counted");
 
     if (errors == 0) $display("PASS: tb_pe_ctrl");
     else             $display("FAILURES: %0d", errors);
