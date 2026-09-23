@@ -176,9 +176,13 @@ module tb_pe_eth_mac;
   logic [10:0] frame_ptr;
   logic [2:0]  dbg_state;
 
-  // Buffer reclaim is driven by the TB so the recovery test can return the
-  // ring to empty without a full reset. Everything else treats it as idle.
+  // Buffer ownership is driven by the TB. `buf_reset` returns the ring to
+  // empty (only legal with nothing in flight); `buf_consume` advances the
+  // consumer's read pointer to the address the TB names. Everything else
+  // treats both as idle.
   logic        buf_reset = 1'b0;
+  logic        buf_consume = 1'b0;
+  logic [10:0] buf_consume_addr = 11'd0;
 
   // The DRU's own lock counter is irrelevant here (it is a confidence
   // indicator, not a gate), but it must be configured to a legal value.
@@ -214,6 +218,7 @@ module tb_pe_eth_mac;
     .bit_en(bit_en), .rx_raw(rx_bit), .rx_err(rx_err),
     .rx_first(rx_first), .rx_second(rx_second),
     .buf_reset(buf_reset),
+    .buf_consume(buf_consume), .buf_consume_addr(buf_consume_addr),
     .crc_bit_en(crc_bit_en), .crc_clr(crc_clr), .crc_bit_in(crc_bit_in),
     .crc_field_out(crc_field_out), .crc_state(crc_state),
     .fbuf_we(fbuf_we), .fbuf_waddr(fbuf_waddr), .fbuf_wdata(fbuf_wdata),
@@ -444,6 +449,36 @@ module tb_pe_eth_mac;
       check(last_len === 16'd46, $sformatf("frame 1: len = %0d, want 46", last_len));
       read_and_check(11'd0, pay, 0, "frame 1");
 
+      // ---- buffer ownership: a consume is non-destructive ----------------
+      // The producer's pointer must not move; only room and rptr do.
+      check(u_mac.rptr === 11'd0, "rptr starts at 0");
+      buf_consume = 1'b1; buf_consume_addr = 11'd46;
+      @(posedge clk); #1;
+      buf_consume = 1'b0;
+      repeat (2) @(posedge clk); #1;
+      check(u_mac.rptr === 11'd46,
+            $sformatf("consume: rptr=%0d want 46", u_mac.rptr));
+      check(frame_ptr === 11'd46,
+            $sformatf("consume moved the WRITE pointer to %0d", frame_ptr));
+      check(u_mac.room === 12'd2048,
+            $sformatf("consume: room=%0d want 2048", u_mac.room));
+
+      // A duplicate consume frees nothing ...
+      buf_consume = 1'b1; buf_consume_addr = 11'd46;
+      @(posedge clk); #1;
+      buf_consume = 1'b0;
+      repeat (2) @(posedge clk); #1;
+      check(u_mac.room === 12'd2048, "duplicate consume over-credited room");
+
+      // ... and a backward address is ignored, not clamped: rptr and room
+      // must stay consistent (over-crediting would hand out live memory).
+      buf_consume = 1'b1; buf_consume_addr = 11'd0;
+      @(posedge clk); #1;
+      buf_consume = 1'b0;
+      repeat (2) @(posedge clk); #1;
+      check(u_mac.rptr === 11'd46, "backward consume moved rptr");
+      check(u_mac.room === 12'd2048, "backward consume over-credited room");
+
     end
 
     // ================= frame 2: an ARP reply (EtherType) ================
@@ -463,7 +498,21 @@ module tb_pe_eth_mac;
       for (int i = 0; i < data; i++) frame[14+i] = want[i];
       nframe = 14 + data;            // 60 bytes + 4 FCS = 64
       fcs = ref_crc32(nframe);
-      send_frame(1'b1);
+      // Pulse buf_consume WHILE frame 2 is mid-payload, naming the previous
+      // frame's end (the same address rptr already holds). A consume that
+      // touched wptr would rebase this frame, and the read-back below would
+      // return shifted bytes.
+      fork
+        begin
+          while (!(u_mac.state == 3'd2 && u_mac.pay_cnt >= 16'd5))
+            @(posedge clk);
+          buf_consume      = 1'b1;
+          buf_consume_addr = 11'd46;
+          @(posedge clk); #1;
+          buf_consume      = 1'b0;
+        end
+        send_frame(1'b1);
+      join
       send_idle(24);
       repeat (6) @(posedge clk); #1;
       check(nvalid === 2, $sformatf("ARP: frame_valid count = %0d, want 2", nvalid));
@@ -472,6 +521,16 @@ module tb_pe_eth_mac;
       check(last_len === 16'd46, $sformatf("ARP: len = %0d, want 46 (data+pad)", last_len));
       // The payload starts where frame 1's payload ended.
       read_and_check(11'd46, data, 0, "ARP");
+
+      // Consume frame 2 as well: rptr to 92, room back to full, wptr fixed.
+      buf_consume = 1'b1; buf_consume_addr = 11'd92;
+      @(posedge clk); #1;
+      buf_consume = 1'b0;
+      repeat (2) @(posedge clk); #1;
+      check(u_mac.rptr === 11'd92,
+            $sformatf("frame 2 consume: rptr=%0d want 92", u_mac.rptr));
+      check(frame_ptr === 11'd92, "frame 2 consume moved the write pointer");
+      check(u_mac.room === 12'd2048, "frame 2 consume: room back to full");
     end
 
     // ================= frame 3: a corrupted FCS must be REJECTED ========

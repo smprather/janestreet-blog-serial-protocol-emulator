@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen/signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-14 modules, 167 ports.
+14 modules, 169 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -160,7 +160,9 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `rx_err` | inp | 1 | _no note yet_ |
 | `rx_first` | inp | 1 | _no note yet_ |
 | `rx_second` | inp | 1 | _no note yet_ |
-| `buf_reset` | inp | 1 | _no note yet_ |
+| `buf_reset` | inp | 1 | **Whole-ring reclaim**: moves BOTH pointers to zero. Only legal when the ring is empty and nothing is in flight, so it is a testbench/debug control — the SoC does not pulse it in traffic (it caused E1). |
+| `buf_consume` | inp | 1 | **Consumer-owned reclaim**: a pulse advances the READ pointer to `buf_consume_addr`. It never touches the write pointer, so it is safe while the next frame is arriving — the E1 fix. |
+| `buf_consume_addr` | inp | `[AW-1:0]` | The consumer's current position (the SoC wires the BUFBYTE window pointer). Accepted only as a forward distance no greater than the allocated bytes; a duplicate is a no-op and a backward address is ignored, so `room` cannot be over-credited. |
 | `crc_bit_en` | out | 1 | _no note yet_ |
 | `crc_clr` | out | 1 | _no note yet_ |
 | `crc_bit_in` | out | 1 | _no note yet_ |

@@ -132,6 +132,28 @@
 // That asymmetry is the whole of `is_type`'s effect on storage, and it is why
 // the wind-back is `is_type ? 4 : 0`: a length frame's FCS bytes were never
 // written, so winding back would corrupt the ring.
+//
+// ---------------------------------------------------------------------------
+// BUFFER OWNERSHIP: wptr IS THE PRODUCER, rptr IS THE CONSUMER
+//
+// The ring has one write pointer (`wptr`) and one read pointer (`rptr`).
+// `room` is the free space ahead of the producer; `used = BUF_BYTES - room` is
+// what is allocated. The consumer moves `rptr` with `buf_consume`, naming the
+// address it has read up to; the producer never touches `rptr`, and the
+// consumer never touches `wptr`.
+//
+// That separation is what makes a reclaim safe while the NEXT frame is already
+// arriving. The whole-ring reset (`buf_reset`) moves BOTH pointers to zero and
+// is only legal when nothing is in flight, so it is a testbench/debug control:
+// the SoC does not pulse it in traffic. An earlier integration did, and the
+// reset rebased an in-flight frame's write pointer, so the frame was published
+// with a wrapped window start and firmware read unwritten memory
+// (reviews/2026-09-23/ETHERNET-SOC-REVIEW.md E1).
+//
+// A consume is accepted only when the named address is a FORWARD distance no
+// greater than `used`; a duplicate (distance 0) is a no-op and a backward
+// address is ignored, so a firmware mistake cannot over-credit `room` and hand
+// out memory that still holds an unconsumed frame.
 
 // No `timescale here on purpose: all RTL in this repo is timescale-free so the
 // unit is the consumer's (the testbenches set their own). pe_eth_mac was the
@@ -165,8 +187,10 @@ module pe_eth_mac #(
   input  logic rx_first,
   input  logic rx_second,
 
-  // ---- buffer reclaim (firmware) --------------------------------------
-  input  logic buf_reset,   // pulse: reclaim the whole frame buffer
+  // ---- buffer ownership (firmware) ------------------------------------
+  input  logic          buf_reset,        // pulse: reclaim the WHOLE ring (tests/debug)
+  input  logic          buf_consume,      // pulse: consumer has read up to buf_consume_addr
+  input  logic [AW-1:0] buf_consume_addr, // the consumer's current position
 
   // ---- CRC engine (external, so the TX path can share it) -------------
   output logic        crc_bit_en,     // qualified strobe, one cycle behind bit_en
@@ -279,6 +303,8 @@ module pe_eth_mac #(
   logic [4:0]    fcs_cnt;     // FCS bits received
   logic [AW-1:0] wptr;
   logic [AW-1:0] frame_start;
+  logic [AW-1:0] rptr;         // consumer read pointer (buffer ownership)
+  logic [AW:0]   freed, used;  // consume accounting, AW+1 bits
   logic [AW:0]   room;
   logic [1:0]    settle;
   // Structural completeness, independent of the CRC. A residue can match on a
@@ -297,6 +323,12 @@ module pe_eth_mac #(
   assign frame_field   = field;
   assign frame_is_type = is_type;
   assign dbg_state     = state;
+
+  // Consumer accounting: `used` is what the producer has allocated since the
+  // consumer's position; `freed` is how far a consume pulse advances it. Both
+  // are AW+1 bits so the modular subtraction cannot lose the full-ring case.
+  assign used  = BUF_BYTES[AW:0] - room;
+  assign freed = {1'b0, buf_consume_addr} - {1'b0, rptr};
 
   assign crc_field_out = 1'b0;   // a receiver folds the field as ordinary data
   // The fold is one cycle behind the strobe and skipped for invalid cells, so
@@ -336,6 +368,7 @@ module pe_eth_mac #(
       fcs_cnt     <= '0;
       wptr        <= '0;
       frame_start <= '0;
+      rptr        <= '0;
       room        <= BUF_BYTES[AW:0];
       settle      <= '0;
       frame_valid <= 1'b0;
@@ -345,12 +378,27 @@ module pe_eth_mac #(
       frame_valid <= 1'b0;      // both statuses are one-cycle pulses
       frame_bad   <= 1'b0;
 
-      // Buffer reclaim. Deliberately independent of the frame machine and NOT
-      // an abort: firmware owns the ring's lifetime, this block only advances
-      // the pointer.
+      // Buffer ownership. `buf_reset` is the WHOLE-RING reclaim and is only
+      // safe when the ring is empty and nothing is in flight, so it is a
+      // testbench/debug control now: the SoC does not pulse it in traffic.
       if (buf_reset) begin
-        wptr <= '0;
-        room <= BUF_BYTES[AW:0];
+        wptr  <= '0;
+        rptr  <= '0;
+        room  <= BUF_BYTES[AW:0];
+      end
+
+      // `buf_consume` is the CONSUMER-owned reclaim. Firmware says "I have
+      // read every byte up to buf_consume_addr"; only the READ pointer moves,
+      // so the write pointer and an in-flight frame's start/count are
+      // untouched. That is what makes the reclaim legal while the next frame
+      // is arriving: it cannot rebase the frame that will be published.
+      if (buf_consume && !buf_reset) begin
+        if (freed <= used) begin
+          rptr <= buf_consume_addr;
+          room <= room + freed;
+        end
+        // else: a duplicate is a no-op; a backward address is ignored rather
+        // than clamped, so `rptr` and `room` can never disagree.
       end
 
       // ---- latch the strobe -------------------------------------------

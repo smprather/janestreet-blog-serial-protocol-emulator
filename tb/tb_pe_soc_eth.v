@@ -160,6 +160,74 @@ module tb_pe_soc_eth;
     return s;
   endfunction
 
+  // ---- E1 regression: two long frames, sent back to back -----------------
+  // The review's reproducer (reviews/2026-09-23/eth-soc/window_reclaim.v):
+  // a 200-byte payload makes firmware's walk (~37 us) outlast the 96-bit
+  // inter-frame gap (~9.6 us), so the reclaim for frame A lands while frame B
+  // is already in S_PAYLOAD. A reclaim that touches the MAC's write pointer
+  // publishes B with a wrapped window start and the walk reads unwritten
+  // memory. This case runs inside the permanent regression, with no wait for
+  // firmware between the two frames.
+  localparam int LONGP = 200;
+  logic [7:0]  lframe [0:14+LONGP-1];
+  logic [7:0]  lwant  [0:LONGP-1];
+  logic [31:0] lfcs   [0:1];
+  logic [7:0]  lsum   [0:1];
+  int          lnframe;
+  int          lcomp = 0;
+  bit          consec = 1'b0;
+
+  function automatic logic [31:0] ref_crc32_long(input int nbytes);
+    logic [31:0] c;
+    c = 32'hFFFFFFFF;
+    for (int k = 0; k < nbytes; k++) begin
+      c = c ^ lframe[k];
+      for (int b = 0; b < 8; b++)
+        c = c[0] ? ((c >> 1) ^ 32'hEDB88320) : (c >> 1);
+    end
+    return ~c;
+  endfunction
+
+  task automatic build_long(input logic [7:0] seed, input int which);
+    for (int k = 0; k < 6; k++)  lframe[k]   = 8'h02;
+    for (int k = 0; k < 6; k++)  lframe[6+k] = 8'h02;
+    lframe[12] = 8'h08;                      // EtherType 0x0806
+    lframe[13] = 8'h06;
+    for (int k = 0; k < LONGP; k++) begin
+      lwant[k]     = seed + k[7:0];
+      lframe[14+k] = lwant[k];
+    end
+    lnframe = 14 + LONGP;
+    lfcs[which] = ref_crc32_long(lnframe);
+    lsum[which] = 8'h00;
+    for (int k = 0; k < LONGP; k++) lsum[which] = lsum[which] + lwant[k];
+  endtask
+
+  task automatic send_long(input int which, input int gap_cells);
+    send_preamble;
+    send_byte(8'hD5);
+    for (int k = 0; k < lnframe; k++) send_byte(lframe[k]);
+    send_byte(lfcs[which][7:0]);
+    send_byte(lfcs[which][15:8]);
+    send_byte(lfcs[which][23:16]);
+    send_byte(lfcs[which][31:24]);
+    send_idle(gap_cells);
+  endtask
+
+  // Each time firmware commits a frame (writes the 0x5A flag), check the
+  // checksum it computed for the consecutive-long pair. `lcomp` is the index
+  // of the completion being reported, so a corrupted frame A is caught before
+  // frame B overwrites the checksum.
+  always @(posedge clk) begin
+    if (consec && (lcomp < 2) && dut.dmem_we &&
+        (dut.dmem_addr == 4'd7) && (dut.dmem_wdata == 8'h5A)) begin
+      check(dut.dmem[5] === lsum[lcomp],
+            $sformatf("consecutive frame %0d: sum=%02h want %02h",
+                      lcomp, dut.dmem[5], lsum[lcomp]));
+      lcomp <= lcomp + 1;
+    end
+  end
+
   // Wait for one data-memory byte to hold `val`, bounded so dead firmware
   // reports instead of hanging.
   task automatic wait_dmem(input int addr, input logic [7:0] val,
@@ -261,6 +329,30 @@ module tb_pe_soc_eth;
     check(n_bad   === 1, "frame 3: no new rejects");
     check(dut.dmem[0] === 8'd46, "frame 3: len=46");
     check(dut.dmem[3] === 8'h08, "frame 3: EtherType high byte");
+
+    // ========= E1: consecutive 200-byte frames, 96-bit gap ================
+    // No wait for frame A's consumption: frame B is driven while firmware is
+    // still walking A, exactly the reproducer's failing schedule. The fix
+    // must make the reclaim non-destructive; a rebased write pointer makes
+    // this second checksum xx or wrong.
+    build_long(8'hA0, 0);
+    send_idle(16);
+    send_long(0, 96);
+    build_long(8'h40, 1);
+    consec = 1'b1;
+    send_long(1, 24);
+    begin
+      int guard = 0;
+      while ((lcomp < 2) && (guard < 400_000)) begin
+        @(posedge clk); #1;
+        guard++;
+      end
+      check(lcomp === 2,
+            $sformatf("consecutive long frames: completions=%0d want 2", lcomp));
+    end
+    check(n_valid === 4,
+          $sformatf("after consecutive: frame_valid=%0d want 4", n_valid));
+    check(n_bad === 1, "after consecutive: no new rejects");
 
     if (errors == 0) $display("PASS: tb_pe_soc_eth");
     else             $display("FAILURES: %0d", errors);

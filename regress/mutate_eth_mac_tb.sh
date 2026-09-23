@@ -2,7 +2,7 @@
 # Mutation-test tb_pe_eth_mac.v: every check it makes must be able to FAIL.
 #
 # The TB passed on its first clean run, which by itself proves only that it
-# agrees with the RTL. This harness breaks the RTL in thirteen ways that each
+# agrees with the RTL. This harness breaks the RTL in sixteen ways that each
 # target one claim the TB makes, and requires the TB to notice every one.
 #
 # The mutations are chosen to be SUBTLE, not obvious: each is a plausible
@@ -214,6 +214,33 @@ check_mutation "no-type-min-size" \
 check_mutation "no-byte-align" \
   "            if ((crc_state == CRC_RESIDUE) && hdr_done && (bit_cnt == 3'd0) &&" \
   "            if ((crc_state == CRC_RESIDUE) && hdr_done &&   // MUTANT: no byte alignment"
+
+# 14. Consume rebases the write pointer: the E1 bug. The block TB pulses a
+#     consume at the previous frame's end while frame 2 is mid-payload; a
+#     rebase shifts the frame's bytes under the read-back.
+check_mutation "consume-rebases-wptr" \
+  "          rptr <= buf_consume_addr;
+          room <= room + freed;" \
+  "          rptr <= buf_consume_addr;
+          wptr <= buf_consume_addr;   // MUTANT: rebases the write pointer
+          room <= room + freed;"
+
+# 15. Consume is ignored: room never comes back and rptr never moves.
+check_mutation "consume-ignored" \
+  "        if (freed <= used) begin
+          rptr <= buf_consume_addr;
+          room <= room + freed;
+        end" \
+  "        if (1'b0) begin
+          rptr <= buf_consume_addr;
+          room <= room + freed;
+        end   // MUTANT: consume ignored"
+
+# 16. No forward-distance guard: a backward consume over-credits room and
+#     hands back memory that still holds an unconsumed frame.
+check_mutation "consume-no-guard" \
+  "        if (freed <= used) begin" \
+  "        if (1'b1) begin   // MUTANT: no forward-distance guard"
 
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="

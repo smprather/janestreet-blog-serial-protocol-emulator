@@ -30,7 +30,10 @@
 //                    arrives the cycle after its address, so consecutive
 //                    BUFBYTE reads must be at least one cycle apart (a
 //                    firmware loop always is; see firmware/eth_rx.pe).
-//   0xE  BUFCTRL w   bit0 pulse: reclaim the frame buffer (MAC buf_reset)
+//   0xE  BUFCTRL w   bit0 pulse: release the bytes firmware has consumed --
+//                    the MAC's read pointer moves to the current BUFBYTE
+//                    window position. Safe while the next frame is arriving:
+//                    it never touches the write pointer.
 //
 // PORTS 0x2 AND 0x3 ARE THE I2C MILESTONE. Everything before them assumed pin
 // direction was a BUILD-TIME decision, and that was true and cheap: UART and
@@ -517,7 +520,7 @@ module pe_soc #(
   logic [FBUF_AW-1:0] eth_frame_ptr;
   logic [2:0]         eth_dbg_state;
 
-  logic               eth_buf_reset;
+  logic               eth_buf_consume;
   logic [FBUF_AW-1:0] eth_buf_raddr;
   logic [7:0]         eth_buf_rdata;
   logic [FBUF_AW-1:0] eth_frame_start;
@@ -534,7 +537,12 @@ module pe_soc #(
 
   assign ethstat_rd = io_re && (io_port == 4'h8);
   assign bufbyte_rd = io_re && (io_port == 4'hD);
-  assign eth_buf_reset = io_we && (io_port == 4'hE) && io_wdata[0];
+  // BUFCTRL: release everything firmware has consumed. The address is the
+  // current BUFBYTE window position, so the MAC's READ pointer advances to the
+  // end of the frame just walked and the WRITE pointer is untouched -- a frame
+  // already arriving keeps its own start and count (E1,
+  // reviews/2026-09-23/ETHERNET-SOC-REVIEW.md).
+  assign eth_buf_consume = io_we && (io_port == 4'hE) && io_wdata[0];
   assign eth_frame_start = eth_frame_ptr - eth_frame_len[FBUF_AW-1:0];
 
   pe_dru #(.SPB(12)) u_eth_dru (
@@ -574,7 +582,9 @@ module pe_soc #(
     .clk(clk), .rst_n(rst_n),
     .bit_en(eth_bit_en), .rx_raw(eth_rx_raw), .rx_err(eth_rx_err),
     .rx_first(eth_rx_first), .rx_second(eth_rx_second),
-    .buf_reset(eth_buf_reset),
+    .buf_reset(1'b0),              // the SoC never whole-ring-resets in traffic
+    .buf_consume(eth_buf_consume),
+    .buf_consume_addr(eth_buf_raddr),
     .crc_bit_en(eth_crc_bit_en), .crc_clr(eth_crc_clr),
     .crc_bit_in(eth_crc_bit_in), .crc_field_out(eth_crc_field_out),
     .crc_state(eth_crc_state),

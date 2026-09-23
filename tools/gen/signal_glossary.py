@@ -79,6 +79,10 @@ NOTES: dict[tuple[str, str], str] = {
     ("pe_crc", "crc_bit"): "The field bit for this strobe: `R[0] ^ cfg_out_inv`. LSB-first of `R` is LSB-first of the CRC for a reflected algorithm and **MSB-first** of it for a non-reflected one, which is correct for both.",
     ("pe_crc", "crc_zero"): "**A status, not an event.** Asserts after the final field strobe and holds until `clr`. Means \"the frame at this boundary is clean\" — the register drains to zero for a transmitter and for a receiver that folds the field un-complemented.",
     ("pe_crc", "crc_state"): "The register, for observability and firmware readback. Reading the CRC a receiver computed means sampling it at the right strobe, which is a firmware-timing decision, not a feature of this port.",
+    # ---- pe_eth_mac: buffer ownership (E1) -------------------------------
+    ("pe_eth_mac", "buf_reset"): "**Whole-ring reclaim**: moves BOTH pointers to zero. Only legal when the ring is empty and nothing is in flight, so it is a testbench/debug control — the SoC does not pulse it in traffic (it caused E1).",
+    ("pe_eth_mac", "buf_consume"): "**Consumer-owned reclaim**: a pulse advances the READ pointer to `buf_consume_addr`. It never touches the write pointer, so it is safe while the next frame is arriving — the E1 fix.",
+    ("pe_eth_mac", "buf_consume_addr"): "The consumer's current position (the SoC wires the BUFBYTE window pointer). Accepted only as a forward distance no greater than the allocated bytes; a duplicate is a no-op and a backward address is ignored, so `room` cannot be over-credited.",
     # ---- pe_dru: the oversampled Manchester receiver --------------------
     ("pe_dru", "bit_en"): "**The strobe** — one per decoded **bit cell** (not per half-cell: pe_manch is given both halves at once). This is the DRU's whole output contract. See [[concepts/strobe-and-committing-edge]].",
     ("pe_dru", "rx_pin"): "The raw **asynchronous** pin. Synchronized internally (2 flops) before anything else touches it — this is the one place in the design where metastability would actually be sampled.",

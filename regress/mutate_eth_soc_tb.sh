@@ -148,6 +148,12 @@ check_mutation "status-never-clears" \
   "        if (!eth_frame_valid) eth_valid <= 1'b0;" \
   "        if (1'b0) eth_valid <= 1'b0;   // MUTANT: valid never clears"
 
+# 8. The reclaim is destructive again (the E1 bug): BUFCTRL pulses the MAC's
+#    whole-ring reset. The permanent consecutive-frame case reads xx.
+check_mutation "destructive-reclaim" \
+  "    .buf_reset(1'b0),              // the SoC never whole-ring-resets in traffic" \
+  "    .buf_reset(eth_buf_consume),   // MUTANT: destructive reclaim in traffic"
+
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="
 if [ $survived -gt 0 ]; then
