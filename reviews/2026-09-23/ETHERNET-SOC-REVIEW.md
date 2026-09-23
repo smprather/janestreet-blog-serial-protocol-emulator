@@ -6,7 +6,8 @@ the Pi harness continued the SPI loader work.
 
 ## E1 — P1: reclaiming frame 1 corrupts an in-flight frame 2
 
-**Open.** Firmware's `OUT BUFCTRL, A` resets the MAC write pointer and room
+**Originally open; resolved at `c9f8e1a`.** Firmware's `OUT BUFCTRL, A` reset
+the MAC write pointer and room
 while the MAC may already be receiving the next frame. The MAC does not abort
 that frame or adjust its payload count/start bookkeeping. It subsequently
 reports a good CRC and `frame_valid`, but `pe_soc` computes a wrapped window
@@ -47,11 +48,54 @@ inside a frame that will later be published as valid. Add a permanent
 consecutive-frame test that does not wait for firmware consumption before
 driving the next frame.
 
+### Resolution recheck
+
+`c9f8e1a` replaces whole-ring reset with consumer-owned release and adds a
+producer write pointer / consumer read pointer. The original reproducer was
+rerun independently on an archive of the fix: all three cases pass, including
+the two 200-byte payloads at a 96-cell gap (`3c`, `04`), the 600-cell control,
+and the 46-byte control. The commit also adds the 200-byte consecutive-frame
+schedule to the permanent SoC regression and 16/16 + 8/8 block/SoC mutation
+gates. Detailed diff rationale and the committed hardening recheck are in
+[E1 resolution](E1-RESOLUTION.md).
+
+**Current open finding: E2 below.**
+
 [Reproducer](eth-soc/window_reclaim.v), [failing trace](eth-soc/min-gap.txt),
 [long-gap control](eth-soc/long-gap.txt), [ARP-size control](eth-soc/arp-gap.txt).
 Build with the same source/model list as `tb_pe_soc_eth`, replacing its TB file
 with the reproducer. Run from `sim/` so `../firmware/eth_rx.hex` resolves.
 Default run fails; `+GAP=600` and `+LEN=46` are the two passing controls.
+
+## E2 — P1: frame-buffer SRAM is absent from SoC hardening metadata
+
+**Open.** The synthesized SoC contains both `u_imem.g_macro.u_sram` and
+`u_eth_fbuf.g_macro.u_sram`. `flow/pe_soc.json` declares only the instruction
+SRAM in `MACROS.instances`, so LibreLane's manual macro placement step does
+not place the frame-buffer SRAM. The config's two `PDN_MACRO_CONNECTIONS`
+entries also match only `u_imem.g_macro.u_sram`.
+
+This matters because the IHP SRAM's supply pins are `VDD!`, `VSS!` and
+`VDDARRAY!` on Metal4. The checked-in macro setup explicitly supplies custom
+connections and Metal4 stripes for the existing SRAM; the generic signal-power
+mapping only covers the standard-cell pins `VPWR`/`VGND` (and the SCL default
+`VDD`/`VSS`). The custom PDN script builds stripes but does not add a second
+instance's missing pin connections. The new frame buffer therefore lacks the
+explicit placement and power hooks this config gives the instruction memory.
+It cannot be treated as ready to harden from the synthesis result alone.
+
+Evidence: the mapped netlist names both macro instances
+([synthesis output](eth-soc/synthesis.txt)); `MACROS.instances` and
+`PDN_MACRO_CONNECTIONS` are visible in `flow/pe_soc.json`; the matching rules
+and standard-cell power-pin defaults are in the installed LibreLane
+`steps/odb.py`, `set_global_connections.tcl`, and the IHP `config.tcl`.
+
+**Required before physical signoff:** add placement for
+`u_eth_fbuf.g_macro.u_sram` in a legal location, add both `VDD!`/`VSS!` and
+`VDDARRAY!` global connections for it, and ensure the macro PDN grid reaches
+its Metal4 supply shapes. Check placement spacing and the core/die budget with
+the selected two-macro layout. This review did not run the physical flow, DRC,
+or LVS.
 
 ## Regression
 

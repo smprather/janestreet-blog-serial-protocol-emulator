@@ -137,10 +137,12 @@
   ],
   "PDN_MACRO_CONNECTIONS": [
     "u_imem\\.g_macro\\.u_sram VPWR VGND VDD! VSS!",
-    "u_imem\\.g_macro\\.u_sram VPWR VGND VDDARRAY! VSS!"
+    "u_imem\\.g_macro\\.u_sram VPWR VGND VDDARRAY! VSS!",
+    "u_eth_fbuf\\.g_macro\\.u_sram VPWR VGND VDD! VSS!",
+    "u_eth_fbuf\\.g_macro\\.u_sram VPWR VGND VDDARRAY! VSS!"
   ],
-  "//53": "THE MACRO HAS THREE SUPPLY PINS, AND THE SECOND HOOK ABOVE IS WHY THERE ARE",
-  "//54": "TWO ENTRIES. The SRAM LEF declares VSS! (GROUND), VDD! (POWER) and VDDARRAY!",
+  "//53": "EACH OF THE TWO MACRO INSTANCES GETS TWO HOOKS, AND THAT IS WHY THERE ARE",
+  "//54": "FOUR ENTRIES. The SRAM LEF declares VSS! (GROUND), VDD! (POWER) and VDDARRAY!",
   "//55": "(POWER, the array rail, on its own Metal4 stripes). A single hook carries only",
   "//56": "ONE power-pin name, so with only the VDD! entry pdngen connects VDD! and leaves",
   "//57": "VDDARRAY! floating -- PDN-0189 'Supply pin .../VDDARRAY! is not connected to",
@@ -156,6 +158,12 @@
   "//67": "(timing_type setup_rising / hold_rising), which is what makes the SRAM's inputs",
   "//68": "held-time-relevant in the first place -- see flow/pe_soc.sdc, where the",
   "//69": "worst hold path in the whole SoC ends at u_imem.g_macro.u_sram/A_ADDR[9].",
+  "//36a": "TWO INSTANCES: u_imem.g_macro.u_sram and u_eth_fbuf.g_macro.u_sram, both the",
+  "//36b": "same part (ADR-003). Placement is (10,10) and (256.8,10) at orientation N:",
+  "//36c": "a 10 um horizontal gap, each 236.8 x 336.46, both inside the 1002x432 die.",
+  "//36d": "tools/checks/macro_flow_config.py re-derives that from the netlist, the LEF",
+  "//36e": "and this file on every regression, so a macro cannot be added without both a",
+  "//36f": "placement and its supply hooks (E2, reviews/2026-09-23/ETHERNET-SOC-REVIEW.md).",
   "MACROS": {
     "RM_IHPSG13_1P_1024x16_c2_bm_bist": {
       "gds": [
@@ -168,6 +176,13 @@
         "u_imem.g_macro.u_sram": {
           "location": [
             10,
+            10
+          ],
+          "orientation": "N"
+        },
+        "u_eth_fbuf.g_macro.u_sram": {
+          "location": [
+            256.8,
             10
           ],
           "orientation": "N"

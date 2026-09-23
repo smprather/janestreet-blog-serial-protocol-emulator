@@ -12,6 +12,11 @@
 
 ## Global Constraints
 
+- **The flow config's macro hardening metadata is static-gated.** Every SRAM
+  macro the RTL instantiates must appear in `flow/pe_soc.json`'s
+  `MACROS.instances` with a legal placement and in `PDN_MACRO_CONNECTIONS` with
+  all three supply pins; `tools/checks/macro_flow_config.py` (run by
+  `run_all.sh`) enforces it. E2, `reviews/2026-09-23/E2-RESOLUTION.md`.
 - **60 MHz operating point is LOCKED.** The loader's synchronizer budget is quoted against it; SCLK is ≤ ~10 MHz.
 - **Standing user ruling: do not run physical flow, DRC or LVS.**
 - **Every new testbench is self-checking, prints `PASS: <name>`, and is added to `regress/run_all.sh`'s `CASES`.** A TB nothing runs is not a test.

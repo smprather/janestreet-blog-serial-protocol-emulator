@@ -1,14 +1,16 @@
 # Project Status — through 10BASE-T receive
 
-> **Latest review follow-up (2026-09-23): E1 is FIXED.** The ring now has a
-> producer write pointer and a consumer read pointer; firmware's BUFCTRL
-> release is non-destructive, so a reclaim during the next frame's reception
-> cannot corrupt it. The review's reproducer passes all three cases, the
-> schedule is a permanent regression (`tb/tb_pe_soc_eth.v`), and the mutation
-> gates are 16/16 (block) and 8/8 (SoC). See
-> `reviews/2026-09-23/ETHERNET-SOC-REVIEW.md` and
-> `reviews/2026-09-23/E1-RESOLUTION.md` for evidence, including the
-> synthesis/STA recheck.
+> **Latest review follow-up (2026-09-23): E1 and E2 are FIXED.** E1: the ring
+> now has a producer write pointer and a consumer read pointer; firmware's
+> BUFCTRL release is non-destructive, so a reclaim during the next frame's
+> reception cannot corrupt it. The review's reproducer passes all three cases,
+> the schedule is a permanent regression (`tb/tb_pe_soc_eth.v`), and the
+> mutation gates are 16/16 (block) and 8/8 (SoC). E2: `flow/pe_soc.json` now
+> places both SRAM instances and hooks all three supplies of each, and
+> `tools/checks/macro_flow_config.py` (run by the regression) re-derives the
+> requirement from the netlist. See `reviews/2026-09-23/ETHERNET-SOC-REVIEW.md`,
+> `E1-RESOLUTION.md` and `E2-RESOLUTION.md` for evidence, including the
+> synthesis/STA recheck. Physical flow, DRC and LVS remain deferred.
 
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
 > Last updated: 2026-09-23, after reviewing the project-layout rework at
@@ -390,6 +392,7 @@ the upside case with `tools/gen/sram_budget.py --tiles 8x4`.
 | **Instruction macro is live; PC width derives from IMEM depth (10 bits at 1024)** | `decisions/adr-004-program-counter-width.md` |
 | 10BASE-T is the LINE LAYER only; the stack is off-chip, and firmware never touches Ethernet bits | `concepts/ethernet-scope.md` |
 | **Buffer ownership: `wptr` is the producer, `rptr` the consumer**; BUFCTRL releases consumed bytes and never rebases the ring under an in-flight frame | `rtl/pe_eth_mac.v`, `reviews/2026-09-23/E1-RESOLUTION.md` |
+| **Both SRAM macros are placed and power-hooked in the flow config**, and a static netlist-vs-config gate keeps it true | `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`, `reviews/2026-09-23/E2-RESOLUTION.md` |
 | **`pe_ctrl` is a passive SPI slave at the wrapper** (host loads, `run` starts); no master, no flash, no bootstrap FSM | `decisions/adr-007-pe-ctrl-passive-slave.md` |
 | Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | the codec headers (`pe_nrzi`/`pe_manch`/`pe_bitstuff`) |
 | `ena` must never gate logic; every pad output driven in every state | `rtl/tt_um_protocol_emulator.v` header |

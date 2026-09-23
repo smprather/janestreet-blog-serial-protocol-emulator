@@ -1,12 +1,15 @@
 # Handoff — state of the repo (2026-09-23)
 
-> **Latest follow-up (2026-09-23): E1 (P1) is FIXED.** The review at `9a84c6e`
-> found that reclaiming frame 1 during reception of frame 2 could publish frame 2
-> with a corrupt window; the fix splits the ring into a producer write pointer
-> and a consumer read pointer (`buf_consume`), so a release never touches an
-> in-flight frame. Read `reviews/2026-09-23/E1-RESOLUTION.md` for the trace,
-> the permanent regression and the hardening recheck; the original finding and
-> reproducer are in `reviews/2026-09-23/ETHERNET-SOC-REVIEW.md`. The user
+> **Latest follow-up (2026-09-23): E1 and E2 (P1) are FIXED.** The review at
+> `9a84c6e` found that reclaiming frame 1 during reception of frame 2 could
+> publish frame 2 with a corrupt window; the fix splits the ring into a producer
+> write pointer and a consumer read pointer (`buf_consume`), so a release never
+> touches an in-flight frame. It also found that the flow config placed and
+> power-hooked only the instruction SRAM; `flow/pe_soc.json` now configures both
+> macro instances with all three supplies each, and
+> `tools/checks/macro_flow_config.py` re-derives that from the netlist on every
+> regression. Read `reviews/2026-09-23/E1-RESOLUTION.md` and `E2-RESOLUTION.md`;
+> the original findings and reproducer are in `ETHERNET-SOC-REVIEW.md`. The user
 > requested 15-minute progress checks, and permits periodic synthesis/STA to
 > catch RTL that cannot be hardened; physical flow, DRC and LVS remain deferred.
 

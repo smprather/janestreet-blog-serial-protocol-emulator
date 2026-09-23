@@ -302,6 +302,18 @@ if [ -d "$HOME/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram/lef" ]; then
 else
   echo "sram budget: SKIPPED (PDK not at ~/pdk/IHP-Open-PDK)"
 fi
+
+# The flow config's macro hardening metadata (E2): every SRAM macro the RTL
+# instantiates needs a legal placement and hooks for all three of its supplies,
+# or LibreLane leaves it unplaced and unpowered. Static check only -- no
+# physical flow, DRC or LVS.
+if python3 tools/checks/macro_flow_config.py > /tmp/macro_flow.log 2>&1; then
+  echo "macro flow config: OK (placements and supply hooks complete)"
+else
+  echo "macro flow config: FAILED"
+  cat /tmp/macro_flow.log
+  stale=1
+fi
 # The CRC constants are checked against the RevEng catalogue on every run, not
 # just regenerated on request: a wrong polynomial or seed is a silent wrong
 # answer on the wire, and it is cheap to catch here (the script also derives

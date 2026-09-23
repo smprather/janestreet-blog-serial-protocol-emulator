@@ -1276,3 +1276,28 @@
   `tb/tb_pe_eth_mac.v`, `tb/tb_pe_soc_eth.v`,
   `regress/mutate_eth_{mac,soc}_tb.sh`, `wiki/reference/signal-names.md`,
   `reviews/2026-09-23/E1-RESOLUTION.md`, `reviews/2026-09-23/e1-recheck/`.
+
+## [2026-09-23] fix | E2: both SRAM macros placed and power-hooked, with a gate
+
+- **E2 resolved at the config level.** The SoC instantiates two SRAM macros
+  (`u_imem` and `u_eth_fbuf`), but `flow/pe_soc.json` listed only the
+  instruction one: no placement for the frame buffer, and no
+  `PDN_MACRO_CONNECTIONS` for its `VDD!`/`VSS!`/`VDDARRAY!` Metal4 supplies
+  (the standard-cell `VPWR`/`VGND` defaults do not cover them). LibreLane would
+  have left the frame-buffer macro unplaced and unpowered; simulation could not
+  see it.
+- **Fix:** both instances are now placed (`(10,10)` and `(256.8,10)`, `N`, a
+  10 um gap, both inside the 1002x432 die), and all four supply hooks are
+  present (VDD!/VSS! and VDDARRAY!/VSS! per instance). The `-macro -default`
+  PDN grid and its Metal4 ladder apply per instance.
+- **New permanent gate:** `tools/checks/macro_flow_config.py`, run by
+  `run_all.sh`. It flattens the elaborated `pe_soc`, requires every macro cell
+  and only macro cells to be configured, requires all three supply pins per
+  instance, checks placement inside the die with a 10 um gap (skipped loudly if
+  the PDK LEF is absent), and requires `PDN_CFG` to still build the Metal4
+  ladder. It fails on the pre-fix config and passes on the fixed one.
+- **Deferred:** the full flow run must confirm both macros place, PSM-0040
+  connectivity, no PDN-0189/PSM-0069, spacing and the host-path hold/screen
+  findings. No physical flow, DRC or LVS ran.
+- **Files:** `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`,
+  `regress/run_all.sh`, `reviews/2026-09-23/E2-RESOLUTION.md`.
