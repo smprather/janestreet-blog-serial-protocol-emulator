@@ -36,20 +36,29 @@
 >   computed limit at ~7.5 MHz for both) or A3 (rising-edge update, two frames,
 >   10 MHz guard, documented non-mode-0 change edge). Plan and timing audit:
 >   `wiki/plans/pe-ctrl-readback.md`.
-> - **`pe_serdes` + `pe_codec_mux` integration**: plan amended after the five
->   review findings (window latched phase, separate `TXLEN`/`RXLEN`,
->   serdes/codec strobe split, pre-OD overlay, wire-loopback first consumer);
->   open scope decisions in `wiki/plans/serdes-integration.md`, findings in
->   `reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`.
+> - **`pe_serdes` + `pe_codec_mux` integration**: plan amended after the first
+>   review's five findings (window latched phase, separate `TXLEN`/`RXLEN`,
+>   overlay before the OD gate, wire-loopback first consumer, strobe split) and
+>   then the loopback-follow-up findings: `pe_codec_mux`'s one `bit_en` gates
+>   both directions (Manchester TX is purely combinational; the codec strobe
+>   is per encoded cell, never 2x half-cell), and `pe_serdes`'s one `bit_en`
+>   clocks both sides. The plan now uses two codec instances (TX/RX), a split
+>   `tx_bit_en`/`rx_bit_en`, payload-only gates (`&& !tx_stuffed` /
+>   `&& rx_bit_valid`), an independent `half_phase` level, and a directed
+>   stuffed Manchester loopback with TX-hold/RX-skip/doubled-cell/cross-wire
+>   mutations; open scope decisions in `wiki/plans/serdes-integration.md`,
+>   findings in `reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`.
 >
 > Do not start either RTL change until the user picks/accepts. The last full
 > regression is `/tmp/run_all_spi_pads.log` (`run_all.sh --fast -j8`: 29/29 RTL,
 > 20/20 firmware, lint clean, all seven mutation suites, gates current), and no
-> RTL has changed since -- only plans, review evidence and docs. The reviewer's
-> uncommitted diagram/live-canvas work (and the comment-only `rtl/pe_ctrl.v`
-> edit) is preserved unstaged; do not stage or clobber it. The progress-diagram
-> notes for both plans are also unstaged by instruction. No physical flow, DRC
-> or LVS was run.
+> RTL has changed since -- only plans, review evidence and docs. The plan
+> amendment, both editable PlantUML diagrams and the touched wiki/handoff docs
+> are committed; the rest of the project-diagram docs rework (`README.md`,
+> `diagrams/README.md`, the live-canvas page, the RTL inventory page), the
+> tooling half (`tools/gen/block_diagram.py`, `regress/run_all.sh`,
+> `.gitignore`) and the comment-only `rtl/pe_ctrl.v` edit remain unstaged --
+> do not stage or clobber them. No physical flow, DRC or LVS was run.
 
 > **SPI pad exposure and project diagrams (2026-09-23).** The SPI firmware now
 > has MOSI on uio[2] and CS_N on uio[3]; SCLK/MISO share uo_out[0]/ui_in[0]
@@ -166,11 +175,11 @@ Historical refactor baseline at `6de2a6a`, verified in a `git archive` copy:
 (14 verilator tops + 11 yosys elaborations), all four mutation suites green, plus
 `signal glossary up to date`, `protocol pin budget up to date`,
 `sram budget up to date`, `crc config up to date`, `clock arithmetic up to date`,
-`block diagram up to date`, `canvas viewer: OK`. The reference docs are generated
+`block diagram up to date`. The reference docs are generated
 from the RTL/PDK and drift-checked inside the regression, so a renamed port or
 deleted TB fails the run. A `git archive` clone with none of the ignored diagrams
-present also exits 0 (the diagram gate is a committed source hash now; see
-`reviews/2026-09-22/REVIEW.md` finding 7).
+present also exits 0. The project architecture and progress diagrams are editable
+PlantUML text in `diagrams/`; they do not depend on generated images.
 
 **Current regression (2026-09-23, after the SPI pad exposure):**
 `run_all.sh --fast -j8` exit 0 — **29/29 RTL, 20/20 firmware**, param guards
@@ -215,7 +224,7 @@ clock. It is dual-edge now (ADR-002's latch pair), and both `tb_pe_dru` and
 FCS. (2) **One oversized frame could zero the receiver's `room` permanently**
 (the reclaim truncated `pay_cnt` to 11 bits, and a full 2,048-byte frame is
 `11'h000`). The rest were the submission source lists, the emulator's timer
-order and stop→run prefetch, Ethernet padding, fresh-clone diagram/Canvas gates,
+order and stop→run prefetch, Ethernet padding, generated-document gates,
 `peasm --rtl-init`, and the lint gate's coverage — which now includes
 `pe_eth_mac`/`pe_fbuf` and fails on ANY yosys `ERROR:`, because the old gate
 grepped for three known diagnostics and passed a file yosys could not parse.
@@ -289,9 +298,9 @@ grepped for three known diagnostics and passed a file yosys could not parse.
    `GRT-0116` congestion at 4.59% utilization on a design that was 7.6% full) and
    a custom `PDN_CFG` for the SRAM's **Metal4** supplies, which
    `PDN_MACRO_CONNECTIONS` alone cannot reach. Both are STATUS gotchas 33-34.
-   The standalone pdngen harness used to A/B the PDN config in ~1 minute instead
-   of a 30-minute flow run is `/home/mylesp/.hermes/cache/scratch/pdn_standalone.sh`
-   (scratch, not repo — but the technique is worth reusing).
+   A temporary standalone pdngen harness was used to A/B the PDN config in
+   about 1 minute instead of a 30-minute flow run (scratch, not repo — but the
+   technique is worth reusing).
 
 10. **A watcher that greps for its own pattern waits forever.** `while pgrep -f
    "run_librelane|librelane"; do sleep 30; done` never exits: `pgrep -f` matches
@@ -312,8 +321,8 @@ implemented, tested and recorded, and the **I2C transaction layer is built**
 ACK, data, ACK, repeated START, address+R, ACK, read, NACK, STOP — verified on
 the emulator across all 60 tick phases and on real RTL against an independent
 Verilog slave FSM. **Item 4 is decided: the six `uo_out[7:2]` pads stay
-`dbg_pc[5:0]` for now** (no readback path; 14 pads free; revisit trigger in
-STATUS). **Item 5's read-only feasibility is documented in
+`dbg_pc[5:0]` for now** (no readback path; 6 usable pads free, or 12 if
+debug is reclaimed; see STATUS for the revisit trigger). **Item 5's read-only feasibility is documented in
 [[reference/floorplan-feasibility]]**: the two macros plus logic fit the
 template 6×4 die at ~60% occupancy, the open question is the pad ring
 (`CORE_AREA` vs `DIE_AREA`), and the physical-flow evidence is deferred and

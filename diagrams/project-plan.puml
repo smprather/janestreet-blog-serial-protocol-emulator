@@ -1,0 +1,104 @@
+@startuml
+title Protocol Emulator ASIC — planned architecture
+top to bottom direction
+skinparam componentStyle rectangle
+skinparam defaultFontName Monospaced
+skinparam packageStyle rectangle
+
+package "Host / board" {
+  component "Host computer" as host
+  component "Protocol wires" as wires
+}
+
+package "Tiny Tapeout top" {
+  component "Passive SPI loader\npe_ctrl" as loader
+  package "Programmable SoC — pe_soc" {
+    component "CPU\nfirmware engine" as cpu
+    component "Instruction SRAM\n1024 × 16" as imem
+    component "CPU data memory\n16-byte register array" as dmem
+    component "Frame buffer SRAM\n2 KB" as fbuf
+    component "Tick timer\n60 MHz timebase" as tick
+    component "Pin matrix\nper-pin OUT / OE / IN / OD" as pinmux
+
+    package "Integrated baseline: 10BASE-T receive" {
+      component "DRU\noversampled capture" as dru
+      component "Manchester decoder" as manch_rx
+      component "Ethernet RX MAC" as eth_rx
+      component "CRC-32 check" as crc_rx
+    }
+
+    package "Planned shared word engine" {
+      component "Indexed control window\nIO port 0xF; 8-bit data" as window
+      component "Programmable timing\nencoded-cell + half-cell + payload strobes" as timing
+      component "pe_serdes\n32-bit word engine\ntx_bit_en / rx_bit_en (split)" as serdes
+      component "pe_codec_mux TX\nNRZI / Manchester / stuffing" as codec_tx
+      component "pe_codec_mux RX\nNRZI / Manchester / stuffing" as codec_rx
+      component "Per-pin level overlay\nbefore OE / open-drain gate" as overlay
+    }
+
+    package "Separate planned Ethernet TX consumer" {
+      component "Frame source\nfirmware stream or TX buffer" as tx_source
+      component "Frame + preamble/SFD" as tx_frame
+      component "FCS generation" as tx_crc
+      component "IFG / transmit control" as tx_control
+    }
+  }
+  component "Pads\nui_in / uo_out / uio" as pads
+}
+
+host --> loader : SPI program load
+loader --> imem : host write port
+imem --> cpu : instruction fetch
+cpu <--> dmem : load / store
+cpu <--> tick : timed firmware I/O
+cpu <--> pinmux : pin-port reads / writes
+pinmux <--> pads : levels, enables, inputs
+pads <--> wires : board connections
+
+wires --> dru : 10BASE-T receive
+dru --> manch_rx : recovered half-bits
+manch_rx --> eth_rx : decoded bits
+eth_rx --> crc_rx : received frame
+eth_rx --> fbuf : store-and-forward
+fbuf --> cpu : firmware frame window
+
+cpu <--> window : indexed control / data
+cpu --> timing : divisor and mode
+timing --> codec_tx : encoded-cell strobe + half_phase
+timing --> codec_rx : decoded-cell strobe (plain modes)
+timing --> serdes : tx_bit_en / rx_bit_en (payload-only)
+serdes --> codec_tx : TX bits
+codec_tx --> serdes : tx_stuffed (hold)
+codec_tx --> overlay : encoded TX level
+overlay --> pinmux : override level before OE gate
+dru --> codec_rx : dru.bit_en (per decoded cell) + halves
+codec_rx --> serdes : rx_bit / rx_bit_valid (skip stuff cells)
+
+tx_source --> tx_frame
+tx_frame --> tx_crc
+tx_crc --> tx_control
+tx_control --> serdes : payload + FCS
+
+note bottom of pads
+  Baseline firmware personas: UART, SPI master, I2C master.
+  The passive loader is a separate SPI path used to load instruction SRAM.
+  Current aliases: uo_out[0] is UART TX / SPI SCLK; ui_in[0] is UART RX /
+  SPI MISO; uio[0:1] are I2C SDA/SCL; uio[2:3] are SPI MOSI/CS_N.
+  ui_in[2] is 10BASE-T RX; ui_in[3:5] are loader SCLK/MOSI/CS_N.
+end note
+
+note bottom of serdes
+  One pe_serdes instance, but its single bit_en clocks both sides; the plan
+  splits it into tx_bit_en/rx_bit_en. TX advances only on payload cells
+  (serdes.tx_bit_en = tx_codec_cell_en && !tx_stuffed); RX captures only
+  payload cells (serdes.rx_bit_en = rx_codec_cell_en && rx_bit_valid). The
+  codec bit_en is per encoded cell, never per half-cell; half_phase is an
+  independent 2x half-cell level. First milestone is a wire loopback (plain
+  and stuffed Manchester) through TX codec, pads/model, DRU/codec RX, and
+  SERDES RX; it needs no Ethernet frame layer. The full 10BASE-T TX consumer
+  is a separate plan and needs a frame source, preamble/SFD, FCS, and
+  inter-frame-gap control.
+  Low-speed USB and CAN are later personas; JTAG, SWD, and PS/2 are optional.
+end note
+
+@enduml

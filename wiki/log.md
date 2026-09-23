@@ -1642,3 +1642,36 @@
   path is separate (`pe_eth_mac` is RX-only, `pe_fbuf` is the RX store).
 - Evidence: reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md. Plan-only: no RTL,
   no regression, no physical flow/DRC/LVS.
+
+## [2026-09-23] soc | serdes topology amended again: per-direction enables and payload handshake
+
+- The loopback follow-up corrected two shared-enable errors in the amended
+  plan. `pe_codec_mux`'s single `bit_en` gates TX and RX state in every stage
+  (`pe_bitstuff`'s one `always_ff`, `pe_nrzi`'s one block, `pe_manch`'s
+  `rx_err`), and `pe_manch` TX is purely combinational: the first amendment's
+  "codec strobe twice per bit for Manchester" was wrong twice over. The codec
+  strobe is now one per **encoded cell** (payload or inserted stuff), with
+  `half_phase` an independent 2x half-cell **level**.
+- `pe_serdes` also has one `bit_en` for both sides. The plan splits it into
+  `tx_bit_en`/`rx_bit_en` and defines the payload-only gates from the RTL:
+  `serdes.tx_bit_en = tx_codec_cell_en && !tx_stuffed` (hold across the
+  stuffed cell; `tx_stuffed` is the combinational output of the registered
+  `tx_pend`, current-cycle) and
+  `serdes.rx_bit_en = rx_codec_cell_en && rx_bit_valid` (skip received stuff
+  cells). Source-grounded against `rtl/pe_bitstuff.v` and
+  `tb_pe_codec_mux.tx_step_comb`.
+- Topology: two `pe_codec_mux` instances (TX/RX) because one instance cannot
+  carry both directions' encoded-cell cadences; alternatives (one instance
+  with a split interface; two `pe_serdes` instances; one shared serdes enable
+  with lockstep scope) are open decisions.
+- Tests: the SoC loopback must run a **stuffed Manchester** configuration
+  (`cfg = 0x05` or `0x07`) with both directions concurrent and check the TX
+  hold and RX skip end to end; the SoC mutation harness must fail on TX-hold
+  removed, RX-skip removed, doubled cell enable, and the strobe cross-wire.
+  Area: the serdes split is a port change (no expected cell delta); the second
+  codec instance is the only material add.
+- Diagrams updated to the two codec instances and the split enables; the wider
+  project-diagram docs rework remains unstaged.
+- Evidence: `reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md` (findings 6-7);
+  plan confidence `medium` until the topology and scope decisions are
+  accepted. Plan-only: no RTL, no regression, no physical flow/DRC/LVS.

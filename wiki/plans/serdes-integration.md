@@ -4,8 +4,8 @@ created: 2026-09-23
 updated: 2026-09-23
 type: plan
 tags: [architecture, integration, serdes, codec, timing, pads]
-sources: [rtl/pe_serdes.v, rtl/pe_codec_mux.v, rtl/pe_soc.v, rtl/pe_dru.v, rtl/pe_pinmux.v, tb/tb_pe_serdes.v, tb/tb_pe_codec_mux.v, diagrams/project-plan.puml, wiki/reference/block-diagram.md, wiki/plans/ethernet-soc.md]
-confidence: high
+sources: [rtl/pe_serdes.v, rtl/pe_codec_mux.v, rtl/pe_bitstuff.v, rtl/pe_nrzi.v, rtl/pe_manch.v, rtl/pe_soc.v, rtl/pe_dru.v, rtl/pe_pinmux.v, tb/tb_pe_serdes.v, tb/tb_pe_codec_mux.v, diagrams/project-plan.puml, wiki/reference/block-diagram.md, wiki/plans/ethernet-soc.md]
+confidence: medium
 ---
 
 # Integrate `pe_serdes` + `pe_codec_mux` into `pe_soc`
@@ -22,10 +22,19 @@ protocols. The project-plan diagram already draws them inside the SoC with
 `cpu ..> serdes` and `codec ..> pads` as planned.
 
 This plan is **review-only**: no RTL changes until it is accepted. It was
-amended 2026-09-23 after the first review (window encoding, LENW, strobe split,
-overlay insertion point, TX-consumer scope); the findings and their
+amended on 2026-09-23 for the first review's five findings (window encoding,
+LENW, overlay insertion point, TX-consumer scope, strobe split) and then for
+the loopback-follow-up findings: `pe_codec_mux`'s single `bit_en` gates **both**
+TX and RX state in every stage, and `pe_serdes`'s single `bit_en` advances
+**both** sides, so neither block can carry a payload cell and a stuffed/decoded
+cell at the same time or serve two directions with different hold/skip
+patterns. The resolution is **two codec instances (TX and RX)**, a **split
+`pe_serdes` enable (`tx_bit_en`/`rx_bit_en`)**, codec state clocked per
+**encoded cell** (never per half-cell), and an independent `half_phase` level
+toggling at half-cell cadence for Manchester TX. The findings and their
 source-grounded resolutions are recorded in
-`reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`.
+`reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`. `confidence` is `medium`
+until the reviewer accepts the topology and the scope decisions below.
 
 ## What the blocks actually contract (source-grounded)
 
@@ -36,10 +45,13 @@ source-grounded resolutions are recorded in
 | TX | `tx_load`, `tx_data[31:0]`, `tx_len[5:0]`, `cfg_lsb_first` | `tx_ser`, `tx_busy`, `tx_done` | load/start while busy **restarts**; bit order and length snapshot at load; `tx_ser` idles **high** |
 | RX | `rx_ser`, `rx_start`, `rx_len[5:0]`, `cfg_lsb_first` | `rx_data[31:0]`, `rx_busy`, `rx_valid` | first bit lands at `rx_data[0]` (LSB-first) or `[rx_len-1]` (MSB-first); `rx_valid` is one cycle behind the final strobe |
 
-Shared: `clk`, `rst_n`, `bit_en` (one strobe per bit cell, from the timing
-block). `MAXLEN = 32`; lengths 0/`>MAXLEN` are out of contract. `rx_ser` must
-already be synchronized/captured (ADR-002 lazy capture) — the block is
-single-edge and does not synchronize.
+Shared today: `clk`, `rst_n`, and **one `bit_en` that clocks both sides** (TX
+`always_ff`: `bit_en && tx_busy`; RX `always_ff`: `bit_en && rx_busy`). The
+plan splits it into `tx_bit_en`/`rx_bit_en`, because with stuffing the two
+directions need different payload-only sequences (see "Timing/strobe block and
+cadence handshake"). `MAXLEN = 32`; lengths 0/`>MAXLEN` are out of contract.
+`rx_ser` must already be synchronized/captured (ADR-002 lazy capture) — the
+block is single-edge and does not synchronize.
 
 **`pe_codec_mux`** — fixed-order, runtime-bypassable pipeline:
 
@@ -48,10 +60,22 @@ single-edge and does not synchronize.
 - `cfg[0]` stuff, `cfg[1]` NRZI, `cfg[2]` Manchester, `cfg[3]` `half_phase`
   (timing-driven half-cell select), `cfg[6:4]` run length (0 => 5; CAN 5, USB 6),
   `cfg[7]` ones-only (USB 0xE3 vs CAN 0x63).
-- `bit_en` is the **cadence the timing block must supply**: one per raw bit for
-  plain/NRZI/stuffed modes, one per **half-cell** (with `half_phase` toggling)
-  for Manchester. `clr` resets the pipeline state.
-- TX stuff/manch stages are combinational; NRZI's line level is registered and
+- `bit_en` is a **single port shared by TX and RX state**, one pulse per
+  **encoded cell** — a payload cell or an inserted stuff cell (`pe_bitstuff`'s
+  stuff slot is a real `bit_en` cycle: it clears `tx_pend` and advances the run
+  state). It is NOT a half-cell strobe: `pe_manch`'s TX is purely combinational
+  (`tx_wire = bypass ? tx_raw : (half_phase ? tx_raw : ~tx_raw)`), so the
+  second Manchester half is selected by the `cfg[3]` **level**, never by a
+  strobe, and clocking the pipeline twice per bit would advance `pe_bitstuff`
+  and `pe_nrzi` twice per cell.
+- The one `bit_en` advances both directions' state: `pe_bitstuff`'s one
+  `always_ff` updates `tx_run`/`tx_pend` and `rx_run`/`rx_err` on the same
+  strobe; `pe_nrzi` updates `tx_level` and `rx_level` in one block gated by it;
+  `pe_manch` registers `rx_err` on it. A loopback that runs the TX encoded-cell
+  cadence and the DRU-decoded RX cadence at once therefore needs **two
+  instances of the pipeline**, not one (see "Codec topology" below). `clr`
+  resets the pipeline state, both directions.
+- TX stuff/manch outputs are combinational; NRZI's line level is registered and
   lands at the strobe. RX reports `rx_err` (stuffing/NRZI violations).
 
 **`pe_soc` today** — deliberately no protocol hardware: CPU + tick timer +
@@ -89,8 +113,8 @@ line in STATUS must be updated in the same change.
 
 ## Interface and data path (recommended shape)
 
-**TX.** `serdes.tx_ser -> codec.tx_bit`; `codec.tx_wire` reaches the pin
-through a per-pin **level override applied at `pe_pinmux`'s level input,
+**TX.** `serdes.tx_ser -> u_tx_codec.tx_bit`; `u_tx_codec.tx_wire` reaches the
+pin through a per-pin **level override applied at `pe_pinmux`'s level input,
 before its open-drain gate** -- not on the post-matrix `pin_out` wire. The
 matrix's enable equation is
 `pad_oe[i] = reg_oe[i] && (!reg_od[i] || !reg_out[i])` (`rtl/pe_pinmux.v`),
@@ -108,30 +132,105 @@ every pin -- the bit-banged personas are bit-identical.
 **RX.** One capture path, not two: route the engine's RX through the existing
 `pe_dru` (`rx_wire`, `rx_first`, `rx_second`, `bit_en`, `locked`), whose input
 is already the synchronized pin. Two modes:
-- **DRU-decoded (Manchester)**: `dru.bit_en` is a **per-bit** strobe and the
-  half-cell data arrives as `rx_first`/`rx_second`; that is exactly how the
-  signed-off eth chain drives `pe_manch` (`half_phase = 0`). `manch_en = 1`.
-- **Plain/NRZI/stuffed**: `dru.rx_wire` feeds the codec; the strobe comes from
-  the new timing block at the bit rate.
+- **DRU-decoded (Manchester)**: `dru.bit_en` is a **per-decoded-cell** strobe
+  (stuff cells included) and the half-cell data arrives as
+  `rx_first`/`rx_second`; `u_rx_codec` consumes them with `manch_en = 1` and
+  `bit_en = dru.bit_en`, exactly how the signed-off eth chain drives `pe_manch`
+  (`half_phase = 0`).
+- **Plain/NRZI/stuffed**: `dru.rx_wire` feeds `u_rx_codec`; the cell strobe
+  comes from the new timing block at the encoded-cell rate.
 A later refactor could replace the dedicated `pe_manch` in the eth RX chain
 with `codec_mux`; **not in this change** — the receive chain is signed off and
 must not be disturbed.
 
-**Timing/strobe block (new, small).** Two strobes, because the serdes and the
-codec run at different cadences:
-- `serdes_bit_en`: once per **logical bit** -- the serdes sides advance on it.
-- `codec_bit_en`: once per **codec cell**. For plain/NRZI/stuffed modes it is
-  the same per-bit cadence; for Manchester TX it runs at **twice the bit
-  rate** with `half_phase` toggling, and `serdes.tx_ser` is held stable across
-  both half-cell strobes (`pe_manch`: `tx_wire = half_phase ? tx_raw : ~tx_raw`).
-- Manchester **RX** does not use the divider: `pe_dru` gives `bit_en` once per
-  decoded bit plus `rx_first`/`rx_second`, which the codec's `pe_manch`
-  consumes directly (as the eth chain does). Plain/NRZI/stuffed RX uses
-  `dru.bit_en` with `dru.rx_wire`.
-The divider register sets the bit period; the Manchester half-cell rate is
-derived from it, not from a second divisor. An optional single-shot mode lets
-firmware pace plain TX by hand. This is the only new stateful block; it is
-protocol-agnostic and has no notion of baud -- the divisor is a register.
+**Codec topology: two instances, not one.** The loopback makes the two
+directions' cadences differ, and one `pe_codec_mux` has one `bit_en` for both
+(as above). The integration therefore instantiates the verified pipeline
+**twice**:
+
+- `u_tx_codec` — TX-only. `tx_bit = serdes.tx_ser`, `tx_wire -> overlay`,
+  `bit_en = tx_codec_cell_en` (one per encoded cell — payload or inserted stuff
+  cell, **never** per half-cell). Its `tx_stuffed` output gates the serdes:
+  `serdes.tx_bit_en = tx_codec_cell_en && !tx_stuffed`. RX inputs tied
+  inactive, `rx_err` unused.
+- `u_rx_codec` — RX-only. `rx_wire`/`rx_first`/`rx_second` from the DRU branch,
+  `rx_bit -> serdes.rx_ser`, `bit_en = rx_codec_cell_en` (one per decoded
+  cell — stuff cells included: `dru.bit_en` for Manchester, the timing cell
+  strobe for plain/NRZI/stuffed). Its `rx_bit_valid` output gates the serdes:
+  `serdes.rx_bit_en = rx_codec_cell_en && rx_bit_valid`. TX inputs tied,
+  `tx_wire`/`tx_stuffed` unused.
+
+Both instances are the existing, TB-verified `pe_codec_mux` **unmodified**, so
+the unit TBs and the fixed pipeline order stay the evidence; each instance's
+unused-direction state advances on its own strobe but drives no consumed
+output. One `CFG` byte is replicated to both instances (every target persona
+uses the same line code in both directions); the spare window index is the
+natural home for a future `CFG_RX` if that ever changes. `half_phase` is not a
+firmware cadence and not a strobe: it is the timing block's half-cell **level**
+(2× toggle), presented in the TX instance's `cfg[3]` position
+(`cfg_tx = {cfg[7:4], half_phase, cfg[2:0]}`); `cfg_rx` takes 0 there
+(Manchester RX decodes from `rx_first`/`rx_second` and ignores the phase).
+
+The alternative — one instance with a **split codec interface**
+(`tx_bit_en`/`rx_bit_en`, and each stage's combined `always_ff` split into TX
+and RX halves) — is workable but touches three verified modules, their port
+lists and their TB/mutation expectations. The two-instance shape is preferred
+for v1: it uses the blocks exactly as verified, and costs one extra pipeline (up
+to ~130 mapped cells; synthesis should dead-code the unused direction — measure
+with `synth_area.sh`). It is a reviewer choice, listed in the open decisions.
+
+**Timing/strobe block and cadence handshake (new, small).** The codec's
+`bit_en` is **one pulse per encoded cell** (payload or inserted stuff), never
+per half-cell; the serdes enables are **payload-only**, gated by the codec's
+own combinational flags with current-cycle semantics:
+
+- `tx_codec_cell_en -> u_tx_codec.bit_en`: one pulse per encoded cell. It
+  advances `pe_bitstuff`'s TX run/pend state (the stuff slot is a real cycle:
+  it clears `tx_pend`) and, when enabled, `pe_nrzi`'s TX level. For Manchester
+  TX it stays one per encoded bit; `pe_manch`'s TX is combinational and
+  consumes no strobe.
+- `serdes.tx_bit_en = tx_codec_cell_en && !tx_stuffed` (**current-cycle
+  semantics**, source-grounded in `rtl/pe_bitstuff.v`): during the inserted
+  stuff cell `tx_stuffed` is the combinational output of the registered
+  `tx_pend`, so it is high for that whole `bit_en` cycle. The serdes holds
+  `tx_shreg[tx_cnt]`/`tx_ser` across the stuff cell and advances only on
+  payload cells; without the gate it consumes one payload bit per wire cell
+  and the bit after a stuff insertion is shifted or lost. The unit reference is
+  `tb_pe_codec_mux.tx_step_comb`: it pulses `bit_en` on the stuff slot (raw
+  ignored, `tx_stuffed` checked high before the edge) and checks that the next
+  payload strobe resumes the correct bit.
+- `rx_codec_cell_en -> u_rx_codec.bit_en`: one pulse per decoded cell.
+  Manchester takes it directly from `pe_dru.bit_en` (the DRU emits one per
+  decoded cell, stuff cells included); plain/NRZI/stuffed take the timing
+  block's encoded-cell strobe with `dru.rx_wire`. This advances the RX
+  stuffer/NRZI state and the valid/error path.
+- `serdes.rx_bit_en = rx_codec_cell_en && rx_bit_valid` (**current-cycle**):
+  `rx_bit_valid` is `pe_bitstuff.rx_raw_valid`, combinational from the RX run
+  state, so it is low for a received stuff cell. The RX serdes skips that cell
+  and captures only payload bits.
+- `half_phase` is a **level**, not a strobe: it toggles once per half-cell
+  (twice per `tx_codec_cell_en` pulse) when Manchester TX is enabled and is 0
+  otherwise. `pe_manch` selects the first/second half from it combinationally.
+
+**`pe_serdes` needs the enable split.** `pe_serdes` has one `bit_en` that
+clocks **both** the TX `always_ff` (`bit_en && tx_busy`) and the RX `always_ff`
+(`bit_en && rx_busy`) (`rtl/pe_serdes.v`). The handshake above gives the two
+directions different sequences whenever stuffing is enabled: TX **holds** on
+each `tx_stuffed` cell while RX **skips** each received stuff cell, and the two
+windows need not coincide (independent words, or DRU decode latency). One
+shared `serdes_bit_en` cannot serve both, so the integration splits the port
+into `tx_bit_en` and `rx_bit_en`, each wired to its own payload-only gate. The
+split is mechanical — the two enable networks already exist inside the module,
+no flops move — so the mapped area should be essentially unchanged (confirm
+with `synth_area.sh`). Source cost: the `rtl/pe_serdes.v` header/contract, its
+port list, `tb_pe_serdes` (drive both; add a directed case where they differ),
+the new `regress/mutate_serdes_tb.sh`, and the generated
+`wiki/reference/signal-names.md`. The alternatives are in the open decisions.
+
+The divider register sets the encoded-cell period; `half_phase` is derived from
+it, not from a second divisor. An optional single-shot mode lets firmware pace
+plain TX by hand. This is the only new stateful block; it is protocol-agnostic
+and has no notion of baud -- the divisor is a register.
 
 ## Control/status semantics and CPU/firmware access
 
@@ -160,7 +259,7 @@ Proposed 16-entry map (values are a shape to review, not a freeze):
 | Idx | Name | R/W | Meaning |
 |---|---|---|---|
 | 0 | `CTRL` | w | engine enable, `tx_load`, `rx_start`, `clr`, `cfg_lsb_first`, TX-pin select |
-| 1 | `CFG` | w | `codec_mux.cfg` byte (stuff/nrzi/manch/half_phase/run/ones_only) |
+| 1 | `CFG` | w | codec cfg byte (stuff/nrzi/manch/run/ones_only); `cfg[3]` is overridden by the timing block on the TX instance and 0 on RX |
 | 2-3 | `DIVL/DIVH` | w | bit-strobe divisor |
 | 4 | `TXLEN` | w | `tx_len[5:0]`, 1..32 (0 invalid); `LENW = 6` |
 | 5 | `RXLEN` | w | `rx_len[5:0]`, 1..32 (0 invalid) |
@@ -174,6 +273,10 @@ transmit and receive at once), and a single 8-bit register cannot hold two
 six-bit lengths regardless of encoding. The 6-bit 1..32 encoding follows
 `LENW = $clog2(MAXLEN+1) = 6`; a 5-bit `0 => 32` encoding is an acceptable
 alternative if the reviewer prefers it, but not both fields in one byte.
+Codec reset is one `CTRL.clr` pulsing both instances together (loopback-safe);
+independent `tx_clr`/`rx_clr` are spare-bit work for a later persona. `CFG` is
+replicated to both instances — every target persona uses one line code in both
+directions — and the spare index can become `CFG_RX` if that changes.
 
 Reset default: engine disabled, overlay off, `REG` reads 0 -- every existing
 TB and firmware is unaffected. Firmware cost: an index write plus one access
@@ -185,12 +288,13 @@ scope**.
 
 ## Reset and clocking
 
-Single `clk`/`rst_n` domain, no new clocks. `rst_n` clears the engine, codec
-state, divider and window. `bit_en` idles low; `serdes.tx_ser` idles high
-(per its contract) but is only visible on a pin when the overlay is enabled
-and OE is set. The only asynchronous paths remain the existing DRU capture and
-the loader's SCLK synchronizer; the engine's `rx_ser` is always a captured
-signal, never a raw pad.
+Single `clk`/`rst_n` domain, no new clocks. `rst_n` clears the engine, both
+codec instances, divider and window. All codec/serdes enables idle low and
+`half_phase` idles 0; `serdes.tx_ser` idles high (per its contract) but is only
+visible on a pin when the overlay is enabled and OE is set. The only
+asynchronous paths remain the existing DRU capture and the loader's SCLK
+synchronizer; the engine's `rx_ser` is always a captured signal, never a raw
+pad.
 
 ## Testbench and mutation evidence (planned)
 
@@ -198,14 +302,40 @@ signal, never a raw pad.
    `pe_serdes` and `pe_codec_mux` (`regress/mutate_serdes_tb.sh`,
    `regress/mutate_codec_tb.sh`) so the integration is not standing on TBs no
    fault injection has ever challenged (`serdes` bit order, restart-while-busy,
-   `rx_valid` timing; codec pipeline order, bypass subsets, ones-only,
-   half_phase).
+   `rx_valid` timing, the new per-side enables; codec pipeline order, bypass
+   subsets, ones-only, half_phase).
 2. **SoC-level, additive path**: a new `tb_pe_soc_serdes` that loads a small
    firmware using the `0xF` window, drives a TX word through the overlay with a
    wire model, and loops it back through the DRU + codec + serdes RX, checking
    the word both ways. Two configurations: plain (LSB-first and MSB-first) and
-   Manchester (half-cell strobes, `half_phase`), the latter decoded by the same
-   model `tb_pe_soc_eth` uses.
+   Manchester (combinational `half_phase` level; **no** half-cell strobe), the
+   latter decoded by the same model `tb_pe_soc_eth` uses.
+   **Directed loopback requirement (the cadence handshake proof).** The
+   Manchester case must run **both directions concurrently** and include a
+   **stuffed** configuration (`cfg = 0x05`: stuff + manchester, default run 5;
+   or `0x07`: stuff + nrzi + manchester) so the TX hold and the RX skip are
+   both exercised, alongside the unstuffed `0x04`. In that run the TB must
+   check:
+   - `u_tx_codec.bit_en` (`tx_codec_cell_en`) pulses once per encoded cell —
+     payload cells plus exactly the inserted stuff cells — and never twice per
+     bit; `half_phase` toggles at twice that rate, independently.
+   - `u_tx_codec.tx_stuffed` is high for the inserted cell; `serdes.tx_ser` is
+     stable across it; the serdes TX advances exactly `tx_len` times (not
+     `tx_len` + stuff count); the payload cell after the stuff cell carries the
+     correct next bit.
+   - `u_rx_codec.bit_en` (`rx_codec_cell_en`) follows `pe_dru.bit_en` once per
+     decoded cell; `rx_bit_valid` is 0 on a received stuff cell;
+     `serdes.rx_bit_en` is 0 there, so the serdes RX advances exactly `rx_len`
+     times.
+   - The decoded word equals the transmitted word (plain LSB/MSB and the
+     stuffed Manchester cases).
+   The SoC mutation suite for this TB must include, and require the TB to fail
+   on: (a) the **TX hold removed** (`serdes.tx_bit_en = tx_codec_cell_en`),
+   (b) the **RX skip removed** (`serdes.rx_bit_en = rx_codec_cell_en`), (c) the
+   **codec cell enable doubled** (drive a codec instance's `bit_en` at the
+   half-cell rate), and (d) the **strobe cross-wire** (`u_rx_codec.bit_en` from
+   the TX cell strobe). Each is the exact failure the shared-enable topology
+   would have produced.
 3. **Non-regression, on the same run**: `tb_pe_soc_uart`, `tb_pe_soc_spi`,
    `tb_pe_soc_i2c_xfer`, `tb_pe_soc_tick`, `tb_pe_soc_eth` must stay green with
    the engine disabled at reset — the proof that the path is additive.
@@ -225,13 +355,21 @@ signal, never a raw pad.
      diagram and gets its own plan; this plan only delivers the engine it will
      use.
 5. All new TBs self-check, print `PASS`, and are registered in `run_all.sh`;
-   every mutation must be independently detected and the source restored.
+   every mutation must be independently detected and the source restored. The
+   new SoC TB gets its own mutation harness (like `mutate_eth_soc_tb.sh`) whose
+   required list includes the TX-hold/RX-skip/doubled-cell/cross-wire
+   mutations above;
+   `regress/mutate_serdes_tb.sh` and `regress/mutate_codec_tb.sh` stay
+   unit-level.
 
 ## Synthesis / STA hardening risks
 
-- **Area**: +`pe_serdes` 539 + `pe_codec_mux` 130 + mux/divider/window glue
-  (estimate +50-150 cells) on top of `pe_soc` 3,298 / TT top 3,613. Confirm
-  with `synth_area.sh` after implementation.
+- **Area**: +`pe_serdes` 539 (the `bit_en` split is a port change — the two
+  enable networks already exist — so no new state expected) + **two**
+  `pe_codec_mux` instances (2 × 130 mapped, less whatever synthesis dead-codes
+  from each instance's unused direction) + the two payload-enable gates +
+  mux/divider/window glue (estimate +50-150 cells) on top of `pe_soc` 3,298 /
+  TT top 3,613. Confirm with `synth_area.sh` after implementation.
 - **Standalone signoff already exists**: `pe_serdes` was through full LibreLane
   Classic (2026-09-18, former 66 MHz target): **0 DRC, 0 LVS, setup WS
   +7.6 ns (slow), hold WS +0.116 ns (fast), 78% utilization**
@@ -245,10 +383,11 @@ signal, never a raw pad.
   100 MHz simulation, which proves function, not silicon timing — the
   implementation needs the native yosys + OpenSTA screen (as for pe_ctrl), and
   possibly a registered Manchester output stage if the path is too deep.
-- **Strobe fanout/skew**: `serdes_bit_en` and `codec_bit_en` (Manchester runs
-  the codec at twice the serdes rate) reach the shift engine, three codec
-  stages and the DRU-derived branch; check max-fanout and the half-cell skew
-  budget.
+- **Strobe fanout/skew**: `tx_codec_cell_en`, `rx_codec_cell_en`,
+  `serdes.tx_bit_en` and `serdes.rx_bit_en` reach the shift engine, the two
+  codec instances and the DRU-derived branch; `half_phase` is a separate 2×
+  toggle into the TX instance's `cfg[3]`. Check max-fanout and the half-cell
+  skew budget.
 - **32-bit shift registers** and the 16x8 window bank are flop-based; the area
   delta is known but the window's read-mux path must be checked for
   timing/depth.
@@ -263,9 +402,11 @@ signal, never a raw pad.
 - **Personas enabled**: the 10BASE-T **wire** transmit side (the frame layer is
   a separate block), USB-LS (NRZI + ones-only stuffing), CAN (stuffing), and
   hardware-paced plain protocols. JTAG/SWD/PS/2 remain optional targets.
-- **Half-duplex note**: 10BASE-T TX and RX share the RX pin (bit 7), so the
-  overlay and the DRU are never enabled in opposite directions at once —
-  firmware owns the turnaround through OE, and the plan must test it.
+- **Half-duplex note**: 10BASE-T TX and RX share the RX pin (bit 7), so on a
+  real wire the overlay and the DRU are never enabled in opposite directions at
+  once — firmware owns the turnaround through OE. The loopback TB is
+  simulation-only and runs both directions concurrently in its wire model,
+  which is exactly why the two codec instances must decouple the cadences.
 
 ## Ordered work list (after review)
 
@@ -273,10 +414,13 @@ signal, never a raw pad.
    hardware" and link this plan.
 2. Strobe/divider block + unit TB (mutation-tested).
 3. `0xF` window + register file + reset defaults; CPU-visible test.
-4. Serdes + codec instantiation with the overlay mux and DRU RX routing.
-5. `tb_pe_soc_serdes` (plain + Manchester loopback); keep every existing TB
-   green; add the two mutation suites.
-6. Wire-loopback TB first (plain + Manchester); the full 10BASE-T TX consumer
+4. `pe_serdes` enable split + **two** codec instances (TX and RX) with the
+   overlay mux, the encoded-cell enables, the two payload gates and the DRU RX
+   routing.
+5. `tb_pe_soc_serdes` (plain + Manchester loopback, stuffed case); keep every
+   existing TB green; add the two unit mutation suites plus the SoC harness.
+6. Wire-loopback TB first (plain + Manchester, both directions, with the
+   directed stuffed mixed-config case above); the full 10BASE-T TX consumer
    (frame/preamble/FCS/IFG/source) is a separate block and plan.
 7. `synth_area.sh` + native yosys/OpenSTA screen; update STATUS, block diagram
    (orphans retire), log and the progress diagram.
@@ -294,5 +438,17 @@ signal, never a raw pad.
    is a separate plan either way.
 5. **Manchester output**: combinational cascade (start) vs. a registered output
    stage (if STA demands it).
+6. **Codec topology**: two `pe_codec_mux` instances, one per direction
+   (recommended: uses the verified blocks unmodified) vs. a split
+   `tx_bit_en`/`rx_bit_en` interface inside one instance (smaller, but touches
+   the three verified codec modules and their TB/mutation expectations).
+7. **Serdes cadence interface**: split `pe_serdes.bit_en` into
+   `tx_bit_en`/`rx_bit_en`, each gated payload-only (recommended: mechanical,
+   area-neutral, and the only shape that carries both directions' sequences
+   when stuffing is enabled) vs. two direction-specific `pe_serdes` instances
+   (double the 539 cells and the unit TB/mutation scope for no functional gain)
+   vs. one shared enable with the engine scoped to lockstep/half-duplex
+   stuffed streams (rejected: the loopback runs both directions at once and
+   the window exposes independent TX/RX lengths).
 
 No RTL was changed; no physical flow, DRC or LVS was run.

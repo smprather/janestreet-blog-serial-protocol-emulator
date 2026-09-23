@@ -1,0 +1,110 @@
+@startuml
+title Protocol Emulator ASIC — implementation progress
+left to right direction
+skinparam componentStyle rectangle
+skinparam defaultFontName Monospaced
+skinparam packageStyle rectangle
+skinparam legendBackgroundColor #f8f8f8
+skinparam legendBorderColor #666666
+
+skinparam component {
+  BackgroundColor<<complete>> #c6efce
+  BorderColor<<complete>> #27823b
+  FontColor<<complete>> #143d1e
+  BackgroundColor<<standalone>> #fff2cc
+  BorderColor<<standalone>> #bf9000
+  FontColor<<standalone>> #5b4500
+  BackgroundColor<<open>> #f4cccc
+  BorderColor<<open>> #b85450
+  FontColor<<open>> #5b1b18
+}
+
+package "Program load and execution" {
+  component "Host SPI loader\npe_ctrl" as loader <<complete>>
+  component "Instruction SRAM\n1024 × 16" as imem <<complete>>
+  component "CPU\nfirmware execution" as cpu <<complete>>
+  component "Data memory\n16-byte register array" as dmem <<complete>>
+  component "Tick timer\n60 MHz timebase" as tick <<complete>>
+  loader --> imem
+  imem --> cpu
+  cpu <--> dmem
+  cpu <--> tick
+}
+
+package "Firmware protocols — baseline" {
+  component "UART echo\nRTL + TT pads verified" as uart <<complete>>
+  component "SPI master\nMOSI / CS_N pads; pad-level TB" as spi <<complete>>
+  component "I2C master\ntransactions; all 60 phases" as i2c <<complete>>
+  component "Pin matrix\nOUT / OE / IN / open-drain" as pinmux <<complete>>
+  cpu --> pinmux
+  pinmux --> uart
+  pinmux --> spi
+  pinmux --> i2c
+}
+
+package "10BASE-T receive — integrated" {
+  component "DRU + Manchester decoder" as rx_front <<complete>>
+  component "Ethernet RX MAC + CRC-32" as rx_mac <<complete>>
+  component "2 KB frame buffer\nfirmware frame window" as rx_buf <<complete>>
+  rx_front --> rx_mac
+  rx_mac --> rx_buf
+  rx_buf --> cpu
+}
+
+package "Built and verified standalone; integration open" {
+  component "pe_serdes\n32-bit word engine" as serdes <<standalone>>
+  component "pe_codec_mux\none instance per direction (TX / RX)\nNRZI / Manchester / stuffing" as codec <<standalone>>
+  serdes --> codec : TX bits / RX bits
+  codec --> serdes : tx_stuffed hold / rx_bit_valid skip
+}
+
+package "Planned integration and future consumers" {
+  component "Timing + strobe block\nencoded-cell / half-cell / payload cadence" as timing <<open>>
+  component "IO 0xF register window\n8-bit indexed access" as window <<open>>
+  component "Pin-level override\nbefore open-drain gate" as overlay <<open>>
+  component "SoC wire-loopback test\nplain + stuffed Manchester" as loopback <<open>>
+  component "10BASE-T TX frame path\nsource + preamble/SFD + FCS + IFG" as eth_tx <<open>>
+  component "Low-speed USB persona" as usb <<open>>
+  component "pe_ctrl readback\ninterface choice pending" as readback <<open>>
+
+  cpu --> window
+  cpu --> timing
+  timing --> serdes : tx_bit_en / rx_bit_en (payload-only)
+  timing --> codec : encoded-cell enable + half_phase level
+  codec --> overlay
+  overlay --> pinmux
+  serdes --> loopback
+  rx_front --> loopback
+  serdes --> eth_tx
+  cpu --> readback
+}
+
+note bottom of loopback
+  The amended integration plan separates this wire-loopback milestone from a
+  complete Ethernet TX frame consumer. The second review round resolved the
+  shared enables: two codec instances (TX/RX), split pe_serdes tx_bit_en /
+  rx_bit_en, codec bit_en per encoded cell (never 2x half-cell), an independent
+  half_phase toggle, and a directed stuffed Manchester loopback checking the TX
+  hold on tx_stuffed and the RX skip of received stuff cells, with mutations
+  for each. No integration RTL is implemented yet.
+  See wiki/plans/serdes-integration and reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md.
+end note
+
+note bottom of readback
+  pe_ctrl readback evaluation is ready; implementation awaits A1/A2/A3 choice.
+  See wiki/plans/pe-ctrl-readback.
+end note
+
+legend left
+  |= Color |= Status |
+  |<#c6efce> Green | Integrated and verified |
+  |<#fff2cc> Amber | Built and verified standalone; integration remains |
+  |<#f4cccc> Red | Planned or incomplete |
+endlegend
+
+note bottom of usb
+  CAN, JTAG, SWD, and PS/2 remain optional targets;
+  they are not committed milestones.
+end note
+
+@enduml

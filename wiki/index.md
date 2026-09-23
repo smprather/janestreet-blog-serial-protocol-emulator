@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-22 | 32 pages (31 content pages + STATUS; index/log/SCHEMA are meta, raw sources are catalogued under their own section)
+> Last updated: 2026-09-23 | 31 pages (30 content pages + STATUS; index/log/SCHEMA are meta, raw sources are catalogued under their own section)
 
 ## Start here
 
@@ -25,7 +25,6 @@
 - [[concepts/factored-hardware-blocks]] — Shared RTL primitives (CDR, SerDes, stuffing, CRC LFSR); no 8b/10b needed.
 - [[concepts/pdk-toolchain]] — Local IHP PDK + EDA bring-up: paths, corners, SRAM macros, install workarounds.
 - [[concepts/tx-timing-generation]] — Exact-integer protocol timing at 60 MHz (ADR-005); NCO for fractional bauds; why 66 MHz is infeasible.
-- [[concepts/live-canvas]] — Side-quest tooling: agent→browser live diagram channel (dashboard plugin, file-write publish).
 - [[concepts/ethernet-scope]] — what "10Mbit Ethernet" as a stretch goal actually asks for: the line layer, a 1.5 KB frame, and why 32 KB was never the requirement.
 - [[concepts/ethernet-receive-path]] — `pe_eth_mac` (914 cells): SFD lock, byte assembly, FCS-against-the-catalogue-residue, store-and-forward. Where four orphaned blocks become one signal path. The preamble-is-not-an-octet trap.
 - [[concepts/strobe-and-committing-edge]] — What the strobe (`bit_en`) and the committing edge are, and the sample-order trap they cause.
@@ -41,7 +40,9 @@
 - [[reference/floorplan-feasibility]] — the actual two-macro + logic fit on the real tile allocations, the blog-vs-template assumption differences, and the evidence a later floorplan run must produce (read-only; generated).
 - [[reference/crc-config]] — every CRC constant `pe_crc` is loaded with, derived and checked against the RevEng catalogue's published values (generated).
 - [[reference/clock-arithmetic]] — every protocol constant at the LOCKED 60 MHz operating point: what is integer-exact and what is an approximation. `CLK_HZ` is read from the RTL (generated).
-- [[reference/block-diagram]] — Mermaid block diagram: what is in the chip, and which built blocks are wired to nothing. Built/orphan split checked against `rtl/` + `run_all.sh` (generated).
+- [[reference/block-diagram]] — RTL block inventory: integrated blocks, standalone orphans, cell counts, and testbenches (generated and drift-checked).
+- `diagrams/project-plan.puml` — planned system topology, including baseline and stretch protocol goals.
+- `diagrams/project-progress.puml` — implementation status by block; colors distinguish integrated, standalone, and open work.
 - [[reference/simulator-bakeoff]] — Icarus vs Verilator, measured (speed, build cost, X)
 
 ## Comparisons
@@ -53,7 +54,7 @@
 - [[plans/through-i2c]] — Plan to the I2C milestone: definition of done, the three blockers, the tick/bit timings, test strategy, ordered work list.
 - [[plans/spi-pads]] — Plan: expose SPI MOSI/CS_N on `uio[2:3]` (SCLK/MISO already share the UART pads), with the budget delta and pad-level verification.
 - [[plans/pe-ctrl-readback]] — Plan: evaluate a MISO response from the loader (echo vs status vs imem peek), with the pad mapping, budget delta, and test/mutation plan. No RTL change yet.
-- [[plans/serdes-integration]] — Plan: integrate `pe_serdes` + `pe_codec_mux` into `pe_soc` (additive engine, DRU RX capture, strobe divider, `0xF` indexed window) with tests, hardening risks and pad implications. Awaiting review.
+- [[plans/serdes-integration]] — Plan: integrate `pe_serdes` + `pe_codec_mux` into `pe_soc` (additive engine, DRU RX capture, two codec instances with encoded-cell enables, split `pe_serdes` payload enables, `0xF` indexed window) with tests, hardening risks and pad implications. Amended after two review rounds; scope decisions remain open.
 
 ## Decisions
 

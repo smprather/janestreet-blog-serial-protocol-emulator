@@ -152,14 +152,13 @@ exist, so there is a `tt_um_*` top level with a real pad interface
 `uio[1:0]`. Until 2026-09-20 every pin-budget conclusion in the wiki described an
 interface that no RTL in this repo implemented.
 
-Nothing has been taped out. **The block diagram is now generated and drift-gated:
-see [[reference/block-diagram]]** — the hand-drawn ASCII version that used to sit
-here had rotted in three places at once (it still claimed the pin matrix did not
-exist and that the SoC's memory was flops, both superseded, and listed `pe_dru`/
-`pe_crc` as unbuilt in one place while citing their cell counts in another). A
-diagram is the most-read and least-checked artifact in a repo. **[[plans/through-i2c]]
-has the ordered work list to the next milestone** (the I2C transaction); the
-summary is at the bottom of this file.
+Nothing has been taped out. The project-wide architecture and implementation
+progress diagrams are editable PlantUML sources in `diagrams/project-plan.puml`
+and `diagrams/project-progress.puml`. The separate [[reference/block-diagram]]
+page is a generated, drift-checked RTL inventory. Keep the plan diagram aligned
+with scope and topology decisions, and the progress diagram aligned with
+implementation and verification changes. **The ordered current work list is the
+Next steps section below**; the summary is at the bottom of this file.
 
 The one-line version, for the reader who wants it before clicking through:
 
@@ -202,8 +201,8 @@ states the reasoning; do not "unify" them without reading it.
 | **Pin matrix** (per-pin OUT/OE/IN/OD, open-drain, read-back) | `rtl/pe_pinmux.v` | **111** | **2,061** | `tb_pe_pinmux` |
 | **SPI loader** (passive slave; 16-bit words to imem, abort on run) | `rtl/pe_ctrl.v` | **292** | **5,791** | `tb_pe_ctrl` |
 | **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
-| **Software-UART SoC** (CPU + tick timer + pin matrix + 10BASE-T RX) | `rtl/pe_soc.v` | **3,066** | **50,895 total** | `tb_pe_soc_uart`, `tb_pe_soc_tick`, `tb_pe_soc_eth` |
-| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **3,056** | **50,948 total** | `tb_tt_um_protocol_emulator` |
+| **Programmable protocol SoC** (CPU + tick timer + pin matrix + 10BASE-T RX) | `rtl/pe_soc.v` | **3,298** | **53,731 total** | `tb_pe_soc_uart`, `tb_pe_soc_tick`, `tb_pe_soc_eth` |
+| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **3,613** | **59,548 total** | `tb_tt_um_protocol_emulator` |
 
 Firmware (no RTL cells — these are programs the CPU runs; see
 [[concepts/spi-as-firmware]]):
@@ -405,7 +404,7 @@ the upside case with `tools/gen/sram_budget.py --tiles 8x4`.
 | **Instruction macro is live; PC width derives from IMEM depth (10 bits at 1024)** | `decisions/adr-004-program-counter-width.md` |
 | 10BASE-T is the LINE LAYER only; the stack is off-chip, and firmware never touches Ethernet bits | `concepts/ethernet-scope.md` |
 | **Buffer ownership: `wptr` is the producer, `rptr` the consumer**; BUFCTRL releases consumed bytes and never rebases the ring under an in-flight frame | `rtl/pe_eth_mac.v`, `reviews/2026-09-23/E1-RESOLUTION.md` |
-| **The six `uo_out[7:2]` pads stay `dbg_pc[5:0]` for now**: no readback path, 14 pads free; revisit when a protocol needs them or readback lands | `rtl/tt_um_protocol_emulator.v` header, STATUS item 4 |
+| **The six `uo_out[7:2]` pads stay `dbg_pc[5:0]` for now**: no readback path, 6 usable pads free (12 if debug is reclaimed); revisit when a protocol needs them or readback lands | `rtl/tt_um_protocol_emulator.v` header, STATUS item 4 |
 | **Both SRAM macros are placed and power-hooked in the flow config**, and a static netlist-vs-config gate keeps it true | `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`, `reviews/2026-09-23/E2-RESOLUTION.md` |
 | **`pe_ctrl` is a passive SPI slave at the wrapper** (host loads, `run` starts); no master, no flash, no bootstrap FSM | `decisions/adr-007-pe-ctrl-passive-slave.md` |
 | Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | the codec headers (`pe_nrzi`/`pe_manch`/`pe_bitstuff`) |
@@ -494,13 +493,7 @@ python3 tools/fw/peemu.py firmware/uart_echo.hex --send "41 42" --max-cycles 900
 # run_all.sh runs this; there are no accepted warnings in this RTL.
 ./regress/lint.sh
 
-# live diagram pane (side-quest): start the dashboard once, write SVG/HTML into
-# diagrams/ and it renders live in the Canvas tab (~1s, no reload)
-hermes dashboard                                   # http://127.0.0.1:9119/canvas
-tools/live-canvas/canvas-publish.sh scratch.svg    # or just cp
-# flowchart from a spec (fails with exit 3 if an edge crosses a shape, which is
-# how the layout bugs get caught before they ship):
-tools/live-canvas/gen_flowchart.py tools/live-canvas/flowcharts/plan-through-i2c.json
+# Editable project block diagrams are stored as PlantUML text in diagrams/.
 
 # full place & route. The config now lives IN THE REPO (flow/), so the signoff
 # result is reproducible from a clean clone; it used to exist only in
@@ -921,53 +914,14 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     slew/cap means `DESIGN_REPAIR_MAX_SLEW_PCT` / `DESIGN_REPAIR_MAX_CAP_PCT`
     plus buffering `A_DOUT`, which is our work, not the PDK's.
 
-47. **A diagram that renders fine can still be invisible -- check the VIEWER, not
-    just the file.** The block-diagram SVGs were correct on disk and correct in
-    `mermaid-cli`'s own render (verified by eye), yet the Canvas pane showed a
-    **blank white stage** for every mermaid diagram. The root cause was in the
-    pane, not the drawings, and it was two independent bugs:
-
-    **(a) `parseFloat('100%')` returns `100`.** Mermaid emits `width="100%"`
-    on most diagrams. The viewer read the intrinsic size with
-    `parseFloat(getAttribute('width'))`, got a *truthy* 100, so the
-    `if(!iw || !ih)` viewBox fallback never fired -- it believed the drawing was
-    100 px wide instead of its viewBox width. Every derived number was then
-    wrong by that ratio: the fit box, the reported fit ratio, and the 100%
-    button. Clicking `100%` rendered a 1593 px diagram into a 100x583 box, so
-    the drawing landed as a ~100x36 px sliver in the corner: effectively
-    invisible.
-
-    **(b) The initial apply raced layout.** The pane creates the iframe and React
-    commits its geometry *after* the srcdoc has parsed, so the first apply saw a
-    zero-width wrap and `wrap.clientWidth || 1` sized the SVG to a **1 px**
-    sliver. Nothing re-measured, because only the WINDOW `resize` was listened
-    for -- and that does not fire when an iframe is resized by its parent. The
-    stage stayed blank until the user clicked Fit, which is exactly the reported
-    symptom.
-
-    Both are fixed (`px()` accepts a bare number or an `px` suffix only;
-    `paneW() <= 1` refuses to size, plus a `ResizeObserver` on the wrap), and
-    both are **mutation-tested** in `tools/checks/canvas_viewer.py`, wired into
-    `regress/run_all.sh` as a gate.
-
-    **The measurement lesson is the real one.** Nothing outside could see the
-    problem: the iframe is sandboxed with an opaque origin, so the parent page
-    cannot read into it and neither can CDP's DOM domain. Reasoning about the
-    geometry produced a *plausible* story that was wrong twice. What worked was
-    reconstructing the pane's exact document in the scratch dir, running the
-    **shipped** FRAME_SCRIPT (extracted from the source, never paraphrased), and
-    measuring in a real browser. The fix was then confirmed by the pane's own
-    `lc-fit` messages: `0.465` = 741/1593.7, the correct ratio, where the
-    pre-fix value had been `7.41`.
+47. **Keep architecture and progress diagrams separate.** The editable block
+    diagrams live in `diagrams/project-plan.puml` and
+    `diagrams/project-progress.puml`. Update the plan view after scope or topology
+    decisions, and the progress view after implementation or verification changes.
 48. **A checker that re-implements the code under test cannot detect its bugs.**
-    The first draft of `tools/checks/canvas_viewer.py` re-derived the *fixed* arithmetic
-    in Python and passed -- while the JS could have regressed underneath it and
-    it would still have passed. Rewritten to extract the shipped `FRAME_SCRIPT`
-    and run it in node against a DOM stub, then **mutate it back to each pre-fix
-    form and require a FAIL**. Mutation A implies `iw=100` (the phantom percent
-    width); mutation B emits a `1`px width call. Both are detected. Same rule as
-    the firmware/TB rule elsewhere in this project: a guard that cannot fail is
-    indistinguishable from a guard that passes.
+    Behavior checks should exercise the shipped implementation and demonstrate
+    that meaningful mutations make the check fail. A guard that cannot fail is
+    indistinguishable from one that passes.
 49. **Beware repr/JSON escaping when matching source text.** Three patch
     attempts failed on the line containing `if(VIEW.mode === 'fit')` because
     every `repr()`/JSON view of it renders the single quotes with a leading
@@ -1383,20 +1337,30 @@ guard margins, not the limits. Neither reaches 10 MHz; A3 (update on the
 synchronized rising edge, documented non-mode-0 change edge, two frames) is
 the 10 MHz path. No RTL changed yet.
 
-### 7. SERDES + codec integration — PLAN AMENDED after review 2026-09-23
+### 7. SERDES + codec integration — PLAN AMENDED (two reviews) 2026-09-23
 
 The last two orphan blocks (539 + 130 cells) are planned into `pe_soc`:
-`serdes.tx_ser -> codec.tx_bit -> codec.tx_wire` through a per-pin level
-override at `pe_pinmux`'s level input (before the OD gate), RX through the
-existing `pe_dru` capture, separate serdes/codec strobes (Manchester codec at
-twice the bit rate), and a 16-entry **latched-phase** indexed window on the one
-free IO port (`0xF`, no ISA change; separate `TXLEN`/`RXLEN`). A full 10BASE-T
-TX frame path is a separate block (`pe_eth_mac` is RX-only; `pe_fbuf` is the RX
-store); this plan's first consumer is a wire loopback. Review findings and
-source-grounded resolutions:
-`reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`. Reset default is
-engine-disabled, so every existing TB/firmware stays bit-identical. Open scope
-decisions: [[plans/serdes-integration]]. No RTL yet.
+`serdes.tx_ser -> u_tx_codec -> tx_wire` through a per-pin level override at
+`pe_pinmux`'s level input (before the OD gate); RX through the existing
+`pe_dru` capture into `u_rx_codec -> serdes.rx_ser`. The loopback follow-up
+found that both blocks have one enable for two directions: `pe_codec_mux`'s
+`bit_en` gates TX and RX state in every stage (and Manchester TX is purely
+combinational — the second half is the `half_phase` **level**, never a 2×
+strobe), and `pe_serdes`'s `bit_en` clocks both sides. The plan now uses
+**two codec instances** (TX/RX), a **split `pe_serdes` enable**
+(`tx_bit_en`/`rx_bit_en`) with payload-only gates
+(`tx_codec_cell_en && !tx_stuffed`, `rx_codec_cell_en && rx_bit_valid`), codec
+enables per encoded/decoded cell, a directed **stuffed Manchester loopback**
+that checks the TX hold and the RX skip, and four mutations (TX-hold removed,
+RX-skip removed, doubled cell enable, strobe cross-wire). Also: a 16-entry
+**latched-phase** indexed window on the one free IO port (`0xF`, no ISA
+change; separate `TXLEN`/`RXLEN`). A full 10BASE-T TX frame path is a separate
+block (`pe_eth_mac` is RX-only; `pe_fbuf` is the RX store); this plan's first
+consumer is a wire loopback. Review findings and source-grounded resolutions:
+`reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`. Plan confidence is
+`medium` until the topology and the open scope decisions are accepted. Reset
+default is engine-disabled, so every existing TB/firmware stays bit-identical.
+Open scope decisions: [[plans/serdes-integration]]. No RTL yet.
 
 ## Reading order for a fresh session
 
