@@ -105,3 +105,14 @@ reports their first-stage endpoints unconstrained, as expected for this
 screen; synchronizer MTBF and physical repair are not established. These are
 pre-layout checks, not hardening signoff. Scripts and full logs are in
 [`pe-ctrl-hardening/`](pe-ctrl-hardening/). No physical flow, DRC or LVS ran.
+
+## Readback path evaluation (2026-09-23)
+
+v1 remains write-only by decision (ADR-007). The host/pad mapping for a MISO
+response is feasible -- `uio[4]`, driven only while the loader is active -- but
+the interface is still an open choice between echoing the completed word
+(write verification), a status frame (`load_error`/`words_written`), and an
+imem peek/poke that would need a read port. The options, the recommended
+minimal contract, the budget delta (one free `uio`; the all-nine shortfall goes
+9 -> 10 kept / 3 -> 4 reclaimed) and the test/mutation plan are in
+[[plans/pe-ctrl-readback]]. No RTL changed; no new regression or STA was run.

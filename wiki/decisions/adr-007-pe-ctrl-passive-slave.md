@@ -18,6 +18,11 @@ and fixes the loader's placement and pads for the same structural reason
 ADR-006 moved the matrix *inside* the SoC: the pads are at the wrapper, and the
 write port `pe_ctrl` must drive already crosses the SoC's boundary.
 
+**Update 2026-09-23:** the readback path the consequences below call "a later
+additive change" is being evaluated; the interface choice is open and written
+up in [[plans/pe-ctrl-readback]] before any RTL change (v1 remains
+write-only).
+
 ## Context
 
 There is no way to get a program into instruction memory on silicon.

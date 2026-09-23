@@ -1528,3 +1528,22 @@
   (`flow/pe_soc.sdc` is the pe_soc core), so there is no pad timing for OpenSTA
   to sign off; the recorded screens stay pe_ctrl/E1/E2. No physical flow, DRC
   or LVS was run.
+
+## [2026-09-23] loader | pe_ctrl readback evaluation planned (choice open)
+
+- ADR-007 left the loader write-only in v1; the read path it calls "a later
+  additive change" now has an evaluation: [[plans/pe-ctrl-readback]]. MISO is a
+  chip output, so it must be a `uio` pad (`uo_out` is full, `ui_in` cannot
+  drive, the matrix SPI pads are chip-owned at reset); recommended `uio[4]`,
+  driven only while `load_active`, released otherwise.
+- Recommended minimal contract: mode-0 echo -- frame k shifts out the word
+  completed at frame k-1, MSB-first on falling edges; frame 0 is zero. The host
+  verifies the write path one frame late; the last word costs one trailing
+  frame, which writes `0x0000` to `imem[N]` in the already-undefined tail.
+- Open: echo vs a status frame (`load_error`/`words_written`) vs an imem
+  peek/poke with a read mux (much larger; a command bit would break "16 rises
+  = a write"); plus the last-word and release-condition policies.
+- Budget if implemented: committed 18 -> 19, free `uio` 4 -> 3, all-nine
+  shortfall 9 -> 10 (kept) / 3 -> 4 (reclaimed) -- the readback is loader
+  overhead, not one of the nine protocols. No RTL changed, so no regression or
+  synthesis/STA screen was warranted.

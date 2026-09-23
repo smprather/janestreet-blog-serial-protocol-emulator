@@ -80,8 +80,10 @@ asynchronous Ethernet sweep is 102 trials / 0 failures, and the boundary runner
 a later run — a TT-top flow config, placement inside a real `CORE_AREA` with the
 pad ring, both macros' PDN connectivity, congestion/DRC and a confirmed tile
 size. SPI's MOSI/CS are now exposed on `uio[2:3]` (2026-09-23,
-[[plans/spi-pads]]; verified pad-level in `tb_tt_um_protocol_emulator`), so the
-live software candidate is a `pe_ctrl` readback path. **The I2C review-focus gaps are closed (2026-09-23):** arbitration loss
+[[plans/spi-pads]]; verified pad-level in `tb_tt_um_protocol_emulator`). The
+next candidate, a `pe_ctrl` readback path, is evaluated in
+[[plans/pe-ctrl-readback]] with the interface choice still open (echo vs
+status vs imem peek); no RTL has changed for it. **The I2C review-focus gaps are closed (2026-09-23):** arbitration loss
 releases and aborts without a STOP, unexpected NACKs record an outcome and end
 with a STOP, and SCL is read back after every release so stretching is waited
 on; all three are tested on the emulator (60 phases, with a

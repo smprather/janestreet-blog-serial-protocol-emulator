@@ -52,6 +52,7 @@
 
 - [[plans/through-i2c]] — Plan to the I2C milestone: definition of done, the three blockers, the tick/bit timings, test strategy, ordered work list.
 - [[plans/spi-pads]] — Plan: expose SPI MOSI/CS_N on `uio[2:3]` (SCLK/MISO already share the UART pads), with the budget delta and pad-level verification.
+- [[plans/pe-ctrl-readback]] — Plan: evaluate a MISO response from the loader (echo vs status vs imem peek), with the pad mapping, budget delta, and test/mutation plan. No RTL change yet.
 
 ## Decisions
 

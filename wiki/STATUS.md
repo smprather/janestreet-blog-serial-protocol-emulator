@@ -1364,10 +1364,25 @@ generated from the PDK LEF, `flow/pe_soc.json` and the measured synthesis cache
 - **Max-slew / max-cap / max-fanout** remain WARNINGS (8 / 10 / 7), not gated.
   Pre-existing, and not worth chasing before the RTL settles.
 
+### 6. `pe_ctrl` readback path — EVALUATION PLANNED 2026-09-23
+
+The v1 loader is write-only (ADR-007). The host/pad mapping is feasible — a
+MISO output on the free `uio[4]`, released except while the loader is active —
+but the interface choice is still open, so the options and tradeoffs are in
+[[plans/pe-ctrl-readback]] **before any RTL change**: **echo** the completed
+word (recommended; verifies the write path bit-exactly, one trailing frame for
+the last word), a **status** frame (`load_error`/`words_written`), or an imem
+**peek/poke** (needs a read port shared with the CPU — much larger). Budget if
+implemented: committed 18 -> 19, free `uio` 4 -> 3, all-nine shortfall 9 -> 10
+(kept) / 3 -> 4 (reclaimed); the readback is loader overhead, not one of the
+nine protocols. No RTL changed yet.
+
 ## Reading order for a fresh session
 
 1. This file.
-2. `wiki/plans/through-i2c.md` — **the work list for the next milestone.**
+2. `wiki/decisions/adr-007-pe-ctrl-passive-slave.md` and
+   `wiki/reference/protocol-pin-budget.md` — constraints for evaluating the
+   `pe_ctrl` readback candidate; no readback interface has been decided.
 3. `wiki/index.md` → then `concepts/competition-overview.md` (rules, budget).
 4. `concepts/factored-hardware-blocks.md` (what exists / what's planned) and
    `concepts/tx-timing-generation.md` (timing + signoff policy).
