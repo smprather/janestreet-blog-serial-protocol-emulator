@@ -183,16 +183,47 @@ released, the read-back mutation is equivalent. The UART test does catch it (its
 read-modify-write stops converging and the TB hangs), which is why the survivor
 is explained rather than papered over, and why the count is asserted exactly.
 
+## The transaction layer (built 2026-09-23)
+
+`firmware/i2c_xfer.pe` (267 words) runs one full master transaction: START,
+`0xA0` (addr 0x50 + W), ACK, `0xA5`, ACK, repeated START, `0xA1`, ACK, read
+`0x5A`, NACK, STOP. There is still no I2C hardware: the program is a state
+dispatcher over one shared send engine and one shared read engine, because the
+ISA has no call and no rotate (left shift is `MOV X,A; ADD A,X`).
+
+Two independent slaves decode it and must agree byte-for-byte:
+`tools/fw/peemu.py`'s `I2CSlaveModel` via `tools/checks/i2c_xfer_check.py` (the
+fast loop, all 60 tick phases), and `tb/tb_pe_soc_i2c_xfer.v`'s Verilog FSM on
+real RTL. Both assert the bytes, the ACKs, the read byte, the grammar, and the
+standard-mode floors. Measured on the pads: tLOW 6.00 us, tHIGH 5.98 us,
+period 11.98 us (52.5–83.5 kHz).
+
+The traps the two checks caught, and the reason both exist:
+
+- **Releasing SCL must HOLD SDA.** `SDA|SCL` released a driven 0 together with
+the clock — an SDA move under a rising clock, and the first version did it on
+every 0 bit.
+- **The repeated START must wait tLOW before raising SCL**, or the ACK clock's
+low phase is 0.37 us (measured) against a 4.7 us floor.
+- **The slave model had two bugs of its own**, both found by the checker: the
+post-START SCL fall was counted as a data bit (addresses decoded 0x50), and
+SDA changes landed on the falling edge instead of after the tHD;DAT hold.
+
+`regress/mutate_i2c_xfer_tb.sh` mutates the FIRMWARE (the TB's DUT) seven ways
+— bit order, repeated START, tLOW, STOP, arbitration, the hold, the read
+accumulator — and requires all seven to be caught.
+
 ## Open work
 
-- **A byte transfer.** No shift register, no ACK, no address phase yet — plan
-  step 6. The primitives above are what it is built from.
-- **A 7-bit address and a real slave.** The TB models the other device as a
-  single pull-down, which is enough for arbitration and not enough for a
-  transaction.
-- **Pull-up values.** Not modelled at all: the TB's bus is ideal. The real RC is
-  what eats into tHIGH on a board, which is why tHIGH carries the larger
-  absolute margin.
+- **Clock stretching and arbitration in the transaction loop.** The pin-level
+firmware proved both; the transaction counts arbitration losses (`dmem[7]`) and
+its TB drives a contention run, but the transaction loop does not yet wait for
+a stretched SCL before counting tHIGH.
+- **A real device.** The acceptance test for the writeup is an SSD1306 or a
+24C02 on the board, with real pull-ups.
+- **Pull-up values.** Not modelled: both bus models are ideal. The real RC is
+what eats into tHIGH on a board, which is why tHIGH carries the larger absolute
+margin.
 
 ## Related
 

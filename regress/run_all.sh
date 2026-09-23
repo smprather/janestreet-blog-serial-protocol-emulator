@@ -130,6 +130,11 @@ CASES=(
   # the open-drain property checked on the RTL's own pin_oe output. This is the
   # test that makes "the matrix is enough to speak I2C" a measured claim.
   "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
+  # The I2C TRANSACTION layer on real RTL: firmware/i2c_xfer.pe against a
+  # Verilog slave FSM that decodes the wire, with timing and grammar asserted
+  # on the pads. The emulator check is the fast loop; this is the real CPU,
+  # matrix, pads and 1 us tick.
+  "tb_pe_soc_i2c_xfer|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_i2c_xfer"
   # SPI mode 0 as firmware, with a real mode-0 SLAVE modelled in the TB. SPI is
   # a baseline protocol whose only executable spec was tools/fw/peemu.py -- a model
   # written from the same understanding as the firmware, so it can agree with it
@@ -462,6 +467,17 @@ if ./regress/mutate_ctrl_tb.sh > /tmp/mutate_ctrl.log 2>&1; then
 else
   echo "ctrl TB mutations: FAILED"
   tail -20 /tmp/mutate_ctrl.log
+  stale=1
+fi
+
+# The I2C transaction TB's DUT is the firmware, so its mutations are firmware
+# edits (bit order, repeated START, tLOW, STOP, arbitration, the tHD;DAT hold,
+# the read accumulator). Both the .pe and the .hex are restored and verified.
+if ./regress/mutate_i2c_xfer_tb.sh > /tmp/mutate_i2c_xfer.log 2>&1; then
+  echo "i2c_xfer TB mutations: OK (no unexplained survivors)"
+else
+  echo "i2c_xfer TB mutations: FAILED"
+  tail -20 /tmp/mutate_i2c_xfer.log
   stale=1
 fi
 

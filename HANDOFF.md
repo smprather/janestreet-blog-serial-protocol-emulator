@@ -226,13 +226,19 @@ grepped for three known diagnostics and passed a file yosys could not parse.
 ## Current work list
 
 The ordered live backlog is **`wiki/STATUS.md`, "Next steps (ordered)"**.
-The review findings are closed; resume the loader and
-I2C transaction work in that order. `wiki/plans/through-i2c.md` is a completed
-implementation plan kept for its timing analysis and findings.
+The review findings are closed, the passive SPI loader (`pe_ctrl`) is
+implemented, tested and recorded, and the **I2C transaction layer is built**
+(as of 2026-09-23): `firmware/i2c_xfer.pe` (267 words) runs START, address+W,
+ACK, data, ACK, repeated START, address+R, ACK, read, NACK, STOP — verified on
+the emulator across all 60 tick phases and on real RTL against an independent
+Verilog slave FSM. Resume at the next ordered item in `wiki/STATUS.md`
+(reclaim or commit the `uo_out[7:2]` debug pins, then the full-chip
+floorplan). `wiki/plans/through-i2c.md` is kept for its timing analysis;
+`wiki/plans/i2c-transaction.md` is the completed transaction plan.
 
-The pin matrix is already inside `pe_soc`. UART and mode-0 SPI run as
-firmware through it; I2C firmware exercises START, one bit cell, and STOP.
-Byte transfer, ACK/NACK, addressing, and transactions remain future work. The
+The pin matrix is already inside `pe_soc`. UART, mode-0 SPI and I2C all run as
+firmware through it; `i2c_xfer.pe` exercises the full transaction (byte
+transfer, ACK/NACK, addressing, repeated START, read path). The
 Ethernet receive chain and frame buffer are integrated into the SoC as of
 2026-09-23 (port bit 7, IO window `0x8-0xE`, `firmware/eth_rx.pe`,
 `tb/tb_pe_soc_eth.v` plus its mutation suite). R2-1/R2-2 qualify the block-level

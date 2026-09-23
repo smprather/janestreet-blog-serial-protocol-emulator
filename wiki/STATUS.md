@@ -53,8 +53,8 @@ firmware images. A fresh archive regression, the original review probes and
 and submission/staged-flow source compilation all pass. Evidence is in
 `reviews/2026-09-23/refactor/`; no physical flow was run.
 
-The regression reports 28/28 RTL and **19/19** firmware checks passing, with
-lint, documentation gates, and all six mutation suites green, and the review's
+The regression reports 29/29 RTL and **20/20** firmware checks passing, with
+lint, documentation gates, and all seven mutation suites green, and the review's
 directed probe suite (`bash reviews/2026-09-22/review2/run_repros.sh`) exits 0.
 The second review's original seven failure cases now pass: the DRU's falling-edge capture is
 now a two-latch pair (the async Ethernet sweep is 102 trials / 0 failures), the
@@ -213,6 +213,8 @@ Firmware (no RTL cells — these are programs the CPU runs; see
 | `firmware/tick_count.pe` — STATUS-port exerciser | 8 | `tb_pe_soc_tick.v` (real RTL) |
 | `firmware/spi_xfer.pe` — SPI mode 0 master | 70 | `tools/fw/peemu.py` (mode-0 slave model) |
 | `firmware/eth_rx.pe` — 10BASE-T frame-window consumer | 42 | `tb_pe_soc_eth.v` (real RTL, real ARP frame) |
+| `firmware/i2c_pins.pe` — I2C pin grammar (START/bit cell/STOP) | 79 | `tb_pe_soc_i2c.v` (real RTL), `tools/checks/i2c_timing.py` |
+| `firmware/i2c_xfer.pe` — I2C master transaction (addr, ACK, read, NACK) | 267 | `tb_pe_soc_i2c_xfer.v` (real RTL, slave FSM), `tools/checks/i2c_xfer_check.py` (60 phases) |
 
 Numbers from `regress/synth_area.sh` (sg13g2 typ corner, mapped pre-route). The routed
 figure for the SERDES comes from the full LibreLane flow (route+CTS+PDN inflate
@@ -250,7 +252,7 @@ depth: 896 words of addressable-by-nothing SRAM for 79,674 µm². **The PC and t
 jump-target field had to widen in the same change.** Full reasoning and the
 rejected alternatives: [[decisions/adr-004-program-counter-width]].
 
-**Regression: 28/28 testbenches + 19/19 firmware tests pass, and the lint gate is
+**Regression: 29/29 testbenches + 20/20 firmware tests pass, and the lint gate is
 clean** (14 verilator tops + 11 yosys elaborations; `regress/run_all.sh` runs the firmware regression first, then every TB, then
 `regress/lint.sh`, then the generated-doc drift checks, then FIVE mutation harnesses --
 `regress/mutate_i2c_tb.sh`, `regress/mutate_spi_tb.sh`, `regress/mutate_fbuf_tb.sh`,
@@ -1263,12 +1265,18 @@ run-transition windows; `tb_tt_um_protocol_emulator` loads five words through
 the pads and executes them; `regress/mutate_ctrl_tb.sh` is 11/11. See
 `reviews/2026-09-23/PE-CTRL-RESOLUTION.md`.
 
-### 3. I2C transaction layer
+### 3. I2C transaction layer — DONE 2026-09-23
 
-`firmware/i2c_pins.pe` is the **pin-level grammar only** (START, one bit cell, STOP).
-Byte transfer, ACK/NACK, 7-bit addressing and a read path are not written. The
-pin-level work was the risky half and it is done; this half is ordinary firmware. The
-read-path turnaround budget is already computed in [[plans/through-i2c]].
+`firmware/i2c_xfer.pe` (267 words) runs **one full master transaction**: START,
+`0xA0` (addr 0x50 + W), ACK, `0xA5`, ACK, repeated START, `0xA1`, ACK, read
+`0x5A`, NACK, STOP. Verified twice, independently: `tools/checks/i2c_xfer_check.py`
+runs it on the emulator against a byte-level slave model across all 60 tick
+phases, and `tb/tb_pe_soc_i2c_xfer.v` runs it on real RTL against a Verilog
+slave FSM, asserting the bytes, the ACKs, the grammar and the standard-mode
+floors on the pads (tLOW 6.00 us, tHIGH 5.98 us, period 11.98 us).
+`regress/mutate_i2c_xfer_tb.sh` mutates the firmware seven ways; all seven are
+caught. The pin-level half remains `firmware/i2c_pins.pe` (79 words); the
+concept page and the traps are in [[concepts/i2c-on-the-matrix]].
 
 ### 4. Reclaim or commit the six `uo_out` pins on `dbg_pc[0..5]`
 

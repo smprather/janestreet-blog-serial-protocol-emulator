@@ -10,6 +10,14 @@ confidence: medium
 
 # Plan — Through I2C
 
+> **Reconciliation (2026-09-23): this plan predates the 60 MHz lock, the SRAM
+> swap, the pin matrix inside the SoC, and the Ethernet work.** The pin-level
+> I2C half is done and measured; the remaining transaction layer is planned in
+> [[plans/i2c-transaction]], which carries a table of what here is stale (40 MHz,
+> the 5/6-tick table, "a rotate is one instruction" — the ISA has no rotate or
+> shift-left). Read that page for current work; the sections below are kept as
+> the historical record and for their findings.
+
 The goal of this milestone: **a real I2C master transaction executed by firmware
 on real RTL** — START, 7-bit address + R/W, data byte, ACK, repeated START, read
 byte with ACK/NACK, STOP — verified by a testbench that does not know how the

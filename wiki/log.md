@@ -1407,3 +1407,24 @@
   released a driven 0 together with the clock), and the repeated START must
   wait tLOW before raising SCL (the ACK clock's low phase measured 0.37 us).
 - Next: the RTL TB with its own Verilog slave model, then docs + screen.
+
+## [2026-09-23] i2c | the transaction layer on real RTL
+
+- `tb/tb_pe_soc_i2c_xfer.v` runs `firmware/i2c_xfer.pe` against a Verilog I2C
+  slave FSM that decodes the wire (START/STOP, bits on SCL rises, ACK on the
+  9th clock, a tHD;DAT hold after every fall) and asserts the slave's records,
+  the firmware's dmem observables, the bus grammar and the standard-mode floors
+  measured on the pads: tLOW 6.00 us, tHIGH 5.98 us. A second run pulls SDA low
+  through a transmitted 1 so the arbitration branch is exercised (dmem[7] > 0).
+- `regress/mutate_i2c_xfer_tb.sh`: 7 firmware mutations (bit order, repeated
+  START, tLOW, STOP, arbitration, the hold, the read accumulator), **7 detected,
+  0 survived**; it restores and cmp-verifies BOTH the `.pe` and the `.hex`.
+- Registry: the TB case in `run_all.sh`, the transaction checker as a spec gate,
+  the assemble step in `run_firmware_tests.sh`. Full regression: **RTL 29/29,
+  firmware 20/20**, lint clean, **seven** mutation suites, all doc gates.
+- The TB found its own trap: releasing `run` immediately after the loader left
+  the SRAM macro with no read at word 0, so the CPU executed an X instruction
+  and skipped `LDI A,0x30`; the OD register stayed 0 and every ACK read back as
+  a NACK. The TB now waits four clocks before `run`, as the UART SoC TBs do.
+- No RTL changed in this milestone (firmware, TBs, emulator and docs only), so
+  the recorded synthesis/STA screens remain the current ones.
