@@ -93,6 +93,19 @@ PROTOCOLS = [
 ]
 
 
+# The wrapper's committed pinout (rtl/tt_um_protocol_emulator.v + info.yaml),
+# kept as DATA so the direction arithmetic on the rendered page cannot be done
+# by hand. It mirrors the wrapper header; update both together.
+DESIGN_PINOUT = {
+    "ui_in": {0: "UART RX", 1: "run", 2: "10BASE-T RX",
+              3: "loader SCLK", 4: "loader MOSI", 5: "loader CS_N"},
+    "uo_out": {0: "UART TX", 1: "heartbeat",
+               2: "dbg_pc[0]", 3: "dbg_pc[1]", 4: "dbg_pc[2]",
+               5: "dbg_pc[3]", 6: "dbg_pc[4]", 7: "dbg_pc[5]"},
+    "uio": {0: "I2C SDA", 1: "I2C SCL"},
+}
+
+
 def tb_signals(stem: str) -> set[str]:
     """Non-SERDES signals a testbench declares — used only as a cross-check."""
     p = TB / f"{stem}.v"
@@ -172,36 +185,74 @@ def build() -> tuple[str, list[str]]:
 
     max_single = max(n for _, n in rows)
     widest = max(rows, key=lambda r: r[1])[0]
+    n_out = sum(1 for p, _ in rows for _, _, d in p["pins"] if d == "out")
+    n_in = sum(1 for p, _ in rows for _, _, d in p["pins"] if d == "in")
+    n_bi = sum(1 for p, _ in rows for _, _, d in p["pins"] if d == "bidir")
+    proto_wires = n_out + n_in + n_bi
+    free = {"ui_in": usable - len(DESIGN_PINOUT["ui_in"]),
+            "uo_out": BUDGET["uo_out"] - len(DESIGN_PINOUT["uo_out"]),
+            "uio": BUDGET["uio"] - len(DESIGN_PINOUT["uio"])}
+    committed = sum(len(v) for v in DESIGN_PINOUT.values())
 
     lines += [
         "## The answer",
         "",
         f"- **Any single protocol: {max_single} pins maximum** ({widest['name']}), out of "
         f"{usable + BUDGET['uo_out'] + BUDGET['uio']} usable. The budget is not the constraint.",
-        "- **All nine at once: ~20 pins of 24 usable** if every wire is pinned out. Still fits — "
-        "but see below, because that is the wrong way to build it.",
+        f"- **All nine at once: {proto_wires} protocol wires** "
+        f"({n_out} out, {n_in} in, {n_bi} bidir). **It does not fit — see the "
+        f"direction arithmetic below.**",
         "",
-        "### Worst case — and why it does not happen",
+        "### Worst case, by direction",
         "",
-        "The naive reading is \"pin every protocol out permanently\", which needs roughly:",
+        "Disjoint wires for every protocol, counted by ROLE rather than by one raw",
+        "total. The role counts are what any assignment has to satisfy: a",
+        "bidirectional wire needs a `uio` pad, an input needs `ui_in` or a released",
+        "`uio`, and an output needs `uo_out` or a driven `uio`.",
         "",
-        "| Group | Pins |",
-        "|---|---|",
+        "| Protocol | Outputs | Inputs | Bidir | Wires |",
+        "|---|---|---|---|---|",
     ]
-    groups = [
-        ("UART + SPI (7 wires)", 7),
-        ("I2C + PS/2 (4 bidirectional)", 4),
-        ("JTAG + SWD (6 wires)", 6),
-        ("CAN + USB + ETH (6 wires)", 6),
-        ("**sum**", 23),
-    ]
-    for g, c in groups:
-        lines.append(f"| {g} | {c} |")
-
+    for p, _ in rows:
+        o = sum(1 for _, _, d in p["pins"] if d == "out")
+        i = sum(1 for _, _, d in p["pins"] if d == "in")
+        b = sum(1 for _, _, d in p["pins"] if d == "bidir")
+        lines.append(f"| {p['name']} | {o} | {i} | {b} | {o+i+b} |")
     lines += [
+        f"| **sum** | **{n_out}** | **{n_in}** | **{n_bi}** | **{proto_wires}** |",
         "",
-        "That is 23 of 24 — technically inside the budget and completely the wrong",
-        "design. **The whole premise of the project is that protocols are firmware,",
+        "### This design's actual pinout",
+        "",
+        "`rtl/tt_um_protocol_emulator.v` + `info.yaml` currently commit:",
+        "",
+        "| Bank | committed | free |",
+        "|---|---|---|",
+        f"| `ui_in` | {len(DESIGN_PINOUT['ui_in'])} "
+        f"({', '.join(DESIGN_PINOUT['ui_in'].values())}) | {free['ui_in']} |",
+        f"| `uo_out` | {len(DESIGN_PINOUT['uo_out'])} "
+        f"(UART TX, heartbeat, dbg_pc[5:0]) | {free['uo_out']} |",
+        f"| `uio` | {len(DESIGN_PINOUT['uio'])} "
+        f"({', '.join(DESIGN_PINOUT['uio'].values())}) | {free['uio']} |",
+        f"| **total** | {committed} | **{free['ui_in']+free['uo_out']+free['uio']}** |",
+        "",
+        "After the pinned UART, I2C and 10BASE-T-RX wires, the remaining protocols",
+        f"need {n_out-1} outputs, {n_in-2} inputs and {n_bi-2} bidir:",
+        "",
+        f"- **Debug pins kept** (the item-4 decision): "
+        f"{free['ui_in']+free['uio']} free pads against 17 remaining wires — short 9, "
+        "and mostly outputs.",
+        f"- **Debug pins reclaimed:** 14 free pads, still short 3: the {n_bi-2} "
+        f"bidirectional wires force {n_bi-2} of the {free['uio']} free `uio` pads, "
+        f"leaving 1 for the {n_out-1} outputs while `uo_out` supplies 6.",
+        "",
+        "**Even shedding every overhead** — the run strap, the heartbeat, the debug",
+        f"pads and the loader's three pads reused at runtime — leaves {n_out} outputs",
+        "for `uo_out`'s 8 plus at most one spare `uio` pad: **one output short**.",
+        "So \"all nine at once\" is not a feasible permanent pinout here, and the raw",
+        "23-of-24 count this page used to carry hid both the arithmetic error (UART",
+        "plus SPI is 6 wires, not 7) and the direction mix. The permanent-only design",
+        "is also completely the wrong way to build it, and the premise is the",
+        "opposite: **the whole premise of the project is that protocols are firmware,",
         "not pin assignments.** A programmable pin matrix means a protocol claims",
         "pins at *runtime*:",
         "",
@@ -211,7 +262,7 @@ def build() -> tuple[str, list[str]]:
         "- Concurrent protocols need disjoint pins, and *that* is a firmware/placement",
         "  decision, not an RTL one — the matrix just has to be flexible enough.",
         "",
-        "So the real constraint is not \"24 pins or 23 pins\" but **how many protocols",
+        "So the real constraint is not a raw wire count but **how many protocols",
         "must run simultaneously**. Two (e.g. UART console + SPI target) is trivial;",
         "a bus-converter persona running four at once is the case worth designing the",
         "matrix around.",

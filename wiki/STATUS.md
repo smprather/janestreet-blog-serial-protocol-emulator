@@ -1293,9 +1293,18 @@ all three; the transaction layer does not claim them.
 **Decision: keep them, for now.** `tt_um_protocol_emulator` leaves `uo_out[7:2]`
 as `dbg_pc[5:0]`. Rationale:
 
-- **The pad budget is not the constraint.** UART, the loader and I2C pin 10
-  pads; 14 remain free (`ui_in[7:6]`, `uio[7:2]`, and these six), enough for the
-  remaining protocol wires even with all nine running at once.
+- **The pad budget does not threaten the realistic cases — but "all nine at
+  once" does NOT fit.** UART, the loader, `run`, the heartbeat and these six
+  debug pins commit **16 of 24** usable pads. All nine protocols need **22
+  disjoint wires (10 out, 5 in, 7 bidir)**; with the debug pins kept only 8
+  pads are free (short 9), and even reclaiming them leaves 14 free against the
+  17 remaining wires — short 3, and the 5 bidirectional wires alone take 5 of
+  the 6 free `uio` (leaving 1 for the 9 outputs while `uo_out` supplies 6).
+  Shedding `run`, the heartbeat and debug *and* reusing the loader's pads still
+  leaves 10 outputs for `uo_out`'s 8 plus one spare `uio`: **one output
+  short**. The direction-aware table is in [[reference/protocol-pin-budget]];
+  the old "23 of 24, still fits" figure there had an arithmetic error
+  (UART+SPI is 6 wires, not 7) and ignored the boot/debug overhead.
 - **There is no readback path.** `pe_ctrl` is a passive slave with no MISO, so
   the visible PC is the only live observability on silicon; a loaded program
   that walks the PC is how bring-up distinguishes running from silent.

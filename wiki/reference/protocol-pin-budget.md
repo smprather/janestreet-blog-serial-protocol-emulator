@@ -73,22 +73,53 @@ distinguishes them, which is why two input bits are spoken for.
 ## The answer
 
 - **Any single protocol: 4 pins maximum** (SPI), out of 24 usable. The budget is not the constraint.
-- **All nine at once: ~20 pins of 24 usable** if every wire is pinned out. Still fits — but see below, because that is the wrong way to build it.
+- **All nine at once: 22 protocol wires** (10 out, 5 in, 7 bidir). **It does not fit — see the direction arithmetic below.**
 
-### Worst case — and why it does not happen
+### Worst case, by direction
 
-The naive reading is "pin every protocol out permanently", which needs roughly:
+Disjoint wires for every protocol, counted by ROLE rather than by one raw
+total. The role counts are what any assignment has to satisfy: a
+bidirectional wire needs a `uio` pad, an input needs `ui_in` or a released
+`uio`, and an output needs `uo_out` or a driven `uio`.
 
-| Group | Pins |
-|---|---|
-| UART + SPI (7 wires) | 7 |
-| I2C + PS/2 (4 bidirectional) | 4 |
-| JTAG + SWD (6 wires) | 6 |
-| CAN + USB + ETH (6 wires) | 6 |
-| **sum** | 23 |
+| Protocol | Outputs | Inputs | Bidir | Wires |
+|---|---|---|---|---|
+| UART | 1 | 1 | 0 | 2 |
+| SPI | 3 | 1 | 0 | 4 |
+| I2C | 0 | 0 | 2 | 2 |
+| JTAG | 3 | 1 | 0 | 4 |
+| SWD | 1 | 0 | 1 | 2 |
+| PS/2 | 0 | 0 | 2 | 2 |
+| CAN (classic) | 1 | 1 | 0 | 2 |
+| USB 1.1 low-speed | 0 | 0 | 2 | 2 |
+| 10BASE-T | 1 | 1 | 0 | 2 |
+| **sum** | **10** | **5** | **7** | **22** |
 
-That is 23 of 24 — technically inside the budget and completely the wrong
-design. **The whole premise of the project is that protocols are firmware,
+### This design's actual pinout
+
+`rtl/tt_um_protocol_emulator.v` + `info.yaml` currently commit:
+
+| Bank | committed | free |
+|---|---|---|
+| `ui_in` | 6 (UART RX, run, 10BASE-T RX, loader SCLK, loader MOSI, loader CS_N) | 2 |
+| `uo_out` | 8 (UART TX, heartbeat, dbg_pc[5:0]) | 0 |
+| `uio` | 2 (I2C SDA, I2C SCL) | 6 |
+| **total** | 16 | **8** |
+
+After the pinned UART, I2C and 10BASE-T-RX wires, the remaining protocols
+need 9 outputs, 3 inputs and 5 bidir:
+
+- **Debug pins kept** (the item-4 decision): 8 free pads against 17 remaining wires — short 9, and mostly outputs.
+- **Debug pins reclaimed:** 14 free pads, still short 3: the 5 bidirectional wires force 5 of the 6 free `uio` pads, leaving 1 for the 9 outputs while `uo_out` supplies 6.
+
+**Even shedding every overhead** — the run strap, the heartbeat, the debug
+pads and the loader's three pads reused at runtime — leaves 10 outputs
+for `uo_out`'s 8 plus at most one spare `uio` pad: **one output short**.
+So "all nine at once" is not a feasible permanent pinout here, and the raw
+23-of-24 count this page used to carry hid both the arithmetic error (UART
+plus SPI is 6 wires, not 7) and the direction mix. The permanent-only design
+is also completely the wrong way to build it, and the premise is the
+opposite: **the whole premise of the project is that protocols are firmware,
 not pin assignments.** A programmable pin matrix means a protocol claims
 pins at *runtime*:
 
@@ -98,7 +129,7 @@ pins at *runtime*:
 - Concurrent protocols need disjoint pins, and *that* is a firmware/placement
   decision, not an RTL one — the matrix just has to be flexible enough.
 
-So the real constraint is not "24 pins or 23 pins" but **how many protocols
+So the real constraint is not a raw wire count but **how many protocols
 must run simultaneously**. Two (e.g. UART console + SPI target) is trivial;
 a bus-converter persona running four at once is the case worth designing the
 matrix around.
