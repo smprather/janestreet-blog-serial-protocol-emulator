@@ -1,5 +1,15 @@
 # Project Status — through 10BASE-T receive
 
+> **Latest review follow-up (2026-09-23): E1 is FIXED.** The ring now has a
+> producer write pointer and a consumer read pointer; firmware's BUFCTRL
+> release is non-destructive, so a reclaim during the next frame's reception
+> cannot corrupt it. The review's reproducer passes all three cases, the
+> schedule is a permanent regression (`tb/tb_pe_soc_eth.v`), and the mutation
+> gates are 16/16 (block) and 8/8 (SoC). See
+> `reviews/2026-09-23/ETHERNET-SOC-REVIEW.md` and
+> `reviews/2026-09-23/E1-RESOLUTION.md` for evidence, including the
+> synthesis/STA recheck.
+
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
 > Last updated: 2026-09-23, after reviewing the project-layout rework at
 > `6de2a6a` against `2cc0f03`. No new functional defect found; earlier review
@@ -12,9 +22,11 @@
 > Branch `main` (reviewed code at `6de2a6a`; later commits only add review
 > evidence/docs); `review/fix-invisible-defects` remains at `2cc0f03`.
 >
-> **Where the work is:** pure RTL functional-simulation development. The standing
-> user ruling is *do not run flow, DRC or LVS* — those are tapeout-prep and are
-> re-checked rarely, not per change. The loop is `iverilog` + `vvp` + the emulator.
+> **Where the work is:** RTL development with `iverilog` + `vvp` + the emulator.
+> The user permits **periodic synthesis and STA to catch RTL that cannot be
+> hardened** (clarified 2026-09-23), including mapping, clock/latch structures,
+> constraint coverage and SRAM timing. **Physical flow, DRC and LVS remain
+> deferred.**
 >
 > **The forward work list is the "Next steps" section below** — it is the one place
 > that list lives, and it was stale until 2026-09-22: three of its items had been
@@ -377,6 +389,7 @@ the upside case with `tools/gen/sram_budget.py --tiles 8x4`.
 | Two SRAM macros: 1024-word instructions + 2 KB frame buffer, both `1P_1024x16` | `decisions/adr-003-memory-plan.md` |
 | **Instruction macro is live; PC width derives from IMEM depth (10 bits at 1024)** | `decisions/adr-004-program-counter-width.md` |
 | 10BASE-T is the LINE LAYER only; the stack is off-chip, and firmware never touches Ethernet bits | `concepts/ethernet-scope.md` |
+| **Buffer ownership: `wptr` is the producer, `rptr` the consumer**; BUFCTRL releases consumed bytes and never rebases the ring under an in-flight frame | `rtl/pe_eth_mac.v`, `reviews/2026-09-23/E1-RESOLUTION.md` |
 | **`pe_ctrl` is a passive SPI slave at the wrapper** (host loads, `run` starts); no master, no flash, no bootstrap FSM | `decisions/adr-007-pe-ctrl-passive-slave.md` |
 | Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | the codec headers (`pe_nrzi`/`pe_manch`/`pe_bitstuff`) |
 | `ena` must never gate logic; every pad output driven in every state | `rtl/tt_um_protocol_emulator.v` header |

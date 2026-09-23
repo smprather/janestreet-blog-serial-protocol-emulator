@@ -1228,3 +1228,51 @@
   and enables; one word per 16 rising SCLK edges into `imem[addr++]`; accepted
   only while `run=0`; pads `ui_in[3:5]`; `run` stays `ui_in[1]`; imem only.
 - Next: the `pe_ctrl` implementation plan (`wiki/plans/pe-ctrl.md`).
+
+## [2026-09-23] review | Ethernet reclaim race and periodic hardening checks
+
+- The user requested 15-minute checks of Pi in tmux pane `%46` and independent
+  reviews. The first check found Pi working on the SPI loader plan.
+- New **E1 (P1), open** at `9a84c6e`: two accepted 200-byte frames with a
+  96-cell gap yield a corrupt second firmware checksum (`xx`); a 600-cell gap
+  and 46-byte payload controls pass. Ring reclaim resets the write pointer
+  while the next frame is already in its payload. Sent the finding and
+  reproducer to Pi; recorded it in `ETHERNET-SOC-REVIEW.md` and the handoff.
+- Fresh isolated regression: 27/27 RTL, 19/19 firmware, all five mutation
+  suites and the lint/doc gates pass. The permanent test misses this schedule.
+- User clarified that periodic synthesis and STA are allowed to detect RTL
+  that cannot be hardened. Native mapped synthesis and three-corner OpenSTA
+  were run in isolation: mapped logic/SRAM timing coverage present, setup
+  nonnegative under screening assumptions, hold/electrical violations remain
+  before physical repair. Full evidence and limits are in the new report.
+  No physical flow, DRC or LVS ran.
+
+## [2026-09-23] fix | E1: consumer-owned ring reclaim
+
+- **E1 resolved.** `pe_eth_mac` gained a consumer read pointer (`rptr`) and
+  `buf_consume`/`buf_consume_addr`; `buf_reset` is retained but demoted to a
+  whole-ring testbench/debug control and wired to `1'b0` in `pe_soc`. BUFCTRL
+  now releases the bytes firmware has walked (the BUFBYTE window position) by
+  advancing `rptr`, never by touching `wptr` — so a reclaim that lands during
+  the next frame's `S_PAYLOAD` cannot rebase it. A consume is accepted only as
+  a forward step within the allocated bytes; duplicates are no-ops and backward
+  addresses are ignored.
+- **Permanent regression:** `tb/tb_pe_soc_eth.v` drives two 200-byte frames
+  with a 96-cell gap and does not wait for consumption; it failed before the
+  fix (`sum=xx want=bc`) and passes now. `tb_pe_eth_mac.v` checks the block
+  contract: consume moves only `rptr`, duplicates free nothing, backward
+  addresses are ignored, and a mid-payload consume leaves the frame intact.
+- **Mutation gates:** eth_mac 16/16, eth_soc 8/8, including
+  `consume-rebases-wptr`, `consume-ignored`, `consume-no-guard` and
+  `destructive-reclaim` (the E1 wiring).
+- **The review's reproducer** passes all three cases (200-byte/96-gap,
+  200-byte/600-gap, 46-byte/96-gap); the fixed trace keeps `wptr=212` while
+  frame B is in `S_PAYLOAD`.
+- **Full regression:** RTL 27/27, firmware 19/19, lint clean, five mutation
+  suites and all doc gates green. **Hardening recheck:** yosys 0 problems;
+  worst hold slack unchanged (slow −0.87 / typ −0.61 / fast −0.48) with the
+  same pre-repair electrical failures; ownership logic costs ~2.9k µm².
+- **Files:** `rtl/pe_eth_mac.v`, `rtl/pe_soc.v`, `firmware/eth_rx.pe`,
+  `tb/tb_pe_eth_mac.v`, `tb/tb_pe_soc_eth.v`,
+  `regress/mutate_eth_{mac,soc}_tb.sh`, `wiki/reference/signal-names.md`,
+  `reviews/2026-09-23/E1-RESOLUTION.md`, `reviews/2026-09-23/e1-recheck/`.

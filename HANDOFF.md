@@ -1,5 +1,15 @@
 # Handoff — state of the repo (2026-09-23)
 
+> **Latest follow-up (2026-09-23): E1 (P1) is FIXED.** The review at `9a84c6e`
+> found that reclaiming frame 1 during reception of frame 2 could publish frame 2
+> with a corrupt window; the fix splits the ring into a producer write pointer
+> and a consumer read pointer (`buf_consume`), so a release never touches an
+> in-flight frame. Read `reviews/2026-09-23/E1-RESOLUTION.md` for the trace,
+> the permanent regression and the hardening recheck; the original finding and
+> reproducer are in `reviews/2026-09-23/ETHERNET-SOC-REVIEW.md`. The user
+> requested 15-minute progress checks, and permits periodic synthesis/STA to
+> catch RTL that cannot be hardened; physical flow, DRC and LVS remain deferred.
+
 Written for whoever picks this up next, human or agent. Read this, then
 `reviews/2026-09-23/REFACTOR-REVIEW.md`, then `wiki/STATUS.md`. The refactor at
 `6de2a6a` was reviewed against `2cc0f03`: no new functional defect found, and
@@ -48,8 +58,11 @@ asynchronous Ethernet sweep is 102 trials / 0 failures, and the boundary runner
 
 **Next:** resume the integration/loader/I2C transaction backlog in
 `wiki/STATUS.md`. All review follow-ups (F1/F2/F3) are closed. Continue the
-functional simulation loop; the standing user ruling is **do not run physical
-flow, DRC, or LVS**. The three R2-7 mutation harnesses restored source bytes in
+functional simulation loop. The user explicitly permits **periodic synthesis
+and STA to catch RTL that cannot be hardened** (2026-09-23): check mapped logic,
+clock/latch structures, constraints, SRAM timing coverage and timing failures.
+The standing restriction is **do not run physical flow, DRC, or LVS**.
+The three R2-7 mutation harnesses restored source bytes in
 the tested interruptions; the preceding verification report records the scope of
 those checks.
 

@@ -159,6 +159,34 @@ the per-byte `room` check exists for. Note the header check compares the **raw
 field** against `room` with no allowance for the FCS: a length frame does not store
 its FCS, so adding 4 would reject legal frames that fit exactly.
 
+## Ownership: the write pointer and the read pointer have different owners
+
+A frame must stay intact until the consumer has read it, and a reclaim must not
+touch the frame the receiver is currently assembling. The ring therefore has
+two pointers: `wptr` (the producer's write pointer) and `rptr` (the consumer's
+read pointer). `room` is free space ahead of `wptr`; `used = BUF_BYTES - room`
+is what is allocated. Firmware's `BUFCTRL` write pulses `buf_consume` with the
+current window position, which advances `rptr` and returns the walked bytes to
+`room`. It never moves `wptr`, so a reclaim that lands while the next frame is
+mid-payload leaves that frame's `frame_start`, `pay_cnt` and bytes alone.
+
+The alternative — the whole-ring reset that zeros both pointers — is legal only
+when nothing is in flight, so it is a testbench/debug control and the SoC wires
+it to 0. Using it from firmware was E1: with a 200-byte payload the walk
+(~37 µs) outlasts the 96-bit gap (~9.6 µs), the reclaim arrived in the next
+frame's `S_PAYLOAD`, and the frame was published with a window start twelve
+bytes before its data; firmware read unwritten memory and checksummed `xx`.
+[[../reviews/2026-09-23/E1-RESOLUTION]] has the trace and the fix evidence.
+
+A consume is accepted only as a forward step no larger than `used`: a duplicate
+is a no-op and a backward address is ignored, so a firmware mistake cannot
+over-credit `room` and hand out memory that still holds an unconsumed frame.
+
+This is separate from the frame buffer's single access port: a walk read that
+collides with a frame write returns the held byte, but firmware's read loop
+spaces reads by nine cycles, so a capture for the current address always
+happens between the address change and the read.
+
 ## How it is verified
 
 `tb/tb_pe_eth_mac.v` drives **raw Manchester levels** into the real DRU and checks
@@ -176,10 +204,11 @@ preamble, header and FCS **in the testbench** and its "preamble" is 58 bits rath
 than 802.3's 64. It is a serdes unit test, not a wire-format reference, and nothing
 in the new TB copies its conventions.
 
-`regress/mutate_eth_mac_tb.sh` breaks the RTL in eight ways — FCS convention, wind-back,
-the settling delay, byte assembly, the type/length split, the bounds check, the idle
-gate, the abort — and requires the TB to catch all eight. Two findings from it are
-worth carrying forward:
+`regress/mutate_eth_mac_tb.sh` breaks the RTL in sixteen ways — FCS convention,
+wind-back, settling delay, byte assembly, the type/length split, the bounds check,
+the idle gate, the abort, the pad, the reclaim width, the structural verdict, the
+minimum size, byte alignment, and the three consume behaviours — and requires the
+TB to catch all sixteen. Two findings from it are worth carrying forward:
 
 - **`no-bounds-check` survived the first version.** The gap was real: the payload's
   own `room == 0` check produces the same `frame_bad` count, so removing the header
