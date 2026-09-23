@@ -92,3 +92,14 @@ Keep both designs plan-only until the user resolves the choices above. The
 SERDES plan's first wire-loopback can remain self-timed if asynchronous plain
 RX is explicitly out of scope. No evidence from this review changes the
 project diagrams' planned topology or implementation progress.
+
+## Documentation re-check
+
+An independent verification of the documentation edits found and corrected two
+wording errors in the SERDES plan: the overlay-to-pin-matrix order was reversed
+in one summary sentence, and the status-event rationale described all codec
+errors as one-clock pulses. The sentence now follows the actual
+codec -> overlay -> pin-matrix path, and the status rationale distinguishes
+one-clock from strobe-gated events. Both corrections were rechecked against
+`diagrams/project-plan.puml`, `rtl/pe_serdes.v`, `rtl/pe_manch.v`, and
+`rtl/pe_bitstuff.v`.

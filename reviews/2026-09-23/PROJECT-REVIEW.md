@@ -94,7 +94,9 @@ completion semantics in the SERDES plan, an asynchronous plain-RX scope
 question, and two readback session-boundary requirements. It also corrected
 two stale plan descriptions and clarified the Manchester half-cell interval.
 The details and source checks are in
-`reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md`; no RTL was changed.
+`reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md`. A second independent doc check
+found two wording errors in the amended SERDES plan; both were corrected and
+verified against the diagram and RTL. No RTL was changed.
 
 No physical flow, DRC, or LVS was run.
 

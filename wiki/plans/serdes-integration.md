@@ -19,9 +19,9 @@ shared word engine and the line-code pipeline the stretch personas need:
 10BASE-T **transmit** (the receive chain is already in `pe_soc`), low-speed USB
 (NRZI + stuffing), CAN (stuffing), and a hardware-paced path for plain
 protocols. The project-plan diagram records the planned blocks inside the SoC:
-CPU access goes through the indexed window and timing control, while the codec
-drives the pin overlay through the pin matrix. These connections remain planned
-and the integration is not implemented.
+CPU access goes through the indexed window and timing control, while codec
+output passes through the pin overlay into the pin matrix. These connections
+remain planned and the integration is not implemented.
 
 This plan is **review-only**: no RTL changes until it is accepted. It was
 amended on 2026-09-23 for the first review's five findings (window encoding,
@@ -284,7 +284,7 @@ level-sensitive inputs and a held bit restarts/reloads the engine or keeps the
 codec cleared. Firmware writes TX/RX data, length and configuration before the
 respective start strobe. Status events such as `tx_done`, `rx_valid`, and
 `rx_err` need latched flags with defined clear semantics so a CPU poll loop
-cannot miss a one-cycle pulse.
+cannot miss a one-cycle or strobe-gated event.
 
 The TX completion event also needs to say whether `tx_done` means the last
 payload bit was consumed or the encoded wire is idle. With stuffing, the final
