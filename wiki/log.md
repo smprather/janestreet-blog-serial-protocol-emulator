@@ -1293,11 +1293,50 @@
 - **New permanent gate:** `tools/checks/macro_flow_config.py`, run by
   `run_all.sh`. It flattens the elaborated `pe_soc`, requires every macro cell
   and only macro cells to be configured, requires all three supply pins per
-  instance, checks placement inside the die with a 10 um gap (skipped loudly if
-  the PDK LEF is absent), and requires `PDN_CFG` to still build the Metal4
+  instance, checks placement inside the die with a 10 um gap (exits 2/incomplete if
+  the PDK LEF or its geometry is unavailable), and requires `PDN_CFG` to build the Metal4
   ladder. It fails on the pre-fix config and passes on the fixed one.
 - **Deferred:** the full flow run must confirm both macros place, PSM-0040
   connectivity, no PDN-0189/PSM-0069, spacing and the host-path hold/screen
   findings. No physical flow, DRC or LVS ran.
 - **Files:** `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`,
   `regress/run_all.sh`, `reviews/2026-09-23/E2-RESOLUTION.md`.
+
+## [2026-09-23] review recheck | Ethernet SoC fixes and macro gate
+
+- Re-ran `tools/checks/macro_flow_config.py` on the current tree: both flattened
+  SRAM macro instances, placement geometry, die bounds, gap, three supplies
+  per macro, and the Metal4 PDN config pass with the installed PDK LEF.
+- Independent temporary-copy mutations all fail the gate as intended:
+  missing frame-buffer placement, missing `VDDARRAY!`, overlapping locations,
+  out-of-die location, and missing `PDN_CFG`; restored baseline passes.
+- Review found one gate contract hole: a missing/malformed vendor LEF printed
+  “SKIPPED” but still returned success although legal placement could not be
+  established. The checker now returns 2 (incomplete) in that case. Verified
+  the normal gate still passes and the forced-missing-LEF probe returns 2.
+- E1 is independently reproduced against `c9f8e1a`; the isolated full
+  regression passes 27/27 RTL and 19/19 firmware. E1 and E2 are recorded as
+  resolved at the RTL and static-config levels. Two-macro physical flow, DRC,
+  and LVS remain deferred; no physical signoff is claimed.
+
+## [2026-09-23] review | pe_ctrl run-transition write race
+
+- Independent review of the in-progress SPI loader found that `run` is checked
+  when the write pipeline starts, but the `W_PULSE` state raises `host_we`
+  without a run check. Raising `run` after a complete word queues and before
+  the pulse is sampled produced `writes=1 writes_while_run=1 error=0` in an
+  isolated Icarus test. This is distinct from the existing test that begins a
+  transaction with `run=1`.
+- The finding and required regression are recorded in
+  `reviews/2026-09-23/PE-CTRL-REVIEW.md` and `HANDOFF.md`. Pi was active in the
+  full regression at the 15:13 UTC pane check; no nudge was sent at that time.
+- The first full run had 28/28 RTL and 19/19 firmware tests passing but exposed
+  unused `shreg[15]` in the lint gate. A 15-bit shift-register correction
+  removed the warning; the repeat run at `39c0eb4` passed 28/28 RTL and 19/19
+  firmware tests, clean lint/elaboration, generated-doc checks and all five
+  mutation gates. Pi has received the open race finding and is reviewing it.
+- Independently mapped `pe_ctrl` (Yosys: 0 problems, ~5,649.8 µm²) and
+  screened it with OpenSTA at 60 MHz: setup passes under the stated assumptions;
+  `run` has −0.158 ns hold slack under a zero-min input assumption, and
+  unplaced high-fanout nets exceed limits. Async SPI synchronizer inputs are
+  intentionally false-pathed. See `reviews/2026-09-23/pe-ctrl-hardening/`.

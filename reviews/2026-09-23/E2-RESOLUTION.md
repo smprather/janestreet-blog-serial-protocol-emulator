@@ -60,8 +60,8 @@ as the existing comments explain.
 2. every instance has `VDD!`, `VDDARRAY!` and `VSS!` in its
    `PDN_MACRO_CONNECTIONS` entries;
 3. every placement fits inside `DIE_AREA` and macros are at least 10 µm apart
-   (using the vendor LEF's `SIZE`; the check is skipped loudly if the PDK LEF
-   is absent);
+   (using the vendor LEF's `SIZE`; an absent or unreadable geometry record now
+   makes the gate exit 2 as incomplete);
 4. `PDN_CFG` exists and still stripes/connects Metal4.
 
 It found the defect and now guards it: deleting the new fbuf placement makes it

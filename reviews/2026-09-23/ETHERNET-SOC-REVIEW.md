@@ -59,7 +59,8 @@ schedule to the permanent SoC regression and 16/16 + 8/8 block/SoC mutation
 gates. Detailed diff rationale and the committed hardening recheck are in
 [E1 resolution](E1-RESOLUTION.md).
 
-**Current open finding: E2 below.**
+**E1 is resolved; E2 was found in the original config and is resolved at the
+configuration level below.**
 
 [Reproducer](eth-soc/window_reclaim.v), [failing trace](eth-soc/min-gap.txt),
 [long-gap control](eth-soc/long-gap.txt), [ARP-size control](eth-soc/arp-gap.txt).
@@ -69,7 +70,8 @@ Default run fails; `+GAP=600` and `+LEN=46` are the two passing controls.
 
 ## E2 — P1: frame-buffer SRAM is absent from SoC hardening metadata
 
-**Open.** The synthesized SoC contains both `u_imem.g_macro.u_sram` and
+**Originally open; fixed at the configuration level in `2d5c97d`.** The
+synthesized SoC contains both `u_imem.g_macro.u_sram` and
 `u_eth_fbuf.g_macro.u_sram`. `flow/pe_soc.json` declares only the instruction
 SRAM in `MACROS.instances`, so LibreLane's manual macro placement step does
 not place the frame-buffer SRAM. The config's two `PDN_MACRO_CONNECTIONS`
@@ -90,19 +92,39 @@ Evidence: the mapped netlist names both macro instances
 and standard-cell power-pin defaults are in the installed LibreLane
 `steps/odb.py`, `set_global_connections.tcl`, and the IHP `config.tcl`.
 
-**Required before physical signoff:** add placement for
+**Original required correction:** add placement for
 `u_eth_fbuf.g_macro.u_sram` in a legal location, add both `VDD!`/`VSS!` and
 `VDDARRAY!` global connections for it, and ensure the macro PDN grid reaches
 its Metal4 supply shapes. Check placement spacing and the core/die budget with
 the selected two-macro layout. This review did not run the physical flow, DRC,
 or LVS.
 
+### Resolution recheck
+
+Commit `2d5c97d` adds placement entries for both macros, all three supply
+hooks for each, and a regression gate that derives the macro instances from a
+flattened `pe_soc` netlist. I reran `python3 tools/checks/macro_flow_config.py`
+on the current tree: it found both macro instances and passed the placement,
+supply-hook, die-boundary, gap, and Metal4 configuration checks using the
+installed PDK LEF. Independently mutation-tested a temporary copy: removing
+the frame-buffer placement, its `VDDARRAY!` hook, either placement geometry
+(overlap or outside the die), or `PDN_CFG` each made the gate fail; restoring
+the baseline made it pass.
+
+The committed resolution and static tests establish that the configuration
+omission is fixed. They do **not** establish that the physical flow completes
+or that the generated straps connect to the macro shapes. The two-macro
+physical placement/PDN check, DRC and LVS remain deferred; see
+[E2 resolution](E2-RESOLUTION.md). Review also found that the checker used to
+return success if the PDK LEF was absent, despite skipping its geometry check.
+It now exits 2 (incomplete) when the LEF or its SIZE record is unavailable.
+
 ## Regression
 
-Fresh archived `./regress/run_all.sh --fast -j4`: exit 0, **27/27 RTL**,
+Fresh archived `./regress/run_all.sh --fast -j4` at E1 fix `c9f8e1a`: exit 0, **27/27 RTL**,
 **19/19 firmware**, lint/elaboration and all five mutation suites pass.
-[Full output](eth-soc/regression.txt). E1 is outside the current permanent TB's
-traffic schedule: it waits for firmware completion between good frames.
+[Full output](eth-soc/regression.txt). The permanent SoC TB now includes the
+consecutive-frame schedule that exposed E1.
 
 ## Preliminary hardening checks
 

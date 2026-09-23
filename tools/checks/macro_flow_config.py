@@ -22,8 +22,8 @@ config to be complete and legal:
   4. `PDN_CFG` is set, exists, and builds the Metal4 ladder the macro supplies
      need.
 
-Placement checks that need the PDK LEF are skipped loudly -- not silently
-passed -- when the LEF is absent.
+Placement geometry cannot be established without the PDK LEF (or when it has
+no SIZE record), so that is an incomplete run and exits 2 rather than passing.
 
     python3 tools/checks/macro_flow_config.py
     exit 0 = complete and legal, 1 = findings, 2 = could not run
@@ -89,6 +89,7 @@ def lef_size() -> tuple[float, float] | None:
 
 def main() -> int:
     problems: list[str] = []
+    unable_to_run = False
     cfg = json.loads(FLOW.read_text())
 
     macros = macro_cells()
@@ -131,8 +132,9 @@ def main() -> int:
     # 3: placement geometry.
     size = lef_size()
     if size is None:
-        print("placement check: SKIPPED (macro LEF not found at "
-              f"{LEF}); instance/supply checks still ran")
+        print("placement check: UNAVAILABLE (macro LEF missing or has no SIZE "
+              f"at {LEF}); cannot establish placement legality")
+        unable_to_run = True
     else:
         w, h = size
         die = cfg.get("DIE_AREA")
@@ -192,7 +194,10 @@ def main() -> int:
         print("macro flow config: FAILED")
         for p in problems:
             print(f"  - {p}")
-        return 1
+        return 2 if unable_to_run else 1
+    if unable_to_run:
+        print("macro flow config: INCOMPLETE (required PDK geometry unavailable)")
+        return 2
     print("macro flow config: OK (placements and supply hooks complete)")
     return 0
 

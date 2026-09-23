@@ -13,6 +13,24 @@
 > requested 15-minute progress checks, and permits periodic synthesis/STA to
 > catch RTL that cannot be hardened; physical flow, DRC and LVS remain deferred.
 
+> **Open review item in the current pe_ctrl work:** an independent transition
+> test found that if `run` rises after a complete SPI word has queued but before
+> `W_PULSE` is sampled, `pe_ctrl` still writes that word while the core runs.
+> The probe observed `writes=1 writes_while_run=1 error=0`. This violates the
+> loader's run gate. See `reviews/2026-09-23/PE-CTRL-REVIEW.md`; add a permanent
+> regression and make the queued write abort safely before considering the
+> loader complete. Pi corrected the separate unused `shreg[15]` lint warning;
+> the repeat full regression at commit `39c0eb4` passed 28/28 RTL and 19/19
+> firmware tests, lint/elaboration, generated-doc checks and all five mutation
+> gates. At the 15:20 UTC pane check Pi was still running that command; after it
+> completed, the independent P1 reproducer was sent to pane `%46` and Pi began
+> reviewing it. The review document records the outstanding fix and test.
+> A pre-layout Yosys/OpenSTA screen found 0 synthesis problems and positive
+> setup slack, with a small input-hold violation on `run` under a 0 ns minimum
+> input-delay assumption and high-fanout violations before physical repair.
+> The async SPI first-stage endpoints are intentionally unconstrained in this
+> screen. Full logs/scripts: `reviews/2026-09-23/pe-ctrl-hardening/`.
+
 Written for whoever picks this up next, human or agent. Read this, then
 `reviews/2026-09-23/REFACTOR-REVIEW.md`, then `wiki/STATUS.md`. The refactor at
 `6de2a6a` was reviewed against `2cc0f03`: no new functional defect found, and
