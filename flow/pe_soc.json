@@ -31,7 +31,9 @@
   "//30": "pe_pinmux is in VERILOG_FILES because pe_soc instantiates it (the",
   "//31": "I2C milestone moved the matrix inside the SoC); its omission was one of",
   "//32": "the review findings, and the identical omission in info.yaml's source",
-  "//33": "list made the TT sources fail to compile.",
+  "//33": "list made the TT sources fail to compile. pe_dru/pe_manch/pe_crc/",
+  "//34": "pe_eth_mac/pe_fbuf are here for the same reason: the 10BASE-T receive",
+  "//35": "path is instantiated inside pe_soc now, so the flow must elaborate it too.",
   "//90": "FP_SIZING absolute uses the REAL allocation: 6x4 tiles = 1002 x 432 um",
   "//91": "(ADR-003; the blog's 'set the tile size in info.yaml to 6x4'). An earlier",
   "//92": "version of this file said 1002x432 in the comment and then used 480x420,",
@@ -51,6 +53,11 @@
     "./src/pe_cpu.v",
     "./src/pe_imem.v",
     "./src/pe_pinmux.v",
+    "./src/pe_dru.v",
+    "./src/pe_manch.v",
+    "./src/pe_crc.v",
+    "./src/pe_eth_mac.v",
+    "./src/pe_fbuf.v",
     "./src/pe_soc.v"
   ],
   "EXTRA_VERILOG_MODELS": [

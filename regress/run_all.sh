@@ -117,29 +117,34 @@ CASES=(
   # $readmemh's firmware/uart_echo.hex, so run_firmware_tests.sh (below) must have
   # assembled a current copy -- it runs first for exactly that reason.
   "tb_pe_cpu|../rtl/pe_cpu.v|tb_pe_cpu"
-  "tb_pe_soc_uart|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_soc.v|tb_pe_soc_uart"
+  "tb_pe_soc_uart|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_uart"
   # The STATUS port. Nothing exercised it until firmware/tick_count.pe existed,
   # which is how a two-driver tick_flag survived a green regression: it raced
   # in Icarus and synthesised to a constant 0, and no test read the port.
-  "tb_pe_soc_tick|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_soc.v|tb_pe_soc_tick"
+  "tb_pe_soc_tick|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_tick"
   # The Tiny Tapeout top level: the pad contract (no X on an output, ena gates
   # nothing, open-drain pins never drive high). This is the only submittable
   # module in the repo.
-  "tb_tt_um_protocol_emulator|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_soc.v ../rtl/tt_um_protocol_emulator.v|tb_tt_um_protocol_emulator"
+  "tb_tt_um_protocol_emulator|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v ../rtl/tt_um_protocol_emulator.v|tb_tt_um_protocol_emulator"
   # I2C on the pin matrix: the runtime direction file driven by firmware, and
   # the open-drain property checked on the RTL's own pin_oe output. This is the
   # test that makes "the matrix is enough to speak I2C" a measured claim.
-  "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
+  "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
   # SPI mode 0 as firmware, with a real mode-0 SLAVE modelled in the TB. SPI is
   # a baseline protocol whose only executable spec was tools/fw/peemu.py -- a model
   # written from the same understanding as the firmware, so it can agree with it
   # about a wrong bit order and pass. The slave here decodes MOSI from the pins.
-  "tb_pe_soc_spi|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_soc.v|tb_pe_soc_spi"
+  "tb_pe_soc_spi|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_spi"
   # The frame buffer: 2 KB behind a byte interface, on the same SRAM macro
   # as the instruction memory (ADR-003). Byte granularity comes from the
   # macro's bit-mask port and the read lane is a register -- two silent
   # failure modes, both mutation-tested.
   "tb_pe_fbuf|../rtl/pe_fbuf.v|tb_pe_fbuf"
+
+  # 10BASE-T on the SoC: wire -> DRU -> Manchester -> MAC + CRC + frame
+  # buffer, and firmware/eth_rx.pe consuming an ARP frame through the frame
+  # window. tb_pe_eth_mac proves the chain; this proves a PROGRAM can use it.
+  "tb_pe_soc_eth|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_eth"
 
   # The 10BASE-T receive path, end to end on real RTL: raw Manchester
   # levels into pe_dru, through pe_manch and pe_crc, into pe_fbuf. Every

@@ -67,6 +67,15 @@ PORTS: dict[str, int] = {
     "TIMER": 0x5,    # free-running half-bit tick counter
     "I2CSTAT": 0x6,  # bit0 = an I2C tick happened (cleared by the read)
     "STATUS": 0x7,   # bit0 = a tick happened (cleared by the read)
+    # 10BASE-T receive window (rtl/pe_soc.v's memory map). ETHSTAT's read
+    # clears the valid/bad event bits; BUFBYTE's read advances the window.
+    "ETHSTAT": 0x8,  # {5'b0, is_type, bad, valid}, clear-on-read
+    "ETHLEN":  0x9,  # frame_len[7:0]
+    "ETHLENH": 0xA,  # frame_len[15:8]
+    "ETHFLD":  0xB,  # frame_field[7:0]
+    "ETHFLDH": 0xC,  # frame_field[15:8]
+    "BUFBYTE": 0xD,  # next frame byte; the read advances the pointer
+    "BUFCTRL": 0xE,  # bit0 pulse: reclaim the frame buffer
 }
 
 MOV_SEL = {

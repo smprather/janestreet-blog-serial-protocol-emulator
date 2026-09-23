@@ -45,7 +45,8 @@
 //
 //   ui_in[0]    UART RX          (the protocol input pin)
 //   ui_in[1]    run              1 = execute firmware, 0 = hold at PC 0
-//   ui_in[7:2]  unused
+//   ui_in[2]    10BASE-T RX      (Manchester line input; port bit 7)
+//   ui_in[7:3]  unused
 //
 //   uo_out[0]   UART TX          (the protocol output pin)
 //   uo_out[1]   heartbeat        timer bit 7, so a scope shows life
@@ -106,7 +107,8 @@ module tt_um_protocol_emulator (
   // `uio_in` and are attached after the pads are declared -- see below.
   assign pin_in_bus[3]   = uart_rx;
   assign pin_in_bus[2:0] = 3'b000;
-  assign pin_in_bus[7:6] = 2'b00;
+  assign pin_in_bus[7]   = ui_in[2];   // 10BASE-T RX -> the DRU's raw pin
+  assign pin_in_bus[6]   = 1'b0;
 
   pe_soc #(
     .IMEM_WORDS(TT_IMEM_WORDS),
@@ -181,7 +183,7 @@ module tt_um_protocol_emulator (
   //
   // uio_in[7:2] are sunk because the current pin map claims only uio[0] and
   // uio[1]; a future protocol can claim the rest without touching this line.
-  wire _unused = &{ena, ui_in[7:2], uio_in[7:2],
+  wire _unused = &{ena, ui_in[7:3], uio_in[7:2],
                    pin_out_bus[7:6], pin_out_bus[3:1],
                    pin_oe_bus[7:6], pin_oe_bus[3:0],
                    dbg_a, dbg_timer[6:0], dbg_pc[7:6], 1'b0};

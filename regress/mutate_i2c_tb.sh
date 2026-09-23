@@ -110,7 +110,9 @@ run_case() {
   # with a non-empty vvp still took the "did not compile" branch.
   local cc=0
   (cd sim && iverilog -g2012 -s "$top" -o "$work/$top.vvp" $SRAM_FLAGS \
-      ../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_soc.v \
+      ../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v \
+      ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v \
+      ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v \
       ../tb/tb_pe_soc_i2c.v) >"$work/compile.log" 2>&1 || cc=$?
   if [ "$cc" -ne 0 ] || [ ! -s "$work/$top.vvp" ]; then
     echo "  INCONCLUSIVE: the mutated design did not compile (iverilog exit $cc)"
@@ -269,7 +271,9 @@ python3 "$TMP/m3b.py" >/dev/null
 work=$(mktemp -d)
 cc=0
 (cd sim && iverilog -g2012 -s tb_pe_soc_uart -o "$work/u.vvp" $SRAM_FLAGS \
-    ../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_soc.v \
+    ../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v \
+    ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v \
+    ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v \
     ../tb/tb_pe_soc_uart.v) >"$work/c.log" 2>&1 || cc=$?
 if [ "$cc" -ne 0 ]; then
   echo "  INCONCLUSIVE: did not compile"

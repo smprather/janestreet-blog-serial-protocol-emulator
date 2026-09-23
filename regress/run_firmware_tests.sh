@@ -75,6 +75,17 @@ printf '%-34s PASS (%s words)\n' "assemble i2c_pins" \
   "$(grep -c . firmware/i2c_pins.hex)"
 pass=$((pass+1))
 
+# eth_rx.pe is the frame-window consumer: tb_pe_soc_eth.v $readmemh's the hex
+# it produces, so a stale image would be a silent pass.
+if ! $PY tools/fw/peasm.py firmware/eth_rx.pe -o firmware/eth_rx.hex >/dev/null 2>&1; then
+  echo "assemble eth_rx                       FAIL"
+  $PY tools/fw/peasm.py firmware/eth_rx.pe 2>&1 | head -3 | sed 's/^/    /'
+  exit 1
+fi
+printf '%-34s PASS (%s words)\n' "assemble eth_rx" \
+  "$(grep -c . firmware/eth_rx.hex)"
+pass=$((pass+1))
+
 # 2. single byte
 run_case "emulate: one byte" \
   $PY tools/fw/peemu.py firmware/uart_echo.hex --send 41 --max-cycles 900000

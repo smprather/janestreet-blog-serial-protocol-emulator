@@ -20,6 +20,17 @@
 //   0x5  TIMER   r   free-running 8-bit counter, one increment per half bit
 //   0x6  I2CSTAT r   bit0 = "an I2C tick happened" (cleared by this read)
 //   0x7  STATUS  r   bit0 = "a timer tick happened" (cleared by this read)
+//   0x8  ETHSTAT r   {5'b0, is_type, bad, valid}; reading CLEARS valid/bad
+//   0x9  ETHLEN  r   frame_len[7:0]    (latched with frame_valid)
+//   0xA  ETHLENH r   frame_len[15:8]
+//   0xB  ETHFLD  r   frame_field[7:0]  (the length/EtherType field as received)
+//   0xC  ETHFLDH r   frame_field[15:8]
+//   0xD  BUFBYTE r   next byte of the received frame; the read ADVANCES the
+//                    window pointer. ONE-CYCLE PIPELINE: fbuf's read data
+//                    arrives the cycle after its address, so consecutive
+//                    BUFBYTE reads must be at least one cycle apart (a
+//                    firmware loop always is; see firmware/eth_rx.pe).
+//   0xE  BUFCTRL w   bit0 pulse: reclaim the frame buffer (MAC buf_reset)
 //
 // PORTS 0x2 AND 0x3 ARE THE I2C MILESTONE. Everything before them assumed pin
 // direction was a BUILD-TIME decision, and that was true and cheap: UART and
@@ -442,6 +453,180 @@ module pe_soc #(
   // ~PIN_IN_MASK, which is the UART/SPI case. Same expression, generalised.
   assign pin_rd = (pin_out & pin_oe) | (pin_in & ~pin_oe);
 
+  // =========================================================================
+  // 10BASE-T receive: pe_dru -> pe_manch -> pe_eth_mac, + pe_crc + pe_fbuf
+  // =========================================================================
+  //
+  // WHY IT IS HERE. pe_eth_mac was built and TB-proven while instantiated
+  // NOWHERE, and it is the block that ties four other orphans (pe_dru,
+  // pe_manch, pe_crc, pe_fbuf) into one signal path. An orphan block is a
+  // claim that has never been exercised inside a design, so the SoC instance
+  // is what retires the claim. This is also the first protocol in the project
+  // that is NOT firmware: wiki/concepts/ethernet-scope.md's arithmetic (48
+  // instructions per byte at 100 ns/bit, ~240 for a software CRC-32) is why
+  // the bit work is hardware and the firmware only sequences frames.
+  //
+  // WHY PORT BIT 7. The port rule is "outputs low, inputs high" and the
+  // baseline protocols already claim bits 0-5 (UART TX/RX, SPI, I2C SDA/SCL
+  // -- see the header's assignment table). Bit 7 is unclaimed and is an input
+  // under the reset mask 8'hF8, so the DRU gets a released pad to listen to.
+  // The DRU takes the RAW pin and does its own synchronizing (a two-flop
+  // synchronizer plus the latch-pair DDR front end, ADR-002) -- it must not
+  // take a registered level.
+  //
+  // WHY THE WINDOW IS REGISTERS AND NOT A FIFO. The MAC owns the ring's
+  // lifetime and the CPU is 16 bytes of data memory; firmware cannot hold a
+  // frame. So frame_valid latches the header and arms a read pointer at the
+  // frame's FIRST STORED BYTE, and BUFBYTE walks it. On frame_valid the MAC's
+  // pointer has already been wound back for a type frame, so `ptr - len` is
+  // the start for BOTH frame kinds (type: ptr = start + pay_cnt - 4 and
+  // len = pay_cnt - 4; length: ptr = start + pay_cnt and len = pay_cnt).
+  //
+  // THE LIMITS, STATED. There is ONE window, not a queue: a second frame that
+  // completes before firmware has read the first overwrites the latched
+  // header (the bytes stay in the ring). A frame landing mid-walk also wins
+  // the fbuf port over the walk read (the write path has priority in
+  // pe_fbuf), so that read returns the previous byte. Firmware consumes a
+  // frame in ~500 cycles against a ~50 us wire time, so neither is reachable
+  // here; a general stack would need a producer/consumer handshake that this
+  // milestone does not.
+  localparam int ETH_RX_BIT = 7;
+  localparam int FBUF_BYTES = 2048;
+  localparam int FBUF_AW    = 11;      // $clog2(2048)
+
+  logic              eth_bit_en, eth_rx_first, eth_rx_second, eth_rx_wire;
+  logic              eth_locked;
+  logic [3:0]        eth_phase;
+  logic              eth_rx_raw, eth_rx_err;
+  // The chain's transmit-side outputs. This integration is RECEIVE-ONLY, so
+  // they have no consumer -- but an empty connection is a Verilator
+  // PINCONNECTEMPTY warning and this repo accepts none, so they are sunk like
+  // the other unused observability below.
+  logic              eth_manch_tx_wire, eth_crc_bit;
+
+  logic              eth_crc_bit_en, eth_crc_clr, eth_crc_bit_in;
+  logic              eth_crc_field_out, eth_crc_zero;
+  logic [31:0]       eth_crc_state;
+
+  logic              eth_fbuf_we;
+  logic [FBUF_AW-1:0] eth_fbuf_waddr;
+  logic [7:0]        eth_fbuf_wdata;
+
+  logic               eth_frame_valid, eth_frame_bad, eth_frame_is_type;
+  logic [15:0]        eth_frame_len, eth_frame_field;
+  logic [FBUF_AW-1:0] eth_frame_ptr;
+  logic [2:0]         eth_dbg_state;
+
+  logic               eth_buf_reset;
+  logic [FBUF_AW-1:0] eth_buf_raddr;
+  logic [7:0]         eth_buf_rdata;
+  logic [FBUF_AW-1:0] eth_frame_start;
+
+  logic               eth_valid, eth_bad, eth_is_type;
+  logic [15:0]        eth_len, eth_field;
+  logic               ethstat_rd, bufbyte_rd;
+
+  // Signals the chain exposes that this integration does not consume. RTL
+  // lint has no waivers in this repo, so they are sunk explicitly (the same
+  // pattern tt_um_protocol_emulator uses).
+  wire _unused_eth = &{1'b0, eth_locked, eth_phase, eth_crc_zero,
+                       eth_dbg_state, eth_manch_tx_wire, eth_crc_bit};
+
+  assign ethstat_rd = io_re && (io_port == 4'h8);
+  assign bufbyte_rd = io_re && (io_port == 4'hD);
+  assign eth_buf_reset = io_we && (io_port == 4'hE) && io_wdata[0];
+  assign eth_frame_start = eth_frame_ptr - eth_frame_len[FBUF_AW-1:0];
+
+  pe_dru #(.SPB(12)) u_eth_dru (
+    .clk(clk), .rst_n(rst_n),
+    .rx_pin(pin_in[ETH_RX_BIT]),
+    .cfg_filter_en(1'b0),          // the pin is driven cleanly in every TB
+    .cfg_lock_bits(8'd4),          // the default confidence threshold
+    .bit_en(eth_bit_en),
+    .rx_first(eth_rx_first), .rx_second(eth_rx_second), .rx_wire(eth_rx_wire),
+    .locked(eth_locked), .dbg_phase(eth_phase)
+  );
+
+  pe_manch u_eth_manch (
+    .clk(clk), .rst_n(rst_n),
+    .bit_en(eth_bit_en), .bypass(1'b0), .clr(1'b0), .half_phase(1'b0),
+    .tx_raw(1'b0), .tx_wire(eth_manch_tx_wire),
+    .rx_wire(eth_rx_wire),
+    .rx_first(eth_rx_first), .rx_second(eth_rx_second),
+    .rx_raw(eth_rx_raw), .rx_err(eth_rx_err)
+  );
+
+  // The receiver folds the field AS TRANSMITTED and compares against the
+  // catalogue residue -- so crc_field_out is held LOW by the MAC and the
+  // verdict is `crc_state == CRC_RESIDUE`, never `crc_zero`. Constants from
+  // the generated wiki/reference/crc-config.md; do not hand-edit.
+  pe_crc #(.W(32)) u_eth_crc (
+    .clk(clk), .rst_n(rst_n),
+    .bit_en(eth_crc_bit_en), .clr(eth_crc_clr),
+    .crc_field(eth_crc_field_out), .bit_in(eth_crc_bit_in),
+    .cfg_poly_r(32'hEDB88320),     // rev(0x04C11DB7, 32)
+    .cfg_seed(32'hFFFFFFFF),
+    .cfg_out_inv(1'b1),            // Ethernet's xorout is all ones
+    .crc_bit(eth_crc_bit), .crc_zero(eth_crc_zero), .crc_state(eth_crc_state)
+  );
+
+  pe_eth_mac #(.BUF_BYTES(FBUF_BYTES)) u_eth_mac (
+    .clk(clk), .rst_n(rst_n),
+    .bit_en(eth_bit_en), .rx_raw(eth_rx_raw), .rx_err(eth_rx_err),
+    .rx_first(eth_rx_first), .rx_second(eth_rx_second),
+    .buf_reset(eth_buf_reset),
+    .crc_bit_en(eth_crc_bit_en), .crc_clr(eth_crc_clr),
+    .crc_bit_in(eth_crc_bit_in), .crc_field_out(eth_crc_field_out),
+    .crc_state(eth_crc_state),
+    .fbuf_we(eth_fbuf_we), .fbuf_waddr(eth_fbuf_waddr),
+    .fbuf_wdata(eth_fbuf_wdata),
+    .frame_valid(eth_frame_valid), .frame_bad(eth_frame_bad),
+    .frame_len(eth_frame_len), .frame_field(eth_frame_field),
+    .frame_is_type(eth_frame_is_type), .frame_ptr(eth_frame_ptr),
+    .dbg_state(eth_dbg_state)
+  );
+
+  pe_fbuf #(.BYTES(FBUF_BYTES), .FLOP(0)) u_eth_fbuf (
+    .clk(clk),
+    .we(eth_fbuf_we), .waddr(eth_fbuf_waddr), .wdata(eth_fbuf_wdata),
+    .raddr(eth_buf_raddr), .rdata(eth_buf_rdata)
+  );
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      eth_valid     <= 1'b0;
+      eth_bad       <= 1'b0;
+      eth_is_type   <= 1'b0;
+      eth_len       <= '0;
+      eth_field     <= '0;
+      eth_buf_raddr <= '0;
+    end else begin
+      // A completed frame owns the window: latch the header and arm the byte
+      // walk at the frame's first stored byte.
+      if (eth_frame_valid) begin
+        eth_valid     <= 1'b1;
+        eth_is_type   <= eth_frame_is_type;
+        eth_len       <= eth_frame_len;
+        eth_field     <= eth_frame_field;
+        eth_buf_raddr <= eth_frame_start;
+      end
+      // Set beats clear, for the same reason STATUS's tick flag does: a frame
+      // landing on the cycle firmware reads the status must not be lost. A
+      // dropped frame costs 100 us of wire time; re-reporting one costs one
+      // extra poll.
+      if (ethstat_rd) begin
+        if (!eth_frame_valid) eth_valid <= 1'b0;
+        if (!eth_frame_bad)   eth_bad   <= 1'b0;
+      end
+      if (eth_frame_bad) eth_bad <= 1'b1;
+      // BUFBYTE advances the window. See the memory-map note on the
+      // one-cycle read pipeline, and the header note on the read/write port
+      // race.
+      if (bufbyte_rd && !eth_frame_valid)
+        eth_buf_raddr <= eth_buf_raddr + 1'b1;
+    end
+  end
+
   // The port read mux.
   //
   // Port 0/1 keep the OLD combined view -- driven pins read back what firmware
@@ -454,6 +639,9 @@ module pe_soc #(
   //   port 2 read = PINOE, not the pad. The pad level is already available as
   //   the released-pin part of port 0, and giving firmware a read-modify-write
   //   of the enable register matters more for I2C than a second pad view.
+  //
+  // The 10BASE-T window is read-only here (0x8-0xD) and BUFCTRL is write-only
+  // (0xE); the receive chain above declares those registers.
   always_comb begin
     case (io_port)
       4'h0:    io_rdata = pin_rd;
@@ -464,6 +652,13 @@ module pe_soc #(
       4'h5:    io_rdata = tick_val;
       4'h6:    io_rdata = {7'b0, i2c_flag};
       4'h7:    io_rdata = {7'b0, tick_flag};
+      4'h8:    io_rdata = {5'b0, eth_is_type, eth_bad, eth_valid};
+      4'h9:    io_rdata = eth_len[7:0];
+      4'hA:    io_rdata = eth_len[15:8];
+      4'hB:    io_rdata = eth_field[7:0];
+      4'hC:    io_rdata = eth_field[15:8];
+      4'hD:    io_rdata = eth_buf_rdata;      // pe_fbuf's registered read output
+      4'hE:    io_rdata = 8'h00;              // BUFCTRL is write-only
       default: io_rdata = 8'h00;
     endcase
   end

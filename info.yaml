@@ -19,8 +19,8 @@
 # 10BASE-T half-UI, the binding TX constraint -- exactly 3 ticks, keeps every
 # other hard protocol exact, and refines the RX grid by 50% (SPB 8 -> 12).
 # 66 MHz is NOT usable: it provably fails the 802.3 TX jitter window at any
-# edge placement, dithered or not. The design is still signed OFF at 66 MHz
-# for margin if the real pad limit comes in below the sky130 figure.
+# edge placement, dithered or not. Both flow configs target signoff at the
+# same 60 MHz operating point (16.667 ns); the 66 MHz target is retired.
 # See wiki/decisions/adr-005-60mhz-turbo.md and concepts/tx-timing-generation.md.
 
 project:
@@ -41,16 +41,23 @@ project:
 
   # Order matters only in that every module must be present; the TT precheck
   # compiles these together. pe_soc instantiates pe_imem (the SRAM
-  # wrapper), pe_pinmux (the per-pin matrix), and -- through pe_imem -- the
-  # SRAM macro. The .bb.v is the macro's empty port shell, which is what lets
-  # an iverilog/verilator compile of these sources resolve the instance; the
-  # real macro model and GDS come from the PDK at build time.
+  # wrapper), pe_pinmux (the per-pin matrix), the 10BASE-T receive chain
+  # (pe_dru -> pe_manch -> pe_eth_mac with pe_crc and pe_fbuf) and -- through
+  # pe_imem/pe_fbuf -- the SRAM macro. The .bb.v is the macro's empty port
+  # shell, which is what lets an iverilog/verilator compile of these sources
+  # resolve the instance; the real macro model and GDS come from the PDK at
+  # build time.
   # Measured before the fix: iverilog on the three listed files ended in
   # "Unknown module type: RM_IHPSG13_1P_1024x16_c2_bm_bist".
   source_files:
     - "rtl/pe_cpu.v"
     - "rtl/pe_imem.v"
     - "rtl/pe_pinmux.v"
+    - "rtl/pe_dru.v"
+    - "rtl/pe_manch.v"
+    - "rtl/pe_crc.v"
+    - "rtl/pe_eth_mac.v"
+    - "rtl/pe_fbuf.v"
     - "rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v"
     - "rtl/pe_soc.v"
     - "rtl/tt_um_protocol_emulator.v"
@@ -60,7 +67,7 @@ project:
 pinout:
   ui[0]: "UART RX (protocol input pin)"
   ui[1]: "run (1 = execute firmware, 0 = hold at PC 0)"
-  ui[2]: ""
+  ui[2]: "10BASE-T RX (Manchester line input)"
   ui[3]: ""
   ui[4]: ""
   ui[5]: ""

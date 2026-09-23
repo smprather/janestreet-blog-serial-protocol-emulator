@@ -100,15 +100,13 @@ report pe_fbuf_macro  "rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist
   # write port -- so this is the whole cost of the hardware-vs-firmware
   # decision wiki/concepts/ethernet-scope.md argues for.
   report pe_eth_mac "rtl/pe_eth_mac.v" pe_eth_mac
-# Note on the SoC: its IMEM/DMEM are register arrays, and yosys will not map
-# flip-flop arrays to an SRAM macro here. They therefore synthesise as thousands
-# of individual flops (~2,215 at 48.9 um2 each) and the mapped area is huge
-# (~177k um2) for what it does. That is the expected consequence of flop memory,
-# not a synthesis failure -- see wiki/reference/sram-budget.md and
-# wiki/plans/through-i2c.md (Blocker 3) for the macro that fixes it.
-report pe_soc  "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_soc.v" pe_soc
+# Note on the SoC: the instruction memory is the SRAM macro, and the frame
+# buffer is the same part; both contribute area from their LEF, not gates. The
+# receive chain's logic is part of this build now, so its sources are listed --
+# the same list flow/pe_soc.json and info.yaml carry.
+report pe_soc  "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_soc.v" pe_soc
 # The deliverable: the only module Tiny Tapeout will instantiate.
-report tt_um_top    "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_soc.v rtl/tt_um_protocol_emulator.v" tt_um_protocol_emulator
+report tt_um_top    "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_soc.v rtl/tt_um_protocol_emulator.v" tt_um_protocol_emulator
 echo "-----------------------------------------------"
 echo "routed reference: pe_serdes = 17,211 um2 cells / 29,164 um2 die @78% util"
 echo "reproduce it with: flow/run_librelane.sh flow/pe_serdes.json"

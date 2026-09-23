@@ -65,22 +65,19 @@ BLOCKS = [
         name="pe_eth_mac",
         source_file="pe_eth_mac.v",
         role="10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward",
-        # Ties four orphan blocks into a signal path: DRU -> manch -> CRC ->
-        # fbuf. The SoC instance is where 10BASE-T lives, which is the next
-        # milestone's work, so instantiated_in is None for now -- and accurate.
-        instantiated_in=None,
+        # Ties four blocks into one signal path: DRU -> manch -> CRC -> fbuf.
+        # Instantiated in pe_soc as of 2026-09-23, with the frame window on the
+        # SoC's IO space and firmware/eth_rx.pe as its first consumer.
+        instantiated_in="pe_soc.v",
         tb="tb_pe_eth_mac.v",
     ),
     dict(
         name="pe_fbuf",
         source_file="pe_fbuf.v",
         role="frame buffer: 2 KB behind a byte interface, same macro as pe_imem",
-        # instantiated_in=None is ACCURATE, not an oversight: the block is
-        # built and TB-proven on both its macro and FLOP paths, but no SoC
-        # instance drives it yet -- wiring it needs the receive path
-        # (10BASE-T is the consumer), which is the next milestone's work.
-        # ADR-003 chose the part; this is the RTL for it.
-        instantiated_in=None,
+        # Instantiated in pe_soc as of 2026-09-23: the receive chain's
+        # store-and-forward port is its writer and BUFBYTE its reader.
+        instantiated_in="pe_soc.v",
         tb="tb_pe_fbuf.v",
         # Same reason as pe_imem above: synth_area maps macro and flop builds
         # separately, so the label must name the configuration that ships. 48
@@ -98,14 +95,14 @@ BLOCKS = [
         name="pe_dru",
         source_file="pe_dru.v",
         role="digital receiver unit: 12x oversampled edge recovery",
-        instantiated_in=None,
+        instantiated_in="pe_soc.v",
         tb="tb_pe_dru.v",
     ),
     dict(
         name="pe_crc",
         source_file="pe_crc.v",
         role="CRC/LFSR generator, 8/16/32-bit, catalogue-checked",
-        instantiated_in=None,
+        instantiated_in="pe_soc.v",
         tb="tb_pe_crc.v",
     ),
     dict(
@@ -332,11 +329,21 @@ def build() -> tuple[str, list[str]]:
         "            CPU" + label(cpu),
         "            IMEM" + label(imem),
         "            TICK[\"tick timer<br/><b>260</b> clk = half a 115200 bit\"]",
-        "            PORT[\"fixed-mask port<br/>PIN_IN_MASK = 8'hF8\"]",
+        "            PORT[\"the pin matrix<br/>per-pin out/oe/od\"]",
+        "            DRU[\"pe_dru<br/>oversampled Manchester RX\"]",
+        "            MANCH[\"pe_manch<br/>Manchester decode\"]",
+        "            ETHMAC[\"pe_eth_mac<br/>SFD lock, FCS, store-and-forward\"]",
+        "            ETHCRC[\"pe_crc<br/>CRC-32, catalogue-checked\"]",
+        "            FBUF[\"pe_fbuf<br/>2 KB frame buffer\"]",
         "            CPU --> IMEM",
         "            CPU --> TICK",
         "            CPU --> PORT",
+        "            CPU -->|\"frame window (IO 0x8-0xE)\"| ETHMAC",
+        "            DRU --> MANCH --> ETHMAC",
+        "            ETHMAC --> ETHCRC",
+        "            ETHMAC --> FBUF",
         "            IMEM -.->|FLOP=0| SRAM",
+        "            FBUF -.->|FLOP=0| SRAM",
         "        end",
         '        SRAM["SRAM macro<br/>RM_IHPSG13 1P_1024x16"]',
         "    end",
@@ -350,7 +357,7 @@ def build() -> tuple[str, list[str]]:
         "",
         '    classDef built fill:#1f4d2e,stroke:#4ade80,color:#fff',
         '    classDef plan fill:#4a1f1f,stroke:#f87171,color:#fff,stroke-dasharray: 5 5',
-        "    class CPU,IMEM,TICK,PORT,SRAM built",
+        "    class CPU,IMEM,TICK,PORT,SRAM,DRU,MANCH,ETHMAC,ETHCRC,FBUF built",
         "```",
         "",
         "### Built, verified — and wired to nothing",
@@ -416,16 +423,17 @@ def build() -> tuple[str, list[str]]:
         "",
         "## The two memory stories",
         "",
-        "There are two memories in the ADRs and only one in the RTL:",
+        "There are two memories in the ADRs, and both are in the RTL now:",
         "",
         "- **Instruction memory — BUILT.** `pe_imem` instantiates the PDK's",
         "  `RM_IHPSG13_1P_1024x16_c2_bm_bist` by default (`FLOP=0`). This is the",
         "  SRAM that carries the design's critical path (`A_CLK` -> `A_DOUT`,",
         "  7.635 ns in context at the slow corner), and it is the reason the SoC",
         "  needed its own STA run at all — see [[reference/sram-budget]].",
-        "- **Frame buffer — NOT BUILT.** ADR-003 plans a 2 KB frame buffer for",
-        "  10BASE-T (a max Ethernet frame is 1518 bytes, so the 1 KB parts miss by",
-        "  494). No RTL exists for it.",
+        "- **Frame buffer — BUILT.** `pe_fbuf` holds 2 KB behind a byte interface",
+        "  on the same `RM_IHPSG13_1P_1024x16_c2_bm_bist` part as the instruction",
+        "  memory (ADR-003), and the 10BASE-T receive chain is its writer as of",
+        "  2026-09-23. The `FLOP=1` path is the register-array fallback.",
         "",
         "The `FLOP=1` path in `pe_imem` synthesises a register array instead of the",
         "macro (60,806 cells vs 12). It exists for tests and area experiments and is",

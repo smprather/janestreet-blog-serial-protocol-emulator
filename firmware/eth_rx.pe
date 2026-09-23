@@ -1,0 +1,110 @@
+; eth_rx.pe — consume 10BASE-T frames the hardware receiver has buffered.
+;
+; THERE IS NO ETHERNET STATE MACHINE IN THIS PROGRAM. rtl/pe_eth_mac.v already
+; locked the SFD, assembled the bytes, checked the FCS and stored the payload;
+; wiki/concepts/ethernet-scope.md's arithmetic is why the bit work is hardware.
+; What is left for firmware is the part that is genuinely control flow: notice
+; a frame, read its header, walk its bytes, reclaim the ring.
+;
+; That walk is the point of this program. Until it existed, the receive chain
+; was TB-proven but no PROGRAM could use a frame -- the window over the IO
+; space (rtl/pe_soc.v's memory map) is the interface this is the first
+; consumer of.
+;
+; ---------------------------------------------------------------------------
+; THE WINDOW
+;
+;   ETHSTAT (0x8) r  {5'b0, is_type, bad, valid}; reading CLEARS valid/bad
+;   ETHLEN  (0x9) r  frame_len[7:0]
+;   ETHLENH (0xA) r  frame_len[15:8]
+;   ETHFLD  (0xB) r  frame_field[7:0]
+;   ETHFLDH (0xC) r  frame_field[15:8]
+;   BUFBYTE (0xD) r  next byte of the frame; the read ADVANCES the window
+;   BUFCTRL (0xE) w  bit0 pulse: reclaim the frame buffer (ring to empty)
+;
+; BUFBYTE HAS A ONE-CYCLE MEMORY PIPELINE. pe_fbuf's read data is valid the
+; cycle AFTER its address, so reading BUFBYTE twice on consecutive cycles
+; returns the SAME byte twice. The loop below is nine instructions long, so
+; consecutive reads are naturally spaced; the checksum is what catches a slip
+; (a duplicated byte changes the sum for any non-zero payload, and the TB
+; drives non-zero payloads). ADD, not OR: OR is idempotent, so a duplicate
+; would not change it.
+;
+; ---------------------------------------------------------------------------
+; WHAT IT LEAVES FOR THE TESTBENCH (dmem is the observable interface)
+;
+;   dmem[0]  frame_len[7:0]            dmem[5]  8-bit SUM of the walked bytes
+;   dmem[1]  frame_len[15:8]           dmem[6]  walk counter, 0 when complete
+;   dmem[2]  frame_field[7:0]          dmem[7]  0x5A once a frame was consumed
+;   dmem[3]  frame_field[15:8]         dmem[8]  count of REJECTED frames
+;   dmem[4]  (unused)                  dmem[9]  scratch: the raw ETHSTAT byte
+;
+; The sum, not a copy, because data memory is 16 bytes: a 46-byte ARP payload
+; cannot be stored, and a checksum over every byte is order- and
+; content-sensitive evidence that all of them were walked.
+;
+; This program handles frames whose length fits in 8 bits (an ARP is 46).
+; ETHLENH is read and recorded, but the walk counter is the low byte.
+
+        ; ---- counters start at zero -------------------------------------
+        ; dmem is uninitialised x at reset, and an x survives ADD, so the
+        ; rejected-frame counter must be cleared before it is used. dmem[7]
+        ; is cleared too, so the TB can tell "never consumed" from "consumed
+        ; a frame whose data happened to be zero".
+        LDI   A, 0
+        STM   8, A
+        STM   7, A
+
+        ; ---- wait for a frame -------------------------------------------
+main:   IN    A, ETHSTAT           ; returns is_type|bad|valid; clears the events
+        STM   9, A                 ; keep the raw byte for the bad test below
+        AND   A, 1                 ; bit0: a frame is ready
+        JNZ   got_frame
+
+        LDM   A, 9
+        AND   A, 2                 ; bit1: a frame was rejected
+        JZ    main                 ; neither event: keep polling
+
+        ; ---- a rejected frame: count it, keep waiting -------------------
+        LDM   A, 8
+        ADD   A, 1
+        STM   8, A
+        JMP   main
+
+        ; ---- record the header ------------------------------------------
+got_frame:
+        IN    A, ETHLEN
+        STM   0, A
+        IN    A, ETHLENH
+        STM   1, A
+        IN    A, ETHFLD
+        STM   2, A
+        IN    A, ETHFLDH
+        STM   3, A
+
+        ; ---- walk the payload and sum it ---------------------------------
+        LDM   A, 0                 ; the length is the walk count
+        STM   6, A
+        LDI   A, 0
+        STM   5, A
+
+sum:    LDM   A, 6
+        JZ    done
+        IN    A, BUFBYTE           ; one byte, and the window advances
+        MOV   X, A
+        LDM   A, 5
+        ADD   A, X                 ; sum += byte
+        STM   5, A
+        LDM   A, 6
+        SUB   A, 1
+        STM   6, A
+        JMP   sum
+
+done:   ; The ring's write pointer is the receiver's to advance; firmware
+        ; reclaims it after consuming, which is what makes room for the next
+        ; frame independent of how many have arrived.
+        LDI   A, 1
+        OUT   BUFCTRL, A
+        LDI   A, 0x5A
+        STM   7, A                 ; the "consumed" flag the TB waits on
+        JMP   main
