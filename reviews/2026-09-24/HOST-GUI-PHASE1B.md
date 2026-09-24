@@ -3,6 +3,7 @@
 **Date entry (UTC):** 2026-09-24T19:07:55Z (`date -u +"%Y-%m-%dT%H:%M:%SZ"`).
 **Branch:** `host-controller-gui` (base `153fbde`, the phase 1a contract layer).
 **Code commit:** `c12734e` (`feat: add host transport, session, server and fake PE`).
+**Result-doc commit:** `9242cf3` (this file plus review section 8).
 **Scope:** plan Task 6 (transport, session, server, first page) plus a fake-PE
 backend for host-side testing. Test-first; the phase 1a 55-case suite stays
 green and is extended.
