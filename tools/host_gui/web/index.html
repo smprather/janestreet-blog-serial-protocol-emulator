@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PE Host Controller</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Protocol Emulator — Host Controller</h1>
+    <p class="subtitle">USB CDC bridge &rarr; framed PE protocol (plan phase 1b)</p>
+  </header>
+
+  <main>
+    <section id="status" class="panel">
+      <h2>Status</h2>
+      <dl>
+        <dt>Connection</dt><dd id="connection-state">DISCONNECTED</dd>
+        <dt>Session</dt><dd id="session-id">—</dd>
+        <dt>SCLK cap</dt><dd id="sclk-cap">—</dd>
+        <dt>Chip state</dt><dd id="chip-state">—</dd>
+        <dt>Run</dt><dd id="run-state">—</dd>
+        <dt>Words written</dt><dd id="words-written">—</dd>
+        <dt>Faults</dt><dd id="faults">—</dd>
+      </dl>
+    </section>
+
+    <section class="panel">
+      <h2>Program</h2>
+      <label for="sources">Source image</label>
+      <select id="sources"></select>
+      <div class="controls">
+        <button id="connect">Connect</button>
+        <button id="load" disabled>Load</button>
+        <button id="start" disabled>Start</button>
+        <button id="stop" disabled>Stop</button>
+        <button id="dump" disabled>Dump core</button>
+      </div>
+      <div id="load-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+        <div id="load-progress-bar"></div>
+      </div>
+      <p id="message" class="message"></p>
+      <dl id="manifest" class="manifest"></dl>
+    </section>
+
+    <section class="panel">
+      <h2>Events</h2>
+      <ul id="events"></ul>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

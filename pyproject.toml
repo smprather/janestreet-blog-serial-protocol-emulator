@@ -20,6 +20,17 @@ authors = [
 requires-python = ">=3.12"
 dependencies = []
 
+# Optional GUI stack (plan Task 2/Task 6): the host_gui core contract modules
+# (protocol, image, transport, session, server logic) run dependency-free; a
+# real serial device needs pyserial and the HTTP/WebSocket server needs
+# fastapi+uvicorn. Install with: pip install .[host-gui]
+[project.optional-dependencies]
+host-gui = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "pyserial>=3.5",
+]
+
 [tool.ruff]
 line-length = 90
 target-version = "py312"
