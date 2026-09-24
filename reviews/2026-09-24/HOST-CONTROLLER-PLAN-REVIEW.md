@@ -285,3 +285,30 @@ contracts as written (with the P23 terminal-jump wording corrected):
 Next host phases (plan Tasks 2, 6, 7): `transport.py`/`session.py`/`server.py`,
 `tools/host_bridge/`, acceptance — all still gated only by the RTL phases above
 for chip-confirmed behavior, not for the host-side fakes.
+
+---
+
+## 8. R0 decisions resolved (W2-2, 2026-09-24)
+
+The manager's W2-2 rulings are now encoded in host code and tests; details and
+commands are in `reviews/2026-09-24/HOST-GUI-PHASE1B.md`:
+
+1. **Pad mapping — the plan wins.** `uio[4]=CS_N`, `uio[5]=MOSI`,
+   `uio[6]=MISO`, `uio[7]=SCK` (`tools/host_gui/board.py`, `FakeBridge.hello`,
+   tests). The A1 raw echo on `uio[4]` is **superseded**; row P2 is closed in
+   favor of the plan.
+2. **A1 semantics transferred, not lost.** The per-word echo is the fake's
+   commit log (every committed word asserted by tests), the final-word echo is
+   the fourth LOAD response word (full-1024 case covered), and a run-aborted
+   word is never committed, counted or echoed. An aborted load does not mark
+   the session loaded.
+3. **Rate.** 5 MHz is the host guard rate; `hello.sclk_hz_max` carries the
+   negotiated cap and `ControllerSession.negotiate_sclk()` refuses to exceed
+   it. The RTL readback ceiling decision (A1/A2/A3) is still R0-open for the
+   chip side, but no host code can silently exceed the cap.
+4. **Terminal rule** (row P23): a backward unconditional JMP, warned but not
+   required — implemented in `image.py`.
+5. **New decisions taken here:** `LOAD` while `run=1` returns `NOT_READY` with
+   no fault; clearing a fault after an aborted load returns to `PREPARED`;
+   `READ_CPU` stays non-halting while `READ_IMEM`/`READ_DMEM`/`DUMP_CORE`
+   require `run=0`.
