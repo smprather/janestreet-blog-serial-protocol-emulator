@@ -28,6 +28,8 @@
 #      chip-side golden vectors must still match a fresh build of the model.
 #   7. the MicroPython conformance run of the deployed bridge modules, when a
 #      `micropython` binary is on PATH (skipped with a note otherwise).
+#   8. the deploy helper's dry run (payload manifest; the unit tests also
+#      exercise the real install and its refusals).
 #
 # IT IS NOT A CHIP GATE. Nothing here runs a testbench, the regression, or
 # synthesis, and nothing here is evidence about silicon: the PE host protocol
@@ -54,6 +56,7 @@ run() {
 
 run "host_gui tests"    python3 -m unittest discover -s tools/host_gui/tests -v
 run "host_bridge tests" python3 -m unittest discover -s tools/host_bridge/tests -v
+run "deploy helper (dry run)" tools/host_bridge/deploy.sh --dry-run
 
 if command -v ruff >/dev/null 2>&1; then
     run "ruff" ruff check tools/host_gui tools/host_bridge
