@@ -194,3 +194,70 @@ weakened a claim:
   `WS_RST2`, `SRV_DATA`, `DHT_DATA`) in the existing timing-constants block.
 - Docs: `docs/demo-walkthrough.md` gains the three acts with their measured
   numbers; `wiki/STATUS.md` gains the summary block.
+
+---
+
+## DS18B20 (Block 2 act a) — where the read rewrite stands at the flush
+
+Firmware and TB are committed as a **WIP checkpoint** (`0339a29`, `2a60791`); the
+TB's latest edge-driven model edit is **uncommitted in the worktree and persists**.
+The act is **not wired into `run_all.sh` and is not claimed to pass.** Block 1's
+three acts remain green after the merge onto main (ws2812 / servo / dht11 all PASS).
+
+**Verified on real RTL (the write path):** reset pulse 485.7 µs (min 480),
+presence pulse found by the firmware's two edge-spins, **16/16 write slots
+reconstructed from the pads**, and **both commands 0xCC (SKIP ROM) and 0xBE (READ
+SCRATCHPAD) decode correctly, LSB-first, from the wire.** The read path does not
+yet bank the right bytes (last run `ff ff`, want `2b 01`).
+
+### Fixed so far (all committed, all in the sources with reasons)
+
+1. **dmem collision between the delay routine and the protocol.** The delay owned
+   dmem[9–15] (its middle-counter *target* was dmem[10]) and the protocol also used
+   dmem[10] (write command counter, then read byte counter). Every delay overwrote
+   the phase counter, so the byte transition read whatever the delay left behind.
+   Now **disjoint**: delay owns 9–15, protocol owns 0–8. Write command counter
+   moved to dmem[7], read byte counter to dmem[8]. *General lesson: a delay
+   routine and its caller must never share a data slot.*
+2. **LSB-first accumulate.** The read used the DHT11's shift-LEFT + bit-at-LSB
+   (MSB-first accumulation) on LSB-first 1-Wire data, so bytes came back
+   **reversed** (0x2b as 0xd4) — right bit count, right ones, so nothing looked
+   wrong. Now `SHR` + `OR 0x80` (bit in at the top; the first read slides down to
+   bit0).
+3. **Fixed-timing read (removed the edge race).** The read waited for the sensor's
+   falling edge, but the line was still low from the initiation pulse, so the loop
+   exited immediately and every sample landed a whole slot early. Now: pull low
+   6 µs, release, wait `OW_T40` (~25.4 µs), **sample the level** — the DHT11
+   lesson: count to a fixed instant where the wire presents a level; wait for
+   edges only where the wire announces an event.
+
+### The read handshake — what remains, and the key new finding
+
+The remaining fault is **in the TB's sensor model, not the firmware**: the read
+cycle is only **~32 µs** (6 µs pull + 25.4 µs wait + overhead), so any model that
+*holds* a 1 for longer than ~32 µs never returns to its ready state between slots
+and the slots bleed together. Holds of 8/25/40/55 µs were all tried; each read
+`ff ff` or a wrong byte. The fix in the latest (uncommitted) edit is to stop
+modelling time and start modelling the **master's release edges**: the sensor
+presents bit N's level (low for 1, released for 0) from the master's N-th release
+until the master's (N+1)-th release, so the level is correct at any instant the
+firmware samples, with no model-local hold timer to mis-time. It compiles but was
+**still reading `ff ff` when the flush hit** — the edge-driven level logic needs one
+more pass (likely the `presenting` gate / `r_bits[n_read_slots-1]` indexing).
+
+### Process note: the pi-lens host_gui blocker was a STALE-COPY finding
+
+Worth recording because it cost a lot of investigation. The recurring
+"call without try/except" STOP on `tools/host_gui/{session,transport}.py` was
+**stale in both directions**: my worktree's `session.py` was pinned at `e607597`
+(8 commits behind main), where `_result_int` did not exist and `_status_fields` /
+`_snapshot` were bare conversions — the check was flagging my **stale** copy while
+the manager was reading main's **fixed** copy. Merging `origin/main` brought the
+gui-worker's `_result_int` fix (31 refs, typed `SessionError`→409, the exact
+surface-not-swallow property) into my tree and the tool **downgraded `session.py`
+to a [stale] advisory** on its own. The four remaining `transport.py` findings
+(L114/115/118/154) are pure `int()`/`float()` coercions of untrusted input on the
+gui-worker's surface — manager-ruled **CLOSED as stale-premise, no code change
+wanted on either side**. I made **no edit** to either file; the resolution was to
+sync the tree, not to edit another actor's surface. *Lesson: for a stale-tree lint
+finding on another actor's code, pull the fix; do not hand-edit.*
