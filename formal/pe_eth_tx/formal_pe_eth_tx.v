@@ -2,20 +2,52 @@
 // abandon path of the 10BASE-T TX frame engine.
 //
 // THE PROPERTIES (the engine's header claims):
-//   P1  a transmitted frame is never < 14 or > 1514 stored bytes: a start
-//       outside the domain is REFUSED (tx_overlong) and no frame is emitted;
-//   P2  the inter-frame gap is >= 96 cells after every frame (the standard's
-//       IFG, the number the engine's own header fixes);
-//   P3  a FIFO underrun abandons to IDLE without a partial FCS (tx_underrun,
-//       no tx_done for that frame).
+//   P1a the length APPLIED at a start boundary is legal: the engine never
+//       begins a frame outside [14, MAX_STORED] (the runt/jabber guard);
+//   P1b a COMPLETED frame's length was legal (the completion form of P1a);
+//   P2  the inter-frame gap is >= 96 cells after every frame;
+//   P3  a FIFO underrun abandons to IDLE without a partial FCS.
 //
-// These are all stated over PORTS: frame_len in, and tx_overlong / tx_done /
-// tx_underrun / ifg_active / cell_start out. No RTL instrumentation, no
-// hierarchical tap (yosys does not resolve cross-module references into
-// connections — the trap pe_ctrl's header documents).
+// WHY P1 IS SPLIT, AND WHAT THE FIRST CAMPAIGN MISSED.
+// The first version sampled frame_len on the `start` INPUT pulse — one or more
+// cycles before the engine applies it (`start_pend` is consumed at the next
+// cell_start, up to DIV-1 clocks later). The engine itself reads frame_len
+// TWICE: it tests `len_ok` at the pulse edge but latches `stored_bytes <=
+// frame_len` at the apply edge. So a host that rewrites TXLEN between those two
+// edges gets one length validated and another transmitted, and the old shadow
+// could not see it. THIS SHADOW SAMPLES AT THE APPLY BOUNDARY (the edge where
+// tx_busy rises 0->1), which is exactly where the engine latches, so
+// `acc_len` is the engine's OWN accepted length. Because the rise detector
+// reads tx_busy one cycle after the fact, it reads the one-cycle-delayed copy
+// `len_d` of frame_len, which at that edge is the value the engine latched.
 //
-// Inputs are anyseq: every push/start/abort/push-rate sequence, so the proof
-// covers all stimuli rather than a testbench's schedule.
+// THE WINDOW IS REAL, AND IT IS NOT PROVED — IT IS ASSUMED AWAY.
+// Dropping the assumption below makes P1a FAIL on the UNMODIFIED RTL: a
+// 6-cycle counterexample starts a frame with TXLEN=14 and rewrites it to 13
+// before the apply boundary. That trace is recorded as a finding in
+// reviews/2026-09-25/FORMAL-VERIFICATION.md (the guard is a start-pulse check
+// against a boundary-time latch: a <=DIV-1 clock hole, host-reachable from the
+// CPU's 0xF window since SoC writes of win_regs[24]/[25] are not gated on
+// tx_busy). The proof therefore carries ONE explicit assumption, and the
+// assumption is itself mutant-checked (`eth_tx_len_window` in
+// formal/mutants.sh removes it and requires this target to FAIL):
+//
+//   THE TXLEN HOLD CONTRACT — the documented host rule (G1 in
+//   wiki/plans/eth-tx-frame-path.md: firmware writes TXLEN, pushes bytes, then
+//   frame_start; TXLEN is held until the engine applies the start). The
+//   assumption is kept as NARROW as the design needs: it constrains frame_len
+//   only on the edges between a start pulse and the apply edge it produces.
+//
+// P1a is a one-step claim at the apply edge, so it is live at the gate's
+// shallow depth AND kills both bound-removal mutants there; the completion form
+// P1b cannot fire before ~576 cells (64 prelude + 480 data/pad + 32 FCS) and is
+// therefore vacuous at the gate depth — labelled by the companion reachability
+// target formal/pe_eth_tx_reach.v, never reported as a proof of the deep case.
+// P2 is vacuous until a frame completes AND the gap closes (~672 cells).
+//
+// All of this is stated over PORTS: no RTL instrumentation, no hierarchical
+// tap (yosys does not resolve cross-module references into connections — the
+// trap pe_ctrl's header documents).
 `default_nettype none
 
 module formal_pe_eth_tx #(
@@ -46,27 +78,50 @@ module formal_pe_eth_tx #(
     .ifg_active(ifg_active), .tx_bit(tx_bit)
   );
 
-  // ---- the length domain -------------------------------------------------
-  wire len_ok = (frame_len >= 12'd14) && (frame_len <= 12'(MAX_STORED));
+  // ---- the engine's OWN accepted length ---------------------------------
+  reg [11:0] len_d;        // frame_len delayed one cycle (the apply-boundary read)
+  reg        busy_d;       // tx_busy delayed one cycle (rise detector)
+  reg [11:0] acc_len;      // the length the engine accepted at the last start
+  reg        acc_started;  // a frame is (or was) in flight from an accepted start
 
-  // ---- a shadow of what the engine accepted ---------------------------
-  // The engine applies a start at the NEXT cell boundary and (after the fix)
-  // transmits len_latch -- the length it validated at the start edge. So the
-  // shadow tracks the same thing: capture frame_len when a start is seen, and
-  // compare against what the engine actually reports completing.
-  reg [11:0] m_len;
-  reg       m_started;
+  // The TXLEN hold shadow: set at a start pulse, cleared at the apply edge.
+  // Its pre-edge value is 1 on every edge in [pulse+1 .. apply], exactly the
+  // window the engine's late re-read spans.
+  reg        hold;
+  reg [11:0] hold_len;     // TXLEN as the engine read it at the pulse edge
+
   always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      m_len     <= 12'd0;
-      m_started <= 1'b0;
-    end else if (tx_done) begin
-      m_len     <= 12'd0;         // frame closed; next start reloads
-      m_started <= 1'b0;
-    end else if (start) begin
-      m_len     <= frame_len;     // a start was issued
-      m_started <= 1'b1;
+      len_d <= 12'd0; busy_d <= 1'b0;
+      acc_len <= 12'd0; acc_started <= 1'b0;
+      hold <= 1'b0; hold_len <= 12'd0;
+    end else begin
+      len_d  <= frame_len;
+      busy_d <= tx_busy;
+
+      if (start) begin
+        hold     <= 1'b1;
+        hold_len <= frame_len;    // the value the engine's len_ok test reads
+      end else if (tx_busy && !busy_d) begin
+        hold     <= 1'b0;         // the engine applied a start at this edge
+      end
+
+      if (tx_busy && !busy_d) begin
+        // the engine applied a start at the edge one cycle ago: len_d holds
+        // the value it latched into stored_bytes, so it is the value to check.
+        assert (len_d >= 12'd14 && len_d <= 12'(MAX_STORED));   // P1a
+        acc_len     <= len_d;
+        acc_started <= 1'b1;
+      end else if (tx_done) begin
+        acc_started <= 1'b0;      // frame closed; the next start reloads
+      end
     end
+  end
+
+  // THE ONE ASSUMPTION (see the header). Not a property of the RTL: removing it
+  // makes P1a fail on the unmodified design, which is the recorded finding.
+  always @(posedge clk) begin
+    if (rst_n && hold) assume (frame_len == hold_len);
   end
 
   // ---- IFG accounting (P2) ----------------------------------------------
@@ -77,6 +132,8 @@ module formal_pe_eth_tx #(
   //     is NOT the end of a gap;
   //   * therefore the gap is closed on a falling edge of ifg_active sampled at
   //     a cell boundary, and that is the only moment the claim is about.
+  // VACUOUS AT THE GATE DEPTH: reaching this assertion needs a complete frame
+  // plus 96 gap cells (~672 cells); the reachability target labels it.
   reg [7:0] ifg_run;
   reg       prev_ifg;
   always @(posedge clk or negedge rst_n) begin
@@ -95,18 +152,16 @@ module formal_pe_eth_tx #(
   end
 
   // ---- reset discipline -------------------------------------------------
+  // Enforced by the flow: `sat` needs -set-assumes for this (and any) $assume
+  // to be a constraint at all. Without that flag it is decoration.
   always @(*) begin
     if ($initstate) assume (!rst_n);
   end
 
-  // ---- P1: a transmitted frame is always inside the length domain ------
-  // If the engine reports a COMPLETED frame, the length that was requested
-  // must have been legal. A runt/jabber is refused (tx_overlong) and can never
-  // reach tx_done. Guarded by m_started so a tx_done with no start in flight
-  // (which the engine should never produce) is not scored as a length bug but
-  // is instead caught by the explicit "tx_done implies a start" assertion.
+  // ---- P1b: a transmitted frame is always inside the length domain ------
+  // The completion form of the claim, over the engine's own accepted length.
   always @(*) begin
-    if (tx_done) assert (m_started && m_len >= 12'd14 && m_len <= 12'(MAX_STORED));
+    if (tx_done) assert (acc_started && acc_len >= 12'd14 && acc_len <= 12'(MAX_STORED));
   end
 
   // A refused start must actually be refused: tx_overlong pulses and the
@@ -114,9 +169,6 @@ module formal_pe_eth_tx #(
   always @(*) begin
     if (tx_overlong) assert (!tx_done);
   end
-
-  // ---- P2 is asserted inside the counter block above, at the gap's
-  // falling edge, where "the gap lasted at least 96 cells" is a real claim.
 
   // ---- P3: an underrun abandons without a partial FCS --------------------
   // tx_underrun and tx_done are the two terminal pulses; a frame cannot
@@ -126,8 +178,6 @@ module formal_pe_eth_tx #(
   end
   always @(posedge clk) begin
     if (rst_n && $past(tx_underrun) && !$past(frame_abort)) begin
-      // by the next cycle the engine must have left the frame (it abandons to
-      // IDLE; the abort path is the only other way to leave early)
       assert (!tx_busy || $past(tx_busy));
     end
   end

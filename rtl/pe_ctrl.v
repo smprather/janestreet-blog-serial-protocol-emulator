@@ -186,6 +186,40 @@ module pe_ctrl #(
   input  logic [7:0]  dbg_y,
   input  logic [15:0] dbg_insn,
   input  logic [7:0]  dbg_timer
+`ifdef FORMAL
+  // ---- FORMAL-ONLY OBSERVATION PORTS (manager ruling 2026-09-25) --------
+  // Guarded instrumentation for formal/pe_ctrl/formal_pe_ctrl.v. These are
+  // ALIASES of existing signals plus two 1-cycle event registers, never new
+  // datapath: the wrapper needs PORTS because yosys does not resolve
+  // hierarchical references into connections (the implicit-wire trap this
+  // file's header documents), and modelling the SPI transaction instead
+  // requires a clock/delay engine the yosys frontend rejects.
+  //
+  // FORMAL IS NEVER DEFINED IN SYNTHESIS. tools/check_formal_ifdef.sh fails
+  // any synthesis path that defines it, and the area/STA baselines are
+  // re-measured with these lines compiled out.
+  //
+  // Each tap, and the claim it exists for (target 2 in the review):
+  //   fv_resp_len/fv_resp_idx/fv_resp_active  P2a no response-index wrap
+  //   fv_r_addr/fv_r_left/fv_r_dmem/fv_rstate P2a no walk past the bound
+  //   fv_r_slot                               P2a no resp_buf slot overrun
+  //   fv_faults/fv_clr_mask/fv_range_evt      P2b RANGE sticky, set then held
+  //   fv_resp_bitpos/fv_fill_pos/fv_r_launch  P2c word-aligned serializer
+  ,output logic [15:0] fv_resp_len
+  ,output logic [4:0]  fv_resp_idx
+  ,output logic        fv_resp_active
+  ,output logic [15:0] fv_r_addr
+  ,output logic [15:0] fv_r_left
+  ,output logic [15:0] fv_r_slot
+  ,output logic        fv_r_dmem
+  ,output logic [2:0]  fv_rstate
+  ,output logic [15:0] fv_faults
+  ,output logic [15:0] fv_clr_mask
+  ,output logic        fv_range_evt
+  ,output logic [3:0]  fv_resp_bitpos
+  ,output logic [3:0]  fv_fill_pos
+  ,output logic        fv_r_launch
+`endif
 );
 
   localparam int IAW = (WORDS <= 2) ? 1 : $clog2(WORDS);
@@ -248,6 +282,15 @@ module pe_ctrl #(
   logic [15:0] r_slot;           // next resp_buf slot to write
   logic [7:0]  r_half;           // first byte of a dmem pair (big-endian)
   logic        r_first;          // 1 = the next dmem byte opens a pair
+
+`ifdef FORMAL
+  // Observation registers for the formal target (see the port list): what a
+  // CLEAR_FAULT applied, and whether a bounded-read RANGE rejection happened
+  // on this cycle. They OBSERVE existing branches -- they do not re-decide
+  // anything, so no proof can lean on a copy of the logic under test.
+  logic [15:0] fv_clr_mask_r;
+  logic        fv_range_evt_r;
+`endif
 
   // The bounded reads are the ONLY opcodes whose response cannot be built in
   // the S_CRC cycle, so the read engine below -- not the generic trailer --
@@ -484,6 +527,10 @@ module pe_ctrl #(
       spi_miso      <= 1'b0;
       for (int i = 0; i < 16; i++) resp_buf[i] <= '0;
     end else begin
+`ifdef FORMAL
+      fv_clr_mask_r <= 16'h0000;   // formal-only: default = no CLEAR_FAULT
+      fv_range_evt_r <= 1'b0;      // formal-only: default = no RANGE rejection
+`endif
       // CS falling edge: a new transaction. Frame state resets; the sticky
       // faults, words_written, echo and selected target persist.
       if (cs_fall) begin
@@ -733,6 +780,9 @@ module pe_ctrl #(
                     resp_buf[0] <= ST_OK;
                     resp_buf[1] <= faults & ~pay0;
                     faults      <= faults & ~pay0;
+`ifdef FORMAL
+                    fv_clr_mask_r <= pay0;   // formal-only observation
+`endif
                   end
                   OP_TARGET: begin
                     if (pay0 == 16'd0) begin
@@ -780,6 +830,9 @@ module pe_ctrl #(
                         faults      <= faults | FAULT_RANGE;
                         r_imm       <= 1'b1;
                         rstate      <= R_START;
+`ifdef FORMAL
+                        fv_range_evt_r <= 1'b1;   // formal-only observation
+`endif
                       end else begin
                         resp_buf[0] <= ST_OK;
                         resp_len    <= 16'd1 + pay1;   // status + data words
@@ -802,6 +855,9 @@ module pe_ctrl #(
                         faults      <= faults | FAULT_RANGE;
                         r_imm       <= 1'b1;
                         rstate      <= R_START;
+`ifdef FORMAL
+                        fv_range_evt_r <= 1'b1;   // formal-only observation
+`endif
                       end else begin
                         resp_buf[0] <= ST_OK;
                         // One status word plus ceil(count/2) data words.
@@ -1023,5 +1079,25 @@ module pe_ctrl #(
       end
     end
   end
+
+`ifdef FORMAL
+  // ---- formal-only observation aliases (see the port list) --------------.
+  // Pure aliases plus the two event registers: no logic, no state, and the
+  // whole block disappears when FORMAL is undefined.
+  assign fv_resp_len    = resp_len;
+  assign fv_resp_idx    = resp_idx;
+  assign fv_resp_active = resp_active;
+  assign fv_r_addr      = r_addr;
+  assign fv_r_left      = r_left;
+  assign fv_r_slot      = r_slot;
+  assign fv_r_dmem      = r_dmem;
+  assign fv_rstate      = rstate;
+  assign fv_faults      = faults;
+  assign fv_clr_mask    = fv_clr_mask_r;
+  assign fv_range_evt   = fv_range_evt_r;
+  assign fv_resp_bitpos = resp_bitpos;
+  assign fv_fill_pos    = fill_pos;
+  assign fv_r_launch    = r_launch;
+`endif
 
 endmodule

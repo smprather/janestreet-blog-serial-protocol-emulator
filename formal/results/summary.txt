@@ -1,2 +1,8 @@
-pinmux_od_invariant|PROVED|16
-eth_tx_safety|PROVED|16
+pinmux_od_invariant|PROVED|16|live
+eth_tx_safety|PROVED|16|live
+eth_tx_reach_busy|REACHABLE|16|live
+eth_tx_reach_tx_done|UNREACHABLE|16|vacuous at this depth
+eth_tx_reach_ifg_active|UNREACHABLE|16|vacuous at this depth
+eth_tx_reach_ifg_close|UNREACHABLE|16|vacuous at this depth
+pe_ctrl_r2|MISSING|16|wrapper absent
+pe_soc_owner_mux|MISSING|16|wrapper absent
