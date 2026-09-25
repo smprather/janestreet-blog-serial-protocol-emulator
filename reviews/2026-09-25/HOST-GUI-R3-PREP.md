@@ -153,9 +153,10 @@ Not cosmetics; each was found by a gate, not by reading:
   the generated package.
 - `acceptance.py --fake` → **28 PASS / 0 FAIL / 1 SKIP**, including the six R3
   cases.
-- Per-vector request/response bytes for the chip side:
-  `/tmp/r3_vector_bytes.md` (regenerate with
-  `python3 -m tools.host_gui.r3_vectors --hex`).
+- Per-vector request/response bytes for the chip side, as a durable artifact:
+  **`reviews/2026-09-25/R3-VECTOR-BYTES.md`** (regenerate the underlying
+  package and hex export with `python3 -m tools.host_gui.r3_vectors --write`
+  and `--hex`).
 
 ## Still open, and not host work
 
