@@ -40,6 +40,7 @@ function renderHealth(health) {
   $("start").disabled = !["LOADED", "STOPPED"].includes(health.state);
   $("stop").disabled = health.state !== "RUNNING";
   $("dump").disabled = !["PREPARED", "LOADED", "STOPPED"].includes(health.state);
+  setCpuPolling(health.state === "RUNNING");
 }
 
 function renderStatus(status) {
@@ -50,6 +51,32 @@ function renderStatus(status) {
   $("faults").textContent = status.faults
     ? `0x${status.faults.toString(16).padStart(4, "0")}`
     : "none";
+}
+
+// The live CPU header comes from READ_CPU, the one non-halting read, so it
+// refreshes while the core runs (R2; not chip-confirmed until the RTL lands).
+function renderCpu(cpu) {
+  if (!cpu) return;
+  for (const [element, key] of [["cpu-pc", "pc"], ["cpu-a", "a"],
+                                ["cpu-x", "x"], ["cpu-y", "y"],
+                                ["cpu-insn", "insn"]]) {
+    const value = cpu[key];
+    $(element).textContent = Number.isInteger(value)
+      ? `0x${value.toString(16).padStart(4, "0")}`
+      : "—";
+  }
+}
+
+let cpuPoll = null;
+function setCpuPolling(on) {
+  if (on && !cpuPoll) {
+    cpuPoll = setInterval(async () => {
+      try { renderCpu((await api("/api/read_cpu")).cpu); } catch (error) { /* running read */ }
+    }, 1000);
+  } else if (!on && cpuPoll) {
+    clearInterval(cpuPoll);
+    cpuPoll = null;
+  }
 }
 
 function renderManifest(manifest) {
@@ -93,6 +120,9 @@ async function refresh() {
     renderHealth(health);
     if (health.state !== "DISCONNECTED") {
       renderStatus((await api("/api/status")).status);
+      if (health.state === "RUNNING") {
+        renderCpu((await api("/api/read_cpu")).cpu);
+      }
     }
   } catch (error) {
     setMessage(error.message, true);

@@ -129,6 +129,14 @@ class TestWebAssets(unittest.TestCase):
         self.assertIn("/api/load", (WEB / "app.js").read_text(encoding="utf-8"))
         self.assertTrue((WEB / "style.css").read_text(encoding="utf-8").strip())
 
+    def test_page_shows_the_live_cpu_header_from_read_cpu(self):
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        for element in ("cpu-pc", "cpu-a", "cpu-x", "cpu-y", "cpu-insn"):
+            self.assertIn(element, html)
+        app = (WEB / "app.js").read_text(encoding="utf-8")
+        self.assertIn("/api/read_cpu", app)
+        self.assertIn("cpu-pc", app)
+
 
 class TestOptionalDependencies(unittest.TestCase):
     def test_have_fastapi_flag_matches_import(self):
