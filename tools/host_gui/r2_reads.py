@@ -13,14 +13,21 @@ evidence: a green probe here is host-side evidence about a model, never about
 silicon. Read the result doc next to it
 (`reviews/2026-09-25/HOST-GUI-R2-PREP.md`).
 
-Two contract questions are left to the chip side (logged as WORKLOG QUESTIONs)
-and are therefore *parameterized* rather than silently decided here:
+Manager RULINGs (2026-09-25, WORKLOG.md) settle both questions the plan left
+open; the host tree now treats them as the contract:
 
-  * does an out-of-range **read** latch a sticky fault, or answer `RANGE` with
-    no fault? The plan's read step (line 334) requires `RANGE` and "do not
-    wrap" but is silent on the sticky fault; the model exposes both policies
-    via ``FakePE(read_fault_policy=...)`` (``"latch"`` is the historical model
-    default, kept so existing tests do not change).
+  * **Read-range latches a sticky fault.** An out-of-range READ answers
+    `RANGE` *and* latches sticky ``FAULT_RANGE`` (0x4), consistent with
+    out-of-range writes; ``CLEAR_FAULT`` clears it. The model default is
+    therefore ``"latch"`` (the parameter is kept only so the rejected
+    ``"status-only"`` behavior stays reachable in a test).
+  * **READ payload is low-word-first, ascending** — the same ascending stream
+    LOAD uses, so ``READ_IMEM(a, n)`` returns words ``a, a+1, ... a+n-1`` in
+    order and ``READ_DMEM(a, n)`` packs bytes ``a..a+n-1`` big-endian per
+    word. Every read obligation below asserts this order explicitly.
+
+Both rulings are contract, not evidence: they say what the chip must do when R2
+lands, and are confirmed against the R2 RTL at that dispatch.
 """
 
 from __future__ import annotations
@@ -51,6 +58,7 @@ class Obligation:
 
 def _read_imem_bounded(pe: F.FakePE) -> bool:
     pe.request(P.OP_LOAD, payload_words=(0x0041, 0x1001, 0x4002))
+    # RULING: low word first, ascending - matches LOAD's stream.
     return pe.request(P.OP_READ_IMEM,
                       payload_words=(1, 2)).payload == (P.STATUS_OK,
                                                         0x1001, 0x4002)
@@ -91,10 +99,12 @@ def _read_while_running_rejected(pe: F.FakePE) -> bool:
 
 
 def _range_never_wraps(pe: F.FakePE) -> bool:
-    return (pe.request(P.OP_READ_IMEM,
-                      payload_words=(1023, 2)).payload[0] == P.STATUS_RANGE
-            and pe.request(P.OP_READ_DMEM,
-                           payload_words=(15, 2)).payload[0] == P.STATUS_RANGE)
+    # RULING: an out-of-range read answers RANGE *and* latches sticky
+    # FAULT_RANGE (the model default policy).
+    over_imem = pe.request(P.OP_READ_IMEM, payload_words=(1023, 2)).payload[0]
+    over_dmem = pe.request(P.OP_READ_DMEM, payload_words=(15, 2)).payload[0]
+    latched = (pe.faults & F.FAULT_RANGE) == F.FAULT_RANGE
+    return over_imem == P.STATUS_RANGE and over_dmem == P.STATUS_RANGE and latched
 
 
 def _full_width_debug_regs(pe: F.FakePE) -> bool:

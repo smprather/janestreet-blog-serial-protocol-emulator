@@ -119,6 +119,22 @@ class TestR2ProbesAgainstFakePE(unittest.TestCase):
         payload = self.pe.request(P.OP_READ_CPU).payload
         self.assertEqual(payload[1:6], (0x3FF, 0x1FFF, 0x2AA, 0x155, 0xFFFF))
 
+    def test_read_payload_is_low_word_first_ascending(self):
+        # Manager RULING: READ payload matches LOAD's ascending stream.
+        words = (0x1111, 0x2222, 0x3333, 0x4444)
+        self.pe.request(P.OP_LOAD, payload_words=words)
+        payload = self.pe.request(P.OP_READ_IMEM, payload_words=(1, 3)).payload
+        self.assertEqual(payload, (P.STATUS_OK, 0x2222, 0x3333, 0x4444))
+
+    def test_out_of_range_read_latches_sticky_fault_by_ruling(self):
+        payload = self.pe.request(P.OP_READ_IMEM, payload_words=(2000, 1)).payload
+        self.assertEqual(payload[0], P.STATUS_RANGE)
+        self.assertEqual(self.pe.faults & F.FAULT_RANGE, F.FAULT_RANGE)
+        # CLEAR_FAULT clears it.
+        cleared = self.pe.request(P.OP_CLEAR_FAULT, payload_words=(F.FAULT_RANGE,))
+        self.assertEqual(self.pe.faults, 0)
+        self.assertEqual(cleared.payload, (P.STATUS_OK, 0))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -202,19 +202,25 @@ a task closes, `BLOCKED`/`QUESTION`/`RULING` when they apply, `STALL` with a
 reason if I go quiet, `IDLE-QUEUE-EMPTY` when my queue is empty and I stand by.
 Line: `YYYY-MM-DD HH:MM TZ | gui-worker | EVENT | detail` (use system `date`).
 
-**Continuous-work / chaining protocol.** After every task:
-1. Log `TASK-DONE` (or the closing event) to the WORKLOG.
-2. Rewrite `/tmp/pi-gui-worker-interrupt` as the **last action of the task** —
-   a concise summary, or `QUESTION:`/`BLOCKED:` + text. The manager's watcher
-   reads it; the file is consumed, so it must be rewritten each task, not left
-   stale.
-3. **Chain the next scoped host task myself** (log `CHAIN` with what I picked
-   and why) rather than idling for a dispatch. If the queue is empty, log
-   `IDLE-QUEUE-EMPTY` and stand by in the sleep-1 loop, sending a liveness
-   ping every ~10 minutes so the manager can see the loop is alive.
-Dispatch is the TUI input box only and the manager dispatches serially while
-conversing, so a worker that waits idle can stall for tens of minutes; the
-log is how that gets caught.
+**Continuous-work / chaining protocol (process fix 2026-09-25).** Chaining
+happens **within the same turn**. The interrupt file is the manager's async
+review trigger, **not** the end of work: a `pi` session cannot start its own
+next turn, so ending a turn after the interrupt write left the worker idle
+(root cause of a ~20-minute idle TUI; manager RULING in WORKLOG.md). Therefore:
+
+1. Log `TASK-START` (WORKLOG) the moment a task begins; append `VERIFY`/
+   `VERIFY-RED`/`COMMIT`/`RULING` lines as they happen.
+2. Do the task, then rewrite `/tmp/pi-gui-worker-interrupt` as the **last action
+   of that task** (concise summary, or `QUESTION:`/`BLOCKED:` + text). The file
+   is consumed by the manager's watcher, so it must be rewritten each task.
+3. **Immediately start the next scoped task in the same turn** — do not end the
+   turn. Pick the next host task myself (log `CHAIN` with what I picked and
+   why), and keep going task-after-task.
+4. **Ending my turn means stopping, and I stop only on:** the host queue is
+   empty (then log `IDLE-QUEUE-EMPTY` and stand by in the sleep-1 loop with a
+   ~10-minute liveness ping), a `QUESTION:` I need answered, or `BLOCKED:`
+   (with the exact request). None of those apply while a scoped host task
+   exists, so the default is to keep chaining.
 
 **How to resume cold (a fresh session).** Read this section, then
 `HANDOFF.md`'s dated blockquotes, then `wiki/plans/host-controller-gui.md` and
