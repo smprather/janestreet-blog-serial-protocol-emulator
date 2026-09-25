@@ -212,6 +212,37 @@ CASES=(
   # pad-to-64, hardware FCS, 96-cell IFG, runt/jabber/underrun faults. Its own
   # TX-dedicated pe_crc is the second instantiation of the shared engine.
   "tb_pe_eth_tx|../rtl/pe_eth_tx.v ../rtl/pe_crc.v|tb_pe_eth_tx"
+
+  # ---- the advanced BUS protocols, as firmware --------------------------
+  # Three acts, three obligations the baseline protocols do not have, each
+  # proved on the real CPU, matrix and pads. The same-list rule: a protocol
+  # that is not in this list is not in the regression, however well it works
+  # when run by hand. firmware/i2c_xfer.pe's TB is the baseline for act 1.
+  #
+  # (1) I2C COMBINED FORMAT with a STRETCHING slave. firmware/i2c_adv.pe sends
+  #     two data bytes, a repeated START, then a THREE-BYTE read burst in which
+  #     the master DRIVES SDA low on the 9th clock to ask for the next byte --
+  #     a transmit behaviour in a receive phase, and the obligation a
+  #     single-byte read never has. The slave owns SCL, so every high-phase
+  #     wait polls the pad; dmem[0] counts those polls and the cases require it
+  #     to be 0 with no stretch and non-zero with one.
+  "tb_pe_soc_i2c_adv|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_i2c_adv"
+  # (2) SPI MODE 3 (CPOL=1/CPHA=1) with a PER-WORD CRC. firmware/spi_mode3.pe
+  #     is a three-word transaction, one CS_N frame per word, each word
+  #     followed by a CRC-8 computed IN SOFTWARE in an ISA with no XOR. Both
+  #     modes sample on the rising edge, so the failure a mode-0 program makes
+  #     is a silent one-bit shift; the TB's mode-3 slave decodes the pins, the
+  #     CRC is checked against an independent Verilog reference on BOTH sides
+  #     of the wire, and one case corrupts a response CRC so the firmware's own
+  #     comparison is proved non-vacuous.
+  "tb_pe_soc_spi3|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_spi3"
+  # (3) UART with RTS/CTS HARDWARE FLOW CONTROL. firmware/uart_flow.pe holds
+  #     RTS across every bit cell of a frame and waits for CTS before the
+  #     first start bit. The TB's claim is an invariant over time, not an
+  #     event: THE WIRE IS IDLE FOR EVERY INSTANT CTS IS LOW, sampled per
+  #     clock on the pin. A second case holds CTS low for ever and requires
+  #     that nothing at all is transmitted.
+  "tb_pe_soc_uart_flow|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_uart_flow"
 )
 
 pass=0; fail=0; failed_names=()
@@ -678,6 +709,20 @@ if ./regress/mutate_eth_tx_loop_tb.sh > /tmp/mutate_eth_tx_loop.log 2>&1; then
 else
   echo "eth_tx loopback TB mutations: FAILED"
   tail -20 /tmp/mutate_eth_tx_loop.log
+  stale=1
+fi
+
+# The three advanced BUS protocols' TBs, mutation-tested together. Their DUT
+# is the FIRMWARE, so the mutations are firmware edits -- the read-burst ACK,
+# the SCL stretch poll, the mode-3 idle level, the CRC's reduction step, the
+# CRC's comparison, the CTS wait, the RTS assertion -- and each TB must catch
+# every one that applies to it. A survivor means the TB does not test what it
+# claims, which is the failure mode this project treats as worse than a red.
+if ./regress/mutate_fwbus_tb.sh > /tmp/mutate_fwbus.log 2>&1; then
+  echo "fw-bus TB mutations: OK (no unexplained survivors)"
+else
+  echo "fw-bus TB mutations: FAILED"
+  tail -20 /tmp/mutate_fwbus.log
   stale=1
 fi
 

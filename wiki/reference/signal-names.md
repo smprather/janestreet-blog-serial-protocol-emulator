@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen/signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-16 modules, 224 ports.
+16 modules, 227 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -230,6 +230,8 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `fv_state` | out | `[2:0]` | FORMAL ONLY — the FSM state, for the IFG floor's structural precondition. |
 | `fv_fcs_left` | out | `[5:0]` | FORMAL ONLY — the FCS counter, for the frame-end precondition. |
 | `fv_abort_pend` | out | 1 | FORMAL ONLY — the abort queue bit (one of the gap's documented abandonment exits). |
+| `fv_pend_len` | out | `[11:0]` | FORMAL ONLY — the length VALIDATED and latched at the start pulse (finding F1's fix; the guard and the latch are one event). |
+| `fv_stored_bytes` | out | `[11:0]` | FORMAL ONLY — the length the frame actually CONSUMES (must equal fv_pend_len; the atomicity half of F1's fix). |
 
 ## `pe_fbuf`
 
@@ -328,8 +330,9 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `dbg_timer` | out | `[7:0]` | _no note yet_ |
 | `fv_tx_path` | out | 1 | FORMAL ONLY — the codec owner bit, for the target-4 exclusivity proof. |
 | `fv_eth_tx_owner` | out | 1 | FORMAL ONLY — the owner-mux output, for the target-4 exclusivity proof. |
-| `fv_eth_tx_busy` | out | 1 | FORMAL ONLY — the frame engine's busy wire, for the owner guard. |
-| `fv_ser_tx_busy` | out | 1 | FORMAL ONLY — the SERDES TX busy wire (the UNGUARDED direction is finding F2). |
+| `fv_ser_busy_seen` | out | 1 | FORMAL ONLY — the SERDES TX busy value THE OWNER GUARD ITSELF saw at that edge (finding F2's fix checks the set is refused while it is high). |
+| `fv_eth_busy_seen` | out | 1 | FORMAL ONLY — the frame engine's busy value the owner guard itself saw (the clear-side guard). |
+| `fv_set_took` | out | 1 | FORMAL ONLY — whether a TXCTRL tx_path SET was actually TAKEN this edge (the guard's own decision, not a re-derivation). |
 
 ## `tt_um_protocol_emulator`
 

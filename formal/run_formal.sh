@@ -128,22 +128,20 @@ FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-6}" \
   -DFV_INDUCT formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
 unset FORMAL_SAT_MODE FORMAL_INDUCT_MAX
 
-echo "--- target 4: pe_soc owner-mux exclusivity (the guard the RTL has)"
+echo "--- target 4: pe_soc owner-mux exclusivity"
 SRAM_STUB="formal/pe_soc/sram_model_formal.v"
 SOC_RTL="rtl/pe_soc.v rtl/pe_eth_tx.v rtl/pe_serdes.v rtl/pe_nrzi.v rtl/pe_bitstuff.v \
          rtl/pe_codec_mux.v rtl/pe_manch.v rtl/pe_dru.v rtl/pe_crc.v rtl/pe_fbuf.v \
          rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_eth_mac.v rtl/pe_pinmux.v"
+# C1 (the clear-side guard) is UNBOUNDED. C2 (the set-side guard, finding F2's
+# fix) is stated and gate-depth checked, but not inductive on this toolchain --
+# see the label in formal_pe_soc.v. F2's enforcement evidence is the directed TB
+# case + its mutation in regress/mutate_eth_tx_loop_tb.sh.
+FORMAL_MEMORY_MAP=1 run_target pe_soc_owner_gate_depth formal_pe_soc "$DEPTH" prove \
+  formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
 FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-3}" FORMAL_MEMORY_MAP=1 \
   run_target pe_soc_owner_guard formal_pe_soc 1 prove \
-  formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
-unset FORMAL_SAT_MODE FORMAL_INDUCT_MAX FORMAL_MEMORY_MAP
-
-echo "--- target 4, second half: the MISSING guard (a recorded finding, refuted)"
-echo "    finding F2: setting tx_path has no ser_tx_busy term, so a TXCTRL"
-echo "    write during a SERDES transmission steals the codec mid-frame."
-FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-3}" FORMAL_MEMORY_MAP=1 \
-  run_target pe_soc_owner_unguarded_refuted formal_pe_soc_refute 1 refute \
-  formal/pe_soc/formal_pe_soc_refute.v $SRAM_STUB $SOC_RTL
+  -DFV_INDUCT formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
 unset FORMAL_SAT_MODE FORMAL_INDUCT_MAX FORMAL_MEMORY_MAP
 
 echo

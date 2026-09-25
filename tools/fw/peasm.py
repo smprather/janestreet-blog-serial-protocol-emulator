@@ -109,6 +109,17 @@ CONSTS: dict[str, int] = {
     # bidirectional pins; both are open-drain on a real bus.
     "SDA": 0x10,
     "SCL": 0x20,
+    # Software-UART port bits, on the SAME 8-bit port as SDA/SCL above --
+    # which is the point: nothing in the RTL knows which protocol is running.
+    #   bit 0  TX (out)   bit 3  RX (in)
+    # The two extra bits are the hardware flow-control pair. RTS is ours and
+    # CTS is the receiver's, and they are the only pins in the map that no
+    # other program touches; firmware/uart_flow.pe is their only user.
+    #   bit 4  RTS (out)  bit 5  CTS (in)
+    "UTX": 0x01,
+    "URX": 0x08,
+    "RTS": 0x10,
+    "CTS": 0x20,
     # Standard-mode tick counts at 1 us per tick. 5/6 rather than 5/5: 5/5 is
     # exactly 100.0 kHz, which is AT the ceiling and works on a bench while
     # failing a compliance report. See wiki/plans/through-i2c.md.
@@ -146,12 +157,12 @@ CONSTS: dict[str, int] = {
     # THE TIMING-PROTOCOL CONSTANTS (WS2812, servo, DHT11).
     #
     # These three protocols are the project's TIMING acts: protocols where the
-    # waveform IS the specification, and where a firmware that is "nearly
-    # right" is wrong. That is the whole reason they live next to the I2C
-    # constants rather than in a separate file -- the I2C numbers are also
-    # timing numbers, and the reason a delay cannot be built out of a 1 us tick
-    # (the phase residual is up to a full tick, which is 80% of a WS2812 bit
-    # cell) is a property of the TICK, not of either protocol.
+    # waveform IS the specification, and where a firmware that is "nearly right"
+    # is wrong. That is the whole reason they live next to the I2C constants
+    # rather than in a separate file -- the I2C numbers are also timing numbers,
+    # and the reason a delay cannot be built out of a 1 us tick (the phase
+    # residual is up to a full tick, which is 80% of a WS2812 bit cell) is a
+    # property of the TICK, not of either protocol.
     #
     # WS2812: one-wire NRZ at 800 kHz. 1.25 us per cell, and 1.25 us at 60 MHz
     # is 75 clocks with NO REMAINDER -- which is why this cell length was
@@ -173,9 +184,9 @@ CONSTS: dict[str, int] = {
     #
     # DHT11: start signal plus a 40-bit timed read. The host start is >=18 ms of
     # low, then 20-40 us of high, then RELEASE. The 40 bits are each ~50 us of
-    # low followed by 26-28 us of high (a 0) or ~70 us of high (a 1), and the
-    # host samples once per bit, so the discrimination margin is the distance
-    # from the sample instant to those two windows -- 12 us and 30 us here.
+    # low followed by 26-28 us of high (a 0) or 70 us of high (a 1), and the
+    # host synchronises on the line's edges and samples 45 us into each
+    # release -- 17 us of margin on the 0 side and 25 us on the 1 side.
     "DHT_DATA": 0x40,  # the sensor's single data wire
 }
 
@@ -411,7 +422,11 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
             elif kind == "stm_arg":
                 # STM addr8, A
                 toks = [t.strip() for t in ops.split(",")]
-                if (len(toks) == 2 and toks[1].upper() == "A") or len(toks) == 1:
+                # Both accepted forms assign toks[0] and nothing else, so
+                # they are one condition. The `or` is NOT a weakening: the
+                # 2-token form whose second token is not A still falls to the
+                # else and is rejected, which is the whole point of the check.
+                if len(toks) == 1 or (len(toks) == 2 and toks[1].upper() == "A"):
                     imm = toks[0]
                 else:
                     raise AsmError(f"STM form is 'STM addr8, A' (got {ops!r})")

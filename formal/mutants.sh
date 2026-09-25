@@ -142,22 +142,23 @@ if apply_mutation "$TMP/jabber.py"; then
   restore_and_verify
 fi
 
-# ------------------------------------------------------ 4. the TXLEN window
-# Not an RTL mutation: the wrapper's TXLEN hold assumption is removed, and the
-# property must then FAIL on the UNMODIFIED design. That failure is the
-# machine-checked form of the recorded finding ("the guard is a start-pulse
-# check against a boundary-time latch"). If it ever passes, the assumption is
-# redundant and should be deleted.
-cat > "$TMP/window.py" <<'PY'
+# --------------------------------------------- 4. the F1 atomicity mutant
+# The PRE-FIX behaviour, now a mutant: the frame re-reads frame_len at the
+# apply boundary instead of consuming the length validated at the start pulse.
+# P1b ("the frame consumes exactly what it latched") must FAIL. The manager's
+# F1 ruling made the guard and the latch one event; this case is what enforces
+# it, and it replaces the old `eth_tx_len_window` case, whose contract
+# assumption is DISCHARGED (the RTL no longer has a window to assume away).
+cat > "$TMP/unlatch.py" <<'PY'
 import pathlib, sys
-p = pathlib.Path('formal/pe_eth_tx/formal_pe_eth_tx.v'); t = p.read_text()
-needle = "    if (rst_n && hold) assume (frame_len == hold_len);"
-if needle not in t: sys.exit("no TXLEN hold assumption found")
-print("  wrapper: TXLEN hold assumption removed (must now FAIL on clean RTL)")
-p.write_text(t.replace(needle, "    // assumption removed by formal/mutants.sh"))
+p = pathlib.Path('rtl/pe_eth_tx.v'); t = p.read_text()
+needle = "                stored_bytes   <= pend_len;"
+if needle not in t: sys.exit("no validate-and-latch assignment found")
+print("  stored_bytes: pend_len -> frame_len (the F1 pre-fix window is back)")
+p.write_text(t.replace(needle, "                stored_bytes   <= frame_len;"))
 PY
-if apply_mutation "$TMP/window.py"; then
-  fv_case eth_tx_len_window "$GATE_DEPTH" formal_pe_eth_tx \
+if apply_mutation "$TMP/unlatch.py"; then
+  fv_case eth_tx_len_unlatch "$GATE_DEPTH" formal_pe_eth_tx \
     formal/pe_eth_tx/formal_pe_eth_tx.v rtl/pe_eth_tx.v rtl/pe_crc.v
   restore_and_verify
 fi
@@ -236,9 +237,10 @@ if apply_mutation "$TMP/mut_clr.py"; then
   restore_and_verify
 fi
 
-# ------------------------------------------------- 10. pe_soc owner guard
-# The clear-side guard removed: tx_path may then be taken away from a RUNNING
-# frame engine. Run by INDUCTION (see rule 1 above).
+# ------------------------------------------------- 10/11. pe_soc owner guards
+# BOTH directions the manager's F2 ruling made symmetric: the clear guard and
+# the new set guard. Each removal must be caught by its own claim (C1 / C2),
+# run by INDUCTION (see rule 1 above).
 cat > "$TMP/mut_owner.py" <<'PY'
 import pathlib, sys
 p = pathlib.Path('rtl/pe_soc.v'); t = p.read_text()
@@ -248,11 +250,23 @@ print("  tx_path clear guard removed (the owner can be taken from a busy engine)
 p.write_text(t.replace(needle, "end else if (1'b1) begin"))
 PY
 if apply_mutation "$TMP/mut_owner.py"; then
+  # -DFV_INDUCT: the shape C1 is PROVED in. Without it the target also carries
+  # C2, whose induction never closes on the clean design either -- so a
+  # "NOTPROVED" here would not be a differential.
   FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=3 FORMAL_MEMORY_MAP=1 \
-  fv_case pe_soc_owner_guard_removed 1 formal_pe_soc \
-    formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
+  fv_case pe_soc_owner_clear_guard_removed 1 formal_pe_soc \
+    -DFV_INDUCT formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
   restore_and_verify
 fi
+# F2's SET-side guard is NOT in this harness ON PURPOSE. Its formal claim (C2)
+# is labelled gate-depth-only in formal_pe_soc.v: it is not inductive on this
+# toolchain, so the clean design does not close the full target either -- a
+# mutation run without -DFV_INDUCT reports a "catch" that is not a differential.
+# The enforcement for F2 is the directed TB case (tb_pe_soc_eth_loop's
+# run_owner_probe) and the `owner-set-guard-removed` mutation in
+# regress/mutate_eth_tx_loop_tb.sh, where the clean TB passes and the mutant
+# fails (verified: clean PASS, mutant FAIL on the rose_mid_serdes and tx_path
+# checks).
 
 rm -rf "$TMP"
 echo

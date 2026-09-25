@@ -20,15 +20,22 @@ from tools.host_gui import transport as T
 from tools.host_gui.tests.fakes import FakeClock, FaultyPort, ScriptedPort, json_lines
 
 
-def resp(request_id: int, result: dict | None = None, ok: bool = True,
-         error: str | None = None) -> str:
-    return json.dumps({"v": T.PROTOCOL_VERSION, "id": request_id, "ok": ok,
-                       "result": result, "error": error})
+def resp(
+    request_id: int, result: dict | None = None, ok: bool = True, error: str | None = None
+) -> str:
+    return json.dumps(
+        {
+            "v": T.PROTOCOL_VERSION,
+            "id": request_id,
+            "ok": ok,
+            "result": result,
+            "error": error,
+        }
+    )
 
 
 def event(name: str, data: dict | None = None) -> str:
-    return json.dumps({"v": T.PROTOCOL_VERSION, "event": name,
-                       "data": data or {}})
+    return json.dumps({"v": T.PROTOCOL_VERSION, "event": name, "data": data or {}})
 
 
 class EchoPort:
@@ -48,9 +55,18 @@ class EchoPort:
 
     def write(self, data: bytes, /) -> int:
         message = json.loads(data.decode("utf-8"))
-        reply = json.dumps({"v": T.PROTOCOL_VERSION, "id": message["id"],
-                            "ok": True, "result": {"id": message["id"]},
-                            "error": None}).encode() + b"\n"
+        reply = (
+            json.dumps(
+                {
+                    "v": T.PROTOCOL_VERSION,
+                    "id": message["id"],
+                    "ok": True,
+                    "result": {"id": message["id"]},
+                    "error": None,
+                }
+            ).encode()
+            + b"\n"
+        )
         self.incoming.append(reply)
         time.sleep(0)
         return len(data)
@@ -94,8 +110,9 @@ class TestTimeouts(unittest.TestCase):
         self.clock = FakeClock()
 
     def _transport(self, port, **kw):
-        return T.SerialTransport(port, clock=self.clock, sleep=self.clock.sleep,
-                                 timeout_s=1.0, **kw)
+        return T.SerialTransport(
+            port, clock=self.clock, sleep=self.clock.sleep, timeout_s=1.0, **kw
+        )
 
     def test_timeout_raises_and_does_not_synthesize_result(self):
         port = ScriptedPort([])
@@ -118,8 +135,9 @@ class TestTimeouts(unittest.TestCase):
             self._transport(port).request("ping")
 
     def test_wrong_protocol_version_raises_protocol_error(self):
-        port = ScriptedPort([json.dumps({"v": 99, "id": 1, "ok": True,
-                                         "result": {}, "error": None})])
+        port = ScriptedPort(
+            [json.dumps({"v": 99, "id": 1, "ok": True, "result": {}, "error": None})]
+        )
         with self.assertRaises(T.TransportProtocolError):
             self._transport(port).request("ping")
 
@@ -144,12 +162,14 @@ class TestEvents(unittest.TestCase):
         self.clock = FakeClock()
 
     def _transport(self, port, **kw):
-        return T.SerialTransport(port, clock=self.clock, sleep=self.clock.sleep,
-                                 timeout_s=1.0, **kw)
+        return T.SerialTransport(
+            port, clock=self.clock, sleep=self.clock.sleep, timeout_s=1.0, **kw
+        )
 
     def test_events_are_queued_while_waiting_for_response(self):
-        port = ScriptedPort([event("chip.irq", {"faults": 0x4}),
-                             resp(1, {"state": "RUNNING"})])
+        port = ScriptedPort(
+            [event("chip.irq", {"faults": 0x4}), resp(1, {"state": "RUNNING"})]
+        )
         transport = self._transport(port)
         self.assertEqual(transport.request("status"), {"state": "RUNNING"})
         events = list(transport.events())
@@ -158,9 +178,9 @@ class TestEvents(unittest.TestCase):
         self.assertEqual(events[0]["data"], {"faults": 0x4})
 
     def test_poll_events_drains_the_queue(self):
-        port = ScriptedPort([event("board.reset"),
-                             event("chip.status", {"run": 1}),
-                             resp(1, {})])
+        port = ScriptedPort(
+            [event("board.reset"), event("chip.status", {"run": 1}), resp(1, {})]
+        )
         transport = self._transport(port)
         transport.request("ping")
         self.assertEqual(len(transport.poll_events()), 2)
@@ -198,22 +218,26 @@ class TestWireSerialization(unittest.TestCase):
         transport = T.SerialTransport(EchoPort(), timeout_s=1.0)
         threads, rounds = 8, 60
         previous = sys.getswitchinterval()
-        sys.setswitchinterval(1e-6)     # force the interleave, do not hope
+        sys.setswitchinterval(1e-6)  # force the interleave, do not hope
         try:
             for _ in range(rounds):
                 results: list[object] = [None] * threads
                 barrier = threading.Barrier(threads + 1)
 
-                def worker(index: int, results: list = results,
-                           barrier: threading.Barrier = barrier) -> None:
+                def worker(
+                    index: int,
+                    results: list = results,
+                    barrier: threading.Barrier = barrier,
+                ) -> None:
                     barrier.wait()
                     try:
                         results[index] = transport.request("ping")["id"]
-                    except BaseException as exc:   # noqa: BLE001
+                    except BaseException as exc:  # noqa: BLE001
                         results[index] = exc
 
-                pool = [threading.Thread(target=worker, args=(i,))
-                        for i in range(threads)]
+                pool = [
+                    threading.Thread(target=worker, args=(i,)) for i in range(threads)
+                ]
                 for thread in pool:
                     thread.start()
                 barrier.wait()
@@ -221,8 +245,10 @@ class TestWireSerialization(unittest.TestCase):
                     thread.join()
                 for outcome in results:
                     if isinstance(outcome, BaseException):
-                        self.fail("concurrent request corrupted the wire: "
-                                  f"{type(outcome).__name__}: {outcome}")
+                        self.fail(
+                            "concurrent request corrupted the wire: "
+                            f"{type(outcome).__name__}: {outcome}"
+                        )
         finally:
             sys.setswitchinterval(previous)
 

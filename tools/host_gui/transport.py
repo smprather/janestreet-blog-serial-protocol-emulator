@@ -82,7 +82,8 @@ def open_serial(port: str, baudrate: int = DEFAULT_BAUDRATE) -> LinePort:
     except ImportError as exc:  # pragma: no cover - exercised via unittest
         raise MissingDependencyError(
             "pyserial is required to open a serial device; install the "
-            "host-gui extra (pip install .[host-gui])") from exc
+            "host-gui extra (pip install .[host-gui])"
+        ) from exc
     return serial.Serial(port, baudrate=baudrate, timeout=0.05)
 
 
@@ -97,9 +98,16 @@ class Response:
 class SerialTransport:
     """Request/response over a line-oriented serial link, with an event queue."""
 
-    def __init__(self, port: LinePort | str, *, timeout_s: float = 1.0,
-                 max_line: int = DEFAULT_MAX_LINE, max_events: int = 256,
-                 clock=time.monotonic, sleep=time.sleep) -> None:
+    def __init__(
+        self,
+        port: LinePort | str,
+        *,
+        timeout_s: float = 1.0,
+        max_line: int = DEFAULT_MAX_LINE,
+        max_events: int = 256,
+        clock=time.monotonic,
+        sleep=time.sleep,
+    ) -> None:
         if isinstance(port, str):
             port = open_serial(port)
         self._port = port
@@ -120,8 +128,13 @@ class SerialTransport:
         # time, including its event draining.
         self._wire_lock = threading.Lock()
 
-    def request(self, op: str, args: Mapping[str, object] | None = None,
-                *, timeout_s: float | None = None) -> dict:
+    def request(
+        self,
+        op: str,
+        args: Mapping[str, object] | None = None,
+        *,
+        timeout_s: float | None = None,
+    ) -> dict:
         """Send one request and return its result dict.
 
         Raises ``BridgeCommandError`` for ``ok=false``, ``TransportTimeout`` on
@@ -133,19 +146,20 @@ class SerialTransport:
         with self._wire_lock:
             return self._request_locked(op, args, timeout_s=timeout_s)
 
-    def _request_locked(self, op: str, args: Mapping[str, object] | None,
-                        *, timeout_s: float | None) -> dict:
+    def _request_locked(
+        self, op: str, args: Mapping[str, object] | None, *, timeout_s: float | None
+    ) -> dict:
         request_id = self._next_id
         self._next_id += 1
         timeout = self._timeout_s if timeout_s is None else float(timeout_s)
-        self._write({"v": PROTOCOL_VERSION, "id": request_id, "op": op,
-                     "args": dict(args or {})})
+        self._write(
+            {"v": PROTOCOL_VERSION, "id": request_id, "op": op, "args": dict(args or {})}
+        )
         deadline = self._clock() + timeout
         while True:
             if self._clock() >= deadline:
                 self._abandoned.add(request_id)
-                raise TransportTimeout(
-                    f"{op}: no response within {timeout:g}s")
+                raise TransportTimeout(f"{op}: no response within {timeout:g}s")
             line = self._readline()
             if not line:
                 self._sleep(0.001)
@@ -156,11 +170,11 @@ class SerialTransport:
                 continue
             response = self._to_response(message)
             if response.id in self._abandoned:
-                continue                      # late reply to a timed-out request
+                continue  # late reply to a timed-out request
             if response.id != request_id:
                 raise TransportProtocolError(
-                    f"response id {response.id} does not match request "
-                    f"id {request_id}")
+                    f"response id {response.id} does not match request id {request_id}"
+                )
             if not response.ok:
                 raise BridgeCommandError(op, response.error or "unknown error")
             return dict(response.result or {})
@@ -213,8 +227,9 @@ class SerialTransport:
             raise TransportClosed(f"USB disconnect on read: {exc}") from exc
 
     def _queue_disconnect(self, reason: str) -> None:
-        self._events.append({"v": PROTOCOL_VERSION, "event": "usb.disconnect",
-                             "data": {"reason": reason}})
+        self._events.append(
+            {"v": PROTOCOL_VERSION, "event": "usb.disconnect", "data": {"reason": reason}}
+        )
 
     def _read_available(self) -> None:
         """Consume lines already waiting on the port into the event queue.
@@ -226,7 +241,7 @@ class SerialTransport:
             try:
                 line = self._readline()
             except TransportClosed:
-                return          # the usb.disconnect event is already queued
+                return  # the usb.disconnect event is already queued
             if not line:
                 return
             message = self._decode(line)
@@ -236,19 +251,20 @@ class SerialTransport:
     def _decode(self, line: bytes) -> dict:
         if len(line) > self._max_line:
             raise TransportProtocolError(
-                f"bridge line of {len(line)} bytes exceeds max_line "
-                f"{self._max_line}")
+                f"bridge line of {len(line)} bytes exceeds max_line {self._max_line}"
+            )
         try:
             message = json.loads(line.decode("utf-8"))
         except (UnicodeDecodeError, ValueError) as exc:
             raise TransportProtocolError(f"malformed bridge line: {exc}") from exc
         if not isinstance(message, dict):
             raise TransportProtocolError(
-                f"bridge line is {type(message).__name__}, not an object")
+                f"bridge line is {type(message).__name__}, not an object"
+            )
         if message.get("v") != PROTOCOL_VERSION:
             raise TransportProtocolError(
-                f"bridge protocol version {message.get('v')!r} is not "
-                f"{PROTOCOL_VERSION}")
+                f"bridge protocol version {message.get('v')!r} is not {PROTOCOL_VERSION}"
+            )
         return message
 
     @staticmethod
@@ -257,6 +273,8 @@ class SerialTransport:
         ok = message.get("ok")
         if not isinstance(request_id, int) or not isinstance(ok, bool):
             raise TransportProtocolError(
-                f"response without an integer id/bool ok: {message!r}")
-        return Response(id=request_id, ok=ok, result=message.get("result"),
-                        error=message.get("error"))
+                f"response without an integer id/bool ok: {message!r}"
+            )
+        return Response(
+            id=request_id, ok=ok, result=message.get("result"), error=message.get("error")
+        )

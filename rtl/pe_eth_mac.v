@@ -222,7 +222,7 @@ module pe_eth_mac #(
   // wiki/reference/crc-config.md. The outside value the verdict is checked
   // against; see the header.
   localparam logic [31:0] CRC_RESIDUE = 32'hDEBB20E3;
-  localparam logic [15:0] TYPE_MIN    = 16'hFFFF;   // MUTANT: no type frames
+  localparam logic [15:0] TYPE_MIN    = 16'h0600;   // 802.3 length/EtherType split
   localparam logic [2:0]  FCS_BYTES   = 3'd4;
   // Minimum data field for a 64-byte frame: 6 dst + 6 src + 2 length + 46
   // data + 4 FCS. A length frame declaring fewer than 46 bytes is padded to 46

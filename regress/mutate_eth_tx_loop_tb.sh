@@ -78,7 +78,7 @@ done
 # The TBs read these images through $readmemh; a stale one is a silent pass.
 missing=
 for hex in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe \
-           eth_tx_arp spi_xfer; do
+           eth_tx_owner_probe eth_tx_arp spi_xfer; do
   [ -f "$ROOT/firmware/$hex.hex" ] || missing="$missing $hex"
 done
 if [ -n "$missing" ]; then
@@ -168,6 +168,13 @@ echo "  [baseline] both TBs pass on the unmutated design"
 check_mutation "owner-mux-stuck-serdes" "rtl/pe_soc.v" \
   "  assign eth_tx_owner = tx_path ? eth_tx_bit : ser_tx;" \
   "  assign eth_tx_owner = ser_tx;   // MUTANT: owner mux stuck on SERDES" loop
+
+# 1b. FINDING F2's guard removed: a TXCTRL tx_path SET during a live SERDES
+# transmission steals the codec mid-frame. tb_pe_soc_eth_loop's owner probe
+# records `tx_path && ser_tx_busy` and must fail.
+check_mutation "owner-set-guard-removed" "rtl/pe_soc.v" \
+  "              if (!ser_tx_busy) tx_path <= 1'b1;" \
+  "              tx_path <= 1'b1;   // MUTANT: F2 guard removed" loop
 
 # 2. The pad overlay never selects pin 7: the wire stays at the firmware level.
 check_mutation "overlay-not-driven" "rtl/pe_soc.v" \

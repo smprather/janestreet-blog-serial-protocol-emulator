@@ -1,0 +1,256 @@
+; uart_flow.pe — a software UART with RTS/CTS hardware flow control.
+;
+; THERE IS NO UART HARDWARE, and there is no flow-control hardware either.
+; The same 8-bit port, the same free-running TIMER and the same 16-opcode CPU
+; that firmware/uart_echo.pe uses for a bare 115200 8N1 echo now carry two
+; extra pins and a handshake. What "hardware flow control" means here is
+; therefore a PROGRAM, and the claim worth making is about what the program
+; guarantees on the wire, not about the name of the protocol.
+;
+; ---------------------------------------------------------------------------
+; PIN MAP (the shared port; see the CONSTS block in tools/fw/peasm.py)
+;
+;   bit 0  out  TX        bit 3  in   RX
+;   bit 4  out  RTS       bit 5  in   CTS
+;
+; RTS and CTS are the only pins in the map that no other program in the tree
+; touches, and the flow-control program below is their only user.
+;
+; ---------------------------------------------------------------------------
+; THE HANDSHAKE, AND WHY THE ORDER IS ASSERT-BEFORE-WAIT
+;
+;   RTS (ours)      CTS (the receiver's)      TX
+;   ------------    ---------------------     ---------------
+;        1    -----> waiting for permission
+;   <---------  0    not now
+;   <---------  1    go
+;                       ...only now does TX move...
+;        0    -----> nothing left to send
+;
+; The receiver asserts CTS in RESPONSE to RTS. A driver that waited for CTS
+; before asserting RTS would therefore wait forever on a receiver that only
+; raises CTS when asked -- a deadlock that no amount of correct bit-banging
+; would fix, and one that a testbench driving CTS low-then-high can make look
+; like a hang rather than like an ordering mistake. Assert first, then wait.
+;
+; RTS is asserted BEFORE the byte is even fetched, and released only after the
+; last stop bit has been clocked out. Releasing it early would tell the
+; receiver "the line is yours" while this program is still driving it, which
+; on a real link is a collision.
+;
+; ---------------------------------------------------------------------------
+; THE OBSERVABLE CLAIM, which is the one the testbench checks:
+;
+;   THE WIRE IS IDLE FOR THE WHOLE INTERVAL IN WHICH CTS IS LOW.
+;
+; Not "the program eventually transmits" -- that a bare echo already satisfies.
+; Not even "the program waits for CTS before the first start bit", which a
+; one-shot test could satisfy by accident if the wait were placed after the
+; frame. The claim is a statement about every instant CTS is low, and it is
+; the only one of the three that a receiver with a full buffer can rely on.
+;
+; ---------------------------------------------------------------------------
+; dmem IS THE OBSERVABLE INTERFACE
+;
+;   dmem[0]  the byte being sent
+;   dmem[1]  the payload index -- which selects the byte by DISPATCH, not by
+;            indexing: LDS is X-addressed with no offset, so a table lookup at
+;            a variable index is three compares and three loads. See the note
+;            at the fetch site.
+;   dmem[2]  bytes sent
+;   dmem[3]  CTS-wait poll count, SATURATING at 0xFF: how many times the loop
+;            read CTS low before it was allowed to proceed. 0 means
+;            the receiver was already ready and the wait never spun -- which is
+;            why the testbench runs a second case with CTS held low for ever
+;            and requires this to be large instead. The pair is what makes the
+;            wait non-vacuous in both directions.
+;   dmem[4]  the last RTS level written (0x10 asserted, 0x00 released)
+;   dmem[5]  tick snapshot
+;   dmem[6]  bits remaining
+;   dmem[7]  the working copy
+;   dmem[8]  payload byte 0     dmem[9]  payload byte 1     dmem[10] payload 2
+;   dmem[11] the half-tick counter
+;   dmem[12] 0xA5 when all three bytes have gone out
+;   dmem[13] the accumulator (unused by the send path; free for the checkers)
+;
+; ---------------------------------------------------------------------------
+; THE PAYLOAD IS 0x00, 0xFF, 0xA5, and the two extremes are the point. 0x00 is
+; eight zero bits behind a start bit and 0xFF is eight one bits; a bit period
+; that is a little long or a little short shows up in one of them and not the
+; other, and 0xA5 (10100101) is not a bit palindrome, so a transmitter that
+; shifted the wrong way is visible rather than accidentally correct. The same
+; reasoning as firmware/spi_xfer.pe's 0x5B.
+;
+; THE BIT TIMING IS uart_echo.pe's, unchanged: TIMER counts one half-bit every
+; 260 clocks (4.333 us at 60 MHz), a bit is two ticks, and the wait is
+; "snapshot the timer once, poll until it moves". The flow-control pins cost
+; no time: the handshake is two register writes either side of a poll loop
+; that was going to be there anyway.
+
+        ; ---- idle: TX HIGH, RTS RELEASED ---------------------------------
+        ; Stated explicitly, as every protocol's firmware here does. Reset
+        ; drives bit 0 HIGH, which is the UART's idle level, but bit 4 is
+        ; whatever the pin matrix's reset value left there -- and "whatever"
+        ; is exactly how a firmware ends up asserting RTS at boot and telling
+        ; a receiver it has data it does not have.
+        LDI   A, UTX
+        OUT   TXPIN, A
+        LDI   A, 0
+        STM   1, A                 ; payload index
+        STM   2, A                 ; bytes sent
+        STM   3, A                 ; CTS-wait polls
+        STM   4, A                 ; RTS level last written
+        STM   12, A
+        ; ---- the payload ------------------------------------------------
+        LDI   A, 0x00
+        STM   8, A
+        LDI   A, 0xFF
+        STM   9, A
+        LDI   A, 0xA5
+        STM   10, A
+
+; ===========================================================================
+main:
+        LDM   A, 2                 ; bytes sent
+        SUB   A, 3
+        JZ    done
+        ; ---- ASSERT RTS FIRST -------------------------------------------
+        ; TX stays high (the idle level) and RTS goes high with it: the
+        ; receiver is being told there is something coming, and the line is
+        ; still idle, so nothing has been transmitted yet.
+        LDI   A, RTS|UTX
+        OUT   TXPIN, A
+        LDI   A, RTS
+        STM   4, A
+
+        ; ---- WAIT FOR CTS -----------------------------------------------
+        ; A POLL, NOT A TIMEOUT, and that choice is worth stating: a real
+        ; driver bounds this wait and gives up on a dead receiver, and there is
+        ; no retry policy here. The count in dmem[3] is the evidence that the
+        ; loop ran, which is what the testbench's second case exercises.
+wait_cts:
+        IN    A, PIN
+        AND   A, CTS
+        JNZ   cts_go
+        LDM   A, 3
+        ; SATURATE, DO NOT WRAP. The counter is 8 bits and this loop runs one
+        ; iteration every six clocks, so a receiver that holds CTS low for a
+        ; millisecond wraps it several times over and the testbench reads a
+        ; number that means nothing. Saturating at 0xFF makes dmem[3] a
+        ; statement about "it waited, and at least this long" instead of a
+        ; residue -- which is the only reason a 16-byte data buffer is worth
+        ; spending a slot on.
+        SUB   A, 0xFF
+        JZ    wait_cts
+        LDI   A, 0xFF
+        STM   3, A
+        JMP   wait_cts
+cts_go:
+        ; ---- fetch the next payload byte --------------------------------
+        ; A DISPATCH, BECAUSE `LDS A, [X]` IS X-INDEXED WITH NO OFFSET.
+        ; There is no LDS-from-a-base-register in this ISA, so dmem[8+index]
+        ; is not addressable: X can only BE the address. The first version
+        ; wrote `LDS A, [X]` with X := the index, which fetched dmem[index] --
+        ; and for index 0 that is dmem[0] itself, the register the fetched byte
+        ; is about to be stored into. So the very first byte was whatever the
+        ; data buffer held at reset, which is x, and the transmitter drove
+        ; x with RTS on the wire for a whole frame. The symptom was a first
+        ; byte that decoded as xx while the second and third were perfect,
+        ; which is a shape no bit-timing bug produces.
+        LDM   A, 1
+        JZ    pay0
+        SUB   A, 1
+        JZ    pay1
+        LDM   A, 10                ; index 2
+        JMP   pay_go
+pay0:   LDM   A, 8
+        JMP   pay_go
+pay1:   LDM   A, 9
+pay_go: STM   0, A                 ; the byte to send
+
+        ; ---- 115200 8N1, LSB first, RTS held for the whole frame --------
+        LDI   A, RTS                ; RTS + start bit (TX low)
+        OUT   TXPIN, A
+        LDI   A, 2
+        STM   11, A
+tx_start:
+        IN    A, TIMER
+        STM   5, A
+tx_startw:
+        IN    A, TIMER
+        LDM   X, 5
+        SUB   A, X
+        JZ    tx_startw
+        LDM   A, 11
+        SUB   A, 1
+        STM   11, A
+        JNZ   tx_start
+
+        LDM   A, 0
+        STM   7, A                 ; the working copy
+        LDI   A, 8
+        STM   6, A                 ; bits remaining
+tx_loop:
+        LDM   A, 7
+        AND   A, 1                 ; isolate the LSB
+        OR    A, RTS               ; RTS stays high for the WHOLE frame: it
+        OUT   TXPIN, A             ; means "I have more", and dropping it here
+        LDI   A, 2                 ; would tell the receiver the line was free
+        STM   11, A                ; in the middle of a frame
+tx_bit:
+        IN    A, TIMER
+        STM   5, A
+tx_bitw:
+        IN    A, TIMER
+        LDM   X, 5
+        SUB   A, X
+        JZ    tx_bitw
+        LDM   A, 11
+        SUB   A, 1
+        STM   11, A
+        JNZ   tx_bit
+        LDM   A, 7
+        SHR   A                    ; the next bit, LSB first
+        STM   7, A
+        LDM   A, 6
+        SUB   A, 1
+        STM   6, A
+        JNZ   tx_loop
+
+        LDI   A, RTS|UTX           ; stop bit: TX high, RTS still asserted
+        OUT   TXPIN, A
+        LDI   A, 2
+        STM   11, A
+tx_stop:
+        IN    A, TIMER
+        STM   5, A
+tx_stopw:
+        IN    A, TIMER
+        LDM   X, 5
+        SUB   A, X
+        JZ    tx_stopw
+        LDM   A, 11
+        SUB   A, 1
+        STM   11, A
+        JNZ   tx_stop
+
+        ; ---- RELEASE RTS, and only now ----------------------------------
+        ; The last stop bit has been clocked out, so the line is ours no
+        ; longer. Until this point the receiver has been told the line is busy
+        ; through every one of the ten bit cells, which is the whole point of
+        ; asserting it before the frame rather than around it.
+        LDI   A, UTX
+        OUT   TXPIN, A
+        LDI   A, 0
+        STM   4, A
+        LDM   A, 1
+        ADD   A, 1
+        STM   1, A                 ; the payload index
+        LDM   A, 2
+        ADD   A, 1
+        STM   2, A                 ; bytes sent
+        JMP   main
+
+done:   LDI   A, 0xA5
+        STM   12, A
+park:   JMP   park

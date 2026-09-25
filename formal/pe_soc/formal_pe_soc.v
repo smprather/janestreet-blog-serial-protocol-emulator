@@ -11,13 +11,13 @@
 //   * CLEARING tx_path is refused while the frame engine is busy -- the RTL
 //     has `else if (!eth_tx_busy) tx_path <= 1'b0;`. That is C1 below, and it
 //     is PROVED here (unbounded, temporal induction).
-//   * SETTING tx_path is UNCONDITIONAL -- `if (io_wdata[2]) tx_path <= 1'b1;`
-//     with no ser_tx_busy term. A TXCTRL write that sets the owner bit during
-//     a SERDES transmission therefore steals the codec mid-frame. C2 states
-//     the missing guard; the companion refutation target
-//     formal_pe_soc_refute.v is expected to FAIL it, and that failure is the
-//     machine-checked form of finding F2 in the 2026-09-25 review. It is NOT
-//     fixed here: an RTL behaviour change needs the manager's ruling.
+//   * SETTING tx_path used to be UNCONDITIONAL -- `if (io_wdata[2]) tx_path <=
+//     1'b1;` with no ser_tx_busy term, so a TXCTRL write during a SERDES
+//     transmission stole the codec mid-frame. That was finding F2, and the
+//     manager's ruling (2026-09-25) fixed it: a SET is now REFUSED while
+//     ser_tx_busy, exactly as the CLEAR is refused while eth_tx_busy, and the
+//     TXSTAT readback reflects the ACTUAL owner. C2 below is the claim that
+//     enforces the new guard (it was the refutation target before the fix).
 //
 // WHY TRANSITION-LOCAL CLAIMS AND WHY NO FIRMWARE PROGRAM. The window writes
 // that move the owner come from the CPU's IO bus (io_we/io_port/io_wdata), and
@@ -50,7 +50,8 @@ module formal_pe_soc #(
   wire [15:0] dbg_insn;
 
   // the manager-approved observation ports (see pe_soc.v's port block)
-  wire fv_tx_path, fv_eth_tx_owner, fv_eth_tx_busy, fv_ser_tx_busy;
+  wire fv_tx_path, fv_eth_tx_owner, fv_ser_busy_seen, fv_eth_busy_seen;
+  wire fv_set_took;
 
   pe_soc #(.IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES)) dut (
     .clk(clk), .rst_n(rst_n),
@@ -63,21 +64,20 @@ module formal_pe_soc #(
     .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_x(dbg_x), .dbg_y(dbg_y),
     .dbg_insn(dbg_insn), .dbg_timer(dbg_timer),
     .fv_tx_path(fv_tx_path), .fv_eth_tx_owner(fv_eth_tx_owner),
-    .fv_eth_tx_busy(fv_eth_tx_busy), .fv_ser_tx_busy(fv_ser_tx_busy)
+    .fv_ser_busy_seen(fv_ser_busy_seen), .fv_eth_busy_seen(fv_eth_busy_seen),
+    .fv_set_took(fv_set_took)
   );
 
   // ---- previous-cycle snapshots (explicit; combinational claims only, for
   // the same reason formal_pe_ctrl.v documents: clocked asserts read sampled
   // copies that an arbitrary induction state can set inconsistently) --------
-  reg p_tx_path, p_eth_busy, p_ser_busy;
+  // ONLY tx_path needs a snapshot: the busy values come from the guard's own
+  // sampled taps (see pe_soc.v's port comment), which are already aligned with
+  // the edge that moved the owner.
+  reg p_tx_path;
   always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-      p_tx_path <= 1'b0; p_eth_busy <= 1'b0; p_ser_busy <= 1'b0;
-    end else begin
-      p_tx_path  <= fv_tx_path;
-      p_eth_busy <= fv_eth_tx_busy;
-      p_ser_busy <= fv_ser_tx_busy;
-    end
+    if (!rst_n) p_tx_path <= 1'b0;
+    else        p_tx_path <= fv_tx_path;
   end
 
   always @(*) begin
@@ -94,8 +94,30 @@ module formal_pe_soc #(
   // A falling tx_path is only possible on a TXCTRL write whose clear arm ran,
   // and that arm is gated by !eth_tx_busy. One-step, so the induction closes.
   always @(*) begin
-    if (p_tx_path && !fv_tx_path) assert (!p_eth_busy);
+    if (p_tx_path && !fv_tx_path) assert (!fv_eth_busy_seen);
   end
+
+`ifndef FV_INDUCT
+  // ---- C2: the owner is not taken away from a RUNNING SERDES (F2's fix) ---
+  // LABELLED: checked at the gate depth, but NOT closed by induction on this
+  // toolchain. The guard and the observed busy value are separate sampling
+  // chains in yosys's clk2fflogic model (the same artifact that made the
+  // pe_ctrl clocked claims non-inductive), so an arbitrary pre-state can make
+  // "the guard was refused" and "the busy value was low" disagree. The
+  // ENFORCEMENT for F2 is therefore the directed TB case in
+  // tb_pe_soc_eth_loop.v (run_owner_probe: a TXCTRL claim during a live SERDES
+  // transmission must leave the codec with the SERDES and the frame intact)
+  // plus the `owner-set-guard-removed` mutation in
+  // regress/mutate_eth_tx_loop_tb.sh, which the TB catches.
+  always @(*) begin
+    if (!p_tx_path && fv_tx_path) assert (!fv_ser_busy_seen);
+  end
+  // The same claim in the block's OWN terms (the form the manager's ruling
+  // states: the set only TAKES when the SERDES is idle).
+  always @(*) begin
+    if (fv_set_took) assert (!fv_ser_busy_seen);
+  end
+`endif
 endmodule
 
 `default_nettype wire
