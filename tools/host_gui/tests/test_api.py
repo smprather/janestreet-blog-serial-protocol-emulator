@@ -137,6 +137,16 @@ class TestWebAssets(unittest.TestCase):
         self.assertIn("/api/read_cpu", app)
         self.assertIn("cpu-pc", app)
 
+    def test_page_polls_status_while_connected_so_idle_faults_surface(self):
+        # The Pico bridge samples IRQ_N only when a host request unblocks its
+        # read loop, so a session that sends nothing never sees a chip fault
+        # (phase-2 record: "IRQ latency while idle"). The page must keep a
+        # light poll running while connected - not only while running.
+        app = (WEB / "app.js").read_text(encoding="utf-8")
+        self.assertIn("pollStatus", app)
+        self.assertIn("/api/status", app)
+        self.assertIn("setInterval", app)
+
 
 class TestOptionalDependencies(unittest.TestCase):
     def test_have_fastapi_flag_matches_import(self):

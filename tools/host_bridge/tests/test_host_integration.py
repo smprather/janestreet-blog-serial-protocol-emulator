@@ -10,6 +10,7 @@ the load/run/dump gating and the fault path agree end to end.
 
 from __future__ import annotations
 
+import json
 import unittest
 from types import SimpleNamespace
 
@@ -108,6 +109,30 @@ class TestHostOverRealBridge(unittest.TestCase):
         snapshot = self.session.status()
         self.assertEqual(snapshot.words_written, 0)
         self.assertEqual(self.session.state, SessionState.PREPARED)
+
+
+    def test_idle_fault_surfaces_on_the_next_status_poll(self):
+        # The Pico samples IRQ_N only when a host request unblocks its read
+        # loop (phase-2 record: "IRQ latency while idle"). The page therefore
+        # keeps a light status poll running while connected; this is the
+        # server/session half of that fix: one poll must move a stopped,
+        # faulted session to FAULTED and retain the chip.irq event.
+        self.session.connect()
+        self.session.load(self.image)
+        self.pe.faults = F.FAULT_LOAD
+        self.adapter.set_irq(True)
+        # The bridge's serve loop samples IRQ before the next request and
+        # writes the event to the host; the loopback port has no serve loop,
+        # so queue the returned lines exactly as serve_io would write them.
+        for event in self.bridge.poll_irq():
+            self.port.incoming.append(
+                json.dumps(event, separators=(",", ":")).encode() + b"\n")
+        snapshot = self.session.status()          # the periodic poll
+        events = self.session.process_events()
+        self.assertEqual(snapshot.faults, F.FAULT_LOAD)
+        self.assertEqual(self.session.state, SessionState.FAULTED)
+        self.assertIn("chip.irq", [event["event"] for event in events])
+        self.assertEqual(self.session.last_fault["event"], "chip.irq")
 
 
 if __name__ == "__main__":

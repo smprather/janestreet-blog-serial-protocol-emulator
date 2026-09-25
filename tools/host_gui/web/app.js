@@ -41,6 +41,7 @@ function renderHealth(health) {
   $("stop").disabled = health.state !== "RUNNING";
   $("dump").disabled = !["PREPARED", "LOADED", "STOPPED"].includes(health.state);
   setCpuPolling(health.state === "RUNNING");
+  setStatusPolling(connected);
 }
 
 function renderStatus(status) {
@@ -76,6 +77,26 @@ function setCpuPolling(on) {
   } else if (!on && cpuPoll) {
     clearInterval(cpuPoll);
     cpuPoll = null;
+  }
+}
+
+// The Pico samples IRQ_N only when a host request unblocks its read loop, so
+// a session that sends nothing never observes a chip fault. Keep one light
+// status read in flight while connected - not just while running - so a fault
+// on a stopped/idle board surfaces within a poll. The response is also our
+// event tick: the server drains bridge events per request.
+let statusPoll = null;
+async function pollStatus() {
+  const health = await api("/api/health");
+  if (health.state === "DISCONNECTED") { setStatusPolling(false); return; }
+  renderStatus((await api("/api/status")).status);
+}
+function setStatusPolling(on) {
+  if (on && !statusPoll) {
+    statusPoll = setInterval(() => { pollStatus().catch(() => {}); }, 2000);
+  } else if (!on && statusPoll) {
+    clearInterval(statusPoll);
+    statusPoll = null;
   }
 }
 
