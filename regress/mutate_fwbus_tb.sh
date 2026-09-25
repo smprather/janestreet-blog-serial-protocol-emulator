@@ -150,14 +150,35 @@ run_tb() {
   # reject a firmware, but it is a WEAKER claim and it has to be visible as one,
   # so it is counted separately and printed as such.
   #
+  # A HANG IS DISTINGUISHED FROM A BOUNDED-WAIT FAILURE BY WHAT ELSE FOLLOWS,
+  # and getting that wrong produced a false attribution that was reported
+  # upward as fact. Matching on the "FAIL: watchdog" prefix ALONE is not
+  # enough, because two testbenches print that line for different things:
+  #
+  #   tb_pe_soc_dmx512.v  an UNBOUNDED 30 ms backstop -- a real hang
+  #   tb_pe_soc_i2c_adv.v a BOUNDED 144,000-clock wait that EXPIRES, prints,
+  #                       and then carries on to its real assertions
+  #
+  # So i2c-no-stop was classified as a hang, and "21 detected, 1 by hang" went
+  # into the findings file and the WORKLOG. It is not a hang: the bounded wait
+  # expires and the testbench then fails `check(n_stop == 1, "one STOP, got
+  # 0")` like any other assertion. A hang produces the watchdog line and
+  # NOTHING else; a bounded-wait diagnostic that still trips assertions
+  # produces the watchdog line AND other FAIL lines. Hence:
+  #
+  #   watchdog line present, but other FAIL lines too  -> assertion catch
+  #   watchdog line present, and it is the only one    -> genuine hang
+  #
   # Returns: 0 = the TB passed (survived), 1 = an assertion caught it,
-  #          3 = caught only by a hang/timeout, 2 = harness error,
-  #          4 = the run produced no verdict at all.
-  if   grep -qE "^PASS" "$LOG";                                  then return 0
-  elif grep -qE "^FAIL: watchdog" "$LOG" || [ "$(wc -l <"$LOG")" -eq 0 ] \
-       || ! grep -qE "^FAIL" "$LOG";                             then return 3
-  elif grep -qE "^FAIL" "$LOG";                                  then return 1
-  else return 4
+  #          3 = caught only by a hang, 2 = harness error, 4 = no verdict.
+  local _nfail _nwatch
+  _nfail=$(grep -cE "^FAIL" "$LOG")
+  _nwatch=$(grep -cE "^FAIL: watchdog" "$LOG")
+  if   [ "$(wc -l <"$LOG")" -eq 0 ];                              then return 4
+  elif grep -qE "^PASS" "$LOG";                                  then return 0
+  elif [ "$_nfail" -eq 0 ];                                       then return 3
+  elif [ "$_nwatch" -gt 0 ] && [ "$_nfail" -eq "$_nwatch" ];      then return 3
+  else return 1
   fi
 }
 

@@ -505,23 +505,40 @@ FAIL: watchdog -- the test did not complete
 and the old rule scored that exactly as it scored `midi-cell-count-minus-one`.
 
 The harness now returns the **mechanism** (1 assertion / 3 hang / 4 no-verdict)
-and prints which caught each. The breakdown is the interesting part:
+and prints which caught each.
+
+> **CORRECTION, and the correction is the interesting part.** The first version
+> of that classifier matched the `FAIL: watchdog` **prefix alone** and reported
+>
+> ```text
+> detected: 21  (of which 1 by hang/timeout only)
+> ```
+>
+> naming `i2c-no-stop` as the hang. **That was false, and it was false because
+> of my own classifier.** Two testbenches print `FAIL: watchdog` for entirely
+> different things: `tb_pe_soc_dmx512.v`'s is an *unbounded* 30 ms backstop — a
+> real hang — while `tb_pe_soc_i2c_adv.v`'s is a *bounded* 144,000-clock wait
+> that **expires**, prints, and carries on to its real assertions, where
+> `i2c-no-stop` fails `check(n_stop == 1, "one STOP, got 0")` like any other.
+>
+> The corrected score is **21 of 21 by assertion, zero by hang** — the coverage
+> is *stronger* than first reported, but it was wrong when reported, and the
+> wrongness came from a mechanism I had added two hours earlier.
+>
+> The rule that separates them is about what *else* the run printed: a hang
+> produces the watchdog line and **nothing else**; a bounded-wait diagnostic that
+> still trips assertions produces the watchdog line **and other FAIL lines**.
+> The harness now compares the `FAIL` count against the watchdog count.
+>
+> The generalisable part is the same shape as everything else in this file:
+> **a classifier is an assertion, and an assertion nobody has tested is a
+> claim.** I added one, used it to produce a number, and reported it — without
+> ever checking it against a case that was *not* a hang. The mutation that
+> exposed it had been in the harness since BLOCK 2.
 
 ```text
-detected: 21  (of which 1 by hang/timeout only)   survived: 0   harness errors: 0
+detected: 21  (of which 0 by hang/timeout only)   survived: 0   harness errors: 0
 ```
-
-**The one hang-caught mutation is `i2c-no-stop`, from BLOCK 2, not from this
-block.** So the "21 detected" reported for most of this session was twenty
-assertions plus one hang, and did not say so. Coverage is unchanged — the same
-21 mutations die either way — but the number now means what it says.
-
-`i2c-no-stop` is worth a follow-up that is **not** mine to make: removing the
-I2C STOP means the grammar monitor never sees a STOP and the run blocks. A
-testbench asserting *"a STOP must be seen within N transactions"* would catch
-it by assertion. That is a previous block's testbench, so it is raised as a
-QUESTION rather than fixed here — but it is the first concrete, named, counted
-instance of the gap this block kept hitting.
 
 ## The parallel-worker `/tmp` collision, which is not about MIDI or DMX at all
 
