@@ -98,15 +98,22 @@ worker; this file is the manager's restart prompt.
   the ongoing hunt for the runaway python3's identity (both OOM windows had
   GUI-bridge test activity; unconfirmed). Mapped/simulation evidence only —
   never run physical flow, DRC or LVS.
-- Actively manage the Pi worker's context size — **flush at ~60% (user
-  standing order 2026-09-25)**. When a worker crosses ~60%, dispatch a WRAP:
-  finish the current sub-task at a clean boundary, record all findings,
-  commands, hashes and remaining work in the review + WORKLOG + ledger,
-  report `DONE-WRAP` and stop. Then `/new` (worker at prompt, no tool
-  running), give the short startup prompt from `COLD-START.md`, and continue
-  the remaining work from the worker's own written record. Never discard
-  unrecorded findings or interrupt active work just to reduce context —
-  wrap first, flush second. Check both workers' context at every wake.
+- Actively manage the Pi worker's context size — **soft wrap at 60-65%,
+  hard wrap forced at 75%, never into the harness's auto zone (manager's
+  domain policy, 2026-09-25; the user's ~60% refined into a band)**. The
+  trigger is a BAND, not a number: past ~60-65%, wrap at the first clean task
+  boundary; at 75% force a wrap at the next sub-step no matter what; a
+  queued task known to need >15-20% of a window starts on a fresh session if
+  the current one is >55%. Rationale: attention dilution and stale-plan
+  leakage past ~2/3 window; per-call cost scales with live context (the tail
+  of a session costs disproportionately); the wrap itself needs 10-20%
+  headroom (final suites + report ingestion); and never let the harness
+  auto-compact — it picks the worst boundary, mid-task, opaquely. WRAP
+  protocol: finish the current sub-task, record all findings/commands/hashes
+  and remaining work in the review + WORKLOG + ledger, report DONE-WRAP and
+  stop; then `/new` (prompt idle, no tool running), re-issue the COLD-START
+  startup prompt, continue from the worker's own written record. Never
+  discard unrecorded findings. Check both workers' context at every wake.
 - When sending a prompt through tmux, type the prompt as literal text and send
   `Enter` as a separate key event. A prior combined send did not submit; this
   was verified by sending literal `Hi!`, sending `Enter` separately, and
