@@ -2,6 +2,8 @@
 
 **Date entry (UTC):** 2026-09-25T06:52:20Z (`date -u +"%Y-%m-%dT%H:%M:%SZ"`).
 **Branch:** `host-controller-gui` at `0681175` (phase 3 pin), base `153fbde`.
+**Result-doc commit:** `322fd20` (this file, `wiki/STATUS.md`,
+plan-review section 11 and HANDOFF.md).
 **Scope:** plan Task 8 for the **host stack**, plus the two record items the
 Task 7 ruling postponed: the host-side `wiki/STATUS.md` entry (this branch's
 copy only) and the plan-status roll-up. Real-hardware runs stay out of scope.
