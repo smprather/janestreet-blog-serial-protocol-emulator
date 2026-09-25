@@ -4,27 +4,46 @@ License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
 This is free software, and you are free to change and redistribute it
 under certain conditions; type `show_copying' for details. 
 This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
-Warning: There are 18 input ports missing set_input_delay.
-  dbg_rd_addr[0]
-  dbg_rd_addr[10]
-  dbg_rd_addr[11]
-  dbg_rd_addr[12]
-  dbg_rd_addr[13]
-  dbg_rd_addr[14]
-  dbg_rd_addr[15]
-  dbg_rd_addr[1]
-  dbg_rd_addr[2]
-  dbg_rd_addr[3]
-  dbg_rd_addr[4]
-  dbg_rd_addr[5]
-  dbg_rd_addr[6]
-  dbg_rd_addr[7]
-  dbg_rd_addr[8]
-  dbg_rd_addr[9]
-  dbg_rd_dmem
-  dbg_rd_req
-Warning: There is 1 unconstrained endpoint.
-  _06385_/D
+Warning 366: sta-pe_soc-fast-board.tcl line 1, port 'dbg_hold' not found.
+Warning 366: sta-pe_soc-fast-board.tcl line 1, port 'dbg_step' not found.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[15]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[14]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[13]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[12]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[11]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[10]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[9]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[8]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[7]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[6]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[5]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[4]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[3]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[2]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[1]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[0]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_valid'.
+Warning 366: sta-pe_soc-fast-board.tcl line 1, port 'dbg_hold' not found.
+Warning 366: sta-pe_soc-fast-board.tcl line 1, port 'dbg_step' not found.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[15]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[14]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[13]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[12]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[11]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[10]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[9]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[8]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[7]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[6]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[5]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[4]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[3]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[2]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[1]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[0]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_valid'.
+Warning 366: sta-pe_soc-fast-board.tcl line 1, port 'dbg_hold' not found.
+Warning 366: sta-pe_soc-fast-board.tcl line 1, port 'dbg_step' not found.
 Startpoint: rst_n (input port clocked by clk)
 Endpoint: _06346_ (recovery check against rising-edge clock clk)
 Path Group: asynchronous
@@ -983,7 +1002,7 @@ _09196_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[5]
 _09198_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2539
 _09197_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2503
 _09194_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2366
-_07192_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2351
+_07192_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2350
 _07201_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1988
 _07201_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1890
 _07201_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1890
@@ -1013,7 +1032,7 @@ _07196_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[4] (RM
 _07198_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1557
 _07198_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1534
 _07192_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1403
-_07194_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1331
+_07194_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1330
 _07538_/Q (sg13g2_dfrbpq_1)          _07539_/D (sg13g2_dfrbpq_1)            -0.1268
 _07194_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1263
 _07194_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1254
@@ -1044,7 +1063,6 @@ _07537_/Q (sg13g2_dfrbpq_1)          _07534_/D (sg13g2_dfrbpq_1)            -0.0
 _07540_/Q (sg13g2_dfrbpq_1)          _07541_/D (sg13g2_dfrbpq_1)            -0.0898
 _07524_/Q (sg13g2_dlhq_1)            _07525_/D (sg13g2_dlhq_1)              -0.0882
 _07539_/Q (sg13g2_dfrbpq_1)          _07537_/D (sg13g2_dfrbpq_1)            -0.0856
-_06385_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0853
 _06667_/Q (sg13g2_dfrbpq_1)          _06667_/D (sg13g2_dfrbpq_1)            -0.0837
 _07541_/Q (sg13g2_dfrbpq_1)          _07535_/D (sg13g2_dfrbpq_1)            -0.0835
 _06530_/Q (sg13g2_dfrbpq_1)          _06530_/D (sg13g2_dfrbpq_1)            -0.0835
@@ -1110,6 +1128,7 @@ _06782_/Q (sg13g2_dfrbpq_1)          _06782_/D (sg13g2_dfrbpq_1)            -0.0
 _06783_/Q (sg13g2_dfrbpq_1)          _06783_/D (sg13g2_dfrbpq_1)            -0.0831
 _06786_/Q (sg13g2_dfrbpq_1)          _06786_/D (sg13g2_dfrbpq_1)            -0.0831
 _06788_/Q (sg13g2_dfrbpq_1)          _06788_/D (sg13g2_dfrbpq_1)            -0.0831
+_06385_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0820
 _06800_/Q (sg13g2_dfrbpq_1)          _06800_/D (sg13g2_dfrbpq_1)            -0.0813
 _09188_/Q (sg13g2_dfrbpq_1)          _06686_/D (sg13g2_dfrbpq_1)            -0.0805
 _06364_/Q (sg13g2_dfrbpq_1)          _06729_/D (sg13g2_dfrbpq_1)            -0.0805
@@ -1447,7 +1466,6 @@ _09794_/Q (sg13g2_dfrbpq_1)          _09794_/D (sg13g2_dfrbpq_1)            -0.0
 _09208_/Q (sg13g2_dfrbpq_1)          _09208_/D (sg13g2_dfrbpq_1)            -0.0627
 _06377_/Q (sg13g2_dfrbpq_1)          _06377_/D (sg13g2_dfrbpq_1)            -0.0627
 _06377_/Q (sg13g2_dfrbpq_1)          _06377_/D (sg13g2_dfrbpq_1)            -0.0627
-_06385_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0626
 _10790_/Q (sg13g2_dfrbpq_1)          _10790_/D (sg13g2_dfrbpq_1)            -0.0623
 _10790_/Q (sg13g2_dfrbpq_1)          _10790_/D (sg13g2_dfrbpq_1)            -0.0623
 _09915_/Q (sg13g2_dfrbpq_1)          _09915_/D (sg13g2_dfrbpq_1)            -0.0620
@@ -1475,6 +1493,7 @@ _09178_/Q (sg13g2_dfrbpq_1)          _09178_/D (sg13g2_dfrbpq_1)            -0.0
 _09178_/Q (sg13g2_dfrbpq_1)          _09178_/D (sg13g2_dfrbpq_1)            -0.0601
 _06367_/Q (sg13g2_dfrbpq_1)          _09910_/D (sg13g2_dfrbpq_1)            -0.0599
 _09171_/Q (sg13g2_dfrbpq_1)          _09171_/D (sg13g2_dfrbpq_1)            -0.0599
+_06385_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0598
 _06367_/Q (sg13g2_dfrbpq_1)          _09910_/D (sg13g2_dfrbpq_1)            -0.0598
 _06367_/Q (sg13g2_dfrbpq_1)          _09910_/D (sg13g2_dfrbpq_1)            -0.0597
 _09173_/Q (sg13g2_dfrbpq_1)          _09173_/D (sg13g2_dfrbpq_1)            -0.0596
@@ -1698,7 +1717,6 @@ _09868_/Q (sg13g2_dfrbpq_1)          _09868_/D (sg13g2_dfrbpq_1)            -0.0
 _09869_/Q (sg13g2_dfrbpq_1)          _09869_/D (sg13g2_dfrbpq_1)            -0.0534
 _09873_/Q (sg13g2_dfrbpq_1)          _09873_/D (sg13g2_dfrbpq_1)            -0.0534
 _09803_/Q (sg13g2_dfrbpq_1)          _09803_/D (sg13g2_dfrbpq_1)            -0.0534
-_09835_/Q (sg13g2_dfrbpq_1)          _09835_/D (sg13g2_dfrbpq_1)            -0.0534
 _09837_/Q (sg13g2_dfrbpq_1)          _09837_/D (sg13g2_dfrbpq_1)            -0.0534
 _09838_/Q (sg13g2_dfrbpq_1)          _09838_/D (sg13g2_dfrbpq_1)            -0.0534
 _09894_/Q (sg13g2_dfrbpq_1)          _09894_/D (sg13g2_dfrbpq_1)            -0.0534
@@ -1722,6 +1740,7 @@ _06744_/Q (sg13g2_dfrbpq_1)          _06744_/D (sg13g2_dfrbpq_1)            -0.0
 _06817_/Q (sg13g2_dfrbpq_1)          _06817_/D (sg13g2_dfrbpq_1)            -0.0534
 _09806_/Q (sg13g2_dfrbpq_1)          _09806_/D (sg13g2_dfrbpq_1)            -0.0534
 _09808_/Q (sg13g2_dfrbpq_1)          _09808_/D (sg13g2_dfrbpq_1)            -0.0534
+_09835_/Q (sg13g2_dfrbpq_1)          _09835_/D (sg13g2_dfrbpq_1)            -0.0534
 _10740_/Q (sg13g2_dfrbpq_1)          _10740_/D (sg13g2_dfrbpq_1)            -0.0534
 _10745_/Q (sg13g2_dfrbpq_1)          _10745_/D (sg13g2_dfrbpq_1)            -0.0534
 _10747_/Q (sg13g2_dfrbpq_1)          _10747_/D (sg13g2_dfrbpq_1)            -0.0534
@@ -1796,28 +1815,12 @@ _09780_/Q (sg13g2_dfrbpq_1)          _09780_/D (sg13g2_dfrbpq_1)            -0.0
 _09781_/Q (sg13g2_dfrbpq_1)          _09781_/D (sg13g2_dfrbpq_1)            -0.0530
 _09782_/Q (sg13g2_dfrbpq_1)          _09782_/D (sg13g2_dfrbpq_1)            -0.0530
 _09783_/Q (sg13g2_dfrbpq_1)          _09783_/D (sg13g2_dfrbpq_1)            -0.0530
-_09852_/Q (sg13g2_dfrbpq_1)          _09852_/D (sg13g2_dfrbpq_1)            -0.0530
-_09853_/Q (sg13g2_dfrbpq_1)          _09853_/D (sg13g2_dfrbpq_1)            -0.0530
-_09854_/Q (sg13g2_dfrbpq_1)          _09854_/D (sg13g2_dfrbpq_1)            -0.0530
-_09855_/Q (sg13g2_dfrbpq_1)          _09855_/D (sg13g2_dfrbpq_1)            -0.0530
-_06632_/Q (sg13g2_dfrbpq_1)          _06632_/D (sg13g2_dfrbpq_1)            -0.0530
-_06633_/Q (sg13g2_dfrbpq_1)          _06633_/D (sg13g2_dfrbpq_1)            -0.0530
-_06635_/Q (sg13g2_dfrbpq_1)          _06635_/D (sg13g2_dfrbpq_1)            -0.0530
 _06637_/Q (sg13g2_dfrbpq_1)          _06637_/D (sg13g2_dfrbpq_1)            -0.0530
 _06681_/Q (sg13g2_dfrbpq_1)          _06681_/D (sg13g2_dfrbpq_1)            -0.0530
 _06683_/Q (sg13g2_dfrbpq_1)          _06683_/D (sg13g2_dfrbpq_1)            -0.0530
 _06684_/Q (sg13g2_dfrbpq_1)          _06684_/D (sg13g2_dfrbpq_1)            -0.0530
 _06685_/Q (sg13g2_dfrbpq_1)          _06685_/D (sg13g2_dfrbpq_1)            -0.0530
-_06721_/Q (sg13g2_dfrbpq_1)          _06721_/D (sg13g2_dfrbpq_1)            -0.0530
-_06722_/Q (sg13g2_dfrbpq_1)          _06722_/D (sg13g2_dfrbpq_1)            -0.0530
-_06723_/Q (sg13g2_dfrbpq_1)          _06723_/D (sg13g2_dfrbpq_1)            -0.0530
-_06724_/Q (sg13g2_dfrbpq_1)          _06724_/D (sg13g2_dfrbpq_1)            -0.0530
-_06725_/Q (sg13g2_dfrbpq_1)          _06725_/D (sg13g2_dfrbpq_1)            -0.0530
-_06726_/Q (sg13g2_dfrbpq_1)          _06726_/D (sg13g2_dfrbpq_1)            -0.0530
-_06727_/Q (sg13g2_dfrbpq_1)          _06727_/D (sg13g2_dfrbpq_1)            -0.0530
-_06728_/Q (sg13g2_dfrbpq_1)          _06728_/D (sg13g2_dfrbpq_1)            -0.0530
 _06736_/Q (sg13g2_dfrbpq_1)          _06736_/D (sg13g2_dfrbpq_1)            -0.0530
-_06737_/Q (sg13g2_dfrbpq_1)          _06737_/D (sg13g2_dfrbpq_1)            -0.0530
 _06738_/Q (sg13g2_dfrbpq_1)          _06738_/D (sg13g2_dfrbpq_1)            -0.0530
 _06739_/Q (sg13g2_dfrbpq_1)          _06739_/D (sg13g2_dfrbpq_1)            -0.0530
 _06741_/Q (sg13g2_dfrbpq_1)          _06741_/D (sg13g2_dfrbpq_1)            -0.0530
@@ -1837,6 +1840,22 @@ _09840_/Q (sg13g2_dfrbpq_1)          _09840_/D (sg13g2_dfrbpq_1)            -0.0
 _09849_/Q (sg13g2_dfrbpq_1)          _09849_/D (sg13g2_dfrbpq_1)            -0.0530
 _09850_/Q (sg13g2_dfrbpq_1)          _09850_/D (sg13g2_dfrbpq_1)            -0.0530
 _09851_/Q (sg13g2_dfrbpq_1)          _09851_/D (sg13g2_dfrbpq_1)            -0.0530
+_09852_/Q (sg13g2_dfrbpq_1)          _09852_/D (sg13g2_dfrbpq_1)            -0.0530
+_09853_/Q (sg13g2_dfrbpq_1)          _09853_/D (sg13g2_dfrbpq_1)            -0.0530
+_09854_/Q (sg13g2_dfrbpq_1)          _09854_/D (sg13g2_dfrbpq_1)            -0.0530
+_09855_/Q (sg13g2_dfrbpq_1)          _09855_/D (sg13g2_dfrbpq_1)            -0.0530
+_06632_/Q (sg13g2_dfrbpq_1)          _06632_/D (sg13g2_dfrbpq_1)            -0.0530
+_06633_/Q (sg13g2_dfrbpq_1)          _06633_/D (sg13g2_dfrbpq_1)            -0.0530
+_06635_/Q (sg13g2_dfrbpq_1)          _06635_/D (sg13g2_dfrbpq_1)            -0.0530
+_06721_/Q (sg13g2_dfrbpq_1)          _06721_/D (sg13g2_dfrbpq_1)            -0.0530
+_06722_/Q (sg13g2_dfrbpq_1)          _06722_/D (sg13g2_dfrbpq_1)            -0.0530
+_06723_/Q (sg13g2_dfrbpq_1)          _06723_/D (sg13g2_dfrbpq_1)            -0.0530
+_06724_/Q (sg13g2_dfrbpq_1)          _06724_/D (sg13g2_dfrbpq_1)            -0.0530
+_06725_/Q (sg13g2_dfrbpq_1)          _06725_/D (sg13g2_dfrbpq_1)            -0.0530
+_06726_/Q (sg13g2_dfrbpq_1)          _06726_/D (sg13g2_dfrbpq_1)            -0.0530
+_06727_/Q (sg13g2_dfrbpq_1)          _06727_/D (sg13g2_dfrbpq_1)            -0.0530
+_06728_/Q (sg13g2_dfrbpq_1)          _06728_/D (sg13g2_dfrbpq_1)            -0.0530
+_06737_/Q (sg13g2_dfrbpq_1)          _06737_/D (sg13g2_dfrbpq_1)            -0.0530
 _09072_/Q (sg13g2_dfrbpq_1)          _09072_/D (sg13g2_dfrbpq_1)            -0.0530
 _10739_/Q (sg13g2_dfrbpq_1)          _10739_/D (sg13g2_dfrbpq_1)            -0.0530
 _10741_/Q (sg13g2_dfrbpq_1)          _10741_/D (sg13g2_dfrbpq_1)            -0.0530

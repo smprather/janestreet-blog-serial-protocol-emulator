@@ -391,3 +391,48 @@ side now covers the surface (C12/C13 + this case), so the chip is not relying on
 that package for it; regenerating the R2 package to carry the cells would be
 host-side work and would need its citations re-established. Recorded here rather
 than left for a reader to assume the R2 vectors cover it.
+
+## 9. M4 follow-through: the same defect was in the R2 screens too
+
+M4 (the gui-worker chip review) flagged that the R3 pe_soc screen left `dbg_hold`
+unconstrained — a screen claiming a debug input is constrained when it is not.
+The **R2 pe_soc screens had the identical gap** (and so would any earlier screen
+of this block): they constrained `{rst_n host_* run pin_in*}` only, leaving the
+debug wires and the R2 read port (`dbg_rd_addr/dmem/req/data/valid`) — exactly
+the surface those screens exist to cover — unconstrained, with the report saying
+so (`1 unconstrained endpoint`, startpoint `rst_n`, on every corner).
+
+Fixed the same way and re-run against the **existing** netlist (the constraints
+changed; the netlist did not):
+
+| screen | unconstrained endpoints before → after | worst slack after |
+|---|---|---|
+| r2-sta pe_soc/slow | 1 → **0** | 0.00 / −0.87 |
+| r2-sta pe_soc/typ | 1 → **0** | 0.00 / −0.61 |
+| r2-sta pe_soc/fast | 1 → **0** | 0.00 / −0.48 |
+
+The slack is **unchanged**, which is the point: it shows those inputs were
+genuinely unconstrained rather than secretly timed, so tightening the screen
+changed no verdict — it only stopped the screen from over-claiming. The `tt_um`
+screens need nothing (`dbg_hold` is internal there, not a port). Recorded
+because the *originally shipped* r2-sta screens had the flaw; the ones in the
+tree now are the corrected re-run.
+
+## 10. R3-scoped verification record (the shared tree is red for someone else's reason)
+
+The full `regress/run_all.sh` is currently **EXIT=1**, and the only six failing
+testbenches are fw-timing's timing/input-capture acts, merged at `5b4731f` — a
+descendant of this phase's last green run, absent from it, and in their files
+(their own log records them BLOCKED mid-Block 3 with RED testbenches committed).
+So the R3 closeout is recorded here on its own evidence, every item re-run
+independently of that boundary:
+
+| R3 evidence | result |
+|---|---|
+| `tb_pe_ctrl_r3_conf` (golden conformance) | **14/14 vectors, 26/26 steps**, 2 known divergences pinned |
+| `tb_pe_ctrl_r3` (directed) | PASS (incl. the new M3 `STATUS`-at-state-3 case) |
+| `tb_pe_ctrl_r2` | 18/18 |
+| full formal gate (`run_formal.sh`) | **8 proved, 0 failed**, 1 reachable-at-depth, 1 vacuous-at-depth |
+| formal mutant harness | 14 caught, 0 survived, 0 inconclusive |
+| R3 STA screen (12 screens) | no new violation class; same four hold classes to ±0.014 ns |
+| R3 synthesis screen | exit 0; pe_cpu +24, pe_ctrl +283, pe_soc +21 cells (pre/post) |
