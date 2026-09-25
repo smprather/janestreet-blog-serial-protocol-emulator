@@ -36,14 +36,36 @@
 // per-slot comparison worth anything, and it is why the payload is a ramp and
 // not a constant.
 //
-// WHY THIS RECEIVER IS NOT THE MIDI RECEIVER, and the arithmetic behind it.
+// WHY THIS RECEIVER IS NOT THE MIDI RECEIVER -- AND THE REASON I FIRST GAVE
+// FOR THAT WAS WRONG, so the correction is here rather than in a changelog.
+//
 // tb_pe_soc_midi.v oversamples: a free-running strobe every quarter bit, never
 // blocking, so a rejected candidate costs the search nothing. That is the
-// right shape for 31.25 kbaud, where the whole frame is 320 us. It is the
-// WRONG shape here, and following it literally would have cost 5.7 million
-// strobe events across 22.6 ms of frame -- the testbench would have spent
-// more time on its own sampler than on the DUT, which is exactly the cost
-// the handoff warned about when it called this act's TB "lean".
+// right shape for 31.25 kbaud, where the whole frame is 320 us. I first wrote
+// that following it literally here "would have cost 5.7 million strobe events
+// across 22.6 ms of frame -- the testbench would have spent more time on its
+// own sampler than on the DUT".
+//
+// MEASURED, THAT IS FALSE BY A FACTOR OF 125. The variant was built and timed
+// rather than left as arithmetic: the same testbench plus a free-running
+// 1/8-bit strobe over the whole frame fires 45,753 strobes, not 5,700,000,
+// and runs in 27 s against this one's 28 s -- no measurable difference at all.
+// The 5.7M came from scaling 22.8 ms by a nanosecond-scale interval instead of
+// by half a cell. 22.8 ms / 0.5 us is 45,600, and that is the whole number.
+//
+// So the lean design does NOT pay for itself in simulation time, and it is
+// kept for the two reasons that survive measurement:
+//
+//   1. It has less state. A background process that must be serviced correctly
+//      for 22.8 ms is a second thing that can be wrong; this has none.
+//   2. Every sample point here is computed from the slot's OWN start edge, so
+//      the receiver never has to reason about a grid that has to be re-anchored
+//      across a quarter of a second of wire.
+//
+// And the honest note, which is the useful part: a design justified by a
+// performance claim that turns out to be unmeasured is a design waiting to be
+// believed. The claim was in this comment and in the findings file for a whole
+// commit before anything timed it.
 //
 // So this receiver samples only WHILE DECODING A SLOT: eleven waits per slot,
 // 5,643 in the whole frame, and the idle time between slots costs nothing at
@@ -51,6 +73,16 @@
 // a frame is ACCEPTED ONLY IF BOTH STOP BITS READ HIGH -- and the reason is
 // the same: the mark between slots is not a start bit, and a transition
 // inside a slot is not a start bit.
+//
+// AND THE NON-VACUITY, run both ways. Driven by firmware/dmx512.hex this
+// passes; driven by firmware/midi_xfer.hex -- a real 8N1 stream at 31.25 kbaud
+// on the same pin -- it fails, and the detail is worth recording: THE BREAK AND
+// MARK CHECKS PASS on the wrong protocol. A 31.25 kbaud frame's long low run
+// measures 159.99 us and its idle high measures 32.00 us, which clears the
+// 87.5 us break floor and the 8 us mark floor without meaning it. What
+// actually rejects it is the stop-bit verification and the per-slot
+// comparison. A floor is a floor: it says "not shorter than", and a wrong
+// protocol is not shorter.
 //
 // HOW A SLOT'S START BIT IS FOUND, since a falling edge is not one. DMX is
 // easier than MIDI in one specific way: within a slot of 8N2, the last

@@ -273,23 +273,63 @@ reversed, because a 512-slot ramp is not a palindrome in either order: slot 1 is
 `0x01` and slot 128 is `0x80`, and swapping the orders turns the first into
 `0x80`.
 
-## The lean testbench, and what "lean" had to mean
+## The lean testbench, and a performance claim of mine that was false
 
 One DMX512-A frame is **22.6 ms of simulated time = 1.37 million clocks**, and
-`tb_pe_soc_dmx512.v` finishes in ~27 s.
+`tb_pe_soc_dmx512.v` finishes in ~28 s.
 
-The first plan was to reuse the MIDI receiver's free-running strobe. Following
-it literally would have meant **5.7 million strobe events** across the frame — the
-testbench would have spent more time on its own sampler than on the DUT. So this
-receiver **samples only while decoding a slot**: eleven waits per slot, 5,643 in
-the whole frame, and the idle time between slots costs nothing at all. It keeps
-the property that matters (both stop bits verified) and drops the shape that
-does not fit the frame length.
+The first plan was to reuse the MIDI receiver's free-running strobe, and I
+justified dropping it with a number: *"following it literally would have meant
+5.7 million strobe events across the frame — the testbench would have spent more
+time on its own sampler than on the DUT."*
 
-The `$dumpvars` is the TB scope only, also for arithmetic rather than taste: a
-full-hierarchy dump over 1.37 M clocks is a file of hundreds of megabytes that
-the regression would write on every run, for a waveform whose only moving part is
-a 4 µs square wave the assertions already measure on the pin.
+**Measured, that is false by a factor of 125.** The comparison was built and
+timed rather than left as arithmetic: the same testbench plus a free-running
+1/8-bit strobe across the whole frame fires **45,753** strobes, not 5,700,000,
+and runs in **27 s against 28 s** — no measurable difference at all. The 5.7 M
+came from scaling 22.8 ms by a nanosecond-scale interval instead of by half a
+cell; 22.8 ms / 0.5 µs is 45,600, and that is the whole number.
+
+So the lean design **does not pay for itself in simulation time.** It is kept for
+the two reasons that survive measurement:
+
+1. **Less state.** A background process that must be serviced correctly for
+   22.8 ms is a second thing that can be wrong. This design has none.
+2. **Every sample point is computed from the slot's own start edge**, so the
+   receiver never has to reason about a grid that has to be re-anchored across a
+   quarter of a second of wire.
+
+The generalisable part is the point: **a design justified by a performance claim
+that nobody timed is a design waiting to be believed.** This one sat in a
+testbench comment *and* in this file for a full commit — through the mutation
+gate, through two full green suites, and through my own review — before anything
+measured it. It is the same shape as every other defect in this file: an
+assertion, repeated confidently, that nothing ever checked. The mutation gate
+checks the *firmware*; nothing in the suite checks the *testbench's own claims
+about itself*.
+
+## Non-vacuity, run both ways — and a floor is not a fingerprint
+
+Driven by `firmware/dmx512.hex`, `tb_pe_soc_dmx512.v` passes. Driven by
+`firmware/midi_xfer.hex` — a real 8N1 stream at 31.25 kbaud on the same pin — it
+fails, which is the same demonstration the MIDI TB gets from `spi_xfer.hex`.
+
+The detail is worth more than the pass/fail: **the break and mark checks PASS on
+the wrong protocol.** A 31.25 kbaud frame's long low run measures **159.99 µs**
+and its idle high **32.00 µs**, which clears the 87.5 µs break floor and the
+8 µs mark floor without meaning it. What actually rejects the wrong stream is
+the **stop-bit verification** and the **per-slot comparison**.
+
+A floor says "not shorter than", and a wrong protocol is not shorter. That is a
+real limitation of the two floor checks and it is worth knowing before anyone
+relies on them: they are necessary, not sufficient, and only the structural
+checks (the two stop bits, the slot values, the count) distinguish *this*
+protocol from a slower one.
+
+The `$dumpvars` is the TB scope only, and this one **is** a measured call rather
+than arithmetic: a full-hierarchy dump over 1.37 M clocks is a file of hundreds
+of megabytes that the regression would write on every run, for a waveform whose
+only moving part is a 4 µs square wave the assertions already measure on the pin.
 
 ## Self-inflicted testbench defects, recorded so they are not repeated
 
