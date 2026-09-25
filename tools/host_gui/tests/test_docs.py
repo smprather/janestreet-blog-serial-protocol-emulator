@@ -73,7 +73,9 @@ class TestDemoWalkthrough(unittest.TestCase):
         # pending.
         self.assertRegex(self.text, r"R2[^\n]*(chip-confirmed|LANDED|landed)")
         self.assertIn("R2-READ-PATH-REVIEW", self.text)
-        self.assertIn("15/15", self.text)          # the conformance count
+        # the conformance count: the package is fully confirmed at 18/18 (the
+        # ceiling/zero-count vectors were proven after the 15 original ones)
+        self.assertIn("18/18", self.text)
         self.assertNotRegex(self.text,
                             r"Memory/register readback \(R2\)[^\n]*\*\*pending\*\*")
         # the honest boundary that remains: the real board, never claimed
@@ -123,6 +125,22 @@ class TestBringupRunbook(unittest.TestCase):
         rows = [line for line in text.splitlines()
                 if line.startswith("| ") and "---" not in line]
         self.assertGreaterEqual(len(rows), 8)       # a real triage table
+
+
+class TestSubmissionReadiness(unittest.TestCase):
+    SCORECARD = REPO_ROOT / "docs" / "submission-readiness.md"
+
+    def test_scorecard_exists_and_names_the_evidence(self):
+        self.assertTrue(self.SCORECARD.is_file(), f"missing {self.SCORECARD}")
+        text = self.SCORECARD.read_text(encoding="utf-8")
+        # it must quote the same regression numbers the walkthrough does
+        walk = read(WALKTHROUGH)
+        for token in ("33/33", "26/26"):
+            with self.subTest(token=token):
+                self.assertIn(token, text)
+                self.assertIn(token, walk)
+        self.assertIn("run_host_tests.sh", text)
+        self.assertIn("not", text.lower())          # honest about what is pending
 
 
 if __name__ == "__main__":
