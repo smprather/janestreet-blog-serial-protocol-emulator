@@ -65,15 +65,17 @@ the docs say is not done. The gaps below are polish, not substance.
 ## What a judge should be able to verify in under five minutes
 
 ```bash
-./regress/run_all.sh --fast          # chip: 33/33 RTL, 26/26 firmware, exit 0
+./regress/run_all.sh --fast          # chip: 34/34 RTL, 26/26 firmware, exit 0
 tools/host_gui/run_host_tests.sh     # host: 233 tests + lint + fuzz + acceptance, exit 0
 python3 tools/fw/peemu.py firmware/uart_echo.hex --send "41 42"   # firmware, ~2 s
 python3 tools/host_bridge/acceptance.py --fake   # end-to-end, no hardware, exit 0
 ```
 
-Each is one command with a stated pass/fail. The demo walkthrough
-(`docs/demo-walkthrough.md`) is the narrative that ties them together, and its
-no-board fallback means a judge without a dev board still sees the whole story.
+Each is one command with a stated pass/fail. These were re-run verbatim on a
+fresh clone of the GitHub remote in `docs/cold-clone-audit.md`. The demo
+walkthrough (`docs/demo-walkthrough.md`) is the narrative that ties them
+together, and its no-board fallback means a judge without a dev board still
+sees the whole story.
 
 ---
 

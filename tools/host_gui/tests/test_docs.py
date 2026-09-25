@@ -93,16 +93,16 @@ class TestDemoWalkthrough(unittest.TestCase):
         self.assertIn("non-halting", self.text)
         self.assertRegex(self.text, r"[Ll]iveness[^\n]*\*\*chip-confirmed")
 
-    def test_regression_numbers_match_the_chip_record(self):
-        # The numbers the walkthrough quotes must appear in the chip-side
-        # record it cites (main's HANDOFF/STATUS), so they cannot drift.
-        chip = subprocess.run(["git", "show", "main:HANDOFF.md"],
-                              capture_output=True, text=True, check=True,
-                              cwd=REPO_ROOT).stdout
-        for number in ("33/33", "26/26"):
+    def test_regression_numbers_match_the_measured_reality(self):
+        # The walkthrough's regression numbers must match the cold-clone
+        # measurement recorded in docs/cold-clone-audit.md (a real run of
+        # run_all on a fresh clone), not a doc that can drift.
+        audit = (Path(__file__).resolve().parents[3] / "docs"
+                 / "cold-clone-audit.md").read_text(encoding="utf-8")
+        for number in ("34/34", "26/26"):
             with self.subTest(number=number):
                 self.assertIn(number, self.text)
-                self.assertIn(number, chip)
+                self.assertIn(number, audit)
 
     def test_walkthrough_points_at_the_real_commands(self):
         for command in ("tools/host_gui/run_host_tests.sh",
@@ -135,7 +135,7 @@ class TestSubmissionReadiness(unittest.TestCase):
         text = self.SCORECARD.read_text(encoding="utf-8")
         # it must quote the same regression numbers the walkthrough does
         walk = read(WALKTHROUGH)
-        for token in ("33/33", "26/26"):
+        for token in ("34/34", "26/26"):
             with self.subTest(token=token):
                 self.assertIn(token, text)
                 self.assertIn(token, walk)

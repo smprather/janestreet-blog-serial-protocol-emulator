@@ -84,7 +84,7 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
 | Claim | Status | Evidence |
 |---|---|---|
 | UART / SPI / I2C / 10BASE-T personas run as firmware | **RTL-proven** | `tb_pe_soc_uart`, `tb_pe_soc_spi`, `tb_pe_soc_i2c*`, `tb_pe_soc_eth*`, `tb_pe_eth_tx` |
-| Full regression is green | **RTL-proven** | `run_all.sh --fast -j8` → exit 0: **RTL 33/33, firmware 26/26, lint clean, 12 gates, 12 mutation suites** (R2 is registered in `run_all`) |
+| Full regression is green | **RTL-proven** | `./regress/run_all.sh --fast -j8` → exit 0 on a cold clone: **RTL 34/34, firmware 26/26, 12 mutation suites** (R2 and the wait-word gate are registered in `run_all`; see `docs/cold-clone-audit.md`) |
 | 60 MHz maps and routes | **RTL-proven (mapped, not routed)** | area + screen reports; physical flow intentionally out of scope |
 | Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, MicroPython conformance, acceptance `--fake` → 22 PASS / 0 FAIL / 1 SKIP) |
 | Bridge on a real MicroPython | **measured** | built the MicroPython unix port and ran the deployed modules on it; found and fixed 5 deployment blockers (`reviews/2026-09-25/HOST-BRIDGE-MICROPYTHON.md`) |
