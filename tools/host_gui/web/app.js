@@ -28,6 +28,13 @@ function setMessage(text, isError = false) {
   el.classList.toggle("error", Boolean(isError));
 }
 
+// Which states each action is offered in. These are the session's rules, not
+// the page's: `tests/test_gui_capabilities.py` asks the real ControllerSession
+// what it accepts in each state and fails if the two disagree, so a policy
+// change on either side has to be made on both.
+const LOADABLE = ["PREPARED", "LOADED", "STOPPED"];
+const DUMPABLE = ["PREPARED", "LOADED", "STOPPED", "DEBUG_HOLD"];
+
 function renderHealth(health) {
   $("connection-state").textContent = health.state;
   $("session-id").textContent = health.session_id || "—";
@@ -36,11 +43,25 @@ function renderHealth(health) {
     : "—";
   const connected = health.state !== "DISCONNECTED";
   $("connect").disabled = connected;
-  $("load").disabled = !["PREPARED", "LOADED", "STOPPED"].includes(health.state);
+  $("load").disabled = !LOADABLE.includes(health.state);
+  // START and STOP are absent from the two HELD states on purpose, not by
+  // oversight: while a debug hold is asserted the run strap is MASKED in BOTH
+  // directions (`cpu_exec = dbg_step || (run && !dbg_hold)`), so pulling it
+  // low neither stops nor starts the core - DEBUG_BP_CLR is the only release,
+  // and it also disarms. Offering a Start/Stop that provably does nothing is
+  // the same lie as mislabelling the state; see the debug panel's Clear.
   $("start").disabled = !["LOADED", "STOPPED"].includes(health.state);
   $("stop").disabled = health.state !== "RUNNING";
-  $("dump").disabled = !["PREPARED", "LOADED", "STOPPED"].includes(health.state);
-  setCpuPolling(health.state === "RUNNING");
+  // DUMP_CORE is gated on the run STRAP, so it answers in every state whose
+  // strap is low - which includes a step-pause (DEBUG_HOLD), where the core is
+  // held but the strap never went high. It is refused under BP_HIT because a
+  // live hit holds the core WITHOUT dropping the strap.
+  $("dump").disabled = !DUMPABLE.includes(health.state);
+  // READ_CPU is the ONE non-halting read: the session answers it in every
+  // state, including a core parked on a breakpoint, which is exactly when the
+  // registers matter. Polling only while RUNNING froze the register view at
+  // the pre-hit values while the debug panel showed the post-hit PC.
+  setCpuPolling(connected);
   setStatusPolling(connected);
 }
 
@@ -77,7 +98,6 @@ function renderStatus(status) {
 //   alive -> running and the timer advanced; stale -> running but the timer
 //   has not moved (the liveness gap). NOT chip-confirmed until a real run.
 let lastHeartbeat = null;
-let lastRun = 0;
 function setLiveness(state, label) {
   const el = $("liveness");
   if (!el) return;
@@ -85,7 +105,6 @@ function setLiveness(state, label) {
   el.textContent = `liveness: ${label}`;
 }
 function noteHeartbeat(timer, run) {
-  lastRun = run ? 1 : 0;
   if (!Number.isInteger(timer)) { setLiveness("unknown", "unknown"); return; }
   $("heartbeat").textContent = `0x${timer.toString(16).padStart(4, "0")}`;
   if (!run) { lastHeartbeat = null; setLiveness("idle", "idle (core stopped)"); return; }
@@ -126,7 +145,7 @@ function setCpuPolling(on) {
       try {
         renderCpu((await api("/api/read_cpu")).cpu);
         renderStatus((await api("/api/status")).status);
-      } catch (error) { /* running read */ }
+      } catch { /* running read */ }
     }, 1000);
   } else if (!on && cpuPoll) {
     clearInterval(cpuPoll);
@@ -195,12 +214,16 @@ async function refresh() {
     renderHealth(health);
     if (health.state !== "DISCONNECTED") {
       renderStatus((await api("/api/status")).status);
-      if (health.state === "RUNNING") {
-        renderCpu((await api("/api/read_cpu")).cpu);
-      }
+      // READ_CPU answers while stopped, held or running (it is the non-halting
+      // read), so the register view is fetched whenever the session is up. It
+      // used to be fetched only while RUNNING, which froze the registers at
+      // their pre-breakpoint values on a core that had just been stopped BY its
+      // breakpoint - while the debug panel, read a moment later, showed the
+      // post-hit PC. Two views of one register, disagreeing.
+      renderCpu((await api("/api/read_cpu")).cpu);
       try {
         renderDebug(await api("/api/debug"));
-      } catch (error) {
+      } catch {
         // A chip without R3 answers UNSUPPORTED; the panel says so instead of
         // leaving stale values on screen.
         $("debug-state").textContent = "not supported by this chip";
@@ -272,8 +295,6 @@ async function main() {
   }
 
   // ---- R3 debug panel ----------------------------------------------------
-  const debugEls = ["debug-state", "debug-pc", "debug-bp", "debug-bp-flags",
-                     "debug-run"];
   const debugButtons = ["debug-step", "bp-set", "bp-clr", "debug-resume"];
 
   function renderDebug(debug) {
@@ -328,7 +349,12 @@ async function main() {
   $("debug-resume").addEventListener("click", () => debugCall("/api/debug/resume", { address: bpAddress() }));
 
   try {
-    const socket = new WebSocket(`ws://${location.host}/api/events`);
+    // The socket scheme follows the page's scheme: a page served over TLS
+    // cannot open a plaintext WebSocket, and a hard-coded ws:// would make
+    // the event stream silently unavailable in exactly the deployment where
+    // it must not be.
+    const socketScheme = location.protocol === "https:" ? "wss:" : "ws:";
+    const socket = new WebSocket(`${socketScheme}//${location.host}/api/events`);
     socket.addEventListener("message", (message) => pushEvent(JSON.parse(message.data)));
   } catch (error) {
     setInterval(async () => {
