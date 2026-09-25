@@ -317,14 +317,44 @@ def run_acceptance(*, fake, device=None, project=DEFAULT_PROJECT, board=None,
         session.read_imem(IMEM_WORDS - 1, 2)      # must be RANGE, never wrap
         report.record("r2_range", False,
                       _r2_detail("read past the end returned data (wrapped)"))
+        range_latched = False
     except SessionError as exc:
         ok = f"status {P.STATUS_RANGE}" in str(exc)
         detail = str(exc)
         if first.pe is not None:
-            detail += f"; read-fault policy={first.pe.read_fault_policy}"
-            if first.pe.faults:
-                session.clear_fault(FAULT_RANGE)   # keep the script deterministic
+            range_latched = bool(first.pe.faults & FAULT_RANGE)
+            detail += (f"; sticky FAULT_RANGE "
+                       f"{'latched' if range_latched else 'NOT latched'} "
+                       f"(policy={first.pe.read_fault_policy})")
         report.record("r2_range", ok, _r2_detail(detail))
+
+    # Manager RULING: an out-of-range READ latches sticky FAULT_RANGE and
+    # CLEAR_FAULT clears it. Prove the whole lifecycle over the session:
+    # bad read -> fault visible in STATUS -> FAULTED -> CLEAR_FAULT -> clear.
+    lifecycle_detail = "no model to observe a latched read fault"
+    lifecycle_ok = True
+    if range_latched:
+        try:
+            faulted = session.status()
+            seen = bool(faulted.faults & FAULT_RANGE)
+            state_when_faulted = session.state
+            became_faulted = state_when_faulted == SessionState.FAULTED
+            cleared = session.clear_fault(FAULT_RANGE)
+            healed = session.state in (SessionState.STOPPED,
+                                       SessionState.PREPARED)
+            lifecycle_ok = seen and became_faulted and cleared == 0 and healed
+            lifecycle_detail = (
+                f"bad read latched FAULT_RANGE (status.faults=0x"
+                f"{faulted.faults:04X}, session state={state_when_faulted}); "
+                f"CLEAR_FAULT -> 0x{cleared:04X}, cleared and state="
+                f"{session.state}")
+        except SessionError as exc:
+            lifecycle_ok, lifecycle_detail = False, str(exc)
+    elif first.pe is not None:
+        lifecycle_ok = False
+        lifecycle_detail = "policy is status-only: no sticky fault to observe"
+    report.record("r2_range_fault_lifecycle", lifecycle_ok,
+                  _r2_detail(lifecycle_detail))
 
     try:
         dump_again = session.dump_core()

@@ -56,7 +56,8 @@ class TestFakeDryRun(unittest.TestCase):
         report = ACC.run_acceptance(fake=True)
         names = {check.name for check in report.checks}
         for expected in ("r2_read_imem", "r2_read_dmem", "r2_range",
-                         "r2_read_cpu", "r2_dump_header"):
+                         "r2_read_cpu", "r2_dump_header",
+                         "r2_range_fault_lifecycle"):
             with self.subTest(check=expected):
                 self.assertIn(expected, names)
         r2 = [c for c in report.checks if c.name.startswith("r2_")]
@@ -65,6 +66,16 @@ class TestFakeDryRun(unittest.TestCase):
             with self.subTest(check=check.name):
                 self.assertEqual(check.status, "PASS")
                 self.assertIn("not chip-confirmed", check.detail.lower())
+
+    def test_range_fault_lifecycle_check_reports_the_sticky_fault(self):
+        report = ACC.run_acceptance(fake=True)
+        check = next(c for c in report.checks
+                     if c.name == "r2_range_fault_lifecycle")
+        self.assertEqual(check.status, "PASS")
+        # The manager ruling: a bad read latches sticky FAULT_RANGE and
+        # CLEAR_FAULT clears it; the detail must record both facts.
+        self.assertIn("FAULT_RANGE", check.detail)
+        self.assertIn("cleared", check.detail.lower())
 
     def test_dry_run_still_reports_uart_as_the_only_skip(self):
         report = ACC.run_acceptance(fake=True)
