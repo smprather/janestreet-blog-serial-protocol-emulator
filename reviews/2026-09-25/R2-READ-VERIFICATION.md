@@ -24,13 +24,13 @@ values instead of re-deriving the contract.
 
 ## Status: CHIP-CONFIRMED in simulation (2026-09-25)
 
-**Chip R2 is complete.** Every one of the 15 golden steps now carries
+**Chip R2 is complete.** All 18 golden steps now carry
 `"chip_confirmed": true` together with a `chip_evidence` citation. The evidence
 is the chip repo's `tb/tb_pe_ctrl_r2.v`, which reports per-vector PASS for all
-15 steps — byte-exact including CRC, with the model image loaded per vector
+18 steps — byte-exact including CRC, with the model image loaded per vector
 and the session's opening 3-word LOAD replayed as a real framed frame. The
 chip-side record is `reviews/2026-09-25/R2-READ-PATH-REVIEW.md` (section
-"Conformance: 15/15, per vector"), which names every step. That run also found
+"Conformance"), which names every step. That run also found
 and fixed three real RTL defects (a dropped trailing dmem byte, a response
 launch that never fired, and an X on the MISO pad before the first frame).
 
