@@ -494,5 +494,88 @@ class TestSclkNegotiation(unittest.TestCase):
         self.assertEqual(adapter.spi_rates, [5_000_000])
 
 
+class BrokenBoardAdapter(FakeTTAdapter):
+    """A deployment-time board failure: unknown project, dead clock, no pin map.
+
+    The phase-2 record noted that these raise out of the serve loop (fail-fast)
+    instead of answering the request; the bridge must report them as a typed
+    ok=false and stay alive.
+    """
+
+    def __init__(self, pe, *, fail=None) -> None:
+        super().__init__(pe)
+        self.fail = fail
+
+    def enable_project(self, name):
+        if self.fail == "enable_project":
+            raise RuntimeError(f"project {name!r} not found on this shuttle")
+        return super().enable_project(name)
+
+    def set_clock(self, hz):
+        if self.fail == "set_clock":
+            raise OSError("clock_project_PWM failed")
+        return super().set_clock(hz)
+
+    def configure_host_spi(self, sclk_hz):
+        if self.fail == "configure_host_spi":
+            raise RuntimeError("host SPI pin map is not configured")
+        return super().configure_host_spi(sclk_hz)
+
+
+def board_bridge(fail):
+    pe = F.FakePE()
+    adapter = BrokenBoardAdapter(pe, fail=fail)
+    bridge = M.PicoBridge(adapter, project=PROJECT, sleep=lambda _s: None)
+    return bridge, adapter, pe
+
+
+class TestBoardFailureHandling(unittest.TestCase):
+    def test_hello_reports_a_project_failure_instead_of_raising(self):
+        bridge, _, _ = board_bridge("enable_project")
+        response, _ = call(bridge, 1, "hello")
+        self.assertFalse(response["ok"])
+        self.assertIn("not found", response["error"])
+        self.assertIn("board", response["error"])
+
+    def test_hello_reports_a_clock_failure_instead_of_raising(self):
+        bridge, _, _ = board_bridge("set_clock")
+        response, _ = call(bridge, 1, "hello")
+        self.assertFalse(response["ok"])
+        self.assertIn("clock", response["error"])
+
+    def test_prepare_reports_a_pin_map_failure_instead_of_raising(self):
+        bridge, _, _ = board_bridge("configure_host_spi")
+        response, _ = call(bridge, 1, "hello")
+        self.assertTrue(response["ok"])
+        response, _ = call(bridge, 2, "prepare")
+        self.assertFalse(response["ok"])
+        self.assertIn("pin map", response["error"])
+
+    def test_bridge_still_serves_after_a_board_failure(self):
+        bridge, _, _ = board_bridge("enable_project")
+        call(bridge, 1, "hello")
+        response, _ = call(bridge, 2, "ping")
+        self.assertTrue(response["ok"])
+        messages = [json.loads(t) for t in bridge.handle_line("not json")]
+        self.assertEqual(messages[0]["event"], "protocol.error")
+
+    def test_retry_after_the_board_is_fixed_succeeds(self):
+        bridge, adapter, _ = board_bridge("enable_project")
+        self.assertFalse(call(bridge, 1, "hello")[0]["ok"])
+        adapter.fail = None
+        response, _ = call(bridge, 2, "hello")
+        self.assertTrue(response["ok"])
+        self.assertEqual(adapter.project_calls, [PROJECT])
+        self.assertEqual(adapter.clock_calls, [60_000_000])
+
+    def test_retry_after_a_clock_failure_starts_the_clock_once(self):
+        bridge, adapter, _ = board_bridge("set_clock")
+        self.assertFalse(call(bridge, 1, "hello")[0]["ok"])
+        adapter.fail = None
+        response, _ = call(bridge, 2, "hello")
+        self.assertTrue(response["ok"])
+        self.assertEqual(adapter.clock_calls, [60_000_000])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

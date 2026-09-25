@@ -171,6 +171,14 @@ class PicoBridge:
             result = handler(request.args)
         except BridgeError as exc:
             return USBResponse(request.id, False, None, str(exc))
+        except (OSError, RuntimeError) as exc:
+            # A board/deployment failure (unknown project, dead clock, missing
+            # pin map, reset/IO error) must not kill the serve loop: answer the
+            # request with a typed error and stay alive. SPI transfer failures
+            # are already converted to BridgeError + spi.timeout in
+            # _pe_request, so they never reach this branch.
+            return USBResponse(request.id, False, None,
+                               f"board error during {request.op}: {exc}")
         return USBResponse(request.id, True, result, None)
 
     def serve_io(self, readline, write):
