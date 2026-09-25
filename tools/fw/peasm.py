@@ -278,6 +278,42 @@ CONSTS: dict[str, int] = {
     "IR_GAP0": 200,
     "IR_GAP1": 67,
     "IR_LEADGAP": 255,
+    #
+    # ---------------------------------------------------------------------
+    # STEPPER STEP/DIR RAMP. The only act in this block that drives a
+    # MECHANISM: the driver chip counts STEP edges and the motor's position
+    # IS that count, so there is no acknowledgement, no status word, and
+    # nothing at the far end to resynchronise to. A step period is a single
+    # number and it is either right or the motor is in the wrong place.
+    #
+    #   STEP pin 6, idles RELEASED -- a stepper driver's input is pulled DOWN
+    #   DIR  pin 5, held DRIVEN throughout, only its level changes
+    #   twelve steps: six one way, the direction changes, six back
+    #   the period falls by 5110 clocks = 85.2 us EVERY step
+    #
+    # THE RAMP IS A SUBTRACTION, NOT A TABLE, and that is the claim. Ten outer
+    # steps of the (4,40) pair is 10 * 511 = 5110 clocks, so the program holds
+    # ONE counter and subtracts 10 from it per step:
+    #   n1 = 196, 186, 176, 166, 156, 146, 136, 126, 116, 106, 96, 86
+    # A table of twelve constants would have been easier to read and would
+    # have made the ramp's LINEARITY an assumption: twelve numbers that happen
+    # to decrease, with nothing in the program saying they decrease by the
+    # same amount. Here the constancy is in the program, and the TB measures
+    # that every step period is exactly 5110 clocks shorter than the last.
+    #
+    # The period is a COUNTED DELAY and not a free-running 1 us tick, and for
+    # the same reason the tick is refused everywhere in this block: its phase
+    # residual is up to a full microsecond, which is 1.2 % of the longest step
+    # period and 0.5 % of a ramp step -- an order of magnitude worse than the
+    # claim.
+    #   ST_PULSE  2 ->   2.4 us   the STEP low pulse (a driver wants >= 1 us)
+    #   ST_SETUP  6 ->   7.0 us   DIR setup before the next STEP edge (5 us min)
+    #   ST_GAP0 196 -> 100160 clocks = 1.669 ms, the first step period
+    "ST_STEP": 0x40,  # the STEP pin
+    "ST_DIR": 0x20,   # the DIR pin
+    "ST_PULSE": 2,    # the low pulse, on the (2,13) pair: 2 * 69 + 4 = 142
+    "ST_SETUP": 6,    # the direction setup, same pair: 6 * 69 + 4 = 418
+    "ST_GAP0": 196,   # the first step period, on (4,40): 196 * 511 + 4
 }
 
 
