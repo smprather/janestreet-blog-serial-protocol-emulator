@@ -138,9 +138,25 @@ host-model evidence only.
 - The FakePE is a model; every probe is host-side. No R2 RTL exists, so nothing
   here is chip-confirmed (by design, and flagged on every line).
 - Real-hardware acceptance still out of scope (needs hardware + R2).
-- `read_cpu` in the acceptance goes through the transport directly (the
-  `ControllerSession` has no `read_cpu` wrapper; the bridge op does). When a
-  session-level `read_cpu` lands, the runner can move up a layer.
+- `read_cpu` in the acceptance goes through the session now (`a6f46c9`); the
+  page shows the same header and polls it while running (`e879290`).
+- A chip fault on an idle/stopped board is surfaced by the page's 2 s status
+  poll while connected (`3790fc3`), because the Pico can only sample `IRQ_N`
+  when a host request unblocks its read loop; the hardware run should still
+  measure the end-to-end latency.
+- One-command re-verify: `tools/host_gui/run_host_tests.sh` (`c24fd87`) runs
+  every host gate — host_gui tests, host_bridge tests, ruff, compileall and the
+  acceptance dry run — and is verified to fail on a real defect.
+
+## Same-turn chain log (WORKLOG-traceable)
+
+Each entry was a separate commit, logged `TASK-START`/`TASK-DONE`/`CHAIN` in
+`/home/mylesp/janestreet-blog-serial-protocol-emulator/WORKLOG.md` (actor
+`gui-worker`), and ended with the interrupt-file rewrite that triggers the
+manager's async review. `264ce27` rulings · `a6f46c9` session read_cpu ·
+`a0b3577` API route · `bbae976` lifecycle gate · `e879290` page header ·
+`3790fc3` idle-fault visibility · `1c5a969` records · `d233fe0` fail-fast gap ·
+`c24fd87` one-command host gate.
 
 Record: WORKLOG `QUESTION` lines carry the two contract questions to the chip
 side; the host-side chain continues independently.
