@@ -39,13 +39,14 @@ README = REPO_ROOT / "reviews" / "2026-09-25" / "R2-READ-VERIFICATION.md"
 HEX_DIR = REPO_ROOT / "reviews" / "2026-09-25" / "r2-hex"
 
 # Chip-side evidence (2026-09-25). Chip R2 is COMPLETE: the chip repo's
-# tb/tb_pe_ctrl_r2.v reports per-vector PASS for all 15 golden steps, byte-exact
+# tb/tb_pe_ctrl_r2.v reports per-vector PASS for all 18 golden steps, byte-exact
 # (CRC included), with the model image loaded per vector and the session's
 # opening 3-word LOAD replayed as a real framed frame. The chip-side record is
-# reviews/2026-09-25/R2-READ-PATH-REVIEW.md in the chip repo, whose "Conformance:
-# 15/15, per vector" table names every step. R2 found three real RTL defects
-# (dropped trailing dmem byte, never-fired response launch, an X on the MISO pad
-# before the first frame) - all fixed there.
+# reviews/2026-09-25/R2-READ-PATH-REVIEW.md in the chip repo, whose "Conformance"
+# section names every step; the ceiling and count==0->RANGE rules needed no RTL
+# change (the host model was corrected to match the chip instead). R2 found three
+# real RTL defects (dropped trailing dmem byte, never-fired response launch, an
+# X on the MISO pad before the first frame) - all fixed there.
 #
 # A step is chip_confirmed ONLY if it appears in CHIP_EVIDENCE with a citation;
 # a step that is not in the map stays False. Nothing is confirmed by assertion:
@@ -67,15 +68,21 @@ CHIP_EVIDENCE = {
         "bad_read_answers_range",
         "status_shows_sticky_fault",
         "clear_fault_clears_the_bit",
+        # Host-side ceiling + zero-count vectors, added after the chip review;
+        # the chip re-ran them and they pass byte-exact (conformance now
+        # 18/18; the ceiling and count==0->RANGE rules needed no RTL change).
+        "read_imem_at_ceiling_15",
+        "read_imem_over_ceiling",
+        "read_dmem_zero_count",
     },
     "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md "
-              "(section 'Conformance: 15/15, per vector')",
+              "(section 'Conformance', per-vector table)",
     "testbench": "chip repo: tb/tb_pe_ctrl_r2.v",
     "harness": "chip-side TB loads imem.hex/dmem.hex, applies each vector's "
                "sparse overrides and register state, replays the 3-word LOAD "
                "precondition as a real framed frame, and compares every "
                "response byte (skipping wait words) to the golden stream",
-    "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+    "conformance": "18/18 golden steps PASS, byte-exact including CRC",
     "scope": "This confirms the chip RTL in SIMULATION against the golden "
              "package. The real-board acceptance run (Pico over USB, physical "
              "shuttle) is still unexecuted and is not claimed here.",
@@ -87,8 +94,8 @@ PACKAGE_NOTICE = (
     "CHIP-CONFIRMED IN SIMULATION: every golden step in this package passes "
     "byte-exactly (CRC included) in the chip repo's tb/tb_pe_ctrl_r2.v, with "
     "the model image loaded per vector - see the chip repo's "
-    "reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance: 15/15, "
-    "per vector', which names every step. NOT HARDWARE-CONFIRMED: the "
+    "reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance', which "
+    "names every step (18/18). NOT HARDWARE-CONFIRMED: the "
     "real-board acceptance run (Pico over USB CDC with a physical shuttle) has "
     "NOT been executed and is not claimed here. The host probes in "
     "r2_reads.py still run against the FakePE model; what the chip confirms is "
