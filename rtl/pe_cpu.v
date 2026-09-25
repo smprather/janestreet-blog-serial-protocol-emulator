@@ -214,7 +214,23 @@ module pe_cpu #(
   // `cpu_exec` is the single execute gate: the strap, masked by the debug hold,
   // plus the step pulse. Everything that commits (the PC and every side effect)
   // hangs off it, so a held core is inert by construction.
-  wire cpu_exec = dbg_step || (run && !dbg_hold);
+  // THE DEFENSIVE DEFAULT, and it is load-bearing. dbg_hold and dbg_step are
+  // module INPUTS, and every instantiation that predates them leaves them
+  // unconnected: the port arrives as Z, `!dbg_hold` is X, and this gate is X,
+  // so the core never executes an instruction and every observable in the
+  // system stays at its reset value. That is not a hypothetical -- it is what
+  // happened to the six timing acts when R3 landed, and the symptom
+  // (dmem = xx, zero edges, a watchdog) looks like a firmware bug in six
+  // unrelated programs at once.
+  //
+  // Tested with CASE equality so that anything which is not a HARD one reads
+  // as "not held" / "no step": the debug interface is inactive unless
+  // something actively asserts it. In synthesis this is identical to the
+  // plain expression (x and z do not exist in hardware), so nothing about the
+  // netlist changes -- the convention is that a debug input defaults to
+  // inactive, and it is enforced where the input is consumed rather than at
+  // every call site, which is the only place a new call site cannot forget it.
+  wire cpu_exec = (dbg_step === 1'b1) || (run && !(dbg_hold === 1'b1));
   assign dbg_next_pc = next_pc;
 
   // While !run the core holds pc at 0 (the boot loader owns the window), and
