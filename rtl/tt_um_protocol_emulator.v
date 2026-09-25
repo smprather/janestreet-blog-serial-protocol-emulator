@@ -130,6 +130,18 @@ module tt_um_protocol_emulator (
   wire        ctrl_load_active, ctrl_load_error;
   wire [15:0] ctrl_words_written, ctrl_faults;
   wire        ctrl_spi_miso, ctrl_miso_oe, ctrl_irq_n;
+  // R2: pe_ctrl drives the bounded reads and receives the architectural state.
+  wire        dbg_rd_req, dbg_rd_dmem, dbg_rd_valid;
+  wire [15:0] dbg_rd_addr, dbg_rd_data;
+
+  // R2: the debug bus is FULL WIDTH at the SoC (dbg_pc is PCW bits, i.e. 10
+  // in a 1,024-word machine). Declared before BOTH instances below (Icarus
+  // binds declaration before use). The pads still expose only dbg_pc[5:1] — a
+  // pad can carry 6 bits, and that limit is a pin budget fact, not a register
+  // truncation. The host read path sees the whole register.
+  wire [9:0] dbg_pc;
+  wire [7:0] dbg_a, dbg_x, dbg_y, dbg_timer;
+  wire [15:0] dbg_insn;
 
   pe_ctrl #(.WORDS(TT_IMEM_WORDS)) u_ctrl (
     .clk(clk), .rst_n(rst_n),
@@ -139,7 +151,12 @@ module tt_um_protocol_emulator (
     .host_we(host_we), .host_imem_sel(host_imem_sel),
     .host_addr(host_addr), .host_wdata(host_wdata),
     .load_active(ctrl_load_active), .load_error(ctrl_load_error),
-    .words_written(ctrl_words_written), .faults(ctrl_faults)
+    .words_written(ctrl_words_written), .faults(ctrl_faults),
+    .dbg_rd_req(dbg_rd_req), .dbg_rd_dmem(dbg_rd_dmem),
+    .dbg_rd_addr(dbg_rd_addr), .dbg_rd_data(dbg_rd_data),
+    .dbg_rd_valid(dbg_rd_valid),
+    .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_x(dbg_x), .dbg_y(dbg_y),
+    .dbg_insn(dbg_insn), .dbg_timer(dbg_timer)
   );
 
   wire       uart_rx = ui_in[0];
@@ -155,7 +172,6 @@ module tt_um_protocol_emulator (
   wire [7:0] pin_in_bus;
   wire [7:0] pin_out_bus;
   wire [7:0] pin_oe_bus;
-  wire [7:0] dbg_pc, dbg_a, dbg_timer;
 
   // UART RX (bit 3) is a dedicated input pad. Bits 4/5 (SDA/SCL) come from
   // `uio_in` and are attached after the pads are declared -- see below.
@@ -176,11 +192,19 @@ module tt_um_protocol_emulator (
     .host_addr(host_addr),
     .host_wdata(host_wdata),
     .run(run),
+    .dbg_rd_req(dbg_rd_req),
+    .dbg_rd_dmem(dbg_rd_dmem),
+    .dbg_rd_addr(dbg_rd_addr),
+    .dbg_rd_data(dbg_rd_data),
+    .dbg_rd_valid(dbg_rd_valid),
     .pin_in(pin_in_bus),
     .pin_out(pin_out_bus),
     .pin_oe(pin_oe_bus),
     .dbg_pc(dbg_pc),
     .dbg_a(dbg_a),
+    .dbg_x(dbg_x),
+    .dbg_y(dbg_y),
+    .dbg_insn(dbg_insn),
     .dbg_timer(dbg_timer)
   );
 
@@ -266,7 +290,7 @@ module tt_um_protocol_emulator (
   wire _unused = &{ena, ui_in[7:3], uio_in[6], uio_in[3:2],
                    pin_out_bus[6], pin_out_bus[3],
                    pin_oe_bus[6], pin_oe_bus[3], pin_oe_bus[0],
-                   dbg_a, dbg_timer, dbg_pc[7:6],
+                   dbg_timer,
                    ctrl_load_active, ctrl_load_error, ctrl_words_written,
                    ctrl_faults, 1'b0};
 

@@ -174,6 +174,11 @@ CASES=(
   # The passive SPI loader: pads in, host write port out. Unit TB first; the
   # TT top-level TB then proves a program loaded through the pads executes.
   "tb_pe_ctrl|../rtl/pe_ctrl.v|tb_pe_ctrl"
+  # R2 conformance: the SAME pe_ctrl driven by the HOST's own bytes. Every
+  # request and response comes from the gui-worker golden package via
+  # $readmemh (tb/r2-vectors/), the model image is loaded per vector, and the
+  # response is compared byte-exactly -- CRC included, R2 wait words skipped.
+  "tb_pe_ctrl_r2|../rtl/pe_ctrl.v|tb_pe_ctrl_r2"
 
   # The 10BASE-T receive path, end to end on real RTL: raw Manchester
   # levels into pe_dru, through pe_manch and pe_crc, into pe_fbuf. Every

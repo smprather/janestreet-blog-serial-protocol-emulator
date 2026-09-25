@@ -209,8 +209,8 @@ check_mutation "echo-at-queue" \
                     load_echo  <= rx_word;   // MUTANT: echo latched at queue time"
 
 check_mutation "status-fields-zero" \
-  "                    resp_buf[5] <= words_written;" \
-  "                    resp_buf[5] <= 16'h0000;   // MUTANT: words_written lost"
+  "                    resp_buf[10] <= words_written;" \
+  "                    resp_buf[10] <= 16'h0000;   // MUTANT: words_written lost"
 
 # ---- faults / IRQ ---------------------------------------------------------
 check_mutation "irq-polarity" \
@@ -230,7 +230,7 @@ check_mutation "clear-mask-ignored" \
 
 # ---- MISO ownership -------------------------------------------------------
 check_mutation "miso-oe-stuck" \
-  "  assign miso_oe     = resp_active | resp_hold_oe;" \
+  "  assign miso_oe     = resp_active | resp_hold_oe | r_filling;" \
   "  assign miso_oe     = 1'b1;   // MUTANT: MISO never releases"
 
 check_mutation "resp-never-active" \

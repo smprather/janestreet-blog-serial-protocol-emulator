@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen/signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-16 modules, 205 ports.
+16 modules, 216 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -114,8 +114,11 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `io_re` | out | 1 | _no note yet_ |
 | `io_wdata` | out | `[7:0]` | _no note yet_ |
 | `io_rdata` | inp | `[7:0]` | _no note yet_ |
-| `dbg_pc` | out | `[7:0]` | Program counter, for observability. A real PORT, not a hierarchical reference from the parent: a cross-module reference simulates but does not synthesise. |
+| `dbg_pc` | out | `[((IMEM_WORDS <= 2) ? 1 : ((IMEM_WORDS <= 256) ? 8 : $clog2(IMEM_WORDS)))-1:0]` | Program counter, for observability. A real PORT, not a hierarchical reference from the parent: a cross-module reference simulates but does not synthesise. |
 | `dbg_a` | out | `[7:0]` | Accumulator, for observability. See dbg_pc. |
+| `dbg_x` | out | `[7:0]` | _no note yet_ |
+| `dbg_y` | out | `[7:0]` | _no note yet_ |
+| `dbg_insn` | out | `[15:0]` | _no note yet_ |
 
 ## `pe_crc`
 
@@ -305,11 +308,19 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
                  ? ((IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS)) : 8)-1:0]` | _no note yet_ |
 | `host_wdata` | inp | `[15:0]` | _no note yet_ |
 | `run` | inp | 1 | _no note yet_ |
+| `dbg_rd_req` | inp | 1 | _no note yet_ |
+| `dbg_rd_dmem` | inp | 1 | _no note yet_ |
+| `dbg_rd_addr` | inp | `[15:0]` | _no note yet_ |
+| `dbg_rd_data` | out | `[15:0]` | _no note yet_ |
+| `dbg_rd_valid` | out | 1 | _no note yet_ |
 | `pin_in` | inp | `[7:0]` | _no note yet_ |
 | `pin_out` | out | `[7:0]` | _no note yet_ |
 | `pin_oe` | out | `[7:0]` | _no note yet_ |
-| `dbg_pc` | out | `[7:0]` | _no note yet_ |
+| `dbg_pc` | out | `[((IMEM_WORDS <= 2) ? 1 : ((IMEM_WORDS <= 256) ? 8 : $clog2(IMEM_WORDS)))-1:0]` | _no note yet_ |
 | `dbg_a` | out | `[7:0]` | _no note yet_ |
+| `dbg_x` | out | `[7:0]` | _no note yet_ |
+| `dbg_y` | out | `[7:0]` | _no note yet_ |
+| `dbg_insn` | out | `[15:0]` | _no note yet_ |
 | `dbg_timer` | out | `[7:0]` | _no note yet_ |
 
 ## `tt_um_protocol_emulator`

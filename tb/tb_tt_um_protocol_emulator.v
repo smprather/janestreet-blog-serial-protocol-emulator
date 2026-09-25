@@ -418,7 +418,10 @@ module tb_tt_um_protocol_emulator;
     check(dut.u_ctrl.faults === FAULT_CRC, "bad crc: FAULT_CRC latched");
     check(uo_out[1] === 1'b0, "bad crc: IRQ_N asserted (active low)");
     exchange(8'h11, 16'h2223, 4'h0, 1'b0);
-    check(rxf[8] === FAULT_CRC, "status: fault reported");
+    // R2: the header is 11 payload words and `faults` sits at payload slot 9
+    // (rxf[13]), after the inserted pc/a/x/y/timer registers.
+    check(rlen === 11, $sformatf("status: R2 payload len %0d, want 11", rlen));
+    check(rxf[13] === FAULT_CRC, "status: fault reported");
     check(uo_out[1] === 1'b0, "status read must not clear the fault");
     txp[0] = FAULT_CRC;
     plen = 1;

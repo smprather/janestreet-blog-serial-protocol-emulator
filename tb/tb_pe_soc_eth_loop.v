@@ -57,7 +57,8 @@ module tb_pe_soc_eth_loop;
   // idles high so no other persona sees a UART start bit.
   wire  [7:0] pin_out_bus, pin_oe_bus;
   wire  [7:0] pin_in_bus = {pin_out_bus[7], 6'b0, 1'b1};
-  logic [7:0] dbg_pc, dbg_a, dbg_timer;
+  logic [9:0] dbg_pc;   // R2: full PC width (pe_soc exposes PCW bits)
+  logic [7:0] dbg_a, dbg_timer;
 
   pe_soc #(
     .IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES), .BAUD(BAUD)
@@ -65,6 +66,10 @@ module tb_pe_soc_eth_loop;
     .clk(clk), .rst_n(rst_n),
     .host_we(host_we), .host_imem_sel(host_imem_sel),
     .host_addr(host_addr), .host_wdata(host_wdata), .run(run),
+    // R2: the host read port is idle in this TB (tied low, not floating:
+    // an undriven input would make the address mux X and break the CPU read).
+    .dbg_rd_req(1'b0), .dbg_rd_dmem(1'b0), .dbg_rd_addr(16'h0000),
+    .dbg_rd_data(), .dbg_rd_valid(),
     .pin_in(pin_in_bus), .pin_out(pin_out_bus), .pin_oe(pin_oe_bus),
     .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_timer(dbg_timer)
   );

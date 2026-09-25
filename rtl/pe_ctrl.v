@@ -40,6 +40,50 @@
 //                          stub those fields, so no response lies]
 //   0x16 CLEAR_FAULT   -> (OK, faults after mask)
 //   0x20 TARGET        -> (OK, target, capabilities)
+//
+// THE R2 READ CONTRACT (landed 2026-09-25; manager ruling on the response
+// latency 2026-09-25). These are the wire changes a HOST must implement:
+//
+//   0x12 READ_CPU   -> (OK, pc, a, x, y, insn, run)
+//                      The ONLY non-halting read: it answers while run=1,
+//                      which is the point of a debugger seeing a live
+//                      program. Registers are at their NATIVE widths -- pc is
+//                      the full PCW (10 bits in a 1,024-word machine, which
+//                      is why the old 8-bit dbg_pc truncation had to go), and
+//                      a/x/y are 8 bits, insn 16. A stays 8 bits: the ISA is
+//                      the source of truth and no field is invented.
+//   0x13 READ_IMEM  -> (OK, word, word, ...)   request (address, count) in
+//                      WORDS; ascending. NOT_READY while run=1.
+//   0x14 READ_DMEM  -> (OK, word, word, ...)   request (byte address, byte
+//                      count) in bytes; two bytes per response word, HIGH
+//                      byte first (big-endian within the word), ascending.
+//   0x15 DUMP_CORE  -> the STATUS header, word for word, while STOPPED;
+//                      NOT_READY while run=1.
+//
+// THE WAIT-WORD RULE. A bounded read cannot answer inside the request's own
+// bit times: the chip must fetch first, and each fetched word or byte is one
+// round trip. So during the fetch the chip DRIVES 0xFFFF filler words on MISO
+// (it does not float the pad -- the level is deterministic on silicon) and
+// the real frame starts at the first NON-0xFFFF word. A host therefore SKIPS
+// leading 0xFFFF words and then validates the frame exactly as in R1
+// (header, sequence, CRC).
+//   * A filler can never be a header: every response sets opcode bit 7 and
+//     version/target are bounded, so no header word is all ones.
+//   * The skip is LEADING-ONLY, so a 0xFFFF inside a payload is data.
+//   * WORST-CASE HOST TIMEOUT: a read returns at most 15 words (16 payload
+//     slots minus the status word), one round trip each, so a host must
+//     tolerate 15 filler words before the frame begins.
+//   * Backward compatible: an R1 response is ready immediately and carries
+//     ZERO wait words, so an unchanged host needs no change at all. The
+//     response BYTES are unchanged; wait words are transport-level only.
+//
+// R2 STATUS is ELEVEN payload words: status, state, run, target, pc, a, x, y,
+// timer, faults, words_written -- the same layout DUMP_CORE returns.
+// An out-of-range READ latches sticky FAULT_RANGE (0x0004) exactly like a
+// write, and CLEAR_FAULT clears it; address+count past the end is RANGE and
+// is NEVER a wrapped read. A count larger than one response frame can carry
+// (15 words / 30 bytes) also answers RANGE: the host splits the transfer.
+// READ_CPU is never rejected for size.
 // Unknown opcodes, a request with the response bit set, and unknown targets
 // answer UNSUPPORTED with no fault. A frame that fails its CRC or header
 // answers BAD_FRAME and latches FAULT_CRC / FAULT_PROTOCOL. A word truncated
@@ -89,7 +133,11 @@
 // No `timescale` here (repo convention: RTL is timescale-free).
 
 module pe_ctrl #(
-  parameter int WORDS = 1024
+  parameter int WORDS = 1024,
+  // R2: the data buffer's size, so the bounded READ_DMEM can bound-check
+  // address+count against the REAL memory (16 bytes at the top level). It
+  // must match pe_soc's DMEM_BYTES; the wrapper passes the same value.
+  parameter int DMEM_BYTES = 16
 ) (
   input  logic clk,
   input  logic rst_n,
@@ -117,7 +165,27 @@ module pe_ctrl #(
   output logic        load_active,     // level: selected and run is low
   output logic        load_error,      // faults[FAULT_LOAD], sticky
   output logic [15:0] words_written,
-  output logic [15:0] faults
+  output logic [15:0] faults,
+
+  // ---- R2: the bounded host READ path -----------------------------------
+  // The debug-only reads the host issues while the CPU is stopped. pe_ctrl
+  // owns the bounds and the status (RANGE / NOT_READY / sticky FAULT_RANGE);
+  // pe_soc owns the address arbitration and returns one word (imem) or one
+  // byte (dmem) per request, one cycle later.
+  output logic        dbg_rd_req,
+  output logic        dbg_rd_dmem,     // 0 = imem word, 1 = dmem byte
+  output logic [15:0] dbg_rd_addr,
+  input  logic [15:0] dbg_rd_data,
+  input  logic        dbg_rd_valid,
+  // R2 STATUS/DUMP_CORE: the full-width architectural registers, so the
+  // response can report the real PC (no 8-bit truncation) and the whole state
+  // while the CPU runs.
+  input  logic [9:0]  dbg_pc,
+  input  logic [7:0]  dbg_a,
+  input  logic [7:0]  dbg_x,
+  input  logic [7:0]  dbg_y,
+  input  logic [15:0] dbg_insn,
+  input  logic [7:0]  dbg_timer
 );
 
   localparam int IAW = (WORDS <= 2) ? 1 : $clog2(WORDS);
@@ -129,6 +197,10 @@ module pe_ctrl #(
   localparam logic [7:0]  OP_PING   = 8'h01;
   localparam logic [7:0]  OP_LOAD   = 8'h10;
   localparam logic [7:0]  OP_STATUS = 8'h11;
+  localparam logic [7:0]  OP_RDCPU  = 8'h12;   // R2: the non-halting read
+  localparam logic [7:0]  OP_RDIMEM = 8'h13;   // R2: bounded instruction read
+  localparam logic [7:0]  OP_RDMEM  = 8'h14;   // R2: bounded data read
+  localparam logic [7:0]  OP_DUMPCOR= 8'h15;   // R2: core header dump
   localparam logic [7:0]  OP_CLRFLT = 8'h16;
   localparam logic [7:0]  OP_TARGET = 8'h20;
   localparam logic [7:0]  RESP_BIT  = 8'h80;
@@ -151,6 +223,49 @@ module pe_ctrl #(
 
   localparam logic [3:0] TARGET_HOST = 4'd0;
   localparam logic [3:0] TARGET_LOOP = 4'd1;
+
+  // ---- R2 read engine ----------------------------------------------------
+  // The bounded reads are the one thing that CANNOT be answered in the S_CRC
+  // cycle: the answer is the memory contents, and the memory answers one
+  // cycle after it is asked. So a read op parks here, walks the requested
+  // range one word (imem) or one byte (dmem) at a time, and only then starts
+  // the response serializer. Nothing else in the protocol blocks this way --
+  // every other response is built from registers available in S_CRC.
+  //
+  //   15 payload words is the ceiling (16 slots minus the status word). A
+  //   read that asks for more cannot be returned in ONE response frame, and
+  //   the protocol has no "too large" status, so it answers RANGE and latches
+  //   FAULT_RANGE: the host splits the transfer. This is a protocol LIMIT, not
+  //   a memory bound, and it is documented as one.
+  localparam int MAX_READ_WORDS = 15;
+  localparam logic [2:0] R_IDLE = 3'd0, R_START = 3'd1, R_REQ = 3'd2,
+                           R_WAIT = 3'd3;
+  logic [2:0]  rstate;
+  logic        r_dmem;           // 1 = dmem byte walk, 0 = imem word walk
+  logic        r_imm;            // 1 = answer now (NOT_READY / RANGE)
+  logic [15:0] r_addr;           // next address to request
+  logic [15:0] r_left;           // items still to fetch
+  logic [15:0] r_slot;           // next resp_buf slot to write
+  logic [7:0]  r_half;           // first byte of a dmem pair (big-endian)
+  logic        r_first;          // 1 = the next dmem byte opens a pair
+
+  // The bounded reads are the ONLY opcodes whose response cannot be built in
+  // the S_CRC cycle, so the read engine below -- not the generic trailer --
+  // starts the serializer for them. This one wire keeps that decision in ONE
+  // place for every read outcome (OK, NOT_READY, RANGE); duplicating the
+  // conditions in the trailer is how a rejected read would end up emitting an
+  // empty response. (`r_is_read` is declared beside the frame signals, below,
+  // because it reads frm_op.)
+
+  // ---- R2 read datapath: driven by the read engine ----------------------
+  // The bounded reads are the only client of the memory read port: READ_CPU
+  // and DUMP_CORE read registers directly, so they never touch it. Idle = no
+  // request.
+  assign dbg_rd_req  = (rstate == R_REQ);
+  assign dbg_rd_dmem = r_dmem;
+  assign dbg_rd_addr = r_addr;
+  wire _unused_r2 = &{1'b0, dbg_rd_valid,
+                       dbg_pc, dbg_a, dbg_x, dbg_y, dbg_insn, dbg_timer};
 
   // CRC-16/CCITT-FALSE over a byte, forward (MSB-first) datapath. The
   // polynomial and seed come from tools/gen/crc_config.py's checked
@@ -226,11 +341,36 @@ module pe_ctrl #(
   logic [3:0]  frm_tgt;
   logic [7:0]  frm_op;
   logic [15:0] frm_seq, rx_ntogo;
+  // The bounded reads are the only opcodes whose response is built outside
+  // the S_CRC cycle, so the read engine (not the generic trailer) starts the
+  // serializer for them -- for EVERY read outcome. One wire, one decision.
+  wire  r_is_read = (frm_op == OP_RDIMEM) || (frm_op == OP_RDMEM);
+
+  // ---- R2 wait-word contract (manager ruling 2026-09-25) ----------------
+  // A bounded read cannot answer inside the request's own bit times: the chip
+  // must fetch first, and the fetch costs one round trip per item. Rather than
+  // floating MISO (undefined on a real pad) or leaving the host to guess, the
+  // chip DRIVES 0xFFFF filler words for the whole fetch and the real frame
+  // starts at the first non-0xFFFF word. A filler can never be mistaken for
+  // the response: the response header sets opcode bit 7 and its version and
+  // target are bounded, so no header word is all ones; and the skip applies to
+  // LEADING words only, so a 0xFFFF inside a payload is data.
+  // R1 responses are unaffected -- they are ready immediately, so they carry
+  // ZERO wait words. This is a transport-level addition: the response bytes
+  // themselves are unchanged.
+  //
+  // WORST-CASE HOST TIMEOUT: a read returns at most 15 words, one round trip
+  // each, so a host must tolerate 15 filler words before the frame begins.
+  logic [3:0]  fill_pos;          // bit position inside the filler word
+  logic        r_launch;          // fetch done; start at the next word edge
+  wire         r_filling = (rstate != R_IDLE) && !r_imm && !r_launch;
   logic [15:0] crc_acc;
   logic        frm_hdr_bad, frm_len_bad;
   logic        frm_not_ready, frm_aborted, frm_range;
   logic [15:0] pay0;
   logic        pay0_valid;
+  logic [15:0] pay1;             // R2: the read ops carry (address, count)
+  logic        pay1_valid;
   logic [15:0] load_idx;        // payload words offered to this LOAD
 
   // ---- response ---------------------------------------------------------
@@ -240,7 +380,13 @@ module pe_ctrl #(
   logic [7:0]  resp_op;
   logic [3:0]  resp_tgt;
   logic [15:0] resp_seq, resp_len, resp_crc;
-  logic [15:0] resp_buf [0:7];
+  // R2: 16 payload slots. The R1 buffer was 8 entries, sized for the longest
+  // R1 response (STATUS's 6 payload words -> frame indices 4..9). R2's
+  // STATUS/DUMP_CORE header is ELEVEN payload words, and a bounded read is
+  // variable length, so the buffer and the index map below grew together. The
+  // frame carries 4 header words, so 16 payload words reach index 19, which
+  // resp_idx's 5 bits address (0..31).
+  logic [15:0] resp_buf [0:15];
   logic [15:0] resp_shreg;
   logic [15:0] resp_w;          // combinational view of resp_word(resp_idx)
 
@@ -254,6 +400,7 @@ module pe_ctrl #(
   logic [1:0]    wstate;
   localparam logic [1:0] W_IDLE = 2'd0, W_PULSE = 2'd1, W_DONE = 2'd2;
 
+
   assign host_we       = we_r & ~run;
   assign host_imem_sel = 1'b1;        // R1: instruction memory only
   assign host_addr     = addr;
@@ -262,7 +409,7 @@ module pe_ctrl #(
   assign load_active = ~cs_s1 && !run;
   assign irq_n       = ~(|faults);
   assign load_error  = faults[0];
-  assign miso_oe     = resp_active | resp_hold_oe;
+  assign miso_oe     = resp_active | resp_hold_oe | r_filling;
 
   // The response word presented at index `idx` of the current frame:
   // 0 sync, 1 header, 2 sequence, 3 length, 4.. payload, last CRC.
@@ -276,13 +423,11 @@ module pe_ctrl #(
         if ({11'b0, resp_idx} >= resp_len + 16'd4) begin
           resp_w = resp_crc;
         end else begin
-          // A fixed 3-bit index per payload slot, not the 5-bit dynamic
-          // `resp_idx - 4` expression Verilator flagged (WIDTHTRUNC: an
-          // 8-entry array indexed by 5 bits). resp_len never exceeds 6 (the
-          // longest response is STATUS's 6 payload words), so the payload
-          // slots are exactly indices 4..9 -> resp_buf[0..5] and this case
-          // is exhaustive for every implemented response. Bit-identical to
-          // the dynamic index on that range.
+          // A fixed index per payload slot, not the 5-bit dynamic
+          // `resp_idx - 4` expression Verilator flagged (WIDTHTRUNC: an array
+          // indexed by 5 bits). The map is exhaustive for every implemented
+          // response: 16 payload slots at frame indices 4..19. Bit-identical
+          // to the dynamic index on that range.
           case (resp_idx)
             5'd4:    resp_w = resp_buf[0];
             5'd5:    resp_w = resp_buf[1];
@@ -290,6 +435,16 @@ module pe_ctrl #(
             5'd7:    resp_w = resp_buf[3];
             5'd8:    resp_w = resp_buf[4];
             5'd9:    resp_w = resp_buf[5];
+            5'd10:   resp_w = resp_buf[6];
+            5'd11:   resp_w = resp_buf[7];
+            5'd12:   resp_w = resp_buf[8];
+            5'd13:   resp_w = resp_buf[9];
+            5'd14:   resp_w = resp_buf[10];
+            5'd15:   resp_w = resp_buf[11];
+            5'd16:   resp_w = resp_buf[12];
+            5'd17:   resp_w = resp_buf[13];
+            5'd18:   resp_w = resp_buf[14];
+            5'd19:   resp_w = resp_buf[15];
             default: resp_w = resp_crc;
           endcase
         end
@@ -309,7 +464,13 @@ module pe_ctrl #(
       frm_hdr_bad   <= 1'b0; frm_len_bad <= 1'b0;
       frm_not_ready <= 1'b0; frm_aborted <= 1'b0; frm_range <= 1'b0;
       pay0          <= '0; pay0_valid <= 1'b0; load_idx <= '0;
+      rstate        <= R_IDLE; r_imm <= 1'b0; r_dmem <= 1'b0; r_first <= 1'b1;
       resp_active   <= 1'b0; resp_hold_oe <= 1'b0; resp_idx <= '0;
+      // R2 wait-word machinery must start from DEFINED values: r_filling feeds
+      // miso_oe, so an X here would put an X on the host pad before the first
+      // frame (the pad-level TB checks uio_oe for X at time 0).
+      fill_pos      <= 4'd0;
+      r_launch      <= 1'b0;
       resp_bitpos   <= '0; resp_op <= '0; resp_tgt <= '0;
       resp_seq      <= '0; resp_len <= '0; resp_crc <= 16'hFFFF;
       resp_shreg    <= '0;
@@ -321,7 +482,7 @@ module pe_ctrl #(
       faults        <= '0;
       selected_target <= '0;
       spi_miso      <= 1'b0;
-      for (int i = 0; i < 8; i++) resp_buf[i] <= '0;
+      for (int i = 0; i < 16; i++) resp_buf[i] <= '0;
     end else begin
       // CS falling edge: a new transaction. Frame state resets; the sticky
       // faults, words_written, echo and selected target persist.
@@ -368,6 +529,7 @@ module pe_ctrl #(
                 frm_hdr_bad   <= 1'b0;
                 frm_len_bad   <= 1'b0;
                 pay0_valid    <= 1'b0;
+                pay1_valid    <= 1'b0;
                 load_idx      <= '0;
               end
             end
@@ -402,6 +564,15 @@ module pe_ctrl #(
               case (frm_op)
                 OP_PING, OP_STATUS:
                   if (rx_word != 16'd0) frm_len_bad <= 1'b1;
+                // R2: these take no payload. READ_CPU and DUMP_CORE are the
+                // register reads; the two bounded reads DO take a payload
+                // ((address, count) for READ_IMEM, (byte address, byte count)
+                // for READ_DMEM) and are checked when that word pair is read.
+                OP_RDCPU, OP_DUMPCOR:
+                  if (rx_word != 16'd0) frm_len_bad <= 1'b1;
+                // The bounded reads carry exactly (address, count).
+                OP_RDIMEM, OP_RDMEM:
+                  if (rx_word != 16'd2) frm_len_bad <= 1'b1;
                 OP_CLRFLT, OP_TARGET:
                   if (rx_word != 16'd1) frm_len_bad <= 1'b1;
                 default: ;   // LOAD bound by range; unknown ops consume
@@ -433,6 +604,15 @@ module pe_ctrl #(
                 if (!pay0_valid) begin
                   pay0       <= rx_word;
                   pay0_valid <= 1'b1;
+                end
+              end else if (frm_op == OP_RDIMEM || frm_op == OP_RDMEM) begin
+                // (address, count): the bounded read's request pair.
+                if (!pay0_valid) begin
+                  pay0       <= rx_word;
+                  pay0_valid <= 1'b1;
+                end else if (!pay1_valid) begin
+                  pay1       <= rx_word;
+                  pay1_valid <= 1'b1;
                 end
               end
             end
@@ -486,14 +666,57 @@ module pe_ctrl #(
                     resp_buf[0] <= ST_OK;
                   end
                   OP_STATUS: begin
-                    resp_len    <= 16'd6;
+                    // R2 layout: the cpu-derived registers are inserted
+                    // between `target` and `faults` (11 payload words), so no
+                    // field lies about a register the R1 layout omitted.
+                    resp_len    <= 16'd11;
                     resp_buf[0] <= ST_OK;
                     resp_buf[1] <= {15'b0, run};             // state
                     resp_buf[2] <= {15'b0, run};             // run
                     resp_buf[3] <= selected_target;
-                    resp_buf[4] <= faults;                   // sticky bits
-                    resp_buf[5] <= words_written;
-                    // R2 inserts pc/a/x/y/timer before the faults word.
+                    resp_buf[4] <= {6'b0, dbg_pc};           // pc, FULL width
+                    resp_buf[5] <= {8'b0, dbg_a};
+                    resp_buf[6] <= {8'b0, dbg_x};
+                    resp_buf[7] <= {8'b0, dbg_y};
+                    resp_buf[8] <= {8'b0, dbg_timer};
+                    resp_buf[9] <= faults;                   // sticky bits
+                    resp_buf[10] <= words_written;
+                  end
+                  OP_DUMPCOR: begin
+                    // The core header. While STOPPED it equals the STATUS
+                    // register header (the golden vectors assert the two are
+                    // byte-identical); while run=1 it answers NOT_READY with
+                    // no fault, because the values would be a moving target.
+                    if (run) begin
+                      resp_len    <= 16'd1;
+                      resp_buf[0] <= ST_NOTREADY;
+                    end else begin
+                      resp_len    <= 16'd11;
+                      resp_buf[0] <= ST_OK;
+                      resp_buf[1] <= {15'b0, run};           // state
+                      resp_buf[2] <= {15'b0, run};           // run
+                      resp_buf[3] <= selected_target;
+                      resp_buf[4] <= {6'b0, dbg_pc};
+                      resp_buf[5] <= {8'b0, dbg_a};
+                      resp_buf[6] <= {8'b0, dbg_x};
+                      resp_buf[7] <= {8'b0, dbg_y};
+                      resp_buf[8] <= {8'b0, dbg_timer};
+                      resp_buf[9] <= faults;
+                      resp_buf[10] <= words_written;
+                    end
+                  end
+                  OP_RDCPU: begin
+                    // The ONLY non-halting read: it answers while run=1,
+                    // which is the whole point of the opcode (a debugger must
+                    // be able to see a running program). 7 payload words.
+                    resp_len    <= 16'd7;
+                    resp_buf[0] <= ST_OK;
+                    resp_buf[1] <= {6'b0, dbg_pc};            // pc, FULL width
+                    resp_buf[2] <= {8'b0, dbg_a};
+                    resp_buf[3] <= {8'b0, dbg_x};
+                    resp_buf[4] <= {8'b0, dbg_y};
+                    resp_buf[5] <= dbg_insn;                 // 16-bit insn
+                    resp_buf[6] <= {15'b0, run};             // run
                   end
                   OP_LOAD: begin
                     resp_len    <= 16'd4;
@@ -529,6 +752,64 @@ module pe_ctrl #(
                       resp_buf[0] <= ST_UNSUP;
                     end
                   end
+                  OP_RDIMEM, OP_RDMEM: begin
+                    // Bounded reads. While run=1 they answer NOT_READY with NO
+                    // fault (a sequencing rejection, like LOAD) -- the CPU is
+                    // fetching and the read would borrow its address bus. The
+                    // bounds are checked BEFORE any read is issued, so a
+                    // rejected read never touches memory, and an
+                    // address+count past the end is RANGE, never a wrap.
+                    if (run) begin
+                      resp_len    <= 16'd1;
+                      resp_buf[0] <= ST_NOTREADY;
+                      r_imm       <= 1'b1;
+                      rstate      <= R_START;
+                    end else if (frm_op == OP_RDIMEM) begin
+                      // imem: address is a WORD index, count in words.
+                      if ((32'(pay0) + 32'(pay1)) > 32'(WORDS) ||
+                          pay1 == 16'd0 || pay1 > 16'(MAX_READ_WORDS)) begin
+                        resp_len    <= 16'd1;
+                        resp_buf[0] <= ST_RANGE;
+                        faults      <= faults | FAULT_RANGE;
+                        r_imm       <= 1'b1;
+                        rstate      <= R_START;
+                      end else begin
+                        resp_buf[0] <= ST_OK;
+                        resp_len    <= 16'd1 + pay1;   // status + data words
+                        r_dmem      <= 1'b0;
+                        r_addr      <= pay0;
+                        r_left      <= pay1;
+                        r_slot      <= 16'd1;
+                        r_half      <= 8'h00;
+                        r_first     <= 1'b1;
+                        r_imm       <= 1'b0;
+                        rstate      <= R_START;
+                      end
+                    end else begin
+                      // dmem: address is a BYTE index, count in bytes; two
+                      // bytes pack per response word (ceil(count/2) words).
+                      if ((32'(pay0) + 32'(pay1)) > 32'(DMEM_BYTES) ||
+                          pay1 == 16'd0 || pay1 > 16'(2 * MAX_READ_WORDS)) begin
+                        resp_len    <= 16'd1;
+                        resp_buf[0] <= ST_RANGE;
+                        faults      <= faults | FAULT_RANGE;
+                        r_imm       <= 1'b1;
+                        rstate      <= R_START;
+                      end else begin
+                        resp_buf[0] <= ST_OK;
+                        // One status word plus ceil(count/2) data words.
+                        resp_len    <= 16'd1 + ((pay1 + 16'd1) >> 1);
+                        r_dmem      <= 1'b1;
+                        r_addr      <= pay0;
+                        r_left      <= pay1;
+                        r_slot      <= 16'd1;
+                        r_half      <= 8'h00;
+                        r_first     <= 1'b1;      // next byte opens a pair
+                        r_imm       <= 1'b0;
+                        rstate      <= R_START;
+                      end
+                    end
+                  end
                   default: begin
                     resp_len    <= 16'd1;
                     resp_buf[0] <= ST_UNSUP;
@@ -537,11 +818,20 @@ module pe_ctrl #(
               end
 
               // ---- start the response serializer --------------------------
-              resp_idx    <= '0;
-              resp_bitpos <= '0;
-              resp_crc    <= 16'hFFFF;
-              resp_active <= 1'b1;
+              // NOT for the bounded reads: their answer is the memory, so the
+              // read engine starts the serializer itself -- for EVERY read
+              // outcome, including the immediate NOT_READY and RANGE ones.
+              if (!r_is_read) begin
+                resp_idx    <= '0;
+                resp_bitpos <= '0;
+                resp_crc    <= 16'hFFFF;
+                resp_active <= 1'b1;
+              end
               rx_state    <= S_SYNC;
+              // A new request frame restarts the filler word: the host's skip
+              // counts leading 0xFFFF words from this frame's first bit.
+              fill_pos    <= 4'd0;
+              r_launch    <= 1'b0;
             end
             default: rx_state <= S_SYNC;
           endcase
@@ -598,9 +888,106 @@ module pe_ctrl #(
         default: wstate <= W_IDLE;
       endcase
 
+      // ---- R2 read engine: walk the requested range, then serialize -------
+      // The host asked for a bounded read; answer it from the memory, not
+      // from a register, so the response cannot start until the last word is
+      // in. Each R_REQ pulses one address; R_WAIT collects the answer.
+      case (rstate)
+        R_IDLE: begin end
+        R_START: begin
+          // Every read outcome passes here exactly once, so the serializer
+          // start lives in ONE place: an immediate rejection starts it now, a
+          // walk starts it when its last word has landed.
+          if (r_imm) begin
+            resp_idx    <= '0;
+            resp_bitpos <= '0;
+            resp_crc    <= 16'hFFFF;
+            resp_active <= 1'b1;
+            rstate      <= R_IDLE;
+          end else begin
+            rstate      <= R_REQ;
+          end
+        end
+        R_REQ: begin
+          rstate <= R_WAIT;
+        end
+        R_WAIT: begin
+          if (dbg_rd_valid) begin
+            // dmem arrives ONE BYTE per read; two bytes pack big-endian into
+            // one response word (high byte first). The first byte of a pair
+            // is held in r_half and only written to the slot once its partner
+            // arrives, so there is NO read-modify-write of resp_buf (which
+            // would not be a real register). imem arrives one word per read
+            // and is stored as-is.
+            if (r_dmem) begin
+              if (r_first) begin                   // first byte: hold it
+                r_half  <= dbg_rd_data[7:0];
+                r_first <= 1'b0;
+              end else begin                       // second byte: emit word
+                resp_buf[r_slot[3:0]] <= {r_half, dbg_rd_data[7:0]};
+                r_slot  <= r_slot + 16'd1;
+                r_first <= 1'b1;
+              end
+            end else begin
+              resp_buf[r_slot[3:0]] <= dbg_rd_data;
+              r_slot <= r_slot + 16'd1;
+            end
+            r_addr <= r_addr + 16'd1;
+            r_left <= r_left - 16'd1;
+            if (r_left == 16'd1) begin
+              // A dmem read with an ODD byte count ends holding its last byte
+              // in r_half (it never got a partner), so flush it as a word with
+              // that byte in the LOW half. Without this the trailing byte is
+              // silently dropped and the response is a word short of its
+              // declared length. The value is dbg_rd_data, NOT r_half: this
+              // byte is the one that just arrived and is still in flight
+              // (r_half holds the PREVIOUS byte until the non-blocking
+              // assignment lands next cycle).
+              if (r_dmem && r_first)
+                resp_buf[r_slot[3:0]] <= {8'h00, dbg_rd_data[7:0]};
+              // The fetch is done, but the frame must begin on a WORD
+              // boundary or the host's 16-bit reader would start half a word
+              // in. Wait for fill_pos to wrap to 0 (the end of the filler
+              // word) and start the real serializer there. That is exactly
+              // the first non-0xFFFF word the host sees.
+              r_launch <= 1'b1;
+              rstate   <= R_IDLE;
+            end else begin
+              rstate <= R_REQ;
+            end
+          end
+        end
+        default: rstate <= R_IDLE;
+      endcase
+
       // ---- response serializer (mode 0: changes on the detected fall) -----
       if (sclk_fall && !cs_s1) begin
-        if (resp_active) begin
+        if (r_filling) begin
+          // One filler bit per SPI falling edge, every bit a 1, so the word
+          // the host assembles is 0xFFFF. No shift register is needed: the
+          // value is constant.
+          spi_miso  <= 1'b1;
+          fill_pos  <= fill_pos + 4'd1;
+        end else if (r_launch) begin
+          // The fetch finished, but the frame must begin on a WORD boundary
+          // or the host's 16-bit reader would start half a word in. Keep
+          // driving filler until fill_pos wraps, then hand the line to the
+          // real serializer -- that boundary is exactly the first non-0xFFFF
+          // word the host sees. (This branch CANNOT live inside the r_filling
+          // arm: setting r_launch clears r_filling, so the arm is skipped
+          // exactly when the launch is needed.)
+          spi_miso  <= 1'b1;
+          if (fill_pos == 4'd15) begin
+            r_launch    <= 1'b0;
+            fill_pos    <= 4'd0;
+            resp_idx    <= '0;
+            resp_bitpos <= '0;
+            resp_crc    <= 16'hFFFF;
+            resp_active <= 1'b1;
+          end else begin
+            fill_pos    <= fill_pos + 4'd1;
+          end
+        end else if (resp_active) begin
           if (resp_bitpos == 4'd0) begin
             spi_miso   <= resp_w[15];
             resp_shreg <= {resp_w[14:0], 1'b0};

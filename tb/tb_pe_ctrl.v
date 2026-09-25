@@ -45,6 +45,43 @@ module tb_pe_ctrl;
   wire [7:0]  host_addr;                  // WORDS=16 -> IAW=4, clamped to 8
   wire [15:0] host_wdata, words_written, faults;
 
+  // ---- R2 read-port model (the SoC's half of the contract) ---------------
+  // One cycle of latency, one word for imem and one byte for dmem, exactly as
+  // pe_soc implements it. The read path is held in flight until a request
+  // arrives, so a dropped or doubled strobe shows up as a wrong answer rather
+  // than as silence.
+  logic        dbg_rd_req, dbg_rd_dmem, dbg_rd_valid;
+  logic [15:0] dbg_rd_addr, dbg_rd_data;
+  logic [9:0]  dbg_pc;
+  logic [7:0]  dbg_a, dbg_x, dbg_y, dbg_timer;
+  logic [15:0] dbg_insn;
+  logic [15:0] model_imem [0:WORDS-1];
+  logic [7:0]  model_dmem [0:15];
+  logic        rd_pending;
+  logic        rd_pending_dmem;
+  logic        rd_valid;
+  logic [15:0] rd_pending_addr;
+
+  assign dbg_rd_data = rd_pending
+      ? (rd_pending_dmem ? {8'h00, model_dmem[rd_pending_addr[3:0]]}
+                         : model_imem[rd_pending_addr[9:0]])
+      : 16'h0000;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      rd_valid <= 1'b0;
+      rd_pending <= 1'b0;
+      for (int i = 0; i < WORDS; i++) model_imem[i] <= 16'h0000;
+      for (int i = 0; i < 16; i++)  model_dmem[i] <= 8'h00;
+    end else begin
+      dbg_rd_valid <= dbg_rd_req;
+      rd_valid     <= dbg_rd_req;
+      rd_pending   <= dbg_rd_req;         // the answer lands next cycle
+      rd_pending_dmem <= dbg_rd_dmem;
+      rd_pending_addr <= dbg_rd_addr;
+    end
+  end
+
   pe_ctrl #(.WORDS(WORDS)) dut (
     .clk(clk), .rst_n(rst_n),
     .spi_sclk(spi_sclk), .spi_mosi(spi_mosi), .spi_cs_n(spi_cs_n),
@@ -53,8 +90,19 @@ module tb_pe_ctrl;
     .host_we(host_we), .host_imem_sel(host_imem_sel),
     .host_addr(host_addr), .host_wdata(host_wdata),
     .load_active(load_active), .load_error(load_error),
-    .words_written(words_written), .faults(faults)
+    .words_written(words_written), .faults(faults),
+    // R2: the read port and the architectural registers. This unit TB models
+    // the SoC side with a tiny imem/dmem so the opcodes can be checked
+    // WITHOUT a CPU; the integrated path is tb_tt_um_protocol_emulator's.
+    .dbg_rd_req(dbg_rd_req), .dbg_rd_dmem(dbg_rd_dmem),
+    .dbg_rd_addr(dbg_rd_addr), .dbg_rd_data(dbg_rd_data),
+    .dbg_rd_valid(dbg_rd_valid),
+    .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_x(dbg_x), .dbg_y(dbg_y),
+    .dbg_insn(dbg_insn), .dbg_timer(dbg_timer)
   );
+
+  // Captured DUMP_CORE header for the word-for-word comparison below.
+  logic [15:0] dump_words [0:10];
 
   // Fault bits, mirrored from the RTL/R0 contract.
   localparam logic [15:0] FAULT_LOAD     = 16'h0001;
@@ -132,12 +180,40 @@ module tb_pe_ctrl;
     for (int k = 15; k >= 0; k--) spi_bit(w[k]);
   endtask
 
+  // R2 WAIT-WORD CONTRACT (manager ruling 2026-09-25). A bounded read cannot
+  // answer inside the request's own bit times, so the chip DRIVES 0xFFFF
+  // filler words while it fetches and the real frame starts at the first
+  // non-0xFFFF word. The reader therefore SKIPS leading 0xFFFF words instead
+  // of waiting: a filler is never a header (the response sets opcode bit 7 and
+  // its version/target are bounded, so no header word is all ones), and the
+  // skip is LEADING-only, so a 0xFFFF inside a payload is data. An R1
+  // response carries zero wait words and is read exactly as before.
+  //
+  // The bound is the documented worst case: a read returns at most 15 words,
+  // one round trip each, so at most 15 filler words precede a response.
+  localparam int MAX_WAIT_WORDS = 16;
+  bit resp_wait;                 // 1 = the next read_word skips leading fillers
+
   task automatic read_word(output logic [15:0] w);
     logic q;
     w = 16'h0000;
-    for (int k = 15; k >= 0; k--) begin
-      spi_bit_rb(1'b0, q);
-      w = {w[14:0], q};
+    if (resp_wait) begin
+      resp_wait = 1'b0;
+      for (int k = 0; k < MAX_WAIT_WORDS; k++) begin
+        for (int b = 15; b >= 0; b--) begin
+          spi_bit_rb(1'b0, q);
+          w = {w[14:0], q};
+        end
+        if (w !== 16'hFFFF) return;          // first non-filler: the frame
+      end
+      $display("FAIL: read_word: %0d wait words with no response (t=%0t)",
+               MAX_WAIT_WORDS, $time);
+      errors = errors + 1;
+    end else begin
+      for (int k = 15; k >= 0; k--) begin
+        spi_bit_rb(1'b0, q);
+        w = {w[14:0], q};
+      end
     end
   endtask
 
@@ -174,6 +250,7 @@ module tb_pe_ctrl;
       send_word(w);
     end
     for (int k = 0; k < 4; k++) begin
+      resp_wait = 1'b1;              // only the first word may be late
       read_word(w);
       rxf[k] = w;
     end
@@ -226,6 +303,13 @@ module tb_pe_ctrl;
     rst_n = 0;
     repeat (4) @(posedge clk); #1;
     rst_n = 1;
+    // Seed the read model so the R2 reads answer with KNOWN contents (and
+    // the STATUS pc field is deterministic). This is a MODEL, not the chip:
+    // the integrated path is tb_tt_um_protocol_emulator.
+    dbg_pc = 10'd7; dbg_a = 8'h11; dbg_x = 8'h22; dbg_y = 8'h33;
+    dbg_timer = 8'h44; dbg_insn = 16'hBEEF;
+    for (int i = 0; i < WORDS; i++) model_imem[i] = 16'h1000 + i[15:0];
+    for (int i = 0; i < 16; i++)       model_dmem[i] = 8'(i * 8'h11);
     repeat (2) @(posedge clk); #1;
 
     // ================= 1: IDLE + PING + response CRC ====================
@@ -281,14 +365,19 @@ module tb_pe_ctrl;
     check(rxf[7] === (16'h2000 + (WORDS-1)), "oversize: echo is the last committed word");
 
     // ================= 5: STATUS reports, does not clear ================
+    // R2: the cpu-derived registers are inserted between target and faults,
+    // so the header is 11 payload words and faults/words_written move from
+    // slots 4/5 to 9/10. The fields that used to be stubs are now real
+    // registers, which is the whole point of the R2 layout.
     exchange(8'h11, 16'h0103, 4'h0, 0, 1'b0);
     check_status(16'd0, "status");
-    check(rlen === 6, $sformatf("status: payload len %0d, want 6", rlen));
+    check(rlen === 11, $sformatf("status: payload len %0d, want 11 (R2)", rlen));
     check(rxf[5] === 16'd0, "status: state stopped");
     check(rxf[6] === 16'd0, "status: run low");
     check(rxf[7] === 16'd0, "status: selected target host");
-    check(rxf[8] === FAULT_RANGE, "status: faults reported");
-    check(rxf[9] === WORDS[15:0], "status: words_written");
+    check(rxf[8] === 16'd7, "status: pc");
+    check(rxf[13] === FAULT_RANGE, "status: faults reported");
+    check(rxf[14] === WORDS[15:0], "status: words_written");
     check(faults === FAULT_RANGE, "status: fault is sticky across a read");
     check(irq_n === 1'b0, "status: IRQ stays asserted after a read");
 
@@ -313,7 +402,7 @@ module tb_pe_ctrl;
 
     // A STATUS read does not clear it; LOAD while run=1 does not either.
     exchange(8'h11, 16'h0201, 4'h0, 0, 1'b0);
-    check(rxf[8] === FAULT_CRC, "bad crc: STATUS reports the fault");
+    check(rxf[13] === FAULT_CRC, "bad crc: STATUS reports the fault");
     check(irq_n === 1'b0, "bad crc: IRQ still asserted");
 
     // ================= 8: CLEAR_FAULT all ===============================
@@ -552,6 +641,107 @@ module tb_pe_ctrl;
     exchange(8'h01, 16'h0A01, 4'h0, 0, 1'b0);
     check_status(16'd0, "100 ns low phase ping");
     set_sclk(HALF_NS, HALF_NS);
+
+    // ================= R2: the read opcodes ==============================
+    // READ_IMEM: a bounded, ascending word read. The model serves
+    // model_imem[i] = 16'h1000 + i, so words 1,2 must come back 0x1001,0x1002.
+    txp[0] = 16'd1; txp[1] = 16'd2;
+    exchange(8'h13, 16'h0B00, 4'h0, 2, 1'b0);
+    check_status(16'd0, "read_imem");
+    check(rlen === 3, $sformatf("read_imem: payload len %0d, want 3", rlen));
+    check(rxf[5] === 16'h1001, "read_imem: word 1 ascending");
+    check(rxf[6] === 16'h1002, "read_imem: word 2 ascending");
+
+    // The LAST word is readable (the bound is inclusive) and one past it is
+    // RANGE, never a wrapped read: the golden vector reads 0x3FF and then
+    // asks for 0x400.
+    txp[0] = 16'(WORDS-1); txp[1] = 16'd1;
+    exchange(8'h13, 16'h0B01, 4'h0, 2, 1'b0);
+    check_status(16'd0, "read_imem last word");
+    check(rxf[5] === 16'h1000 + WORDS-1, "read_imem: last word value");
+    txp[0] = 16'(WORDS-1); txp[1] = 16'd2;
+    exchange(8'h13, 16'h0B02, 4'h0, 2, 1'b0);
+    check_status(16'd3, "read_imem past end");
+    check(rlen === 1, "read_imem past end: no data words");
+    check(faults === FAULT_RANGE,
+          "read_imem past end: latched sticky FAULT_RANGE");
+
+    // CLEAR_FAULT clears exactly that bit (it was the only one set here).
+    txp[0] = FAULT_RANGE;
+    exchange(8'h16, 16'h0B03, 4'h0, 1, 1'b0);
+    check(faults === 16'd0, "clear_fault: RANGE cleared");
+
+    // READ_DMEM: bytes, packed big-endian per word, ascending. Re-enabled
+    // after the wait-word contract (manager ruling 2026-09-25) made the
+    // read's variable latency visible to the host as 0xFFFF filler words.
+    // The model serves model_dmem[i] = 8'(i*0x11), so bytes 0..3 are
+    // 00 11 22 33 and the two data words must be 0x0011, 0x2233.
+    txp[0] = 16'd0; txp[1] = 16'd4;
+    exchange(8'h14, 16'h0B05, 4'h0, 2, 1'b0);
+    check_status(16'd0, "read_dmem");
+    check(rlen === 3, $sformatf("read_dmem: payload len %0d, want 3", rlen));
+    check(rxf[5] === 16'h0011, "read_dmem: bytes 0,1 big-endian");
+    check(rxf[6] === 16'h2233, "read_dmem: bytes 2,3 big-endian");
+
+    // An ODD byte count: the last byte lands in the low half of its word.
+    txp[0] = 16'd0; txp[1] = 16'd3;
+    exchange(8'h14, 16'h0B06, 4'h0, 2, 1'b0);
+    check_status(16'd0, "read_dmem odd count");
+    check(rxf[5] === 16'h0011, "read_dmem odd: first word");
+    check(rxf[6] === 16'({8'h00, 8'h22}), "read_dmem odd: trailing byte alone");
+
+    // dmem bounds are bytes: 15 + 2 is past the 16-byte buffer.
+    txp[0] = 16'd15; txp[1] = 16'd2;
+    exchange(8'h14, 16'h0B07, 4'h0, 2, 1'b0);
+    check_status(16'd3, "read_dmem past end");
+    check(faults === FAULT_RANGE, "read_dmem past end: sticky RANGE");
+    txp[0] = FAULT_RANGE;
+    exchange(8'h16, 16'h0B08, 4'h0, 1, 1'b0);
+
+    // READ_CPU is the ONLY non-halting read: it answers while run=1.
+    run = 1'b1;
+    exchange(8'h12, 16'h0B09, 4'h0, 0, 1'b0);
+    check_status(16'd0, "read_cpu while running");
+    check(rlen === 7, $sformatf("read_cpu: payload len %0d, want 7", rlen));
+    check(rxf[5] === {6'b0, 10'd7},  "read_cpu: pc full width");
+    check(rxf[6] === 16'h0011, "read_cpu: a");
+    check(rxf[7] === 16'h0022, "read_cpu: x");
+    check(rxf[8] === 16'h0033, "read_cpu: y");
+    check(rxf[9] === 16'hBEEF, "read_cpu: insn 16 bits");
+    check(rxf[10] === 16'd1,    "read_cpu: run reported high");
+    // ... while the bounded reads are NOT_READY while run=1, with NO fault.
+    txp[0] = 16'd0; txp[1] = 16'd1;
+    exchange(8'h13, 16'h0B0A, 4'h0, 2, 1'b0);
+    check_status(16'd6, "read_imem while running");
+    check(rlen === 1, "read_imem while running: no data");
+    check(faults === 16'd0, "read_imem while running: NO fault (rejection)");
+    txp[0] = 16'd0; txp[1] = 16'd1;
+    exchange(8'h14, 16'h0B0B, 4'h0, 2, 1'b0);
+    check_status(16'd6, "read_dmem while running");
+    exchange(8'h15, 16'h0B0C, 4'h0, 0, 1'b0);
+    check_status(16'd6, "dump_core while running");
+    run = 1'b0;
+
+    // DUMP_CORE while stopped equals the STATUS header, word for word. The
+    // golden vectors assert exactly this, so the comparison is real: the dump
+    // is captured first, then STATUS is fetched and the two are compared.
+    exchange(8'h15, 16'h0B0D, 4'h0, 0, 1'b0);
+    check_status(16'd0, "dump_core");
+    check(rlen === 11, $sformatf("dump_core: payload len %0d, want 11", rlen));
+    check(rxf[5]  === 16'd0,    "dump_core: state");
+    check(rxf[6]  === 16'd0,    "dump_core: run low");
+    check(rxf[7]  === 16'd0,    "dump_core: target host");
+    check(rxf[8]  === {6'b0, 10'd7}, "dump_core: pc");
+    check(rxf[9]  === 16'h0011, "dump_core: a");
+    check(rxf[10] === 16'h0022, "dump_core: x");
+    check(rxf[11] === 16'h0033, "dump_core: y");
+    check(rxf[12] === 16'h0044, "dump_core: timer");
+    for (int k = 0; k < 11; k++) dump_words[k] = rxf[4+k];
+    exchange(8'h11, 16'h0B0E, 4'h0, 0, 1'b0);
+    check(rlen === 11, "status header len after dump");
+    for (int k = 0; k < 11; k++)
+      check(rxf[4+k] === dump_words[k],
+            $sformatf("dump_core == status header at word %0d", k));
 
     if (errors == 0) $display("PASS: tb_pe_ctrl");
     else             $display("FAILURES: %0d", errors);

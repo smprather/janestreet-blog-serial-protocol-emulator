@@ -113,6 +113,7 @@ while :; do
     fi
     rm -f "/tmp/pi-sup-alerted-${agent}"
     pane=$(tmux capture-pane -p -S -250 -t "$sess:$win" 2>/dev/null)
+    pane_live=$(tmux capture-pane -p -S -6 -t "$sess:$win" 2>/dev/null)
 
     # ---- law enforcement: forbidden commands in tool-call lines ------------
     if printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -Eq "$FORBIDDEN_CMD_RE"; then
@@ -131,10 +132,18 @@ while :; do
     fi
 
     # ---- telemetry stall while working -------------------------------------
-    newest_ts=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | tail -1 | cut -c1-16)
+    newest_ts=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1 | cut -c1-16)
     newest_epoch=$(date -d "$newest_ts" +%s 2>/dev/null || echo 0)
     now=$(date +%s)
-    if printf '%s' "$pane" | grep -qE '─ (⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏) (Working|Thinking)|^.*(Working|Thinking) ─+$'; then
+    if printf '%s' "$pane_live" | grep -qE '─ (⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏) (Working|Thinking)|^.*(Working|Thinking) ─+$'; then
+      rm -f "/tmp/pi-sup-idle-since-${agent}"
+      # A worker whose newest line is IDLE-QUEUE-EMPTY cannot be
+      # 'silent while working' — stale spinner scrollback is not activity.
+      newest_line=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1)
+      case "$newest_line" in *IDLE-QUEUE-EMPTY*) continue;; esac
+      # Marker lifecycle: cleared the moment the worker resumes logging,
+      # so a gap can re-alert if it recurs (the 02:44 marker never cleared).
+      if [ $((now - newest_epoch)) -lt "$STALL_ALERT_S" ]; then rm -f "/tmp/pi-sup-stall-${agent}"; fi
       if [ $((now - newest_epoch)) -ge "$STALL_ALERT_S" ] && [ ! -f "/tmp/pi-sup-stall-${agent}" ]; then
         touch "/tmp/pi-sup-stall-${agent}"
         echo "SUPERVISOR: $agent WORKING but silent in WORKLOG.md >${STALL_ALERT_S}s at $(date '+%F %T') — suspected mid-task stall. Last log: ${newest_ts:-none}." >>"$ALERT"
@@ -144,9 +153,17 @@ while :; do
     fi
 
     # ---- idle: nudge back onto the queue (the anti-smoke-break) ------------
+    # Require 60s of CONTINUOUS idle: tool-call transitions look idle for a
+    # beat and must not nudge (2026-09-25 04:50 transition noise).
+    if [ ! -f "/tmp/pi-sup-idle-since-${agent}" ]; then
+      echo "$now" >"/tmp/pi-sup-idle-since-${agent}"
+      continue
+    fi
+    idle_since=$(cat "/tmp/pi-sup-idle-since-${agent}")
+    [ $((now - idle_since)) -lt 60 ] && continue
     last=$(cat "/tmp/pi-sup-last-${agent}" 2>/dev/null || echo 0)
     [ $((now - last)) -lt "$NUDGE_COOLDOWN" ] && continue
-    newest=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | tail -1)
+    newest=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1)
     case "$newest" in *IDLE-QUEUE-EMPTY*) continue;; esac
     echo "$now" >"/tmp/pi-sup-last-${agent}"
     if [ "$ONCE" -eq 1 ]; then
@@ -155,7 +172,7 @@ while :; do
       tmux send-keys -t "$sess:$win" -l "Supervisor nudge $(date '+%H:%M') (automatic): you are idle at your prompt with work in the queue. Per the Continuous work protocol: log TASK-START in WORKLOG.md and START THE NEXT SCOPED TASK NOW IN THIS SAME TURN. Ending your turn = stopping; only stop on IDLE-QUEUE-EMPTY (log it), QUESTION: or BLOCKED:."
       sleep 0.5
       tmux send-keys -t "$sess:$win" Enter
-      if [ "${last:-0}" -gt 0 ] && [ "$newest_epoch" -lt "${last:-0}" ]; then
+      if [ "${last:-0}" -gt 0 ] && [ "$newest_epoch" -lt "${last:-0}" ] && [ $((now - newest_epoch)) -ge 300 ]; then
         worklog "$agent | VIOLATION-IDLE | two consecutive nudges with zero WORKLOG activity — idle-with-queue is the primary crime; manager to re-dispatch a smaller task (no kill: killing produces even less work)"
         manager_alert "$agent" "idle despite repeated nudges — re-dispatch a smaller task"
       else

@@ -1,5 +1,30 @@
 # Project Status — through 10BASE-T receive
 
+> **PE host bus R2 — read ops landed; conformance pending the model image
+> (2026-09-25).** The framed host protocol's read path is in: `READ_CPU` (0x12,
+> the only non-halting read — answers while `run=1`, with the registers at
+> their NATIVE widths, so `dbg_pc` is no longer truncated to 8 bits), bounded
+> `READ_IMEM`/`READ_DMEM` (0x13/0x14; dmem packs two bytes per response word,
+> high byte first), and `DUMP_CORE` (0x15, the STATUS header while stopped,
+> NOT_READY while running). `STATUS` is now 11 payload words — `status, state,
+> run, target, pc, a, x, y, timer, faults, words_written` — because R2 stopped
+> stubbing the cpu-derived fields. **The wait-word contract:** a bounded read
+> cannot answer in the request's bit times, so the chip DRIVES `0xFFFF` filler
+> words while it fetches and the real frame starts at the first non-`0xFFFF`
+> word; a host skips leading fillers and validates exactly as in R1. Worst
+> case 15 filler words (a 15-word read is one round trip each). This is
+> transport-level only — the response bytes are unchanged and an R1 host sees
+> zero wait words. An out-of-range READ latches sticky `FAULT_RANGE` (0x4),
+> cleared by `CLEAR_FAULT`, and is never a wrapped read. Regression: **33/33
+> RTL, 26/26 firmware, lint clean, 12 mutation suites, exit 0**; the two eth_tx
+> suites (18/18, 7/7) and `mutate_ctrl_tb` (29/29) still catch every mutation.
+> **Open:** the golden-vector conformance TB (`tb_pe_ctrl_r2.v`) proves the
+> FRAMING byte-exact against the host's own bytes, but the package must first
+> ship the model image its vectors assume — until then the data-path vectors
+> are unproven and no `chip_confirmed` flag has been flipped. The TB is
+> deliberately not in the regression so it cannot make a false red about the
+> chip. Contract in `rtl/pe_ctrl.v`'s header; merge sequenced after R2.
+
 > **10BASE-T TX frame path — COMPLETE, plan Tasks 1-7 (2026-09-25, manager
 > Task 11 close-out + the chained Task 6/7 pass).** The last unbuilt block in
 > the topology is now built and hardened. `rtl/pe_eth_tx.v` emits a full frame

@@ -71,6 +71,23 @@ the manager verification block in `PROJECT-REVIEW.md`); a fresh mapped
 `pe_ctrl` STA screen shows no new violation class. GUI planning belongs to the
 user (separate session); no GUI/bridge implementation is dispatched here.
 
+> **PE host bus R2 — read ops landed; conformance pending the model image
+> (2026-09-25).** `READ_CPU` (0x12, the only non-halting read, registers at
+> their native widths so `dbg_pc` is no longer truncated to 8), bounded
+> `READ_IMEM`/`READ_DMEM` (0x13/0x14, dmem two bytes per word high-byte-first),
+> `DUMP_CORE` (0x15), and an 11-word `STATUS` (`status, state, run, target,
+> pc, a, x, y, timer, faults, words_written`). **Wait-word contract:** a
+> bounded read cannot answer in the request's bit times, so the chip drives
+> `0xFFFF` filler words while it fetches and the frame starts at the first
+> non-`0xFFFF` word; hosts skip leading fillers (worst case 15). Transport-
+> level only — response bytes unchanged, R1 hosts unaffected. Out-of-range
+> READ latches sticky `FAULT_RANGE` (0x4), never wraps. Regression exit 0
+> (33/33, 26/26, 12 suites). **Open:** the conformance TB proves the framing
+> byte-exact but the golden package must ship the model image its vectors
+> assume; no `chip_confirmed` flipped yet and the TB is kept out of the
+> regression so it cannot make a false red about the chip. Contract in
+> `rtl/pe_ctrl.v`'s header; merge sequenced after R2.
+
 > **10BASE-T TX frame path — COMPLETE, plan Tasks 1-7 (2026-09-25, manager
 > Task 11 close-out + the chained Task 6/7 pass).** The last unbuilt block in
 > the topology is now built and hardened. `rtl/pe_eth_tx.v` emits a full frame

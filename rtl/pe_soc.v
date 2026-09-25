@@ -174,6 +174,27 @@ module pe_soc #(
   input  logic [15:0] host_wdata,
   input  logic        run,
 
+  // ---- R2: the bounded host READ port -----------------------------------
+  // A debug-only read path for the host controller (READ_IMEM / READ_DMEM).
+  // NOT_READY while run=1 is decided by pe_ctrl, which only issues these
+  // requests while the CPU is stopped -- that is what makes the address
+  // arbitration below safe: a stopped pe_cpu holds imem_addr at 0 and leaves
+  // dmem_addr idle, so the host can take the address bus without fighting the
+  // fetch.
+  //   dbg_rd_req    1-cycle pulse: start a read of dbg_rd_addr
+  //   dbg_rd_dmem   0 = one instruction WORD, 1 = one data BYTE (low 8 bits)
+  //   dbg_rd_valid  1-cycle pulse one cycle after the request: dbg_rd_data is
+  //                 valid. Instruction memory is a REGISTERED-read macro, so
+  //                 its data can only be captured on the following edge; the
+  //                 data buffer is a flop array with a combinational read, and
+  //                 is given the same one-cycle latency so the host contract
+  //                 has ONE shape for both memories.
+  input  logic        dbg_rd_req,
+  input  logic        dbg_rd_dmem,
+  input  logic [15:0] dbg_rd_addr,
+  output logic [15:0] dbg_rd_data,
+  output logic        dbg_rd_valid,
+
   // The protocol pin port. Everything else is software.
   // Inputs and outputs are separate buses -- there is no tristate at THIS
   // boundary; `pin_oe` carries the per-pin direction out to the wrapper, which
@@ -184,9 +205,15 @@ module pe_soc #(
   output logic [7:0]  pin_out,
   output logic [7:0]  pin_oe,
 
-  // Observability
-  output logic [7:0]  dbg_pc,
+  // Observability. R2: full native widths, no truncation. dbg_pc used to be
+  // 8 bits wide, so a PC above 255 read back as zero in a 1,024-word machine;
+  // the host read path must be able to report the real register. dbg_x,
+  // dbg_y and dbg_insn are new for the non-halting READ_CPU answer.
+  output logic [((IMEM_WORDS <= 2) ? 1 : ((IMEM_WORDS <= 256) ? 8 : $clog2(IMEM_WORDS)))-1:0] dbg_pc,
   output logic [7:0]  dbg_a,
+  output logic [7:0]  dbg_x,
+  output logic [7:0]  dbg_y,
+  output logic [15:0] dbg_insn,
   output logic [7:0]  dbg_timer
 );
 
@@ -229,7 +256,6 @@ module pe_soc #(
   // ---- CPU <-> memory ---------------------------------------------------
   logic [IAW-1:0] imem_addr;
   logic [15:0]    imem_rdata;
-  logic [DAW-1:0] dmem_addr;
   logic           dmem_we;
   logic [7:0]     dmem_wdata, dmem_rdata;
   logic [3:0]     io_port;
@@ -270,23 +296,71 @@ module pe_soc #(
   // load: `LDM addr` changes the address on the very cycle it wants the data,
   // so the register would return whatever the previous instruction addressed.
   (* ram_style = "distributed" *) logic [7:0] dmem [0:DMEM_BYTES-1];
-  assign dmem_rdata = dmem[dmem_addr];
+  // The CPU's own address buses. Declared before the data-buffer write above
+  // (Icarus binds declaration before use) and before the instance below.
+  wire [IAW-1:0] cpu_imem_addr;
+  wire [DAW-1:0] cpu_dmem_addr;
+
+  // The data buffer's read address is arbitrated too (dmem_rd_addr), because
+  // the R2 host read borrows the same flop array. dmem_byte is the selected
+  // byte; dmem_rdata is what the CPU sees.
+  wire [DAW-1:0] dmem_rd_addr;
+  wire [7:0]     dmem_byte = dmem[dmem_rd_addr];
+  assign dmem_rdata = dmem_byte;
 
   always_ff @(posedge clk) begin
-    if (dmem_we) dmem[dmem_addr] <= dmem_wdata;
+    if (dmem_we) dmem[cpu_dmem_addr] <= dmem_wdata;
     if (host_we && !host_imem_sel && (32'(host_addr) < DMEM_BYTES))
       dmem[host_addr[DAW-1:0]] <= host_wdata[7:0];
   end
 
   pe_cpu #(.IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES)) u_cpu (
     .clk(clk), .rst_n(rst_n), .run(run),
-    .imem_addr(imem_addr), .imem_rdata(imem_rdata),
-    .dmem_addr(dmem_addr), .dmem_we(dmem_we),
+    .imem_addr(cpu_imem_addr), .imem_rdata(imem_rdata),
+    .dmem_addr(cpu_dmem_addr), .dmem_we(dmem_we),
     .dmem_wdata(dmem_wdata), .dmem_rdata(dmem_rdata),
     .io_port(io_port), .io_we(io_we), .io_re(io_re),
     .io_wdata(io_wdata), .io_rdata(io_rdata),
-    .dbg_pc(dbg_pc), .dbg_a(dbg_a)
+    .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_x(dbg_x), .dbg_y(dbg_y),
+    .dbg_insn(dbg_insn)
   );
+
+  // ---- R2: the bounded host read port ------------------------------------
+  // One request/answer shape for both memories, one cycle of latency:
+  //   imem  -> the addressed instruction WORD (the macro read is registered,
+  //            so the answer can only be captured on the next edge);
+  //   dmem  -> the addressed BYTE in dbg_rd_data[7:0] (the flop array reads
+  //            combinationally; it is given the same latency so the host
+  //            contract has one shape, and so a byte pair can be assembled
+  //            from two consecutive answers).
+  // The request is held for one cycle by the caller through dbg_rd_req; the
+  // answer pulses dbg_rd_valid. pe_soc does NOT range-check: R2 puts the
+  // bounds in pe_ctrl, which owns the response status and the sticky
+  // FAULT_RANGE, so the check lives in exactly one place.
+  wire dbg_reading = dbg_rd_req | dbg_rd_valid;
+  wire [15:0] dbg_addr = dbg_rd_dmem ? {8'b0, dbg_rd_addr[7:0]}
+                                     : dbg_rd_addr;
+  wire _unused_dbg_addr_hi = &{1'b0, dbg_addr[15:10]};
+
+  // Address arbitration: the host owns the read address while a read is in
+  // flight. run=0 is the precondition enforced by pe_ctrl, so the CPU's own
+  // address is not being fetched from at that moment.
+  assign imem_addr = dbg_reading && !dbg_rd_dmem ? dbg_addr[IAW-1:0]
+                                                 : cpu_imem_addr;
+  assign dmem_rd_addr = dbg_reading && dbg_rd_dmem ? dbg_addr[DAW-1:0]
+                                                   : cpu_dmem_addr;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      dbg_rd_valid <= 1'b0;
+      dbg_rd_data  <= 16'h0000;
+    end else begin
+      dbg_rd_valid <= dbg_rd_req;      // the answer, one cycle later
+      if (dbg_rd_req)
+        dbg_rd_data <= dbg_rd_dmem ? {8'h00, dmem_byte}
+                                   : imem_rdata;
+    end
+  end
 
   // ---- tick counter -----------------------------------------------------
   // tick_cnt, tick_val and tick_flag are ONE register process. They used to be

@@ -82,8 +82,20 @@ module pe_cpu #(
   // netlist. A cross-module reference is not synthesisable; a port is.
   // They cost nothing: pc and a exist regardless, and an unloaded output is
   // removed by the synthesiser at the top level.
-  output logic [7:0]       dbg_pc,
-  output logic [7:0]       dbg_a
+  //
+  // R2 (the host read path): the registers are exposed at their NATIVE
+  // widths, not truncated. `dbg_pc` used to be 8 bits, which silently hid
+  // two PC bits above address 255 in a 1,024-word machine -- exactly the
+  // "no response may lie about a register" rule the R1 STATUS layout was
+  // written to honour, so the truncation had to go rather than be reported
+  // as a value. `dbg_x`/`dbg_y`/`dbg_insn` are new: the host's READ_CPU
+  // answers while `run=1` and needs the whole architectural state, not just
+  // PC and A.
+  output logic [((IMEM_WORDS <= 2) ? 1 : ((IMEM_WORDS <= 256) ? 8 : $clog2(IMEM_WORDS)))-1:0] dbg_pc,
+  output logic [7:0]       dbg_a,
+  output logic [7:0]       dbg_x,
+  output logic [7:0]       dbg_y,
+  output logic [15:0]      dbg_insn
 );
 
   localparam int IAW = (IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS);
@@ -134,9 +146,17 @@ module pe_cpu #(
 
   logic [7:0] a, y, x;
   logic [PCW-1:0] pc;
+  // Declared before the debug assigns below (Icarus binds declaration
+  // before use); it is assigned from imem_rdata in the fetch section.
+  logic [15:0] insn;
 
-  assign dbg_pc = pc[7:0];
-  assign dbg_a  = a;
+  // Full width, NOT truncated: dbg_pc was `pc[7:0]`, which reported 0 for a PC
+  // above 255 in a 1,024-word machine. R2 exposes the real register.
+  assign dbg_pc   = pc;
+  assign dbg_a    = a;
+  assign dbg_x    = x;
+  assign dbg_y    = y;
+  assign dbg_insn = insn;
 
   // ---- fetch (fetch-ahead) ----------------------------------------------
   // The instruction ROM has a REGISTERED output (it models a real ROM macro,
@@ -152,7 +172,6 @@ module pe_cpu #(
   //   cycle C   : pc=P, imem_rdata=imem[P]. Compute next_pc=N. Drive addr=N.
   //               The ROM registers imem[N] at the edge ending C; pc <= N.
   //   cycle C+1 : imem_rdata=imem[N]=imem[pc]. Correct instruction, no lag.
-  logic [15:0] insn;
   logic [3:0]  op;
   logic [11:0] arg;
   assign insn = imem_rdata;
