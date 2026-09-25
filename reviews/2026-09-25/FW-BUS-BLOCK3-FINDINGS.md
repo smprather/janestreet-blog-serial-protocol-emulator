@@ -293,6 +293,18 @@ a 4 µs square wave the assertions already measure on the pin.
 
 ## Self-inflicted testbench defects, recorded so they are not repeated
 
+There were four more, recorded because the first one is the most expensive
+mistake of the whole block and the other three are the ordinary way a testbench
+lies to you.
+
+0. **A merge resolver that kept only the conflict hunks.** Resolving
+   `run_all.sh` against `main` with a script that appended a line *only* when
+   the state was `ours` silently dropped all 233 lines outside the hunks — the
+   whole file header, the run lock, the options parsing, and the three BLOCK 1+2
+   testbench entries — leaving a 3-line file. The check that caught it was
+   counting the entries expected in the list being unioned (5 protocol TBs
+   before, 2 after) and not reading the file. **A merge resolution is a build
+   step and gets the same verify-don't-trust treatment as any other.**
 1. **A drain cap that is not derived from the rate.** The first version allowed
    900 µs for 14 bytes × 320 µs = 4480 µs of stream — five times too little — so
    the run stopped after two and a half messages and every check failed on a
@@ -335,6 +347,7 @@ a 4 µs square wave the assertions already measure on the pin.
 | `tb/tb_pe_soc_dmx512.v` | **committed** — lean receiver, 513 slots, both stops verified |
 | `regress/mutate_fwbus_tb.sh` | **committed** — 21 mutations, 21 detected, 0 survived |
 | `regress/run_all.sh`, `regress/run_firmware_tests.sh` | **committed** — same-list wiring: 2 TBs, 2 firmwares |
+| `main` merged beneath the branch | **committed** as `2adc845`, so landing is a fast-forward; the merge resolution was verified by counting entries, after it destroyed `run_all.sh` once — see the self-inflicted defects above |
 | `regress/dev_tb.sh` | **NOT committed** — dev-only helper; a second way to run a TB is one more thing that can drift from the first |
 
 ## The mutation gate, and the two mutations the block exists for
@@ -392,3 +405,43 @@ The consequence worth carrying to the next bit-banged protocol: **build the
 delay, then measure it on the pin, then assert the measurement is inside a window
 narrower than the delay's own quantisation step** — otherwise the assertion
 cannot see the one change that matters, and the suite will be green and wrong.
+
+---
+
+## Limits
+
+**This section existed before this file was rewritten and was dropped in the
+rewrite.** It is restored here, and the fact that it went missing for one
+commit is itself the argument for having it: the file that lost it is the same
+file that spent a section insisting that a rate assertion only counts if
+something can see it, and an audit that checked the parts it had *added* and not
+the part it had *removed* would not have caught that either. Restore a boundary
+statement even when the rewrite feels like a pure improvement — especially then.
+
+**Simulated evidence only.** No synthesis, no STA, no timing closure, no
+physical flow, no DRC, no LVS, no hardware. The full regression passing
+(`EXIT=0`, 39/39 testbenches, 35/35 firmwares, 21/21 mutations detected) means
+the programs behave as specified **in 4-state simulation on the modelled CPU,
+pin matrix, SRAM and pads**. It is not sign-off, and nothing here should be
+quoted as such.
+
+**No RTL changed in BLOCK 3**, which is the thesis being demonstrated rather than
+a caveat: both acts are programs on the same CPU, pin matrix and 260-clock tick
+that `firmware/i2c_xfer.pe` and `firmware/spi_xfer.pe` already use. That is also
+precisely why no synthesis or STA screen was run — there is nothing new for it
+to say — and why these results say nothing about whether a *hardware* UART or
+DMX driver would meet its timing. What they demonstrate is the thesis of the
+block: **the pin matrix and the tick are sufficient**, and a protocol whose rate
+the tick cannot express is reachable in software, measured.
+
+**Two things a hardware bring-up would still have to check**, and simulation
+cannot: the real 60 MHz clock's tolerance across temperature (every figure here
+assumes a perfect clock, which is why the transmitter is a pure divider and why
+the cell measures to 0.0000 µs of spread — a real crystal will not), and the
+pad's actual rise/fall behaviour against a 4 µs DMX bit cell.
+
+**BLOCK 3 is not landed on `main`.** It is on `fw-bus-protocols` as `e630d74`,
+with `main` merged in beneath it as `2adc845` so that landing is a clean
+fast-forward. Merging it is the manager's call; see the open QUESTION in the
+WORKLOG. The merge-readiness run that established this is on the merged tree,
+not on the pre-merge one.
