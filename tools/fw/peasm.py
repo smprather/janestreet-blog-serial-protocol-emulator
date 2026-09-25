@@ -97,6 +97,14 @@ CONSTS: dict[str, int] = {
     # I2C port bits (see rtl/pe_soc.v's map). SDA and SCL are the two
     # bidirectional pins; both are open-drain on a real bus.
     "SDA": 0x10, "SCL": 0x20,
+    # Software-UART port bits, on the SAME 8-bit port as SDA/SCL above --
+    # which is the point: nothing in the RTL knows which protocol is running.
+    #   bit 0  TX (out)   bit 3  RX (in)
+    # The two extra bits are the hardware flow-control pair. RTS is ours and
+    # CTS is the receiver's, and they are the only pins in the map that no
+    # other program touches; firmware/uart_flow.pe is their only user.
+    #   bit 4  RTS (out)  bit 5  CTS (in)
+    "UTX": 0x01, "URX": 0x08, "RTS": 0x10, "CTS": 0x20,
     # Standard-mode tick counts at 1 us per tick. 5/6 rather than 5/5: 5/5 is
     # exactly 100.0 kHz, which is AT the ceiling and works on a bench while
     # failing a compliance report. See wiki/plans/through-i2c.md.
@@ -356,9 +364,11 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
             elif kind == "stm_arg":
                 # STM addr8, A
                 toks = [t.strip() for t in ops.split(",")]
-                if len(toks) == 2 and toks[1].upper() == "A":
-                    imm = toks[0]
-                elif len(toks) == 1:
+                # Both accepted forms assign toks[0] and nothing else, so
+                # they are one condition. The `or` is NOT a weakening: the
+                # 2-token form whose second token is not A still falls to the
+                # else and is rejected, which is the whole point of the check.
+                if len(toks) == 1 or (len(toks) == 2 and toks[1].upper() == "A"):
                     imm = toks[0]
                 else:
                     raise AsmError(f"STM form is 'STM addr8, A' (got {ops!r})")
