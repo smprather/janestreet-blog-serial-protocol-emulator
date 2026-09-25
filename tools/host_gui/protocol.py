@@ -54,6 +54,25 @@ OP_DUMP_CORE = 0x15
 OP_CLEAR_FAULT = 0x16
 OP_TARGET = 0x20
 
+# ---- R3 debug-control opcodes (NOT CHIP-CONFIRMED) -----------------------
+# The R3 wire contract is a DRAFT being drafted chip-side (manager dispatch
+# 2026-09-25: opcodes 0x21/0x22/0x23/0x24 in the same framed host bus,
+# ready-immediate responses, same CRC/sequence/target rules). The opcode
+# NUMBERS come from the dispatch and are therefore fixed; the RESPONSE
+# LAYOUTS below are the host's provisional reading and every one of them is
+# listed in `tools/host_gui/r3_reads.py` as a reconciliation item to check
+# against rtl/pe_ctrl.v's header the moment it appears. Nothing here is
+# evidence about silicon -- it is the host side of a contract still being
+# written.
+OP_DEBUG_STEP = 0x21
+OP_DEBUG_BP_SET = 0x22
+OP_DEBUG_BP_CLR = 0x23
+OP_DEBUG_STATUS = 0x24
+
+# Debug-control opcodes are ready-immediate: none of them is a bounded read,
+# so none carries wait words (the R2 wait-word rule applies only to the reads).
+R3_OPCODES = (OP_DEBUG_STEP, OP_DEBUG_BP_SET, OP_DEBUG_BP_CLR, OP_DEBUG_STATUS)
+
 # ---- response status codes (first response payload word) -----------------
 STATUS_OK = 0
 STATUS_BUSY = 1

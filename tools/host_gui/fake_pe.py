@@ -53,6 +53,41 @@ LOOPBACK_ID = 0x10C0
 STATE_STOPPED = 0
 STATE_RUNNING = 1
 
+# ---- R3 debug control (NOT CHIP-CONFIRMED) --------------------------------
+# The debug-control wire contract is a chip-side DRAFT (manager dispatch
+# 2026-09-25: opcodes 0x21 DEBUG_STEP, 0x22 DEBUG_BP_SET, 0x23 DEBUG_BP_CLR,
+# 0x24 DEBUG_STATUS; ready-immediate responses; same CRC/sequence/target
+# rules). The opcode numbers are fixed by that dispatch. Everything BELOW --
+# the breakpoint table depth, the step ceiling, the response layouts, the
+# rejection rules and the "none" sentinel -- is the host's PROVISIONAL
+# reading and is listed item by item in tools/host_gui/r3_reads.py so it can
+# be reconciled mechanically against rtl/pe_ctrl.v's header the moment it
+# appears. It is a model of what the chip owes, never evidence that it does.
+DEBUG_STOPPED = 0
+DEBUG_RUNNING = 1
+DEBUG_BP_HIT = 2
+DEBUG_STEPPING = 3
+
+DEBUG_STATE_NAMES = {
+    DEBUG_STOPPED: "STOPPED",
+    DEBUG_RUNNING: "RUNNING",
+    DEBUG_BP_HIT: "BP_HIT",
+    DEBUG_STEPPING: "STEPPING",
+}
+
+# Provisional chip parameters (reconcile with the R3 header):
+#   * the breakpoint table depth;
+#   * the largest single-step request the chip will serve in one frame.
+# The step ceiling mirrors the read path's MAX_READ_WORDS rule -- a count over
+# the ceiling is RANGE so the host splits it, rather than a value the chip
+# silently clamps.
+MAX_BREAKPOINTS = 4
+MAX_STEP_COUNT = 16
+# "no slot" / "no address" in a 16-bit response word. 0xFFFF is out of range
+# for both a slot index (MAX_BREAKPOINTS=4) and an address (IMEM_WORDS=1024),
+# so it cannot be confused with a real value in either field.
+DEBUG_NONE = 0xFFFF
+
 STATUS_KEYS = ("state", "run", "target", "pc", "a", "x", "y", "timer",
                "faults", "words_written")
 
@@ -125,6 +160,16 @@ class FakePE:
         self.words_written = 0
         self.committed_words: list[int] = []
         self.selected_target = 0
+        # R3 debug control: a small armed-breakpoint table (None = unarmed) and
+        # the debug state machine. `on_step`, when set, is called with the new
+        # pc after each stepped instruction WHILE the core is in DEBUG_STEPPING
+        # -- that is how the transient STEPPING state is observed, since a
+        # synchronous DEBUG_STEP settles to STOPPED/BP_HIT before it answers.
+        self.breakpoints: list[int | None] = [None] * MAX_BREAKPOINTS
+        self.debug_state = DEBUG_STOPPED
+        self.hit_slot: int | None = None
+        self.hit_address: int | None = None
+        self.on_step = None
         # Test stimulus for the run-abort window: simulate `run` rising just
         # before word `abort_after_words` would be committed. One-shot.
         self.abort_after_words: int | None = None
@@ -132,6 +177,57 @@ class FakePE:
     @property
     def state(self) -> int:
         return STATE_RUNNING if self.run else STATE_STOPPED
+
+    # ---- R3 debug control ---------------------------------------------------
+    def _slot_at(self, address: int) -> int | None:
+        """The armed slot holding ``address``, or None."""
+        for slot, value in enumerate(self.breakpoints):
+            if value == address:
+                return slot
+        return None
+
+    def _bp_count(self) -> int:
+        return sum(1 for value in self.breakpoints if value is not None)
+
+    def _bp_mask(self) -> int:
+        mask = 0
+        for slot, value in enumerate(self.breakpoints):
+            if value is not None:
+                mask |= 1 << slot
+        return mask
+
+    def reset_debug(self) -> None:
+        """Clear every breakpoint and settle the debug state machine."""
+        self.breakpoints = [None] * MAX_BREAKPOINTS
+        self.debug_state = DEBUG_STOPPED
+        self.hit_slot = None
+        self.hit_address = None
+
+    def begin_run(self) -> tuple[bool, int | None, int | None]:
+        """Start the core, honouring a breakpoint armed at the current pc.
+
+        Returns ``(run, hit_slot, hit_address)``. A breakpoint at the resume
+        address means the core does NOT run: it stops on the breakpoint
+        immediately and reports the hit. The host's start path depends on this
+        (a start can end in BP_HIT, not RUNNING), so it is a contract, not a
+        convenience.
+        """
+        slot = self._slot_at(self.pc)
+        if slot is not None:
+            self.run = False
+            self.debug_state = DEBUG_BP_HIT
+            self.hit_slot, self.hit_address = slot, self.pc
+            return False, slot, self.pc
+        self.run = True
+        self.debug_state = DEBUG_RUNNING
+        self.hit_slot = self.hit_address = None
+        return True, None, None
+
+    def halt_run(self) -> None:
+        """Stop the core and settle to STOPPED (an explicit stop is not a hit)."""
+        self.run = False
+        self.debug_state = DEBUG_STOPPED
+        self.hit_slot = self.hit_address = None
 
     # ---- framed interface -------------------------------------------------
     def request(self, opcode: int, sequence: int = 0, target: int = 0,
@@ -179,6 +275,10 @@ class FakePE:
             P.OP_DUMP_CORE: self._dump_core,
             P.OP_CLEAR_FAULT: self._clear_fault,
             P.OP_TARGET: self._target,
+            P.OP_DEBUG_STEP: self._debug_step,
+            P.OP_DEBUG_BP_SET: self._debug_bp_set,
+            P.OP_DEBUG_BP_CLR: self._debug_bp_clr,
+            P.OP_DEBUG_STATUS: self._debug_status,
         }.get(opcode)
         if handler is None:
             return self._response(opcode, sequence, target,
@@ -306,6 +406,93 @@ class FakePE:
             return (P.STATUS_OK, P.TARGET_LOOPBACK, CAP_LOOPBACK)
         return (P.STATUS_UNSUPPORTED,)
 
+    # ---- R3 debug-control handlers (provisional response layouts) ----------
+    # A DEBUG_STEP response is (status, steps_completed, pc, a, x, y, insn,
+    # hit). `hit` is 1 when the step window stopped on an armed breakpoint, in
+    # which case the core settles in DEBUG_BP_HIT with the slot and address
+    # readable through DEBUG_STATUS. Steps are counted as INSTRUCTIONS retired.
+    def _debug_step(self, payload: tuple[int, ...]) -> tuple[int, ...]:
+        if self.run:
+            return (P.STATUS_NOT_READY,)
+        steps = int(payload[0]) if payload else 1
+        if steps < 1 or steps > MAX_STEP_COUNT:
+            return (P.STATUS_RANGE,)
+        completed = 0
+        hit_slot: int | None = None
+        self.debug_state = DEBUG_STEPPING
+        try:
+            for _ in range(steps):
+                # One instruction: fetch the word at pc into insn, advance pc.
+                # The model does NOT execute the ISA -- R3's obligation is the
+                # debug-control state machine and register visibility, and an
+                # invented execution model would be a lie about silicon.
+                self.insn = self.imem[self.pc] & ISA_INSN_MASK
+                self.pc = (self.pc + 1) & ISA_PC_MASK
+                completed += 1
+                if self.on_step is not None:
+                    self.on_step(self.pc)
+                hit_slot = self._slot_at(self.pc)
+                if hit_slot is not None:
+                    break                    # stepping ONTO a bp reports it
+        finally:
+            if self.debug_state == DEBUG_STEPPING:
+                self.debug_state = (DEBUG_BP_HIT if hit_slot is not None
+                                    else DEBUG_STOPPED)
+        if hit_slot is not None:
+            self.hit_slot, self.hit_address = hit_slot, self.pc
+        else:
+            self.hit_slot = self.hit_address = None
+        pc, a, x, y, insn = self._regs()
+        return (P.STATUS_OK, completed, pc, a, x, y, insn,
+                1 if hit_slot is not None else 0)
+
+    def _debug_bp_set(self, payload: tuple[int, ...]) -> tuple[int, ...]:
+        if self.run:
+            return (P.STATUS_NOT_READY,)
+        slot = int(payload[0]) if payload else 0
+        address = int(payload[1]) if len(payload) > 1 else 0
+        if not 0 <= slot < MAX_BREAKPOINTS or not 0 <= address < IMEM_WORDS:
+            # An out-of-range breakpoint address is RANGE and latches sticky
+            # FAULT_RANGE, exactly as an out-of-range READ does.
+            if not 0 <= address < IMEM_WORDS:
+                self._read_range_fault()
+            return (P.STATUS_RANGE,)
+        existing = self._slot_at(address)
+        if existing is not None:
+            # Idempotent: the slot already holding that address is returned.
+            return (P.STATUS_OK, existing, address, self._bp_count())
+        if self.breakpoints[slot] is not None:
+            # The slot is in use: BUSY, so the caller clears it explicitly
+            # rather than silently losing a breakpoint.
+            return (P.STATUS_BUSY,)
+        self.breakpoints[slot] = address
+        return (P.STATUS_OK, slot, address, self._bp_count())
+
+    def _debug_bp_clr(self, payload: tuple[int, ...]) -> tuple[int, ...]:
+        if self.run:
+            return (P.STATUS_NOT_READY,)
+        slot = int(payload[0]) if payload else 0
+        if not 0 <= slot < MAX_BREAKPOINTS:
+            return (P.STATUS_RANGE,)
+        if self.breakpoints[slot] is None:
+            # Provisional: clearing an unarmed slot is UNSUPPORTED rather than
+            # a silent no-op, so a wrong slot is visible to the caller.
+            return (P.STATUS_UNSUPPORTED,)
+        self.breakpoints[slot] = None
+        if self.debug_state == DEBUG_BP_HIT and self.hit_slot == slot:
+            # Clearing the breakpoint we are stopped on releases the hit.
+            self.debug_state = DEBUG_STOPPED
+            self.hit_slot = self.hit_address = None
+        return (P.STATUS_OK, slot, self._bp_count())
+
+    def _debug_status(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
+        pc, a, x, y, insn = self._regs()
+        return (P.STATUS_OK, self.debug_state, 1 if self.run else 0,
+                pc, a, x, y, insn, self._bp_count(), self._bp_mask(),
+                self.hit_slot if self.hit_slot is not None else DEBUG_NONE,
+                self.hit_address if self.hit_address is not None
+                else DEBUG_NONE)
+
 
 class FakeBridge:
     """Newline-JSON USB bridge over ``FakePE`` (the Pico's role)."""
@@ -313,7 +500,7 @@ class FakeBridge:
     def __init__(self) -> None:
         self.pe = FakePE()
         self._known_faults = 0
-        self._pending_events: deque[dict] = deque()
+        self._pending_events: deque[str] = deque()
 
     # ---- newline-JSON interface -------------------------------------------
     def handle_line(self, line: str) -> list[str]:
@@ -366,6 +553,7 @@ class FakeBridge:
         if op == "prepare":
             self.pe.run = False
             self.pe.faults = 0
+            self.pe.reset_debug()
             self._event("board.reset", {})
             return {"state": "PREPARED", "run": False}
         if op == "ping":
@@ -386,12 +574,18 @@ class FakeBridge:
             self._event("chip.status", dict(result))
             return result
         if op == "start":
-            self.pe.run = True
-            result = {"state": "RUNNING", "run": True}
+            # A start can end on a breakpoint rather than running (R3): the
+            # model reports the hit instead of a RUNNING that never happened.
+            running, slot, address = self.pe.begin_run()
+            if running:
+                result = {"state": "RUNNING", "run": True}
+            else:
+                result = {"state": "BP_HIT", "run": False,
+                          "hit_slot": slot, "hit_address": address}
             self._event("chip.status", dict(result))
             return result
         if op == "stop":
-            self.pe.run = False
+            self.pe.halt_run()
             result = {"state": "STOPPED", "run": False}
             self._event("chip.status", dict(result))
             return result
@@ -435,6 +629,47 @@ class FakeBridge:
             return {"status": frame.payload[0],
                     "target": frame.payload[1] if ok else self.pe.selected_target,
                     "capabilities": frame.payload[2] if ok else 0}
+        # ---- R3 debug control (not chip-confirmed; provisional layouts) ----
+        if op == "debug_step":
+            steps = int(args.get("steps", 1))
+            frame = self.pe.request(P.OP_DEBUG_STEP, target=target,
+                                    payload_words=(steps,))
+            payload = frame.payload
+            if payload[0] != P.STATUS_OK:
+                return {"status": payload[0], "steps": 0, "hit": 0}
+            return {"status": payload[0], "steps": payload[1], "pc": payload[2],
+                    "a": payload[3], "x": payload[4], "y": payload[5],
+                    "insn": payload[6], "hit": payload[7]}
+        if op == "bp_set":
+            slot = int(args.get("slot", 0))
+            address = int(args.get("address", 0))
+            frame = self.pe.request(P.OP_DEBUG_BP_SET, target=target,
+                                    payload_words=(slot, address))
+            payload = frame.payload
+            if payload[0] != P.STATUS_OK:
+                return {"status": payload[0], "slot": slot, "address": address,
+                        "bp_count": self.pe._bp_count()}
+            return {"status": payload[0], "slot": payload[1],
+                    "address": payload[2], "bp_count": payload[3]}
+        if op == "bp_clr":
+            slot = int(args.get("slot", 0))
+            frame = self.pe.request(P.OP_DEBUG_BP_CLR, target=target,
+                                    payload_words=(slot,))
+            payload = frame.payload
+            if payload[0] != P.STATUS_OK:
+                return {"status": payload[0], "slot": slot,
+                        "bp_count": self.pe._bp_count()}
+            return {"status": payload[0], "slot": payload[1],
+                    "bp_count": payload[2]}
+        if op == "debug_status":
+            values = self.pe.request(P.OP_DEBUG_STATUS, target=target).payload
+            return {"status": values[0], "debug_state": values[1],
+                    "run": values[2], "pc": values[3], "a": values[4],
+                    "x": values[5], "y": values[6], "insn": values[7],
+                    "bp_count": values[8], "bp_mask": values[9],
+                    "hit_slot": values[10], "hit_address": values[11],
+                    "debug_state_name": DEBUG_STATE_NAMES.get(
+                        values[1], f"UNKNOWN({values[1]})")}
         raise FakeBridgeError(f"unknown op {op!r}")
 
     # ---- helpers -----------------------------------------------------------
