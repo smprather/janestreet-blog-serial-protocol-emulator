@@ -1,0 +1,527 @@
+; spi_mode3.pe — an SPI MODE 3 (CPOL=1, CPHA=1) master in software, with a
+; per-word CRC.
+;
+; THERE IS NO SPI HARDWARE, and nothing below adds any. The same
+; rtl/pe_pinmux.v per-pin direction file, the same 8-bit port, the same tick
+; counter and the same 16-opcode CPU that run firmware/spi_xfer.pe (mode 0)
+; run this program. The difference between the two protocols is entirely WHICH
+; pin edge each phase happens on -- which is the claim this program exists to
+; demonstrate at transaction level.
+;
+; ---------------------------------------------------------------------------
+; MODE 3 IS NOT MODE 0 WITH THE CLOCK INVERTED, and the difference is the
+; whole exercise.
+;
+;   CPOL=1  SCLK idles HIGH, and the "first edge" of a frame is the FALLING one.
+;   CPHA=1  data is CAPTURED on the SECOND edge, so with CPOL=1 the second edge
+;           is the RISING one.
+;
+; Read together: data changes on the FALLING edge and is captured on the
+; RISING edge, in both directions. So the master's per-bit loop is
+;
+;   1. SCLK is HIGH. Put the next MOSI bit on the wire.   <- the launch
+;   2. Lower SCL (falling). The slave may now change MISO.
+;   3. Wait a half period.
+;   4. Raise SCL (rising). The slave captures MOSI; we capture MISO.
+;
+; Compare mode 0 (firmware/spi_xfer.pe): the SAME three phases in a different
+; order -- set MOSI, raise-and-sample, lower.
+;
+;        mode 0:  set MOSI (SCLK low)  | SCLK ^  sample | SCLK v
+;        mode 3:  set MOSI (SCLK high) | SCLK v  wait   | SCLK ^  sample
+;
+; Both sample on the rising edge, which is the trap: a mode-0 master run in
+; mode 3 starts with SCLK HIGH, and its very first `SCLK v` becomes a falling
+; edge at the wrong point in the frame. The idle level alone is enough to
+; break it -- mode 0 drives SCLK low at init, and in mode 3 that same write
+; IS a falling edge, i.e. a data change under an idle-high clock, before CS_N
+; has even been asserted.
+;
+; ---------------------------------------------------------------------------
+; PIN MAP (unchanged from spi_xfer.pe -- same port, different discipline)
+;
+;   bit 0  out  SCLK      bit 1  out  MOSI
+;   bit 2  out  CS_N      bit 3  in   MISO
+;
+; ---------------------------------------------------------------------------
+; THE TRANSACTION: THREE WORDS, EACH WITH ITS OWN CRC-8.
+;
+;   CS_N v | WORD(16) | CRC8(WORD)(8) | RESP(8) | CRC8(RESP)(8) | CS_N ^
+;   ... repeated for word 1, word 2, word 3.
+;
+; One CS_N frame per word, because that is how a command/response device with
+; an integrity check is actually driven, and it gives the testbench a hard
+; per-word frame boundary to count: exactly 40 SCLK rises per frame.
+;
+; The words are 0x1134, 0x1245, 0x1356. None is a bit palindrome, and neither
+; is any of the three response bytes (0x6B, 0x2C, 0xD9). A palindromic word
+; puts the identical pin sequence on MOSI whichever way the shift goes, so it
+; cannot catch a bit-order defect at all -- the trap firmware/spi_xfer.pe
+; records for 0x5A, and the reason it sends 0x5B instead.
+;
+; CRC-8: polynomial 0x07, initial value 0x00, no reflection, no final XOR --
+; the textbook MSB-first bit-serial form. The reference datapath is written
+; independently in tb_pe_soc_spi3.v, and the two must agree on every byte or
+; the test fails; a CRC checked against itself proves nothing. A word's CRC
+; covers its two bytes in TRANSMISSION order: high byte first, then low.
+;
+; ---------------------------------------------------------------------------
+; HOW A CRC IS POSSIBLE AT ALL IN THIS ISA, and it is worth the space.
+;
+; The ALU has ADD, SUB, AND, OR -- no XOR, and no shift left. Two consequences
+; shape the fold below:
+;
+;   * SHIFT LEFT IS `MOV X, A ; ADD A, X`. The adder truncates to 8 bits, so
+;     that IS an 8-bit shift with the top bit simply lost. The same idiom
+;     spi_xfer.pe and i2c_xfer.pe already use.
+;   * XOR IS DERIVABLE. For every byte pair,
+;
+;         (A | P) - (A & P) == A ^ P
+;
+;     with no carry between the two terms, because A|P is exactly (A&P) +
+;     (A^P) bit by bit. Verified exhaustively over all 65,536 pairs rather
+;     than argued; the sequences below are that identity written out. ADD
+;     would NOT have worked: 0xFF + 0x07 = 0x06 where 0xFF ^ 0x07 = 0xF8,
+;     because the addition carries out of the low three bits.
+;
+; ---------------------------------------------------------------------------
+; dmem IS THE OBSERVABLE INTERFACE (the TB asserts on it)
+;
+;   dmem[0]  the current word's LOW byte, kept intact for the CRC fold
+;   dmem[1]  the last response byte received
+;   dmem[2]  the last response CRC byte as RECEIVED
+;   dmem[3]  the CRC-8 the firmware computed for that response -- and, while
+;            a fold is running, the fold's BYTE counter (see fold_byte)
+;   dmem[4]  running sum of the three transmitted per-word CRCs
+;   dmem[5]  words transmitted
+;   dmem[6]  response CRCs that checked out
+;   dmem[7]  the last word's transmitted CRC-8
+;   dmem[8]  the byte currently being shifted out
+;   dmem[9]  the current word's HIGH byte
+;   dmem[10] the bit counter, in the bit loop and in the fold alike
+;   dmem[11] the receive accumulator
+;   dmem[12] the bit loop's return state
+;   dmem[13] the receive destination slot, and the fold's input byte
+;   dmem[14] the CRC register
+;   dmem[15] 0xA5 once all three words are done; while folding, the state to
+;            run next (the ISA has no CALL/RET, so the fold's caller parks
+;            its continuation here)
+;
+; dmem[3] is doing two jobs and the second is visible only mid-fold. That is
+; deliberate rather than accidental: the alternative was a seventeenth slot,
+; and the value the TB reads at the end (state 8) is written AFTER every fold
+; in the frame has finished. fold_byte's own header says so at the point of
+; reuse.
+;
+; THE BIT LOOP USES NO dmem SLOT FOR ITS TIMER SNAPSHOT. It keeps the snapshot
+; in X and compares with `SUB A, X`, which leaves X alone -- so the loop is
+; three instructions and dmem[0] stays free to hold the word. The alternative
+; (dmem[0] as the snapshot, as spi_xfer.pe does with dmem[8]) would have
+; forced the word's low byte elsewhere, and the CRC fold would then have read
+; a value the shift had already destroyed.
+;
+; ---------------------------------------------------------------------------
+; STATES (dmem[10], dispatched by a cumulative subtract chain)
+;
+;   0  CS_N low, assemble the word
+;   1  shift out the word's HIGH byte
+;   2  shift out the word's LOW byte
+;   3  fold CRC-8 over the word's two bytes
+;   4  shift out the CRC, and continue at state 5
+;   5  receive 8 bits, landing in dmem[1]
+;   6  store it, fold CRC-8 over it, then continue at state 7
+;   7  receive 8 bits, landing in dmem[2]
+;   8  compare, record, release CS_N, next word or park
+;   9  park (dmem[15] = 0xA5)
+;
+; THE CHAIN IS POSITIONAL, AND THAT IS WORTH SAYING OUT LOUD. Each branch
+; tests the state value one lower than the branch above, so a state number
+; with no branch does not become unreachable -- it SHIFTS every state above
+; it by one, and the program runs the wrong handler for each. The first
+; version of this file left out state 4 on the theory that folding straight
+; into the CRC shift-out saved a jump; the result was that state 5 ran state
+; 6's handler, state 6 ran state 7's, and the frame closed 16 bits early with
+; CS_N raised from the wrong place. There is now a branch for every number in
+; the list above, and the list is the chain.
+
+        ; ---- mode 3 idle: SCLK HIGH, MOSI low, CS_N high ----------------
+        ; Written explicitly, and the HIGH is the load-bearing half. Reset
+        ; drives bit 0 HIGH (the UART's idle TX level), which happens to be
+        ; mode 3's idle clock but mode 0's ACTIVE edge -- so a program that
+        ; inherited the reset level instead of stating its own would begin
+        ; mode 0 by luck and mode 3 one edge out of place.
+        LDI   A, 5                 ; CS_N=1, MOSI=0, SCLK=1
+        OUT   TXPIN, A
+        LDI   A, 0
+        STM   1, A
+        STM   2, A
+        STM   3, A
+        STM   4, A
+        STM   5, A
+        STM   6, A
+        STM   7, A
+        STM   10, A                ; state 0
+
+; ===========================================================================
+; Dispatcher. Cumulative subtract chain: two instructions per state, because
+; the ISA has no indirect jump and a reload-and-retest cascade costs five.
+; ===========================================================================
+main:   LDM   A, 10
+        JZ    s0
+        SUB   A, 1
+        JZ    s1
+        SUB   A, 1
+        JZ    s2
+        SUB   A, 1
+        JZ    s3
+        SUB   A, 1
+        JZ    s4
+        SUB   A, 1
+        JZ    s5
+        SUB   A, 1
+        JZ    s6
+        SUB   A, 1
+        JZ    s7
+        SUB   A, 1
+        JZ    s8
+        SUB   A, 1
+        JZ    s9
+        JMP   park
+
+; ---- state 0: select the slave and assemble this word -------------------
+; The words are 0x11+i : 0x34 + 0x11*i for word index i = dmem[5], so 0x1134,
+; 0x1245, 0x1356. CS_N is asserted BEFORE the word is assembled, so the first
+; launch cannot happen with the slave still deselected.
+s0:     IN    A, PIN
+        AND   A, 0xFB              ; CS_N low
+        OUT   TXPIN, A
+        LDI   A, 0x11
+        MOV   X, A
+        LDM   A, 5
+        ADD   A, X                 ; the high byte = 0x11 + i
+        STM   9, A
+        ; 0x11 * i, with NO MULTIPLY AND NO SHIFT-LEFT IN THE ISA. Four
+        ; `A + A` doublings put 16i in Y, then one ADD of i finishes it:
+        ; 16i + i = 17i = 0x11 * i. The first version wrote a plain
+        ; `ADD A, X` here, which computes 0x34 + i -- and that assembles,
+        ; runs, and puts 0x34/0x35/0x36 on the wire where the testbench
+        ; expected 0x34/0x45/0x56. A multiply written as an add is the
+        ; quietest wrong instruction there is.
+        LDM   A, 5
+        MOV   X, A
+        ADD   A, X                 ; 2i
+        MOV   X, A
+        ADD   A, X                 ; 4i
+        MOV   X, A
+        ADD   A, X                 ; 8i
+        MOV   X, A
+        ADD   A, X                 ; 16i
+        MOV   Y, A
+        LDM   X, 5
+        MOV   A, Y
+        ADD   A, X                 ; 17i
+        MOV   X, A
+        LDI   A, 0x34
+        ADD   A, X                 ; the low byte  = 0x34 + 0x11*i
+        STM   0, A
+        LDI   A, 1
+        STM   10, A
+        LDI   A, 2
+        STM   12, A                ; the bit loop returns to state 2
+        JMP   s1
+
+; ---- state 1: shift out the word's HIGH byte ----------------------------
+s1:     LDM   A, 9
+        STM   8, A                 ; the shift register starts on the high byte
+        LDI   A, 8
+        STM   10, A
+        JMP   bit_loop
+
+; ---- state 2: shift out the word's LOW byte -----------------------------
+s2:     LDM   A, 0
+        STM   8, A
+        LDI   A, 8
+        STM   10, A
+        LDI   A, 3
+        STM   12, A                ; the bit loop returns to state 3
+        JMP   bit_loop
+
+; ---- state 3: CRC-8 over the two word bytes, then shift the CRC out ------
+s3:     LDI   A, 0
+        STM   14, A                ; crc := 0
+        LDI   A, 2
+        STM   3, A                 ; two bytes to fold
+        LDM   A, 9                 ; ... the high byte first
+        STM   13, A
+        LDI   A, 4
+        STM   15, A                ; the state to run when the fold ends
+        JMP   fold_byte
+
+; ---- state 4: shift out the word's CRC-8 --------------------------------
+s4:     LDM   A, 14
+        STM   7, A                 ; the TB checks this against its own CRC-8
+        LDM   A, 4
+        MOV   X, A
+        LDM   A, 14
+        ADD   A, X
+        STM   4, A                 ; the running sum of the per-word CRCs
+        LDM   A, 14
+        STM   8, A                 ; the CRC is the next byte to shift out
+        LDI   A, 8
+        STM   10, A
+        LDI   A, 5
+        STM   12, A                ; the bit loop returns to state 5
+        JMP   bit_loop
+
+; ---- state 5: receive the response byte ---------------------------------
+s5:     LDI   A, 0
+        STM   11, A               ; the accumulator, filled from bit 7 down
+        LDI   A, 8
+        STM   10, A
+        LDI   A, 1
+        STM   13, A               ; the destination slot
+        LDI   A, 6
+        STM   12, A
+        JMP   bit_loop
+
+; ---- state 6: store the response byte, then fold its CRC ----------------
+s6:     LDM   X, 13
+        LDM   A, 11
+        STS   [X], A               ; dmem[1] := the response byte
+        LDI   A, 0
+        STM   11, A
+        STM   14, A                ; crc := 0
+        LDI   A, 1                 ; one byte to fold
+        STM   3, A
+        LDM   A, 1
+        STM   13, A
+        LDI   A, 7
+        STM   15, A                ; the state to run when the fold ends
+        JMP   fold_byte
+
+; ---- state 7: receive the response's CRC byte ---------------------------
+s7:     LDI   A, 0
+        STM   11, A
+        LDI   A, 8
+        STM   10, A
+        LDI   A, 2
+        STM   13, A               ; the destination slot
+        LDI   A, 8
+        STM   12, A
+        JMP   bit_loop
+
+; ---- state 8: the frame's end. Compare, record, next word. --------------
+s8:     LDM   X, 13
+        LDM   A, 11
+        STS   [X], A               ; dmem[2] := the received CRC byte
+        LDI   A, 0
+        STM   11, A
+        LDM   A, 14
+        STM   3, A                 ; the CRC we computed for the response
+        ; COMPARE THE TWO REGISTERS, NOT A REGISTER AND A CONSTANT. There is
+        ; no memory-to-memory subtract in this ISA, and `SUB A, 2` -- which
+        ; reads exactly like "subtract the received CRC" -- assembles to
+        ; `A := dmem[14] - 2`. Against a CRC of 0x04 that is 0x02, never zero,
+        ; so the check NEVER fired and the counter stayed at 0 for all three
+        ; words while the transaction otherwise completed perfectly. The
+        ; testbench's own "computed == received" check passed on the same
+        ; bytes, which is what made the asymmetry obvious: the wire was right
+        ; and the firmware's verdict on it was wrong.
+        LDM   X, 2
+        MOV   A, X                 ; A = the received CRC byte
+        LDM   X, 14
+        SUB   A, X                 ; A = received - computed
+        JZ    s8_good
+        ; A mismatch is COUNTED, not fatal: the frame is still closed and the
+        ; transaction still ends, so the testbench can report how many of the
+        ; three checked out instead of only the first failure.
+        JMP   s8_close
+s8_good:
+        LDM   A, 6
+        ADD   A, 1
+        STM   6, A
+s8_close:
+        IN    A, PIN
+        OR    A, 4                 ; CS_N high, and SCLK STAYS HIGH: that is
+        OUT   TXPIN, A             ; mode 3's idle level, not mode 0's
+        LDM   A, 5
+        ADD   A, 1
+        STM   5, A                 ; words transmitted
+        LDM   A, 5
+        SUB   A, 3                 ; three words: index 0, 1, 2. This IS a
+        JZ    s9                   ; register-against-constant compare, which is
+        LDI   A, 0                 ; what SUB with an immediate is FOR -- the
+        STM   10, A                ; opposite mistake to s8's, and the two
+        JMP   main                 ; together are the whole hazard
+s9:     LDI   A, 0xA5
+        STM   15, A
+        JMP   park
+park:   JMP   park
+
+; ===========================================================================
+; bit_loop: one mode-3 bit cell, full duplex.
+;
+; ENTERED AND LEFT WITH SCL HIGH. On entry dmem[8] holds the byte to shift
+; out (and is irrelevant on a receive-only pass), dmem[10] holds the bit
+; count, dmem[11] is the receive accumulator and dmem[12] is the state to
+; return to.
+;
+; MOSI is launched while SCL is HIGH, SCL then falls, and the sample happens
+; after the rise. Both directions use the same three edges; the ORDER is the
+; only difference from mode 0, and it is the difference the whole program is
+; about.
+; ===========================================================================
+bit_loop:
+        LDM   A, 10
+        JZ    bl_done
+        ; ---- 1. launch MOSI (mode 3 changes data on the falling edge) ---
+        LDM   A, 8
+        AND   A, 0x80              ; the MSB is the bit to send
+        JZ    bl_mosi0
+        IN    A, PIN
+        OR    A, 2                 ; MOSI high
+        JMP   bl_mosi
+bl_mosi0:
+        IN    A, PIN
+        AND   A, 0xFD              ; MOSI low
+bl_mosi:
+        OUT   TXPIN, A
+        LDM   A, 8                 ; shift the working copy left (A = 2A)
+        MOV   X, A
+        ADD   A, X
+        STM   8, A
+        ; ---- 2. SCL FALLS: the slave may now change MISO ---------------
+        IN    A, PIN
+        AND   A, 0xFE
+        OUT   TXPIN, A
+        ; ---- 3. half a period -------------------------------------------
+        ; The snapshot lives in X, not in dmem: `SUB A, X` leaves X alone, so
+        ; the loop is three instructions and dmem[0] stays free for the word.
+        IN    A, TIMER
+        MOV   X, A
+bl_w:   IN    A, TIMER
+        SUB   A, X
+        JZ    bl_w
+        ; ---- 4. SCL RISES: the slave captures MOSI, we capture MISO ----
+        IN    A, PIN
+        OR    A, 1
+        OUT   TXPIN, A
+        IN    A, PIN
+        AND   A, 8                 ; MISO, sampled on the rising edge
+        JZ    bl_miso0
+        LDM   A, 11
+        MOV   X, A
+        ADD   A, X                 ; acc <<= 1
+        OR    A, 1                 ; ... and the new bit arrives at bit 0
+        STM   11, A
+        JMP   bl_next
+bl_miso0:
+        LDM   A, 11
+        MOV   X, A
+        ADD   A, X                 ; acc <<= 1, and insert a 0
+        STM   11, A
+bl_next:
+        LDM   A, 10
+        SUB   A, 1
+        STM   10, A
+        JNZ   bit_loop
+bl_done:
+        LDM   A, 12
+        STM   10, A                ; the caller's return state
+        JMP   main
+
+; ===========================================================================
+; fold_byte: fold dmem[13] into the CRC register dmem[14], then repeat until
+; dmem[3] bytes have been folded. On the first entry dmem[13] already holds
+; the first byte; the remaining bytes come from dmem[0] (the word's low byte),
+; which is why that slot is kept intact.
+;
+; The step is the textbook MSB-first bit-serial update:
+;
+;     crc := crc ^ byte
+;     repeat 8:  crc := (crc & 0x80) ? (crc<<1) ^ 0x07 : (crc<<1)
+;
+; Both the XOR and the reduction are the (A|P) - (A&P) identity from the
+; header. dmem[10] is free to be the bit counter here because the bit loop
+; that also used it has already returned; dmem[15] carries the caller's
+; continuation, because the ISA has no CALL; dmem[2] parks the high term of
+; the reduction, because three registers cannot hold the two live terms AND
+; the other operand of both.
+;
+; THREE REGISTERS IS ONE SHORT, AND THE MISSING INSTRUCTION IS INVISIBLE IF
+; YOU DO NOT COUNT. The reduction was first written as
+;
+;     A = V ; A = A | P ; Y = A ; A = A & P ; X = A ; A = Y ; A = A - X
+;
+; which looks right and computes (V|P) & P -- and P is a SUBSET of V|P, so
+; that term is not V&P at all, it is P, every single time. The fold then
+; returned a CRC that was right for the first few bytes and wrong after that,
+; which is the worst shape a bug can have: a firmware that checks its own
+; output against itself looks fine. Parking the high term in dmem[2] for the
+; two instructions between the OR and the SUB is what makes it the intended
+; identity. (The XOR at the top of fold_byte does NOT need the park, because
+; there crc is the ALU's second operand in both terms and the OTHER value is
+; what moves through A -- which is exactly the asymmetry that hid this.)
+;
+; dmem[3] is the BYTE counter. Its permanent role is "the CRC-8 the firmware
+; computed for the response", written at state 8 -- which is after every fold
+; in the frame. So the reuse is invisible in the value the testbench reads,
+; and the alternative was a seventeenth data slot.
+; ===========================================================================
+fold_byte:
+        ; ---- crc := crc ^ byte, via (A|P) - (A&P) ----------------------
+        LDM   A, 14
+        MOV   X, A                 ; X = crc; neither OR nor AND moves X
+        LDM   A, 13
+        OR    A, X                 ; A = byte | crc
+        MOV   Y, A                 ; Y = byte | crc
+        LDM   A, 13                ; the byte is re-read rather than kept in a
+        AND   A, X                 ; third register: only A, X and Y exist, and
+        MOV   X, A                 ; two of the three live values are needed
+        MOV   A, Y                 ; simultaneously for the subtraction
+        SUB   A, X                 ; (byte|crc) - (byte&crc) == crc ^ byte
+        STM   14, A
+        LDI   A, 8
+        STM   10, A                ; ... and dmem[10] becomes the BIT counter
+fb_step:
+        LDM   A, 14
+        AND   A, 0x80              ; was a 1 shifted out?
+        JZ    fb_shift
+        LDM   A, 14
+        MOV   X, A
+        ADD   A, X                 ; V = crc << 1, the top bit dropped
+        MOV   Y, A                 ; Y = V: LDI only writes A, so V needs a
+        LDI   A, 0x07              ; home before the polynomial goes in X
+        MOV   X, A                 ; X = the polynomial
+        MOV   A, Y                 ; A = V
+        OR    A, X                 ; A = V | 0x07
+        STM   2, A                 ; the high term, parked: THREE REGISTERS
+        MOV   A, Y                 ; ARE NOT ENOUGH WITHOUT IT
+        AND   A, X                 ; A = V & 0x07
+        MOV   X, A                 ; X = the low term
+        LDM   A, 2
+        SUB   A, X                 ; (V|7) - (V&7) == V ^ 7
+        STM   14, A
+        JMP   fb_next
+fb_shift:
+        LDM   A, 14
+        MOV   X, A
+        ADD   A, X                 ; no reduction: a plain 8-bit shift left
+        STM   14, A
+fb_next:
+        LDM   A, 10
+        SUB   A, 1
+        STM   10, A
+        JNZ   fb_step
+        ; ---- another byte to fold? -------------------------------------
+        LDM   A, 3                 ; the fold's byte counter
+        SUB   A, 1
+        STM   3, A
+        JZ    fb_end
+        LDM   A, 0                 ; the word's LOW byte, still intact
+        STM   13, A
+        JMP   fold_byte
+fb_end:
+        LDM   A, 15                ; the caller's continuation
+        STM   10, A
+        JMP   main

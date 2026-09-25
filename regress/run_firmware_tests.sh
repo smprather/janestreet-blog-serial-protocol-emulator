@@ -142,6 +142,27 @@ for prog in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe; do
   pass=$((pass+1))
 done
 
+# The three advanced BUS protocols' firmwares. Each is the DUT of one of the
+# SoC testbenches in run_all.sh, which $readmemh's its hex, so a stale image
+# would be a silent pass on the integration it configures:
+#
+#   i2c_adv    a combined-format transaction whose read burst is three bytes
+#              long and whose slave may own SCL
+#   spi_mode3  mode 3 (CPOL=1/CPHA=1) with a CRC-8 per word, computed in
+#              software in an ISA whose ALU has no XOR
+#   uart_flow  RTS/CTS flow control, where the claim is about the TX pin
+#              rather than about a counter
+for prog in i2c_adv spi_mode3 uart_flow; do
+  if ! $PY tools/fw/peasm.py "firmware/$prog.pe" -o "firmware/$prog.hex" >/dev/null 2>&1; then
+    echo "assemble $prog FAIL"
+    $PY tools/fw/peasm.py "firmware/$prog.pe" 2>&1 | head -3 | sed 's/^/    /'
+    exit 1
+  fi
+  printf '%-34s PASS (%s words)\n' "assemble $prog" \
+    "$(grep -c . "firmware/$prog.hex")"
+  pass=$((pass+1))
+done
+
 # 2. single byte
 run_case "emulate: one byte" \
   $PY tools/fw/peemu.py firmware/uart_echo.hex --send 41 --max-cycles 900000
