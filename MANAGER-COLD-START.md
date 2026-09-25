@@ -98,6 +98,18 @@ worker; this file is the manager's restart prompt.
   the ongoing hunt for the runaway python3's identity (both OOM windows had
   GUI-bridge test activity; unconfirmed). Mapped/simulation evidence only —
   never run physical flow, DRC or LVS.
+- **Parallel fleet (user, 2026-09-25: "spin up as many parallel workers as you
+  need").** Independent blocks run in ISOLATED GIT WORKTREES, one worker per
+  branch (never more than one editor per file): `pw-fw-timing`
+  (fw-timing-protocols: timing protocols), `pw-fw-bus` (fw-bus-protocols: bus
+  transactions), plus `pi-protocol-worker` (chip RTL) and `pi-gui-worker`
+  (host). Per-worktree run/formal locks; all workers append to the MAIN
+  worktree `WORKLOG.md`; worker interrupt files: `/tmp/pi-worker-interrupt`,
+  `/tmp/pi-gui-worker-interrupt`, `/tmp/pi-fw-timing-interrupt`,
+  `/tmp/pi-fw-bus-interrupt` (plus `/tmp/pi-mem-interrupt`,
+  `/tmp/pi-manager-interrupt`). Workers commit to their own branches; the
+  manager merges with keep-both discipline. Each /new: set the model
+  (openrouter/stealth/space-bunny-alpha) and verify the status line.
 - **Worker model policy (user, 2026-09-25): the workers' model is
   `stealth/space-bunny-alpha`.** Set it at every `/new` (right after reset)
   and verify it on the pane's status line — after a reset, a worker must
