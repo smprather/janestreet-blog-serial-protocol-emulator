@@ -56,6 +56,79 @@ frame in the demos is checked against.
    wire bits). Firmware programs drive both (`eth_arp_echo`, `eth_tx_two`, a
    wrap probe and a busy probe).
 
+## The three timing acts — where the waveform IS the specification
+
+The four protocols above all have something to decode: a start bit, a clock edge, an
+ACK. Get a bit slightly wrong and the peer resynchronises. The three acts below
+are the opposite, and they are why this project can claim *cycle* accuracy
+rather than merely "works on the bench": **there is no clock on the wire, the
+value is a pulse width, and a firmware that is one clock out is wrong.**
+
+They are also the cheapest thing to demonstrate live, because each is a `.pe`
+file and a testbench, and each testbench prints its measurements.
+
+**5. WS2812 — 800 kHz one-wire, GRB, 24 bits, cycle-exact.**
+`firmware/ws2812.pe` (129 words) drives a strip on pin 6. 1.25 µs per cell is
+**exactly 75 clocks** at 60 MHz, with no remainder, and the bit cell is
+straight-line code — so the period is the *length of the program*, not a count
+calibrated against a tick. `tb_pe_soc_ws2812` measures on the pads: every 1-cell
+high for **exactly 48 clocks (800.0 ns, the datasheet's nominal tHIGH1)**, every
+0-cell for exactly 0, the 24 cells spanning exactly 24 × 75 clocks, and every
+1-cell's rising edge on the 75-cycle grid. It runs the strip twice, so the >50 µs
+reset *between* frames is measured too (62.3 µs measured).
+
+> The grid check is the one that earns the word "cycle-accurate". A cell that was
+> 74 or 76 clocks still clears every datasheet window in the world — it is still
+> 1.23 µs — and a decoder that resynchronises on every rising edge would never
+> notice. The mutation suite includes exactly that mutant, and the TB catches it.
+
+**6. Servo PWM — 50 Hz, 1–2 ms, five positions.**
+`firmware/servo_sweep.pe` (84 words) sweeps 1000, 1500, 1750, 1250 and 2000 µs.
+Each position carries **its own gap, chosen as 20 ms − its own pulse**, so the
+frame is a *slot* and the rise-to-rise is 20 ms whatever the pulse is. Measured:
+**19 999.95 µs = 50.000 Hz**, and the five widths land within 0.15 µs of nominal.
+The order is deliberately not monotonic, so a firmware that emitted the right
+widths in the wrong order fails.
+
+> The two full 20 ms slots are what the 50 Hz claim rests on; the last three
+> positions use a 2.5 ms gap. That trade is stated in the firmware header and the
+> TB prints the short gaps rather than hiding them.
+
+**7. DHT11 — a start signal and a 40-bit timed read.**
+`firmware/dht11_read.pe` (134 words) drives the 18 ms start signal, the 30 µs
+host-high window, then releases the line and **reads 40 bits whose value is a
+pulse width** (26–28 µs high = 0, 70 µs = 1). `tb_pe_soc_dht11` models a sensor
+driven at the **worst case of each window** and checks the sample margin on both
+sides: **17.0 µs past the longest 0-release, 25.0 µs before the 1-release ends**.
+
+> The host **synchronises on the data line's edges** rather than counting
+> milliseconds per bit, because the sensor's 0-bit is 76–78 µs long and a
+> fixed-wait host drifts 40 µs over twenty zero bits — three times the margin.
+> That is the single most useful thing this act demonstrates, and it is a
+> firmware property, not a hardware one.
+
+### What the three acts cost, and what they prove about the claim
+
+| | WS2812 | Servo | DHT11 |
+|---|---|---|---|
+| firmware | 129 words | 84 words | 134 words |
+| simulated time | 65 µs | **52.5 ms** | **22 ms** |
+| regression time | 0.4 s | **66 s** | 29 s |
+| the number that is the claim | 48 clocks, exactly | 20 ms, ±0.005 µs | 17/25 µs of margin |
+| mutants caught | 5/5 | 4/4 | 5/5 |
+
+`regress/mutate_timing_tb.sh` runs those 14 firmware mutants in parallel on
+private copies and then verifies the tree was never written to. It exists because
+the DUT of these three is partly a *program*: nothing in `rtl/` can notice that a
+cell is one clock short.
+
+**The honest cost:** the servo and DHT11 testbenches simulate milliseconds, so
+the full regression's wall time goes from about a minute to about three. The
+frame rate is measured on two slots rather than five, and the three TBs dump a
+narrow set of signals instead of everything, for exactly that reason. The
+alternative — a fast regression that does not measure milliseconds — cannot make
+the claim at all.
+
 ## How the host controller fits in the demo
 
 The GUI is not a mock: it speaks the real wire protocol to the real bridge.

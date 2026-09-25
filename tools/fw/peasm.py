@@ -129,6 +129,42 @@ CONSTS: dict[str, int] = {
     #
     # Period = 13 ticks + instruction overhead = 13.03 us = 76.7 kHz, against
     # the 100 kHz standard-mode ceiling.
+    #
+    # ---------------------------------------------------------------------
+    # THE TIMING-PROTOCOL CONSTANTS (WS2812, servo, DHT11).
+    #
+    # These three protocols are the project's TIMING acts: protocols where the
+    # waveform IS the specification, and where a firmware that is "nearly
+    # right" is wrong. That is the whole reason they live next to the I2C
+    # constants rather than in a separate file -- the I2C numbers are also
+    # timing numbers, and the reason a delay cannot be built out of a 1 us tick
+    # (the phase residual is up to a full tick, which is 80% of a WS2812 bit
+    # cell) is a property of the TICK, not of either protocol.
+    #
+    # WS2812: one-wire NRZ at 800 kHz. 1.25 us per cell, and 1.25 us at 60 MHz
+    # is 75 clocks with NO REMAINDER -- which is why this cell length was
+    # chosen. The bit cell is straight-line code, not a delay loop, so its
+    # period is the length of the code and is exact by construction. The
+    # counters here are for the RESET only (>50 us of low), which does not need
+    # cycle-exactness and would cost 3,600 words of NOPs to express.
+    "LED_DIN": 0x40,   # bit 6: the strip's data pin (0-5 taken, 7 is the DRU)
+    "WS_RST1": 10,     # (10-1)*(4*99+7)+4 = 3,631 clocks = 60.5 us of low
+    "WS_RST2": 99,     # see firmware/ws2812.pe: the inner counter is RELOADED
+    #
+    # Servo PWM: 50 Hz frame, 1.0-2.0 ms pulse. The frame period is the sum of
+    # the pulse and the gap, so each sweep position carries its OWN gap and the
+    # rise-to-rise interval is 20 ms whatever the pulse width is -- which is
+    # the property a real servo needs (position is set by the pulse, not by
+    # where it sits in the frame). See the delay-lattice derivation in
+    # firmware/servo_sweep.pe before changing a number here.
+    "SRV_DATA": 0x40,  # the servo's signal pin, same unclaimed pad as LED_DIN
+    #
+    # DHT11: start signal plus a 40-bit timed read. The host start is >=18 ms of
+    # low, then 20-40 us of high, then RELEASE. The 40 bits are each ~50 us of
+    # low followed by 26-28 us of high (a 0) or ~70 us of high (a 1), and the
+    # host samples once per bit, so the discrimination margin is the distance
+    # from the sample instant to those two windows -- 12 us and 30 us here.
+    "DHT_DATA": 0x40,  # the sensor's single data wire
 }
 
 
@@ -356,9 +392,7 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
             elif kind == "stm_arg":
                 # STM addr8, A
                 toks = [t.strip() for t in ops.split(",")]
-                if len(toks) == 2 and toks[1].upper() == "A":
-                    imm = toks[0]
-                elif len(toks) == 1:
+                if (len(toks) == 2 and toks[1].upper() == "A") or len(toks) == 1:
                     imm = toks[0]
                 else:
                     raise AsmError(f"STM form is 'STM addr8, A' (got {ops!r})")

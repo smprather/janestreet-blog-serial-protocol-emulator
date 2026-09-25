@@ -1,3 +1,38 @@
+> **Three TIMING protocols as firmware, TBs and demo acts (2026-09-25,
+> branch `fw-timing-protocols`).** WS2812 800 kHz one-wire (`ws2812.pe`, 129
+> words), servo PWM 50 Hz 1-2 ms (`servo_sweep.pe`, 84), DHT11 start signal +
+> 40-bit timed read (`dht11_read.pe`, 134) — all on pin 6, all as new demo acts
+> in `docs/demo-walkthrough.md`. These are the protocols where **the waveform IS
+> the specification**: nothing on the wire gives a receiver a clock, so the value
+> is a pulse width and a program one clock out is wrong. Measured on the pads:
+> every WS2812 1-cell high for **exactly 48 clocks** (800.0 ns, the datasheet
+> nominal) with all 24 cells on the 75-cycle grid and a 62.3 us between-frame
+> reset; the servo frame period **19 999.95 us = 50.000 Hz** with five widths
+> within 0.15 us of nominal; the DHT11 sample margin **17.0 us past the longest
+> 0-release and 25.0 us before the 1-release ends**, against a sensor model
+> driven at the worst case of each window. The timing is exact because the core
+> is single-cycle and every timed interval is straight-line code or a
+> fixed-cost loop — the 1 us tick's phase residual is up to a full microsecond,
+> which is 80% of a WS2812 bit cell. `regress/mutate_timing_tb.sh`:
+> **14 firmware mutants, 14 detected, 0 survived**, run in parallel on private
+> copies with the tree `cmp`-verified untouched. **Cost, stated:** the servo and
+> DHT11 TBs simulate 52.5 ms and 22 ms (66 s and 29 s), moving the regression
+> from about a minute to about three; mitigated by measuring the frame rate on
+> two slots rather than five, narrow VCD scopes, and edge-triggered recorders.
+> Four new `CONSTS` in `tools/fw/peasm.py`. Fourteen defects were found and
+> fixed on the way — eight in the firmware, **five in the testbenches** (a
+> two-`always`-block race on the cycle counter that turned 75 clocks into
+> alternating 74/76; a 32-bit overflow in the reset threshold; frame anchors
+> taken from cell 3; a window measured where nothing moves; a read recorder
+> filtering on the wrong side of a gap) and one in the harness conventions
+> (`run` raised at a clock edge silently drops the first instruction, which cost
+> the servo firmware its first pulse-table entry). All recorded in
+> `reviews/2026-09-25/TIMING-PROTOCOLS-REVIEW.md`. **REGRESSION ON THIS BRANCH:
+> RTL 34/37 — the three failures (`tb_pe_soc_eth`, `tb_pe_soc_eth_loop`,
+> `tb_pe_eth_mac`) are PRE-EXISTING at this branch's base commit ecb2b13, proven
+> by running them from a pristine `git archive HEAD` checkout; they are not
+> caused by this work and need a rebase onto main before the merge.**
+
 # Project Status — through 10BASE-T receive
 
 > **PE host bus R2 — read ops landed; conformance pending the model image

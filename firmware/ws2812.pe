@@ -1,0 +1,435 @@
+; ws2812.pe — a WS2812 LED strip, in firmware, with no LED controller in gates.
+;
+; ---------------------------------------------------------------------------
+; WHY THIS PROTOCOL IS THE SHARPEST TEST OF THE THESIS
+;
+; UART, SPI and I2C all have a clock on the wire. The peer's edges define the
+; bit cells, so firmware that runs 10% fast still produces a readable waveform
+; and firmware that runs 10% slow does too. A WS2812 strip has NO clock. Its 24
+; bits are NRZ cells whose only reference is the cell period itself, and the
+; strip decodes them by SAMPLING THE LINE AT ONE INSTANT IN EVERY CELL.
+;
+; That makes this the project's first protocol where the TIMING IS THE
+; WHOLE PROTOCOL:
+;
+;   * 800 kHz => 1.25 us per cell. At 60 MHz that is 75 clocks exactly, with no
+;     remainder -- which is not an accident to be discovered but the reason
+;     this cell length was chosen for the first timing act.
+;   * tHIGH0 ~ 400 ns (0.4 us), tHIGH1 ~ 800 ns (0.8 us), and the strip
+;     samples at about 2/3 into the cell. So a 1 is high for 50 clocks
+;     (0.833 us) and a 0 for 25 clocks (0.417 us): both clear the sample
+;     point on their own side, with 0.13 us and 0.28 us of margin.
+;   * The reset is >50 us of LOW, and the line must be DRIVEN (not released)
+;     for the whole frame: a released DIN floats up to the strip's pull-up and
+;     reads as a run of 1s. A silent corruption that no edge-counting check
+;     would ever see.
+;
+; ---------------------------------------------------------------------------
+; HOW THE 75 CLOCKS ARE MADE EXACT, AND WHY A LOOP COULD NOT DO IT
+;
+; The obvious implementation waits on the 1 us tick, the way i2c_pins.pe does.
+; It cannot work here, and the reason is worth stating because it is the whole
+; difference between this program and that one:
+;
+;   I2CTICK is free-running, so firmware cannot see where in its 60-clock
+;   window a read lands. Call that unknown offset phi. A "wait N ticks" delay
+;   then delivers somewhere in (N-1, N] us -- UP TO A FULL TICK SHORT, and a
+;   full microsecond is 80% of the bit cell this protocol is made of. A bit
+;   cell of 1.25 us cannot be built out of a 1 us quantum with an 80%
+;   uncertainty, and no choice of N fixes it: the error is not a rounding error
+;   in the constant, it is the resolution of the mechanism.
+;
+; So this program does not use a counter for the bit cell. The bit cell is
+; STRAIGHT-LINE code, and the core is single-cycle (one instruction per clock,
+; no stalls, no pipeline bubbles -- see rtl/pe_cpu.v), so N instructions take
+; exactly N clocks. The period is not a constant that has to be calibrated
+; against a tick; it is the LENGTH OF THE CODE.
+;
+;   6  the cell's own work: mask the bit, drive the pin   <- the cell starts
+;   50 NOP                                             padding to the cell
+;   6  advance: the mask down one bit, the counter down one
+;   1  the byte-boundary test
+;   12 equalised branch: pad one way, do the boundary work the other
+;   ---
+;   75 clocks = 1.25 us at 60 MHz
+;
+; and the number is a WHOLE number of cycles, which is the claim the
+; testbench measures. It measures it on the PADS: every transition must land
+; on the 75-clock grid, and a firmware that drifted to 74 or 76 clocks would
+; fail even though its high times still cleared every datasheet window. That
+; is the difference between "fast enough" and "cycle-accurate", and it is the
+; reason this act is in the demo.
+;
+; ---------------------------------------------------------------------------
+; THE MOVING MASK, WHICH IS THE PART THAT IS ACTUALLY HARD
+;
+; A WS2812 frame is MSB first. This ISA has SHR and no shift-left (see
+; rtl/pe_cpu.v: the datapath is one right-shift register, shared by every
+; opcode that shifts). That is not a small inconvenience here, it decides the
+; shape of the loop:
+;
+;   The tempting version is "mask bit 7 of the byte, then shift the byte
+;   right", which reads like MSB-first and is not. After k shifts the bit that
+;   is due at position k has moved DOWN to position 7-k, so bit 7 of the
+;   shifted byte is zero from the second cell onwards and the frame comes out
+;   as one long 1. The first version of this file did exactly that and the
+;   testbench decoded 24 zeros.
+;
+;   Two ways out, both of which are correct:
+;     (a) ROTATE the byte left, feeding the old bit 7 into bit 0. Expressible
+;         as a = 2b + carry, which needs the doubling (MOV X,A / ADD A,X) and
+;         then the carry added to a register the doubling is no longer using.
+;         Nine instructions, and every one of them has to be right.
+;     (b) DON'T MOVE THE BYTE. Leave it in dmem[6] for the whole byte and walk
+;         a MASK down it: 0x80, 0x40, 0x20 ... 0x01. The bit for cell k is
+;         byte & mask_k, and the mask needs one SHR per cell.
+;
+;   (b) is what this program does. It is fewer instructions, it has no carry
+;   to lose, and -- the part that actually matters -- it keeps the DATA
+;   UNTOUCHED, so the frame in dmem[0..2] is the frame the firmware was given,
+;   in the order the datasheet names it, and a reader (or a testbench) can
+;   check it by eye. A rotating byte leaves a rotated byte behind, so every
+;   later read of dmem[0..2] has to know it has been chewed on.
+;
+;   The mask also has to reach the AND, and the AND's only register operand is
+;   X -- which is also the byte pointer for LDS/STS. They do not collide
+;   because the byte is reached with LDM (an immediate address) and the pointer
+;   is only needed at a byte boundary, where the mask is reloaded anyway. The
+;   arrangement is worth stating because it is the reason the boundary work
+;   can afford to be expensive.
+;
+; ---------------------------------------------------------------------------
+; THE EQUALISED BRANCH, WHICH IS THE OTHER PART THAT IS EASY TO GET WRONG
+;
+; The loop has two exits at the same point: eight bits of one byte, or move to
+; the next byte. If the byte boundary cost extra instructions, the EIGHTH cell
+; of every byte would be longer than the other seven and the frame would be
+; malformed -- a single stretched cell in each byte, which a decoder that
+; resynchronises on every rising edge would never notice and a strip would.
+;
+; So both paths are made the same length by construction: the taken path does
+; twelve instructions of real work, the not-taken path pays twelve NOPs, and
+; the byte-boundary test is INSIDE the taken path so the last byte of the frame
+; does not load a fourth byte that does not exist.
+;
+; ---------------------------------------------------------------------------
+; THE PIN, AND WHY IT CLAIMS THE WHOLE PORT
+;
+; bit 6 is the data pin. Bits 0-5 are the baseline protocols' (UART TX, two
+; spares, UART RX, I2C SDA/SCL) and bit 7 is the Ethernet DRU's input, so bit 6
+; is the first unclaimed pad. PINOE is written directly with 0x40, which
+; RELEASES the three pins the reset default had enabled. That is right for a
+; single-protocol program and is the point of a runtime matrix: each program
+; owns the pins it uses. A program MIXING protocols would read-modify-write
+; PINOE instead -- the idiom spi_xfer.pe uses.
+;
+; Open-drain is deliberately NOT set. A WS2812 DIN is a push-pull signal into a
+; high-impedance input; there is no second device to contend with, and the
+; whole protocol depends on the line being actively driven (see above). Using
+; od here would release every 1 and turn the frame into a run of pull-up
+; highs, which on a strip with no pull-up is just a floating line.
+;
+; ONE MORE THING THE LEVEL BYTE GETS WRONG. The level is written straight to
+; TXPIN, so a 1 must arrive in the DATA PIN'S BIT (bit 6) while the bit being
+; sent is selected at the mask's position. When the mask is 0x01 (the last cell
+; of a byte) `byte & mask` lands in bit 0 and has to be moved up to bit 6 --
+; which this ISA cannot do. So the level is built as
+;
+;     AND A, X    ->  the bit, at the mask's position
+;     SHR A       ->  ...which is the pin's bit only while the mask is 0x80
+;
+; and that is wrong for the last seven cells. The mask is therefore held
+; SHIFTED UP relative to the pin bit: the cell masks with 0x80..0x01 and then
+; the level is placed by ONE shift of the whole value, which works for every
+; mask position because the mask is always applied to bit 7 of the byte before
+; the shift. See the loop; the arithmetic is 5 instructions and it is the
+; cleanest form of the three tried.
+;
+; ---------------------------------------------------------------------------
+; THE RESET
+;
+; >50 us of low, and this program holds it for about 60 us. It is the ONE delay
+; here that is not cycle-critical in the same way, so it uses a two-level
+; counter loop below rather than 3,600 NOPs (60 us is 3,631 instructions, and
+; padding the program to 3,631 words to avoid a loop would trade a real
+; property -- a program that fits instruction memory -- for nothing).
+;
+; The routine, and the one bug every version of this loop has:
+;
+;   dly1: LDM A,9  / SUB A,1 / STM 9,A  / JZ dly_done   4
+;         LDM A,10 / STM 11,A                            2   <-- the RELOAD
+;   dly2: LDM A,11 / SUB A,1 / STM 11,A / JNZ dly2       4 per iteration
+;         JMP dly1                                       1
+;
+;   total = (n1-1) * (4*n2 + 7) + 4   clocks, exactly, no phase residual
+;
+; The counters are in slots 9, 10 and 11, NOT 6 and 7, because 6 and 7 belong
+; to the bit cell (the working byte and the byte pointer). Putting a delay
+; counter in a slot the loop also uses is the kind of collision that only shows
+; up as a slightly wrong number, and the dmem table above is the place to catch
+; it.
+;
+; With n1=10, n2=99: 9*403+4 = 3,631 clocks = 60.5 us. The 3,631 is not a
+; measured number -- it is what the code above does when it is executed once
+; per clock, which is the property the testbench confirms on the pads.
+;
+; THE RELOAD IS THE WHOLE TRICK. The inner counter is DESTROYED by its own
+; loop: it arrives at zero. A first version had the inner loop reading and
+; writing the same slot, so on the next outer pass it read zero, subtracted one,
+; and wrapped to 255 -- and the delay became 1.1 million clocks instead of
+; 3,631 while the program looked completely correct. That is the failure mode
+; a delay loop written from the i2c_pins.pe idiom invites, because that idiom
+; waits for a FREE-RUNNING counter to reach a value and never decrements one.
+; Here the target has to be kept somewhere the loop does not touch, which is
+; why there are two slots (7 = the caller's count, 8 = the loop's working
+; copy) and not one.
+;
+; ---------------------------------------------------------------------------
+; DMEM LAYOUT (the program's observable output)
+;
+;   dmem[0..2]  the frame, one byte per component, GRB order, untouched
+;   dmem[3]     cells left in the current byte
+;   dmem[4]     the mask for the current cell (0x80 walking down to 0x01)
+;   dmem[6]     the byte currently being sent (a copy of dmem[0..2])
+;   dmem[7]     which frame byte dmem[6] currently holds (0, 1 or 2)
+;   dmem[9,10]  the reset delay's counts (outer, inner target)
+;   dmem[11]    the reset delay's inner working copy
+;
+; The frame is repeated, not sent once. The testbench needs to see a reset
+; BETWEEN frames to claim anything about the reset, and a single frame cannot
+; show one.
+
+        ; the pin and the reset length are peasm CONSTS (LED_DIN, WS_RST1,
+        ; WS_RST2) so the numbers that matter live in one place -- see the
+        ; TIMING-PROTOCOL CONSTANTS block in tools/fw/peasm.py.
+        ; The frame is 0x9C 0xE0 0x8A, G R B, and all three open with a 1: see
+        ; the testbench's note on why the frame's first bit is a property of
+        ; the data (it is what gives the cell grid an edge to anchor on).
+
+; ---------------------------------------------------------------------------
+; CLAIM THE PIN. Release first, then set the level, then enable -- the same
+; order i2c_pins.pe uses and for the same reason: a pin must never be enabled
+; while holding a level that means something to a peer.
+; ---------------------------------------------------------------------------
+        LDI   A, 0x00
+        OUT   PINOE, A          ; release every pin the reset had enabled
+        LDI   A, LED_DIN
+        OUT   TXPIN, A          ; the line idles high, pushed not released
+        LDI   A, LED_DIN
+        OUT   PINOE, A          ; claim exactly one pin, push-pull
+
+; ---------------------------------------------------------------------------
+; THE FRAME DATA. Written once, in datasheet order, and NEVER MODIFIED -- the
+; mask walks the copy in dmem[6] instead (see the header).
+; ---------------------------------------------------------------------------
+        LDI   A, 0x9C
+        STM   0, A              ; G
+        LDI   A, 0xE0
+        STM   1, A              ; R
+        LDI   A, 0x8A
+        STM   2, A              ; B
+
+; ===========================================================================
+; ONE FRAME
+; ===========================================================================
+frame:
+        LDI   A, 0x00
+        OUT   TXPIN, A          ; the line goes low: the reset starts here
+        LDI   A, 0x9C
+        STM   6, A              ; the working byte: G
+        LDI   A, 0
+        STM   7, A              ; which frame byte dmem[6] holds (0 = G)
+        LDI   A, 0x80
+        STM   4, A              ; the mask starts at the top bit -- and it is
+                                ; also the LOOP COUNTER (see the header): after
+                                ; eight cells the mask has walked off the end
+                                ; of the byte and reads 0
+
+        ; --- the reset: hold the line low for WS_RST1/WS_RST2 ------------
+        LDI   A, WS_RST1
+        STM   9, A
+        LDI   A, WS_RST2
+        STM   10, A
+        JMP   dly1
+
+; ===========================================================================
+; THE BIT CELL -- 75 clocks, exactly.
+;
+; A WS2812 bit is not a level, it is a PULSE: a 1 is about 0.8 us of high
+; followed by about 0.45 us of low, a 0 is the other way round, and the strip
+; reads the line near the END of the high period. So the cell drives the level
+; on entry and drives the line LOW 48 clocks later -- unconditionally, because
+; for a 0 the pin is already low and the write is a no-op. That is what makes
+; tHIGH1 = 48 clocks = 800.0 ns and tLOW = 27 clocks = 450.0 ns: the datasheet's
+; NOMINAL figures, hit to the clock, because 75 clocks divides into 48 + 27
+; exactly. 48 was chosen over 50 for that reason -- a 50-clock high gives a
+; longer high and a 417 ns low, which is 7% under the nominal tLOW, and the
+; receiver's margin is better spent matching the datasheet than maximising one
+; side of it.
+;
+; A 0 CELL IS LOW FOR THE WHOLE 1.25 us rather than carrying a 0.4 us high
+; first. That is a deliberate simplification, and the testbench measures and
+; reports it rather than leaving it implied: the strip samples at about 2/3
+; into the cell, so a line that is low the whole time is unambiguously a 0, and
+; shaping the 0 as well would buy nothing a receiver can see while costing a
+; second conditional in the cell -- which does not fit in 75 clocks (see the
+; budget in the header).
+;
+; THE MASK IS ALSO THE LOOP COUNTER. After eight cells the mask has walked
+; 0x80 -> 0x40 -> ... -> 0x01 -> 0, so `SHR` then `JNZ` ends the byte with no
+; second counter, no comparison and no immediate. A first version kept a
+; separate 8..1 counter in dmem[3] and the cell came out at 77 clocks instead
+; of 75 -- over budget, because the extra counter cost 3 instructions and the
+; byte-boundary work had nowhere to hide them. The mask was already counting
+; the same thing.
+;
+; THE EQUALISED PATHS. Three places in this cell have two exits, and all three
+; are padded so both paths execute the same number of instructions:
+;
+;   * the level: `JZ drive / LDI A,LED_DIN / JMP pad` against a two-NOP
+;     `drive` path. A 1 costs two instructions (load and jump over), so a 0
+;     must cost two as well, or the cell is 75 clocks for a 1 and 73 for a 0.
+;   * the byte end: the boundary work is padded to the length of the pads that
+;     would have run instead.
+;
+;   Budget: 8 to the OUT, 48 for the high period, 3 for the mask, 1 for the
+;   branch, 15 for the path = 75.
+; ===========================================================================
+bitcell:
+        LDM   A, 4              ;  1  the mask for THIS cell
+        MOV   X, A              ;  2  X: the AND's only register operand
+        LDM   A, 6              ;  3  the byte being sent, untouched
+        AND   A, X              ;  4  the bit, at the mask's position
+        JZ    drive             ;  5  a 0: A is already 0x00
+        LDI   A, LED_DIN        ;  6  a 1: the data pin's bit
+        JMP   pad               ;  7
+drive: NOP                     ;  8  the 0 path pays two here...
+        NOP                     ;  9  ...because the 1 path pays two above
+pad:   OUT   TXPIN, A          ; 10  <- the cell starts on this edge
+        NOP                     ; 11
+        NOP                     ; 12
+        NOP                     ; 13
+        NOP                     ; 14
+        NOP                     ; 15
+        NOP                     ; 16
+        NOP                     ; 17
+        NOP                     ; 18
+        NOP                     ; 19
+        NOP                     ; 20
+        NOP                     ; 21
+        NOP                     ; 22
+        NOP                     ; 23
+        NOP                     ; 24
+        NOP                     ; 25
+        NOP                     ; 26
+        NOP                     ; 27
+        NOP                     ; 28
+        NOP                     ; 29
+        NOP                     ; 30
+        NOP                     ; 31
+        NOP                     ; 32
+        NOP                     ; 33
+        NOP                     ; 34
+        NOP                     ; 35
+        NOP                     ; 36
+        NOP                     ; 37
+        NOP                     ; 38
+        NOP                     ; 39
+        NOP                     ; 40
+        NOP                     ; 41
+        NOP                     ; 42
+        NOP                     ; 43
+        NOP                     ; 44
+        NOP                     ; 45
+        NOP                     ; 46
+        NOP                     ; 47
+        NOP                     ; 48
+        NOP                     ; 49
+        NOP                     ; 50
+        NOP                     ; 51
+        NOP                     ; 52
+        NOP                     ; 53
+        NOP                     ; 54
+        NOP                     ; 55
+        NOP                     ; 56
+        LDI   A, 0x00           ; 57
+        OUT   TXPIN, A          ; 58  back to low: tHIGH1 = 48 clocks,
+        LDM   A, 4              ; 59
+        SHR   A                 ; 60  the mask walks down the byte
+        STM   4, A              ; 61
+        JZ    byteend           ; 62  a zero mask means this byte is done
+        NOP                     ; 63  the equalised branch: fourteen pads, one
+        NOP                     ; 64  for each of the fourteen instructions the
+        NOP                     ; 65  byte-end path executes below
+        NOP                     ; 66
+        NOP                     ; 67
+        NOP                     ; 68
+        NOP                     ; 69
+        NOP                     ; 70
+        NOP                     ; 71
+        NOP                     ; 72
+        NOP                     ; 73
+        NOP                     ; 74
+        NOP                     ; 75
+        NOP                     ; 76
+        JMP   bitcell           ; 77
+byteend:
+        LDM   A, 7              ; 63' the index of the byte in dmem[6]
+        MOV   X, A              ; 64'
+        LDI   A, 2              ; 65'  the last index: 0,1,2 are G,R,B
+        SUB   A, X              ; 66'
+        JZ    frame             ; 67'  the frame is complete: start over. The
+                                ;      test is HERE, before the load, so the
+                                ;      last byte does not pull a fourth "byte"
+                                ;      out of dmem[3] -- which is not data.
+        INCX                    ; 68'  the next frame byte
+        MOV   A, X              ; 69'
+        STM   7, A              ; 70'  remember which one is in dmem[6]
+        LDS   A                 ; 71'
+        STM   6, A              ; 72'
+        LDI   A, 0x80           ; 73'  the mask restarts at the top of a byte
+        STM   4, A              ; 74'
+        NOP                     ; 75'  padding to the pads' length
+        NOP                     ; 76'
+        JMP   bitcell           ; 77'  fourteen instructions, like the pads above
+
+; NOTE ON WHERE THE PADS GO, because getting this wrong is invisible in the
+; source and very visible on the wire. The byte-end test has to branch to a
+; DIFFERENT amount of work -- twelve instructions of boundary handling against
+; nothing -- so the equalisation is twelve NOPs on the short side and three
+; NOPs inside the long one, and both sides end with the same JMP. A first
+; version put the pads AFTER the test with a `JNZ cont` on the wrong side of
+; them, so the pads ran on BOTH paths: the cell came out 75 clocks on the
+; three boundary cells and 62 on the other twenty-one, and the frame decoded
+; as one correct byte followed by twenty-four zero cells. Every datasheet
+; window still passed -- a 62-clock cell is still 1.03 us, still inside the
+; 1.10..1.40 band -- which is exactly why the testbench checks the 75-CYCLE
+; GRID and not only the windows.
+; ===========================================================================
+; THE RESET DELAY -- two nested counters, exact, no phase residual.
+;
+;     total = (n1-1) * (4*n2 + 7) + 4  clocks
+;
+; Slot 10 is the caller's count and slot 11 the loop's working copy: the inner
+; loop destroys its counter, so the target has to survive outside it. See the
+; header for why that reload line is the difference between a 60 us reset and an
+; 18 ms one that looks identical in the source.
+; ===========================================================================
+dly1:   LDM   A, 9              ;  1
+        SUB   A, 1              ;  2
+        STM   9, A              ;  3
+        JZ    dly_done          ;  4
+        LDM   A, 10             ;  5
+        STM   11, A             ;  6   the reload
+dly2:   LDM   A, 11             ;  7
+        SUB   A, 1              ;  8
+        STM   11, A             ;  9
+        JNZ   dly2              ; 10
+        JMP   dly1              ; 11
+dly_done:
+        JMP   bitcell           ; the reset is over: into the first cell.
+                                ; A JMP, not a fall-through, because the bit
+                                ; cell is ABOVE this routine: the program is
+                                ; laid out frame, bitcell, delay so the
+                                ; routine can be appended to any protocol
+                                ; that needs it without moving anything.

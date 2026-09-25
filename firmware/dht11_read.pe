@@ -1,0 +1,390 @@
+; dht11_read.pe — a DHT11 temperature/humidity sensor, read by firmware.
+;
+; ---------------------------------------------------------------------------
+; WHY THIS PROTOCOL IS THE HARDEST OF THE THREE, AND WHY IT IS STILL JUST
+; TIMING
+;
+; The DHT11 has one wire, no clock and no framing to speak of. What it has is a
+; handshake in which BOTH sides decide what a bit means by how long they hold the
+; line:
+;
+;   HOST:  pull low >= 18 ms          the start signal, the sensor's reset
+;   HOST:  pull high 20-40 us         then RELEASE: the pull-up takes the line
+;   SENSOR: low 80 us, high 80 us     the acknowledgement
+;   SENSOR: 40 bits, each ~50 us low then
+;            26-28 us high = 0        the bit value IS the width
+;            70 us high   = 1
+;
+; So the host's job is: make a start signal of the right LENGTH, release at the
+; right instant, wait for an acknowledgement whose timing it must tolerate, and
+; then sample the line once per bit at an instant chosen so that a 0 and a 1 are
+; 12 us and 30 us away from it respectively. There is no other content. The
+; whole protocol is "be somewhere in time", which is why it is the sharpest of
+; the three timing acts and why a project that claims cycle accuracy should be
+; able to do it.
+;
+; The 18 ms start is also the longest single timed interval in the project --
+; 1.08 million clocks, 6.4 times the WS2812 reset and 900 times the WS2812 bit
+; cell -- so it is what forces a three-level delay routine rather than a NOP
+; sled. See the header of firmware/servo_sweep.pe: the same routine, the same
+; table-fitted constants, the same reload trap.
+;
+; ---------------------------------------------------------------------------
+; THE SAMPLE INSTANT, AND WHY THE HOST WAITS FOR AN EDGE RATHER THAN FOR A TIME
+;
+; A bit is: the sensor pulls the line LOW for 50 us, then RELEASES it, and the
+; release lasts 26-28 us for a 0 and about 70 us for a 1. The host therefore
+; cannot sample inside the release -- a line high 20 us into the release is a 0
+; AND a 1 -- so it samples AFTER a 0's release has ended:
+;
+;   0:  ...50 us low, release 26-28 us, then the NEXT bit pulls it low again
+;   1:  ...50 us low, release 70 us
+;
+; The two differ, and the sample has to be in the gap: after 28 us and before
+; 70 us, i.e. roughly 45 us after the line went high. That is 17 us of margin
+; on the 0 side and 25 us on the 1 side, and it is the only place in this program
+; where a timing number has to be aimed rather than merely satisfied.
+;
+; BUT THE SENSOR'S BIT PERIOD IS NOT FIXED, AND THAT IS THE REAL LESSON
+;
+;   a 0-bit is 50 + 26..28 = 76..78 us and a 1-bit is 50 + 70 = 120 us. A host
+;   that waited a fixed time per bit, computed from the previous bit's value,
+;   would track the sensor exactly for a while and then drift: at the 2 us spread
+;   of the 0-bit, twenty zero bits is 40 us of slip, which is three times the
+;   margin. (That was this program's first design, and it decoded the nominal
+;   frame perfectly while failing as soon as the sensor was modelled at the
+;   SHORT end of its own 0-bit window -- which is a sensor inside its
+;   specification and the firmware outside its own.)
+;
+; So the host SYNCHRONISES on the line instead of counting:
+;
+;   1. wait for the line to go LOW   (the next bit's 50 us prefix)
+;   2. wait for the line to go HIGH  (the release: the bit's value window)
+;   3. wait 45 us
+;   4. sample once
+;
+; Both waits are spin loops on the pin, which is the one thing the pin matrix is
+; FOR: `IN A, PIN` reads the pad, and a released pin reads the pad rather than
+; the output register (see the matrix's read-port note in rtl/pe_pinmux.v). The
+; loops poll every three instructions, so an edge is caught within 50 ns against
+; a 26 us window -- four thousand times finer than anything here needs to be.
+;
+; The result is that the 26-28 and 70 us figures enter the firmware ONCE, as the
+; 45 us, and the sensor's tolerance stops being the firmware's problem. That is
+; the whole difference between a bit-banger that works on the bench and one that
+; works on a shelf.
+;
+; The 18 ms start and the 30 us host window are still timed, not synchronised:
+; nothing on the wire says when they are over, so they are the delay routine's
+; job. The acknowledge (80 us low, 80 us high) is skipped by falling into the
+; same edge-wait loop: the first round through it waits out the acknowledge and
+; the second one is bit 0.
+;
+; THE SAMPLE BIT, AND THE INSTRUCTION THAT PUTS IT WHERE THE BYTE NEEDS IT
+;
+; The data line is pin 6, so `IN A, PIN` masked with the pin's bit leaves the
+; sample in bit 6. A DHT11 byte is MSB first, and the byte is built by shifting
+; the accumulator right and dropping the new bit in at the top -- so the sample
+; has to arrive in bit 7. There is no shift-LEFT in this ISA, so it is doubled
+; instead:
+;
+;     IN  A, PIN
+;     AND A, DHT        ; 0x00 or 0x40
+;     MOV X, A
+;     ADD A, X          ; 0x00 or 0x80  <- the doubling, 2 instructions
+;
+; `MOV X,A` followed by `ADD A,X` is the only shift-left this machine has, it
+; is exact for a single bit because 0x40 + 0x40 = 0x80 does not carry out of
+; the byte, and it is the same pair the accumulator update then reuses. The
+; alternative -- using pin 7, where the sample already lands in bit 7 -- was
+; rejected: bit 7 is the Ethernet DRU's input and a program that claims it
+; silently takes a documented pad away from a documented protocol.
+;
+; ---------------------------------------------------------------------------
+; THE START SIGNAL, AND WHY THE HOST PULLS HIGH BEFORE RELEASING
+;
+; The sequence is: low for 18 ms, then HIGH for 20-40 us, then release. The
+; middle step is not optional and not cosmetic. The DHT11 is a single-wire device
+; that pulls its line LOW to answer, so the host cannot simply stop driving and
+; let the pull-up win -- the sensor would see a line that never went high and
+; would not start converting. Pulling it high for 30 us guarantees the sensor
+; sees a clean high-to-low transition to answer with, and only then does the host
+; become a reader.
+;
+; It is also the one place where this program drives the line high push-pull
+; into a device that may pull it low, which is safe only because the host has
+; already stopped driving by the time the sensor answers. The open-drain bit is
+; deliberately NOT set: a DHT11 line is a single-wire signal with a pull-up, and
+; the 30 us high here is a driven high, not a release.
+;
+; ---------------------------------------------------------------------------
+; THE DELAY ROUTINE, AND THE TWO (n2, n3) PAIRS
+;
+; The routine is the one from firmware/servo_sweep.pe, unchanged:
+;
+;   total(n1,n2,n3) = (n1-1) * (10 + (n2-1) * (4*n3 + 7)) + 4   clocks
+;
+; and the reload lines in it are the same trap: both inner counters are burned
+; down to zero by their own loops, so the caller's count is copied into a
+; working slot at the top of every pass.
+;
+; Two (n2,n3) pairs are used, and the reason is the 34,000-to-1 ratio between
+; the shortest and longest delay here (30 us against 1.08 million clocks):
+;
+;   long  (n2,n3) = (6,255):  one outer step is 5145 clocks = 85.8 us
+;                      the 18 ms start, one step of 85.8 us out of 18 ms
+;short (n2,n3) = (2,20):   one outer step is 91 clocks = 1.5 us
+;the 30 us, 90 us and 250 us delays
+;
+; A single pair cannot do both: with the fine step the 18 ms start would need
+; an outer counter of 11,900, and with the coarse step the 30 us window could
+; not be aimed at (the DHT11's host-high window is 20-40 us, so 20.7 us would be
+; inside it and 34 us would be outside it). Two pairs, chosen so each phase is
+; aimed rather than merely inside its window.
+;
+; ---------------------------------------------------------------------------
+; DMEM LAYOUT
+;
+;   dmem[0..4]  the 40 bits: humidity, temperature, and the checksum byte
+;   dmem[5]     the bits left in the current byte
+;   dmem[6]     the byte accumulator being shifted in
+;   dmem[7]     which phase the delay is returning to
+;   dmem[8]     the bytes left to receive
+;   dmem[11]    the index of the byte being received
+;   dmem[9]     the delay's outer counter
+;   dmem[10]    the middle counter's target
+;   dmem[12]    the middle counter, the loop's working copy
+;   dmem[11]    the inner counter's target
+;   dmem[14]    the inner counter, the loop's working copy
+;   dmem[15]    1 when all 40 bits are in, 0 while reading -- the program's
+;               observable output, so a testbench can tell "hung mid-byte" from
+;               "finished"
+;
+; The five delay slots are 9, 10, 11, 12, 14 -- NOT 9-13, because 15 is the
+; observable. The first draft of this file used 9-13 for the delay and 15 for the
+; flag, and the inner working copy sat on top of the flag: the delay burned it to
+; zero on every call, so a finished read reported 0. It is the sort of collision
+; that a dmem table in the header exists to catch, and the reason the table
+; lists the working copies as 12 and 14 rather than as a tidy 9-13.
+;
+; ---------------------------------------------------------------------------
+; LIMITS, STATED
+;
+;   * ONE READ, then the program parks. A real driver loops; this one reads once
+;     and stops, because the DHT11 needs about a SECOND between conversions and
+;     a looping program would be indistinguishable from a stuck one at this
+;     simulation's timescale. The loop version is the same code with a jump back
+;     to `start`.
+;   * No CRC beyond the sensor's own byte sum. The DHT11 has an 8-bit checksum
+;     (the low byte of the sum of the first four) and this program RECORDS it in
+;     dmem[4] rather than checking it, because a program that silently drops a
+;     bad frame is a program whose failure is invisible. The testbench checks
+;     the sum.
+;   * The 26-28 us and 70 us figures are the sensor's, and a real DHT11 is loose
+;     about them. The testbench models the WORST case of each, so the margin
+;     this measures is the margin against a sensor at the edge of its own
+;     specification.
+
+; The data line is pin 6, the first unclaimed pad: bits 0-5 belong to the
+; baseline protocols and bit 7 to the Ethernet DRU. Every call site loads its own
+; three counters, because the delay routine burns them -- there is no table to
+; keep, and a table would be one more thing to fall out of step.
+
+; ---------------------------------------------------------------------------
+; CLAIM THE PIN and park the line low: the DHT11's idle state is the pull-up,
+; so the line is released until the start signal drives it down.
+; ---------------------------------------------------------------------------
+        LDI   A, 0x00
+        OUT   PINOE, A          ; release every pin the reset had enabled
+        LDI   A, DHT_DATA
+        OUT   TXPIN, A
+        LDI   A, DHT_DATA
+        OUT   PINOE, A          ; claim exactly one pin, push-pull
+
+; ===========================================================================
+; THE START SIGNAL
+; ===========================================================================
+start:  LDI   A, 0
+        STM   0, A              ; the five data bytes, cleared
+        STM   1, A
+        STM   2, A
+        STM   3, A
+        STM   4, A
+        STM   6, A
+        STM   15, A             ; 0: not all 40 bits in yet
+        LDI   A, 8
+        STM   5, A              ; eight bits in this byte
+        LDI   A, 5
+        STM   8, A              ; the bytes left to receive
+        LDI   A, 0
+        STM   11, A             ; the byte index -- IN dmem, and the reason is
+                                ; the accumulate below needs X as scratch (see
+                                ; the header: X is the long-lived index and
+                                ; using it as a temporary loses the pointer)
+
+        LDI   A, 0x00
+        OUT   TXPIN, A          ; THE START SIGNAL: the line goes low here
+        LDI   A, 0
+        STM   7, A              ; the delay returns to phase 0
+        LDI   A, 212
+        STM   9, A              ; the long (6,255) counts, 18 ms
+        LDI   A, 6
+        STM   10, A
+        LDI   A, 255
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 0: the line has been low for 18 ms ----
+ph0:    LDI   A, DHT_DATA
+        OUT   TXPIN, A          ; pull HIGH for the host window
+        LDI   A, 1
+        STM   7, A              ; the delay returns to phase 1
+        LDI   A, 45
+        STM   9, A              ; the fine (2,6) counts, 30 us
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 6
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 1: the 30 us window is over, so RELEASE ----
+ph1:    LDI   A, 0x00
+        OUT   PINOE, A          ; the pull-up owns the line: the sensor may
+                                ; now pull it low to acknowledge
+        LDI   A, 2
+        STM   7, A              ; the delay returns to phase 2
+        LDI   A, 250
+        STM   9, A              ; the fine (2,6) counts, a coarse 170 us:
+        LDI   A, 2              ; enough to clear the 160 us acknowledge, and
+        STM   10, A             ; the edge waits below correct the rest
+        LDI   A, 6
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 2: the acknowledge is in flight; line up on the first bit ----
+;
+; The 170 us below is a COARSE aim, not a deadline: the edge waits that follow
+; correct it. It only has to be late enough not to be fooled by the
+; acknowledge's 80 us of high, and early enough to still be inside bit 0's low
+; prefix (or, if it is not, the first spin loop simply waits for it).
+ph2:    LDI   A, 3
+        STM   7, A              ; from here on the delay returns to phase 4
+        JMP   ph3               ; ...and the first round of the edge waits below
+                                ; is spent on the acknowledge
+
+; ---- phase 3: wait for an edge, then wait 45 us into the release ----
+ph3:    ; 1. wait for the line to go LOW: the next bit's 50 us prefix
+w_lo:   IN    A, PIN
+        AND   A, DHT_DATA
+        JNZ   w_lo              ; already low (a 0 sampled late) passes at once
+        ; 2. wait for the line to go HIGH: the release, which is the bit's
+        ;    value window -- 26-28 us for a 0 and about 70 us for a 1
+w_hi:   IN    A, PIN
+        AND   A, DHT_DATA
+        JZ    w_hi
+        LDI   A, 4
+        STM   7, A              ; the delay returns to phase 4
+        LDI   A, 67             ; 45 us into the release: 17 us of margin on
+        STM   9, A              ; the 0 side and 25 us on the 1 side
+        LDI   A, 2
+        STM   10, A             ; the fine (2,6) counts: one outer step is
+        LDI   A, 6              ; 41 clocks = 0.68 us
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 4: SAMPLE ONCE, into the accumulator ----
+;
+; The accumulator shifts LEFT and the new bit arrives at bit 0, and the two
+; cases are written out rather than folded together because folding them needs
+; the sample in A and the accumulator in X at the same time and the sample
+; arrives in A. The branch costs four instructions on a path whose timing
+; property is the delay above, not this.
+;
+; AND THE ACCUMULATE USES X AS SCRATCH, WHICH THE ISA'S OWN HEADER SAYS NOT TO
+; DO: "X = the long-lived index. STS/LDS address through it with no offset, so it
+; is never used as a scratch loop counter." The shift needs a register X
+; (`MOV X,A` / `ADD A,X`) and the byte index is what X is FOR, so the index lives
+; in dmem[11] and is reloaded before every `STS [X], A`. Keeping it in X instead
+; silently banks every byte at the accumulator's own value: the frame comes out
+; as 0x00, 0x02, 0x00, 0x00, 0x08, which looks like a dead sensor.
+ph4:    IN    A, PIN             ; the pad level: the sensor owns the line
+        AND   A, DHT_DATA       ; the sample, in bit 6
+        JZ    bit_was_zero
+        LDM   A, 6              ; a 1: shift the accumulator left, set bit 0
+        MOV   X, A
+        ADD   A, X              ; a = 2*acc  (ADD is A+X, not "load X")
+        OR    A, 0x01           ; ...and OR takes an immediate
+        STM   6, A
+        JMP   bit_taken
+bit_was_zero:
+        LDM   A, 6              ; a 0: the same shift, bit 0 left clear
+        MOV   X, A
+        ADD   A, X
+        STM   6, A
+bit_taken:
+        LDM   A, 5
+        SUB   A, 1
+        STM   5, A
+        JNZ   next_bit          ; this byte is not finished
+
+        ; ---- the byte is complete: bank it and start the next ----
+        LDM   A, 11
+        MOV   X, A              ; X is reloaded from dmem because the
+        LDM   A, 6              ; accumulate above used it as scratch
+        STS   [X], A            ; dmem[0..4]: the byte just received
+        LDI   A, 0
+        STM   6, A              ; the accumulator starts again
+        LDM   A, 11
+        ADD   A, 1
+        STM   11, A             ; the next byte's index
+        LDM   A, 8
+        SUB   A, 1
+        STM   8, A              ; the bytes left to receive
+        JZ    all_done          ; five bytes banked
+        LDI   A, 8
+        STM   5, A
+
+next_bit:
+        JMP   ph3               ; straight back into the edge waits
+
+; ===========================================================================
+; DONE -- park. The line is released, so the pull-up holds it high and the
+; sensor is left alone. dmem[15] is the observable the testbench watches.
+; ===========================================================================
+all_done:
+        LDI   A, 1
+        STM   15, A             ; all 40 bits are in
+park:   LDI   A, 0x00
+        OUT   TXPIN, A
+halt:   JMP   halt              ; the ISA has no HALT
+
+; ===========================================================================
+; THE DELAY -- the same three nested counters as servo_sweep.pe. See the header
+; for total(), for the reload trap, and for why two (n2,n3) pairs are needed.
+; ===========================================================================
+dly1:   LDM   A, 9              ;  1  the outer counter
+        SUB   A, 1              ;  2
+        STM   9, A              ;  3
+        JZ    dly_done          ;  4
+        LDM   A, 10             ;  5  the middle counter's target
+        STM   12, A             ;  6  into the loop's working copy
+dly2:   LDM   A, 12             ;  7  the middle counter
+        SUB   A, 1              ;  8
+        STM   12, A             ;  9
+        JZ    dly1              ; 10  exhausted -> the next outer pass
+        LDM   A, 13             ; 11  the inner counter's target
+        STM   14, A             ; 12  into the loop's working copy
+dly3:   LDM   A, 14             ; 13  the inner counter
+        SUB   A, 1              ; 14
+        STM   14, A             ; 15
+        JNZ   dly3              ; 16  n3 iterations
+        JMP   dly2              ; 17
+dly_done:
+        LDM   A, 7              ; the ISA cannot return to five addresses, so
+        JZ    ph0               ; the phase in dmem[7] chooses where
+        SUB   A, 1
+        JZ    ph1
+        SUB   A, 1
+        JZ    ph2
+        SUB   A, 1
+        JMP   ph4
