@@ -404,67 +404,119 @@ of cycles can produce, 21 at −1.7 % and 22 at +2.9 %, and rejects the third);
 and a mutant that was behaviourally a no-op because I wrote its anchor against
 the byte's *load* rather than its *rotate*.
 
-## Act (c) Stepper step/dir ramp — **WIP, NOT GREEN, NOT WIRED IN**
+## Act (c) Stepper step/dir ramp — CLOSED, in the regression
 
-Commit `b8b3b71`. `firmware/stepper_ramp.pe` (94 words) +
-`tb/tb_pe_soc_stepper_ramp.v`. Deliberately **not** in `run_all.sh` or
-`run_firmware_tests.sh`: wiring an act that fails would break the suite.
+Commit `2f2e6c4`. `firmware/stepper_ramp.pe` (96 words) +
+`tb/tb_pe_soc_stepper_ramp.v`, in `run_all.sh` and `run_firmware_tests.sh`, and
+`mutate_timing_tb.sh` goes **37 → 48 cases, all 48 detected, 0 survived**.
 
-The claim is the sharpest and the simplest in the block — the only act that
-drives a **mechanism**, where the driver's edge count *is* the motor's position,
-so there is no acknowledgement and nothing to resynchronise to. Every step
-period is an exact instruction count measured on the pin, and the ramp is exactly
-linear **to the clock**: the firmware subtracts ten outer steps of the `(4,40)`
-pair (5110 clocks) per step, so the constancy is *in the program*, not an
-assumption about a table of twelve constants.
+The only act here that drives a **mechanism**: the driver chip counts STEP
+edges and the motor's position *is* that count, so there is no acknowledgement,
+no status word, and nothing at the far end to resynchronise to. The claim is
+therefore the sharpest and the simplest in the block — every step period is an
+exact instruction count measured on the pin, and the ramp is exactly linear **to
+the clock**. The firmware subtracts ten outer steps of the `(4,40)` pair
+(5110 clocks) per step, so the constancy is *in the program* rather than assumed
+about a table of twelve constants.
 
-**Verified:** the ramp is exact on **8 of its 10** step intervals, measured as an
-equality against 5110 clocks and not a tolerance — 1661.133 µs falling to
-809.501 µs (602 Hz → 1235 Hz), 12 pulses, 12 distinct periods, all strictly
-shortening, all in band, `dmem[14]=1`, and the firmware's ramp counter landing on
-76 after twelve decrements of 10.
+Measured: **1661.133 µs falling to 809.501 µs (602 Hz → 1235 Hz)**, 12 pulses,
+12 distinct periods, all 11 intervals strictly shortening, all in band,
+direction changed once mid-ramp with **6.00 µs of setup**.
 
-**Two faults open:**
+### The two faults the WIP checkpoint left open were both closed — and neither was a fault in the ramp
 
-1. **Two intervals around the direction change are off by a matched pair.**
-   Interval 4→5 measures 4736.71 clocks and 5→6 measures 5482.67, summing to
-   exactly 2 × 5109.7 — so ~373 clocks of cost have moved one interval later than
-   they belong. 373 is close to `ST_SETUP`'s 418, and the direction change plus
-   its setup delay is the only thing in the program that is not a step, so the
-   mechanism is almost certainly the setup delay landing in the interval after
-   the one it should be in. **Not root-caused** — the phase-3 setup return is the
-   first place to look.
-2. **The direction-change setup-time check is not running at all.** Its first
-   version searched only the first DIR edge, which is the pin-matrix *init*
-   rather than the flip, so it was vacuous by construction; fixing that exposed
-   that the flip's timestamp does not land where the search expects.
+**1. The 373-clock displacement was NOT a defect.** The direction change is the
+only thing in the program that is not a step, so exactly one interval carries it:
+that interval is long by the setup delay (349 clocks) plus 24 instructions of
+flip bookkeeping, and the interval after it is short by the same 373 —
+`4735.72 + 5483.67 = 2 × 5109.7` exactly. **The check was wrong, not the
+firmware**: it expected two anomalies where there is one cost and its recovery,
+and it never established what the cost *was*. It is now pinned rather than
+excused — every other interval exactly on the line, the **pair sums to exactly
+twice the line**, the change is the long one, and the excess is at least the
+setup delay — so a firmware that added or dropped an instruction in the flip
+fails the sum.
 
-**Two firmware defects already fixed, both the shape of ones this block has
-already found.** The ramp counter was `dmem[9]` — the **delay routine's own
-outer counter**, which counts itself to zero — so the program ran twelve steps at
-a constant 2.09 ms: every step read back zero, subtracted ten, and got 246
-again, the unsigned wrap, which is a perfectly plausible step period. *A delay
-routine and its caller must never share a data slot.* And the ramp decremented
-**before its first use**, so the nominal 196 was spent immediately and the first
-interval was exactly one ramp step too long — which is what a counter
-initialised off by one looks like from the outside.
+**2. The direction change NEVER REACHED THE WIRE, and the cause was a real
+firmware bug.** The step's level write went out as `LDI A, 0x00; OUT TXPIN, A`
+and cleared the **DIR bit** too, so the first step zeroed DIR and the change half
+a ramp later wrote 0 to a register that was already 0. The direction never
+changed after step one, and the TB's `n_flip == 2` check **passed on a spurious
+pair of edges at init** — one when the program set DIR at startup and one when
+the first step cleared it.
 
-**Two testbench defects, the pattern of the previous three acts:** `$time`
-quantisation (every width here is in tenths of a nanosecond, because this act's
-claim is right to the *clock*), and the ramp first computed in one pass that
-compared each period against the next **before computing it**, so every "ramp"
-equalled a period and every ramp check passed while printing numbers that looked
-like measurements. A check that reads a value the loop has not filled in yet is
-a check that cannot fail.
+**That was the FOURTH write in the program that cleared the other pin**, all with
+one cause, and they were found in this order:
 
-### Resume point, exactly
+| write | what it clobbered |
+|---|---|
+| the step's level write (`0x00`) | DIR zeroed by the first step — the direction never changed |
+| `ph1`'s release (`0x00`) | DIR floating for the whole of every step pulse |
+| `st_step`'s `PINOE` (`ST_STEP`) | **DIR released at exactly the STEP edge, which is where a driver decodes it** — hence the new `ST_BOTH` constant |
+| the park's (`0x00`) | a direction change after the last step |
 
-Root-cause the 373-clock displacement around the direction change (start with the
-phase-3 setup return in `ph2`), then the DIR edge placement, then wire into
-`run_all.sh` + `run_firmware_tests.sh`, then add the mutation gate. Do not
-plausible-ise fault 1 into an accepted exception until it is explained.
+`PINOE` and `TXPIN` are **whole registers**, so a write that means "this pin" is
+a write that also means "the other pin" unless the other pin's level is carried
+in it. The direction *value* now lives in `dmem[0]` and every write carries it.
+This is the same lesson the 1-Wire act recorded for `od` and this repository's
+third instance of "what a peripheral sees is the PIN, not the data register".
 
-## The pattern across all five acts, stated once
+### The gate found the act's own blind spot twice more
+
+**A released DIR pad SURVIVED every edge-based check.** The edges such a pad
+makes land on the interval **boundaries** rather than inside an interval, and a
+pad floating to the pull-down still reads as a **valid level** — so nothing about
+edge counts or intervals can see it. The fix is the sharper claim the protocol
+actually makes: **a driver decodes DIR on the STEP edge**, so the TB now measures
+the direction **at every step edge** — 6 of 6 high in the first run, 0 of 6 in
+the second, changing exactly once at step 6. A floating pad during the step
+pulse decodes as the wrong direction on *every* step, and nothing else in the
+file noticed.
+
+**A second mutant survived twice and looked like a gap in the testbench both
+times — and was neither.** It released the DIR pad at the direction change, which
+put it in a position that seemed to implicate the edge checks. It does not: the
+pad is released for the four instructions between that write and the write that
+sets the direction, **and the direction being set is the pull-down's own value**,
+so the wire is identical either way. It is a **benign mutant**. It was **deleted
+and replaced** rather than caught by loosening a check, because a gate that
+claims to catch a no-op is making the same error as a check that cannot fail,
+one level down. This is the second time this act block has deleted a mutation
+that was not a defect (the first was `ir-no-rotate`, written against the byte's
+load rather than its rotate).
+
+### Three testbench defects, and the pattern is the same as the previous four acts
+
+The measuring instrument, again: `$time` quantises to the module's `timeunit`
+(1 ns) and returns an integer, so every width here is in **tenths of a
+nanosecond** — this act's claim is that a step period is right to the *clock*,
+and 1 ns is 0.06 clocks, an order of magnitude coarser. The ramp was first
+computed in **one pass that compared each period against the next before
+computing it**, so every "ramp" equalled a period and every ramp check passed
+while printing numbers that looked like measurements. And `dir_lvl` watched the
+**data register** rather than the pin, so a released pad looked like a valid
+level — found by the gate (`st-dir-released` survived), which is the third time in
+this block the gate has found the act's blind spot rather than a defect in the
+design.
+
+### One more counted-delay-constant mutation, and how to pick a good one
+
+`st-ramp-const` is the case worth copying for any ramp: it does **not** shift
+the whole ramp, because shifting a ramp is a *different valid ramp, not a
+defect*, and a gate claiming to catch that would be claiming to catch a choice.
+It sets `ST_GAP0 = 112`, which **runs the ramp out**: by the twelfth step the
+counter is 2 outer steps, 17 µs, an order of magnitude under the driver's minimum
+step rate — and one step earlier it is 255, the unsigned wrap, which is the
+defect this block has now found four times. Two more mutate constants directly
+(`ST_SETUP` under the driver's 5 µs, `ST_PULSE` under the driver's 1 µs) and one
+mutates the ramp **decrement** from 10 to 9 — a perfectly good ramp that is not
+*this* ramp, and which only an equality check against 5110 can tell apart.
+
+### Still open
+
+Nothing. All three Block 2 acts are closed and in the regression.
+
+## The pattern across all six acts, stated once
 
 Every one of these defects is **invisible from the waveform's shape alone**: a
 reversed byte, a complemented byte, a truncated immediate, a runner that reads
@@ -476,9 +528,20 @@ was sent** — plus a mutation gate that perturbs the fitted constants, because
 three of the five acts *are* a fitted constant and a gate that cannot perturb one
 is not testing the thing the act claims.
 
-And four of the twelve defects were in the **measuring instrument**, not the
-thing measured: a quantised clock, a rounding artefact poisoning a minimum, an
-accumulator reporting numbers no waveform has, and a check reading a value the
-loop had not written. That is worth more than the defects themselves, because a
-defect in the testbench invents a defect that is not there, and the first thing
-anyone does with an invented defect is go looking for it in the design.
+And **seven of the eighteen defects were in the measuring instrument**, not the
+thing measured: a quantised clock (twice), a rounding artefact poisoning a
+minimum, an accumulator reporting numbers no waveform has, a check reading a
+value the loop had not written (twice), a watch on the data register instead of
+the pin, and an edge-count where the claim was about edge *position*. That is
+worth more than the defects themselves, because a defect in the testbench
+invents a defect that is not there, and the first thing anyone does with an
+invented defect is go looking for it in the design.
+
+**The last two lessons are the ones I would keep.** A *check* can pass without
+running — the direction-setup assertion sat behind an `if (found)` that was never
+true, and an edge *count* passed on two spurious edges for a program in which
+the direction never changed. And a *mutation* can survive without being a defect
+— releasing a pad for four instructions before setting it to the pull-down's own
+value changes nothing on the wire, and loosening a check to catch it would be
+claiming to catch a no-op. Both are the same error one level apart: a gate
+element that reports success without asserting anything.
