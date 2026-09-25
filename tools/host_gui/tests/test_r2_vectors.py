@@ -109,5 +109,90 @@ class TestR2VectorPackage(unittest.TestCase):
         self.assertIn("R2-READ-VERIFICATION.json", text)
 
 
+class TestReadmemhExport(unittest.TestCase):
+    """The $readmemh export must be byte-identical to the JSON frames.
+
+    The chip-side testbenches consume these .hex files directly, so this is the
+    last translation step: if a hex stream ever diverged from the JSON frame,
+    the TB would be asserting against a different protocol than the host. The
+    check compares bytes, not strings.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.package = V.build_package()
+        cls.hex_dir = V.HEX_DIR
+        cls.manifest = json.loads(
+            (cls.hex_dir / "manifest.json").read_text(encoding="utf-8"))
+
+    def _read_hex(self, path):
+        # a $readmemh load is whitespace-insensitive; this mirrors that.
+        return bytes.fromhex("".join(path.read_text(encoding="utf-8").split()))
+
+    def test_manifest_covers_every_vector_and_step(self):
+        self.assertEqual(len(self.manifest["vectors"]),
+                         len(self.package["vectors"]))
+        self.assertFalse(self.manifest["chip_confirmed"])
+        for vector in self.manifest["vectors"]:
+            with self.subTest(vector=vector["name"]):
+                self.assertFalse(vector["chip_confirmed"])
+                self.assertEqual(len(vector["steps"]),
+                                 len(self.package["vectors"][
+                                     [v["name"] for v in
+                                      self.package["vectors"]]
+                                     .index(vector["name"])]["steps"]))
+
+    def test_hex_streams_round_trip_identical_to_the_json_bytes(self):
+        for vector in self.manifest["vectors"]:
+            source = next(v for v in self.package["vectors"]
+                          if v["name"] == vector["name"])
+            for index, step in enumerate(vector["steps"]):
+                expected = source["steps"][index]
+                with self.subTest(vector=vector["name"], step=step["name"]):
+                    request = self._read_hex(self.hex_dir /
+                                             step["request_file"])
+                    response = self._read_hex(self.hex_dir /
+                                              step["response_file"])
+                    self.assertEqual(request, bytes.fromhex(
+                        expected["request_hex"]))
+                    self.assertEqual(response, bytes.fromhex(
+                        expected["response_hex"]))
+
+    def test_hex_streams_decode_as_the_same_frames(self):
+        from tools.host_gui import protocol as P
+        for vector in self.manifest["vectors"]:
+            source = next(v for v in self.package["vectors"]
+                          if v["name"] == vector["name"])
+            for index, step in enumerate(vector["steps"]):
+                request = P.decode_frame(self._read_hex(
+                    self.hex_dir / step["request_file"]))
+                response = P.decode_frame(self._read_hex(
+                    self.hex_dir / step["response_file"]))
+                with self.subTest(vector=vector["name"], step=step["name"]):
+                    self.assertEqual(request.opcode,
+                                     source["steps"][index]["opcode"])
+                    self.assertEqual(list(response.payload), step[
+                        "response_payload_words"])
+
+    def test_hex_export_is_drift_checked(self):
+        self.assertEqual(V.check_hex_export(), 0)
+
+    def test_a_corrupted_hex_file_is_detected(self):
+        victim = V.HEX_DIR / "full_width_debug_regs.read_cpu_full_width_regs.req.hex"
+        original = victim.read_text(encoding="utf-8")
+        try:
+            victim.write_text(original.replace("a5", "a4", 1), encoding="utf-8")
+            self.assertNotEqual(V.check_hex_export(), 0)
+        finally:
+            victim.write_text(original, encoding="utf-8")
+        self.assertEqual(V.check_hex_export(), 0)   # restored
+
+    def test_hex_readme_explains_readmemh_use(self):
+        readme = (V.HEX_DIR / "README.md").read_text(encoding="utf-8")
+        self.assertIn("$readmemh", readme)
+        self.assertIn("not chip-confirmed", readme.lower())
+        self.assertIn("manifest.json", readme)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

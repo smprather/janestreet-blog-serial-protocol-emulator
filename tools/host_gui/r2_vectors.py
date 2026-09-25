@@ -36,6 +36,7 @@ from tools.host_gui import r2_reads as R
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ARTIFACT = REPO_ROOT / "reviews" / "2026-09-25" / "R2-READ-VERIFICATION.json"
 README = REPO_ROOT / "reviews" / "2026-09-25" / "R2-READ-VERIFICATION.md"
+HEX_DIR = REPO_ROOT / "reviews" / "2026-09-25" / "r2-hex"
 TARGET = P.TARGET_HOST
 LOAD_WORDS = (0x0041, 0x1001, 0x4002)
 
@@ -237,6 +238,132 @@ def check_package(path: Path = ARTIFACT) -> int:
     return 0
 
 
+def _hex_bytes(raw_hex):
+    """$readmemh-ready byte stream: one lowercase two-digit byte per line.
+
+    $readmemh fills an 8-bit array from address 0, so a testbench does
+    ``$readmemh("....req.hex", req_mem);`` and clocks ``req_mem`` out. One byte
+    per line (rather than packed words) keeps the stream identical to the JSON
+    frame's bytes, which the conformance test asserts.
+    """
+    return "".join(f"{byte:02x}\n" for byte in bytes.fromhex(raw_hex))
+
+
+def _read_hex(path):
+    """Read a $readmemh file back to bytes (whitespace-insensitive)."""
+    return bytes.fromhex("".join(path.read_text(encoding="utf-8").split()))
+
+
+def write_hex_export(directory=HEX_DIR):
+    """Write per-step request/response .hex files plus a manifest."""
+    package = build_package()
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    vectors = []
+    for vector in package["vectors"]:
+        steps = []
+        for step in vector["steps"]:
+            base = f"{vector['name']}.{step['name']}"
+            request_file = f"{base}.req.hex"
+            response_file = f"{base}.rsp.hex"
+            (directory / request_file).write_text(
+                _hex_bytes(step["request_hex"]), encoding="utf-8")
+            (directory / response_file).write_text(
+                _hex_bytes(step["response_hex"]), encoding="utf-8")
+            steps.append({
+                "name": step["name"],
+                "opcode": step["opcode"],
+                "opcode_name": step["opcode_name"],
+                "sequence": step["sequence"],
+                "request_file": request_file,
+                "request_bytes": len(step["request_hex"]) // 2,
+                "response_file": response_file,
+                "response_bytes": len(step["response_hex"]) // 2,
+                "response_hex": step["response_hex"],
+                "status": step["status"],
+                "response_payload_words": step["response_payload_words"],
+                "model_faults": step["model_faults"],
+            })
+        vectors.append({"name": vector["name"],
+                        "obligation": vector["obligation"],
+                        "chip_confirmed": vector["chip_confirmed"],
+                        "steps": steps})
+    manifest = {
+        "artifact": "R2 read-path $readmemh export",
+        "generated_by": "tools/host_gui/r2_vectors.py (--hex)",
+        "source_of_truth": package["source_of_truth"],
+        "chip_confirmed": False,
+        "notice": package["notice"],
+        "word_order": package["protocol"]["word_order"],
+        "readmemh_usage": (
+            "$readmemh(\"<file>\", mem); with an 8-bit mem[] filled from "
+            "address 0; the stream is the frame's bytes in wire order."),
+        "vectors": vectors,
+    }
+    (directory / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8")
+    (directory / "README.md").write_text(_hex_readme(manifest), encoding="utf-8")
+    return manifest
+
+
+def check_hex_export(directory=HEX_DIR) -> int:
+    """Drift gate: every .hex file must equal the JSON frame it came from."""
+    directory = Path(directory)
+    manifest_path = directory / "manifest.json"
+    if not manifest_path.is_file():
+        print(f"missing hex export: {manifest_path} (regenerate with --hex)")
+        return 1
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    package = {vector["name"]: vector for vector in build_package()["vectors"]}
+    for vector in manifest.get("vectors", []):
+        source = package.get(vector["name"])
+        if source is None:
+            print(f"hex manifest names an unknown vector: {vector['name']}")
+            return 1
+        for index, step in enumerate(vector["steps"]):
+            expected = source["steps"][index]
+            for key, raw in (("request_file", expected["request_hex"]),
+                             ("response_file", expected["response_hex"])):
+                path = directory / step[key]
+                if not path.is_file():
+                    print(f"missing hex file: {path}")
+                    return 1
+                if _read_hex(path) != bytes.fromhex(raw):
+                    print(f"hex file does not match the JSON frame: {path}")
+                    return 1
+    return 0
+
+
+def _hex_readme(manifest) -> str:
+    rows = ["| vector | step | request | response | status |",
+            "|---|---|---|---|---|"]
+    for vector in manifest["vectors"]:
+        for step in vector["steps"]:
+            rows.append(f"| `{vector['name']}` | `{step['name']}` | "
+                        f"`{step['request_file']}` ({step['request_bytes']} B) | "
+                        f"`{step['response_file']}` ({step['response_bytes']} B) | "
+                        f"{step['status']} |")
+    return (
+        "# R2 read vectors - $readmemh export\n\n"
+        "Generated by `python3 -m tools.host_gui.r2_vectors --hex` from the same\n"
+        "build as `../R2-READ-VERIFICATION.json`; `--check` proves every file\n"
+        "here is byte-identical to the JSON frame, so a testbench can consume\n"
+        "these files directly and there is no translation step.\n\n"
+        f"**Status: NOT chip-confirmed** - {manifest['notice']}\n\n"
+        "## Use\n\n"
+        "```verilog\n"
+        "logic [7:0] req_mem [0:255];\n"
+        "initial $readmemh(\"read_imem_bounded.read_imem_address_1_count_2."
+        "req.hex\", req_mem);\n"
+        "```\n\n"
+        "Each file is one byte per line, so `$readmemh` fills an 8-bit array\n"
+        "from address 0 in wire order. `manifest.json` maps every vector/step to\n"
+        "its files, expected status, expected response payload words and the\n"
+        "sticky fault register after the step.\n\n"
+        "## Files\n\n" + "\n".join(rows) + "\n")
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate/check the R2 read verification package.")
@@ -245,14 +372,25 @@ def main(argv=None) -> int:
                       help="write the artifact from a fresh build")
     mode.add_argument("--check", action="store_true",
                       help="fail if the checked-in artifact is stale")
+    mode.add_argument("--hex", action="store_true",
+                      help="write the $readmemh .hex export + manifest")
     args = parser.parse_args(argv)
     if args.write:
         print(f"wrote {write_package()}")
         return 0
+    if args.hex:
+        manifest = write_hex_export()
+        files = sum(len(step["request_file"]) and 2
+                    for vector in manifest["vectors"] for step in vector["steps"])
+        print(f"wrote {HEX_DIR} ({files} .hex files + manifest.json)")
+        return 0
     result = check_package()
+    hex_result = check_hex_export()
     print("r2 verification package: up to date" if result == 0
           else "r2 verification package: STALE")
-    return result
+    print("r2 $readmemh export: up to date" if hex_result == 0
+          else "r2 $readmemh export: STALE")
+    return result or hex_result
 
 
 if __name__ == "__main__":

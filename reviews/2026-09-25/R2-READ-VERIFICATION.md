@@ -9,10 +9,18 @@ values instead of re-deriving the contract.
   framed request bytes (`request_hex`), the request payload words, the response
   bytes (`response_hex`), the response payload words, the status code, and the
   model's fault bits after the step.
+- **`r2-hex/`** — the **$readmemh export** for Verilog testbenches: 30 `.hex`
+  files (one request + one response per step, one byte per line so `$readmemh`
+  fills an 8-bit array from address 0 in wire order) plus `manifest.json`
+  (vector → step → files → expected status, response payload words, sticky
+  fault register) and a short `README.md`. The chip TBs consume these directly
+  — no translation step — and `--check` proves every hex file is byte-identical
+  to the JSON frame it came from.
 - Regenerate / drift-check:
-  `python3 -m tools.host_gui.r2_vectors --write` and `--check`.
-  The checked-in JSON must match a fresh build (a test enforces this), so the
-  artifact can never silently disagree with the host model.
+  `python3 -m tools.host_gui.r2_vectors --write`, `--hex` and `--check`.
+  The checked-in JSON and the hex export must match a fresh build (tests
+  enforce this), so the artifacts can never silently disagree with the host
+  model.
 
 ## Status: NOT chip-confirmed
 
