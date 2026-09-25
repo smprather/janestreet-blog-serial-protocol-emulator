@@ -19,6 +19,7 @@ reviews/2026-09-24/HOLD-SCREEN-ATTRIBUTION.md:
                         uncertainty (pre-CTS; the routed flow's hold repair
                         closed these at +0.1209 ns, 0 violating paths)
 """
+
 import re
 import sys
 
@@ -26,8 +27,8 @@ import sys
 # instance names are long the column padding collapses, so split on the first
 # `)` (the end of the startpoint's parenthesised type) and on the trailing
 # float.
-PAT = re.compile(r'^(.+?\))\s+(.+?)\s+(-?\d+\.\d+)\s*$')
-PAT_LOOSE = re.compile(r'^(\S.*?)\s{2,}(\S.*?)\s{2,}(-?\d+\.\d+)\s*$')
+PAT = re.compile(r"^(.+?\))\s+(.+?)\s+(-?\d+\.\d+)\s*$")
+PAT_LOOSE = re.compile(r"^(\S.*?)\s{2,}(\S.*?)\s{2,}(-?\d+\.\d+)\s*$")
 
 
 def parse(path):
@@ -99,4 +100,6 @@ if __name__ == "__main__":
             nb = s_board.get(c, [0])[0]
             wz = f"{s_zero[c][1]:+.4f}" if c in s_zero else "-"
             wb = f"{s_board[c][1]:+.4f}" if c in s_board else "-"
-            print(f"   {c:34s} zero: {nz:5d} paths worst {wz:>8s} | board: {nb:5d} paths worst {wb:>8s}")
+            print(
+                f"   {c:34s} zero: {nz:5d} paths worst {wz:>8s} | board: {nb:5d} paths worst {wb:>8s}"
+            )
