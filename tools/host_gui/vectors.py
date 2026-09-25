@@ -92,8 +92,9 @@ class Spec:
         block is normalised in one place rather than one field at a time;
         `test_r2_vectors` pins the round trip.
         """
-        return _json_shaped({**self.evidence,
-                             "confirmed_steps": sorted(self.confirmed_steps)})
+        return _json_shaped(
+            {**self.evidence, "confirmed_steps": sorted(self.confirmed_steps)}
+        )
 
     def evidence_for(self, step_name: str) -> dict | None:
         """Citation for a step, or None when the chip has not confirmed it."""

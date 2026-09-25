@@ -25,10 +25,18 @@ from tools.host_gui import fake_pe as F
 from tools.host_gui import protocol as P
 from tools.host_gui import r2_vectors as V
 
-PACKAGE_JSON = (Path(__file__).resolve().parents[3] / "reviews" / "2026-09-25"
-                / "R2-READ-VERIFICATION.json")
-PACKAGE_README = (Path(__file__).resolve().parents[3] / "reviews" / "2026-09-25"
-                  / "R2-READ-VERIFICATION.md")
+PACKAGE_JSON = (
+    Path(__file__).resolve().parents[3]
+    / "reviews"
+    / "2026-09-25"
+    / "R2-READ-VERIFICATION.json"
+)
+PACKAGE_README = (
+    Path(__file__).resolve().parents[3]
+    / "reviews"
+    / "2026-09-25"
+    / "R2-READ-VERIFICATION.md"
+)
 
 # The 18 chip-confirmed steps, pinned byte for byte: (request, response).
 #
@@ -40,24 +48,66 @@ PACKAGE_README = (Path(__file__).resolve().parents[3] / "reviews" / "2026-09-25"
 # changed byte is not. Updating this table is a REVIEW decision (the chip has
 # to re-run and re-confirm), never a way to make a failing build green.
 CONFIRMED_STEP_BYTES = {
-    "read_imem_address_1_count_2": ("a55a11300001000200010002b9cd", "a55a193000010003000010014002ca95"),
-    "read_dmem_address_0_count_4": ("a55a1140000100020000000445e0", "a55a19400001000300000a0b0c0d7c84"),
-    "dump_core_header": ("a55a1150000100009b96", "a55a19500001000b0000000000000000012300450078009a000700000003e6c0"),
-    "status_header": ("a55a111000020000d3ae", "a55a19100002000b0000000000000000012300450078009a0007000000032139"),
-    "read_cpu_while_running": ("a55a1120000100008610", "a55a192000010007000003ff00ff00ff00ffffff0001d415"),
-    "read_cpu_full_width_regs": ("a55a1120000100008610", "a55a192000010007000003ff00ff00ff00ffffff0000c434"),
+    "read_imem_address_1_count_2": (
+        "a55a11300001000200010002b9cd",
+        "a55a193000010003000010014002ca95",
+    ),
+    "read_dmem_address_0_count_4": (
+        "a55a1140000100020000000445e0",
+        "a55a19400001000300000a0b0c0d7c84",
+    ),
+    "dump_core_header": (
+        "a55a1150000100009b96",
+        "a55a19500001000b0000000000000000012300450078009a000700000003e6c0",
+    ),
+    "status_header": (
+        "a55a111000020000d3ae",
+        "a55a19100002000b0000000000000000012300450078009a0007000000032139",
+    ),
+    "read_cpu_while_running": (
+        "a55a1120000100008610",
+        "a55a192000010007000003ff00ff00ff00ffffff0001d415",
+    ),
+    "read_cpu_full_width_regs": (
+        "a55a1120000100008610",
+        "a55a192000010007000003ff00ff00ff00ffffff0000c434",
+    ),
     "read_imem_not_ready": ("a55a11300001000200000001be9e", "a55a1930000100010006dd58"),
     "read_dmem_not_ready": ("a55a11400002000200000001cdc7", "a55a1940000200010006b7eb"),
     "dump_core_not_ready": ("a55a115000030000f5f6", "a55a19500003000100062ac1"),
-    "read_imem_last_word": ("a55a11300001000203ff0001ea21", "a55a19300001000200000000e4f4"),
-    "read_imem_past_end_no_wrap": ("a55a11300002000203ff000202c0", "a55a1930000200010003632f"),
-    "read_dmem_past_end_no_wrap": ("a55a114000030002000f000269f4", "a55a19400003000100034d1f"),
-    "read_imem_at_ceiling_15": ("a55a1130000100020000000f5f50", "a55a19300001001000000041100140020000000000000000000000000000000000000000000000001b97"),
-    "read_imem_over_ceiling": ("a55a11300002000200000010640c", "a55a1930000200010003632f"),
+    "read_imem_last_word": (
+        "a55a11300001000203ff0001ea21",
+        "a55a19300001000200000000e4f4",
+    ),
+    "read_imem_past_end_no_wrap": (
+        "a55a11300002000203ff000202c0",
+        "a55a1930000200010003632f",
+    ),
+    "read_dmem_past_end_no_wrap": (
+        "a55a114000030002000f000269f4",
+        "a55a19400003000100034d1f",
+    ),
+    "read_imem_at_ceiling_15": (
+        "a55a1130000100020000000f5f50",
+        "a55a19300001001000000041100140020000000000000000000000000000000000000000000000001b97",
+    ),
+    "read_imem_over_ceiling": (
+        "a55a11300002000200000010640c",
+        "a55a1930000200010003632f",
+    ),
     "read_dmem_zero_count": ("a55a114000030002000000006587", "a55a19400003000100034d1f"),
-    "bad_read_answers_range": ("a55a11300001000207d000018a27", "a55a19300001000100038dfd"),
-    "status_shows_sticky_fault": ("a55a111000020000d3ae", "a55a19100002000b0000000000000000000000000000000000000004000323b2"),
-    "clear_fault_clears_the_bit": ("a55a11600003000100044dd4", "a55a196000030002000000008830"),
+    "bad_read_answers_range": (
+        "a55a11300001000207d000018a27",
+        "a55a19300001000100038dfd",
+    ),
+    "status_shows_sticky_fault": (
+        "a55a111000020000d3ae",
+        "a55a19100002000b0000000000000000000000000000000000000004000323b2",
+    ),
+    "clear_fault_clears_the_bit": (
+        "a55a11600003000100044dd4",
+        "a55a196000030002000000008830",
+    ),
 }
 
 # The held-core steps added after the R3 debug work, and the state each one
@@ -86,15 +136,14 @@ class TestR2VectorPackage(unittest.TestCase):
         # tb_pe_ctrl_r2 against them), so the package-level flag is
         # deliberately FALSE (partial) and the notice must say which steps are
         # confirmed and which are not.
-        confirmed = sum(1 for v in self.package["vectors"]
-                        for s in v["steps"] if s["chip_confirmed"])
+        confirmed = sum(
+            1 for v in self.package["vectors"] for s in v["steps"] if s["chip_confirmed"]
+        )
         self.assertEqual(confirmed, 18)
         self.assertFalse(self.package["chip_confirmed"])
-        self.assertIn("chip-confirmed in simulation",
-                      self.package["notice"].lower())
+        self.assertIn("chip-confirmed in simulation", self.package["notice"].lower())
         # the honest boundary: simulation confirmed, hardware not
-        self.assertIn("not hardware-confirmed",
-                      self.package["notice"].lower())
+        self.assertIn("not hardware-confirmed", self.package["notice"].lower())
 
     def test_every_vector_reports_its_confirmation_state(self):
         self.assertTrue(self.package["vectors"])
@@ -104,7 +153,8 @@ class TestR2VectorPackage(unittest.TestCase):
                 self.assertTrue(vector["steps"])
                 self.assertEqual(
                     vector["chip_confirmed"],
-                    all(step["chip_confirmed"] for step in vector["steps"]))
+                    all(step["chip_confirmed"] for step in vector["steps"]),
+                )
 
     def test_every_confirmed_step_cites_chip_evidence(self):
         """A chip_confirmed=true step is only allowed WITH a citation."""
@@ -115,9 +165,9 @@ class TestR2VectorPackage(unittest.TestCase):
                     if step["chip_confirmed"]:
                         evidence = step["chip_evidence"]
                         self.assertIsNotNone(
-                            evidence, "a confirmed step must cite evidence")
-                        self.assertIn("R2-READ-PATH-REVIEW",
-                                      evidence["review"])
+                            evidence, "a confirmed step must cite evidence"
+                        )
+                        self.assertIn("R2-READ-PATH-REVIEW", evidence["review"])
                         self.assertIn("tb_pe_ctrl_r2", evidence["testbench"])
                         self.assertIn("18/18", evidence["conformance"])
                         self.assertIn("date", evidence)
@@ -134,8 +184,7 @@ class TestR2VectorPackage(unittest.TestCase):
         for vector in self.package["vectors"]:
             for step in vector["steps"]:
                 with self.subTest(step=step["name"]):
-                    self.assertEqual(step["chip_confirmed"],
-                                     step["name"] in mapped)
+                    self.assertEqual(step["chip_confirmed"], step["name"] in mapped)
 
     def test_every_step_carries_exact_framed_words(self):
         for vector in self.package["vectors"]:
@@ -146,20 +195,21 @@ class TestR2VectorPackage(unittest.TestCase):
                     self.assertEqual(request.opcode, step["opcode"])
                     self.assertFalse(request.is_response)
                     self.assertTrue(response.is_response)
-                    self.assertEqual(response.opcode,
-                                     step["opcode"] | P.RESPONSE_BIT)
+                    self.assertEqual(response.opcode, step["opcode"] | P.RESPONSE_BIT)
                     self.assertEqual(response.sequence, request.sequence)
-                    self.assertEqual(list(response.payload),
-                                     step["response_payload_words"])
+                    self.assertEqual(
+                        list(response.payload), step["response_payload_words"]
+                    )
                     self.assertEqual(response.payload[0], step["status"])
 
     def test_read_vectors_use_low_word_first_ascending_order(self):
         vectors = {v["name"]: v for v in self.package["vectors"]}
         read_imem = vectors["read_imem_bounded"]
-        self.assertEqual(read_imem["steps"][-1]["request_payload_words"],
-                         [1, 2])
-        self.assertEqual(read_imem["steps"][-1]["response_payload_words"],
-                         [P.STATUS_OK, 0x1001, 0x4002])
+        self.assertEqual(read_imem["steps"][-1]["request_payload_words"], [1, 2])
+        self.assertEqual(
+            read_imem["steps"][-1]["response_payload_words"],
+            [P.STATUS_OK, 0x1001, 0x4002],
+        )
         self.assertEqual(read_imem["word_order"], "low-word-first ascending")
 
     def test_lifecycle_vector_covers_sticky_fault_and_clear(self):
@@ -168,8 +218,10 @@ class TestR2VectorPackage(unittest.TestCase):
         statuses = [step["status"] for step in lifecycle["steps"]]
         self.assertIn(P.STATUS_RANGE, statuses)
         faults_after_bad_read = next(
-            step for step in lifecycle["steps"]
-            if step["name"] == "status_shows_sticky_fault")
+            step
+            for step in lifecycle["steps"]
+            if step["name"] == "status_shows_sticky_fault"
+        )
         self.assertEqual(faults_after_bad_read["model_faults"], 0x0004)
         cleared = lifecycle["steps"][-1]
         self.assertEqual(cleared["name"], "clear_fault_clears_the_bit")
@@ -177,6 +229,7 @@ class TestR2VectorPackage(unittest.TestCase):
 
     def test_obligations_cover_every_r2_read_obligation(self):
         from tools.host_gui import r2_reads as R
+
         names = {v["name"] for v in self.package["vectors"]}
         for obligation in R.OBLIGATIONS:
             with self.subTest(obligation=obligation.name):
@@ -187,8 +240,9 @@ class TestR2VectorPackage(unittest.TestCase):
         # not reflected in the artifact fails here, so the chip-side spec can
         # never silently disagree with the host.
         self.assertTrue(PACKAGE_JSON.is_file(), f"missing {PACKAGE_JSON}")
-        self.assertEqual(json.loads(PACKAGE_JSON.read_text(encoding="utf-8")),
-                         self.package)
+        self.assertEqual(
+            json.loads(PACKAGE_JSON.read_text(encoding="utf-8")), self.package
+        )
 
     def test_the_fresh_build_is_already_json_shaped(self):
         """The build must survive a JSON round trip UNCHANGED.
@@ -202,7 +256,8 @@ class TestR2VectorPackage(unittest.TestCase):
         next field. This test names the invariant at the point it bites.
         """
         self.assertEqual(
-            json.loads(json.dumps(self.package, sort_keys=True)), self.package)
+            json.loads(json.dumps(self.package, sort_keys=True)), self.package
+        )
 
     def test_check_mode_passes_on_this_tree(self):
         self.assertEqual(V.main(["--check"]), 0)
@@ -229,15 +284,15 @@ class TestReadmemhExport(unittest.TestCase):
         cls.package = V.build_package()
         cls.hex_dir = V.HEX_DIR
         cls.manifest = json.loads(
-            (cls.hex_dir / "manifest.json").read_text(encoding="utf-8"))
+            (cls.hex_dir / "manifest.json").read_text(encoding="utf-8")
+        )
 
     def _read_hex(self, path):
         # a $readmemh load is whitespace-insensitive; this mirrors that.
         return bytes.fromhex("".join(path.read_text(encoding="utf-8").split()))
 
     def test_manifest_covers_every_vector_and_step(self):
-        self.assertEqual(len(self.manifest["vectors"]),
-                         len(self.package["vectors"]))
+        self.assertEqual(len(self.manifest["vectors"]), len(self.package["vectors"]))
         # package-level: PARTIAL. 18 read-path steps are confirmed; the
         # held-core steps added after R3 await a chip re-run, and a manifest
         # that said otherwise would be the field a chip TB reads first.
@@ -245,46 +300,53 @@ class TestReadmemhExport(unittest.TestCase):
         for vector in self.manifest["vectors"]:
             with self.subTest(vector=vector["name"]):
                 # a vector is confirmed iff all its steps are
-                self.assertEqual(vector["chip_confirmed"],
-                                 all(s["chip_confirmed"]
-                                     for s in vector["steps"]))
-                self.assertEqual(len(vector["steps"]),
-                                 len(self.package["vectors"][
-                                     [v["name"] for v in
-                                      self.package["vectors"]]
-                                     .index(vector["name"])]["steps"]))
+                self.assertEqual(
+                    vector["chip_confirmed"],
+                    all(s["chip_confirmed"] for s in vector["steps"]),
+                )
+                self.assertEqual(
+                    len(vector["steps"]),
+                    len(
+                        self.package["vectors"][
+                            [v["name"] for v in self.package["vectors"]].index(
+                                vector["name"]
+                            )
+                        ]["steps"]
+                    ),
+                )
 
     def test_hex_streams_round_trip_identical_to_the_json_bytes(self):
         for vector in self.manifest["vectors"]:
-            source = next(v for v in self.package["vectors"]
-                          if v["name"] == vector["name"])
+            source = next(
+                v for v in self.package["vectors"] if v["name"] == vector["name"]
+            )
             for index, step in enumerate(vector["steps"]):
                 expected = source["steps"][index]
                 with self.subTest(vector=vector["name"], step=step["name"]):
-                    request = self._read_hex(self.hex_dir /
-                                             step["request_file"])
-                    response = self._read_hex(self.hex_dir /
-                                              step["response_file"])
-                    self.assertEqual(request, bytes.fromhex(
-                        expected["request_hex"]))
-                    self.assertEqual(response, bytes.fromhex(
-                        expected["response_hex"]))
+                    request = self._read_hex(self.hex_dir / step["request_file"])
+                    response = self._read_hex(self.hex_dir / step["response_file"])
+                    self.assertEqual(request, bytes.fromhex(expected["request_hex"]))
+                    self.assertEqual(response, bytes.fromhex(expected["response_hex"]))
 
     def test_hex_streams_decode_as_the_same_frames(self):
         from tools.host_gui import protocol as P
+
         for vector in self.manifest["vectors"]:
-            source = next(v for v in self.package["vectors"]
-                          if v["name"] == vector["name"])
+            source = next(
+                v for v in self.package["vectors"] if v["name"] == vector["name"]
+            )
             for index, step in enumerate(vector["steps"]):
-                request = P.decode_frame(self._read_hex(
-                    self.hex_dir / step["request_file"]))
-                response = P.decode_frame(self._read_hex(
-                    self.hex_dir / step["response_file"]))
+                request = P.decode_frame(
+                    self._read_hex(self.hex_dir / step["request_file"])
+                )
+                response = P.decode_frame(
+                    self._read_hex(self.hex_dir / step["response_file"])
+                )
                 with self.subTest(vector=vector["name"], step=step["name"]):
-                    self.assertEqual(request.opcode,
-                                     source["steps"][index]["opcode"])
-                    self.assertEqual(list(response.payload), step[
-                        "response_payload_words"])
+                    self.assertEqual(request.opcode, source["steps"][index]["opcode"])
+                    self.assertEqual(
+                        list(response.payload), step["response_payload_words"]
+                    )
 
     def test_hex_export_is_drift_checked(self):
         self.assertEqual(V.check_hex_export(), 0)
@@ -297,7 +359,7 @@ class TestReadmemhExport(unittest.TestCase):
             self.assertNotEqual(V.check_hex_export(), 0)
         finally:
             victim.write_text(original, encoding="utf-8")
-        self.assertEqual(V.check_hex_export(), 0)   # restored
+        self.assertEqual(V.check_hex_export(), 0)  # restored
 
     def test_hex_readme_explains_readmemh_use(self):
         readme = (V.HEX_DIR / "README.md").read_text(encoding="utf-8")
@@ -319,10 +381,10 @@ class TestModelImageShipsWithTheVectors(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.package = V.build_package()
-        cls.on_disk = json.loads(
-            PACKAGE_JSON.read_text(encoding="utf-8"))
+        cls.on_disk = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
         cls.manifest = json.loads(
-            (V.HEX_DIR / "manifest.json").read_text(encoding="utf-8"))
+            (V.HEX_DIR / "manifest.json").read_text(encoding="utf-8")
+        )
 
     def _read_hex(self, path):
         return bytes.fromhex("".join(path.read_text(encoding="utf-8").split()))
@@ -334,8 +396,7 @@ class TestModelImageShipsWithTheVectors(unittest.TestCase):
             with self.subTest(vector=vector["name"]):
                 self.assertIn(vector["model_image_id"], images)
                 for step in vector["steps"]:
-                    self.assertEqual(step["model_image_id"],
-                                     vector["model_image_id"])
+                    self.assertEqual(step["model_image_id"], vector["model_image_id"])
 
     def test_image_declares_imem_dmem_and_register_state(self):
         for image_id, image in self.on_disk["model_images"].items():
@@ -343,8 +404,17 @@ class TestModelImageShipsWithTheVectors(unittest.TestCase):
                 self.assertEqual(image["imem"]["words"], 1024)
                 self.assertEqual(image["dmem"]["bytes"], 16)
                 state = image["state"]
-                for field in ("pc", "a", "x", "y", "insn", "timer", "run",
-                              "faults", "words_written"):
+                for field in (
+                    "pc",
+                    "a",
+                    "x",
+                    "y",
+                    "insn",
+                    "timer",
+                    "run",
+                    "faults",
+                    "words_written",
+                ):
                     self.assertIn(field, state)
                 self.assertLess(state["pc"], 1 << F.ISA_PC_BITS)
                 self.assertLess(state["a"], 1 << F.ISA_A_BITS)
@@ -362,7 +432,7 @@ class TestModelImageShipsWithTheVectors(unittest.TestCase):
         images = self.on_disk["model_images"]
         for vector in self.on_disk["vectors"]:
             image = images[vector["model_image_id"]]
-            pe = V.load_model_from_image(image)     # the shipped initial state
+            pe = V.load_model_from_image(image)  # the shipped initial state
             for step in vector["steps"]:
                 with self.subTest(vector=vector["name"], step=step["name"]):
                     response = pe.exchange(bytes.fromhex(step["request_hex"]))
@@ -373,8 +443,11 @@ class TestModelImageShipsWithTheVectors(unittest.TestCase):
 
     def test_the_lifecycle_vector_is_stateful_from_its_image(self):
         # Guard the semantics: step 2 only makes sense after step 1 latched.
-        vector = next(v for v in self.on_disk["vectors"]
-                      if v["name"] == "read_range_fault_lifecycle")
+        vector = next(
+            v
+            for v in self.on_disk["vectors"]
+            if v["name"] == "read_range_fault_lifecycle"
+        )
         image = self.on_disk["model_images"][vector["model_image_id"]]
         self.assertEqual(image["state"]["faults"], 0)
         pe = V.load_model_from_image(image)
@@ -386,32 +459,33 @@ class TestModelImageShipsWithTheVectors(unittest.TestCase):
         self.assertEqual(second.hex(), vector["steps"][1]["response_hex"])
 
     def test_a_tampered_image_changes_the_data_the_vector_proves(self):
-        image = json.loads(json.dumps(
-            self.on_disk["model_images"]["v01-read_imem_bounded"]))
-        image["imem"]["sparse"]["1"] = 0xDEAD       # not the shipped word
+        image = json.loads(
+            json.dumps(self.on_disk["model_images"]["v01-read_imem_bounded"])
+        )
+        image["imem"]["sparse"]["1"] = 0xDEAD  # not the shipped word
         pe = V.load_model_from_image(image)
-        response = pe.exchange(bytes.fromhex(
-            self.on_disk["vectors"][0]["steps"][0]["request_hex"]))
+        response = pe.exchange(
+            bytes.fromhex(self.on_disk["vectors"][0]["steps"][0]["request_hex"])
+        )
         if response is None:
             self.fail("no response for the tampered-image read")
-        self.assertNotEqual(response.hex(),
-                            self.on_disk["vectors"][0]["steps"][0]["response_hex"])
+        self.assertNotEqual(
+            response.hex(), self.on_disk["vectors"][0]["steps"][0]["response_hex"]
+        )
+
     def test_imem_hex_file_decodes_to_the_shipped_image(self):
-        image = self.manifest["model_images"][
-            self.manifest["image_files"]["image_id"]]
+        image = self.manifest["model_images"][self.manifest["image_files"]["image_id"]]
         data = self._read_hex(V.HEX_DIR / self.manifest["image_files"]["imem_file"])
         self.assertEqual(len(data), 2 * image["imem"]["words"])
         fill = int(str(image["imem"]["fill"]), 0)
-        words = [int.from_bytes(data[i:i + 2], "big")
-                 for i in range(0, len(data), 2)]
+        words = [int.from_bytes(data[i : i + 2], "big") for i in range(0, len(data), 2)]
         self.assertEqual(words[0], int(image["imem"]["sparse"]["0"]))
         self.assertEqual(words[1], int(image["imem"]["sparse"]["1"]))
         self.assertEqual(words[2], int(image["imem"]["sparse"]["2"]))
-        self.assertEqual(words[500], fill)          # the fill default holds
+        self.assertEqual(words[500], fill)  # the fill default holds
 
     def test_dmem_hex_file_decodes_to_the_shipped_image(self):
-        image = self.manifest["model_images"][
-            self.manifest["image_files"]["image_id"]]
+        image = self.manifest["model_images"][self.manifest["image_files"]["image_id"]]
         data = self._read_hex(V.HEX_DIR / self.manifest["image_files"]["dmem_file"])
         self.assertEqual(len(data), image["dmem"]["bytes"])
         for address, byte in image["dmem"]["sparse"].items():
@@ -470,8 +544,7 @@ class TestTheConfirmedBytesArePinned(unittest.TestCase):
         for name in CONFIRMED_STEP_BYTES:
             with self.subTest(step=name):
                 self.assertTrue(
-                    (V.HEX_DIR / f"status_while_step_paused.{name}.req.hex")
-                    .exists()
+                    (V.HEX_DIR / f"status_while_step_paused.{name}.req.hex").exists()
                     or any(
                         path.name.endswith(f".{name}.req.hex")
                         for path in V.HEX_DIR.glob("*.req.hex")
@@ -519,9 +592,8 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
                 vector = self.by_vector[name]
                 self.assertEqual(
                     sorted(s["name"] for s in vector["steps"]),
-                    sorted(
-                        s for s in HELD_STEPS
-                        if s in self._steps(name)))
+                    sorted(s for s in HELD_STEPS if s in self._steps(name)),
+                )
                 self.assertEqual(len(vector["steps"]), 2)
                 self.assertIn(vector["model_image_id"], self.images)
                 self.assertFalse(vector["chip_confirmed"])
@@ -554,8 +626,7 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
         self.assertEqual(dump["status"], P.STATUS_OK)
         # The R2 obligation restated under a hold: the two headers agree, and
         # the state word inside them says the hold is why the core is stopped.
-        self.assertEqual(dump["response_payload_words"],
-                         status["response_payload_words"])
+        self.assertEqual(dump["response_payload_words"], status["response_payload_words"])
         self.assertEqual(dump["response_payload_words"][1], F.DEBUG_HOLD)
 
     def test_dump_core_is_refused_under_a_live_hit(self):
@@ -593,15 +664,15 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
         stepped = load(F.FakePE())
         stepped.bp_addr, stepped.bp_en = 2, True
         stepped.debug_step_once()
-        self.assertEqual((stepped.pc, stepped.a, stepped.state),
-                         (1, 0x41, F.DEBUG_HOLD))
+        self.assertEqual((stepped.pc, stepped.a, stepped.state), (1, 0x41, F.DEBUG_HOLD))
         pause = self.images["v09-status_while_step_paused"]
         self.assertEqual(pause["state"]["pc"], stepped.pc)
         self.assertEqual(pause["state"]["a"], stepped.a)
         self.assertEqual(pause["state"]["run"], 0)
-        self.assertEqual(pause["debug"],
-                         {"bp_addr": 2, "bp_en": True, "bp_hit": False,
-                          "debug_hold": True})
+        self.assertEqual(
+            pause["debug"],
+            {"bp_addr": 2, "bp_en": True, "bp_hit": False, "debug_hold": True},
+        )
 
         # The SAME program free-running with the strap high: the core stops ON
         # the breakpoint, the hit latches, and the strap stays high.
@@ -609,21 +680,27 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
         live.bp_addr, live.bp_en = 2, True
         live.set_run(True)
         self.assertTrue(live.advance_free_running())
-        self.assertEqual((live.pc, live.a, live.state, int(live.run)),
-                         (2, 0x41, F.DEBUG_BP_HIT, 1))
+        self.assertEqual(
+            (live.pc, live.a, live.state, int(live.run)), (2, 0x41, F.DEBUG_BP_HIT, 1)
+        )
         hit = self.images["v10-status_while_bp_hit"]
         self.assertEqual(hit["state"]["pc"], live.pc)
         self.assertEqual(hit["state"]["a"], live.a)
         self.assertEqual(hit["state"]["run"], 1)
-        self.assertEqual(hit["debug"],
-                         {"bp_addr": 2, "bp_en": True, "bp_hit": True,
-                          "debug_hold": True})
+        self.assertEqual(
+            hit["debug"],
+            {"bp_addr": 2, "bp_en": True, "bp_hit": True, "debug_hold": True},
+        )
 
     def test_the_held_steps_are_unconfirmed_and_cite_nothing(self):
         for name in HELD_STEPS:
             with self.subTest(step=name):
-                step = next(s for v in self.package["vectors"]
-                            for s in v["steps"] if s["name"] == name)
+                step = next(
+                    s
+                    for v in self.package["vectors"]
+                    for s in v["steps"]
+                    if s["name"] == name
+                )
                 self.assertFalse(step["chip_confirmed"])
                 self.assertIsNone(step.get("chip_evidence"))
 
@@ -640,11 +717,12 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
                     self.assertEqual(response.hex(), step["response_hex"])
 
     def test_the_hex_export_ships_the_held_steps(self):
-        manifest = json.loads(
-            (V.HEX_DIR / "manifest.json").read_text(encoding="utf-8"))
-        shipped = {step["name"]: step
-                   for vector in manifest["vectors"]
-                   for step in vector["steps"]}
+        manifest = json.loads((V.HEX_DIR / "manifest.json").read_text(encoding="utf-8"))
+        shipped = {
+            step["name"]: step
+            for vector in manifest["vectors"]
+            for step in vector["steps"]
+        }
         for name in HELD_STEPS:
             with self.subTest(step=name):
                 self.assertIn(name, shipped)
@@ -668,12 +746,16 @@ class TestTheNoticeMatchesTheFlagArithmetic(unittest.TestCase):
         cls.package = V.build_package()
         cls.notice = cls.package["notice"]
         cls.confirmed = [
-            step["name"] for vector in cls.package["vectors"]
-            for step in vector["steps"] if step["chip_confirmed"]
+            step["name"]
+            for vector in cls.package["vectors"]
+            for step in vector["steps"]
+            if step["chip_confirmed"]
         ]
         cls.unconfirmed = [
-            step["name"] for vector in cls.package["vectors"]
-            for step in vector["steps"] if not step["chip_confirmed"]
+            step["name"]
+            for vector in cls.package["vectors"]
+            for step in vector["steps"]
+            if not step["chip_confirmed"]
         ]
 
     def test_the_confirmed_and_unconfirmed_counts_are_stated(self):
@@ -689,9 +771,11 @@ class TestTheNoticeMatchesTheFlagArithmetic(unittest.TestCase):
 
     def test_the_notice_makes_none_of_the_contradicted_claims(self):
         lowered = self.notice.lower()
-        for claim in ("every golden step in this package passes",
-                      f"all {len(self.confirmed) + len(self.unconfirmed)} golden steps",
-                      "fully confirmed"):
+        for claim in (
+            "every golden step in this package passes",
+            f"all {len(self.confirmed) + len(self.unconfirmed)} golden steps",
+            "fully confirmed",
+        ):
             with self.subTest(claim=claim):
                 self.assertNotIn(claim, lowered)
 
@@ -707,8 +791,7 @@ class TestTheNoticeMatchesTheFlagArithmetic(unittest.TestCase):
                     self.assertNotIn("every", ruling.lower())
 
     def test_the_hex_manifest_carries_the_identical_notice(self):
-        manifest = json.loads(
-            (V.HEX_DIR / "manifest.json").read_text(encoding="utf-8"))
+        manifest = json.loads((V.HEX_DIR / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["notice"], self.notice)
         self.assertFalse(manifest["chip_confirmed"])
 

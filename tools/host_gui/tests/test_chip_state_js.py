@@ -73,16 +73,30 @@ process.stdout.write(JSON.stringify(out));
 def drive(samples):
     if NODE is None:
         raise unittest.SkipTest("node not installed")
-    result = subprocess.run([NODE, "-e", DRIVER, str(APP_JS), json.dumps(samples)],
-                            capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        [NODE, "-e", DRIVER, str(APP_JS), json.dumps(samples)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     if result.returncode != 0:
         raise AssertionError(f"node driver failed: {result.stderr[:400]}")
     return json.loads(result.stdout)
 
 
 def sample(state, run):
-    return {"state": state, "run": run, "target": 0, "pc": 0, "a": 0, "x": 0,
-            "y": 0, "timer": 0, "faults": 0, "words_written": 0}
+    return {
+        "state": state,
+        "run": run,
+        "target": 0,
+        "pc": 0,
+        "a": 0,
+        "x": 0,
+        "y": 0,
+        "timer": 0,
+        "faults": 0,
+        "words_written": 0,
+    }
 
 
 class TestChipStateReadout(unittest.TestCase):

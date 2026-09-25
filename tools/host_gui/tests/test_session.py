@@ -296,8 +296,8 @@ class TestStatusReportsTheHeldState(unittest.TestCase):
         session, bridge = self._running_stack()
         pe = bridge.pe
         pe.bp_addr, pe.bp_en = 2, True
-        pe.set_run(False)             # back to the boot stop
-        pe.debug_step_once()          # one instruction, then held
+        pe.set_run(False)  # back to the boot stop
+        pe.debug_step_once()  # one instruction, then held
         self.assertEqual(pe.state, F.DEBUG_HOLD)
 
         snapshot = session.status()
@@ -318,9 +318,9 @@ class TestStatusReportsTheHeldState(unittest.TestCase):
         """
         session, bridge = self._running_stack()
         session.bp_set(1)
-        bridge.pe.advance_free_running()      # the core stops on the breakpoint
+        bridge.pe.advance_free_running()  # the core stops on the breakpoint
         with self.assertRaises(S.SessionStateError):
-            session.dump_core()               # strap high: refused, as the chip does
+            session.dump_core()  # strap high: refused, as the chip does
 
         # a step-pause with the strap LOW, reached the way an operator reaches
         # one: stop, arm FURTHER AHEAD, step. (Arming the next landing address
@@ -330,7 +330,7 @@ class TestStatusReportsTheHeldState(unittest.TestCase):
         session.bp_set(3)
         step = session.debug_step()
         self.assertEqual(step.state, F.DEBUG_HOLD)
-        dump = session.dump_core()            # strap low: answered
+        dump = session.dump_core()  # strap low: answered
         self.assertEqual(dump.state, F.DEBUG_HOLD)
         self.assertEqual(dump.run, 0)
 

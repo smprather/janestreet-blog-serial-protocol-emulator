@@ -110,8 +110,11 @@ class TestDemoWalkthrough(unittest.TestCase):
         repository. Four held-core steps ship unconfirmed, so the R2 row has
         to say which half is which rather than presenting one number.
         """
-        row = next(line for line in self.text.splitlines()
-                   if "Memory/register readback (R2)" in line)
+        row = next(
+            line
+            for line in self.text.splitlines()
+            if "Memory/register readback (R2)" in line
+        )
         self.assertIn("18/18", row)
         self.assertIn("18 of 22", row)
         self.assertRegex(row, r"NOT confirmed|unconfirmed")
