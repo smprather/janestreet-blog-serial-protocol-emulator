@@ -476,6 +476,24 @@ class ControllerSession:
                     "event": "chip.irq",
                     "data": {"faults": snapshot.faults},
                 }
+        elif snapshot.state in (DEBUG_BP_HIT, DEBUG_HOLD):
+            # The chip says the core is HELD, and that outranks the run word.
+            # A live breakpoint hit arrives as state=3 WITH run=1 - the hold
+            # masks the strap, it does not drop it - so mapping the session on
+            # `run` alone reports a core parked on a breakpoint as RUNNING, and
+            # a step-pause (state=2, run=0) as a plain STOPPED. The strap is
+            # still taken from the run word and nothing is inferred here:
+            # STATUS reports the two as SEPARATE words, which is exactly what
+            # `_debug_state_from` cannot do for the debug prefix (that one
+            # carries no strap, so it must not guess one).
+            self._run = bool(snapshot.run)
+            if snapshot.run:
+                self._has_run = True
+            self.state = (
+                SessionState.BP_HIT
+                if snapshot.state == DEBUG_BP_HIT
+                else SessionState.DEBUG_HOLD
+            )
         elif snapshot.run:
             self._run = True
             self._has_run = True

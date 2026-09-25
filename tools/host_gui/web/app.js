@@ -44,9 +44,23 @@ function renderHealth(health) {
   setStatusPolling(connected);
 }
 
+// The chip's own state encoding (rtl/pe_ctrl.v:
+//   dbg_state = dbg_hold_r ? (bp_hit ? 2'd3 : 2'd2) : (run ? 2'd1 : 2'd0)).
+// Four values, not two: R3's debug control made 2 and 3 reachable, and a core
+// parked on a breakpoint is 3 WITH the run strap still high. Collapsing that
+// to "STOPPED" is a lie the operator acts on - it is how a held core looks
+// like an idle one. Same vocabulary and same "(value)" form as the debug
+// panel's readout below, so the two rows of this page cannot disagree.
+const CHIP_STATE_NAMES = { 0: "STOPPED", 1: "RUNNING", 2: "DEBUG_HOLD",
+                           3: "BP_HIT" };
+
 function renderStatus(status) {
   if (!status) return;
-  $("chip-state").textContent = status.state === 1 ? "RUNNING" : "STOPPED";
+  const name = CHIP_STATE_NAMES[status.state];
+  // An unrecognised value is shown as itself, never as a definite state: a
+  // host talking to a newer chip must not read an unknown word as "STOPPED".
+  $("chip-state").textContent =
+    `${name || "UNKNOWN"} (${status.state})`;
   $("run-state").textContent = status.run ? "on" : "off";
   $("words-written").textContent = status.words_written;
   $("faults").textContent = status.faults

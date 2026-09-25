@@ -249,6 +249,106 @@ class TestLoadStartStop(unittest.TestCase):
         self.assertEqual(session.state, S.SessionState.FAULTED)
 
 
+class TestStatusReportsTheHeldState(unittest.TestCase):
+    """STATUS carries the chip's own state word; the session must use it.
+
+    R3 gave the chip two more ways to be stopped, and R2's STATUS reports both
+    of them in its own `state` word — so the op a host polls continuously is
+    the one that can tell it the core is parked on a breakpoint. It cannot,
+    today: `status()` maps the session state from the `run` word ALONE, so a
+    live hit (`state=3, run=1`, the state the golden R2 step
+    `status_reports_the_hit` now pins) reads as RUNNING, and a step-pause
+    (`state=2, run=0`) reads as a plain STOPPED. The debug ops get this right —
+    `_debug_state_from` maps 2/3 — which is why the gap is easy to miss: the
+    panel path is right and the poll path is wrong, and a host that only uses
+    the R2 readback never sees a hold at all.
+
+    Nothing here is inferred: STATUS reports the state word and the run strap
+    as SEPARATE words, so the session takes the debug state from the first and
+    the strap from the second. The same discipline `_debug_state_from` states
+    for the debug prefix, which does not carry the strap.
+    """
+
+    def _running_stack(self):
+        session, bridge, _, _ = make_stack()
+        session.connect()
+        session.load(ECHO)
+        session.start()
+        return session, bridge
+
+    def test_a_core_parked_on_a_breakpoint_is_not_reported_as_running(self):
+        session, bridge = self._running_stack()
+        pe = bridge.pe
+        pe.bp_addr, pe.bp_en = 1, True
+        pe.set_run(True)
+        self.assertTrue(pe.advance_free_running(), "the core must stop on the bp")
+        self.assertEqual(pe.state, F.DEBUG_BP_HIT)
+
+        snapshot = session.status()
+
+        # what the chip said, unchanged
+        self.assertEqual(snapshot.state, F.DEBUG_BP_HIT)
+        self.assertEqual(snapshot.run, 1, "a hit holds the core, not the strap")
+        # what the session made of it
+        self.assertEqual(session.state, S.SessionState.BP_HIT)
+
+    def test_a_step_pause_is_reported_as_the_hold_it_is(self):
+        session, bridge = self._running_stack()
+        pe = bridge.pe
+        pe.bp_addr, pe.bp_en = 2, True
+        pe.set_run(False)             # back to the boot stop
+        pe.debug_step_once()          # one instruction, then held
+        self.assertEqual(pe.state, F.DEBUG_HOLD)
+
+        snapshot = session.status()
+
+        self.assertEqual(snapshot.state, F.DEBUG_HOLD)
+        self.assertEqual(snapshot.run, 0)
+        self.assertEqual(session.state, S.SessionState.DEBUG_HOLD)
+
+    def test_the_strap_still_governs_the_stopped_only_reads(self):
+        """A GUARD, not the finding: knowing the core is HELD must not unlock it.
+
+        DUMP_CORE is gated on the run strap (the golden step
+        `dump_core_refused_the_strap_is_high` pins NOT_READY under a live hit),
+        so the session's stopped-only guard keeps following the strap: refused
+        under a live hit, answered under a step-pause. Learning the hold must
+        not move the host across that gate, and this is driven through the
+        session's own API so it cannot pass by accident.
+        """
+        session, bridge = self._running_stack()
+        session.bp_set(1)
+        bridge.pe.advance_free_running()      # the core stops on the breakpoint
+        with self.assertRaises(S.SessionStateError):
+            session.dump_core()               # strap high: refused, as the chip does
+
+        # a step-pause with the strap LOW, reached the way an operator reaches
+        # one: stop, arm FURTHER AHEAD, step. (Arming the next landing address
+        # would land the step ON the breakpoint and give a BP_HIT instead,
+        # which is a different state and already covered above.)
+        session.stop()
+        session.bp_set(3)
+        step = session.debug_step()
+        self.assertEqual(step.state, F.DEBUG_HOLD)
+        dump = session.dump_core()            # strap low: answered
+        self.assertEqual(dump.state, F.DEBUG_HOLD)
+        self.assertEqual(dump.run, 0)
+
+    def test_an_unheld_core_reads_exactly_as_before(self):
+        session, _ = self._running_stack()
+        self.assertEqual(session.status().state, F.DEBUG_RUNNING)
+        self.assertEqual(session.state, S.SessionState.RUNNING)
+        session.stop()
+        self.assertEqual(session.status().state, F.DEBUG_STOPPED)
+        self.assertEqual(session.state, S.SessionState.STOPPED)
+
+    def test_a_fault_still_outranks_the_held_state(self):
+        session, bridge = self._running_stack()
+        bridge.pe.faults = F.FAULT_PROTOCOL
+        session.status()
+        self.assertEqual(session.state, S.SessionState.FAULTED)
+
+
 class TestReadbackAndDump(unittest.TestCase):
     def test_dump_allowed_when_stopped(self):
         session, _, _, _ = make_stack()
