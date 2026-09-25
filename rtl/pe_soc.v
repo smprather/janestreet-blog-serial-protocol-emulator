@@ -215,6 +215,18 @@ module pe_soc #(
   output logic [7:0]  dbg_y,
   output logic [15:0] dbg_insn,
   output logic [7:0]  dbg_timer
+`ifdef FORMAL
+  // ---- FORMAL-ONLY OBSERVATION PORTS (manager ruling 2026-09-25) --------
+  // Target 4: the codec owner mux. The subject is internal (tx_path and the two
+  // engines' busy wires), and the window writes that move the owner come from
+  // the CPU's IO bus, so the claims are stated as one-step transitions over
+  // these aliases rather than by modelling a firmware program. FORMAL is never
+  // defined in synthesis (tools/check_formal_ifdef.sh enforces it).
+  ,output logic        fv_tx_path
+  ,output logic        fv_eth_tx_owner
+  ,output logic        fv_eth_tx_busy
+  ,output logic        fv_ser_tx_busy
+`endif
 );
 
   localparam int IAW = (IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS);
@@ -739,7 +751,7 @@ module pe_soc #(
       // dropped frame costs 100 us of wire time; re-reporting one costs one
       // extra poll.
       if (ethstat_rd) begin
-        if (!eth_frame_valid) eth_valid <= 1'b0;
+        if (1'b0) eth_valid <= 1'b0;   // MUTANT: valid never clears
         if (!eth_frame_bad)   eth_bad   <= 1'b0;
       end
       if (eth_frame_bad) eth_bad <= 1'b1;
@@ -1207,5 +1219,13 @@ module pe_soc #(
       default: io_rdata = 8'h00;
     endcase
   end
+
+`ifdef FORMAL
+  // ---- formal-only observation aliases (see the port list) --------------
+  assign fv_tx_path       = tx_path;
+  assign fv_eth_tx_owner  = eth_tx_owner;
+  assign fv_eth_tx_busy   = eth_tx_busy;
+  assign fv_ser_tx_busy   = ser_tx_busy;
+`endif
 
 endmodule

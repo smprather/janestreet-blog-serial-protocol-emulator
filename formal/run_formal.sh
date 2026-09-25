@@ -2,127 +2,155 @@
 # run_formal.sh — the formal verification campaign (reviews/2026-09-25/
 # FORMAL-VERIFICATION.md).
 #
-#   bash formal/run_formal.sh            # the fast subset (also in run_all)
-#   bash formal/run_formal.sh --full     # every target, deeper
+#   bash formal/run_formal.sh            # the gate: every target, bounded depths
+#   bash formal/run_formal.sh --full     # (kept for compatibility; same targets)
 #
-# TOOLCHAIN (documented, because the usual one is absent here). SymbiYosys is
-# NOT installed and pip refuses to install it (no virtualenv on this host), and
-# there is NO SMT solver on the system at all (boolector/yices/z3/cvc* all
-# absent), so sby could not have run even if installed. We therefore use yosys'
-# BUILT-IN `sat` engine: read_verilog -formal, prep, clk2fflogic, async2sync,
-# dffunmap, then `sat -seq N -set-init-zero -set-assumes -prove-asserts -verify`.
+# TOOLCHAIN, in one place: every proof runs through formal/fv_run.sh, which
+# owns the yosys flags, the -set-assumes fix, the memory cap (ulimit -v) and the
+# one-yosys-at-a-time flock. Do not run yosys directly for a campaign proof.
 #
-# FOUR THINGS THIS FLOW LEARNED THE HARD WAY, all encoded below:
-#   * `-set-init-zero` is REQUIRED. Without it the flip-flops' initial values
-#     are unconstrained, so the solver can "start" a design mid-frame (e.g. the
-#     TX engine already in S_FCS, tx_done high) and every safety property fails
-#     for reasons that are harness artifacts, not defects.
-#   * `-set-assumes` is REQUIRED FOR ANY ASSUMPTION TO EXIST AT ALL. `sat`
-#     ignores $assume cells unless it is passed; without it the reset-discipline
-#     assume (and every contract assumption) is decoration. Found while
-#     debugging an assumption that provably was not constraining the solver
-#     (a minimal design proved FAIL with `assume(1'b0)` in force). The earlier
-#     campaign's proofs ran without it; every result here is with it.
-#   * hierarchical references (dut.reg_od) do NOT become connections in yosys,
-#     even under -flatten -- the same implicit-wire trap pe_ctrl's header
-#     documents. A tap-based wrapper compares the DUT against NOISE and
-#     produces a confident, meaningless FAIL. So the wrappers use REFERENCE
-#     MODELS built from the observable ports (or, where the subject is internal
-#     state, the guarded `ifdef FORMAL` observation ports the manager approved) --
-#     never an unguarded hierarchical tap.
-#   * VACUITY IS PART OF THE RESULT. `sat` cannot model $cover cells on this
-#     build, so each target with a deep-only claim has a companion
-#     reachability target that asserts the state is NEVER reached: a model
-#     means the state is reachable (the claim is live), a proof means the
-#     claim is VACUOUS at that depth. Those labels are printed, not hidden.
+# TWO PROOF SHAPES:
+#   bmc     `sat -seq N` — bounded; the depth is the strength, and a claim that
+#           cannot be REACHED at N is VACUOUS there (labelled by the reach
+#           targets and by the mutant checks, never silently trusted).
+#   induct  `sat -tempinduct` — UNBOUNDED (base case + induction step). This is
+#           the shape the manager's 2026-09-25 ruling directs for claims that a
+#           frame engine makes deep: a cap-kill on a deep BMC is a STRATEGY
+#           SIGNAL, not a reason to retry deeper.
+#
+# THREE OUTCOMES PER TARGET, reported honestly:
+#   prove   PROVED is the pass; COUNTEREXAMPLE / NOTPROVED / ERROR is a failure.
+#   reach   the claim is INVERTED (assert the state is never reached):
+#           a model = REACHABLE (the corresponding assertion is live here),
+#           a proof = VACUOUS at this depth. Informational, never a pass.
+#   refute  a claim the RTL is EXPECTED to violate (a recorded FINDING):
+#           NOTPROVED / COUNTEREXAMPLE = the finding is confirmed; PROVED = the
+#           finding would be closed (informational).
+#
+# Peak RSS per run is recorded in formal/results/summary.txt: the memory ceiling
+# and every run's peak are part of the evidence.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 ROOT="$PWD"
-DEPTH="${FORMAL_DEPTH:-16}"   # fast subset; see the review for what each depth reaches
-[ "${1:-}" = "--full" ] && DEPTH="${FORMAL_DEPTH_FULL:-240}"
+DEPTH="${FORMAL_DEPTH:-16}"
+[ "${1:-}" = "--full" ] && DEPTH="${FORMAL_DEPTH_FULL:-24}"
 
 OUT="$ROOT/formal/results"
 mkdir -p "$OUT"
-pass=0; fail=0; live=0; vacuous=0
+pass=0; fail=0; live=0; vacuous=0; findings=0
 declare -a SUMMARY
 
+# peak RSS recorded from the yosys log ("MEM: x MB peak"); a run killed by the
+# cap never prints it, and that absence is itself the signal.
+peak_of() {
+  local p
+  p=$(grep -oE "MEM: [0-9.]+ MB peak" "$1" 2>/dev/null | tail -1)
+  printf '%s' "${p:-MEMCAP-or-killed (no MEM line)}"
+}
+
 # run_target <name> <top> <depth> <mode> <sources...>
-#   mode = prove  : expect a proof; FAIL exits non-zero
-#   mode = reach  : invert the claim (assert the state is NEVER reached);
-#                   a model is the interesting outcome and is reported as
-#                   REACHABLE (claim live), a proof as UNREACHABLE (vacuous)
 run_target() {
   local name="$1" top="$2" depth="$3" mode="$4"; shift 4
   local log="$OUT/$name.log"
-  printf '=== %-24s depth=%-4s ' "$name" "$depth"
+  local shape="${FORMAL_SAT_MODE:-bmc}"
+  printf '=== %-26s depth=%-4s shape=%-6s ' "$name" "$depth" "$shape"
   local res
   res=$(bash formal/fv_run.sh "$log" "$top" "$depth" "$@")
-  case "$res" in
-    PROVED)
-      if [ "$mode" = reach ]; then
-        printf 'UNREACHABLE (claim vacuous at this depth)\n'; vacuous=$((vacuous+1))
-        SUMMARY+=("$name|UNREACHABLE|$depth|vacuous at this depth")
-      else
-        printf 'PROVED (bounded, %s)\n' "$depth"; pass=$((pass+1))
-        SUMMARY+=("$name|PROVED|$depth|live")
-      fi ;;
-    COUNTEREXAMPLE)
-      if [ "$mode" = reach ]; then
-        printf 'REACHABLE (claim live here; witness in %s)\n' "$log"; live=$((live+1))
-        SUMMARY+=("$name|REACHABLE|$depth|live")
-      else
-        printf 'COUNTEREXAMPLE (see %s)\n' "$log"; fail=$((fail+1))
-        SUMMARY+=("$name|COUNTEREXAMPLE|$depth|FAILED")
-      fi ;;
-    *)
+  local peak; peak=$(peak_of "$log")
+  case "$mode:$res" in
+    prove:PROVED)
+      printf 'PROVED\n'; pass=$((pass+1))
+      SUMMARY+=("$name|PROVED|$depth|$shape|$peak") ;;
+    prove:COUNTEREXAMPLE)
+      printf 'COUNTEREXAMPLE (see %s)\n' "$log"; fail=$((fail+1))
+      SUMMARY+=("$name|COUNTEREXAMPLE|$depth|$shape|$peak") ;;
+    prove:NOTPROVED)
+      printf 'NOT PROVED (the claim set did not close; see %s)\n' "$log"; fail=$((fail+1))
+      SUMMARY+=("$name|NOTPROVED|$depth|$shape|$peak") ;;
+    prove:*)
       printf 'ERROR (see %s)\n' "$log"; fail=$((fail+1))
-      SUMMARY+=("$name|ERROR|$depth|build/solver error") ;;
+      SUMMARY+=("$name|ERROR|$depth|$shape|$peak") ;;
+    reach:COUNTEREXAMPLE)
+      printf 'REACHABLE (claim live here)\n'; live=$((live+1))
+      SUMMARY+=("$name|REACHABLE|$depth|$shape|$peak") ;;
+    reach:PROVED)
+      printf 'VACUOUS at this depth\n'; vacuous=$((vacuous+1))
+      SUMMARY+=("$name|VACUOUS|$depth|$shape|$peak") ;;
+    reach:*)
+      printf 'ERROR (see %s)\n' "$log"; fail=$((fail+1))
+      SUMMARY+=("$name|ERROR|$depth|$shape|$peak") ;;
+    refute:PROVED)
+      printf 'CLAIM HOLDS (the finding would be closed)\n'
+      SUMMARY+=("$name|HOLDS|$depth|$shape|$peak") ;;
+    refute:COUNTEREXAMPLE)
+      printf 'REFUTED with a witness (finding confirmed)\n'; findings=$((findings+1))
+      SUMMARY+=("$name|REFUTED-WITNESS|$depth|$shape|$peak") ;;
+    refute:NOTPROVED)
+      printf 'REFUTED (finding confirmed: the transition permits it)\n'; findings=$((findings+1))
+      SUMMARY+=("$name|REFUTED|$depth|$shape|$peak") ;;
+    refute:*)
+      printf 'ERROR (see %s)\n' "$log"; fail=$((fail+1))
+      SUMMARY+=("$name|ERROR|$depth|$shape|$peak") ;;
   esac
 }
 
-echo "=== formal campaign (yosys $(yosys -V | head -1 | cut -d' ' -f2)), depth $DEPTH ==="
+echo "=== formal campaign (yosys $(yosys -V | head -1 | cut -d' ' -f2)) — see the review for per-claim status ==="
+
 echo "--- target 1: pe_pinmux open-drain safety"
 run_target pinmux_od_invariant formal_pe_pinmux "$DEPTH" prove \
   formal/pe_pinmux/formal_pe_pinmux.v rtl/pe_pinmux.v
 
-echo "--- target 3: pe_eth_tx frame bounds / IFG / underrun"
+echo "--- target 3: pe_eth_tx frame bounds / underrun (P1a/P1b/P3), + vacuity labels"
 run_target eth_tx_safety formal_pe_eth_tx "$DEPTH" prove \
   formal/pe_eth_tx/formal_pe_eth_tx.v rtl/pe_eth_tx.v rtl/pe_crc.v
-
-echo "--- vacuity labels for target 3 (what the proof above actually reached)"
-for sel in 0 1 2 3; do
+for sel in 0 1; do
   case $sel in
     0) label="reach_busy" ;;
     1) label="reach_tx_done" ;;
-    2) label="reach_ifg_active" ;;
-    3) label="reach_ifg_close" ;;
   esac
   run_target "eth_tx_$label" formal_pe_eth_tx_reach "$DEPTH" reach \
     -DREACH_SEL=$sel formal/pe_eth_tx/formal_pe_eth_tx_reach.v rtl/pe_eth_tx.v rtl/pe_crc.v
 done
 
-echo "--- target 2: pe_ctrl R2 (no wrap / sticky RANGE / word-aligned serializer)"
-if [ -f formal/pe_ctrl/formal_pe_ctrl.v ]; then
-  run_target pe_ctrl_r2 formal_pe_ctrl "$DEPTH" prove \
-    formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
-else
-  printf '%-24s %s\n' "pe_ctrl_r2" "MISSING WRAPPER (formal/pe_ctrl/formal_pe_ctrl.v)"
-  SUMMARY+=("pe_ctrl_r2|MISSING|$DEPTH|wrapper absent")
-fi
+echo "--- target 3b: the IFG floor, INDUCTIVELY (unbounded)"
+FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-6}" \
+  run_target eth_tx_ifg_floor formal_pe_eth_tx_ifg 1 prove \
+  formal/pe_eth_tx/formal_pe_eth_tx_ifg.v rtl/pe_eth_tx.v rtl/pe_crc.v
+unset FORMAL_SAT_MODE FORMAL_INDUCT_MAX
 
-echo "--- target 4: pe_soc tx_path owner-mux exclusivity"
-if [ -f formal/pe_soc/formal_pe_soc.v ]; then
-  run_target pe_soc_owner_mux formal_pe_soc "$DEPTH" prove \
-    formal/pe_soc/formal_pe_soc.v rtl/pe_soc.v rtl/pe_eth_tx.v rtl/pe_serdes.v \
-    rtl/pe_nrzi.v rtl/pe_bitstuff.v rtl/pe_codec_mux.v rtl/pe_manch.v \
-    rtl/pe_dru.v rtl/pe_crc.v rtl/pe_fbuf.v rtl/pe_cpu.v rtl/pe_imem.v
-else
-  printf '%-24s %s\n' "pe_soc_owner_mux" "MISSING WRAPPER (formal/pe_soc/formal_pe_soc.v)"
-  SUMMARY+=("pe_soc_owner_mux|MISSING|$DEPTH|wrapper absent")
-fi
+echo "--- target 2: pe_ctrl R2 (no wrap / sticky RANGE / word-aligned serializer)"
+run_target pe_ctrl_r2 formal_pe_ctrl "$DEPTH" prove \
+  formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
+echo "    (the inductive subset: the claims that close by k-induction; the rest"
+echo "     are gate-depth only and are labelled as such in the review)"
+FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-6}" \
+  run_target pe_ctrl_r2_induct formal_pe_ctrl 1 prove \
+  -DFV_INDUCT formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
+unset FORMAL_SAT_MODE FORMAL_INDUCT_MAX
+
+echo "--- target 4: pe_soc owner-mux exclusivity (the guard the RTL has)"
+SRAM_STUB="formal/pe_soc/sram_model_formal.v"
+SOC_RTL="rtl/pe_soc.v rtl/pe_eth_tx.v rtl/pe_serdes.v rtl/pe_nrzi.v rtl/pe_bitstuff.v \
+         rtl/pe_codec_mux.v rtl/pe_manch.v rtl/pe_dru.v rtl/pe_crc.v rtl/pe_fbuf.v \
+         rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_eth_mac.v rtl/pe_pinmux.v"
+FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-3}" FORMAL_MEMORY_MAP=1 \
+  run_target pe_soc_owner_guard formal_pe_soc 1 prove \
+  formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
+unset FORMAL_SAT_MODE FORMAL_INDUCT_MAX FORMAL_MEMORY_MAP
+
+echo "--- target 4, second half: the MISSING guard (a recorded finding, refuted)"
+echo "    finding F2: setting tx_path has no ser_tx_busy term, so a TXCTRL"
+echo "    write during a SERDES transmission steals the codec mid-frame."
+FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-3}" FORMAL_MEMORY_MAP=1 \
+  run_target pe_soc_owner_unguarded_refuted formal_pe_soc_refute 1 refute \
+  formal/pe_soc/formal_pe_soc_refute.v $SRAM_STUB $SOC_RTL
+unset FORMAL_SAT_MODE FORMAL_INDUCT_MAX FORMAL_MEMORY_MAP
 
 echo
-echo "=== $pass proved, $fail counterexample/error, $live live-at-depth, $vacuous vacuous-at-depth (depth $DEPTH) ==="
-printf '%s\n' "${SUMMARY[@]:-}" > "$OUT/summary.txt"
+echo "=== $pass proved, $fail failed, $live reachable-at-depth, $vacuous vacuous-at-depth, $findings findings confirmed ==="
+{
+  printf 'name|result|depth|shape|peak_rss\n'
+  printf '%s\n' "${SUMMARY[@]:-}"
+} > "$OUT/summary.txt"
 [ "$fail" -eq 0 ] || exit 1
 exit 0

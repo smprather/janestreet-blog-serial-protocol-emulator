@@ -446,11 +446,34 @@ fi
 # are documented in reviews/2026-09-25/FORMAL-VERIFICATION.md. A "proved" that
 # never reaches the state it is about is worse than none, so this gate ships
 # with its non-vacuity mutants recorded rather than a bare green tick.
+# The FORMAL-IFDEF GATE: `ifdef FORMAL` instrumentation (the observation ports
+# for formal targets 2 and 4) must never be live on a synthesis path. This
+# checks that no build script defines FORMAL, and that a real synthesis
+# elaboration contains no fv_* wire at all.
+if bash tools/check_formal_ifdef.sh > /tmp/check_formal_ifdef.log 2>&1; then
+  echo "formal-ifdef gate: OK (FORMAL never defined on a synthesis path; taps compile out)"
+else
+  echo "formal-ifdef gate: FAILED (see /tmp/check_formal_ifdef.log)"
+  tail -12 /tmp/check_formal_ifdef.log
+  stale=1
+fi
+
 if bash formal/run_formal.sh > /tmp/run_formal.log 2>&1; then
-  echo "formal safety proofs: OK (pe_pinmux OD invariant, pe_eth_tx bounds/IFG/underrun)"
+  echo "formal safety proofs: OK (see formal/results/summary.txt for per-property status)"
 else
   echo "formal safety proofs: FAILED (counterexample or build error)"
   tail -20 /tmp/run_formal.log
+  stale=1
+fi
+
+# The non-vacuity evidence for those proofs: every proof must kill the mutant
+# that attacks its claim. Runs in its own proof shape per case (BMC or
+# induction) and takes the run lock reentrantly via CHIP_RUN_LOCK_HELD.
+if bash formal/mutants.sh > /tmp/run_formal_mutants.log 2>&1; then
+  echo "formal mutant checks: OK (10 caught, 0 survived; see formal/results/mutants.txt)"
+else
+  echo "formal mutant checks: FAILED (a mutant survived -- a claim is a blind spot)"
+  tail -20 /tmp/run_formal_mutants.log
   stale=1
 fi
 

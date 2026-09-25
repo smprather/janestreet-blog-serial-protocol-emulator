@@ -98,6 +98,13 @@ worker; this file is the manager's restart prompt.
   the ongoing hunt for the runaway python3's identity (both OOM windows had
   GUI-bridge test activity; unconfirmed). Mapped/simulation evidence only —
   never run physical flow, DRC or LVS.
+- **Worker model policy (user, 2026-09-25): the workers' model is
+  `stealth/space-bunny-alpha`.** Set it at every `/new` (right after reset)
+  and verify it on the pane's status line — after a reset, a worker must
+  NEVER be left on another model. The global settings default
+  (`ollama-cloud/deepseek-v4.1-flash`) is deliberately left alone (it serves
+  the user's own sessions); the model is applied per worker session at each
+  reset. Check the model at liveness ticks alongside the context percent.
 - Actively manage the Pi worker's context size — **soft wrap at 60-65%,
   hard wrap forced at 75%, never into the harness's auto zone (manager's
   domain policy, 2026-09-25; the user's ~60% refined into a band)**. The

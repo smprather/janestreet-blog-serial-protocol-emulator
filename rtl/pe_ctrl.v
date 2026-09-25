@@ -203,8 +203,11 @@ module pe_ctrl #(
   //   fv_resp_len/fv_resp_idx/fv_resp_active  P2a no response-index wrap
   //   fv_r_addr/fv_r_left/fv_r_dmem/fv_rstate P2a no walk past the bound
   //   fv_r_slot                               P2a no resp_buf slot overrun
-  //   fv_faults/fv_clr_mask/fv_range_evt      P2b RANGE sticky, set then held
-  //   fv_resp_bitpos/fv_fill_pos/fv_r_launch  P2c word-aligned serializer
+  //   fv_faults/fv_clr_mask                   P2b RANGE sticky
+  //   fv_resp_bitpos                          P2c word-aligned serializer
+  //   fv_r_imm                                P2a walk-vs-immediate-rejection:
+  //                both sit in R_START, and only the immediate one holds stale
+  //                r_addr/r_left values
   ,output logic [15:0] fv_resp_len
   ,output logic [4:0]  fv_resp_idx
   ,output logic        fv_resp_active
@@ -215,10 +218,8 @@ module pe_ctrl #(
   ,output logic [2:0]  fv_rstate
   ,output logic [15:0] fv_faults
   ,output logic [15:0] fv_clr_mask
-  ,output logic        fv_range_evt
   ,output logic [3:0]  fv_resp_bitpos
-  ,output logic [3:0]  fv_fill_pos
-  ,output logic        fv_r_launch
+  ,output logic        fv_r_imm
 `endif
 );
 
@@ -284,12 +285,10 @@ module pe_ctrl #(
   logic        r_first;          // 1 = the next dmem byte opens a pair
 
 `ifdef FORMAL
-  // Observation registers for the formal target (see the port list): what a
-  // CLEAR_FAULT applied, and whether a bounded-read RANGE rejection happened
-  // on this cycle. They OBSERVE existing branches -- they do not re-decide
-  // anything, so no proof can lean on a copy of the logic under test.
+  // Observation register for the formal target (see the port list): what a
+  // CLEAR_FAULT applied. It OBSERVES an existing branch -- it does not
+  // re-decide anything, so no proof leans on a copy of the logic under test.
   logic [15:0] fv_clr_mask_r;
-  logic        fv_range_evt_r;
 `endif
 
   // The bounded reads are the ONLY opcodes whose response cannot be built in
@@ -529,7 +528,6 @@ module pe_ctrl #(
     end else begin
 `ifdef FORMAL
       fv_clr_mask_r <= 16'h0000;   // formal-only: default = no CLEAR_FAULT
-      fv_range_evt_r <= 1'b0;      // formal-only: default = no RANGE rejection
 `endif
       // CS falling edge: a new transaction. Frame state resets; the sticky
       // faults, words_written, echo and selected target persist.
@@ -830,9 +828,6 @@ module pe_ctrl #(
                         faults      <= faults | FAULT_RANGE;
                         r_imm       <= 1'b1;
                         rstate      <= R_START;
-`ifdef FORMAL
-                        fv_range_evt_r <= 1'b1;   // formal-only observation
-`endif
                       end else begin
                         resp_buf[0] <= ST_OK;
                         resp_len    <= 16'd1 + pay1;   // status + data words
@@ -855,9 +850,6 @@ module pe_ctrl #(
                         faults      <= faults | FAULT_RANGE;
                         r_imm       <= 1'b1;
                         rstate      <= R_START;
-`ifdef FORMAL
-                        fv_range_evt_r <= 1'b1;   // formal-only observation
-`endif
                       end else begin
                         resp_buf[0] <= ST_OK;
                         // One status word plus ceil(count/2) data words.
@@ -1094,10 +1086,8 @@ module pe_ctrl #(
   assign fv_rstate      = rstate;
   assign fv_faults      = faults;
   assign fv_clr_mask    = fv_clr_mask_r;
-  assign fv_range_evt   = fv_range_evt_r;
   assign fv_resp_bitpos = resp_bitpos;
-  assign fv_fill_pos    = fill_pos;
-  assign fv_r_launch    = r_launch;
+  assign fv_r_imm       = r_imm;
 `endif
 
 endmodule

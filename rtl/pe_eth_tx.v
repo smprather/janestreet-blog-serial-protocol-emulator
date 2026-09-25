@@ -101,6 +101,29 @@ module pe_eth_tx #(
 
   // raw bit into u_tx_codec (Manchester, cfg = 0x04)
   output logic        tx_bit
+`ifdef FORMAL
+  // ---- FORMAL-ONLY OBSERVATION PORTS (manager ruling 2026-09-25) --------
+  // Exposed so the IFG floor can be proved INDUCTIVELY, as the manager's 3b
+  // ruling directs: a BMC that unrolls a whole frame dies at the memory cap
+  // ~672 cells in, so the claim is stated over the state that enforces it.
+  //   fv_ifg_cnt   the gap counter (frame-end opens the gap at 0; the gap
+  //                leaves only at its terminal value)
+  //   fv_state     the FSM state (the FCS's last cell is a STRUCTURAL
+  //                precondition: state==S_FCS && fcs_left==1 && cell_start)
+  //   fv_fcs_left  the FCS cell counter
+  //   fv_abort_pend the abort queue bit (an abort is one of the two documented
+  //                exits that legitimately cut the gap short -- the other is
+  //                losing `enable`)
+  // Keying the floor on `tx_done` instead would NOT be inductive: in an
+  // arbitrary state tx_done is free, so the solver can assert it while the FSM
+  // is nowhere near the FCS. These are aliases of existing signals; the whole
+  // block disappears when FORMAL is undefined, and synthesis NEVER defines it
+  // (tools/check_formal_ifdef.sh enforces that).
+  ,output logic [6:0] fv_ifg_cnt
+  ,output logic [2:0] fv_state
+  ,output logic [5:0] fv_fcs_left
+  ,output logic       fv_abort_pend
+`endif
 );
 
   // ---- state and counters ------------------------------------------------
@@ -161,6 +184,12 @@ module pe_eth_tx #(
   // ---- status and the wire bit ------------------------------------------
   assign tx_busy    = (state != S_IDLE);
   assign ifg_active = (state == S_IFG);
+`ifdef FORMAL
+  assign fv_ifg_cnt  = ifg_cnt;    // formal-only aliases (see the port list)
+  assign fv_state    = state;
+  assign fv_fcs_left = fcs_left;
+  assign fv_abort_pend = abort_pend;
+`endif
 
   // Mid-frame the wire bit is the registered data bit (or the CRC field bit);
   // everywhere else it tracks half_phase, which turns the Manchester encoder's

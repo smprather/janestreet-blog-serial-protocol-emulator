@@ -67,6 +67,9 @@ module formal_pe_eth_tx #(
 );
   wire       push_ready, tx_busy, tx_done, tx_underrun, tx_overlong, ifg_active;
   wire       tx_bit;
+  wire [6:0] fv_ifg_cnt;      // P2 taps: the gap counter, the FSM state, and
+  wire [2:0] fv_state;        // the FCS counter (all formal-only aliases)
+  wire [5:0] fv_fcs_left;
 
   pe_eth_tx #(.MAX_STORED(MAX_STORED)) dut (
     .clk(clk), .rst_n(rst_n),
@@ -75,7 +78,8 @@ module formal_pe_eth_tx #(
     .frame_len(frame_len), .start(start), .frame_abort(frame_abort),
     .tx_busy(tx_busy), .tx_done(tx_done),
     .tx_underrun(tx_underrun), .tx_overlong(tx_overlong),
-    .ifg_active(ifg_active), .tx_bit(tx_bit)
+    .ifg_active(ifg_active), .tx_bit(tx_bit),
+    .fv_ifg_cnt(fv_ifg_cnt), .fv_state(fv_state), .fv_fcs_left(fv_fcs_left)
   );
 
   // ---- the engine's OWN accepted length ---------------------------------
@@ -124,32 +128,17 @@ module formal_pe_eth_tx #(
     if (rst_n && hold) assume (frame_len == hold_len);
   end
 
-  // ---- IFG accounting (P2) ----------------------------------------------
-  // Count cell boundaries spent inside the gap, and check the count when the
-  // gap CLOSES. Two subtleties, both learned from a counterexample:
-  //   * the engine asserts tx_done on the LAST cell of the FCS, and ifg_active
-  //     only reads high on the NEXT cell -- so the cell where a frame finishes
-  //     is NOT the end of a gap;
-  //   * therefore the gap is closed on a falling edge of ifg_active sampled at
-  //     a cell boundary, and that is the only moment the claim is about.
-  // VACUOUS AT THE GATE DEPTH: reaching this assertion needs a complete frame
-  // plus 96 gap cells (~672 cells); the reachability target labels it.
-  reg [7:0] ifg_run;
-  reg       prev_ifg;
-  always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-      ifg_run   <= 8'd0;
-      prev_ifg  <= 1'b0;
-    end else if (cell_start) begin
-      if (ifg_active) begin
-        ifg_run <= ifg_run + 8'd1;
-      end else begin
-        if (prev_ifg) assert (ifg_run >= 8'(IFG_CELLS));
-        ifg_run <= 8'd0;
-      end
-      prev_ifg <= ifg_active;
-    end
-  end
+  // ---- P2: the IFG floor lives in formal_pe_eth_tx_ifg.v ----------------
+  // The floor cannot be reached by BMC on this toolchain (~672 cells; the
+  // shortened-gap mutant SURVIVES at depth 240 and the deeper run dies at the
+  // memory cap), and the manager's 3b ruling directs an INDUCTIVE proof. An
+  // induction proof demands that EVERY assertion in its target be inductive,
+  // and this wrapper's P1a/P1b/P3 claims are keyed on free registers
+  // (tx_done/acc_started/start_pend) that an arbitrary pre-state may set to
+  // anything -- so they are proved bounded here and the floor is proved
+  // inductively in its own single-purpose wrapper with its own taps
+  // (fv_state/fv_fcs_left/fv_ifg_cnt). The two targets share the same reset
+  // discipline and the same fv_run.sh toolchain flags.
 
   // ---- reset discipline -------------------------------------------------
   // Enforced by the flow: `sat` needs -set-assumes for this (and any) $assume
