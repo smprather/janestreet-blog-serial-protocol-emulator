@@ -1,5 +1,15 @@
 # Handoff — state of the repo (2026-09-23)
 
+> **Host GUI phase 3 — acceptance runner and `--fake` dry run (2026-09-25).**
+> `tools/host_bridge/acceptance.py` is committed at `f6fdd65` and recorded in
+> `reviews/2026-09-25/HOST-GUI-PHASE3-ACCEPTANCE.md`: the dry run passes
+> `16 PASS / 0 FAIL / 1 SKIP` (118-word `uart_echo` load, readback,
+> start/heartbeat, stop, dump, scripted IRQ→FAULTED→CLEAR_FAULT, reconnect)
+> and never opens a serial device. UART observation is a SKIP (no bridge op)
+> and the real Pico run is still unexecuted — it needs hardware plus chip RTL
+> phases R1/R2 (chip-side, manager dispatch). No `rtl/`, `tb/` or `info.yaml`
+> file was touched.
+
 > **Host GUI phase 2 — Pico bridge committed and verified (2026-09-25).**
 > `tools/host_bridge/` (MicroPython frame codec, TT SDK adapter, newline-JSON
 > endpoint + SPI sequencing) is committed at `c28234d` and recorded in

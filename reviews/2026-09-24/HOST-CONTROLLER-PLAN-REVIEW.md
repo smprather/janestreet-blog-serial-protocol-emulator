@@ -338,3 +338,26 @@ Remaining host work: Task 7 acceptance (`--fake` can land now; the real Pico
 run needs hardware) and Task 8 final verification. Plan Tasks 3–5 (PE RTL
 protocol, SoC/memory readback, pin remap) are chip-side and under the
 chip-repo manager's dispatch; nothing in this phase claims chip behavior.
+
+---
+
+## 10. Host Task 7 acceptance runner delivered (2026-09-25)
+
+Plan Task 7's scripted runner and no-hardware dry run are committed at
+`f6fdd65`; evidence is in `reviews/2026-09-25/HOST-GUI-PHASE3-ACCEPTANCE.md`.
+
+- `tools/host_bridge/acceptance.py --fake` runs the real host stack through
+  the real bridge against the fake adapter/PE: `PASS (16 PASS, 0 FAIL, 1 SKIP)`
+  — hello, prepare, 5 MHz cap, 118-word `uart_echo` assemble/load/readback,
+  start/heartbeat, stop, dump, scripted IRQ -> FAULTED -> CLEAR_FAULT,
+  disconnect and a fresh reconnect.
+- The 8 new cases pin the dry run, the UART skip and the device-open failure
+  text; bridge suite 63/63, host GUI 154/154, ruff and compileall clean.
+- SKIPs are contract gaps, not passes: no bridge op reports UART bytes, and
+  real IRQ/faults need RTL phase R1. The runner reports them with reasons.
+- The real device run (Task 7 Step 3) remains hardware-gated; `wiki/STATUS.md`
+  is deferred to Task 8/merge (shared chip-side backlog; ruling in the result
+  doc).
+
+Remaining: Task 8 final verification (whole-suite + regression + synthesis
+screen) when the host phases and the chip RTL phases are ready to meet.
