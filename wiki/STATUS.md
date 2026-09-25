@@ -23,7 +23,12 @@
 > ship the model image its vectors assume — until then the data-path vectors
 > are unproven and no `chip_confirmed` flag has been flipped. The TB is
 > deliberately not in the regression so it cannot make a false red about the
-> chip. Contract in `rtl/pe_ctrl.v`'s header; merge sequenced after R2.
+> chip. Mapped 16.667 ns screen of the R2 read path
+> (`reviews/2026-09-25/r2-sta/`, 12 screens): **no new violation class** —
+> `pe_soc` unchanged (hold -0.87/-0.61/-0.48) and `tt_um_top` hold IMPROVED
+> (-0.59/-0.45/-0.38, zero == board), the new classes appearing only in the
+> pre-existing external-output class. Contract in `rtl/pe_ctrl.v`'s header;
+> merge sequenced after R2.
 
 > **10BASE-T TX frame path — COMPLETE, plan Tasks 1-7 (2026-09-25, manager
 > Task 11 close-out + the chained Task 6/7 pass).** The last unbuilt block in
@@ -357,6 +362,25 @@
 > `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md`; original fixes and regression
 > evidence in `ETHERNET-SOC-REVIEW.md`, `E1-RESOLUTION.md` and
 > `E2-RESOLUTION.md`. Physical flow, DRC and LVS remain deferred.
+
+<!-- BEGIN gui-worker host block (top note) - keep whole; place BESIDE the
+     chip-side top-of-file blockquotes when merging, do not interleave -->
+> **Host controller GUI + Pico bridge (2026-09-25; host side only).** The
+> operator tooling lives on branch `host-controller-gui` and touches no
+> chip-side file: `tools/host_gui/` (image/frame contracts, serial transport,
+> session state machine, local page, fake PE model) and `tools/host_bridge/`
+> (MicroPython frame codec, TT SDK adapter, newline-JSON USB endpoint, scripted
+> acceptance runner). Host evidence: 176/176 host-GUI tests, 67/67 bridge tests
+> (including the real host stack driven over the real bridge through fakes),
+> ruff/compileall clean, and `acceptance.py --fake` at 22 PASS / 0 FAIL /
+> 1 SKIP. **Nothing here is chip-confirmed yet**: the PE host protocol, read
+> path and IRQ are RTL phases R1/R2 (plan Tasks 3-5, under the chip-side
+> manager), and the real Pico/USB run is unexecuted. The host side is
+> R2-ready (session/API/page read_cpu, R2 read gate, idle-fault visibility);
+> see `reviews/2026-09-25/HOST-GUI-R2-PREP.md` and
+> [[plans/host-controller-gui]].
+<!-- END gui-worker host block (top note) -->
+
 >
 > **Also done 2026-09-23: the SPI loader.** `rtl/pe_ctrl.v` is a passive SPI
 > slave at the TT wrapper (ADR-007) that clocks 16-bit words into `pe_imem`
@@ -686,6 +710,34 @@ on ihp-sg13g2, former 66 MHz target):
 0 DRC, 0 LVS, setup WS +7.6 ns (slow corner), hold WS +0.116 ns (fast corner),
 die 161.7 × 180.4 µm, 78 % utilization. Run dir: `~/asic-runs/pe-serdes`.
 The checked-in config now targets 60 MHz (16.667 ns).
+
+<!-- BEGIN gui-worker host block (host tooling section) - keep whole -->
+## Host controller GUI and Pico bridge (host side, branch `host-controller-gui`)
+
+This entry records the host-side half of the operator tooling; the chip half of
+that plan is the RTL phases below/above (Tasks 3-5 of
+[[plans/host-controller-gui]]), tracked by the chip-side manager. **This
+section describes the host branch `host-controller-gui`; it is not a statement
+about `main`'s chip state.**
+
+| Piece | File | What it is | Evidence |
+|---|---|---|---|
+| Image/frame contracts | `tools/host_gui/{image,protocol}.py` | `.pe` assembly through the existing `peasm.py`, 1024-word cap, canonical digest; the PE frame codec (sync `A55A`, version/opcode/target, seq, len, CRC-16/CCITT-FALSE) | 55 cases, golden bytes + the published `0x29B1` check value |
+| Host session | `tools/host_gui/{transport,session,server}.py`, `web/` | newline-JSON USB CDC transport with id correlation and a bounded event queue; the state machine; the loopback local page | 97 cases; transport/session/API |
+| Fake PE + fake bridge | `tools/host_gui/fake_pe.py` | in-memory chip model: LOAD/STATUS/READ_CPU/READ_IMEM/READ_DMEM/DUMP_CORE/CLEAR_FAULT/TARGET + loopback target 1, sticky faults, run gating | 329 cases drive it |
+| Pico bridge | `tools/host_bridge/{pe_frame,tt_adapter,main}.py` | MicroPython frame codec, TT SDK HAL (project/clock/reset/run/`uio_oe_pico`/CS_N), newline-JSON endpoint with framed SPI, LOAD-forces-run-0, start-after-load, IRQ polling, 5 MHz first-pass SCLK cap | 43 cases; 8 fake-`ttboard` cases; 4 cases with the real host stack over the real bridge |
+| Acceptance runner | `tools/host_bridge/acceptance.py` | one scripted sequence for `--fake` (no device) and `--device` (hardware); per-step PASS/FAIL/SKIP + manifest; `dialout` hint instead of a traceback | `RESULT: PASS (22 PASS, 0 FAIL, 1 SKIP)` |
+| R2 read contract (host side) | `tools/host_gui/r2_reads.py` | the seven R2 read obligations as named probes, each `chip_confirmed=False`; read-range latches sticky `FAULT_RANGE`, READ payload low-word-first ascending (manager rulings) | 15 cases, green |
+
+Full result records, commands and limits: `reviews/2026-09-24/HOST-GUI-PHASE1B.md`,
+`reviews/2026-09-25/HOST-GUI-PHASE2-BRIDGE.md`,
+`reviews/2026-09-25/HOST-GUI-PHASE3-ACCEPTANCE.md`,
+`reviews/2026-09-25/HOST-GUI-R2-PREP.md`,
+`reviews/2026-09-25/HOST-GUI-TASK8-FINAL.md`. Operator steps: README's
+"Host controller" section and `tools/host_gui/tests/fixtures/acceptance.md`.
+The page shows the live CPU header (`/api/read_cpu`) and keeps a status poll
+running while connected so a chip fault on an idle board surfaces.
+<!-- END gui-worker host block (host tooling section) -->
 
 ## Area budget — where the die actually goes
 

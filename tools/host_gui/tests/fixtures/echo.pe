@@ -1,0 +1,8 @@
+; echo.pe — image fixture for tools/host_gui/tests.
+; A tiny program with a terminal backward jump, so the host does not warn
+; about the undefined instruction-memory tail.
+start:
+        LDI   A, 0x41
+        OUT   TXPIN, A
+loop:
+        JMP   loop

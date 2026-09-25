@@ -88,6 +88,66 @@ user (separate session); no GUI/bridge implementation is dispatched here.
 > regression so it cannot make a false red about the chip. Contract in
 > `rtl/pe_ctrl.v`'s header; merge sequenced after R2.
 
+<!-- BEGIN gui-worker host block (top notes) - keep whole; place BESIDE the
+     chip-side top-of-file blocks when merging, do not interleave -->
+> **Host GUI R2 read-path prep (2026-09-25; host side, NOT chip-confirmed).**
+> `tools/host_gui/r2_reads.py` is the single source of truth for the R2 read
+> obligations (bounded IMEM/DMEM reads, DUMP_CORE==STATUS header, non-halting
+> READ_CPU, run-gating, no-wrap range, full-width debug regs) — each probe
+> marked `chip_confirmed=False`; `FakePE(read_fault_policy=...)` parameterizes
+> the sticky-fault-on-range-read behaviour (default `latch` per manager
+> ruling). `reviews/2026-09-25/R2-READ-VERIFICATION.json` + `.md` are the
+> **portable golden-vector package** for the chip-side R2 testbench, generated
+> from the model with a drift gate. The acceptance runner runs six end-to-end
+> R2 read checks, each tagged `[not chip-confirmed]`
+> (`acceptance.py --fake` → `PASS (22 PASS, 0 FAIL, 1 SKIP)`), so chip R2
+> (plan Tasks 3-5) is validated the moment it lands. Current host evidence:
+> host_gui 187, bridge 73, ruff/compileall clean, one-command gate
+> `tools/host_gui/run_host_tests.sh` (exit 0; verified to fail on a real
+> defect). No chip-side file touched (`git diff --name-only 153fbde..HEAD`).
+> RULING: the UART-bytes bridge op is DROPPED from this phase (SKIP stands;
+> revisit at hardware bring-up); the host-branch merge is deferred to the chip
+> manager (no rebase). Merge note: `reviews/2026-09-25/HOST-BRANCH-MERGE-NOTE.md`.
+> Record: `reviews/2026-09-25/HOST-GUI-R2-PREP.md`.
+<!-- END gui-worker host block (top notes) -->
+
+> **Host GUI plan Task 8 — final verification, host scope, DONE (2026-09-25).**
+> The host plan (Tasks 1, 2, 6, 7, 8-host) is implemented and verified on branch
+> `host-controller-gui` (`0681175`, base `153fbde`); recorded in
+> `reviews/2026-09-25/HOST-GUI-TASK8-FINAL.md` with the phase records it
+> supersedes. Fresh final numbers: 154/154 host-GUI, 63/63 bridge, 34/34
+> protocol, ruff/compileall clean, `acceptance.py --fake` 16 PASS / 0 FAIL /
+> 1 SKIP, and the optional-dependency boundary re-closed in the venv (154/154
+> with the FastAPI route test running). The branch touches **no** chip-side file
+> (`git diff --name-only main..HEAD`); `main` was never checked out or modified
+> here. This branch's `wiki/STATUS.md` and plan-review §11 carry the status
+> roll-up. The plan is **not** complete: Tasks 3–5 (PE protocol, readback, pin
+> remap) are chip-side under the manager, the real Pico/USB run is
+> hardware-gated, and the chip regression/synthesis steps stay with the
+> manager's own verification. Merge is the manager's call; branch and worktree
+> are preserved.
+
+> **Host GUI phase 3 — acceptance runner and `--fake` dry run (2026-09-25).**
+> `tools/host_bridge/acceptance.py` is committed at `f6fdd65` and recorded in
+> `reviews/2026-09-25/HOST-GUI-PHASE3-ACCEPTANCE.md`: the dry run passes
+> `16 PASS / 0 FAIL / 1 SKIP` (118-word `uart_echo` load, readback,
+> start/heartbeat, stop, dump, scripted IRQ→FAULTED→CLEAR_FAULT, reconnect)
+> and never opens a serial device. UART observation is a SKIP (no bridge op)
+> and the real Pico run is still unexecuted — it needs hardware plus chip RTL
+> phases R1/R2 (chip-side, manager dispatch). No `rtl/`, `tb/` or `info.yaml`
+> file was touched.
+
+> **Host GUI phase 2 — Pico bridge committed and verified (2026-09-25).**
+> `tools/host_bridge/` (MicroPython frame codec, TT SDK adapter, newline-JSON
+> endpoint + SPI sequencing) is committed at `c28234d` and recorded in
+> `reviews/2026-09-25/HOST-GUI-PHASE2-BRIDGE.md`. Host-side evidence: 55/55
+> bridge tests, 34/34 protocol tests, 154/154 host GUI tests (1 FastAPI skip),
+> ruff and compileall clean; the real host `SerialTransport`/`ControllerSession`
+> now speaks to the real `PicoBridge` over a loopback (4 integration cases).
+> The real Pico/USB transport, MicroPython deployment and the chip-side RTL
+> phases (R1 protocol engine, R2 read path) remain unverified; RTL is under the
+> chip-repo manager's dispatch. No `rtl/`, `tb/` or `info.yaml` file was touched.
+
 > **10BASE-T TX frame path — COMPLETE, plan Tasks 1-7 (2026-09-25, manager
 > Task 11 close-out + the chained Task 6/7 pass).** The last unbuilt block in
 > the topology is now built and hardened. `rtl/pe_eth_tx.v` emits a full frame
@@ -838,6 +898,76 @@ comparisons and fresh regression support the functional no-op claim:
 holds the harnesses, `tools/{fw,gen,checks}/` the Python, the SoC is
 `rtl/pe_soc.v`, the line codecs are one module per file, and the SRAM shell is
 under `rtl/vendor/`. Commands in this file use the new paths.
+
+## Session role: `gui-worker` (host-controller GUI/bridge)
+
+<!-- BEGIN gui-worker host block (role + chaining protocol) - keep whole -->
+
+Standing orders adopted 2026-09-25. A restarted session **inherits this
+section**; read it before touching anything.
+
+**Who I am / what I own.** I am the host-controller GUI/bridge session worker.
+My worktree is `/tmp/opencode/host-controller-gui` on branch
+`host-controller-gui` (base `153fbde`). Everything I own lives under
+`tools/host_gui/`, `tools/host_bridge/`, `reviews/`, plus this branch's
+`wiki/plans/host-controller-gui.md`, `wiki/STATUS.md`, `README.md`,
+`HANDOFF.md`, `pyproject.toml`. The plan contract is
+`wiki/plans/host-controller-gui.md`; the status roll-up is
+`reviews/2026-09-24/HOST-CONTROLLER-PLAN-REVIEW.md` §11.
+
+**The chip boundary (hard).** I make **no** chip-side change: no `rtl/`, `tb/`,
+`sim/`, `firmware/`, `flow/`, `info.yaml`, `regress/`, `tools/fw|gen|checks/`.
+The PE host protocol, the R2 read path, the IRQ and the pin remap are
+chip-side, under the manager's dispatch in the main worktree
+`/home/mylesp/janestreet-blog-serial-protocol-emulator`. If host work needs a
+chip-side change I write `BLOCKED: <exact request>` to the interrupt file and
+the WORKLOG — I do not edit the chip. Host work that *anticipates* chip
+behavior (FakePE, acceptance expectations) must be labelled
+**not-chip-confirmed**: it is a model/expectation, never evidence about
+silicon.
+
+**Logging duty (standing, every state change).** I append one line per event
+to `/home/mylesp/janestreet-blog-serial-protocol-emulator/WORKLOG.md` — the
+shared manager/worker log, format in its header, `actor` = `gui-worker`. That
+file is the **only** file I touch in the chip repo; append-only, never rewrite
+or delete another actor's line; newest at the bottom. Event vocabulary:
+`TASK-START` the moment I begin a task, `VERIFY`/`VERIFY-RED` for evidence,
+`COMMIT` for each commit, `CHAIN` for picking the next task, `TASK-DONE` when
+a task closes, `BLOCKED`/`QUESTION`/`RULING` when they apply, `STALL` with a
+reason if I go quiet, `IDLE-QUEUE-EMPTY` when my queue is empty and I stand by.
+Line: `YYYY-MM-DD HH:MM TZ | gui-worker | EVENT | detail` (use system `date`).
+
+**Continuous-work / chaining protocol (process fix 2026-09-25).** Chaining
+happens **within the same turn**. The interrupt file is the manager's async
+review trigger, **not** the end of work: a `pi` session cannot start its own
+next turn, so ending a turn after the interrupt write left the worker idle
+(root cause of a ~20-minute idle TUI; manager RULING in WORKLOG.md). Therefore:
+
+1. Log `TASK-START` (WORKLOG) the moment a task begins; append `VERIFY`/
+   `VERIFY-RED`/`COMMIT`/`RULING` lines as they happen.
+2. Do the task, then rewrite `/tmp/pi-gui-worker-interrupt` as the **last action
+   of that task** (concise summary, or `QUESTION:`/`BLOCKED:` + text). The file
+   is consumed by the manager's watcher, so it must be rewritten each task.
+3. **Immediately start the next scoped task in the same turn** — do not end the
+   turn. Pick the next host task myself (log `CHAIN` with what I picked and
+   why), and keep going task-after-task.
+4. **Ending my turn means stopping, and I stop only on:** the host queue is
+   empty (then log `IDLE-QUEUE-EMPTY` and stand by in the sleep-1 loop with a
+   ~10-minute liveness ping), a `QUESTION:` I need answered, or `BLOCKED:`
+   (with the exact request). None of those apply while a scoped host task
+   exists, so the default is to keep chaining.
+
+**How to resume cold (a fresh session).** Read this section, then
+`HANDOFF.md`'s dated blockquotes, then `wiki/plans/host-controller-gui.md` and
+`reviews/2026-09-24/HOST-CONTROLLER-PLAN-REVIEW.md` §11 (the roll-up), then
+the newest result doc under `reviews/2026-09-25/`. Trust `git log` +
+`git status` over recollection; preserve all uncommitted work (never
+reset/revert/clean). Verify with, at minimum:
+`python3 -m unittest discover -s tools/host_gui/tests`,
+`python3 -m unittest discover -s tools/host_bridge/tests`,
+`ruff check tools/host_gui tools/host_bridge`,
+`python3 tools/host_gui/acceptance.py --fake`.
+<!-- END gui-worker host block (role + chaining protocol) -->
 
 ## Resume after refactor review
 
