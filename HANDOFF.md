@@ -153,6 +153,67 @@ holds the harnesses, `tools/{fw,gen,checks}/` the Python, the SoC is
 `rtl/pe_soc.v`, the line codecs are one module per file, and the SRAM shell is
 under `rtl/vendor/`. Commands in this file use the new paths.
 
+## Session role: `gui-worker` (host-controller GUI/bridge)
+
+Standing orders adopted 2026-09-25. A restarted session **inherits this
+section**; read it before touching anything.
+
+**Who I am / what I own.** I am the host-controller GUI/bridge session worker.
+My worktree is `/tmp/opencode/host-controller-gui` on branch
+`host-controller-gui` (base `153fbde`). Everything I own lives under
+`tools/host_gui/`, `tools/host_bridge/`, `reviews/`, plus this branch's
+`wiki/plans/host-controller-gui.md`, `wiki/STATUS.md`, `README.md`,
+`HANDOFF.md`, `pyproject.toml`. The plan contract is
+`wiki/plans/host-controller-gui.md`; the status roll-up is
+`reviews/2026-09-24/HOST-CONTROLLER-PLAN-REVIEW.md` §11.
+
+**The chip boundary (hard).** I make **no** chip-side change: no `rtl/`, `tb/`,
+`sim/`, `firmware/`, `flow/`, `info.yaml`, `regress/`, `tools/fw|gen|checks/`.
+The PE host protocol, the R2 read path, the IRQ and the pin remap are
+chip-side, under the manager's dispatch in the main worktree
+`/home/mylesp/janestreet-blog-serial-protocol-emulator`. If host work needs a
+chip-side change I write `BLOCKED: <exact request>` to the interrupt file and
+the WORKLOG — I do not edit the chip. Host work that *anticipates* chip
+behavior (FakePE, acceptance expectations) must be labelled
+**not-chip-confirmed**: it is a model/expectation, never evidence about
+silicon.
+
+**Logging duty (standing, every state change).** I append one line per event
+to `/home/mylesp/janestreet-blog-serial-protocol-emulator/WORKLOG.md` — the
+shared manager/worker log, format in its header, `actor` = `gui-worker`. That
+file is the **only** file I touch in the chip repo; append-only, never rewrite
+or delete another actor's line; newest at the bottom. Event vocabulary:
+`TASK-START` the moment I begin a task, `VERIFY`/`VERIFY-RED` for evidence,
+`COMMIT` for each commit, `CHAIN` for picking the next task, `TASK-DONE` when
+a task closes, `BLOCKED`/`QUESTION`/`RULING` when they apply, `STALL` with a
+reason if I go quiet, `IDLE-QUEUE-EMPTY` when my queue is empty and I stand by.
+Line: `YYYY-MM-DD HH:MM TZ | gui-worker | EVENT | detail` (use system `date`).
+
+**Continuous-work / chaining protocol.** After every task:
+1. Log `TASK-DONE` (or the closing event) to the WORKLOG.
+2. Rewrite `/tmp/pi-gui-worker-interrupt` as the **last action of the task** —
+   a concise summary, or `QUESTION:`/`BLOCKED:` + text. The manager's watcher
+   reads it; the file is consumed, so it must be rewritten each task, not left
+   stale.
+3. **Chain the next scoped host task myself** (log `CHAIN` with what I picked
+   and why) rather than idling for a dispatch. If the queue is empty, log
+   `IDLE-QUEUE-EMPTY` and stand by in the sleep-1 loop, sending a liveness
+   ping every ~10 minutes so the manager can see the loop is alive.
+Dispatch is the TUI input box only and the manager dispatches serially while
+conversing, so a worker that waits idle can stall for tens of minutes; the
+log is how that gets caught.
+
+**How to resume cold (a fresh session).** Read this section, then
+`HANDOFF.md`'s dated blockquotes, then `wiki/plans/host-controller-gui.md` and
+`reviews/2026-09-24/HOST-CONTROLLER-PLAN-REVIEW.md` §11 (the roll-up), then
+the newest result doc under `reviews/2026-09-25/`. Trust `git log` +
+`git status` over recollection; preserve all uncommitted work (never
+reset/revert/clean). Verify with, at minimum:
+`python3 -m unittest discover -s tools/host_gui/tests`,
+`python3 -m unittest discover -s tools/host_bridge/tests`,
+`ruff check tools/host_gui tools/host_bridge`,
+`python3 tools/host_bridge/acceptance.py --fake`.
+
 ## Resume after refactor review
 
 The user asked to review the large layout refactor. Fresh verification at
