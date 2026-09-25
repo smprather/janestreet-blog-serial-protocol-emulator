@@ -37,6 +37,82 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ARTIFACT = REPO_ROOT / "reviews" / "2026-09-25" / "R2-READ-VERIFICATION.json"
 README = REPO_ROOT / "reviews" / "2026-09-25" / "R2-READ-VERIFICATION.md"
 HEX_DIR = REPO_ROOT / "reviews" / "2026-09-25" / "r2-hex"
+
+# Chip-side evidence (2026-09-25). Chip R2 is COMPLETE: the chip repo's
+# tb/tb_pe_ctrl_r2.v reports per-vector PASS for all 15 golden steps, byte-exact
+# (CRC included), with the model image loaded per vector and the session's
+# opening 3-word LOAD replayed as a real framed frame. The chip-side record is
+# reviews/2026-09-25/R2-READ-PATH-REVIEW.md in the chip repo, whose "Conformance:
+# 15/15, per vector" table names every step. R2 found three real RTL defects
+# (dropped trailing dmem byte, never-fired response launch, an X on the MISO pad
+# before the first frame) - all fixed there.
+#
+# A step is chip_confirmed ONLY if it appears in CHIP_EVIDENCE with a citation;
+# a step that is not in the map stays False. Nothing is confirmed by assertion:
+# the map is the claim, and a test pins that every confirmed step cites it.
+CHIP_EVIDENCE = {
+    "confirmed_steps": {
+        "read_imem_address_1_count_2",
+        "read_dmem_address_0_count_4",
+        "dump_core_header",
+        "status_header",
+        "read_cpu_while_running",
+        "read_cpu_full_width_regs",
+        "read_imem_not_ready",
+        "read_dmem_not_ready",
+        "dump_core_not_ready",
+        "read_imem_last_word",
+        "read_imem_past_end_no_wrap",
+        "read_dmem_past_end_no_wrap",
+        "bad_read_answers_range",
+        "status_shows_sticky_fault",
+        "clear_fault_clears_the_bit",
+    },
+    "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md "
+              "(section 'Conformance: 15/15, per vector')",
+    "testbench": "chip repo: tb/tb_pe_ctrl_r2.v",
+    "harness": "chip-side TB loads imem.hex/dmem.hex, applies each vector's "
+               "sparse overrides and register state, replays the 3-word LOAD "
+               "precondition as a real framed frame, and compares every "
+               "response byte (skipping wait words) to the golden stream",
+    "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+    "scope": "This confirms the chip RTL in SIMULATION against the golden "
+             "package. The real-board acceptance run (Pico over USB, physical "
+             "shuttle) is still unexecuted and is not claimed here.",
+    "date": "2026-09-25",
+}
+
+
+PACKAGE_NOTICE = (
+    "CHIP-CONFIRMED IN SIMULATION: every golden step in this package passes "
+    "byte-exactly (CRC included) in the chip repo's tb/tb_pe_ctrl_r2.v, with "
+    "the model image loaded per vector - see the chip repo's "
+    "reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance: 15/15, "
+    "per vector', which names every step. NOT HARDWARE-CONFIRMED: the "
+    "real-board acceptance run (Pico over USB CDC with a physical shuttle) has "
+    "NOT been executed and is not claimed here. The host probes in "
+    "r2_reads.py still run against the FakePE model; what the chip confirms is "
+    "that the RTL matches these same expectations.")
+
+
+def _chip_evidence_json():
+    """CHIP_EVIDENCE with the confirmed-step set as a sorted list for JSON."""
+    evidence = dict(CHIP_EVIDENCE)
+    evidence["confirmed_steps"] = sorted(CHIP_EVIDENCE["confirmed_steps"])
+    return evidence
+
+
+def _chip_evidence_for(step_name):
+    """Evidence citation for a step, or None if the chip has not confirmed it."""
+    if step_name not in CHIP_EVIDENCE["confirmed_steps"]:
+        return None
+    return {
+        "review": CHIP_EVIDENCE["review"],
+        "testbench": CHIP_EVIDENCE["testbench"],
+        "conformance": CHIP_EVIDENCE["conformance"],
+        "date": CHIP_EVIDENCE["date"],
+        "scope": CHIP_EVIDENCE["scope"],
+    }
 TARGET = P.TARGET_HOST
 LOAD_WORDS = (0x0041, 0x1001, 0x4002)
 
@@ -168,6 +244,10 @@ def _record(pe, name, opcode, payload_words, sequence, note="",
     }
     if model_image_id is not None:
         record["model_image_id"] = model_image_id
+    evidence = _chip_evidence_for(name)
+    record["chip_confirmed"] = evidence is not None
+    if evidence is not None:
+        record["chip_evidence"] = evidence
     return record
 
 
@@ -193,7 +273,8 @@ def _loaded_model(*, pc=0, a=0, x=0, y=0, insn=0, timer=0, dmem=b"",
 
 def _vector(name, obligation, word_order, steps, image):
     return {"name": name, "obligation": obligation, "word_order": word_order,
-            "chip_confirmed": False, "model_image_id": image["id"],
+            "chip_confirmed": all(step["chip_confirmed"] for step in steps),
+            "model_image_id": image["id"],
             "steps": steps}
 
 
@@ -323,8 +404,9 @@ def build_package() -> dict:
         "source_of_truth": ["tools/host_gui/r2_reads.py",
                             "tools/host_gui/fake_pe.py",
                             "tools/host_gui/protocol.py"],
-        "chip_confirmed": False,
-        "notice": R.NOT_CHIP_CONFIRMED,
+        "chip_confirmed": all(vector["chip_confirmed"] for vector in vectors),
+        "chip_evidence": _chip_evidence_json(),
+        "notice": PACKAGE_NOTICE,
         "rulings_applied": [
             ("out-of-range READ latches sticky FAULT_RANGE (0x4); "
              "CLEAR_FAULT clears it (manager ruling 2026-09-25)"),
@@ -335,6 +417,8 @@ def build_package() -> dict:
              "framing (manager ruling 2026-09-25)"),
             ("register widths are the ISA's: pc 10, a/x/y 8, insn 16 "
              "(manager ruling 2026-09-25)"),
+            (f"chip R2 CONFIRMED: {CHIP_EVIDENCE['conformance']} "
+             f"({CHIP_EVIDENCE['testbench']})"),
         ],
         "protocol": {
             "sync": P.SYNC,
@@ -411,6 +495,8 @@ def write_hex_export(directory=HEX_DIR):
                 "opcode_name": step["opcode_name"],
                 "sequence": step["sequence"],
                 "model_image_id": step.get("model_image_id"),
+                "chip_confirmed": step.get("chip_confirmed", False),
+                "chip_evidence": step.get("chip_evidence"),
                 "request_file": request_file,
                 "request_bytes": len(step["request_hex"]) // 2,
                 "response_file": response_file,
@@ -430,7 +516,8 @@ def write_hex_export(directory=HEX_DIR):
         "artifact": "R2 read-path $readmemh export",
         "generated_by": "tools/host_gui/r2_vectors.py (--hex)",
         "source_of_truth": package["source_of_truth"],
-        "chip_confirmed": False,
+        "chip_confirmed": package["chip_confirmed"],
+        "chip_evidence": package["chip_evidence"],
         "notice": package["notice"],
         "word_order": package["protocol"]["word_order"],
         "readmemh_usage": (

@@ -1,6 +1,31 @@
 {
   "artifact": "R2 read-path verification package",
-  "chip_confirmed": false,
+  "chip_confirmed": true,
+  "chip_evidence": {
+    "confirmed_steps": [
+      "bad_read_answers_range",
+      "clear_fault_clears_the_bit",
+      "dump_core_header",
+      "dump_core_not_ready",
+      "read_cpu_full_width_regs",
+      "read_cpu_while_running",
+      "read_dmem_address_0_count_4",
+      "read_dmem_not_ready",
+      "read_dmem_past_end_no_wrap",
+      "read_imem_address_1_count_2",
+      "read_imem_last_word",
+      "read_imem_not_ready",
+      "read_imem_past_end_no_wrap",
+      "status_header",
+      "status_shows_sticky_fault"
+    ],
+    "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+    "date": "2026-09-25",
+    "harness": "chip-side TB loads imem.hex/dmem.hex, applies each vector's sparse overrides and register state, replays the 3-word LOAD precondition as a real framed frame, and compares every response byte (skipping wait words) to the golden stream",
+    "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+    "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+    "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+  },
   "generated_by": "tools/host_gui/r2_vectors.py (build_package)",
   "memory": {
     "dmem_bytes": 16,
@@ -245,7 +270,7 @@
       }
     }
   },
-  "notice": "These probes run against the host FakePE model. They are NOT chip-confirmed: the R2 read path is chip-side work under the manager's dispatch and is unverified until it lands and passes the same probes on hardware.",
+  "notice": "CHIP-CONFIRMED IN SIMULATION: every golden step in this package passes byte-exactly (CRC included) in the chip repo's tb/tb_pe_ctrl_r2.v, with the model image loaded per vector - see the chip repo's reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance: 15/15, per vector', which names every step. NOT HARDWARE-CONFIRMED: the real-board acceptance run (Pico over USB CDC with a physical shuttle) has NOT been executed and is not claimed here. The host probes in r2_reads.py still run against the FakePE model; what the chip confirms is that the RTL matches these same expectations.",
   "protocol": {
     "crc": "CRC-16/CCITT-FALSE",
     "crc_init": 65535,
@@ -260,7 +285,8 @@
     "out-of-range READ latches sticky FAULT_RANGE (0x4); CLEAR_FAULT clears it (manager ruling 2026-09-25)",
     "READ payload is low-word-first ascending, matching LOAD (manager ruling 2026-09-25)",
     "the package ships the MODEL IMAGE (imem/dmem/registers) each vector assumes, so data-path reads prove data, not just framing (manager ruling 2026-09-25)",
-    "register widths are the ISA's: pc 10, a/x/y 8, insn 16 (manager ruling 2026-09-25)"
+    "register widths are the ISA's: pc 10, a/x/y 8, insn 16 (manager ruling 2026-09-25)",
+    "chip R2 CONFIRMED: 15/15 golden steps PASS, byte-exact including CRC (chip repo: tb/tb_pe_ctrl_r2.v)"
   ],
   "source_of_truth": [
     "tools/host_gui/r2_reads.py",
@@ -278,12 +304,20 @@
   },
   "vectors": [
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v01-read_imem_bounded",
       "name": "read_imem_bounded",
       "obligation": "READ_IMEM returns the requested address..address+count words.",
       "steps": [
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v01-read_imem_bounded",
           "name": "read_imem_address_1_count_2",
@@ -308,12 +342,20 @@
       "word_order": "low-word-first ascending"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v02-read_dmem_bounded",
       "name": "read_dmem_bounded",
       "obligation": "READ_DMEM returns the requested byte range packed big-endian.",
       "steps": [
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v02-read_dmem_bounded",
           "name": "read_dmem_address_0_count_4",
@@ -338,12 +380,20 @@
       "word_order": "bytes big-endian per word, ascending"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v03-dump_core_header",
       "name": "dump_core_header",
       "obligation": "DUMP_CORE while stopped equals the STATUS register header.",
       "steps": [
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v03-dump_core_header",
           "name": "dump_core_header",
@@ -370,6 +420,14 @@
           "status": 0
         },
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v03-dump_core_header",
           "name": "status_header",
@@ -399,12 +457,20 @@
       "word_order": "n/a (register header)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v04-read_cpu_non_halting",
       "name": "read_cpu_non_halting",
       "obligation": "READ_CPU answers while run=1 (the only non-halting read).",
       "steps": [
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v04-read_cpu_non_halting",
           "name": "read_cpu_while_running",
@@ -430,12 +496,20 @@
       "word_order": "n/a (register header)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v05-full_width_debug_regs",
       "name": "full_width_debug_regs",
       "obligation": "READ_CPU exposes every ISA register bit: pc 10 (PCW at IMEM_WORDS=1024), a/x/y 8, insn 16 - the obligation is no truncation, not invented bits.",
       "steps": [
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v05-full_width_debug_regs",
           "name": "read_cpu_full_width_regs",
@@ -461,12 +535,20 @@
       "word_order": "n/a (register header)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v06-read_while_running_rejected",
       "name": "read_while_running_rejected",
       "obligation": "READ_IMEM/READ_DMEM/DUMP_CORE answer NOT_READY while run=1.",
       "steps": [
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v06-read_while_running_rejected",
           "name": "read_imem_not_ready",
@@ -486,6 +568,14 @@
           "status": 6
         },
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v06-read_while_running_rejected",
           "name": "read_dmem_not_ready",
@@ -505,6 +595,14 @@
           "status": 6
         },
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v06-read_while_running_rejected",
           "name": "dump_core_not_ready",
@@ -524,12 +622,20 @@
       "word_order": "n/a (status only)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v07-range_never_wraps",
       "name": "range_never_wraps",
       "obligation": "address+count past the memory end is RANGE, never a wrapped read.",
       "steps": [
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v07-range_never_wraps",
           "name": "read_imem_last_word",
@@ -550,6 +656,14 @@
           "status": 0
         },
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 4,
           "model_image_id": "v07-range_never_wraps",
           "name": "read_imem_past_end_no_wrap",
@@ -569,6 +683,14 @@
           "status": 3
         },
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 4,
           "model_image_id": "v07-range_never_wraps",
           "name": "read_dmem_past_end_no_wrap",
@@ -591,12 +713,20 @@
       "word_order": "n/a (rejected)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v08-read_range_fault_lifecycle",
       "name": "read_range_fault_lifecycle",
       "obligation": "An out-of-range READ latches sticky FAULT_RANGE and CLEAR_FAULT clears it (manager ruling).",
       "steps": [
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 4,
           "model_image_id": "v08-read_range_fault_lifecycle",
           "name": "bad_read_answers_range",
@@ -616,6 +746,14 @@
           "status": 3
         },
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 4,
           "model_image_id": "v08-read_range_fault_lifecycle",
           "name": "status_shows_sticky_fault",
@@ -642,6 +780,14 @@
           "status": 0
         },
         {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v08-read_range_fault_lifecycle",
           "name": "clear_fault_clears_the_bit",

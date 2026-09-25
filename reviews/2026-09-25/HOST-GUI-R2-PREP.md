@@ -1,4 +1,4 @@
-# Host GUI R2 read-path prep — host side, not chip-confirmed (2026-09-25)
+# Host GUI R2 read-path prep — host side (2026-09-25; chip-confirmed since)
 
 **Date entry (UTC):** 2026-09-25T07:24:40Z.
 **Branch:** `host-controller-gui` at `c1fc916` (role-doc commit), base `153fbde`.
@@ -25,12 +25,21 @@ this branch lacks.
   the manager's async review trigger, not the end of work; a turn ends only on
   IDLE-QUEUE-EMPTY / QUESTION / BLOCKED. HANDOFF's role section was rewritten.
 
-**What R2 is (chip side, not done):** plan Tasks 3-5 / review rows P16-P17 —
+**What R2 was (chip side):** plan Tasks 3-5 / review rows P16-P17 —
 full-width CPU debug ports (PC/A/X/Y/insn, replacing the 8-bit `dbg_pc`/`dbg_a`
 truncation), a `pe_imem` host read port, a SoC host-read mux with explicit
 no-wrap range rejection (1024 words / 16 bytes), and chip-side read-while-running
-rejection. That RTL is under the chip-repo manager's dispatch. **None of it is
-on the chip; nothing below is chip-confirmed.**
+rejection.
+
+> **Update 2026-09-25: chip R2 is LANDED and this prep is now chip-confirmed.**
+> The chip repo's `tb/tb_pe_ctrl_r2` passes **all 15 golden steps byte-exact**
+> (CRC included) with the model image loaded per vector, and the session's
+> opening 3-word LOAD replayed as a real framed frame — recorded in the chip
+> repo's `reviews/2026-09-25/R2-READ-PATH-REVIEW.md` ("Conformance: 15/15, per
+> vector"). It found and fixed three real RTL defects on the way (dropped
+> trailing dmem byte, never-fired response launch, an X on the MISO pad before
+> the first frame). The package's `chip_confirmed` flags were flipped to true
+> with per-step citations. The real-board acceptance run is still unexecuted.
 
 ## What this prep adds (all host-side)
 

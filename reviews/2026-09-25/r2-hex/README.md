@@ -6,7 +6,7 @@ here is byte-identical to the JSON frame AND to the shipped model
 image, so a testbench can consume these files directly and there is
 no translation step.
 
-**Status: NOT chip-confirmed** - These probes run against the host FakePE model. They are NOT chip-confirmed: the R2 read path is chip-side work under the manager's dispatch and is unverified until it lands and passes the same probes on hardware.
+**Status: NOT chip-confirmed** - CHIP-CONFIRMED IN SIMULATION: every golden step in this package passes byte-exactly (CRC included) in the chip repo's tb/tb_pe_ctrl_r2.v, with the model image loaded per vector - see the chip repo's reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance: 15/15, per vector', which names every step. NOT HARDWARE-CONFIRMED: the real-board acceptance run (Pico over USB CDC with a physical shuttle) has NOT been executed and is not claimed here. The host probes in r2_reads.py still run against the FakePE model; what the chip confirms is that the RTL matches these same expectations.
 
 ## Load procedure (Verilog)
 

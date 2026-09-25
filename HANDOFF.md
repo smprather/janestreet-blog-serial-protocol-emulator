@@ -2,7 +2,7 @@
 
 <!-- BEGIN gui-worker host block (top notes) - keep whole; place BESIDE the
      chip-side top-of-file blocks when merging, do not interleave -->
-> **Host GUI R2 read-path prep (2026-09-25; host side, NOT chip-confirmed).**
+> **Host GUI R2 read-path (2026-09-25; now CHIP-CONFIRMED in simulation).**
 > `tools/host_gui/r2_reads.py` is the single source of truth for the R2 read
 > obligations (bounded IMEM/DMEM reads, DUMP_CORE==STATUS header, non-halting
 > READ_CPU, run-gating, no-wrap range, full-width debug regs) — each probe
@@ -10,10 +10,14 @@
 > the sticky-fault-on-range-read behaviour (default `latch` per manager
 > ruling). `reviews/2026-09-25/R2-READ-VERIFICATION.json` + `.md` are the
 > **portable golden-vector package** for the chip-side R2 testbench, generated
-> from the model with a drift gate. The acceptance runner runs six end-to-end
-> R2 read checks, each tagged `[not chip-confirmed]`
-> (`acceptance.py --fake` → `PASS (22 PASS, 0 FAIL, 1 SKIP)`), so chip R2
-> (plan Tasks 3-5) is validated the moment it lands. Current host evidence:
+> from the model with a drift gate. **Chip R2 has landed and the package is
+> chip-confirmed**: `tb_pe_ctrl_r2` passes all 15 golden steps byte-exact with
+> the model image loaded per vector (chip repo:
+> `reviews/2026-09-25/R2-READ-PATH-REVIEW.md`), and each step's
+> `chip_confirmed` flag cites that evidence. The real-board acceptance run is
+> still unexecuted. The acceptance runner's R2 checks
+> (`acceptance.py --fake` → `PASS (22 PASS, 0 FAIL, 1 SKIP)`) are the host-side
+> gate for the same contract. Current host evidence:
 > host_gui 187, bridge 73, ruff/compileall clean, one-command gate
 > `tools/host_gui/run_host_tests.sh` (exit 0; verified to fail on a real
 > defect). No chip-side file touched (`git diff --name-only 153fbde..HEAD`).

@@ -127,9 +127,15 @@ def build_serial_link(device):
 
 
 def _r2_detail(text: str) -> str:
-    """Tag every R2 read-path line as not chip-confirmed."""
-    return (f"{text} [not chip-confirmed: the R2 read path is chip-side work "
-            f"under the manager's dispatch; this is a host-model expectation]")
+    """Tag every R2 read-path line with its evidence status.
+
+    Chip R2 is landed and chip-confirmed IN SIMULATION (chip repo
+    `tb_pe_ctrl_r2`: all 15 golden steps byte-exact, see
+    `R2-READ-PATH-REVIEW.md`). The hardware run — this script against a real
+    Pico and shuttle — is still unexecuted, so the tag says exactly that.
+    """
+    return (f"{text} [chip-confirmed in simulation (tb_pe_ctrl_r2, 15/15 "
+            f"byte-exact); hardware acceptance not yet run]")
 
 
 def _observe_heartbeat(session, pe, *, tries=3, sleep=time.sleep):
