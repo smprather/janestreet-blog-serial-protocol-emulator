@@ -145,7 +145,7 @@ module tt_um_protocol_emulator (
 
   pe_ctrl #(.WORDS(TT_IMEM_WORDS)) u_ctrl (
     .clk(clk), .rst_n(rst_n),
-    .spi_sclk(uio_in[6]), .spi_mosi(uio_in[5]), .spi_cs_n(uio_in[4]),   // MUTANT: SCK on uio[6]
+    .spi_sclk(uio_in[7]), .spi_mosi(uio_in[5]), .spi_cs_n(uio_in[4]),
     .spi_miso(ctrl_spi_miso), .miso_oe(ctrl_miso_oe), .irq_n(ctrl_irq_n),
     .run(ui_in[1]),
     .host_we(host_we), .host_imem_sel(host_imem_sel),
