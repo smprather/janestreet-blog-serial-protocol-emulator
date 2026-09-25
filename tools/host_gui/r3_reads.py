@@ -69,9 +69,16 @@ NOT_CHIP_CONFIRMED = (
 # The words are DISTINCT so a mis-stepped vector cannot pass by coincidence.
 PROGRAM = (0x0055, 0x00AA, 0xF000, 0x000F, 0x4002)
 
-# DISCREPANCIES between the contract's §3 vector table and the implemented RTL.
-# The chip is the source of truth, so the golden vectors follow the RTL, and
-# these are reported rather than silently smoothed over.
+# DISCREPANCIES between the contract's §3 vector table and the implemented RTL,
+# and the RULING that settled them.
+#
+# MANAGER RULING 2026-09-25: the vectors STAND. The response pc is the PC at
+# the request, and insn is the landing word. The contract's §3 table is being
+# corrected chip-side to match the RTL, and
+# reviews/2026-09-25/R3-VECTOR-BYTES.md is the conformance reference for
+# tb_pe_ctrl_r3. So these rows are no longer a host judgement call pending a
+# ruling -- they are ruled, and the wording below says so, because a conformance
+# reference's provenance is part of what it asserts.
 DISCREPANCIES = (
     (
         "vector 11 (debug_bp_clr_while_stopped_is_boot_stop)",
@@ -80,7 +87,8 @@ DISCREPANCIES = (
             "AT THE REQUEST and only re-zeroes the core at the same edge, so a "
             "following DEBUG_STATUS/STATUS reads 0. The RTL's own comment and the "
             "contract's 'Known limits' section both state the RTL behaviour; only the "
-            "table row disagrees. The golden vector follows the RTL."
+            "table row disagrees. RULED 2026-09-25: the vectors stand, and "
+            "the table is being corrected chip-side to match the RTL."
         ),
     ),
     (
@@ -90,7 +98,9 @@ DISCREPANCIES = (
             "next_pc while executing (next_pc / pc while held / 0 at the boot stop), "
             "so a free-running readback reports the word at the LANDING address, not "
             "at pc. A TB that wants insn=imem[pc] must hold the core (state 2) or "
-            "preload the pipeline. The golden vector follows the RTL's fetch mode."
+            "preload the pipeline. RULED 2026-09-25: the vectors stand "
+            "(insn is the landing word), and the table is being corrected "
+            "chip-side."
         ),
     ),
 )

@@ -35,6 +35,27 @@ Invariants (each violated case is a Finding with a reproducing seed):
   8. REPRODUCIBLE AND BOUNDED - the seed is printed, the iteration counts are
      fixed, and a wall-clock budget overrun is itself a finding.
 
+ADDING A CAMPAIGN? THREE RULES, ONE OF THEM LEARNED THE HARD WAY
+-----------------------------------------------------------------
+1. Give it its own random stream, derived from the run seed -- do NOT draw from
+   a shared ``rng``. The campaigns used to share one, and adding the R3 debug
+   campaign silently changed what every OTHER campaign exercised for a given
+   seed: ``test_campaign_exercises_every_class`` caught it because the shifted
+   draws stopped selecting ``hostile/drop``. The rule generalises: on a fuzzer
+   with a shared stream, adding a campaign is a GLOBAL change to every other
+   campaign's coverage, and an old finding can stop reproducing for reasons
+   that have nothing to do with the code. A new campaign must be a pure
+   addition. ``run()`` now builds one stream per campaign via ``stream(name)``.
+2. Count the new attack surface in the shared invariants. The R3 debug ops
+   joined the state mix *and* got a dedicated campaign, because random ordering
+   cannot reach a contract edge (address 0 is a legal breakpoint, only
+   ``bp_flags`` bit0 says "armed") -- that needs stating.
+3. Expect the campaign to find something. It found an unhandled HTTP 500
+   reachable from seven call sites across both the new and the pre-existing
+   ops, in code this session had already touched. That is the argument for
+   scheduling fuzz runs: the gap was a boundary nobody had attacked, and
+   "we just rewrote this area" is exactly when it is most likely to be wrong.
+
 Usage:
     python3 -m tools.host_gui.fuzz_server                    # default campaign
     python3 -m tools.host_gui.fuzz_server --seed 7 -n 2000 --rounds 50
