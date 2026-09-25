@@ -130,57 +130,86 @@ run_tb() {
     return 2
   fi
   (cd "$ROOT/sim" && timeout 300 vvp "/tmp/mut_fwbus_${_wt}_$tb.vvp") >"$LOG" 2>&1
-  # THE VERDICT IS THE MECHANISM, NOT MERELY "NOT PASSING". This harness used
-  # to decide `grep -qE "^PASS"` and call everything else "detected", which
-  # silently conflated two very different outcomes:
-  #
-  #   * an ASSERTION failed   -- evidence that the testbench TESTS the firmware,
-  #                              which is the whole point of a mutation gate
-  #   * the testbench HUNG     -- the run reached its watchdog or the 300 s
-  #                              timeout -- evidence only that the testbench
-  #                              would not ACCEPT the image, which proves
-  #                              nothing about the assertions
-  #
-  # Confirmed by construction, not guessed: a dmx512 mutation that redirects
-  # the start code straight to `park` produces
-  #     break 88.06 us (floor 87.5)      <- the break and mark checks PASS
-  #     FAIL: watchdog -- the test did not complete
-  # and the old rule would have scored that exactly as it scores
-  # midi-cell-count-minus-one. A hang is a legitimate way for a testbench to
-  # reject a firmware, but it is a WEAKER claim and it has to be visible as one,
-  # so it is counted separately and printed as such.
-  #
-  # A HANG IS DISTINGUISHED FROM A BOUNDED-WAIT FAILURE BY WHAT ELSE FOLLOWS,
-  # and getting that wrong produced a false attribution that was reported
-  # upward as fact. Matching on the "FAIL: watchdog" prefix ALONE is not
-  # enough, because two testbenches print that line for different things:
-  #
-  #   tb_pe_soc_dmx512.v  an UNBOUNDED 30 ms backstop -- a real hang
-  #   tb_pe_soc_i2c_adv.v a BOUNDED 144,000-clock wait that EXPIRES, prints,
-  #                       and then carries on to its real assertions
-  #
-  # So i2c-no-stop was classified as a hang, and "21 detected, 1 by hang" went
-  # into the findings file and the WORKLOG. It is not a hang: the bounded wait
-  # expires and the testbench then fails `check(n_stop == 1, "one STOP, got
-  # 0")` like any other assertion. A hang produces the watchdog line and
-  # NOTHING else; a bounded-wait diagnostic that still trips assertions
-  # produces the watchdog line AND other FAIL lines. Hence:
-  #
-  #   watchdog line present, but other FAIL lines too  -> assertion catch
-  #   watchdog line present, and it is the only one    -> genuine hang
-  #
-  # Returns: 0 = the TB passed (survived), 1 = an assertion caught it,
-  #          3 = caught only by a hang, 2 = harness error, 4 = no verdict.
-  local _nfail _nwatch
+  run_tb_verdict "$LOG"
+}
+
+# The verdict rule, factored out of run_tb so the self-test below can
+# exercise the REAL code rather than a copy of it. A copy is not a test.
+#   0 = passed (survived)   1 = an assertion caught it
+#   3 = caught only by a hang   2 = harness error   4 = no verdict at all
+run_tb_verdict() {
+  local LOG="$1" _nfail _nwatch
   _nfail=$(grep -cE "^FAIL" "$LOG")
   _nwatch=$(grep -cE "^FAIL: watchdog" "$LOG")
-  if   [ "$(wc -l <"$LOG")" -eq 0 ];                              then return 4
-  elif grep -qE "^PASS" "$LOG";                                  then return 0
-  elif [ "$_nfail" -eq 0 ];                                       then return 3
-  elif [ "$_nwatch" -gt 0 ] && [ "$_nfail" -eq "$_nwatch" ];      then return 3
+  if   [ "$(wc -l <"$LOG")" -eq 0 ];                          then return 4
+  elif grep -qE "^PASS" "$LOG";                              then return 0
+  elif [ "$_nfail" -eq 0 ];                                   then return 3
+  elif [ "$_nwatch" -gt 0 ] && [ "$_nfail" -eq "$_nwatch" ];  then return 3
   else return 1
   fi
 }
+
+# ---------------------------------------------------------------------------
+# THE CLASSIFIER SELF-TEST, and it runs on EVERY invocation, before any score.
+#
+# A classifier is an assertion, and an assertion nobody has tested is a claim.
+# This is the second time in this file that a mechanism of mine produced a
+# wrong number nobody could see. The first version of the verdict matched the
+# "FAIL: watchdog" PREFIX alone, so it scored a BOUNDED wait that expires
+# (tb_pe_soc_i2c_adv.v) exactly as it scored a genuine UNBOUNDED hang
+# (tb_pe_soc_dmx512.v), and reported "1 of 21 by hang" when the truth is none.
+# It was caught only by reading the wait instead of trusting the number.
+#
+# The rule is about what ELSE a run printed: a hang prints the watchdog line
+# and nothing else; a bounded-wait diagnostic that still trips assertions
+# prints it AND other FAIL lines.
+#
+# TWO OF THE FIVE CASES BELOW EXIST TO PROVE THE CLASSIFIER CAN STILL SAY
+# "hang". A rule that classified everything as an assertion would report a
+# clean "0 by hang" and look like an improvement -- which is exactly the shape
+# of the bug it replaced. The cases are the real shapes observed in this
+# session, not invented ones.
+# ---------------------------------------------------------------------------
+classifier_self_test() {
+  local d rc bad=0 n w
+  d=$(mktemp -d /tmp/fwbus_clsfy.${_wt:-shared}.XXXXXX)
+  # a GENUINE hang: the watchdog line plus diagnostic lines that are NOT FAILs
+  printf '%s\n' "=== dmx ===" "FAIL: watchdog -- the test did not complete" \
+    "  slots reached: 0 of 513" "  frame layer finished: 0" "  pc=64" > "$d/hang"
+  # a BOUNDED wait that expires and then trips real assertions
+  printf '%s\n' "=== i2c ===" "FAIL: watchdog -- the transaction did not complete" \
+    "FAIL: one STOP, got 0" "FAIL: two STARTs, got 1" "FAILURES: 2" > "$d/bounded"
+  # a plain assertion failure, no watchdog at all
+  printf '%s\n' "=== midi ===" "FAIL: exactly 14 bytes on the wire (got 13)" \
+    "FAILURES: 1" > "$d/assert"
+  printf '%s\n' "=== dmx ===" "PASS: tb_pe_soc_dmx512" > "$d/pass"
+  : > "$d/empty"
+
+  for c in hang:3 bounded:1 assert:1 pass:0 empty:4; do
+    n=${c%%:*}; w=${c##*:}
+    # The RETURN VALUE, not stdout: run_tb_verdict RETURNS its code, and
+    # capturing stdout here silently yields the empty string and fails all five
+    # cases. Which is what happened the first time, and is the second instance
+    # in this file of the same mistake in a different costume -- a hand-written
+    # probe that ECHOED the code, then a real function that RETURNS it, and a
+    # call site left in the first style.
+    run_tb_verdict "$d/$n"; rc=$?
+    if [ "$rc" != "$w" ]; then
+      echo "  CLASSIFIER SELF-TEST FAILED: '$n' returned '$rc', expected $w"
+      bad=1
+    fi
+  done
+  rm -rf "$d"
+  if [ "$bad" -ne 0 ]; then
+    echo "mutate_fwbus_tb.sh: refusing to report a score from a classifier that is itself broken" >&2
+    return 1
+  fi
+  return 0
+}
+
+if ! classifier_self_test; then
+  exit 1
+fi
 
 mutate() {
   python3 - "$ROOT/firmware/$1.pe" "$2" "$3" <<'PYEOF'
