@@ -37,6 +37,50 @@
 // execution; the one vector pairing a freeze with a DEBUG_STEP expects NOT_READY
 // and no pulse is ever emitted.
 //
+// PER-VECTOR PRE-STATE REACHABILITY (2026-09-25, manager action M2). The preloads
+// poke the debug registers HIERARCHICALLY, so a pre-state can encode a state the
+// hardware cannot reach. It does, in four distinguishable ways; every vector is
+// classified. "Reachable" means from reset using only bus ops (BP_SET /
+// DEBUG_STEP / the run strap) with the imem image the vector ships (words 0-4 =
+// LDI A,0x55 / LDI A,0xAA / NOP / LDI A,0xF / JMP 2, 0 elsewhere):
+//
+//   fully reachable from reset        bp_set_readback, bp_set_wrong_length,
+//                                     step_executes_one, step_sequence,
+//                                     step_lands_on_bp, bad_crc_no_side_effect,
+//                                     unsupported_target   (reset, or reset +
+//                                     one BP_SET)
+//   reachable core STATE, but `a` is not what a real path yields
+//                                     bp_hit_stops_live_core, step_off_bp_clears_hit,
+//                                     bp_clr_resumes, bp_clr_while_stopped_is_boot_stop
+//                                     -- a real path to pc=2/3 executes the LDI at
+//                                     1 or 3 first, so `a` would be 0xAA/0x0F, not
+//                                     the 0 the vector carries. Every claim these
+//                                     vectors test (state, pc, bp_flags, run, the
+//                                     release) is independent of `a`, and `a` is
+//                                     only echoed, so the snapshot is faithful to
+//                                     what is being asserted.
+//   pc not reachable in the SHIPPED image, claim is pc-independent
+//                                     step_while_running asks for pc=7; the
+//                                     program never reaches 7 (it loops 2,3,4).
+//                                     Harmless: the claim under test is the
+//                                     NOT_READY refusal, which does not depend on
+//                                     pc.
+//   IMPOSSIBLE -- the pinned boundary step
+//                                     status_common_prefix asks for pc=4 with a=0
+//                                     and run=1, no hold. Reaching address 4
+//                                     requires EXECUTING address 3, which is
+//                                     `LDI A,0x0F`; so a real core at pc=4 has
+//                                     a=0x0F, and (pc=4, a=0) is a state the
+//                                     chip cannot occupy. Its expected `insn`
+//                                     (0xF000, the landing word) is therefore not
+//                                     contract-determined for a preloaded pc, which
+//                                     is exactly why this step is left
+//                                     chip_confirmed=false and its divergence is
+//                                     pinned in R3_KNOWN_DIVERGENCES.txt. The
+//                                     pre-state impossibility is the REASON, and
+//                                     it is proved from the program's own update
+//                                     rule, not asserted.
+//
 // THE STATE WORD IS DERIVED, NEVER PRELOADED. pe_ctrl computes it from the
 // debug registers and the run strap, so the TB asserts that derivation
 // explicitly after every preload as well as comparing the golden bytes.

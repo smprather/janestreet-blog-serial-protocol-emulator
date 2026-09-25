@@ -4,29 +4,40 @@ License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
 This is free software, and you are free to change and redistribute it
 under certain conditions; type `show_copying' for details. 
 This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
-Warning: There are 20 input ports missing set_input_delay.
-  dbg_hold
-  dbg_rd_addr[0]
-  dbg_rd_addr[10]
-  dbg_rd_addr[11]
-  dbg_rd_addr[12]
-  dbg_rd_addr[13]
-  dbg_rd_addr[14]
-  dbg_rd_addr[15]
-  dbg_rd_addr[1]
-  dbg_rd_addr[2]
-  dbg_rd_addr[3]
-  dbg_rd_addr[4]
-  dbg_rd_addr[5]
-  dbg_rd_addr[6]
-  dbg_rd_addr[7]
-  dbg_rd_addr[8]
-  dbg_rd_addr[9]
-  dbg_rd_dmem
-  dbg_rd_req
-  dbg_step
-Warning: There is 1 unconstrained endpoint.
-  _06490_/D
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[15]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[14]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[13]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[12]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[11]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[10]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[9]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[8]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[7]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[6]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[5]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[4]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[3]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[2]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[1]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[0]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_valid'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[15]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[14]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[13]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[12]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[11]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[10]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[9]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[8]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[7]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[6]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[5]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[4]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[3]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[2]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[1]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[0]'.
+Warning 440: sta-pe_soc-fast-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_valid'.
 Startpoint: rst_n (input port clocked by clk)
 Endpoint: _06451_ (recovery check against rising-edge clock clk)
 Path Group: asynchronous
@@ -306,9 +317,8 @@ Path Type: max
              9.2129   slack (MET)
 
 
-Startpoint: u_imem.g_macro.u_sram
-            (rising edge-triggered flip-flop clocked by clk)
-Endpoint: dbg_next_pc[2] (output port clocked by clk)
+Startpoint: dbg_hold (input port clocked by clk)
+Endpoint: _09357_ (rising edge-triggered flip-flop clocked by clk)
 Path Group: clk
 Path Type: max
 
@@ -316,26 +326,39 @@ Path Type: max
 -------------------------------------------------------------
    0.0000    0.0000   clock clk (rise edge)
    0.0000    0.0000   clock network delay (ideal)
-   0.0000    0.0000 ^ u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
-   2.6652    2.6652 ^ u_imem.g_macro.u_sram/A_DOUT[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
-   0.0716    2.7368 ^ _06940_/X (sg13g2_mux2_1)
-   0.1735    2.9103 ^ _06941_/X (sg13g2_or3_1)
-   0.0488    2.9591 v _06970_/Y (sg13g2_nor2_1)
-   0.1263    3.0855 ^ _06971_/Y (sg13g2_a21oi_1)
-   0.0000    3.0855 ^ dbg_next_pc[2] (out)
-             3.0855   data arrival time
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ dbg_hold (in)
+   0.2295    3.5629 ^ _06977_/Y (sg13g2_nor2b_1)
+   0.1312    3.6941 ^ _06979_/X (sg13g2_or2_1)
+   0.0603    3.7544 v _07290_/Y (sg13g2_nor4_1)
+   0.0342    3.7886 ^ _06376_/Y (sg13g2_nand2_1)
+   0.0312    3.8197 v _06377_/Y (sg13g2_nor3_1)
+   0.0271    3.8468 ^ _07881_/Y (sg13g2_nand2_1)
+   0.1755    4.0223 v _07882_/Y (sg13g2_a221oi_1)
+   0.2644    4.2867 ^ _07910_/Y (sg13g2_nand2_1)
+   0.1096    4.3963 v _08067_/Y (sg13g2_nand4_1)
+   0.0518    4.4481 ^ _08069_/Y (sg13g2_nor2_1)
+   0.7512    5.1993 v _08070_/Y (sg13g2_nand4_1)
+   0.8584    6.0577 ^ _08072_/Y (sg13g2_nor2_1)
+   0.1388    6.1965 v _08464_/Y (sg13g2_a22oi_1)
+   0.0886    6.2851 ^ _08465_/Y (sg13g2_o21ai_1)
+   0.0543    6.3394 v _08471_/Y (sg13g2_a21oi_1)
+   0.0280    6.3674 ^ _08472_/Y (sg13g2_o21ai_1)
+   0.0000    6.3674 ^ _09357_/D (sg13g2_dfrbpq_1)
+             6.3674   data arrival time
 
   16.6670   16.6670   clock clk (rise edge)
    0.0000   16.6670   clock network delay (ideal)
   -1.0000   15.6670   clock uncertainty
    0.0000   15.6670   clock reconvergence pessimism
-  -3.3334   12.3336   output external delay
-            12.3336   data required time
+            15.6670 ^ _09357_/CLK (sg13g2_dfrbpq_1)
+  -0.0837   15.5833   library setup time
+            15.5833   data required time
 -------------------------------------------------------------
-            12.3336   data required time
-            -3.0855   data arrival time
+            15.5833   data required time
+            -6.3674   data arrival time
 -------------------------------------------------------------
-             9.2481   slack (MET)
+             9.2159   slack (MET)
 
 
 Startpoint: rst_n (input port clocked by clk)

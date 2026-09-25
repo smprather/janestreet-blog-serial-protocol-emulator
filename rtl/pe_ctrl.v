@@ -113,6 +113,21 @@
 //                        resumes; with run=0 it returns to the normal boot stop
 //                        (PC=0). This is also how a host resumes a core that a
 //                        breakpoint stopped. Idempotent (safe when disarmed).
+//
+//   *** BRING-UP TRAP: ONCE HELD, THE run STRAP IS IGNORED -- BOTH WAYS ***
+//   A hold is RELEASED ONLY BY DEBUG_BP_CLR OR BY RESET. The run strap does
+//   nothing while the hold is up, in EITHER direction: dropping it does not
+//   resume, and RAISING it does not either. The gate is
+//   `cpu_exec = dbg_step || (run && !dbg_hold)` (pe_cpu.v:217), so `run` is
+//   masked by the hold, and `dbg_hold_r` is cleared at exactly two places
+//   (reset, and the DEBUG_BP_CLR branch below) and set by a step or a hit.
+//   So a host that single-steps, or that stops on a breakpoint, and then
+//   "re-asserts run=1 to carry on" will find the core STILL held, with no
+//   fault and no error to explain it. The only resume is
+//   DEBUG_BP_CLR (which also disarms, hence the step-off -> clear -> re-arm
+//   recipe), or a reset. This is a property of the debug design, not a bug;
+//   it is recorded here because it is invisible from the response words and
+//   it costs a bring-up board a long time if nobody has written it down.
 //   0x24 DEBUG_STATUS -> (OK, state, pc, bp_addr, bp_flags, run, a, x, y, insn)
 //                        len must be 0. The full debug readback: the common
 //                        5-word prefix plus the architectural state, same field

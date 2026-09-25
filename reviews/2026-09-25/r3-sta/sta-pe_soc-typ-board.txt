@@ -4,29 +4,40 @@ License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
 This is free software, and you are free to change and redistribute it
 under certain conditions; type `show_copying' for details. 
 This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
-Warning: There are 20 input ports missing set_input_delay.
-  dbg_hold
-  dbg_rd_addr[0]
-  dbg_rd_addr[10]
-  dbg_rd_addr[11]
-  dbg_rd_addr[12]
-  dbg_rd_addr[13]
-  dbg_rd_addr[14]
-  dbg_rd_addr[15]
-  dbg_rd_addr[1]
-  dbg_rd_addr[2]
-  dbg_rd_addr[3]
-  dbg_rd_addr[4]
-  dbg_rd_addr[5]
-  dbg_rd_addr[6]
-  dbg_rd_addr[7]
-  dbg_rd_addr[8]
-  dbg_rd_addr[9]
-  dbg_rd_dmem
-  dbg_rd_req
-  dbg_step
-Warning: There is 1 unconstrained endpoint.
-  _06490_/D
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[15]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[14]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[13]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[12]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[11]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[10]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[9]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[8]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[7]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[6]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[5]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[4]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[3]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[2]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[1]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[0]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_valid'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[15]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[14]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[13]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[12]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[11]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[10]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[9]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[8]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[7]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[6]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[5]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[4]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[3]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[2]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[1]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[0]'.
+Warning 440: sta-pe_soc-typ-board.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_valid'.
 Startpoint: rst_n (input port clocked by clk)
 Endpoint: _06451_ (recovery check against rising-edge clock clk)
 Path Group: asynchronous

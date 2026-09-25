@@ -4,29 +4,40 @@ License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
 This is free software, and you are free to change and redistribute it
 under certain conditions; type `show_copying' for details. 
 This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
-Warning: There are 20 input ports missing set_input_delay.
-  dbg_hold
-  dbg_rd_addr[0]
-  dbg_rd_addr[10]
-  dbg_rd_addr[11]
-  dbg_rd_addr[12]
-  dbg_rd_addr[13]
-  dbg_rd_addr[14]
-  dbg_rd_addr[15]
-  dbg_rd_addr[1]
-  dbg_rd_addr[2]
-  dbg_rd_addr[3]
-  dbg_rd_addr[4]
-  dbg_rd_addr[5]
-  dbg_rd_addr[6]
-  dbg_rd_addr[7]
-  dbg_rd_addr[8]
-  dbg_rd_addr[9]
-  dbg_rd_dmem
-  dbg_rd_req
-  dbg_step
-Warning: There is 1 unconstrained endpoint.
-  _06490_/D
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[15]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[14]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[13]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[12]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[11]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[10]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[9]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[8]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[7]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[6]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[5]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[4]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[3]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[2]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[1]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[0]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_valid'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[15]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[14]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[13]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[12]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[11]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[10]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[9]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[8]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[7]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[6]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[5]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[4]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[3]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[2]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[1]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_data[0]'.
+Warning 440: sta-pe_soc-slow.tcl line 1, set_input_delay not allowed on output port 'dbg_rd_valid'.
 Startpoint: rst_n (input port clocked by clk)
 Endpoint: _06451_ (recovery check against rising-edge clock clk)
 Path Group: asynchronous
@@ -1991,13 +2002,23 @@ host_wdata[9] (input)                u_imem.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_
 host_addr[5] (input)                 u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.7895
 host_addr[8] (input)                 u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.7717
 host_addr[6] (input)                 u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.7606
+dbg_rd_addr[4] (input)               u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.7067
+dbg_rd_addr[1] (input)               u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.7066
+dbg_rd_addr[0] (input)               u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6922
+dbg_rd_addr[2] (input)               u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6884
+dbg_rd_addr[9] (input)               u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6746
 host_addr[4] (input)                 u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6730
 host_addr[1] (input)                 u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6730
+dbg_rd_addr[7] (input)               u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6675
+dbg_rd_addr[3] (input)               u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6671
 host_addr[0] (input)                 u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6594
 host_addr[2] (input)                 u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6558
+dbg_rd_addr[5] (input)               u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6507
 host_addr[9] (input)                 u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6428
 host_addr[7] (input)                 u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6362
 host_addr[3] (input)                 u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6358
+dbg_rd_addr[8] (input)               u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6329
+dbg_rd_addr[6] (input)               u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6218
 host_addr[5] (input)                 u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6205
 host_addr[8] (input)                 u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6041
 host_addr[6] (input)                 u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5940
@@ -2006,66 +2027,56 @@ _06628_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[4]
 _09319_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5182
 _06633_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5116
 _09318_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5086
+dbg_rd_addr[4] (input)               u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5051
+dbg_rd_addr[1] (input)               u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5051
 _06627_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5013
-host_we (input)                      u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4857
-host_we (input)                      u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4857
+dbg_rd_addr[0] (input)               u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4916
+dbg_rd_addr[2] (input)               u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4880
 _06631_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4853
 _06626_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4852
 _09188_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4852
 _09188_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4794
 _06624_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4759
-host_imem_sel (input)                u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4754
-host_imem_sel (input)                u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4754
-host_we (input)                      u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4712
+dbg_rd_addr[9] (input)               u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4750
 _06629_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4686
+dbg_rd_addr[7] (input)               u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4684
 _09326_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4684
 _09188_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4684
-host_we (input)                      u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4673
+dbg_rd_addr[3] (input)               u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4680
 _09321_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4667
 _06632_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4666
 _09187_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4651
 _09184_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4640
 _09187_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4628
 _09184_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4621
-host_imem_sel (input)                u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4609
 _09317_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4594
-host_imem_sel (input)                u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4570
 _06630_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4541
-host_we (input)                      u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4534
+dbg_rd_addr[5] (input)               u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4528
 _09187_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4514
 _09184_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4507
 _09182_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4502
 _09182_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4501
 _09188_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4469
-host_we (input)                      u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4463
-host_we (input)                      u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4459
-host_imem_sel (input)                u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4431
 _09185_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4397
 _09185_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4386
 _09182_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4381
-host_imem_sel (input)                u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4360
+dbg_rd_addr[8] (input)               u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4364
 _09186_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4359
-host_imem_sel (input)                u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4356
 _09186_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4329
-host_we (input)                      u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4294
 _09187_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4284
 _09184_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4275
 _09185_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4269
+dbg_rd_addr[6] (input)               u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4263
 _09183_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4238
 _09186_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4230
-host_imem_sel (input)                u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4191
 _09183_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4177
 _09325_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4157
 _09182_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4146
 _09322_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4139
 _09324_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4122
-host_we (input)                      u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4114
 _09183_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4101
 _09185_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4041
-host_imem_sel (input)                u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4011
-host_we (input)                      u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4003
 _09186_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3989
-host_imem_sel (input)                u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3900
 _06625_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3852
 _09183_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3849
 _09203_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3797
@@ -2093,9 +2104,11 @@ _09324_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[7]
 _09325_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2771
 _09320_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2403
 _09323_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2300
+dbg_rd_req (input)                   _06490_/D (sg13g2_dfrbpq_1)            -0.1630
 host_we (input)                      u_imem.g_macro.u_sram/A_REN (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1572
 host_imem_sel (input)                u_imem.g_macro.u_sram/A_REN (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1469
 pin_in[7] (input)                    _07666_/D (sg13g2_dfrbpq_1)            -0.1324
+dbg_rd_req (input)                   _06490_/D (sg13g2_dfrbpq_1)            -0.1197
 host_we (input)                      u_imem.g_macro.u_sram/A_REN (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1000
 host_imem_sel (input)                u_imem.g_macro.u_sram/A_REN (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0928
 pin_in[7] (input)                    _07666_/D (sg13g2_dfrbpq_1)            -0.0850

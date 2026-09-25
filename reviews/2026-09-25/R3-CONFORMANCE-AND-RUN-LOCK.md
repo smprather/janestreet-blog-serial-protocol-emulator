@@ -342,3 +342,21 @@ table above isolates R3. I had written that the baselines were "R1-era"; the
 accurate statement is that they are *earlier-list* measurements. A current
 figures entry has been appended to `wiki/STATUS.md` with today's screen and the
 R3 delta, and the no-STA-screen note for this phase is carried forward there.
+
+## 8. gui-worker chip-review action list (ed8aa51) — dispositions
+
+| # | item | disposition |
+|---|---|---|
+| **M1** | contract §3 rows 11/13 "still superseded" | **VERIFIED CORRECTED — no change needed.** Rows 11 (line 164, `pc=3` = PC at the request) and 13 (line 166, `insn` = the landing word) are corrected **in the table body**, not only the changelog, and the file is clean three ways: working tree == HEAD == origin/main. Checked rather than assumed; "fixing" an already-correct table would have added noise. |
+| **M2** | hierarchical preload can encode an unreachable pre-state | **RECORDED PER VECTOR.** A reachability table now heads `tb/tb_pe_ctrl_r3_conf.v` classifying all 14: 7 fully reachable from reset (± a `BP_SET`); 4 whose core *state* is reachable but whose `a` is not what a real path yields (every claim they test is `a`-independent); 1 (`step_while_running`, pc=7) whose pc is unreachable in the shipped image for a pc-independent claim; and **1 IMPOSSIBLE** — the boundary step. |
+| **M4** | `dbg_hold` unconstrained in the pe_soc STA screen | **FIXED.** `dbg_hold`/`dbg_step` (and the R2 `dbg_rd_*` inputs) added to the `set_input_delay` set in all six pe_soc screens. Unconstrained-endpoint warnings **1 → 0** on every corner; worst slack unchanged (0.00 / −0.87), confirming they were genuinely unconstrained rather than secretly timed. |
+| **L1** | once held, the `run` strap is ignored both ways | **DOCUMENTED IN `pe_ctrl`'s header**, as a bring-up trap: `cpu_exec = dbg_step \|\| (run && !dbg_hold)` (pe_cpu.v:217) masks `run` entirely, and `dbg_hold_r` clears at exactly two places (reset, and the `DEBUG_BP_CLR` branch). Comment-only (0 non-comment lines added), lint clean. The runbook line routes to the gui-worker. |
+
+**The boundary-step impossibility, proved from the program's own update rule**
+(M2's explicit ask): the vector asks for `pc=4, a=0, run=1, no hold`. The shipped
+imem is `LDI A,0x55 / LDI A,0xAA / NOP / LDI A,0x0F / JMP 2`, so the only path to
+address 4 **executes address 3**, which loads `a=0x0F`. A real core at pc=4
+therefore has `a=0x0F`, and `(pc=4, a=0)` is a state the chip cannot occupy. Its
+expected `insn` is consequently not contract-determined for a preloaded pc — which
+is precisely why that step stays `chip_confirmed=false` with its divergence
+pinned. The impossibility is the reason, and it is derived, not asserted.
