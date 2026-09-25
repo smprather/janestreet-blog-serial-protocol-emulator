@@ -90,6 +90,32 @@ unbounded; the blocker is the toolchain's lack of reachability-constrained or
 relational induction, not a design defect and not a vacuous claim.** C2, by
 contrast, is now unbounded with a differential mutant.
 
+### 2b. Per-claim record (the dispatch's required format)
+
+The helper-invariant attempt was run honestly and **failed**; per the ruling that
+leaves the toolchain gap as the answer. The mechanism is sharper than "no
+reachability": the failing model carries **two independent sampled copies of the
+same register** — e.g. `dbg_step_r[0:0]#sampled$8571` *and*
+`dbg_step_r#sampled$8569` in the same initial state — so a register's
+next-value is not one shared signal and a one-step register-update argument is
+not expressible. That is exactly why C2 (same-edge, cross-register) closed and
+these (which need a register's *next* value) do not.
+
+| # | claim | independent justification (non-circular) | helper attempted | verdict |
+|---|---|---|---|---|
+| 1 | `walking → r_slot != 0` | RTL fact: every walking entry loads `r_slot<=1` at the same edge (`pe_ctrl.v:994/1017`); the only other writer is the R_WAIT increment (`1221/1226`) | history bit `walk_entry` (set on any walking state, `r_slot!=0` after) — **NOT circular** (history, not present-guard), **NOTPROVED** | gap stands |
+| 2 | walk sum `r_addr+r_left` preserved | RTL fact: R_WAIT does `r_addr+1 / r_left-1` (`1228/1229`), preserving the sum; reloaded only at accept | re-accept-exclusion on the guard — **NOTPROVED** | gap stands |
+| 3 | slot sum `r_slot+words_left` never grows | RTL fact: R_WAIT increments `r_slot` and decrements `r_left`, so the outstanding-word sum is non-increasing within a walk | re-accept-exclusion — **NOTPROVED** | gap stands |
+| 4 | response index advance bounded | RTL fact: index advances only at the serializer's last-word boundary and is reset to 0 on every activation | guard tighten (compare to current length) — **NOTPROVED** | gap stands |
+
+Every helper was checked for circularity first: none assumed the claim it served
+(e.g. the `walk_entry` helper constrains *history*, not the present-state guard
+the claim uses), and none was allowed into the shipped harness — a helper that
+only holds because of the claim it serves would have been rejected and recorded
+as circular. None masked a mutant: with the shipped C2 invariant in place the
+full harness still reports **12 caught, 0 survived, 0 inconclusive**, and the
+formal gate is **8 proved, 0 failed**.
+
 ## 3. Evidence
 
 * `formal/results/summary.txt` — `pe_soc_owner_guard PROVED induct`,
