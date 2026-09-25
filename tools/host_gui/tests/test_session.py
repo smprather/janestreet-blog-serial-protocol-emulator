@@ -189,6 +189,45 @@ class TestReadbackAndDump(unittest.TestCase):
         with self.assertRaises(S.SessionStateError):
             session.read_imem(0, 1)
 
+    def test_read_cpu_is_non_halting_while_running(self):
+        session, bridge, _, _ = make_stack()
+        session.connect()
+        session.load(ECHO)
+        session.start()
+        bridge.pe.pc, bridge.pe.a, bridge.pe.x = 5, 6, 7
+        bridge.pe.y, bridge.pe.insn = 8, 0x0041
+        cpu = session.read_cpu()
+        self.assertEqual((cpu.pc, cpu.a, cpu.x, cpu.y, cpu.insn),
+                         (5, 6, 7, 8, 0x0041))
+        self.assertTrue(bridge.pe.run)          # still running: non-halting
+        self.assertEqual(session.state, S.SessionState.RUNNING)
+
+    def test_read_cpu_while_stopped(self):
+        session, bridge, _, _ = make_stack()
+        session.connect()
+        session.load(ECHO)
+        bridge.pe.pc = 3
+        cpu = session.read_cpu()
+        self.assertEqual(cpu.pc, 3)
+        self.assertFalse(bridge.pe.run)
+
+    def test_read_cpu_requires_a_connected_session(self):
+        session, _, _, _ = make_stack()
+        with self.assertRaises(S.SessionStateError):
+            session.read_cpu()
+
+    def test_read_cpu_full_width_registers(self):
+        # Manager RULING: R2 exposes full-width PC/A/X/Y/insn (the old RTL
+        # truncated dbg_pc/dbg_a to 8 bits); the host must carry them whole.
+        session, bridge, _, _ = make_stack()
+        session.connect()
+        session.load(ECHO)
+        bridge.pe.pc, bridge.pe.a, bridge.pe.x = 0x3FF, 0x1FFF, 0x2AA
+        bridge.pe.y, bridge.pe.insn = 0x155, 0xFFFF
+        cpu = session.read_cpu()
+        self.assertEqual((cpu.pc, cpu.a, cpu.x, cpu.y, cpu.insn),
+                         (0x3FF, 0x1FFF, 0x2AA, 0x155, 0xFFFF))
+
 
 class TestFaultsAndEvents(unittest.TestCase):
     def test_fault_sets_faulted_and_survives_disconnect(self):

@@ -71,6 +71,16 @@ class StatusSnapshot:
 
 
 @dataclass(frozen=True)
+class CpuSnapshot:
+    pc: int
+    a: int
+    x: int
+    y: int
+    insn: int
+    state: int
+
+
+@dataclass(frozen=True)
 class CoreDump:
     state: int
     run: int
@@ -248,6 +258,24 @@ class ControllerSession:
         return snapshot
 
     # ---- stopped-only reads ------------------------------------------------
+    def read_cpu(self) -> CpuSnapshot:
+        """READ_CPU is the one *non-halting* read: it answers while run=1.
+
+        It requires a connected session but not a stopped core (plan Task 3 /
+        review P16: STATUS and READ_CPU are non-halting).
+        """
+        self._require_connected()
+        result = self._request("read_cpu")
+        status = int(result.get("status", -1))
+        if status != P.STATUS_OK:
+            raise SessionError(f"read_cpu failed with status {status}")
+        return CpuSnapshot(pc=int(result.get("pc", 0)),
+                           a=int(result.get("a", 0)),
+                           x=int(result.get("x", 0)),
+                           y=int(result.get("y", 0)),
+                           insn=int(result.get("insn", 0)),
+                           state=int(result.get("state", 0)))
+
     def dump_core(self) -> CoreDump:
         self._require_stopped_read("dump_core")
         return CoreDump(**_status_fields(self._request("dump_core")))

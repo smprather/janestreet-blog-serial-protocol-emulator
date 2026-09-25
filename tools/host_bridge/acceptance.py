@@ -255,14 +255,14 @@ def run_acceptance(*, fake, device=None, project=DEFAULT_PROJECT, board=None,
                   f"state={snapshot.state} run={snapshot.run}")
 
     # READ_CPU is the one read that must answer while the core runs (R2).
+    # Driven through the session state machine (not the raw transport) so the
+    # whole host read path is exercised.
     try:
-        cpu = first.transport.request("read_cpu")
-        cpu_ok = (cpu.get("status") == P.STATUS_OK
-                  and all(key in cpu for key in ("pc", "a", "x", "y", "insn")))
-        cpu_detail = (f"status={cpu.get('status')} "
-                      f"pc=0x{cpu.get('pc', 0):04X} "
-                      f"insn=0x{cpu.get('insn', 0):04X} while running")
-    except TransportError as exc:
+        cpu = session.read_cpu()
+        cpu_ok = True
+        cpu_detail = (f"pc=0x{cpu.pc:04X} insn=0x{cpu.insn:04X} "
+                      f"state={cpu.state} while running")
+    except SessionError as exc:
         cpu_ok, cpu_detail = False, str(exc)
     report.record("r2_read_cpu", cpu_ok, _r2_detail(cpu_detail))
 
