@@ -33,25 +33,25 @@ from pathlib import Path
 #   'sel2'  MOV selector
 #   'alu'   ALU sub-op + imm8
 MNEMONICS: dict[str, tuple[int, str]] = {
-    "LDI":  (0x0, "imm8"),
-    "OUT":  (0x1, "out_port"),
-    "IN":   (0x2, "in_port"),
-    "MOV":  (0x3, "mov_sel"),
-    "JMP":  (0x4, "addr8"),
-    "JZ":   (0x5, "addr8"),
-    "JNZ":  (0x6, "addr8"),
-    "ADD":  (0x7, "alu"),
-    "SUB":  (0x7, "alu"),
-    "AND":  (0x7, "alu"),
-    "OR":   (0x7, "alu"),
+    "LDI": (0x0, "imm8"),
+    "OUT": (0x1, "out_port"),
+    "IN": (0x2, "in_port"),
+    "MOV": (0x3, "mov_sel"),
+    "JMP": (0x4, "addr8"),
+    "JZ": (0x5, "addr8"),
+    "JNZ": (0x6, "addr8"),
+    "ADD": (0x7, "alu"),
+    "SUB": (0x7, "alu"),
+    "AND": (0x7, "alu"),
+    "OR": (0x7, "alu"),
     "INCX": (0x8, "none"),
     "DECX": (0x9, "none"),
-    "SHR":  (0xA, "none"),
-    "LDS":  (0xB, "none"),
-    "STS":  (0xC, "none"),
-    "LDM":  (0xD, "ldm_arg"),
-    "STM":  (0xE, "stm_arg"),
-    "NOP":  (0xF, "none"),
+    "SHR": (0xA, "none"),
+    "LDS": (0xB, "none"),
+    "STS": (0xC, "none"),
+    "LDM": (0xD, "ldm_arg"),
+    "STM": (0xE, "stm_arg"),
+    "NOP": (0xF, "none"),
 }
 
 ALU_SUB = {"ADD": 0, "SUB": 1, "AND": 2, "OR": 3}
@@ -59,44 +59,56 @@ ALU_SUB = {"ADD": 0, "SUB": 1, "AND": 2, "OR": 3}
 # Symbolic IO port names -> port number. The firmware writes IN A, RXSTAT
 # rather than IN A, 3; the map lives here so it matches the RTL's memory map.
 PORTS: dict[str, int] = {
-    "PIN": 0x0,      # port levels: driven pins read back, released read the pad
-    "TXPIN": 0x1,    # output levels (write)
-    "PINOE": 0x2,    # per-pin output enable: 1 = drive, 0 = release (high-Z)
-    "PINOD": 0x3,    # per-pin open-drain: with 1, a pin holding 1 is released
+    "PIN": 0x0,  # port levels: driven pins read back, released read the pad
+    "TXPIN": 0x1,  # output levels (write)
+    "PINOE": 0x2,  # per-pin output enable: 1 = drive, 0 = release (high-Z)
+    "PINOD": 0x3,  # per-pin open-drain: with 1, a pin holding 1 is released
     "I2CTICK": 0x4,  # free-running 1 microsecond counter
-    "TIMER": 0x5,    # free-running half-bit tick counter
+    "TIMER": 0x5,  # free-running half-bit tick counter
     "I2CSTAT": 0x6,  # bit0 = an I2C tick happened (cleared by the read)
-    "STATUS": 0x7,   # bit0 = a tick happened (cleared by the read)
+    "STATUS": 0x7,  # bit0 = a tick happened (cleared by the read)
     # 10BASE-T receive window (rtl/pe_soc.v's memory map). ETHSTAT's read
     # clears the valid/bad event bits; BUFBYTE's read advances the window.
     "ETHSTAT": 0x8,  # {5'b0, is_type, bad, valid}, clear-on-read
-    "ETHLEN":  0x9,  # frame_len[7:0]
+    "ETHLEN": 0x9,  # frame_len[7:0]
     "ETHLENH": 0xA,  # frame_len[15:8]
-    "ETHFLD":  0xB,  # frame_field[7:0]
+    "ETHFLD": 0xB,  # frame_field[7:0]
     "ETHFLDH": 0xC,  # frame_field[15:8]
     "BUFBYTE": 0xD,  # next frame byte; the read advances the pointer
     "BUFCTRL": 0xE,  # bit0 pulse: reclaim the frame buffer
     # The word-engine window (rtl/pe_soc.v, wiki/plans/serdes-integration.md).
     # INDEX phase sets the pointer, DATA phase bursts, any read re-arms INDEX.
-    "ENGINE":  0xF,
+    "ENGINE": 0xF,
 }
 
 MOV_SEL = {
-    "A,Y": 0, "A<-Y": 0, "AY": 0,
-    "Y,A": 1, "Y<-A": 1, "YA": 1,
-    "X,A": 2, "X<-A": 2, "XA": 2,
-    "A,X": 3, "A<-X": 3, "AX": 3,
+    "A,Y": 0,
+    "A<-Y": 0,
+    "AY": 0,
+    "Y,A": 1,
+    "Y<-A": 1,
+    "YA": 1,
+    "X,A": 2,
+    "X<-A": 2,
+    "XA": 2,
+    "A,X": 3,
+    "A<-X": 3,
+    "AX": 3,
 }
 
 # A few constants the firmware leans on; resolved like ports.
 CONSTS: dict[str, int] = {
-    "RX_VALID": 0x1, "RX_BUSY": 0x2,
-    "RX_START": 0x1, "RX_CLR": 0x2,
+    "RX_VALID": 0x1,
+    "RX_BUSY": 0x2,
+    "RX_START": 0x1,
+    "RX_CLR": 0x2,
     "LSB_FIRST": 0x1,
-    "TRUE": 1, "FALSE": 0,
+    "TRUE": 1,
+    "FALSE": 0,
     # I2C port bits (see rtl/pe_soc.v's map). SDA and SCL are the two
     # bidirectional pins; both are open-drain on a real bus.
-    "SDA": 0x10, "SCL": 0x20,
+    "SDA": 0x10,
+    "SCL": 0x20,
     # Standard-mode tick counts at 1 us per tick. 5/6 rather than 5/5: 5/5 is
     # exactly 100.0 kHz, which is AT the ceiling and works on a bench while
     # failing a compliance report. See wiki/plans/through-i2c.md.
@@ -111,12 +123,12 @@ CONSTS: dict[str, int] = {
     # firmware/i2c_pins.pe.
     #
     # Standard-mode floors and the counts chosen to clear them worst-case:
-    "T_LOW": 7,    # tLOW   >= 4.7 us -> worst case 6 us (nominal 7)
-    "T_HIGH": 6,   # tHIGH  >= 4.0 us -> worst case 5 us (nominal 6)
-    "T_STA": 6,    # tHD;STA>= 4.0 us -> worst case 5 us (nominal 6)
-    "T_DAT": 2,    # tSU;DAT>= 0.25 us-> worst case 1 us (nominal 2)
-    "T_STO": 6,    # tSU;STO>= 4.0 us -> worst case 5 us (nominal 6)
-    "T_BUF": 6,    # tBUF   >= 4.7 us -> worst case 5 us (nominal 6)
+    "T_LOW": 7,  # tLOW   >= 4.7 us -> worst case 6 us (nominal 7)
+    "T_HIGH": 6,  # tHIGH  >= 4.0 us -> worst case 5 us (nominal 6)
+    "T_STA": 6,  # tHD;STA>= 4.0 us -> worst case 5 us (nominal 6)
+    "T_DAT": 2,  # tSU;DAT>= 0.25 us-> worst case 1 us (nominal 2)
+    "T_STO": 6,  # tSU;STO>= 4.0 us -> worst case 5 us (nominal 6)
+    "T_BUF": 6,  # tBUF   >= 4.7 us -> worst case 5 us (nominal 6)
     #
     # WHY tLOW GETS THE LARGER SHARE. Both counts are reduced by up to one tick
     # by the phase residual, and the two floors differ (4.7 vs 4.0), so the
@@ -147,9 +159,9 @@ CONSTS: dict[str, int] = {
     # period is the length of the code and is exact by construction. The
     # counters here are for the RESET only (>50 us of low), which does not need
     # cycle-exactness and would cost 3,600 words of NOPs to express.
-    "LED_DIN": 0x40,   # bit 6: the strip's data pin (0-5 taken, 7 is the DRU)
-    "WS_RST1": 10,     # (10-1)*(4*99+7)+4 = 3,631 clocks = 60.5 us of low
-    "WS_RST2": 99,     # see firmware/ws2812.pe: the inner counter is RELOADED
+    "LED_DIN": 0x40,  # bit 6: the strip's data pin (0-5 taken, 7 is the DRU)
+    "WS_RST1": 10,  # (10-1)*(4*99+7)+4 = 3,631 clocks = 60.5 us of low
+    "WS_RST2": 99,  # see firmware/ws2812.pe: the inner counter is RELOADED
     #
     # Servo PWM: 50 Hz frame, 1.0-2.0 ms pulse. The frame period is the sum of
     # the pulse and the gap, so each sweep position carries its OWN gap and the
@@ -202,7 +214,8 @@ def check_range(value: int, limit: int, what: str, tok: str) -> int:
         raise AsmError(
             f"{what} {tok} = {value} is out of range (0..{limit - 1}); "
             f"the field is truncated in hardware, so this would assemble "
-            f"clean and run wrong")
+            f"clean and run wrong"
+        )
     return value
 
 
@@ -258,7 +271,7 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
     labels: dict[str, int] = {}
 
     # ---- pass 1: addresses + labels ------------------------------------
-    items: list[tuple[int, str, str]] = []   # (addr, mnemonic, operands)
+    items: list[tuple[int, str, str]] = []  # (addr, mnemonic, operands)
     addr = 0
     for lineno, raw in enumerate(lines, 1):
         line = raw.split(";")[0].strip()
@@ -319,13 +332,15 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
                     port_tok = toks[0]
                 else:
                     raise AsmError(f"{mnem} form is '{mnem} A, PORT' (got {ops!r})")
-                arg = check_range(parse_imm(port_tok, CONSTS), IO_PORTS,
-                                  "IO port", port_tok)
+                arg = check_range(
+                    parse_imm(port_tok, CONSTS), IO_PORTS, "IO port", port_tok
+                )
             elif kind == "mov_sel":
                 key = re.sub(r"\s+", "", ops).upper()
                 if key not in MOV_SEL:
-                    raise AsmError(f"MOV selector {ops!r} is not one of "
-                                   f"{sorted(set(MOV_SEL))}")
+                    raise AsmError(
+                        f"MOV selector {ops!r} is not one of {sorted(set(MOV_SEL))}"
+                    )
                 arg = MOV_SEL[key]
             elif kind == "addr8":
                 tok = ops.strip()
@@ -355,8 +370,11 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
                 # timer-delta idiom, and Y stays free as the snapshot.
                 if key == "X":
                     arg = (ALU_SUB[mnem] << 10) | (1 << 9)
-                elif re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", key) and \
-                        key not in CONSTS and key not in PORTS:
+                elif (
+                    re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", key)
+                    and key not in CONSTS
+                    and key not in PORTS
+                ):
                     # A bare identifier that is not a known constant is almost
                     # always an attempt at register-register, which this ISA
                     # cannot encode -- so say that rather than "unknown symbol".
@@ -365,7 +383,8 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
                     # would put a magic number in the firmware.
                     raise AsmError(
                         f"{mnem} second operand must be an immediate or X "
-                        f"(got {key!r}); register-register is not in this ISA")
+                        f"(got {key!r}); register-register is not in this ISA"
+                    )
                 else:
                     arg = (ALU_SUB[mnem] << 10) | (parse_imm(key, CONSTS) & 0xFF)
             elif kind == "ldm_arg":
@@ -396,8 +415,7 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
                     imm = toks[0]
                 else:
                     raise AsmError(f"STM form is 'STM addr8, A' (got {ops!r})")
-                arg = check_range(parse_imm(imm, CONSTS), DMEM_BYTES,
-                                  "data address", imm)
+                arg = check_range(parse_imm(imm, CONSTS), DMEM_BYTES, "data address", imm)
         except AsmError as exc:
             raise AsmError(f"addr {a:3d} ({mnem} {ops}): {exc}") from exc
 
@@ -410,7 +428,8 @@ def assemble(src: str) -> tuple[list[int], list[tuple[int, str, str]]]:
             f"program is {len(words)} words and instruction memory holds "
             f"{IMEM_WORDS}; the program counter aliases word {IMEM_WORDS} "
             f"onto word 0, so the overflow does not fail loudly at run time. "
-            f"See wiki/plans/through-i2c.md Blocker 3 for the SRAM swap.")
+            f"See wiki/plans/through-i2c.md Blocker 3 for the SRAM swap."
+        )
     return words, listing
 
 
@@ -434,10 +453,13 @@ def rtl_init(words: list[int], width: int = IMEM_WORDS) -> str:
         raise AsmError(
             f"--rtl-init: program is {len(words)} words but the initialiser "
             f"width is {width}; pass a width >= {len(words)} (the SoC's IMEM "
-            f"is {IMEM_WORDS} words).")
-    padded = words + [0xF000] * (width - len(words))     # NOP fill
-    lines = ["  initial begin",
-             f"    // {len(words)} words used of {width}; the rest is NOP fill"]
+            f"is {IMEM_WORDS} words)."
+        )
+    padded = words + [0xF000] * (width - len(words))  # NOP fill
+    lines = [
+        "  initial begin",
+        f"    // {len(words)} words used of {width}; the rest is NOP fill",
+    ]
     for i, w in enumerate(padded):
         lines.append(f"    imem[{i}] = 16'h{w:04X};")
     lines.append("  end")
@@ -445,15 +467,22 @@ def rtl_init(words: list[int], width: int = IMEM_WORDS) -> str:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("source", type=Path)
     ap.add_argument("-o", "--out", type=Path, default=None)
     ap.add_argument("--listing", action="store_true")
-    ap.add_argument("--rtl-init", action="store_true",
-                    help="emit a Verilog register init instead of hex")
-    ap.add_argument("--vh", action="store_true",
-                    help="emit a Verilog $readmemh include file (one word per line)")
+    ap.add_argument(
+        "--rtl-init",
+        action="store_true",
+        help="emit a Verilog register init instead of hex",
+    )
+    ap.add_argument(
+        "--vh",
+        action="store_true",
+        help="emit a Verilog $readmemh include file (one word per line)",
+    )
     args = ap.parse_args()
 
     try:
@@ -465,8 +494,10 @@ def main() -> int:
     if args.listing:
         for a, hx, txt in listing:
             print(f"{a:3d}  {hx}  {txt}")
-        print(f"--- {len(words)} words "
-              f"({len(words) * 2} bytes of instruction memory)", file=sys.stderr)
+        print(
+            f"--- {len(words)} words ({len(words) * 2} bytes of instruction memory)",
+            file=sys.stderr,
+        )
 
     if args.rtl_init:
         try:
