@@ -31,10 +31,25 @@ WHAT THE CONTRACT ACTUALLY SAYS (the shapes a host must implement)
 
 KEY SEMANTICS, stated once so the probes below are not re-deriving them
 ---------------------------------------------------------------------
-* **Stop-before.** A hit compares the core's LANDING address (`dbg_next_pc`)
-  against the armed breakpoint, so the instruction AT the breakpoint address
-  has NOT executed. That is what lets a debugger inspect the landing
-  instruction and then step that very instruction.
+* **Stop-before — and note the HALF that is easy to get wrong.** A hit compares
+  the core's LANDING address (`dbg_next_pc`) against the armed breakpoint, so
+  the instruction AT the breakpoint address has NOT executed. That is what lets
+  a debugger inspect the landing instruction and then step that very
+  instruction.
+
+  What this does NOT mean is that the step withholds anything. A step is exactly
+  ONE instruction and it RUNS: pe_ctrl pulses `dbg_step_r`, so `cpu_exec` is
+  true and the instruction at the current PC retires. The HOLD is what keeps the
+  instruction at the breakpoint from running. So a step from 1 to 2 with a
+  breakpoint at 2 DOES execute the `LDI A,0xAA` at address 1, and leaves `a`
+  holding 0xAA with the PC parked on 2 and the hit latched.
+
+  This host model once got it backwards — it skipped the execute whenever the
+  landing address matched, withholding the stepped instruction instead of the
+  breakpoint's — and the chip's conformance run caught it. The failure mode is
+  worth naming: every document here stated only the NEGATIVE half, so the bug
+  contradicted nothing that was written down. If you change this, state both
+  halves.
 * **BP_CLR is the only release.** It disarms, clears the hit and drops the
   hold: with run=1 the core resumes, with run=0 it falls to the boot stop and
   the PC re-zeroes. Continuing *with* the breakpoint armed therefore costs

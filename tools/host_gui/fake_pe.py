@@ -572,8 +572,7 @@ class FakePE:
         # in that slot, which agreed with `run` only when no hold was asserted
         # and silently disagreed the moment one was (state 2 vs run 0).
         pc, a, x, y, _latched = self._regs()
-        return (P.STATUS_OK, pc, a, x, y, self.latched_insn,
-                1 if self.run else 0)
+        return (P.STATUS_OK, pc, a, x, y, self.latched_insn, 1 if self.run else 0)
 
     def _read_range_fault(self) -> None:
         """Latch FAULT_RANGE on a read range error only under the 'latch' policy."""

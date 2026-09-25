@@ -210,7 +210,7 @@ class TestChipConformanceCorrections(unittest.TestCase):
         executing.
         """
         pe = R.loaded(pc=0)
-        pe.request(P.OP_DEBUG_STEP)          # now held: state 2, run 0
+        pe.request(P.OP_DEBUG_STEP)  # now held: state 2, run 0
         self.assertEqual(pe.state, F.DEBUG_HOLD)
         payload = pe.request(P.OP_READ_CPU).payload
         self.assertEqual(payload[0], P.STATUS_OK)
@@ -220,12 +220,13 @@ class TestChipConformanceCorrections(unittest.TestCase):
     def test_read_cpu_while_held_reports_the_fetched_word(self):
         """While held, the fetch mode is pc, so insn is the word AT that pc."""
         pe = R.loaded(pc=0)
-        pe.request(P.OP_DEBUG_STEP)          # executes imem[0], pc -> 1
+        pe.request(P.OP_DEBUG_STEP)  # executes imem[0], pc -> 1
         payload = pe.request(P.OP_READ_CPU).payload
-        self.assertEqual(payload[1], 1)                       # pc
-        self.assertEqual(payload[2], 0x55)                    # a = LDI retired
-        self.assertEqual(payload[5], R.PROGRAM[1], "insn is imem[pc], not the "
-                                                     "last-executed word")
+        self.assertEqual(payload[1], 1)  # pc
+        self.assertEqual(payload[2], 0x55)  # a = LDI retired
+        self.assertEqual(
+            payload[5], R.PROGRAM[1], "insn is imem[pc], not the last-executed word"
+        )
 
     def test_a_step_executes_one_instruction_and_the_hold_protects_the_next(self):
         """Stop-before withholds the LANDING instruction, not the stepped one.
@@ -236,9 +237,9 @@ class TestChipConformanceCorrections(unittest.TestCase):
         keeps the instruction AT the breakpoint from running.
         """
         pe = R.loaded(pc=0, bp_addr=2, bp_en=True)
-        pe.request(P.OP_DEBUG_STEP)          # 0 -> 1, retires LDI A,0x55
+        pe.request(P.OP_DEBUG_STEP)  # 0 -> 1, retires LDI A,0x55
         self.assertEqual(pe.a, 0x55)
-        payload = pe.request(P.OP_DEBUG_STEP).payload      # 1 -> 2, lands on bp
+        payload = pe.request(P.OP_DEBUG_STEP).payload  # 1 -> 2, lands on bp
         self.assertEqual(pe.a, 0xAA, "the step from 1 to 2 retires the LDI at 1")
         self.assertEqual(payload[1], F.DEBUG_BP_HIT)
         self.assertEqual(payload[2], 2)
@@ -251,22 +252,28 @@ class TestChipConformanceCorrections(unittest.TestCase):
     def test_the_two_corrected_steps_match_the_chips_observed_bytes(self):
         """The exact frame words the chip reported, so the vectors cannot drift."""
         package = V3.build_package()
-        steps = {(v["name"], s["name"]): s
-                 for v in package["vectors"] for s in v["steps"]}
+        steps = {
+            (v["name"], s["name"]): s for v in package["vectors"] for s in v["steps"]
+        }
 
         def words(key):
             raw = bytes.fromhex(steps[key]["response_hex"])
-            return [f"{int.from_bytes(raw[i:i + 2], 'big'):04X}"
-                    for i in range(0, len(raw), 2)]
+            return [
+                f"{int.from_bytes(raw[i : i + 2], 'big'):04X}"
+                for i in range(0, len(raw), 2)
+            ]
 
         # 0-based frame words: 0=SYNC 1=header 2=seq 3=len 4=OK ... last=CRC.
-        self.assertEqual(words(("debug_step_executes_one",
-                                "read_cpu_shows_a_55"))[9:12],
-                         ["00AA", "0000", "77B8"])
-        self.assertEqual(words(("debug_step_lands_on_bp",
-                                "status_reports_the_hit"))[10], "00AA")
-        self.assertEqual(words(("debug_step_lands_on_bp",
-                                "status_reports_the_hit"))[14], "7D55")
+        self.assertEqual(
+            words(("debug_step_executes_one", "read_cpu_shows_a_55"))[9:12],
+            ["00AA", "0000", "77B8"],
+        )
+        self.assertEqual(
+            words(("debug_step_lands_on_bp", "status_reports_the_hit"))[10], "00AA"
+        )
+        self.assertEqual(
+            words(("debug_step_lands_on_bp", "status_reports_the_hit"))[14], "7D55"
+        )
 
     def test_the_model_boundary_stays_unproven_and_unchanged(self):
         """insn is not contract-determined for a free-running core.
@@ -278,9 +285,13 @@ class TestChipConformanceCorrections(unittest.TestCase):
         recorded rather than quietly "fixed" to match a testbench.
         """
         package = V3.build_package()
-        step = next(s for v in package["vectors"] if v["name"]
-                    == "debug_status_common_prefix" for s in v["steps"]
-                    if s["name"] == "status_full_readback")
+        step = next(
+            s
+            for v in package["vectors"]
+            if v["name"] == "debug_status_common_prefix"
+            for s in v["steps"]
+            if s["name"] == "status_full_readback"
+        )
         raw = bytes.fromhex(step["response_hex"])
         insn = f"{int.from_bytes(raw[26:28], 'big'):04X}"
         self.assertEqual(insn, "F000")
@@ -292,6 +303,7 @@ class TestChipConformanceCorrections(unittest.TestCase):
         """The READ_CPU fix must not perturb the chip-confirmed R2 package."""
         self.assertEqual(V2.check_package(), 0)
         self.assertEqual(V2.check_hex_export(), 0)
+
 
 class TestObligations(unittest.TestCase):
     def test_every_probe_passes(self):

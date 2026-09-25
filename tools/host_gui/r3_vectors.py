@@ -720,20 +720,22 @@ def build_package() -> dict:
     # claimed" -- so the expectation stays the ruled landing word and the step
     # stays chip_confirmed=false, rather than bending a contract value to match a
     # testbench artefact.
-    package["model_boundaries"] = [{
-        "vector": "debug_status_common_prefix",
-        "step": "status_full_readback",
-        "field": "insn",
-        "expected": "the manager-ruled LANDING word (0xF000)",
-        "chip_reports": "0x0000",
-        "why": "a freeze-snapshot TB pins pc every cycle, collapsing the fetch "
-               "pipeline onto the fill word; insn is not contract-determined for "
-               "a free-running core",
-        "chip_confirmed": False,
-        "note": "not a contract disagreement and not claimed on either side; "
-                "a TB that holds the core (state 2) would make insn "
-                "deterministic at imem[pc] and could prove the word",
-    }]
+    package["model_boundaries"] = [
+        {
+            "vector": "debug_status_common_prefix",
+            "step": "status_full_readback",
+            "field": "insn",
+            "expected": "the manager-ruled LANDING word (0xF000)",
+            "chip_reports": "0x0000",
+            "why": "a freeze-snapshot TB pins pc every cycle, collapsing the fetch "
+            "pipeline onto the fill word; insn is not contract-determined for "
+            "a free-running core",
+            "chip_confirmed": False,
+            "note": "not a contract disagreement and not claimed on either side; "
+            "a TB that holds the core (state 2) would make insn "
+            "deterministic at imem[pc] and could prove the word",
+        }
+    ]
     package["model_only_obligations"] = [
         {"name": name, "why": why} for name, why in MODEL_ONLY_OBLIGATIONS
     ]
