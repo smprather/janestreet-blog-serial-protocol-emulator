@@ -109,28 +109,36 @@ CHIP_EVIDENCE = {
         "step_one",
         "step_two",
     },
-    "review": ("chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md "
-               "(the conformance record and the run lock)"),
+    "review": (
+        "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md "
+        "(the conformance record and the run lock)"
+    ),
     "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v",
-    "harness": ("tb_pe_ctrl_r3_conf loads imem.hex/dmem.hex, applies each "
-                "vector's model_images[] state (registers plus bp_addr/bp_en/"
-                "bp_hit/debug_hold), drives the step's request_file and "
-                "compares the response word for word, CRC included. It also "
-                "checks tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt: a divergence "
-                "that CHANGES, or any divergence not listed, turns the gate "
-                "red -- so a resolved host defect cannot read as 'known'"),
-    "conformance": ("tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and "
-                    "25 of them with NO divergence after this package's "
-                    "regeneration"),
-    "scope": ("Chip-confirmed IN SIMULATION against the implemented R3 "
-              "contract. The remaining step (status_full_readback) is a "
-              "pinned TB model boundary, deliberately NOT claimed by either "
-              "side: insn is not contract-determined for a free-running core, "
-              "and the freeze-snapshot pre-state is a state the chip cannot "
-              "physically occupy. Chip-side R3.1 hold-semantics polish is in "
-              "flight and may change it. NOT hardware-confirmed: the real-"
-              "board run (Pico over USB, physical shuttle) has never been "
-              "executed."),
+    "harness": (
+        "tb_pe_ctrl_r3_conf loads imem.hex/dmem.hex, applies each "
+        "vector's model_images[] state (registers plus bp_addr/bp_en/"
+        "bp_hit/debug_hold), drives the step's request_file and "
+        "compares the response word for word, CRC included. It also "
+        "checks tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt: a divergence "
+        "that CHANGES, or any divergence not listed, turns the gate "
+        "red -- so a resolved host defect cannot read as 'known'"
+    ),
+    "conformance": (
+        "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and "
+        "25 of them with NO divergence after this package's "
+        "regeneration"
+    ),
+    "scope": (
+        "Chip-confirmed IN SIMULATION against the implemented R3 "
+        "contract. The remaining step (status_full_readback) is a "
+        "pinned TB model boundary, deliberately NOT claimed by either "
+        "side: insn is not contract-determined for a free-running core, "
+        "and the freeze-snapshot pre-state is a state the chip cannot "
+        "physically occupy. Chip-side R3.1 hold-semantics polish is in "
+        "flight and may change it. NOT hardware-confirmed: the real-"
+        "board run (Pico over USB, physical shuttle) has never been "
+        "executed."
+    ),
     "date": "2026-09-25",
 }
 
@@ -155,12 +163,24 @@ MODEL_ONLY_OBLIGATIONS = (
     ),
 )
 
+# The numbers below are CHECKED against the flag arithmetic by
+# test_the_notice_matches_the_flag_arithmetic, because a notice written by
+# hand drifts the moment the arithmetic moves -- and the drift gate cannot
+# catch that: the notice and the data are generated from the same source, so a
+# fresh build faithfully reproduces the same stale prose. That is the whole
+# reason the check is a TEST and not a regeneration.
 PACKAGE_NOTICE = (
-    "NOT CHIP-CONFIRMED. Reconciled against the implemented R3 contract "
-    "(chip repo, 2026-09-25), but no step here has been run against the chip's "
-    "tb_pe_ctrl_r3 yet, so every step is chip_confirmed=false. A passing step "
-    "in this package is the gate the chip must meet, NOT evidence that it "
-    "does. The real-board acceptance run has not been executed."
+    "25 of 26 steps are CHIP-CONFIRMED IN SIMULATION: the chip's "
+    "tb_pe_ctrl_r3_conf is GREEN, 26/26 steps byte-exact (CRC included), and "
+    "25 of them with no divergence. The 26th, status_full_readback, is "
+    "deliberately NOT claimed by either side -- its expected insn is not "
+    "contract-determined for a free-running core, and the conformance TB's "
+    "freeze-snapshot pre-state is a state the chip cannot physically occupy; "
+    "chip-side R3.1 hold-semantics polish is in flight and may change it. "
+    "Citations are in chip_evidence; confirmation is a citation, never an "
+    "assertion, and the confirmed set is an explicit list. NOT "
+    "HARDWARE-CONFIRMED: the real-board acceptance run (Pico over USB, "
+    "physical shuttle) has never been executed."
 )
 
 # The response shapes, spelled out once so the manifest documents the wire
@@ -229,7 +249,9 @@ SPEC = V.Spec(
             "a rejected op has no side effect: wrong length is a 1-word "
             "BAD_FRAME, and a BP_SET past IMEM_WORDS is RANGE with no fault"
         ),
-        (f"every step is chip_confirmed=False: {CHIP_EVIDENCE['conformance']}"),
+        ("25 of 26 steps are chip-confirmed in simulation; the 1 exception is "
+         "the pinned TB model boundary, unproven by both sides -- see "
+         "chip_evidence.conformance for the chip's own numbers"),
     ),
     evidence=CHIP_EVIDENCE,
     word_order="big-endian words on the wire; the debug payloads are the "

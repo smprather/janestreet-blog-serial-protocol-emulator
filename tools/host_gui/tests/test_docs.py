@@ -254,8 +254,7 @@ class TestDebugActIsHonest(unittest.TestCase):
                 self.assertFalse(entry["chip_confirmed"])
         # The 25 the chip ran ARE confirmed now; only the boundary is not.
         boundary = {e["step"] for e in self.package["model_boundaries"]}
-        unconfirmed = [s["name"] for s in self.steps
-                       if not s["chip_confirmed"]]
+        unconfirmed = [s["name"] for s in self.steps if not s["chip_confirmed"]]
         self.assertEqual(len(self.steps), 26)
         self.assertEqual(unconfirmed, sorted(boundary))
 

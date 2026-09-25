@@ -468,15 +468,19 @@ class TestPackage(unittest.TestCase):
         for vector in package["vectors"]:
             for step in vector["steps"]:
                 seen.setdefault(step["name"], []).append(
-                    (vector["name"], step["chip_confirmed"]))
+                    (vector["name"], step["chip_confirmed"])
+                )
         shared = {n: v for n, v in seen.items() if len(v) > 1}
         self.assertIn("step_one", shared, "the name collision this guards")
         for name, entries in shared.items():
             with self.subTest(step=name):
-                self.assertEqual({flag for _, flag in entries}, {True},
-                                 f"steps sharing the name {name!r} disagree "
-                                 f"on confirmation, which name-keyed evidence "
-                                 f"cannot express: {entries}")
+                self.assertEqual(
+                    {flag for _, flag in entries},
+                    {True},
+                    f"steps sharing the name {name!r} disagree "
+                    f"on confirmation, which name-keyed evidence "
+                    f"cannot express: {entries}",
+                )
 
     def test_a_confirmed_step_must_cite_the_evidence(self):
         """The R2 discipline: confirmation is a citation, never an assertion."""
@@ -486,8 +490,9 @@ class TestPackage(unittest.TestCase):
                     self.assertIn("chip_evidence", step)
                     self.assertTrue(step["chip_evidence"]["review"])
         confirmed = V3.CHIP_EVIDENCE["confirmed_steps"]
-        self.assertEqual(len(confirmed), 24, "distinct names; step_one covers "
-                                              "two steps, so 25 steps")
+        self.assertEqual(
+            len(confirmed), 24, "distinct names; step_one covers two steps, so 25 steps"
+        )
         self.assertNotIn("status_full_readback", confirmed)
         for key in ("review", "testbench", "harness", "conformance", "scope"):
             with self.subTest(citation=key):
@@ -548,6 +553,69 @@ class TestFrameworkIsSharedAndR2IsUntouched(unittest.TestCase):
         self.assertIs(V2.V, V3.V)
         self.assertEqual(V2.SPEC.schema, None)  # R2 predates the stamp
         self.assertEqual(V3.SPEC.schema, V.SCHEMA_VERSION)
+
+
+class TestTheNoticeMatchesTheFlagArithmetic(unittest.TestCase):
+    """The shipped prose must agree with the package's own data.
+
+    This class exists because prose staleness has now bitten three times, and
+    the DRIFT GATE structurally cannot catch it: the notice and the flags are
+    generated from the same source, so a fresh build faithfully reproduces
+    stale prose and `--check` passes. The only thing that can catch it is a
+    check that compares the prose against the DATA it describes.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.package = V3.build_package()
+        cls.steps = [s for v in cls.package["vectors"] for s in v["steps"]]
+        cls.confirmed = [s for s in cls.steps if s["chip_confirmed"]]
+        cls.boundary = {b["step"] for b in cls.package["model_boundaries"]}
+
+    def test_the_notice_states_the_real_counts(self):
+        notice = self.package["notice"]
+        self.assertIn(f"{len(self.confirmed)} of {len(self.steps)}", notice)
+
+    def test_the_notice_names_the_unconfirmed_step(self):
+        for step in self.boundary:
+            with self.subTest(step=step):
+                self.assertIn(step, self.package["notice"])
+
+    def test_the_notice_makes_no_contradicted_claim(self):
+        """The specific failure: a notice that says "every step is false"."""
+        forbidden = (
+            "every step is chip_confirmed=false",
+            "every step is chip_confirmed=False",
+            "no step here has been run",
+            "NOT CHIP-CONFIRMED.",
+        )
+        for phrase in forbidden:
+            with self.subTest(phrase=phrase):
+                self.assertNotIn(phrase, self.package["notice"])
+
+    def test_the_notice_still_refuses_the_hardware_claim(self):
+        """Fresh numbers must not quietly become a hardware claim."""
+        self.assertIn("HARDWARE-CONFIRMED", self.package["notice"])
+        self.assertIn("has never been executed", self.package["notice"])
+
+    def test_the_rulings_do_not_contradict_themselves(self):
+        joined = " ".join(self.package["rulings_applied"])
+        self.assertNotIn("every step is chip_confirmed=False", joined)
+        self.assertIn(f"{len(self.confirmed)} of {len(self.steps)}", joined)
+
+    def test_the_hex_export_carries_the_same_notice(self):
+        """The hex manifest is what a chip TB reads; it must not lag the JSON."""
+        import json
+        manifest = json.loads(
+            (V3.SPEC.hex_dir / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["notice"], self.package["notice"])
+
+    def test_confirmed_count_is_derived_not_asserted(self):
+        """Guard the arithmetic itself: 25 of 26, boundary excluded."""
+        self.assertEqual(len(self.confirmed), 25)
+        self.assertEqual(len(self.steps), 26)
+        unconfirmed = {s["name"] for s in self.steps if not s["chip_confirmed"]}
+        self.assertEqual(unconfirmed, self.boundary)
 
 
 if __name__ == "__main__":
