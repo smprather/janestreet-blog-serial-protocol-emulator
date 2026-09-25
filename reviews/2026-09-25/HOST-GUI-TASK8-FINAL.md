@@ -56,14 +56,24 @@ exercised, not merely declared.
 
 ## No chip-side changes (Task 8 Step 4, proved)
 
-`git diff --name-only main..HEAD` lists **41** files, all of them under
-`tools/host_gui/`, `tools/host_bridge/`, `reviews/`, `wiki/plans/host-controller-gui.md`,
-`wiki/STATUS.md` (this branch's copy), `README.md`, `HANDOFF.md`, or
-`pyproject.toml`. A filter for `rtl/`, `tb/`, `sim/`, `firmware/`, `flow/`,
-`info.yaml`, `regress/`, `tools/fw/`, `tools/gen/`, `tools/checks/` returns
-**nothing**. `git worktree list` shows `main` checked out in
-`/home/mylesp/janestreet-blog-serial-protocol-emulator` (at `4f3a4fa`) and this
-worktree on `host-controller-gui`.
+`git diff --name-only <fork>..HEAD` lists **41** files, all of them under
+`tools/host_gui/`, `tools/host_bridge/`, `reviews/`,
+`wiki/plans/host-controller-gui.md`, `wiki/STATUS.md` (this branch's copy),
+`README.md`, `HANDOFF.md`, or `pyproject.toml`. A filter for `rtl/`, `tb/`,
+`sim/`, `firmware/`, `flow/`, `info.yaml`, `regress/`, `tools/fw/`,
+`tools/gen/`, `tools/checks/` returns **nothing**. `git worktree list` shows
+`main` checked out in
+`/home/mylesp/janestreet-blog-serial-protocol-emulator` and this worktree on
+`host-controller-gui`.
+
+> **Correction (2026-09-25, appended, not rewritten):** the original wording
+> here said "verified by `git diff --name-only main..HEAD`". `main` has since
+> moved (`153fbde` -> `e77e7cb`, the protocol-worker's eth-tx work), so that
+> range now lists what **main** has that this branch lacks, not what this
+> branch changed - the wrong direction. The correct check is the fork point:
+> `git diff --name-only 153fbde..HEAD` adds **zero** chip-side files. The
+> conclusion is unchanged; the evidence line is now stated correctly. The
+> manager's WORKLOG carries the same correction.
 
 ## The deferred record items, done here
 

@@ -6,7 +6,11 @@
 per plan Task 3-5: extend FakePE and the acceptance expectations for the read
 ops the chip side will implement, clearly marked not-chip-confirmed, so
 chip-side R2 can be validated end-to-end the moment it lands." No chip-side
-change; this branch still touches no `rtl/`/`tb/`/`info.yaml` file.
+change; this branch still touches no `rtl/`/`tb/`/`info.yaml` file. Proved
+against the **fork point** (`git diff --name-only 153fbde..HEAD` = zero
+chip-side files), not `main..HEAD`: `main` has since moved to `e77e7cb` (the
+protocol-worker's eth-tx work), which makes that range show what main has that
+this branch lacks.
 
 ## Manager RULINGs (settled 2026-09-25, applied in `264ce27`)
 
@@ -147,6 +151,14 @@ host-model evidence only.
 - One-command re-verify: `tools/host_gui/run_host_tests.sh` (`c24fd87`) runs
   every host gate — host_gui tests, host_bridge tests, ruff, compileall and the
   acceptance dry run — and is verified to fail on a real defect.
+- **Branch base / merge note (manager's call).** The host branch forked at
+  `153fbde`; `main` is now `e77e7cb`, so the branch is behind on chip files and
+  `HANDOFF.md`, `README.md` and `wiki/STATUS.md` are edited on both sides and
+  will conflict at merge. I have **not** rebased or merged: a rebase would
+  rewrite the commit hashes already cited in `WORKLOG.md` and in these records,
+  and the merge decision belongs to the manager. The host gates read no chip
+  file, so they re-verify cleanly on this tree; after the merge the same
+  `run_host_tests.sh` is the command to re-run.
 
 ## Same-turn chain log (WORKLOG-traceable)
 

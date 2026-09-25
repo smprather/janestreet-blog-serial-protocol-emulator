@@ -421,10 +421,10 @@ moment it lands. Record: `reviews/2026-09-25/HOST-GUI-R2-PREP.md`.
 - Two contract questions (read-range fault latching; READ_CPU/READ_DMEM payload
   order) are logged as WORKLOG `QUESTION`s for the chip side.
 
-No chip-side file was touched; `git diff --name-only main..HEAD` still shows
-none. When R2 lands, the five acceptance checks are the hardware gate (they are
-expected to fail on pre-R2 hardware) and the `chip_confirmed` flags flip only
-with that run as evidence.
+No chip-side file was touched; `git diff --name-only 153fbde..HEAD` (fork
+point) shows none. When R2 lands, the six acceptance checks are the hardware
+gate (they are expected to fail on pre-R2 hardware) and the `chip_confirmed`
+flags flip only with that run as evidence.
 
 ---
 
