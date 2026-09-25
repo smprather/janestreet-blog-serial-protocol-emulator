@@ -705,15 +705,15 @@
           "request_file": "debug_step_executes_one.read_cpu_shows_a_55.req.hex",
           "response_bytes": 24,
           "response_file": "debug_step_executes_one.read_cpu_shows_a_55.rsp.hex",
-          "response_hex": "a55a19200003000700000001005500000000005500029899",
+          "response_hex": "a55a1920000300070000000100550000000000aa000077b8",
           "response_payload_words": [
             0,
             1,
             85,
             0,
             0,
-            85,
-            2
+            170,
+            0
           ],
           "sequence": 3,
           "status": 0
@@ -897,7 +897,7 @@
           "request_file": "debug_step_lands_on_bp.status_reports_the_hit.req.hex",
           "response_bytes": 30,
           "response_file": "debug_step_lands_on_bp.status_reports_the_hit.rsp.hex",
-          "response_hex": "a55a1a400003000a000000030002000200030000005500000000f000d824",
+          "response_hex": "a55a1a400003000a00000003000200020003000000aa00000000f0007d55",
           "response_payload_words": [
             0,
             3,
@@ -905,7 +905,7 @@
             2,
             3,
             0,
-            85,
+            170,
             0,
             0,
             61440

@@ -1,42 +1,53 @@
 # R3 golden vectors — per-step request/response bytes for the chip side
 
-Generated from the implemented `pe_ctrl.v` contract on 2026-09-25 by
+Generated from the implemented `pe_ctrl.v` contract by
 `python3 -m tools.host_gui.r3_vectors`. Consumed by `tb_pe_ctrl_r3` the way
 `r2-hex/` is consumed by `tb_pe_ctrl_r2`.
 
-> **chip_confirmed = false on every step below.** The chip has run its own
-> `tb_pe_ctrl_r3` with a 7-mutant gate and formal proofs for S1–S4; that is
-> the chip's evidence. *These* host vectors become chip-confirmed only when
-> that TB passes them byte-exactly (CRC included).
+> **chip_confirmed = false on every step.** The chip's `tb_pe_ctrl_r3_conf` is
+> GREEN 26/26. Green here means the chip conforms to the contract; the steps
+> become *chip-confirmed* only when the conformance TB passes **these**
+> vectors byte-exactly and the citations are recorded in `CHIP_EVIDENCE`.
+
+## 2026-09-25 — corrected against the chip's conformance run
+
+The chip's conformance run reported 26/26 with three pinned divergences, in which
+the CHIP was right. Two were host-side vector defects and are fixed here; one is a
+TB model boundary and is deliberately left alone.
+
+| step | what the chip proved | now |
+| --- | --- | --- |
+| `read_cpu_shows_a_55` | READ_CPU's last word is the **run strap** (`resp_buf[6] <= {15'b0, run}`), and `insn` is the **fetched** word at the held pc | builder fixed: `run`, and `imem[pc]` while held |
+| `status_reports_the_hit` | a step from 1 to 2 **does retire** the `LDI A,0xAA` at address 1; stop-before protects the instruction *at* the breakpoint, which has not run | step semantics fixed: the step executes, the hold protects the landing word |
+| `status_full_readback` | `insn` is **not contract-determined** for a free-running core; the freeze-snapshot TB reports 0x0000 | **unchanged** (stays the ruled 0xF000), recorded as a model boundary, `chip_confirmed` stays false |
 
 ## How to run one
 
-1. `$readmemh("imem.hex", imem)` (1024 words) and `$readmemh("dmem.hex", dmem)`.
-2. Preload the vector's `model_images[id]`: `state`
-   (pc/a/x/y/insn/timer/run/faults/words_written) and `debug`
-   (bp_addr/bp_en/bp_hit/debug_hold).
-3. Drive `request_file` as bytes; compare the response to `response_file`
-   word for word. **These ops emit ZERO wait words** — there is nothing to skip.
-4. The `state` word is DERIVED by the chip from the debug registers, so it is
-   never preloaded; assert it against `dbg_hold_r ? (bp_hit ? 3 : 2) : (run ? 1 : 0)`.
+1. `$readmemh("imem.hex", imem)` and `$readmemh("dmem.hex", dmem)`.
+2. Preload the vector's `model_images[id]`: `state` (pc/a/x/y/insn/timer/run/
+   faults/words_written) and `debug` (bp_addr/bp_en/bp_hit/debug_hold).
+3. Drive `request_file`; compare the response to `response_file` word for word.
+   **These ops emit ZERO wait words.**
+4. The `state` word is DERIVED by the chip (`dbg_hold ? (bp_hit ? 3 : 2) :
+   (run ? 1 : 0)`), so it is never preloaded.
 
 ## Vectors
 
 | # | vector / step | image | request (hex) | response (hex) | response payload words |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | 1 | `debug_bp_set_readback` / `bp_set_address_2` | `v01-bp-set-readback` | `a55a12200001000100027c08` | `a55a1a200001000500000000000000020001caf2` | `0000 0000 0000 0002 0001` |
 | 2 | `debug_bp_set_out_of_range` / `bp_set_past_imem` | `v02-bp-set-out-of-range` | `a55a1220000100010400908e` | `a55a1a200001000500030000000000030001d086` | `0003 0000 0000 0003 0001` |
 | 3 | `debug_bp_set_wrong_length` / `bp_set_len_0` | `v03-bp-set-wrong-length` | `a55a12200001000048f0` | `a55a1a2000010001000262d2` | `0002` |
 | 4 | `debug_step_executes_one` / `step_from_boot_stop` | `v04-step-executes-one` | `a55a121000010000441e` | `a55a1a100001000500000002000100000000ad9f` | `0000 0002 0001 0000 0000` |
 | 5 | `debug_step_executes_one` / `status_shows_pc_1` | `v04-step-executes-one` | `a55a124000020000087c` | `a55a1a400002000a00000002000100000000000000550000000000aabbb5` | `0000 0002 0001 0000 0000 0000 0055 0000 0000 00AA` |
-| 6 | `debug_step_executes_one` / `read_cpu_shows_a_55` | `v04-step-executes-one` | `a55a112000030000e870` | `a55a19200003000700000001005500000000005500029899` | `0000 0001 0055 0000 0000 0055 0002` |
+| 6 | `debug_step_executes_one` / `read_cpu_shows_a_55` | `v04-step-executes-one` | `a55a112000030000e870` | `a55a1920000300070000000100550000000000aa000077b8` | `0000 0001 0055 0000 0000 00AA 0000` |
 | 7 | `debug_step_sequence` / `step_one` | `v05-step-sequence` | `a55a121000010000441e` | `a55a1a100001000500000002000100000000ad9f` | `0000 0002 0001 0000 0000` |
 | 8 | `debug_step_sequence` / `step_two` | `v05-step-sequence` | `a55a1210000200001d4e` | `a55a1a1000020005000000020002000000008ce8` | `0000 0002 0002 0000 0000` |
 | 9 | `debug_step_sequence` / `status_shows_a_aa` | `v05-step-sequence` | `a55a1240000300003f4c` | `a55a1a400003000a00000002000200000000000000aa00000000f0009f8b` | `0000 0002 0002 0000 0000 0000 00AA 0000 0000 F000` |
 | 10 | `debug_step_while_running` / `step_not_ready` | `v06-step-while-running` | `a55a121000010000441e` | `a55a1a100001000500060001000700000000e210` | `0006 0001 0007 0000 0000` |
 | 11 | `debug_step_lands_on_bp` / `step_one` | `v07-step-lands-on-bp` | `a55a121000010000441e` | `a55a1a100001000500000002000100020001d3de` | `0000 0002 0001 0002 0001` |
 | 12 | `debug_step_lands_on_bp` / `step_lands_on_2` | `v07-step-lands-on-bp` | `a55a1210000200001d4e` | `a55a1a1000020005000000030002000200036a8a` | `0000 0003 0002 0002 0003` |
-| 13 | `debug_step_lands_on_bp` / `status_reports_the_hit` | `v07-step-lands-on-bp` | `a55a1240000300003f4c` | `a55a1a400003000a000000030002000200030000005500000000f000d824` | `0000 0003 0002 0002 0003 0000 0055 0000 0000 F000` |
+| 13 | `debug_step_lands_on_bp` / `status_reports_the_hit` | `v07-step-lands-on-bp` | `a55a1240000300003f4c` | `a55a1a400003000a00000003000200020003000000aa00000000f0007d55` | `0000 0003 0002 0002 0003 0000 00AA 0000 0000 F000` |
 | 14 | `debug_bp_hit_stops_live_core` / `status_after_live_hit` | `v08-bp-hit-stops-live-core` | `a55a124000010000512c` | `a55a1a400001000a000000030002000200030001000000000000f0006a21` | `0000 0003 0002 0002 0003 0001 0000 0000 0000 F000` |
 | 15 | `debug_bp_hit_stops_live_core` / `status_is_stable` | `v08-bp-hit-stops-live-core` | `a55a124000020000087c` | `a55a1a400002000a000000030002000200030001000000000000f000c53c` | `0000 0003 0002 0002 0003 0001 0000 0000 0000 F000` |
 | 16 | `debug_step_off_bp_clears_hit` / `step_off_the_breakpoint` | `v09-step-off-bp-clears-hit` | `a55a121000010000441e` | `a55a1a100001000500000002000300020001975d` | `0000 0002 0003 0002 0001` |
@@ -53,23 +64,23 @@ Generated from the implemented `pe_ctrl.v` contract on 2026-09-25 by
 
 **14 vectors, 26 steps, 0 chip-confirmed.**
 
-Request bytes are the complete frame (`A55A` sync, header, sequence, length,
-payload, CRC); response bytes likewise. Note step
-`debug_bad_crc_no_side_effect/bp_set_bad_crc`: its request hex is
-*deliberately corrupt* — the bad CRC is part of the golden stream, so the
-testbench drives the malformed bytes rather than mangling a good frame.
+`debug_bad_crc_no_side_effect/bp_set_bad_crc` ships a *deliberately corrupt*
+request — the bad CRC is part of the golden stream, so the testbench drives the
+malformed bytes rather than mangling a good frame.
 
-## Where the vector spec and the RTL disagree
+## Known model boundary (not a contract disagreement)
 
-The vectors follow the **RTL**, because the chip is what has to pass them.
+**`debug_status_common_prefix` / `status_full_readback`, field `insn`** — a freeze-snapshot TB pins pc every cycle, collapsing the fetch pipeline onto the fill word; insn is not contract-determined for a free-running core.
 
-### vector 11 (debug_bp_clr_while_stopped_is_boot_stop)
+- expected: the manager-ruled LANDING word (0xF000)
+- chip reports: 0x0000
+- `chip_confirmed`: False — not a contract disagreement and not claimed on either side; a TB that holds the core (state 2) would make insn deterministic at imem[pc] and could prove the word
 
-the table's expected response says pc=0, but the RTL answers with the PC AT THE REQUEST and only re-zeroes the core at the same edge, so a following DEBUG_STATUS/STATUS reads 0. The RTL's own comment and the contract's 'Known limits' section both state the RTL behaviour; only the table row disagrees. The golden vector follows the RTL.
+## Ruled spec-vs-RTL rows (the vectors stand)
 
-### vector 13 (debug_status_common_prefix)
+**vector 11 (debug_bp_clr_while_stopped_is_boot_stop)** — the table's expected response says pc=0, but the RTL answers with the PC AT THE REQUEST and only re-zeroes the core at the same edge, so a following DEBUG_STATUS/STATUS reads 0. The RTL's own comment and the contract's 'Known limits' section both state the RTL behaviour; only the table row disagrees. RULED 2026-09-25: the vectors stand, and the table is being corrected chip-side to match the RTL.
 
-the table expects insn=imem[4] while free-running, but pe_cpu fetches at next_pc while executing (next_pc / pc while held / 0 at the boot stop), so a free-running readback reports the word at the LANDING address, not at pc. A TB that wants insn=imem[pc] must hold the core (state 2) or preload the pipeline. The golden vector follows the RTL's fetch mode.
+**vector 13 (debug_status_common_prefix)** — the table expects insn=imem[4] while free-running, but pe_cpu fetches at next_pc while executing (next_pc / pc while held / 0 at the boot stop), so a free-running readback reports the word at the LANDING address, not at pc. A TB that wants insn=imem[pc] must hold the core (state 2) or preload the pipeline. RULED 2026-09-25: the vectors stand (insn is the landing word), and the table is being corrected chip-side.
 
 ## Not covered by a frame
 

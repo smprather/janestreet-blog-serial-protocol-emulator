@@ -259,6 +259,24 @@ class FakePE:
         return (BP_FLAG_HIT if self.bp_hit else 0) | (BP_FLAG_ARMED if self.bp_en else 0)
 
     @property
+    def latched_insn(self) -> int:
+        """The instruction word READ_CPU reports.
+
+        While a debug hold is asserted the fetch mode is `pc` (pe_cpu:
+        `imem_addr = cpu_exec ? next_pc : dbg_hold ? pc : 0`), so the reported
+        word is the one AT the held PC -- the landing instruction, which is what
+        a debugger wants to see. Otherwise it is the latched register, because
+        that is what a conformance-TB snapshot preloads: R2's READ_CPU vectors
+        preload `insn` (0xFFFF) and the chip passes them byte-exactly, so the
+        register must survive here. Asserting the fetched word unconditionally
+        would break the chip-confirmed R2 package, which is why this is scoped
+        to the hold.
+        """
+        if self.debug_hold:
+            return self.imem[self.pc & ISA_PC_MASK] & ISA_INSN_MASK
+        return self.insn & ISA_INSN_MASK
+
+    @property
     def fetch_address(self) -> int:
         """Where the core fetches, per pe_cpu's three fetch modes.
 
@@ -360,16 +378,19 @@ class FakePE:
         """
         pc = self.pc & ISA_PC_MASK
         landing = self._next_pc(self.imem[pc], pc)
-        hit = self.bp_en and landing == self.bp_addr
-        if hit:
-            # Stop-before: the PC still reports the LANDING address (the chip
-            # samples dbg_next_pc, and the contract says "the PC reads
-            # bp_addr"), but the instruction AT it has NOT executed.
-            self.pc = landing
-        else:
-            self._execute_one()  # a landing executes; a stop does not
+        # A step is EXACTLY ONE INSTRUCTION, and it RUNS: pe_ctrl pulses
+        # `dbg_step_r`, so `cpu_exec` is true and the instruction at the current
+        # PC executes. The stop-before property is that the instruction AT THE
+        # LANDING ADDRESS has not run -- which is guaranteed by the hold below,
+        # not by skipping the execute.
+        #
+        # This host model used to skip the execute whenever the landing address
+        # matched, which suppressed the WRONG instruction: it withheld the step
+        # instead of the breakpoint. The chip's conformance run caught it -- a
+        # step from 1 to 2 really does retire the LDI A,0xAA at address 1.
+        self._execute_one()
         self.debug_hold = True
-        self.bp_hit = hit
+        self.bp_hit = self.bp_en and landing == self.bp_addr
         return self.state, self.pc, self.bp_flags
 
     def advance_free_running(self, max_instructions: int = 4096) -> bool:
@@ -543,8 +564,16 @@ class FakePE:
         )
 
     def _read_cpu(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
-        pc, a, x, y, insn = self._regs()
-        return (P.STATUS_OK, pc, a, x, y, insn, self.state)
+        # The last payload word is the RUN STRAP, not the debug state. pe_ctrl's
+        # OP_RDCPU builder is explicit -- `resp_buf[6] <= {15'b0, run}` -- and so
+        # is the R2 header, `(OK, pc, a, x, y, insn, run)`. The R2 package's own
+        # READ_CPU vector carries a run value there and the chip passes it 18/18,
+        # which settles the shape. This host builder used to put the DEBUG STATE
+        # in that slot, which agreed with `run` only when no hold was asserted
+        # and silently disagreed the moment one was (state 2 vs run 0).
+        pc, a, x, y, _latched = self._regs()
+        return (P.STATUS_OK, pc, a, x, y, self.latched_insn,
+                1 if self.run else 0)
 
     def _read_range_fault(self) -> None:
         """Latch FAULT_RANGE on a read range error only under the 'latch' policy."""

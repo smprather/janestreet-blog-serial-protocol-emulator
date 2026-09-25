@@ -710,6 +710,30 @@ def build_package() -> dict:
     )
 
     package = b.package(vectors)
+    # A TB MODEL BOUNDARY, recorded so nobody reads the expected insn as
+    # proven. For a free-running core `insn` is whatever the fetch pipeline
+    # happens to hold, which a STATIC pre-state cannot pin: the manager-ruled
+    # landing word is 0xF000, while tb_pe_ctrl_r3_conf's freeze-snapshot model
+    # reports 0x0000, because a model that pins pc every cycle collapses the
+    # fetch onto the fill word. The chip's conformance doc is explicit that this
+    # is "not a disagreement about the contract; not proven here, and not
+    # claimed" -- so the expectation stays the ruled landing word and the step
+    # stays chip_confirmed=false, rather than bending a contract value to match a
+    # testbench artefact.
+    package["model_boundaries"] = [{
+        "vector": "debug_status_common_prefix",
+        "step": "status_full_readback",
+        "field": "insn",
+        "expected": "the manager-ruled LANDING word (0xF000)",
+        "chip_reports": "0x0000",
+        "why": "a freeze-snapshot TB pins pc every cycle, collapsing the fetch "
+               "pipeline onto the fill word; insn is not contract-determined for "
+               "a free-running core",
+        "chip_confirmed": False,
+        "note": "not a contract disagreement and not claimed on either side; "
+                "a TB that holds the core (state 2) would make insn "
+                "deterministic at imem[pc] and could prove the word",
+    }]
     package["model_only_obligations"] = [
         {"name": name, "why": why} for name, why in MODEL_ONLY_OBLIGATIONS
     ]

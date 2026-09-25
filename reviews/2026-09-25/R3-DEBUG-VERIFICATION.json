@@ -15,6 +15,18 @@
     "dmem_bytes": 16,
     "imem_words": 1024
   },
+  "model_boundaries": [
+    {
+      "chip_confirmed": false,
+      "chip_reports": "0x0000",
+      "expected": "the manager-ruled LANDING word (0xF000)",
+      "field": "insn",
+      "note": "not a contract disagreement and not claimed on either side; a TB that holds the core (state 2) would make insn deterministic at imem[pc] and could prove the word",
+      "step": "status_full_readback",
+      "vector": "debug_status_common_prefix",
+      "why": "a freeze-snapshot TB pins pc every cycle, collapsing the fetch pipeline onto the fill word; insn is not contract-determined for a free-running core"
+    }
+  ],
   "model_images": {
     "v01-bp-set-readback": {
       "debug": {
@@ -769,15 +781,15 @@
           "opcode_name": "OP_READ_CPU",
           "request_hex": "a55a112000030000e870",
           "request_payload_words": [],
-          "response_hex": "a55a19200003000700000001005500000000005500029899",
+          "response_hex": "a55a1920000300070000000100550000000000aa000077b8",
           "response_payload_words": [
             0,
             1,
             85,
             0,
             0,
-            85,
-            2
+            170,
+            0
           ],
           "sequence": 3,
           "status": 0
@@ -950,7 +962,7 @@
           "opcode_name": "OP_DEBUG_STATUS",
           "request_hex": "a55a1240000300003f4c",
           "request_payload_words": [],
-          "response_hex": "a55a1a400003000a000000030002000200030000005500000000f000d824",
+          "response_hex": "a55a1a400003000a00000003000200020003000000aa00000000f0007d55",
           "response_payload_words": [
             0,
             3,
@@ -958,7 +970,7 @@
             2,
             3,
             0,
-            85,
+            170,
             0,
             0,
             61440
