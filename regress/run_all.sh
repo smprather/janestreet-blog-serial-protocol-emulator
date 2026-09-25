@@ -162,6 +162,26 @@ CASES=(
   # measured to sit inside the sensor's data window with margin at both ends.
   # ~2.2 ms of 60 MHz: the reset, sixteen write slots, sixteen read slots.
   "tb_pe_soc_ds18b20|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_ds18b20"
+  # 1-WIRE (Block 2 act a). The DHT11 act above is a sensor the host READS on
+  # a schedule it chooses; this one is the shape 1-Wire actually is. The DEVICE
+  # initiates: after the host's reset pulse the sensor drives a presence pulse
+  # back, and every read slot is answered by the sensor, so the firmware's
+  # edge-wait loops and the pin matrix's read-back are both load-bearing in a
+  # way nothing else here is. The claim is the whole slot, both directions:
+  # the commands are decoded FROM THE PADS (so a wrong command, a wrong bit
+  # order or a slot of the wrong length fails rather than agreeing with a
+  # model built from the same reading of it), and the sample instant is
+  # measured to sit inside the sensor's data window with margin at both ends.
+  # ~2.2 ms of 60 MHz: the reset, sixteen write slots, sixteen read slots.
+  # NEC INFRARED (Block 2 act b). The sharpest timing claim in the repository
+  # and the only one with NO WIRE: the only thing that leaves the pin is light,
+  # so a receiver has to find a 38 kHz burst and time the silences between
+  # bursts to know what was sent. Nothing resynchronises to anything -- the
+  # carrier is fitted to the CLOCK (789 clocks a half period, 38.049 kHz off the
+  # pin) and the two half periods are checked separately and for constancy to
+  # within a clock, because a carrier that alternates 37.9/38.1 is a program
+  # that is out by a fraction of a clock on every other edge. 32 ms of 60 MHz.
+  "tb_pe_soc_ir_nec|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_ir_nec"
   "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
   # The I2C TRANSACTION layer on real RTL: firmware/i2c_xfer.pe against a
   # Verilog slave FSM that decodes the wire, with timing and grammar asserted

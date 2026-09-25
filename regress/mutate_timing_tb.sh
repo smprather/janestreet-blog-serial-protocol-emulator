@@ -55,12 +55,13 @@ TB_WS="$ROOT/tb/tb_pe_soc_ws2812.v"
 TB_SV="$ROOT/tb/tb_pe_soc_servo.v"
 TB_DH="$ROOT/tb/tb_pe_soc_dht11.v"
 TB_DS="$ROOT/tb/tb_pe_soc_ds18b20.v"
+TB_NEC="$ROOT/tb/tb_pe_soc_ir_nec.v"
 JOBS="${MUTATE_TIMING_JOBS:-6}"
 mkdir -p "$ROOT/sim"
 
 # ---- the tree must not change ---------------------------------------------
 SNAP=$(mktemp -d /tmp/mut_timing_snap.XXXXXX)
-for f in ws2812 servo_sweep dht11_read ds18b20; do
+for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir; do
   cp "$ROOT/firmware/$f.pe"  "$SNAP/$f.pe"
   cp "$ROOT/firmware/$f.hex" "$SNAP/$f.hex"
 done
@@ -118,7 +119,7 @@ PYEOF
   return $rc
 }
 export -f run_case
-export ROOT SRCS SRAM_MODEL TB_WS TB_SV TB_DH TB_DS
+export ROOT SRCS SRAM_MODEL TB_WS TB_SV TB_DH TB_DS TB_NEC
 
 # ---- the cases --------------------------------------------------------------
 # Each one is a defect a real firmware of this shape can have, chosen so the
@@ -153,6 +154,17 @@ ow-skip-rom|ds18b20|SKIP ROM sent as 0x44 instead of 0xCC
 ow-read-cmd|ds18b20|READ SCRATCHPAD sent as 0xAE instead of 0xBE
 ow-presence-edge|ds18b20|the wait for the presence pulse's release removed
 ow-read-count|ds18b20|the read slot counter started at 7, so one slot is short
+ir-carrier-h1|nec_ir|the carrier's HIGH half period one step short, so the carrier alternates
+ir-carrier-h2|nec_ir|the carrier's LOW half period one step short, so the carrier alternates
+ir-carrier-n1|nec_ir|the carrier's LOW half period re-fitted to the same (2,34) pair as the other half
+ir-gap0|nec_ir|a ZERO's gap shortened to a ONE's, so the zero bits read as ones
+ir-gap1|nec_ir|a ONE's gap stretched into a ZERO's
+ir-leader|nec_ir|the leader's cycle count reduced, so the 9 ms leader is 3 ms
+ir-leadgap|nec_ir|the leader's 4.5 ms gap shortened to 136 us
+ir-burst-count|nec_ir|a data burst built from 20 carrier cycles instead of 21
+ir-no-rotate|nec_ir|the byte never rotated, so the frame is eight ones instead of 0xA5
+ir-stop-burst|nec_ir|the stop burst left out, so the frame ends on the eighth gap
+ir-no-drive|nec_ir|only the leader drives the pin; the data bursts leave it released
 CASES_EOF
 
 # The counts come from the $results file, not from four shell variables set
@@ -172,6 +184,7 @@ run_one() {
     sv-*) stem=servo_sweep;  tb="$TB_SV"; def=SERVO_HEX ;;
     dh-*) stem=dht11_read;   tb="$TB_DH"; def=DHT11_HEX ;;
     ow-*) stem=ds18b20;      tb="$TB_DS"; def=DS18B20_HEX ;;
+    ir-*) stem=nec_ir;       tb="$TB_NEC"; def=NEC_HEX ;;
     *) echo "HARNESS ERROR: unknown case id $id" >> "$results"; return 2 ;;
   esac
   case "$id" in
@@ -291,6 +304,104 @@ run_one() {
       extra='--const OW_T65=2'
       anchor="        LDI   A, OW_T65         ; 65 us: the datasheet's ~60 us low for a 0"
       repl="        LDI   A, OW_T65         ; MUTANT: the fitted constant is overridden" ;;
+    # ---- NEC. The carrier cases are the point of this act: each one leaves
+    # the carrier inside the 38 kHz tolerance and breaks its CONSTANCY, which
+    # is a check a single carrier-frequency window would forgive.
+    ir-carrier-h1)
+      extra='--const IR_H1=4'    # 4 steps of 193: 13.0 us instead of 13.15
+      anchor="        LDI   A, IR_H1
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 44"
+      repl="        LDI   A, IR_H1
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 44
+        ; MUTANT: the fitted high half period is overridden (see --const)" ;;
+    ir-carrier-h2)
+      extra='--const IR_H2=5'
+      anchor="        LDI   A, IR_H2
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 34"
+      repl="        LDI   A, IR_H2
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 34
+        ; MUTANT: the fitted low half period is overridden (see --const)" ;;
+    ir-carrier-n1)
+      # the same delay constant for BOTH halves, on the (2,34) pair: the two
+      # half periods then differ by the seven clocks the phase ladder costs,
+      # and the carrier alternates 38.05/37.88 kHz -- inside every window.
+      anchor="        LDI   A, IR_H1
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 44"
+      repl="        LDI   A, IR_H2
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 34" ;;
+    ir-gap0)
+      extra='--const IR_GAP0=67'   # a ZERO sent with a ONE's gap
+      anchor="        LDI   A, IR_GAP0
+        STM   9, A"
+      repl="        LDI   A, IR_GAP0
+        STM   9, A
+        ; MUTANT: the fitted zero gap is overridden (see --const)" ;;
+    ir-gap1)
+      extra='--const IR_GAP1=200'  # a ONE sent with a ZERO's gap
+      anchor="        LDI   A, IR_GAP1
+        STM   9, A"
+      repl="        LDI   A, IR_GAP1
+        STM   9, A
+        ; MUTANT: the fitted one gap is overridden (see --const)" ;;
+    ir-leader)
+      extra='--const IR_LEADR=1'   # one run, not two: a 4.5 ms "leader"
+      anchor="        LDI   A, IR_LEADR
+        STM   1, A"
+      repl="        LDI   A, IR_LEADR
+        STM   1, A
+        ; MUTANT: the leader is one run instead of two (see --const)" ;;
+    ir-leadgap)
+      extra='--const IR_LEADGAP=17'  # 529 & 0xFF: the eight-bit truncation
+      anchor="        LDI   A, IR_LEADGAP
+        STM   9, A"
+      repl="        LDI   A, IR_LEADGAP
+        STM   9, A
+        ; MUTANT: the leader gap is the TRUNCATED constant (see --const)" ;;
+    ir-burst-count)
+      extra='--const IR_BIT=20'
+      anchor="        LDI   A, IR_BIT
+        STM   7, A              ; 21 carrier cycles = 0.5625 ms"
+      repl="        LDI   A, IR_BIT
+        STM   7, A
+        ; MUTANT: the fitted burst length is overridden (see --const)" ;;
+    ir-no-rotate)
+      anchor='ph5:    LDM   A, 3              ; the byte being sent
+        SHR   A                 ; the next bit of the frame is now bit 0
+        STM   3, A'
+      repl='ph5:    LDM   A, 3              ; the byte being sent
+        NOP                     ; MUTANT: never rotated, so every bit is the same
+        STM   3, A' ;;
+    ir-stop-burst)
+      anchor="        JZ    ir_stop           ; all eight sent: the stop burst next"
+      repl="        NOP                     ; MUTANT: the stop burst is never sent
+        JMP   ir_start_bit" ;;
+    ir-no-drive)
+      # only the leader drives the pad: the data bursts leave it released, and
+      # the frame that leaves the pin is a leader and nothing else.
+      anchor="ir_emit:
+        LDI   A, IR_DATA
+        OUT   PINOE, A          ; drive: the burst is on the wire from here"
+      repl="ir_emit:
+        LDI   A, 0x00
+        OUT   PINOE, A          ; MUTANT: the pad is left released" ;;
     ow-presence-edge)
       anchor='ph1b:   IN    A, PIN
         AND   A, OW_DATA
@@ -358,11 +469,11 @@ rm -f "$CASES" "$results" "$CASELOG"
 
 # ---- the tree must not have changed ----------------------------------------
 stale=0
-for f in ws2812 servo_sweep dht11_read ds18b20; do
+for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir; do
   cmp -s "$SNAP/$f.pe" "$ROOT/firmware/$f.pe"  || { echo "FATAL: firmware/$f.pe was modified"; stale=1; }
   cmp -s "$SNAP/$f.hex" "$ROOT/firmware/$f.hex" || { echo "FATAL: firmware/$f.hex was modified"; stale=1; }
 done
-[ "$stale" -eq 0 ] && echo "firmware tree byte-identical after the run (cmp-verified, all 8 files)"
+[ "$stale" -eq 0 ] && echo "firmware tree byte-identical after the run (cmp-verified, all 10 files: 5 programs, .pe and .hex)"
 
 echo
 echo "timing-TB mutations: $n_cases cases, $n_ok detected, $n_surv survived, $n_err harness errors"

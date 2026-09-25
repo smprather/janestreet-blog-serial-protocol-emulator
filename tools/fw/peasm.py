@@ -214,6 +214,70 @@ CONSTS: dict[str, int] = {
     "OW_T40": 23,
     "OW_T55": 49,
     "OW_T65": 57,
+    #
+    # ---------------------------------------------------------------------
+    # NEC INFRARED REMOTE. The one protocol here with NO WIRE: the only thing
+    # that leaves the pin is light, and a NEC receiver recovers the data from a
+    # 38 kHz burst it has to find, integrate and time. There is nothing to
+    # resynchronise to, which is what makes this the sharpest timing claim in
+    # the repository.
+    #
+    #   leader  9 ms burst   leader gap  4.5 ms
+    #   bit 0   0.5625 ms burst + 1.6875 ms silence
+    #   bit 1   0.5625 ms burst + 0.5625 ms silence
+    #   stop    one final 0.5625 ms burst
+    #   bits are LSB first
+    #
+    # THE CARRIER IS FITTED TO THE CLOCK, NOT TO MICROSECONDS. A half period
+    # at 38 kHz is 60e6 / (2 * 38000) = 789.47 clocks, so 789 clocks is
+    # 38.0228 kHz -- +0.06 % -- and there is no way to be wrong by more than
+    # half a clock if the constant is one of those two. That matters more here
+    # than anywhere else in the block: a carrier is the one quantity that
+    # cannot be a little bit late.
+    #
+    # The (2,44) and (2,34) pairs are the ones the two carrier half periods
+    # are fitted on. Their outer steps are 10 + 143 = 153 and 10 + 127 = 143
+    # clocks, and the difference is not arbitrary: the phase ladder costs 7
+    # clocks more coming out of phase 1 than out of phase 0 (four instructions
+    # of dispatch instead of two, plus the cycle-count block), and two step
+    # sizes are what make the two halves come out EQUAL. The delay alone
+    # cannot, because the ladder cost is not a multiple of either step. So:
+    #   low half  = ladder 13 + (5-1) * 193 + 4 = 13 + 776 = 789 clocks
+    #   high half = ladder 20 + (6-1) * 153 + 4 = 20 + 769 = 789 clocks
+    #   carrier   = 1578 clocks = 38.0228 kHz, +0.06 % on 38.0 kHz
+    # The TB measures both halves off the pin, so the ladder costs above are a
+    # prediction and the number that is claimed is the measurement. (It came
+    # out 789 and 789 on the first run, which is the whole point of fitting
+    # the ladder and the delay together rather than tuning the delay alone.)
+    #
+    # Everything else uses (4,40): one outer step is 511 clocks = 8.52 us.
+    #   IR_LEADGAP 255 -> 4504.3 us   4.5 ms   (the leader's silence)
+    #
+    # IR_LEADGAP USES THE (3,130) PAIR, not (4,40), and that is the eight-bit
+    # immediate AGAIN. (4,40) wants 529 outer steps for 4.5 ms and 529 & 0xFF
+    # is 17, so the leader's gap came out 136 us instead of 4.5 ms -- and
+    # 136 us is not far enough off to look like a truncated constant, it looks
+    # like a transmitter that is in a hurry. (3,130) has a 1064-clock step, so
+    # 255 outer steps reach the target inside one byte. The other two gaps are
+    # 200 and 67 and fit (4,40) as they are.
+    #   IR_GAP0    200 -> 1694.9 us   1687.5 us (a ZERO's silence)
+    #   IR_GAP1     67 ->  562.2 us   562.5 us (a ONE's silence)
+    #
+    # THE BURSTS ARE COUNTS OF CARRIER CYCLES, and the leader's count is SPLIT
+    # IN TWO. 9 ms is 342 cycles of a 1578-clock carrier, and the ISA's LDI
+    # immediate is EIGHT BITS: `LDI A, 342` assembled to `LDI A, 86` and the
+    # frame that left the pin was a perfectly good 38 kHz carrier whose 9 ms
+    # leader was 2.3 ms. Nothing downstream noticed. So the leader is
+    # IR_LEADR runs of IR_LEAD cycles, and IR_BIT (21) is a single run.
+    "IR_DATA": 0x40,  # the IR LED: cathode on the pin, so LOW emits
+    "IR_H1": 5,       # the high half period, on the (2,44) pair: 776 clocks
+    "IR_H2": 6,       # the low half period,  on the (2,34) pair: 769 clocks
+    "IR_LEADR": 2,    # the leader is this many runs (2 x 171 = 342 cycles)
+    "IR_LEAD": 171,   # ...of this many carrier cycles each
+    "IR_BIT": 21,     # a data burst: 21 cycles = 0.5625 ms
+    "IR_GAP0": 200,
+    "IR_GAP1": 67,
+    "IR_LEADGAP": 255,
 }
 
 
