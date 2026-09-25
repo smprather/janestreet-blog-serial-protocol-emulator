@@ -157,11 +157,22 @@ what leaving it means.
 ## The receiver, and the four versions that failed first
 
 `tb_pe_soc_midi.v` is a **free-running oversampling search**: a background
-quarter-bit strobe on its own timeline, a high-to-low transition as a
-*candidate* start bit, eight samples at mid-points, and **the stop bit verified
-before the frame is accepted**. A candidate whose stop reads low is discarded and
-the search continues, which costs nothing because the sampler never waited for
-the decoder.
+strobe every **eighth** bit (8×, 4 µs) on its own timeline, a high-to-low
+transition as a *candidate* start bit, eight samples at mid-points, and **the
+stop bit verified before the frame is accepted**. A candidate whose stop reads
+low is discarded and the search continues, which costs nothing because the
+sampler never waited for the decoder.
+
+**It is 8×, and this file said "quarter-bit" until 2026-09-25 16:30.** The cause
+was not loose prose: the receiver's interval variable was *named* `quarter`
+while holding a bit divided by eight, and the name propagated into three
+committed places — this file, `tb_pe_soc_dmx512.v`'s header, and one WORKLOG
+entry — before anyone compared the name against the code. The variable is now
+`ovs_ns` and the reason is recorded at its declaration. It is the same lesson as
+the 5.7 M strobe claim one section down, and the same reason it survived: **the
+mutation gate checks the firmware, and nothing in the suite checks a testbench's
+claims about itself.** A variable whose name lies will keep writing false
+comments for whoever reads the file next.
 
 Four earlier versions decoded from edges and every one failed on a back-to-back
 8N1 stream, for one reason: **in a back-to-back 8N1 stream a falling edge is not

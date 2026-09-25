@@ -39,7 +39,8 @@
 // WHY THIS RECEIVER IS NOT THE MIDI RECEIVER -- AND THE REASON I FIRST GAVE
 // FOR THAT WAS WRONG, so the correction is here rather than in a changelog.
 //
-// tb_pe_soc_midi.v oversamples: a free-running strobe every quarter bit, never
+// tb_pe_soc_midi.v oversamples: a free-running strobe every EIGHTH bit (8x,
+// 4 us), never
 // blocking, so a rejected candidate costs the search nothing. That is the
 // right shape for 31.25 kbaud, where the whole frame is 320 us. I first wrote
 // that following it literally here "would have cost 5.7 million strobe events

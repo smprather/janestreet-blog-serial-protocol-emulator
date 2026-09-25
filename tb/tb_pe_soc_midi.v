@@ -164,8 +164,15 @@ module tb_pe_soc_midi;
   // verified stop sample for DECIDING is the distinction the four failures
   // above were about; a receiver that takes both decisions from edges is v1.
   // =========================================================================
-  localparam int OVERSAMPLE = 8;                 // strobes per bit
-  real quarter = MIDI_BIT_NS / OVERSAMPLE;      // 4 us
+  // OVERSAMPLING IS 8x, NOT 4x, and the variable used to be called `quarter`
+  // when it held an eighth of a bit. That misnaming is not a cosmetic slip:
+  // it propagated into three committed places that described this receiver as
+  // "a quarter-bit strobe", which it has never been. A variable whose name
+  // lies keeps producing false comments for everyone who reads the code next,
+  // so the name is now `ovs_ns` -- the oversampling interval -- and it is 4 us
+  // because a MIDI bit is 32 us and 32/8 = 4.
+  localparam int OVERSAMPLE = 8;                 // strobes per bit = EIGHTH-bit
+  real ovs_ns  = MIDI_BIT_NS / OVERSAMPLE;      // 4.000 us
   real bit_ns  = MIDI_BIT_NS;                   // refined from verified frames
   logic s_tick = 1'b0;                          // toggles: EVERY edge is a strobe
 
@@ -173,9 +180,9 @@ module tb_pe_soc_midi;
   // identifiers at elaboration and a forward reference from a task body is a
   // hard error rather than a warning.
   //
-  // `#(quarter)` re-reads quarter on every iteration, so the refinement below
+  // `#(ovs_ns)` re-reads ovs_ns on every iteration, so the refinement below
   // takes effect on the next strobe without restarting anything.
-  initial forever #(quarter) s_tick = ~s_tick;
+  initial forever #(ovs_ns) s_tick = ~s_tick;
 
   // The exact time of the most recent falling edge. The search has already
   // decided (on a verified stop bit) that the transition it is looking at is
@@ -333,11 +340,11 @@ module tb_pe_soc_midi;
         // ---- eight data bits, one bit period apart ----
         //
         // THE SAMPLE POINT IS THE STROBE NEAREST THE TARGET, not the first
-        // strobe at or after it. `t_now + quarter/2 >= t_target` is that test,
+        // strobe at or after it. `t_now + ovs_ns/2 >= t_target` is that test,
         // and it bounds the sampling error at half a strobe (2 us = 6% of a
         // cell) instead of a whole one. Every target then falls 8 strobes
         // later, so the comparison cannot fire twice for one target.
-        S_DATA: if (t_now + quarter * 0.5 >= t_target) begin
+        S_DATA: if (t_now + ovs_ns * 0.5 >= t_target) begin
           b[k] = tx_pin;
           k        = k + 1;
           t_target = t_target + bit_ns;
@@ -345,7 +352,7 @@ module tb_pe_soc_midi;
         end
 
         // ---- the stop bit: THE VERIFICATION ----
-        S_STOP: if (t_now + quarter * 0.5 >= t_target) begin
+        S_STOP: if (t_now + ovs_ns * 0.5 >= t_target) begin
           if (tx_pin) begin
             // accepted. Measure the cell time from this frame's own edges,
             // and refine the strobe period from the same number so the next
@@ -366,7 +373,7 @@ module tb_pe_soc_midi;
                 span = (t1 - t_start) / k1;
                 cell_meas[n_meas] = span;
                 bit_ns  = span;
-                quarter = span / OVERSAMPLE;
+                ovs_ns = span / OVERSAMPLE;
                 n_meas  = n_meas + 1;
               end
             end
@@ -397,7 +404,7 @@ module tb_pe_soc_midi;
     run_status = 8'h00; pending_d1 = 8'h00; have_d1 = 1'b0;
     state = S_SEARCH; k = 0; b = 8'h00; prev_level = 1'b1;
     t_prev_start = -1.0; t_last_fall = -1.0;
-    bit_ns = MIDI_BIT_NS; quarter = MIDI_BIT_NS / OVERSAMPLE;
+    bit_ns = MIDI_BIT_NS; ovs_ns = MIDI_BIT_NS / OVERSAMPLE;
     rst_n = 1'b1;
     repeat (2) @(posedge clk); #1;
     load_firmware();
