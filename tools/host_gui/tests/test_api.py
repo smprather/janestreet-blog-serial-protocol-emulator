@@ -8,6 +8,7 @@ absent, and the HTTP integration tests are skipped unless it is installed.
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import unittest
@@ -174,6 +175,27 @@ class TestOptionalDependencies(unittest.TestCase):
                          .json()["load"]["words_written"], 3)
         client.post("/api/start")
         self.assertIn("insn", client.get("/api/read_cpu").json()["cpu"])
+
+
+class TestHostGateHarness(unittest.TestCase):
+    """The one-command host gate exists so a re-verify is one command, not a
+    remembered list (a green run on the wrong tree proves nothing)."""
+
+    SCRIPT = Path(__file__).resolve().parents[3] / "tools" / "host_gui" / \
+        "run_host_tests.sh"
+
+    def test_gate_script_exists_and_is_executable(self):
+        self.assertTrue(self.SCRIPT.is_file(), f"missing {self.SCRIPT}")
+        self.assertTrue(os.access(self.SCRIPT, os.X_OK),
+                        f"{self.SCRIPT} is not executable")
+
+    def test_gate_script_covers_every_host_gate(self):
+        text = self.SCRIPT.read_text(encoding="utf-8")
+        for gate in ("tools/host_gui/tests", "tools/host_bridge/tests",
+                     "ruff check tools/host_gui tools/host_bridge",
+                     "compileall", "acceptance.py --fake"):
+            with self.subTest(gate=gate):
+                self.assertIn(gate, text)
 
 
 if __name__ == "__main__":
