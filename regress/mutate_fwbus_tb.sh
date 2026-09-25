@@ -321,6 +321,15 @@ check_mutation "midi-cell-count-minus-one" midi_xfer tb_pe_soc_midi \
 # in that cell moves by a clock, and the frame stops having one rate. One
 # clock is 0.05%, so this is a mutation the rate window is blind to by a factor
 # of six, and it is why the TB asserts that every cell measures the same.
+#
+# WHICH ASSERTION CATCHES IT, and note that "detected" does not say. This
+# harness prints one verdict per mutation and cannot distinguish which check
+# fired, so the attribution was established by running this mutation by hand: it
+# produces EXACTLY ONE failure, "every cell is the same length (the
+# measurements span 0.0146 us)", and all fourteen per-frame rate-window checks
+# PASS. So the spread assertion is load-bearing here rather than decorative --
+# and if it were ever removed this mutation would SURVIVE and this harness
+# would report that, which is the safety net one level below the explanation.
 check_mutation "midi-cell-padding-nop" midi_xfer tb_pe_soc_midi \
   "        NOP                      ; three NOPs, and their number is not a
         NOP                      ; matter of taste. See the header, \"A CELL'S

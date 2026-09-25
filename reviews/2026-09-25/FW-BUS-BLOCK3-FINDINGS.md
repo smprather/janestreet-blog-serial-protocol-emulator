@@ -240,6 +240,22 @@ a picosecond. The clean firmware measures **exactly zero** spread, because a pur
 divider has nothing to be inexact about. That check is what makes
 `midi-cell-padding-nop` a detected mutation rather than a survivor.
 
+**Which assertion catches it, measured rather than argued:** the gate reports
+only `detected`, which does not distinguish *which* check fired, so this was run
+by hand. With the fourth NOP in `sb_start` the run produces **exactly one
+failure** —
+
+```
+FAIL: every cell is the same length (the measurements span 0.0146 us)
+```
+
+— and nothing else: all fourteen per-frame rate-window checks **pass**. One
+clock is 0.0167 µs on a 31.9987 µs cell, i.e. 0.05 %, against a ±0.3 % window, so
+the spread really is the only thing that sees it. Two consequences: the spread
+assertion is load-bearing rather than decorative, and if it were ever removed the
+mutation would **survive** and the gate would say so — the safety net does
+exist, one level below the explanation.
+
 ## The factorisation, and the 8-bit counter that eats it
 
 | | delay needed | body | iterations | result |
