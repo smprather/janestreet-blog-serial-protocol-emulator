@@ -91,6 +91,36 @@ constraints (`CLOCK_PERIOD` 16.667 ns; see `wiki/concepts/pdk-toolchain.md`):
 flow/run_librelane.sh flow/pe_serdes.json   # results under ~/asic-runs/
 ```
 
+## Host controller (USB → Pico → PE)
+
+The operator tooling lives in `tools/host_gui/` (browser UI, session state
+machine, framed protocol) and `tools/host_bridge/` (MicroPython bridge for the
+TT demo board). Contract and decisions: `wiki/plans/host-controller-gui.md`.
+
+```bash
+pip install .[host-gui]           # optional: fastapi/uvicorn + pyserial
+sudo usermod -aG dialout $USER    # then re-login: the CDC device is root:dialout
+
+python3 tools/host_bridge/acceptance.py --fake
+python3 tools/host_bridge/acceptance.py --device /dev/ttyACM0 --board <rev>
+```
+
+Deploy the bridge by copying `tools/host_bridge/{main,pe_frame,tt_adapter}.py`
+to the Pico's MicroPython filesystem and running `main.py`: it selects the
+shuttle, starts the 60 MHz project clock, holds reset, configures the host SPI
+on `uio[4:7]`, and speaks the newline-JSON protocol over USB CDC. The
+first-pass SCLK cap is 5 MHz (`min(5 MHz, project_clk/6)`); `LOAD` always
+forces `run=0`, and `start` raises `ui_in[1]` only after a successful LOAD
+response. The local page is served by `tools.host_gui.server.serve(Api())`
+(the acceptance runner is the scripted equivalent of the same sequence).
+
+Evidence levels are kept distinct: **simulator** (fake PE model),
+**host-verified** (this tree's tests), **board-observed** (Pico `hello`/STATUS),
+and **chip-confirmed** (requires the PE host protocol in RTL, plan Tasks 3-5,
+not landed yet). `acceptance.py --fake` is the current end-to-end evidence and
+its checklist is in `tools/host_gui/tests/fixtures/acceptance.md`; the real
+device run is pending hardware and the RTL phases.
+
 ## Layout
 
 ```
