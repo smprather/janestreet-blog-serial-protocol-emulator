@@ -20,11 +20,30 @@ the session to a stopped state.
 from __future__ import annotations
 
 import enum
+import functools
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 
 from tools.host_gui import protocol as P
 from tools.host_gui import transport as T
+
+
+class TransportLike(Protocol):
+    """What the session needs from a transport (real or a test double).
+
+    A Protocol instead of the concrete ``SerialTransport`` so the state
+    machine is testable with scripted transports, and any future transport
+    (USB, socket) only has to satisfy these three calls.
+    """
+
+    def request(self, op: str, args: dict | None = None, *,
+                timeout_s: float | None = None) -> dict: ...
+
+    def poll_events(self) -> list[dict]: ...
+
+    def close(self) -> None: ...
 
 STATUS_KEYS = ("state", "run", "target", "pc", "a", "x", "y", "timer",
                "faults", "words_written")
@@ -102,13 +121,31 @@ def _snapshot(result: dict) -> StatusSnapshot:
     return StatusSnapshot(**_status_fields(result))
 
 
+def _serialized(method):
+    """Serialize one public session operation against all the others.
+
+    FastAPI runs sync handlers in a threadpool, and the GUI polls STATUS and
+    READ_CPU on timers while user actions run, so the session IS used from
+    several threads. Without this lock the state machine has check-then-act
+    races (a concurrent load/start can land their state writes out of order)
+    and the transport sees interleaved requests; ``fuzz_server`` reproduces
+    both. An RLock because ``connect`` re-enters through ``process_events``.
+    """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
 class ControllerSession:
     """Owns one connected bridge session and the load/run/dump state machine."""
 
-    def __init__(self, transport_factory: Callable[[], T.SerialTransport], *,
+    def __init__(self, transport_factory: Callable[[], TransportLike], *,
                  clock=None) -> None:
+        self._lock = threading.RLock()
         self._transport_factory = transport_factory
-        self._transport: T.SerialTransport | None = None
+        self._transport: TransportLike | None = None
         self._clock = clock
         self.state = SessionState.DISCONNECTED
         self.session_id = 0
@@ -121,6 +158,7 @@ class ControllerSession:
         self._faults = 0
 
     # ---- connection --------------------------------------------------------
+    @_serialized
     def connect(self) -> None:
         if self.state != SessionState.DISCONNECTED:
             raise SessionStateError(
@@ -155,6 +193,7 @@ class ControllerSession:
         self._faults = 0
         self.process_events()          # consume handshake events (board.reset)
 
+    @_serialized
     def disconnect(self) -> None:
         if self._transport is not None:
             self._transport.close()
@@ -162,6 +201,7 @@ class ControllerSession:
         self.negotiated_sclk_hz = None
         self.state = SessionState.DISCONNECTED
 
+    @_serialized
     def negotiate_sclk(self, hz: int) -> int:
         if hz <= 0:
             raise SessionError(f"requested SCLK {hz} Hz is not positive")
@@ -180,12 +220,24 @@ class ControllerSession:
                               SessionState.STOPPED):
             raise SessionStateError(
                 f"load requires a stopped session (state is {self.state})")
+        previous = self.state
         self.state = SessionState.LOADING
-        result = self._request("load", {
-            "words": [int(word) for word in image.words],
-            "sha256": image.sha256,
-            "target": P.TARGET_HOST,
-        })
+        try:
+            result = self._request("load", {
+                "words": [int(word) for word in image.words],
+                "sha256": image.sha256,
+                "target": P.TARGET_HOST,
+            })
+        except SessionError:
+            # A transport/integrity failure mid-load must not leave the
+            # session stuck in LOADING, where every later load is refused
+            # until a reconnect (fuzz_server: state/stuck-loading). A timeout
+            # has already latched the session FAULTED on purpose - keep that
+            # sticky state; only a state the failed request left behind is
+            # restored.
+            if self.state is SessionState.LOADING:
+                self.state = previous
+            raise
         status = int(result.get("status", -1))
         faults = int(result.get("faults", 0))
         words_written = int(result.get("words_written", 0))
@@ -211,6 +263,7 @@ class ControllerSession:
         return LoadResult(words_written=words_written, faults=faults,
                           echo=echo, target=target)
 
+    @_serialized
     def start(self) -> None:
         self._require_connected()
         if not self._loaded:
@@ -225,6 +278,7 @@ class ControllerSession:
         self._has_run = True
         self.state = SessionState.RUNNING
 
+    @_serialized
     def stop(self) -> None:
         self._require_connected()
         if self.state != SessionState.RUNNING:
@@ -234,6 +288,7 @@ class ControllerSession:
         self._run = False
         self.state = SessionState.STOPPED
 
+    @_serialized
     def status(self) -> StatusSnapshot:
         self._require_connected()
         snapshot = _snapshot(self._request("status"))
@@ -276,10 +331,12 @@ class ControllerSession:
                            insn=int(result.get("insn", 0)),
                            state=int(result.get("state", 0)))
 
+    @_serialized
     def dump_core(self) -> CoreDump:
         self._require_stopped_read("dump_core")
         return CoreDump(**_status_fields(self._request("dump_core")))
 
+    @_serialized
     def read_imem(self, address: int, count: int) -> tuple[int, ...]:
         self._require_stopped_read("read_imem")
         result = self._request("read_imem",
@@ -289,6 +346,7 @@ class ControllerSession:
             raise SessionError(f"read_imem failed with status {status}")
         return tuple(int(word) for word in result.get("words", []))
 
+    @_serialized
     def read_dmem(self, address: int, count: int) -> bytes:
         self._require_stopped_read("read_dmem")
         result = self._request("read_dmem",
@@ -299,6 +357,7 @@ class ControllerSession:
         return bytes(int(byte) for byte in result.get("bytes", []))
 
     # ---- faults and events -------------------------------------------------
+    @_serialized
     def clear_fault(self, mask: int = 0xFFFF) -> int:
         self._require_connected()
         result = self._request("clear_fault", {"mask": int(mask)})
@@ -308,6 +367,7 @@ class ControllerSession:
                           else SessionState.PREPARED)
         return self._faults
 
+    @_serialized
     def process_events(self) -> list[dict]:
         """Apply queued bridge events to the state machine; return them."""
         if self._transport is None:

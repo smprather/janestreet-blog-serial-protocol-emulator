@@ -33,6 +33,13 @@
 #   9. a bounded protocol-fuzz campaign against both frame decoders and the
 #      chip-side model (hostile frames/requests; every crash or misdecode is
 #      a finding).
+#  10. a bounded server/API-fuzz campaign against the FastAPI routes, the
+#      session state machine, a hostile bridge and concurrent requests
+#      (wrong-state sequences, huge/malformed bodies, reconnect storms,
+#      crossed/stolen replies; every crash or misdecode is a finding).
+#  11. a soak smoke run of the bridge+session+API loop under the RSS watch
+#      (the runner and its analysis; the full 20-minute soak is a manual,
+#      recorded run - see reviews/2026-09-25/HOST-SOAK-API-FUZZ.md).
 #
 # IT IS NOT A CHIP GATE. Nothing here runs a testbench, the regression, or
 # synthesis, and nothing here is evidence about silicon: the PE host protocol
@@ -70,6 +77,10 @@ fi
 run "compileall" python3 -m compileall -q tools/host_gui tools/host_bridge
 run "R2 vector package" python3 -m tools.host_gui.r2_vectors --check
 run "protocol fuzz" python3 -m tools.host_gui.fuzz_protocol -n 2000
+run "server fuzz" python3 -m tools.host_gui.fuzz_server -n 120 --rounds 10
+run "soak smoke" python3 -m tools.host_gui.soak_host --minutes 0 --cycles 300 \
+    --sample-every 50 --sample-seconds 1 --max-growth-mb 64 \
+    --max-object-growth 200000
 run "acceptance --fake" python3 tools/host_bridge/acceptance.py --fake
 
 # The deployed bridge must import and run on MicroPython. This runs the same

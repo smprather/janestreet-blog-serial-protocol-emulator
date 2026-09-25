@@ -10,7 +10,11 @@ reported as a successful result.
 from __future__ import annotations
 
 import json
+import sys
+import threading
+import time
 import unittest
+from collections import deque
 
 from tools.host_gui import transport as T
 from tools.host_gui.tests.fakes import FakeClock, FaultyPort, ScriptedPort, json_lines
@@ -25,6 +29,37 @@ def resp(request_id: int, result: dict | None = None, ok: bool = True,
 def event(name: str, data: dict | None = None) -> str:
     return json.dumps({"v": T.PROTOCOL_VERSION, "event": name,
                        "data": data or {}})
+
+
+class EchoPort:
+    """Answer each request with its own id, yielding the GIL in write().
+
+    The yield is deliberate: it is the window fuzz_server used to show two
+    requests reading each other's replies ('response id 7 does not match
+    request id 10') and a concurrent poller stealing a reply.
+    """
+
+    def __init__(self) -> None:
+        self.incoming: deque[bytes] = deque()
+        self.closed = False
+
+    def readline(self) -> bytes:
+        return self.incoming.popleft() if self.incoming else b""
+
+    def write(self, data: bytes, /) -> int:
+        message = json.loads(data.decode("utf-8"))
+        reply = json.dumps({"v": T.PROTOCOL_VERSION, "id": message["id"],
+                            "ok": True, "result": {"id": message["id"]},
+                            "error": None}).encode() + b"\n"
+        self.incoming.append(reply)
+        time.sleep(0)
+        return len(data)
+
+    def flush(self) -> None:
+        pass
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class TestRequestForm(unittest.TestCase):
@@ -152,6 +187,61 @@ class TestEvents(unittest.TestCase):
         transport.close()
         transport.close()
         self.assertTrue(port.closed)
+
+
+class TestWireSerialization(unittest.TestCase):
+    """fuzz_server (seed 20260926) found concurrent requests crossing on the
+    wire and a websocket-style poller stealing replies. One request owns the
+    wire at a time, so neither can happen."""
+
+    def test_concurrent_requests_never_read_each_others_replies(self):
+        transport = T.SerialTransport(EchoPort(), timeout_s=1.0)
+        threads, rounds = 8, 60
+        previous = sys.getswitchinterval()
+        sys.setswitchinterval(1e-6)     # force the interleave, do not hope
+        try:
+            for _ in range(rounds):
+                results: list[object] = [None] * threads
+                barrier = threading.Barrier(threads + 1)
+
+                def worker(index: int, results: list = results,
+                           barrier: threading.Barrier = barrier) -> None:
+                    barrier.wait()
+                    try:
+                        results[index] = transport.request("ping")["id"]
+                    except BaseException as exc:   # noqa: BLE001
+                        results[index] = exc
+
+                pool = [threading.Thread(target=worker, args=(i,))
+                        for i in range(threads)]
+                for thread in pool:
+                    thread.start()
+                barrier.wait()
+                for thread in pool:
+                    thread.join()
+                for outcome in results:
+                    if isinstance(outcome, BaseException):
+                        self.fail("concurrent request corrupted the wire: "
+                                  f"{type(outcome).__name__}: {outcome}")
+        finally:
+            sys.setswitchinterval(previous)
+
+    def test_concurrent_poll_events_does_not_steal_a_response(self):
+        transport = T.SerialTransport(EchoPort(), timeout_s=0.2)
+        stop = threading.Event()
+
+        def poll() -> None:
+            while not stop.is_set():
+                transport.poll_events()
+
+        poller = threading.Thread(target=poll, daemon=True)
+        poller.start()
+        try:
+            for _ in range(100):
+                transport.request("ping")
+        finally:
+            stop.set()
+            poller.join()
 
 
 class TestDependencies(unittest.TestCase):

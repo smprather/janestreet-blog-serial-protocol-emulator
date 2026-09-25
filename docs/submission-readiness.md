@@ -18,7 +18,7 @@ demo walkthrough, and check every number against the artifacts that back it.
 | Entry point (README) | **B** | Clear pitch, Tiny Tapeout framing, honest "what exists" list — but the top status block **predates** the landed 10BASE-T TX path and the R1/R2 host bus (fixed below). |
 | Licensing | **A** | MIT, present at the root with a copyright line. |
 | Submittability metadata | **A** | `info.yaml` and `rtl/tt_um_protocol_emulator.v` present and self-describing. |
-| Reproducibility | **A** | `regress/run_all.sh` one-command regression; host side has `tools/host_gui/run_host_tests.sh` (exit 0, ten checks). |
+| Reproducibility | **A** | `regress/run_all.sh` one-command regression; host side has `tools/host_gui/run_host_tests.sh` (exit 0, twelve checks). |
 | Demo story | **A−** | `docs/demo-walkthrough.md` gives a judge the four protocol acts with a per-claim proven/simulated/pending table and a no-board fallback. One stale number (fixed below). |
 | Honesty of claims | **A** | Proven vs simulated vs pending is explicit everywhere; the R2 read path is marked chip-confirmed-in-simulation with the hardware run explicitly not claimed. |
 | Cross-references | **B−** | A few bare filenames in the walkthrough (`uart_echo.pe`, `main.py`, `R2-READ-PATH-REVIEW.md`) are ambiguous without their directory; the R2 review lives in the **chip** repo, not this one. |
@@ -66,7 +66,7 @@ the docs say is not done. The gaps below are polish, not substance.
 
 ```bash
 ./regress/run_all.sh --fast          # chip: 34/34 RTL, 26/26 firmware, exit 0
-tools/host_gui/run_host_tests.sh     # host: 233 tests + lint + fuzz + acceptance, exit 0
+tools/host_gui/run_host_tests.sh     # host: 251 tests + lint + protocol/server fuzz + soak smoke + acceptance, exit 0
 python3 tools/fw/peemu.py firmware/uart_echo.hex --send "41 42"   # firmware, ~2 s
 python3 tools/host_bridge/acceptance.py --fake   # end-to-end, no hardware, exit 0
 ```

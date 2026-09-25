@@ -109,7 +109,7 @@ TT demo board). Contract and decisions: `wiki/plans/host-controller-gui.md`.
 pip install .[host-gui]           # optional: fastapi/uvicorn + pyserial
 sudo usermod -aG dialout $USER    # then re-login: the CDC device is root:dialout
 
-tools/host_gui/run_host_tests.sh   # the one-command host gate (tests + lint + acceptance)
+tools/host_gui/run_host_tests.sh   # the one-command host gate (tests + lint + fuzz + soak + acceptance)
 python3 tools/host_bridge/acceptance.py --fake
 python3 tools/host_bridge/acceptance.py --device /dev/ttyACM0 --board <rev>
 ```
