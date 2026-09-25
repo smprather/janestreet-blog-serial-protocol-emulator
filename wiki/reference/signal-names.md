@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen/signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-16 modules, 216 ports.
+16 modules, 224 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -226,6 +226,10 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `tx_overlong` | out | 1 | _no note yet_ |
 | `ifg_active` | out | 1 | _no note yet_ |
 | `tx_bit` | out | 1 | _no note yet_ |
+| `fv_ifg_cnt` | out | `[6:0]` | FORMAL ONLY — the gap counter, for the inductive IFG-floor proof. |
+| `fv_state` | out | `[2:0]` | FORMAL ONLY — the FSM state, for the IFG floor's structural precondition. |
+| `fv_fcs_left` | out | `[5:0]` | FORMAL ONLY — the FCS counter, for the frame-end precondition. |
+| `fv_abort_pend` | out | 1 | FORMAL ONLY — the abort queue bit (one of the gap's documented abandonment exits). |
 
 ## `pe_fbuf`
 
@@ -322,6 +326,10 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `dbg_y` | out | `[7:0]` | _no note yet_ |
 | `dbg_insn` | out | `[15:0]` | _no note yet_ |
 | `dbg_timer` | out | `[7:0]` | _no note yet_ |
+| `fv_tx_path` | out | 1 | FORMAL ONLY — the codec owner bit, for the target-4 exclusivity proof. |
+| `fv_eth_tx_owner` | out | 1 | FORMAL ONLY — the owner-mux output, for the target-4 exclusivity proof. |
+| `fv_eth_tx_busy` | out | 1 | FORMAL ONLY — the frame engine's busy wire, for the owner guard. |
+| `fv_ser_tx_busy` | out | 1 | FORMAL ONLY — the SERDES TX busy wire (the UNGUARDED direction is finding F2). |
 
 ## `tt_um_protocol_emulator`
 

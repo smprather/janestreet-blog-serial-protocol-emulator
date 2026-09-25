@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-25 | 32 pages (31 content pages + STATUS; index/log/SCHEMA are meta, raw sources are catalogued under their own section)
+> Last updated: 2026-09-25 | 42 pages (41 content pages + STATUS; index/log/SCHEMA are meta, raw sources are catalogued under their own section)
 
 ## Start here
 
@@ -57,6 +57,10 @@
 - [[plans/demo-host-gui]] — Draft plan: the Linux PC demo GUI over the RP2040 on the Tiny Tapeout demo board — operator workflows, load/start contract, clock control, status/error tiers, transport/API and packaging options (all marked open), and a test/acceptance strategy. Planning only; STATUS item 8 stays TODO until accepted.
 - [[plans/serdes-integration]] — Plan: integrate `pe_serdes` + `pe_codec_mux` into `pe_soc` (additive engine, DRU RX capture, two codec instances with encoded-cell enables, split `pe_serdes` payload enables, `0xF` indexed window) with tests, hardening risks and pad implications. Amended after two review rounds; scope decisions remain open.
 - [[plans/eth-tx-frame-path]] — Plan: the 10BASE-T TX frame path (`eth_tx`) — hardware preamble/SFD, FCS append via a TX-dedicated `pe_crc`, 64-byte pad, 96-bit-time IFG, runt/jabber policy, the frame-source/pad choices (eight scope groups, each with a recommended default), and the pad-level + RX-loopback acceptance tests. **COMPLETE (Tasks 1-7, 2026-09-25)** — G1-G8 adopted, everything landed and hardened; review: [[reviews/2026-09-25/ETH-TX-FRAME-PATH-REVIEW]].
+- [[plans/ethernet-soc]] — Plan: 10BASE-T SoC integration — `pe_dru` → `pe_manch` → `pe_eth_mac` with `pe_crc`/`pe_fbuf` inside `pe_soc`, RX on the pin matrix, and the firmware frame-buffer walk.
+- [[plans/pe-ctrl]] — Plan: `pe_ctrl`, the passive SPI load path and the framed host bus (LOAD/STATUS/READ/TARGET/CLEAR_FAULT), with its own test and mutation strategy.
+- [[plans/i2c-transaction]] — Plan: the I2C transaction layer on the pin matrix (START/bit cell/STOP as firmware, timing and arbitration cases).
+- [[plans/host-controller-gui]] — Plan: the host controller GUI and the PE host-control bus (R2 read ops, golden package, bridge/GUI). Host-side work; the user's separate session owns its execution.
 
 ## Decisions
 
@@ -71,3 +75,20 @@
 ## Queries
 
 (none yet)
+
+## Reviews and evidence
+
+Where the verification record lives; the generated pages above are drift-checked,
+and these are the hand-written reviews they support. Host-side reviews landed in
+this repo with the 2026-09-25 `host-controller-gui` merge, so the R2 record is no
+longer across a repo boundary.
+
+- [[reviews/2026-09-23/PROJECT-REVIEW]] — the project review: claims audit, E1/E2 findings, residual observations R1-R5.
+- [[reviews/2026-09-24/PE-CTRL-READBACK-REVIEW]] — the A1 readback review (retired by the R0 pad ruling; its semantics live in the framed LOAD response).
+- [[reviews/2026-09-24/CLOSEOUT-HARDENING-REVIEW]] — SERDES mapped-STA refresh and the codec mutation suite.
+- [[reviews/2026-09-25/R2-READ-PATH-REVIEW]] — the R2 host read path (`READ_CPU`/`READ_IMEM`/`READ_DMEM`/`DUMP_CORE`), the wait-word contract and the chip/host split.
+- [[reviews/2026-09-25/R2-READ-VERIFICATION]] — the R2 read conformance evidence and the portable golden package.
+- [[reviews/2026-09-25/FORMAL-VERIFICATION.md|FORMAL-VERIFICATION]] — the formal safety campaign: proved claims, vacuity labels, the instrumented targets, and findings **F1** (the `pe_eth_tx` TXLEN apply-window) and **F2** (the `pe_soc` owner SET-side guard).
+- [[reviews/2026-09-25/ETH-TX-FRAME-PATH-REVIEW]] — the eth-tx close-out (mapped STA, mutation suites, plan status).
+- [[reviews/2026-09-25/CHIP-CODE-REVIEW]] — the chip-side code review.
+- [[reviews/2026-09-25/HOST-BRANCH-MERGE-NOTE]] — what the host-controller-gui merge brought into this repo.

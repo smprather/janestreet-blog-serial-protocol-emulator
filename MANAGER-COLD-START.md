@@ -105,6 +105,11 @@ worker; this file is the manager's restart prompt.
   (`ollama-cloud/deepseek-v4.1-flash`) is deliberately left alone (it serves
   the user's own sessions); the model is applied per worker session at each
   reset. Check the model at liveness ticks alongside the context percent.
+  PROCEDURE at each `/new`: after the reset settles, send
+  `/model openrouter/stealth/space-bunny-alpha` (provider prefix REQUIRED),
+  send Enter separately, and VERIFY the pane status line shows
+  `(openrouter) stealth/space-bunny-alpha` — the command can sit unsubmitted
+  in the input box (caught 2026-09-25), so never assume it applied.
 - Actively manage the Pi worker's context size — **soft wrap at 60-65%,
   hard wrap forced at 75%, never into the harness's auto zone (manager's
   domain policy, 2026-09-25; the user's ~60% refined into a band)**. The

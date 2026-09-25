@@ -79,7 +79,7 @@ if ( ulimit -v "${FORMAL_MEM_KB:-6000000}" 2>/dev/null; flock -w 14400 9 || exit
     clk2fflogic; async2sync; dffunmap;
     chformal -assume -early;
     $SAT
-  " ) 9>/tmp/chip-formal.lock > "$LOG" 2>&1; then
+  " ) 9>"${CHIP_FORMAL_LOCK:-/tmp/chip-formal.$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8).lock}" > "$LOG" 2>&1; then
   if fv_is_success "$LOG"; then echo PROVED; else echo ERROR; fi
 else
   if fv_is_success "$LOG"; then echo PROVED

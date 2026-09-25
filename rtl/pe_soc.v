@@ -751,7 +751,7 @@ module pe_soc #(
       // dropped frame costs 100 us of wire time; re-reporting one costs one
       // extra poll.
       if (ethstat_rd) begin
-        if (1'b0) eth_valid <= 1'b0;   // MUTANT: valid never clears
+        if (!eth_frame_valid) eth_valid <= 1'b0;
         if (!eth_frame_bad)   eth_bad   <= 1'b0;
       end
       if (eth_frame_bad) eth_bad <= 1'b1;

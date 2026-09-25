@@ -60,6 +60,30 @@ NOTES: dict[tuple[str, str], str] = {
     ("pe_serdes", "tx_ser"): "Serial output. Idles **high** (UART idle), driven only while `tx_busy`.",
     ("pe_serdes", "tx_busy"): "High from load until the final strobe.",
     ("pe_serdes", "tx_done"): "One-cycle pulse on the final strobe. TX-only event — see the sticky-flag note in the testbenches.",
+    # FORMAL-ONLY observation taps (manager-approved 2026-09-25): guarded by
+    # `ifdef FORMAL`, never present in synthesis or simulation (the
+    # formal-ifdef gate proves 0 fv_* wires in a synthesis elaboration). They
+    # exist so the formal targets can state internal-state claims over ports.
+    ("pe_eth_tx", "fv_ifg_cnt"): "FORMAL ONLY — the gap counter, for the inductive IFG-floor proof.",
+    ("pe_eth_tx", "fv_state"): "FORMAL ONLY — the FSM state, for the IFG floor's structural precondition.",
+    ("pe_eth_tx", "fv_fcs_left"): "FORMAL ONLY — the FCS counter, for the frame-end precondition.",
+    ("pe_eth_tx", "fv_abort_pend"): "FORMAL ONLY — the abort queue bit (one of the gap's documented abandonment exits).",
+    ("pe_ctrl", "fv_resp_len"): "FORMAL ONLY — response length, for the R2 no-wrap claims.",
+    ("pe_ctrl", "fv_resp_idx"): "FORMAL ONLY — frame word index, for the R2 no-wrap claims.",
+    ("pe_ctrl", "fv_resp_active"): "FORMAL ONLY — serializer live, for the R2 frame-start claims.",
+    ("pe_ctrl", "fv_r_addr"): "FORMAL ONLY — walk address, for the R2 bound claim.",
+    ("pe_ctrl", "fv_r_left"): "FORMAL ONLY — walk items left, for the R2 bound claim.",
+    ("pe_ctrl", "fv_r_slot"): "FORMAL ONLY — next response slot, for the R2 buffer-budget claim.",
+    ("pe_ctrl", "fv_r_dmem"): "FORMAL ONLY — walk target (imem word / dmem byte), for the R2 bound claim.",
+    ("pe_ctrl", "fv_rstate"): "FORMAL ONLY — read-engine state, for the R2 walk claims.",
+    ("pe_ctrl", "fv_faults"): "FORMAL ONLY — the sticky fault register, for the R2 RANGE-stickiness claim.",
+    ("pe_ctrl", "fv_clr_mask"): "FORMAL ONLY — the mask a CLEAR_FAULT applied, for the R2 stickiness claim.",
+    ("pe_ctrl", "fv_resp_bitpos"): "FORMAL ONLY — bit position in the word, for the R2 word-alignment claim.",
+    ("pe_ctrl", "fv_r_imm"): "FORMAL ONLY — immediate rejection (R_START with stale walk registers).",
+    ("pe_soc", "fv_tx_path"): "FORMAL ONLY — the codec owner bit, for the target-4 exclusivity proof.",
+    ("pe_soc", "fv_eth_tx_owner"): "FORMAL ONLY — the owner-mux output, for the target-4 exclusivity proof.",
+    ("pe_soc", "fv_eth_tx_busy"): "FORMAL ONLY — the frame engine's busy wire, for the owner guard.",
+    ("pe_soc", "fv_ser_tx_busy"): "FORMAL ONLY — the SERDES TX busy wire (the UNGUARDED direction is finding F2).",
     ("pe_serdes", "rx_ser"): "Serial input, **expected already synchronized** (latch-pair dual-edge capture flop, ADR-002). This block is single-edge.",
     ("pe_serdes", "rx_start"): "Starts a receive. Captures `rx_len` and the bit order. Ignored when `rx_len == 0`.",
     ("pe_serdes", "rx_len"): "Bits to receive, 1..MAXLEN.",
@@ -211,7 +235,7 @@ CONVENTION_ROWS = [
 
 def port_blocks(text: str, module: str) -> list[tuple[str, str, str]]:
     """`(direction, width, name)` for one module's port list."""
-    m = re.search(rf"^\s*module\s+{module}\b(.*?)\);", text, re.S | re.M)
+    m = re.search(rf"^\s*module\s+{module}\b(.*?)\);", text, re.DOTALL | re.MULTILINE)
     if not m:
         return []
     body = m.group(1)
@@ -229,7 +253,7 @@ def port_blocks(text: str, module: str) -> list[tuple[str, str, str]]:
 
 
 def declared_internals(text: str) -> set[str]:
-    return set(re.findall(r"^\s*logic\s*(?:\[[^\]]*\])?\s*([A-Za-z_][A-Za-z_0-9]*)", text, re.M))
+    return set(re.findall(r"^\s*logic\s*(?:\[[^\]]*\])?\s*([A-Za-z_][A-Za-z_0-9]*)", text, re.MULTILINE))
 
 
 def build() -> str:
@@ -245,7 +269,7 @@ def build() -> str:
     modules: list[tuple[str, list[tuple[str, str, str]]]] = []
     for f in sorted(files, key=rank):
         text = f.read_text(encoding="utf-8")
-        for mod in re.findall(r"^\s*module\s+([A-Za-z_][A-Za-z_0-9]*)", text, re.M):
+        for mod in re.findall(r"^\s*module\s+([A-Za-z_][A-Za-z_0-9]*)", text, re.MULTILINE):
             ports = port_blocks(text, mod)
             if ports:
                 modules.append((mod, ports))

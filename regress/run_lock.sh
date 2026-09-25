@@ -30,7 +30,12 @@
 #   chip_take_run_lock "run_all.sh"        # or the absolute path
 # Exits non-zero (75) with a message when another run holds the lock.
 
-CHIP_RUN_LOCK_FILE="${CHIP_RUN_LOCK_FILE:-/tmp/chip-run-all.lock}"
+# PER-WORKTREE by default (2026-09-25, parallel workers): concurrent runs in
+# DIFFERENT worktrees are safe (disjoint files); the hazard is concurrent runs
+# in the SAME worktree, which is what this lock exists for.
+_wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
+CHIP_RUN_LOCK_FILE="${CHIP_RUN_LOCK_FILE:-/tmp/chip-run-all.${_wt:-shared}.lock}"
+CHIP_RUN_OWNER_FILE="${CHIP_RUN_OWNER_FILE:-/tmp/chip-run-all.${_wt:-shared}.owner}"
 
 chip_take_run_lock() {
   local who="${1:-$(basename "$0")}"
@@ -52,8 +57,8 @@ chip_take_run_lock() {
     echo "  This worktree is shared, and concurrent runs would mutate and" >&2
     echo "  restore the same RTL at once. Wait for the other run to finish" >&2
     echo "  (the lock releases by itself if that run dies), then start." >&2
-    if [ -r /tmp/chip-run-all.owner ]; then
-      echo "  current holder: $(cat /tmp/chip-run-all.owner 2>/dev/null)" >&2
+    if [ -r "$CHIP_RUN_OWNER_FILE" ]; then
+      echo "  current holder: $(cat "$CHIP_RUN_OWNER_FILE" 2>/dev/null)" >&2
     fi
     exit 75
   fi
@@ -63,7 +68,7 @@ chip_take_run_lock() {
   # is removed on release, and because a killed run cannot run its own trap,
   # chip_take_run_lock overwrites any stale note on acquire.
   printf '%s pid=%s started=%s\n' "$who" "$$" "$(date '+%F %T %Z')" \
-    > /tmp/chip-run-all.owner 2>/dev/null || true
+    > "$CHIP_RUN_OWNER_FILE" 2>/dev/null || true
 
   CHIP_RUN_LOCK_HELD=1
   export CHIP_RUN_LOCK_HELD
