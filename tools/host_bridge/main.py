@@ -24,8 +24,6 @@ All board access goes through the adapter HAL (see ``tt_adapter.py``), so this
 module runs under CPython tests against ``tests/fakes.FakeTTAdapter``.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 import time
@@ -37,8 +35,16 @@ except ImportError:             # flat MicroPython deployment
     import pe_frame
 
 BRIDGE_VERSION = "pe-bridge-1"
-DEFAULT_MAX_LINE = 65536
+# The Pico has 264 KB of SRAM and the bridge parses every request line whole,
+# so this bound is a RAM guard, not just an anti-garbage guard. The largest
+# legal request is a full 1024-word LOAD: measured 4,142 bytes as sent by the
+# host (json.dumps of {"words": [...]}), whose json.loads costs ~8.4 KB of
+# MicroPython heap. 8 KB therefore accepts every legal request with ~2x margin
+# and rejects a pathological line before it is parsed. Measured with
+# tools/host_bridge/micropython_check.py on the MicroPython 1.30 unix port.
+DEFAULT_MAX_LINE = 8192
 SCLK_GUARD_HZ = 5_000_000
+MAX_EVENT_QUEUE = 16
 
 # Plan mapping (review R0): host SPI is uio[4..7].
 PADS = {"cs_n": 4, "mosi": 5, "miso": 6, "sck": 7}
@@ -89,14 +95,21 @@ class USBResponse:
 
 
 class PicoBridge:
-    def __init__(self, adapter, *, project=None, clock_hz=60_000_000,
+    # MicroPython (1.30) does not accept keyword-only parameters (`*,`) in a
+    # def, so these stay ordinary defaulted parameters; callers still pass
+    # them by name.
+    def __init__(self, adapter, project=None, clock_hz=60_000_000,
                  sleep=None, max_line=DEFAULT_MAX_LINE):
         self._adapter = adapter
         self._project = project
         self._clock_hz = int(clock_hz)
         self._sleep = sleep if sleep is not None else time.sleep
         self._max_line = int(max_line)
-        self._events = deque()
+        # MicroPython's collections.deque has no zero-argument form: it is
+        # deque(iterable, maxlen). A bound is also what a 264 KB Pico wants -
+        # the queue is drained after every request, so 16 slots is ample and
+        # caps the event memory instead of letting it grow.
+        self._events = deque([], MAX_EVENT_QUEUE)
         self._sequence = 1
         self._project_enabled = False
         self._clock_started = False
@@ -159,7 +172,11 @@ class PicoBridge:
                     USBResponse(message["id"], False, None,
                                 "args must be an object").to_message()]
         response = self.handle(USBRequest.from_message(message))
-        return [*self.drain_events(), response.to_message()]
+        # MicroPython's parser rejects starred unpacking inside a list
+        # display (`[*events, response]`), so build the list the plain way.
+        messages = self.drain_events()
+        messages.append(response.to_message())
+        return messages
 
     def handle(self, request):
         """Dispatch one ``USBRequest``; returns a ``USBResponse``."""
@@ -221,8 +238,11 @@ class PicoBridge:
 
     # ---- request helpers ----------------------------------------------------
     def drain_events(self):
+        # MicroPython's deque has no .clear(); popleft-until-empty is the
+        # portable form (it is also the documented way to empty one).
         out = list(self._events)
-        self._events.clear()
+        while self._events:
+            self._events.popleft()
         return out
 
     def _event(self, name, data):

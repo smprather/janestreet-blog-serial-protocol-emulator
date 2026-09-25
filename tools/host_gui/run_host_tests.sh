@@ -26,6 +26,8 @@
 #      opens a serial device.
 #   6. the R2 verification package drift check (r2_vectors --check): the
 #      chip-side golden vectors must still match a fresh build of the model.
+#   7. the MicroPython conformance run of the deployed bridge modules, when a
+#      `micropython` binary is on PATH (skipped with a note otherwise).
 #
 # IT IS NOT A CHIP GATE. Nothing here runs a testbench, the regression, or
 # synthesis, and nothing here is evidence about silicon: the PE host protocol
@@ -62,6 +64,16 @@ fi
 run "compileall" python3 -m compileall -q tools/host_gui tools/host_bridge
 run "R2 vector package" python3 -m tools.host_gui.r2_vectors --check
 run "acceptance --fake" python3 tools/host_bridge/acceptance.py --fake
+
+# The deployed bridge must import and run on MicroPython. This runs the same
+# conformance harness on both interpreters when a micropython binary is
+# available (build the unix port: git clone micropython && make -C ports/unix).
+if command -v micropython >/dev/null 2>&1; then
+    run "micropython conformance (bridge)" \
+        micropython tools/host_bridge/micropython_check.py
+else
+    printf '\n=== micropython conformance (bridge) ===\n[skip] micropython (not installed; see the runbook)\n'
+fi
 
 printf '\n=== host gate: %s ===\n' "$([ "$failed" -eq 0 ] && echo PASS || echo FAIL)"
 exit "$failed"

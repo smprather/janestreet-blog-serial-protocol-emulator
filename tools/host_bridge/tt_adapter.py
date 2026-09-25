@@ -29,8 +29,6 @@ Two facts are deliberately configuration, not guesses:
     must not require an interrupt input.
 """
 
-from __future__ import annotations
-
 # Host SPI pads on the chip (plan mapping, review R0): uio[4..7].
 PAD_CS_N = 4
 PAD_MOSI = 5
@@ -49,8 +47,7 @@ _HOST_INPUT_MASK = 1 << PAD_MISO
 class TTAdapter:
     """Concrete adapter over the Tiny Tapeout MicroPython SDK (ttboard v3)."""
 
-    def __init__(self, pins: dict | None = None, *, irq_enabled: bool = False,
-                 spi_id: int = 0) -> None:
+    def __init__(self, pins=None, irq_enabled=False, spi_id=0):
         self.pins = dict(pins) if pins else None
         self.irq_enabled = bool(irq_enabled)
         self.spi_id = spi_id

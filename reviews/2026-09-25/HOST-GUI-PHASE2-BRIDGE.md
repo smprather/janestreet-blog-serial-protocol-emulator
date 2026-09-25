@@ -95,13 +95,21 @@ the system interpreter; the phase-1b venv run covers that path). Full log:
 ## Known limits (honest scope)
 
 - **Real Pico/USB is unverified.** No serial device was opened; `open_serial`
-  and the pyserial path have never run against hardware. The MicroPython
-  deployment (SDK version, flat-file import of `pe_frame`/`tt_adapter`,
+  and the pyserial path have never run against hardware.
+  **MicroPython compatibility is no longer an assumption (2026-09-25,
+  `HOST-BRIDGE-MICROPYTHON.md`):** the three deployed modules were run on a
+  built MicroPython 1.30 unix port and five deployment-blocking issues were
+  found and fixed (`__future__` import, starred list unpacking, keyword-only
+  defs, zero-arg `deque`/no `.clear()`, and a 16x over-permissive
+  `DEFAULT_MAX_LINE`). The harness `tools/host_bridge/micropython_check.py`
+  now runs in the host gate. RP2040 heap headroom, `machine.SPI` and USB CDC
+  still need hardware.
+- The MicroPython deployment (SDK version, flat-file import of `pe_frame`/`tt_adapter`,
   `machine.SPI` pin mapping, RP2040 vs RP2350 GPIO numbers — plan Open Item 2)
   is reviewed by inspection only. `from __future__ import annotations` and
   PEP 604 unions in `tt_adapter.py`/`main.py` are a MicroPython compatibility
   assumption, not a measured fact.
-- **Chip-side behavior is out of scope.** RTL phases R1 (protocol engine, IRQ,
+- Chip-side behavior is out of scope. RTL phases R1 (protocol engine, IRQ,
   target 1) and R2 (read path) are under the chip-repo manager; `FakePE` is a
   model, so every "chip-confirmed" claim here is fake-hardware evidence only.
   No `rtl/`, `tb/`, `info.yaml` or regression file was touched.
