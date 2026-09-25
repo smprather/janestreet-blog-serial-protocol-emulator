@@ -1,0 +1,608 @@
+; i2c_adv.pe — the I2C COMBINED-FORMAT transaction, with clock stretching.
+;
+; This is the advanced act of the bus block, and it is strictly harder than
+; firmware/i2c_xfer.pe in three ways, each of which is a real protocol
+; obligation rather than a bigger version of the same loop:
+;
+;   1. THE REPEATED START IS INSIDE A COMBINED FORMAT. i2c_xfer.pe sends
+;      0xA0, one data byte, repeated START, 0xA1, ONE read byte, NACK, STOP.
+;      Here the write phase carries TWO data bytes and the read phase is a
+;      THREE-BYTE BURST with the master ACKing the first two. That is the
+;      combined format real EEPROMs and sensors are actually read with, and
+;      it needs the repeated START to come after an arbitrary-length write
+;      phase, not after a fixed one.
+;
+;   2. THE READ BURST IS STATEFUL ON THE SLAVE. An ACK from the master after
+;      read byte k tells the slave to present byte k+1; a NACK ends the burst.
+;      So the master must DRIVE SDA LOW on the 9th clock of a continuing read
+;      -- it is no longer purely a receiver on the bus, and getting that
+;      wrong hangs the burst forever waiting for a byte nobody sends.
+;
+;   3. THE SLAVE MAY HOLD SCL LOW AT ANY TIME. A stretching slave owns SCL
+;      during the low phase, so the master cannot time tHIGH from its own
+;      write: it must WAIT FOR THE LINE TO READ HIGH and start the tHIGH
+;      window from that edge. Every high-phase wait in this program polls
+;      the pad, and dmem[0] counts the poll iterations that were spent with
+;      SCL still low -- so the test can prove the stretch path ran rather
+;      than assume it did.
+;
+; ---------------------------------------------------------------------------
+; THE TRANSACTION (fixed by tb/tb_pe_soc_i2c_adv.v's independent slave):
+;
+;   START . 0xA0 (addr 0x50 + W) . ACK . 0x3C . ACK . 0x5A . ACK
+;         . repeated START . 0xA1 (addr 0x50 + R) . ACK
+;         . read 0x11 . ACK . read 0x22 . ACK . read 0x33 . NACK
+;         . STOP
+;
+; ---------------------------------------------------------------------------
+; dmem IS THE OBSERVABLE INTERFACE (the TB asserts on it)
+;
+;   dmem[0]  stretch-poll count: iterations spent with SCL read low while the
+;            master had already released it. 0 = no stretch seen.
+;   dmem[1]  write-address ACK    (0x00 = ACKed, 0x10 = NACKed)
+;   dmem[2]  data byte 1 ACK
+;   dmem[3]  data byte 2 ACK
+;   dmem[4]  read-address ACK
+;   dmem[5]  read byte 1      dmem[6]  read byte 2      dmem[7]  read byte 3
+;   dmem[8]  byte being sent                 dmem[9]  bit counter
+;   dmem[10] transaction state               dmem[11] read accumulator
+;   dmem[12] transient flag: "this bit is a 1" on TX, "this is the last
+;            read byte, so NACK" on RX. The two engines are never both live,
+;            so the slot is shared deliberately.
+;   dmem[13] dynamic ACK slot on TX, read-byte store slot on RX
+;   dmem[14] sample scratch
+;   dmem[15] 0xA5 on a clean transaction, 0x55 on an abort
+;
+; The READ SLOT AND THE NEXT STATE ARE DERIVED, not passed. Read state k
+; (k = 6,7,8) stores into dmem[5 + k - 6] and continues to state k+1, so the
+; read engine computes its own store slot as (state - 1) and its own next
+; state as (state + 1). That is what keeps this map at exactly 16 bytes --
+; the 1024-word instruction memory bought program space, not data space.
+;
+; ---------------------------------------------------------------------------
+; THE WAIT IDIOM IS i2c_xfer.pe's EXACT-TARGET WAIT, plus the stretch poll.
+;
+; The free-running 1 us tick delivers (N-1, N] us for an N-tick wait, so
+; T_LOW is 7 and T_HIGH is 6 (wiki/concepts/i2c-on-the-matrix.md). The stretch
+; poll is a SEPARATE wait on the PIN port, not a longer tick wait: the whole
+; point is that the master does not know how long the slave will hold the
+; line, and guessing a bigger constant is exactly the bug this replaces.
+;
+; ---------------------------------------------------------------------------
+; THE INIT ORDER IS OD -> OUT -> OE and it is load-bearing: writing OE first
+; enables the pins while the output register still holds 0x01, pulling SDA low
+; with SCL high, which IS a START. See wiki/concepts/i2c-on-the-matrix.md.
+
+        ; ---- enter open-drain mode, in the order that cannot glitch ---------
+        LDI   A, SDA|SCL
+        OUT   PINOD, A
+        LDI   A, SDA|SCL           ; levels first: both released (bus idle)
+        OUT   TXPIN, A
+        LDI   A, SDA|SCL           ; then claim the pins
+        OUT   PINOE, A
+
+        ; ---- clear the observables -----------------------------------------
+        LDI   A, 0
+        STM   0, A                 ; stretch-poll count
+        STM   1, A
+        STM   2, A
+        STM   3, A
+        STM   4, A
+        STM   5, A
+        STM   6, A
+        STM   7, A
+        STM   10, A                ; state 0: START
+        STM   11, A
+        STM   15, A
+
+; ===========================================================================
+; The dispatcher. dmem[10] names the next action; each handler sets up the
+; byte/slot/next-state and jumps into a shared engine, which jumps back here.
+;
+; A CUMULATIVE SUBTRACT CHAIN, not the re-load-and-re-test cascade
+; i2c_xfer.pe uses. Both are the same control flow, but each state here costs
+; two instructions instead of five: with eleven states the cascade would spend
+; more words on the dispatcher than the STOP sequence it dispatches to. The
+; chain is correct because SUB A, 1 leaves the decremented value in A, so
+; the next JZ tests the next-lower state.
+; ===========================================================================
+main:   LDM   A, 10
+        JZ    s0
+        SUB   A, 1
+        JZ    s1
+        SUB   A, 1
+        JZ    s2
+        SUB   A, 1
+        JZ    s3
+        SUB   A, 1
+        JZ    s4
+        SUB   A, 1
+        JZ    s5
+        SUB   A, 1
+        JZ    s6
+        SUB   A, 1
+        JZ    s7
+        SUB   A, 1
+        JZ    s8
+        SUB   A, 1
+        JZ    s9
+        JMP   park                 ; unknown state: park rather than wander
+
+; ---- state 0 and 4: (repeated) START -------------------------------------
+s0:     LDI   A, 1
+        STM   10, A
+        JMP   do_start
+s4:     LDI   A, 5
+        STM   10, A
+        JMP   do_start
+
+; ---- state 1: the write address 0xA0, ACK into dmem[1] -------------------
+s1:     LDI   A, 0xA0
+        STM   8, A
+        LDI   A, 1
+        STM   13, A
+        LDI   A, 2
+        STM   10, A
+        JMP   send_byte
+
+; ---- state 2: data byte 1 (0x3C), ACK into dmem[2] -----------------------
+s2:     LDI   A, 0x3C
+        STM   8, A
+        LDI   A, 2
+        STM   13, A
+        LDI   A, 3
+        STM   10, A
+        JMP   send_byte
+
+; ---- state 3: data byte 2 (0x5A), ACK into dmem[3] -----------------------
+s3:     LDI   A, 0x5A
+        STM   8, A
+        LDI   A, 3
+        STM   13, A
+        LDI   A, 4
+        STM   10, A
+        JMP   send_byte
+
+; ---- state 5: the read address 0xA1, ACK into dmem[4] --------------------
+s5:     LDI   A, 0xA1
+        STM   8, A
+        LDI   A, 4
+        STM   13, A
+        LDI   A, 6
+        STM   10, A
+        JMP   send_byte
+
+; ---- states 6, 7, 8: the three read bytes --------------------------------
+; No setup beyond the state itself: read_byte derives its store slot and its
+; next state from dmem[10] (see the header), and NACKs when the state is 8.
+s6:     JMP   read_byte
+s7:     JMP   read_byte
+s8:     JMP   read_byte
+
+; ---- state 9: STOP -------------------------------------------------------
+s9:     JMP   do_stop
+
+; ---- terminal state: dmem[15] is already set (0xA5 or 0x55) ---------------
+park:   JMP   park
+
+; ===========================================================================
+; do_stop: the STOP sequence, then mark success (nothing NACKed) or failure.
+; Entered with SCL low; SDA may be low or released. The first write pulls SDA
+; low with SCL low, which is always legal. SHARED with the NACK abort.
+; ===========================================================================
+do_stop:
+        LDI   A, 0x00
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_STO
+        MOV   X, A
+w_sto:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_sto
+        LDI   A, SCL               ; release SCL while SDA is still low
+        OUT   TXPIN, A
+        ; a stretching slave may hold SCL low: wait for the real level before
+        ; timing tHIGH from it
+w_sth0: IN    A, PIN
+        AND   A, SCL
+        JNZ   w_sth1
+        LDM   A, 0
+        ADD   A, 1
+        STM   0, A
+        JMP   w_sth0
+w_sth1:
+        IN    A, I2CTICK
+        ADD   A, T_HIGH
+        MOV   X, A
+w_sth:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_sth
+        LDI   A, SDA|SCL           ; release SDA with SCL high: the STOP
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_BUF
+        MOV   X, A
+w_buf:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_buf
+        LDM   A, 1
+        JNZ   stop_fail
+        LDM   A, 2
+        JNZ   stop_fail
+        LDM   A, 3
+        JNZ   stop_fail
+        LDM   A, 4
+        JNZ   stop_fail
+        LDI   A, 0xA5              ; every byte ACKed: clean transaction
+        JMP   stop_mark
+stop_fail:
+        LDI   A, 0x55              ; aborted: arbitration or an unexpected NACK
+stop_mark:
+        STM   15, A
+        LDI   A, 10
+        STM   10, A                ; terminal state 10 = park
+        JMP   main
+
+; ===========================================================================
+; arb_abort: arbitration was lost, so this master is no longer the bus owner.
+; Release BOTH lines immediately and do NOT issue a STOP -- the winner owns the
+; transaction and a STOP from the loser would corrupt it. Then park with the
+; failure flag.
+;
+; THERE IS NO BUS-FREE WAIT, deliberately: a single sample of {SDA,SCL}==11
+; cannot distinguish an idle bus from a winner's data-1 high phase, so an
+; "idle" loop would exit early and claim something it did not establish.
+; ===========================================================================
+arb_abort:
+        LDI   A, SDA|SCL
+        OUT   TXPIN, A
+        LDI   A, 0x55
+        STM   15, A
+        JMP   park
+
+; ===========================================================================
+; do_start: drive a (repeated) START and return to the dispatcher.
+;
+; Entered with SCL low and SDA released (the end of every byte) or with the bus
+; idle-high. Releasing both first makes the two cases identical: SCL rises,
+; SDA stays high through T_STA, then SDA falls while SCL is high -- the START
+; definition. The second wait is tHD;STA before SCL may fall.
+; ===========================================================================
+do_start:
+        ; If the previous clock left SCL low -- always, coming out of a byte --
+        ; this rise ends the ACK clock's LOW phase, so it must still meet tLOW.
+        ; Without this wait a repeated START raised SCL 22 cycles after the
+        ; ACK fell (0.37 us of tLOW, measured on the wire). At the initial
+        ; START the wait is harmless: SCL is already high, no edge results.
+        IN    A, I2CTICK
+        ADD   A, T_LOW
+        MOV   X, A
+w_ds:   IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_ds
+        LDI   A, SDA|SCL           ; SCL high (or stays high), SDA released
+        OUT   TXPIN, A
+ds_hi:  IN    A, PIN
+        AND   A, SCL
+        JNZ   ds_h1
+        LDM   A, 0
+        ADD   A, 1
+        STM   0, A
+        JMP   ds_hi
+ds_h1:
+        IN    A, I2CTICK
+        ADD   A, T_STA
+        MOV   X, A
+w_sta:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_sta
+        LDI   A, SCL               ; SDA driven low with SCL high: START
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_STA
+        MOV   X, A
+w_hst:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   w_hst
+        LDI   A, 0x00              ; SCL low: the bus is captured
+        OUT   TXPIN, A
+        JMP   main
+
+; ===========================================================================
+; send_byte: clock dmem[8] out MSB-first, then sample the ACK into the slot
+; named by dmem[13]. The byte is shifted left after every bit, so the MSB is
+; the bit under test each iteration. Every transmitted 1 is read back while
+; SCL is high: a 0 is arbitration loss and dmem[0]'s neighbour is not needed
+; for it -- an abort is terminal, and the count is not worth a slot.
+; ===========================================================================
+send_byte:
+        LDI   A, 8
+        STM   9, A
+sb_bit: LDM   A, 9
+        JZ    sb_ack
+        LDM   A, 8
+        MOV   X, A
+        AND   A, 0x80              ; the MSB is the bit to send
+        JZ    sb_zero
+        LDI   A, 1
+        STM   12, A                ; remember: a 1 is being sent
+        LDI   A, SDA               ; out=1 in OD is a RELEASE
+        JMP   sb_drive
+sb_zero:
+        LDI   A, 0
+        STM   12, A
+sb_drive:
+        OUT   TXPIN, A             ; SDA set while SCL is low
+        IN    A, I2CTICK
+        ADD   A, T_LOW
+        MOV   X, A
+sb_w1:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   sb_w1
+        ; Release SCL HOLDING SDA. `SDA|SCL` would also release a driven 0,
+        ; which makes SDA rise in the same cycle SCL does -- an illegal data
+        ; move under a rising clock, and the first version did exactly that.
+        LDM   A, 12
+        JZ    sb_rel0
+        LDI   A, SDA|SCL           ; bit 1: SDA released, SCL released
+        JMP   sb_rel
+sb_rel0:
+        LDI   A, SCL               ; bit 0: SDA stays driven low
+sb_rel:
+        OUT   TXPIN, A
+sb_hi:  IN    A, PIN
+        AND   A, SCL
+        JNZ   sb_h1
+        LDM   A, 0                 ; SCL still low: the slave is stretching
+        ADD   A, 1
+        STM   0, A
+        JMP   sb_hi
+sb_h1:
+        IN    A, I2CTICK
+        ADD   A, T_HIGH
+        MOV   X, A
+sb_w2:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   sb_w2
+        ; arbitration: only a transmitted 1 can lose, and a released SDA
+        ; reads the pad. dmem[12] gates the check so a driven 0 is not read.
+        LDM   A, 12
+        JZ    sb_noarb
+        IN    A, PIN
+        AND   A, SDA
+        JNZ   sb_noarb
+        ; lost arbitration: mark the abort and release the bus
+        LDI   A, 1
+        JMP   arb_abort            ; arb_abort writes the 0x55 marker
+sb_noarb:
+        ; Pull SCL low HOLDING SDA too: the next change happens with the
+        ; clock low, which is where data is allowed to move.
+        LDM   A, 12
+        JZ    sb_pl0
+        LDI   A, SDA               ; bit 1: SCL low, SDA released
+        JMP   sb_pl
+sb_pl0:
+        LDI   A, 0x00              ; bit 0: SCL low, SDA held low
+sb_pl:
+        OUT   TXPIN, A
+        LDM   A, 8                 ; shift the byte left: A = 2A via X
+        MOV   X, A
+        ADD   A, X
+        STM   8, A
+        LDM   A, 9
+        SUB   A, 1
+        STM   9, A
+        JMP   sb_bit
+
+; ---- the ACK slot: release SDA, clock it, sample while SCL is high --------
+sb_ack:
+        LDI   A, SDA
+        OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_LOW
+        MOV   X, A
+sb_w3:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   sb_w3
+        LDI   A, SDA|SCL
+        OUT   TXPIN, A
+sk_hi:  IN    A, PIN
+        AND   A, SCL
+        JNZ   sk_h1
+        LDM   A, 0
+        ADD   A, 1
+        STM   0, A
+        JMP   sk_hi
+sk_h1:
+        IN    A, I2CTICK
+        ADD   A, T_HIGH
+        MOV   X, A
+sb_w4:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   sb_w4
+        IN    A, PIN
+        AND   A, SDA               ; 0x00 = ACKed, 0x10 = NACKed
+        STM   14, A
+        LDI   A, SDA
+        OUT   TXPIN, A             ; SCL low for the next phase
+        LDM   X, 13                ; dynamic ACK slot: STS is X-indexed
+        LDM   A, 14
+        STS   [X], A
+        JZ    sb_ack_ok            ; A still holds the sample
+        ; Unexpected NACK. There is no separate outcome byte to write -- the
+        ; NACK is ALREADY RECORDED in the ACK slot (0x10), and do_stop's clean
+        ; test is "every one of the four slots reads 0x00". So all this path
+        ; has to do is end the transaction with a STOP, and the STOP's own
+        ; test turns the recorded 0x10 into the 0x55 marker. That is why there
+        ; is no outcome code here at all: the slots ARE the record.
+        ;
+        ; Sending data after an address NACK, or reading after one, is what a
+        ; broken master does, so the abort is immediate and unconditional.
+        LDM   A, 13
+        JZ    nk_go
+        SUB   A, 1
+        JZ    nk_go                ; slot 1: the write address
+        SUB   A, 1
+        JZ    nk_go                ; slot 2: data byte 1
+        SUB   A, 1
+        JMP   nk_go                ; slot 3: data byte 2
+sb_ack_ok:
+        JMP   main
+
+; ===========================================================================
+; read_byte: release SDA and sample eight bits MSB-first into dmem[11], store
+; the byte in dmem[13], then clock the ACK/NACK slot and advance to state+1.
+;
+; THIS ENGINE DRIVES THE BUS, WHICH IS THE WHOLE POINT OF A BURST. A single
+; read leaves the master releasing SDA for all nine clocks; a continuing read
+; makes the master pull SDA LOW for the 9th clock to say "send another". So
+; the ACK/NACK decision is the state's, and getting it wrong stalls the slave
+; on a byte that never arrives.
+;
+; The accumulator shifts left each bit and ORs in a 1.
+; ===========================================================================
+read_byte:
+        LDM   A, 10
+        SUB   A, 1                 ; store slot = state - 1
+        STM   13, A
+        LDI   A, 0
+        STM   11, A
+        LDI   A, 8
+        STM   9, A
+rb_bit: LDM   A, 9
+        JZ    rb_ack
+        LDI   A, SDA
+        OUT   TXPIN, A             ; SDA released (the slave drives it)
+        IN    A, I2CTICK
+        ADD   A, T_LOW
+        MOV   X, A
+rb_w1:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   rb_w1
+        LDI   A, SDA|SCL
+        OUT   TXPIN, A
+rb_hi:  IN    A, PIN
+        AND   A, SCL
+        JNZ   rb_h1
+        LDM   A, 0
+        ADD   A, 1
+        STM   0, A
+        JMP   rb_hi
+rb_h1:
+        IN    A, I2CTICK
+        ADD   A, T_HIGH
+        MOV   X, A
+rb_w2:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   rb_w2
+        IN    A, PIN
+        AND   A, SDA
+        STM   14, A
+        LDI   A, SDA
+        OUT   TXPIN, A             ; SCL low before anything else changes
+        LDM   A, 11
+        MOV   X, A
+        ADD   A, X                 ; acc <<= 1
+        STM   11, A
+        LDM   A, 14
+        JZ    rb_skip
+        LDM   A, 11
+        OR    A, 1
+        STM   11, A
+rb_skip:
+        LDM   A, 9
+        SUB   A, 1
+        STM   9, A
+        JMP   rb_bit
+
+; ---- the 9th clock: master ACKs (SDA driven low) or NACKs (SDA released) ---
+;
+; THE PIN-DISCIPLINE HERE IS THE WHOLE TRAP, and the first version of this
+; program got it wrong in the way that matters. The 9th clock is a rising
+; edge, so SDA has to hold its value ACROSS it:
+;
+;   * ACK  -- SDA must stay DRIVEN LOW while SCL is released. Releasing SCL
+;     alone (write SCL, leaving SDA low) is the only correct instruction.
+;   * NACK -- SDA is already released, so releasing both together is correct.
+;
+; Releasing BOTH for the ACK is the natural-looking "release the bus" line and
+; it is wrong twice over: the slave samples SDA on the rising edge and would
+; read the release instead of the ACK, ending the burst after one byte; and
+; SDA would rise under a rising clock, which is an illegal data move. The
+; testbench caught it as two grammar violations and a one-byte burst, and
+; firmware/i2c_xfer.pe's send path carries the same warning for the same
+; reason.
+;
+; Symmetrically, the phase AFTER the high window pulls SCL low HOLDING SDA
+; (write 0x00), and only then releases SDA with the clock already low.
+rb_ack:  LDM   A, 10
+        SUB   A, 8                 ; state 8 is the last of the three read bytes
+        JNZ   rb_is_ack
+        LDI   A, 1
+        STM   12, A                ; dmem[12] = 1 -> NACK this byte
+        JMP   rb_flag
+rb_is_ack:
+        LDI   A, 0
+        STM   12, A                ; dmem[12] = 0 -> ACK, ask for another
+rb_flag: LDM   A, 12
+        JNZ   rb_nack_pre
+        LDI   A, 0x00              ; ACK: SDA driven low while SCL is low
+        JMP   rb_w9
+rb_nack_pre:
+        LDI   A, SDA               ; NACK: SDA released, SCL low
+rb_w9:  OUT   TXPIN, A
+        IN    A, I2CTICK
+        ADD   A, T_LOW
+        MOV   X, A
+rb_w3:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   rb_w3
+        LDM   A, 12
+        JZ    rb_ack_rel
+        LDI   A, SDA|SCL           ; NACK: both released, SDA stays up
+        JMP   rb_w9r
+rb_ack_rel:
+        LDI   A, SCL               ; ACK: release SCL, HOLD SDA low
+rb_w9r: OUT   TXPIN, A
+rk_hi:  IN    A, PIN
+        AND   A, SCL
+        JNZ   rk_h1
+        LDM   A, 0
+        ADD   A, 1
+        STM   0, A
+        JMP   rk_hi
+rk_h1:
+        IN    A, I2CTICK
+        ADD   A, T_HIGH
+        MOV   X, A
+rb_w4:  IN    A, I2CTICK
+        SUB   A, X
+        JNZ   rb_w4
+        LDM   A, 12
+        JZ    rb_ack_lo
+        LDI   A, SDA               ; NACK: SDA released, SCL low
+        JMP   rb_lo
+rb_ack_lo:
+        LDI   A, 0x00              ; ACK: SCL low FIRST, SDA still held low
+rb_lo:  OUT   TXPIN, A
+        LDM   X, 13
+        LDM   A, 11
+        STS   [X], A               ; the read byte lands in its slot
+        LDM   A, 10
+        SUB   A, 8                 ; the third read byte is the one that NACKs
+        JZ    rb_stop
+        LDM   A, 10
+        ADD   A, 1                 ; otherwise the next read byte
+        STM   10, A
+        JMP   main
+rb_stop:
+        LDI   A, 9
+        STM   10, A
+        JMP   main
+
+; ===========================================================================
+; nk_go: the transaction was NACKed. Go straight to the STOP sequence, which
+; waits out tSU;STO and releases SDA, and whose own clean test sees the
+; recorded 0x10 and writes the 0x55 marker.
+; ===========================================================================
+nk_go:  JMP   do_stop
