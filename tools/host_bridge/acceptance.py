@@ -24,6 +24,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Protocol
 
 if __package__ in (None, ""):      # direct script run: put the repo root on path
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -35,6 +36,7 @@ from tools.host_gui.session import (
     ControllerSession,
     SessionError,
     SessionState,
+    TransportLike,
 )
 from tools.host_gui.transport import TransportError
 
@@ -87,12 +89,40 @@ class AcceptanceReport:
         return "\n".join(lines)
 
 
+# The roles a link plays, as Protocols. `Link` used to type every field as
+# `object`, which told a type checker nothing while the script went on to call
+# `first.transport.request(...)`, `first.pe.faults` and
+# `first.adapter.set_irq(...)` unchecked. These say what each side must offer,
+# and they are structural, so the real FakePE / PicoBridge / TTAdapter satisfy
+# them without inheriting anything. Stdlib only, as this module must stay.
+class _PEModel(Protocol):
+    faults: int
+    dmem: bytearray
+    timer: int
+    run: bool
+    read_fault_policy: str
+
+
+class _Adapter(Protocol):
+    # Positional-only: TTAdapter spells this `active` and FakeTTAdapter spells
+    # it `asserted`, and this script only ever calls it positionally. A
+    # name-based protocol would demand one spelling and reject the other,
+    # which says nothing useful about the capability.
+    def set_irq(self, asserted: bool, /) -> None: ...
+
+    def set_run(self, active: bool, /) -> None: ...
+
+
+class _Bridge(Protocol):
+    def poll_irq(self) -> list[dict]: ...
+
+
 @dataclass
 class Link:
-    transport: object
-    pe: object | None = None
-    adapter: object | None = None
-    bridge: object | None = None
+    transport: TransportLike
+    pe: _PEModel | None = None
+    adapter: _Adapter | None = None
+    bridge: _Bridge | None = None
 
 
 def build_fake_link(project=DEFAULT_PROJECT):
@@ -136,6 +166,21 @@ def _r2_detail(text: str) -> str:
     """
     return (f"{text} [chip-confirmed in simulation (tb_pe_ctrl_r2, 15/15 "
             f"byte-exact); hardware acceptance not yet run]")
+
+
+def _r3_detail(text: str) -> str:
+    """Tag every R3 debug-control line with its evidence status.
+
+    The R3 contract is IMPLEMENTED chip-side (pe_ctrl.v opcodes 0x21-0x24, and
+    the chip's own tb_pe_ctrl_r3 with a 7-mutant gate). This script, however,
+    is a HOST script: these cases check the host's session/API path against the
+    FakePE model, and the host's own golden vectors in
+    `reviews/2026-09-25/R3-DEBUG-VERIFICATION.json` are still
+    chip_confirmed=false -- no step has been run against tb_pe_ctrl_r3 yet.
+    The tag says exactly that, and does not borrow the chip's evidence.
+    """
+    return (f"{text} [host-side only: R3 vectors NOT yet chip-confirmed "
+            f"(tb_pe_ctrl_r3 has not run them); hardware acceptance not run]")
 
 
 def _observe_heartbeat(session, pe, *, tries=3, sleep=time.sleep):
@@ -328,6 +373,9 @@ def run_acceptance(*, fake, device=None, project=DEFAULT_PROJECT, board=None,
     except SessionError as exc:
         report.record("r2_read_dmem", False, _r2_detail(str(exc)))
 
+    # Initialised here so the invariant does not depend on which branch of the
+    # try/except below runs.
+    range_latched = False
     try:
         session.read_imem(IMEM_WORDS - 1, 2)      # must be RANGE, never wrap
         report.record("r2_range", False,
@@ -382,6 +430,77 @@ def run_acceptance(*, fake, device=None, project=DEFAULT_PROJECT, board=None,
                                  "stopped"))
     except SessionError as exc:
         report.record("r2_dump_header", False, _r2_detail(str(exc)))
+
+    # ---- R3 debug control (implemented chip-side; host cases only) ---------
+    # The scripted debug walk a real board-in-the-loop run would perform. The
+    # expectations are the contract's, but the EVIDENCE is host-side: the
+    # golden vectors in the R3 package are still chip_confirmed=false.
+    def r3(name, fn):
+        try:
+            ok, detail = fn()
+        except SessionError as exc:
+            ok, detail = False, str(exc)
+        report.record(name, ok, _r3_detail(detail))
+
+    def debug_status_case():
+        snapshot = session.debug_status()
+        return True, (f"state={snapshot.state_name} pc={snapshot.pc} "
+                      f"a=0x{snapshot.a:02X} armed={snapshot.armed} "
+                      f"hit={snapshot.hit}")
+
+    def debug_step_case():
+        step = session.debug_step()
+        return True, (f"one instruction retired -> pc_next={step.pc_next} "
+                      f"state={step.state_name} (session {session.state})")
+
+    def bp_arm_case():
+        armed = session.bp_set(2)
+        return True, (f"armed at {armed.bp_addr} flags=0x{armed.bp_flags:02X} "
+                      f"state={armed.state_name}")
+
+    def bp_hit_case():
+        session.bp_set(2)                    # arm, then step onto it
+        seen = []
+        for _ in range(4):
+            seen.append(session.debug_step())
+            if seen[-1].hit:
+                break
+        if not any(step.hit for step in seen):
+            return False, "never reported a hit (states: " + \
+                ",".join(step.state_name for step in seen) + ")"
+        hit = next(step for step in seen if step.hit)
+        return True, (f"stepped onto the armed address: pc_next={hit.pc_next} "
+                      f"state={hit.state_name} flags=0x{hit.bp_flags:02X} "
+                      f"(stop-before: the instruction there has NOT run)")
+
+    def bp_release_case():
+        released = session.bp_clr()
+        after = session.debug_status()
+        return (True,
+                (f"cleared: state={released.state_name}, then "
+                 f"{after.state_name} pc={after.pc} armed={after.armed}"))
+
+    def step_while_running_case():
+        # Raise the strap WITHOUT telling the session, so the session's own
+        # guard does not mask the chip's refusal: the chip must answer
+        # NOT_READY. This is the one case that drives the run strap directly.
+        first.transport.request("start")
+        try:
+            session.debug_step()
+        except SessionError as exc:
+            return (f"status {P.STATUS_NOT_READY}" in str(exc),
+                    f"free-running core refused the step ({exc})")
+        finally:
+            first.transport.request("stop")
+        return False, "a free-running core accepted a step"
+
+    for name, case in (("r3_debug_status", debug_status_case),
+                       ("r3_debug_step", debug_step_case),
+                       ("r3_bp_set", bp_arm_case),
+                       ("r3_bp_hit_stop_before", bp_hit_case),
+                       ("r3_bp_clr_releases", bp_release_case),
+                       ("r3_step_while_running", step_while_running_case)):
+        r3(name, case)
 
     chip_only = ("IRQ_N and sticky status faults do not exist until RTL "
                  "phase R1 (chip-side, under the chip-repo manager)")

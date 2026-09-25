@@ -184,7 +184,16 @@ async function refresh() {
       if (health.state === "RUNNING") {
         renderCpu((await api("/api/read_cpu")).cpu);
       }
+      try {
+        renderDebug(await api("/api/debug"));
+      } catch (error) {
+        // A chip without R3 answers UNSUPPORTED; the panel says so instead of
+        // leaving stale values on screen.
+        $("debug-state").textContent = "not supported by this chip";
+        debugReady("DISCONNECTED");
+      }
     }
+    debugReady(health.state);
   } catch (error) {
     setMessage(error.message, true);
   }
@@ -247,6 +256,62 @@ async function main() {
       } catch (error) { setMessage(error.message, true); }
     });
   }
+
+  // ---- R3 debug panel ----------------------------------------------------
+  const debugEls = ["debug-state", "debug-pc", "debug-bp", "debug-bp-flags",
+                     "debug-run"];
+  const debugButtons = ["debug-step", "bp-set", "bp-clr", "debug-resume"];
+
+  function renderDebug(debug) {
+    // The chip's own state word drives the label; "armed" and "hit" come from
+    // bp_flags, never from the address -- a breakpoint at 0 is legal and is
+    // only distinguishable by bit0.
+    $("debug-state").textContent = `${debug.state_name} (${debug.state})`;
+    $("debug-pc").textContent = `0x${debug.pc.toString(16).padStart(3, "0")}`;
+    $("debug-bp").textContent = debug.armed
+      ? `armed at 0x${debug.bp_addr.toString(16).padStart(3, "0")}` : "disarmed";
+    $("debug-bp-flags").textContent =
+      `0x${debug.bp_flags.toString(16).padStart(2, "0")}` +
+      `${debug.hit ? " (hit latched)" : ""}`;
+    $("debug-run").textContent = debug.run ? "high" : "low";
+  }
+
+  function debugReady(state) {
+    // Step is only legal when the core is held or stopped; a free-running core
+    // answers NOT_READY, so the button is disabled instead of inviting an
+    // error. Setting a breakpoint IS legal while running.
+    const held = state === "DEBUG_HOLD" || state === "BP_HIT" ||
+                 state === "STOPPED" || state === "LOADED";
+    $(debugButtons[0]).disabled = !held;
+    for (const id of debugButtons.slice(1)) $(id).disabled = state === "DISCONNECTED";
+  }
+
+  async function debugCall(path, body) {
+    try {
+      const result = await api(path, { method: "POST", body: JSON.stringify(body) });
+      const payload = result.debug || result.step || result.breakpoint;
+      if (payload) renderDebug({ ...payload, state_name: result.state_name ||
+        payload.state_name, armed: result.armed ?? Boolean(payload.bp_flags & 1),
+        hit: result.hit ?? Boolean(payload.bp_flags & 2), run: payload.run ?? 0 });
+      setDebugMessage(`${path} ok`);
+      await refresh();
+    } catch (error) {
+      setDebugMessage(error.message, true);
+    }
+  }
+
+  function setDebugMessage(text, bad) {
+    const el = $("debug-message");
+    el.textContent = text;
+    el.classList.toggle("error", Boolean(bad));
+  }
+
+  const bpAddress = () => Number($("bp-address").value);
+
+  $("debug-step").addEventListener("click", () => debugCall("/api/debug/step", {}));
+  $("bp-set").addEventListener("click", () => debugCall("/api/debug/bp_set", { address: bpAddress() }));
+  $("bp-clr").addEventListener("click", () => debugCall("/api/debug/bp_clr", {}));
+  $("debug-resume").addEventListener("click", () => debugCall("/api/debug/resume", { address: bpAddress() }));
 
   try {
     const socket = new WebSocket(`ws://${location.host}/api/events`);

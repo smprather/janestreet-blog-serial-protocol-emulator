@@ -474,63 +474,55 @@ class PicoBridge:
         return {"sclk_hz": hz, "sclk_hz_max": cap}
 
     # ---- R3 debug control ---------------------------------------------------
-    # These ops speak the DRAFT R3 contract (opcodes 0x21-0x24). The opcode
-    # numbers are fixed by the manager dispatch; the response layouts are the
-    # host's provisional reading (see tools/host_gui/r3_reads.py) and are NOT
-    # chip-confirmed. They are implemented here, on the Pico, so the debug path
-    # is not a host-only fiction: on a chip without R3 the PE answers
-    # UNSUPPORTED and the host surfaces that verbatim rather than pretending.
+    # The implemented pe_ctrl.v contract (2026-09-25), transcribed. The shapes
+    # are the RTL's, and the pico copies (pe_frame) carry the opcodes, so the
+    # Pico speaks the real debug protocol rather than a host-only fiction: on a
+    # chip without R3 the PE answers UNSUPPORTED and the host surfaces that
+    # verbatim. The five-word prefix is (status, state, pc, bp_addr, bp_flags);
+    # BP_SET carries exactly one payload word, the others take none.
     #
-    # Note `_op_start` is deliberately left alone. It reports the strap it
-    # commanded, because that is all this bridge can know without a second
-    # SPI round-trip on every start. Whether a resume that lands on an armed
-    # breakpoint traps is the CHIP's call, so the host confirms the real
-    # debug state with `debug_status` instead of the bridge guessing it.
+    # `_op_start` is deliberately untouched: it reports the strap it
+    # commanded, because that is all this bridge can know without a second SPI
+    # round-trip on every start. Whether a resume lands on an armed breakpoint
+    # is the chip's call, so the host confirms the real state with debug_status.
     def _op_debug_step(self, args):
-        steps = _int_arg(args, "steps", 1)
-        frame = self._pe_request(pe_frame.OP_DEBUG_STEP, (steps,))
-        payload = frame.payload
+        payload = self._pe_request(pe_frame.OP_DEBUG_STEP).payload
         if not payload or payload[0] != pe_frame.STATUS_OK:
+            # A refusal (NOT_READY) still answers the full prefix; a bad frame
+            # is a single status word. Forward whatever came back verbatim.
             return {"status": payload[0] if payload
-                    else pe_frame.STATUS_BAD_FRAME, "steps": 0, "hit": 0}
-        return {"status": payload[0], "steps": payload[1], "pc": payload[2],
-                "a": payload[3], "x": payload[4], "y": payload[5],
-                "insn": payload[6], "hit": payload[7]}
+                    else pe_frame.STATUS_BAD_FRAME, "payload": list(payload)}
+        return {"status": payload[0], "state": payload[1], "pc_next": payload[2],
+                "bp_addr": payload[3], "bp_flags": payload[4],
+                "hit": bool(payload[4] & 0b10)}
 
     def _op_bp_set(self, args):
-        slot = _int_arg(args, "slot", 0)
         address = _int_arg(args, "address", 0)
-        frame = self._pe_request(pe_frame.OP_DEBUG_BP_SET, (slot, address))
-        payload = frame.payload
-        if not payload or payload[0] != pe_frame.STATUS_OK:
-            return {"status": payload[0] if payload
-                    else pe_frame.STATUS_BAD_FRAME, "slot": slot,
-                    "address": address}
-        return {"status": payload[0], "slot": payload[1], "address": payload[2],
-                "bp_count": payload[3] if len(payload) > 3 else 0}
+        payload = self._pe_request(pe_frame.OP_DEBUG_BP_SET, (address,)).payload
+        if not payload:
+            return {"status": pe_frame.STATUS_BAD_FRAME}
+        return {"status": payload[0], "state": payload[1], "pc": payload[2],
+                "bp_addr": payload[3], "bp_flags": payload[4],
+                "armed": bool(payload[4] & 0b01)}
 
     def _op_bp_clr(self, args):
-        slot = _int_arg(args, "slot", 0)
-        frame = self._pe_request(pe_frame.OP_DEBUG_BP_CLR, (slot,))
-        payload = frame.payload
-        if not payload or payload[0] != pe_frame.STATUS_OK:
-            return {"status": payload[0] if payload
-                    else pe_frame.STATUS_BAD_FRAME, "slot": slot}
-        return {"status": payload[0], "slot": payload[1],
-                "bp_count": payload[2] if len(payload) > 2 else 0}
+        payload = self._pe_request(pe_frame.OP_DEBUG_BP_CLR).payload
+        if not payload:
+            return {"status": pe_frame.STATUS_BAD_FRAME}
+        return {"status": payload[0], "state": payload[1], "pc": payload[2],
+                "bp_addr_before": payload[3], "bp_flags": payload[4]}
 
     def _op_debug_status(self, args):
         payload = self._pe_request(pe_frame.OP_DEBUG_STATUS).payload
         if not payload or payload[0] != pe_frame.STATUS_OK:
             return {"status": payload[0] if payload
                     else pe_frame.STATUS_BAD_FRAME}
-        return {"status": payload[0], "debug_state": payload[1],
-                "run": payload[2], "pc": payload[3], "a": payload[4],
-                "x": payload[5], "y": payload[6], "insn": payload[7],
-                "bp_count": payload[8] if len(payload) > 8 else 0,
-                "bp_mask": payload[9] if len(payload) > 9 else 0,
-                "hit_slot": payload[10] if len(payload) > 10 else 0xFFFF,
-                "hit_address": payload[11] if len(payload) > 11 else 0xFFFF}
+        return {"status": payload[0], "state": payload[1], "pc": payload[2],
+                "bp_addr": payload[3], "bp_flags": payload[4], "run": payload[5],
+                "a": payload[6], "x": payload[7], "y": payload[8],
+                "insn": payload[9],
+                "armed": bool(payload[4] & 0b01),
+                "hit": bool(payload[4] & 0b10)}
 
 
 def run(project=None, clock_hz=60_000_000):

@@ -131,6 +131,49 @@ class Api:
     def dump(self) -> dict:
         return {"dump": asdict(self.session.dump_core())}
 
+    # ---- R3 debug control --------------------------------------------------
+    # Thin wrappers over the session, which owns the state machine. The
+    # responses carry the chip's own state word so the GUI can render
+    # DEBUG_HOLD and BP_HIT as what they are, and `bp_flags` so "armed" and
+    # "hit" are never inferred from the address (address 0 is a legal
+    # breakpoint, told apart by bit0 only).
+    def debug_status(self) -> dict:
+        snapshot = self.session.debug_status()
+        return {"debug": asdict(snapshot),
+                "state_name": snapshot.state_name,
+                "armed": snapshot.armed,
+                "hit": snapshot.hit}
+
+    def debug_step(self) -> dict:
+        result = self.session.debug_step()
+        return {"step": asdict(result), "state_name": result.state_name,
+                "hit": result.hit}
+
+    def bp_set(self, address) -> dict:
+        # The value is validated by the session, which raises a typed
+        # SessionError (-> 409) for a non-integer. Coercing here with int()
+        # would raise ValueError out of the route instead, because guarded()
+        # only catches ApiError and SessionError.
+        result = self.session.bp_set(address)
+        return {"breakpoint": asdict(result), "state_name": result.state_name,
+                "armed": result.armed}
+
+    def bp_clr(self) -> dict:
+        result = self.session.bp_clr()
+        return {"breakpoint": asdict(result), "state_name": result.state_name}
+
+    def resume_with_breakpoint(self, address) -> dict:
+        """Step off, release, re-arm -- the contract's continue recipe.
+
+        Returns the same shape as the other debug endpoints (state_name,
+        armed, hit alongside the snapshot), so the GUI's one response handler
+        can render any of them.
+        """
+        self.session.resume_with_breakpoint(address)
+        snapshot = self.session.debug_status()
+        return {"debug": asdict(snapshot), "state_name": snapshot.state_name,
+                "armed": snapshot.armed, "hit": snapshot.hit}
+
 
 def create_app(api: Api, config: ServerConfig):
     """Build the FastAPI app, or fail loudly when FastAPI is not installed."""
@@ -191,6 +234,26 @@ def create_app(api: Api, config: ServerConfig):
     @app.post("/api/dump")
     def dump():
         return guarded(api.dump)()
+
+    @app.get("/api/debug")
+    def debug():
+        return guarded(api.debug_status)()
+
+    @app.post("/api/debug/step")
+    def debug_step():
+        return guarded(api.debug_step)()
+
+    @app.post("/api/debug/bp_set")
+    def bp_set(body: dict):
+        return guarded(api.bp_set)(body.get("address", 0))
+
+    @app.post("/api/debug/bp_clr")
+    def bp_clr():
+        return guarded(api.bp_clr)()
+
+    @app.post("/api/debug/resume")
+    def resume(body: dict):
+        return guarded(api.resume_with_breakpoint)(body.get("address", 0))
 
     @app.websocket("/api/events")
     async def events(websocket: WebSocket):
