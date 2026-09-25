@@ -73,9 +73,8 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
   side effect.
 - **Observe.** Status shows run/state, registers, the heartbeat timer, fault
   bits and words written; a register dump and bounded memory reads are
-  available while stopped (the chip's readback is the R2 item below). A chip
-  fault surfaces as an event and the GUI labels what is *host-commanded*,
-  *board-observed* or *chip-confirmed*.
+  available while stopped. A chip fault surfaces as an event and the GUI
+  labels what is *host-commanded*, *board-observed* or *chip-confirmed*.
 - **The bridge is real firmware.** `main.py` runs on the Pico, owns reset,
   the 60 MHz project clock and the SPI pins, and was verified on a real
   MicroPython interpreter (not just by inspection).
@@ -85,21 +84,24 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
 | Claim | Status | Evidence |
 |---|---|---|
 | UART / SPI / I2C / 10BASE-T personas run as firmware | **RTL-proven** | `tb_pe_soc_uart`, `tb_pe_soc_spi`, `tb_pe_soc_i2c*`, `tb_pe_soc_eth*`, `tb_pe_eth_tx` |
-| Full regression is green | **RTL-proven** | `run_all.sh --fast -j8` → exit 0: **RTL 33/33, firmware 26/26, lint clean, 12 gates, 10 mutation suites** |
+| Full regression is green | **RTL-proven** | `run_all.sh --fast -j8` → exit 0: **RTL 33/33, firmware 26/26, lint clean, 12 gates, 10 mutation suites** (R2 is registered in `run_all`) |
 | 60 MHz maps and routes | **RTL-proven (mapped, not routed)** | area + screen reports; physical flow intentionally out of scope |
 | Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, MicroPython conformance, acceptance `--fake` → 22 PASS / 0 FAIL / 1 SKIP) |
 | Bridge on a real MicroPython | **measured** | built the MicroPython unix port and ran the deployed modules on it; found and fixed 5 deployment blockers (`reviews/2026-09-25/HOST-BRIDGE-MICROPYTHON.md`) |
 | Framed host bus (PING/LOAD/STATUS/CLEAR_FAULT/TARGET, target-1 loopback, sticky faults, `IRQ_N`) | **RTL-proven** | chip-side R1 landed and verified with mutation coverage; the host's bridge/acceptance drive the same contract |
 | Host protocol on real silicon (R1) | **LANDED + verified** | the chip team landed the framed bus, `IRQ_N` and target 1; the host stack speaks that exact contract today |
-| Memory/register readback (R2) | **pending** | the chip still has no MISO readback path; the host side is *ready and gated* (`reviews/2026-09-25/R2-READ-VERIFICATION.json` is the acceptance spec the chip passes once R2 lands) |
-| Board-in-the-loop acceptance | **pending** | runner + runbook exist (`docs/host-bridge-bringup.md`); needs a board |
+| Memory/register readback (R2) | **chip-confirmed (simulation)** | chip R2 landed and registered in `run_all`: `tb_pe_ctrl_r2` reports **15/15** golden steps PASS, byte-exact (CRC included) with the model image loaded per vector, the opening 3-word LOAD replayed as a real frame, and `pe_ctrl` STA-screened (chip repo: `R2-READ-PATH-REVIEW.md`); the host consumed those same steps as its acceptance spec (`reviews/2026-09-25/R2-READ-VERIFICATION.json`) |
+| Liveness is observable (P3) | **chip-confirmed (simulation)** | R2's STATUS is 11 words incl. `pc/a/x/y/timer` at native widths, and `READ_CPU` is the one **non-halting** read, so a host can watch a RUNNING program (chip P3 finding closed; host GUI surfacing is this branch) |
+| Board-in-the-loop acceptance | **pending** | runner + runbook exist (`docs/host-bridge-bringup.md`); needs a board. This is the one thing the demo table marks not-done |
 | Physical flow (DRC/LVS) | **out of scope by design** | deferred in the plan; no physical tools run |
 
 The honest shape of the entry: the *chip* is a verified microcontroller with
-four working protocol personas and a verified framed host bus; the *host
-stack* is a verified client whose real bridge firmware already speaks that
-bus, with the chip's register/memory readback (R2) the one remaining
-integration. Nothing above claims more than the artifacts.
+four working protocol personas, a verified framed host bus (R1) and verified
+register/memory readback (R2, byte-exact against the same golden vectors the
+host gates on); the *host* stack is a verified client whose real bridge
+firmware speaks that bus and whose acceptance spec is the chip's own passing
+table. The one thing not yet demonstrated is the **physical** run - a Pico over
+USB with a real shuttle - which is stated as such everywhere it appears.
 
 ## Timings worth quoting
 

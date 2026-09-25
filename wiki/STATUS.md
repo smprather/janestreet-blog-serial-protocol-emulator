@@ -381,9 +381,11 @@
 > ruff/compileall clean, and `acceptance.py --fake` at 22 PASS / 0 FAIL /
 > 1 SKIP. **Nothing here is chip-confirmed yet**: the PE host protocol, read
 > path and IRQ are RTL phases R1/R2 (plan Tasks 3-5, under the chip-side
-> manager), and the real Pico/USB run is unexecuted. The host side is
-> R2-ready (session/API/page read_cpu, R2 read gate, idle-fault visibility);
-> see `reviews/2026-09-25/HOST-GUI-R2-PREP.md` and
+> manager), and the real Pico/USB run is unexecuted. **R2 has since landed
+> on the chip and is chip-confirmed in simulation** (15/15 golden steps
+> byte-exact); the host side carries the session/API/page read_cpu, the R2
+> read gate and idle-fault visibility. See
+> `reviews/2026-09-25/HOST-GUI-R2-PREP.md` and
 > [[plans/host-controller-gui]].
 <!-- END gui-worker host block (top note) -->
 
@@ -734,7 +736,7 @@ about `main`'s chip state.**
 | Fake PE + fake bridge | `tools/host_gui/fake_pe.py` | in-memory chip model: LOAD/STATUS/READ_CPU/READ_IMEM/READ_DMEM/DUMP_CORE/CLEAR_FAULT/TARGET + loopback target 1, sticky faults, run gating | 329 cases drive it |
 | Pico bridge | `tools/host_bridge/{pe_frame,tt_adapter,main}.py` | MicroPython frame codec, TT SDK HAL (project/clock/reset/run/`uio_oe_pico`/CS_N), newline-JSON endpoint with framed SPI, LOAD-forces-run-0, start-after-load, IRQ polling, 5 MHz first-pass SCLK cap | 43 cases; 8 fake-`ttboard` cases; 4 cases with the real host stack over the real bridge |
 | Acceptance runner | `tools/host_bridge/acceptance.py` | one scripted sequence for `--fake` (no device) and `--device` (hardware); per-step PASS/FAIL/SKIP + manifest; `dialout` hint instead of a traceback | `RESULT: PASS (22 PASS, 0 FAIL, 1 SKIP)` |
-| R2 read contract (host side) | `tools/host_gui/r2_reads.py` | the seven R2 read obligations as named probes, each `chip_confirmed=False`; read-range latches sticky `FAULT_RANGE`, READ payload low-word-first ascending (manager rulings) | 15 cases, green |
+| R2 read contract (host side) | `tools/host_gui/r2_reads.py` | the seven R2 read obligations as named probes; read-range latches sticky `FAULT_RANGE`, READ payload low-word-first ascending, ISA widths (pc 10, a/x/y 8, insn 16) — **chip-confirmed in simulation**: `tb_pe_ctrl_r2` passes all 15 golden steps byte-exact (chip repo `R2-READ-PATH-REVIEW.md`) | 15 cases, green; package `chip_confirmed: true` |
 
 Full result records, commands and limits: `reviews/2026-09-24/HOST-GUI-PHASE1B.md`,
 `reviews/2026-09-25/HOST-GUI-PHASE2-BRIDGE.md`,

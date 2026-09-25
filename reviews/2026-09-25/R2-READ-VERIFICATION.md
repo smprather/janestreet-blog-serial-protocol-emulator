@@ -1,4 +1,4 @@
-# R2 read-path verification package (host contract, NOT chip-confirmed)
+# R2 read-path verification package (host contract; chip-confirmed in simulation)
 
 This is the **R2 acceptance spec** for the chip side, handed over by the
 gui-worker so the protocol worker can wire `tb_pe_host.v` (and the R2 RTL in
@@ -22,14 +22,22 @@ values instead of re-deriving the contract.
   enforce this), so the artifacts can never silently disagree with the host
   model.
 
-## Status: NOT chip-confirmed
+## Status: CHIP-CONFIRMED in simulation (2026-09-25)
 
-Every vector carries `"chip_confirmed": false`. These are the **agreed
-expectations** the chip read path must satisfy, derived from the host's
-`FakePE` model — they are the gate, not evidence that the RTL passes it. The
-R2 read path is chip-side work under the chip manager's dispatch; when it lands,
-the same vectors are driven against real RTL and `chip_confirmed` flips only
-with that run as evidence.
+**Chip R2 is complete.** Every one of the 15 golden steps now carries
+`"chip_confirmed": true` together with a `chip_evidence` citation. The evidence
+is the chip repo's `tb/tb_pe_ctrl_r2.v`, which reports per-vector PASS for all
+15 steps — byte-exact including CRC, with the model image loaded per vector
+and the session's opening 3-word LOAD replayed as a real framed frame. The
+chip-side record is `reviews/2026-09-25/R2-READ-PATH-REVIEW.md` (section
+"Conformance: 15/15, per vector"), which names every step. That run also found
+and fixed three real RTL defects (a dropped trailing dmem byte, a response
+launch that never fired, and an X on the MISO pad before the first frame).
+
+What is **not** claimed: the real-board acceptance run — a Pico over USB CDC
+with a physical shuttle — has not been executed. The host probes in
+`r2_reads.py` still run against the `FakePE` model; what the chip confirms is
+that the RTL matches these same expectations.
 
 ## Manager RULINGs encoded (2026-09-25)
 

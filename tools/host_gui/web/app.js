@@ -52,10 +52,45 @@ function renderStatus(status) {
   $("faults").textContent = status.faults
     ? `0x${status.faults.toString(16).padStart(4, "0")}`
     : "none";
+  noteHeartbeat(status.timer, status.run);
+}
+
+// Liveness (P3, host half): the chip's heartbeat is the STATUS timer. A
+// RUNNING core whose timer stops advancing is exactly the liveness gap P3
+// describes, so the indicator is driven by whether the timer MOVES between
+// samples, not by run alone:
+//   unknown -> no sample yet; idle -> stopped (a still core is fine);
+//   alive -> running and the timer advanced; stale -> running but the timer
+//   has not moved (the liveness gap). NOT chip-confirmed until a real run.
+let lastHeartbeat = null;
+let lastRun = 0;
+function setLiveness(state, label) {
+  const el = $("liveness");
+  if (!el) return;
+  el.dataset.state = state;
+  el.textContent = `liveness: ${label}`;
+}
+function noteHeartbeat(timer, run) {
+  lastRun = run ? 1 : 0;
+  if (!Number.isInteger(timer)) { setLiveness("unknown", "unknown"); return; }
+  $("heartbeat").textContent = `0x${timer.toString(16).padStart(4, "0")}`;
+  if (!run) { lastHeartbeat = null; setLiveness("idle", "idle (core stopped)"); return; }
+  if (lastHeartbeat === null) {
+    lastHeartbeat = timer;
+    setLiveness("alive", "running (heartbeat: starting)");
+    return;
+  }
+  if (timer !== lastHeartbeat) {
+    lastHeartbeat = timer;
+    setLiveness("alive", "alive & running");
+  } else {
+    setLiveness("stale", "running but heartbeat stalled");
+  }
 }
 
 // The live CPU header comes from READ_CPU, the one non-halting read, so it
-// refreshes while the core runs (R2; not chip-confirmed until the RTL lands).
+// refreshes while the core runs (R2; chip-confirmed in simulation, hardware
+// acceptance still open).
 function renderCpu(cpu) {
   if (!cpu) return;
   for (const [element, key] of [["cpu-pc", "pc"], ["cpu-a", "a"],
@@ -72,7 +107,12 @@ let cpuPoll = null;
 function setCpuPolling(on) {
   if (on && !cpuPoll) {
     cpuPoll = setInterval(async () => {
-      try { renderCpu((await api("/api/read_cpu")).cpu); } catch (error) { /* running read */ }
+      // READ_CPU is non-halting, so this also keeps the heartbeat moving while
+      // the core runs: one read, registers + liveness together.
+      try {
+        renderCpu((await api("/api/read_cpu")).cpu);
+        renderStatus((await api("/api/status")).status);
+      } catch (error) { /* running read */ }
     }, 1000);
   } else if (!on && cpuPoll) {
     clearInterval(cpuPoll);

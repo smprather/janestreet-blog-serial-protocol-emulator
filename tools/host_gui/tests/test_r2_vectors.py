@@ -6,8 +6,13 @@ checked-in JSON must match a fresh build byte for byte. That makes it a
 *contract* the chip-side R2 testbench can consume as golden values, and a
 drift gate for the host at the same time.
 
-Still NOT chip-confirmed: these are the agreed expectations, not silicon
-evidence. Every vector carries `chip_confirmed: false`.
+Chip R2 is COMPLETE (2026-09-25): the chip repo's tb/tb_pe_ctrl_r2.v reports
+per-vector PASS for all 15 golden steps, byte-exact including CRC, with the
+model image loaded per vector (evidence: the chip repo's
+reviews/2026-09-25/R2-READ-PATH-REVIEW.md). Steps therefore carry
+`chip_confirmed: true` with a citation; a step with no citation stays false.
+This confirms the RTL in SIMULATION - the real-board acceptance run is still
+unexecuted and is not claimed.
 """
 
 from __future__ import annotations
@@ -35,16 +40,52 @@ class TestR2VectorPackage(unittest.TestCase):
         self.assertEqual(self.package["protocol"]["sync"], P.SYNC)
         self.assertEqual(self.package["protocol"]["version"], P.VERSION)
         self.assertEqual(self.package["protocol"]["crc"], "CRC-16/CCITT-FALSE")
-        self.assertFalse(self.package["chip_confirmed"])
-        self.assertIn("not chip-confirmed", self.package["notice"].lower())
+        self.assertTrue(self.package["chip_confirmed"])
+        self.assertIn("chip-confirmed in simulation",
+                      self.package["notice"].lower())
+        # the honest boundary: simulation confirmed, hardware not
+        self.assertIn("not hardware-confirmed",
+                      self.package["notice"].lower())
 
-    def test_every_vector_is_not_chip_confirmed(self):
+    def test_every_vector_reports_its_confirmation_state(self):
         self.assertTrue(self.package["vectors"])
         for vector in self.package["vectors"]:
             with self.subTest(vector=vector["name"]):
-                self.assertFalse(vector["chip_confirmed"])
                 self.assertTrue(vector["obligation"].strip())
                 self.assertTrue(vector["steps"])
+                self.assertEqual(
+                    vector["chip_confirmed"],
+                    all(step["chip_confirmed"] for step in vector["steps"]))
+
+    def test_every_confirmed_step_cites_chip_evidence(self):
+        """A chip_confirmed=true step is only allowed WITH a citation."""
+        cited = 0
+        for vector in self.package["vectors"]:
+            for step in vector["steps"]:
+                with self.subTest(vector=vector["name"], step=step["name"]):
+                    if step["chip_confirmed"]:
+                        evidence = step["chip_evidence"]
+                        self.assertIsNotNone(
+                            evidence, "a confirmed step must cite evidence")
+                        self.assertIn("R2-READ-PATH-REVIEW",
+                                      evidence["review"])
+                        self.assertIn("tb_pe_ctrl_r2", evidence["testbench"])
+                        self.assertIn("15/15", evidence["conformance"])
+                        self.assertIn("date", evidence)
+                        # the citation must also say what it does NOT prove
+                        self.assertIn("SIMULATION", evidence["scope"])
+                        cited += 1
+                    else:
+                        self.assertIsNone(step.get("chip_evidence"))
+        self.assertEqual(cited, 15, "all 15 golden steps are chip-confirmed")
+
+    def test_no_step_is_confirmed_without_being_in_the_evidence_map(self):
+        mapped = V.CHIP_EVIDENCE["confirmed_steps"]
+        for vector in self.package["vectors"]:
+            for step in vector["steps"]:
+                with self.subTest(step=step["name"]):
+                    self.assertEqual(step["chip_confirmed"],
+                                     step["name"] in mapped)
 
     def test_every_step_carries_exact_framed_words(self):
         for vector in self.package["vectors"]:
@@ -105,7 +146,7 @@ class TestR2VectorPackage(unittest.TestCase):
     def test_readme_exists_and_states_the_status(self):
         self.assertTrue(PACKAGE_README.is_file(), f"missing {PACKAGE_README}")
         text = PACKAGE_README.read_text(encoding="utf-8")
-        self.assertIn("not chip-confirmed", text.lower())
+        self.assertIn("chip-confirmed", text.lower())
         self.assertIn("low-word-first", text.lower())
         self.assertIn("R2-READ-VERIFICATION.json", text)
 
@@ -133,10 +174,10 @@ class TestReadmemhExport(unittest.TestCase):
     def test_manifest_covers_every_vector_and_step(self):
         self.assertEqual(len(self.manifest["vectors"]),
                          len(self.package["vectors"]))
-        self.assertFalse(self.manifest["chip_confirmed"])
+        self.assertTrue(self.manifest["chip_confirmed"])
         for vector in self.manifest["vectors"]:
             with self.subTest(vector=vector["name"]):
-                self.assertFalse(vector["chip_confirmed"])
+                self.assertTrue(vector["chip_confirmed"])
                 self.assertEqual(len(vector["steps"]),
                                  len(self.package["vectors"][
                                      [v["name"] for v in
@@ -191,7 +232,7 @@ class TestReadmemhExport(unittest.TestCase):
     def test_hex_readme_explains_readmemh_use(self):
         readme = (V.HEX_DIR / "README.md").read_text(encoding="utf-8")
         self.assertIn("$readmemh", readme)
-        self.assertIn("not chip-confirmed", readme.lower())
+        self.assertIn("chip-confirmed", readme.lower())
         self.assertIn("manifest.json", readme)
 
 
@@ -307,7 +348,7 @@ class TestModelImageShipsWithTheVectors(unittest.TestCase):
         self.assertIn("$readmemh", readme)
         self.assertIn("imem.hex", readme)
         self.assertIn("dmem.hex", readme)
-        self.assertIn("not chip-confirmed", readme.lower())
+        self.assertIn("chip-confirmed", readme.lower())
 
 
 if __name__ == "__main__":

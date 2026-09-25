@@ -65,7 +65,9 @@ class TestFakeDryRun(unittest.TestCase):
         for check in r2:
             with self.subTest(check=check.name):
                 self.assertEqual(check.status, "PASS")
-                self.assertIn("not chip-confirmed", check.detail.lower())
+                # Chip R2 is confirmed in simulation; the hardware run is not.
+                self.assertIn("chip-confirmed in simulation",
+                              check.detail.lower())
 
     def test_range_fault_lifecycle_check_reports_the_sticky_fault(self):
         report = ACC.run_acceptance(fake=True)

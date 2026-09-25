@@ -374,9 +374,9 @@ session should read before the plan continues.
 |---|---|---|
 | Task 1 | image + frame contracts | **DONE** — `c12734e`, `153fbde` (reviewed as phase 1a) |
 | Task 2 | USB transport + Pico bridge | **DONE** — code `c28234d`, record phase 2 |
-| Task 3 | PE bidirectional host protocol (RTL) | OPEN — chip-side, chip-repo manager |
-| Task 4 | SoC + memory readback (RTL) | OPEN — chip-side, chip-repo manager |
-| Task 5 | wrapper/pin remap (RTL + docs) | OPEN — chip-side, chip-repo manager |
+| Task 3 | PE bidirectional host protocol (RTL) | **DONE (chip-side)** — R1 landed and verified; the host bridge speaks it |
+| Task 4 | SoC + memory readback (RTL) | **DONE (chip-side)** — R2 landed; all 15 golden steps pass byte-exact in `tb_pe_ctrl_r2` |
+| Task 5 | wrapper/pin remap (RTL + docs) | **DONE (chip-side)** — landed with R1/R2 |
 | Task 6 | local web GUI | **DONE (host side)** — `c12734e` (reviewed as phase 1b); page/transport/session/API covered, the real run needs the chip phases |
 | Task 7 | board-in-the-loop acceptance | **DONE (dry run)** — code `f6fdd65`, record phase 3; the real device run is hardware-gated and still unexecuted |
 | Task 8 | final verification + handoff | **DONE (host scope)** — this section; the RTL regression/synthesis steps stay with the chip manager's own verification, and the branch merge is the manager's integration call |

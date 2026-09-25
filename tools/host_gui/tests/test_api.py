@@ -148,6 +148,26 @@ class TestWebAssets(unittest.TestCase):
         self.assertIn("/api/status", app)
         self.assertIn("setInterval", app)
 
+    def test_page_surfaces_chip_liveness_from_the_heartbeat(self):
+        """P3 (host half): the user must see "the chip is alive and RUNNING".
+
+        The chip's heartbeat is the STATUS `timer`; a RUNNING core whose timer
+        stops advancing is exactly the liveness gap P3 describes. The page must
+        show the heartbeat value and an explicit alive/stale/idle indicator
+        driven by whether the timer actually moves.
+        """
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        self.assertIn("liveness", html)
+        self.assertIn("heartbeat", html)
+        app = (WEB / "app.js").read_text(encoding="utf-8")
+        self.assertIn("heartbeat", app)
+        self.assertIn("noteHeartbeat", app)
+        for state in ("alive", "stale", "idle", "unknown"):
+            with self.subTest(state=state):
+                self.assertIn(state, app)
+        # liveness is driven by the timer moving, not by run alone
+        self.assertIn("timer", app)
+
 
 class TestOptionalDependencies(unittest.TestCase):
     def test_have_fastapi_flag_matches_import(self):
