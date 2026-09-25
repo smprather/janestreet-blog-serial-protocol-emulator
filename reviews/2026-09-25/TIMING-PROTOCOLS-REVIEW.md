@@ -261,3 +261,224 @@ gui-worker's surface — manager-ruled **CLOSED as stale-premise, no code change
 wanted on either side**. I made **no edit** to either file; the resolution was to
 sync the tree, not to edit another actor's surface. *Lesson: for a stale-tree lint
 finding on another actor's code, pull the fix; do not hand-edit.*
+
+---
+
+## Act (a) DS18B20 1-Wire — CLOSED, in the regression
+
+Commit `6cc69f9`. `firmware/ds18b20.pe` (205 words) + `tb/tb_pe_soc_ds18b20.v`,
+in `run_all.sh` and `run_firmware_tests.sh`, and `mutate_timing_tb.sh` goes
+**14 → 26 cases, all 26 detected, 0 survived**.
+
+The flush note said the remaining fault was in the TB's sensor model ("the
+edge-driven level gate needs one more pass"). **The model was right and the
+firmware was wrong, in two places:**
+
+1. **THE POLARITY.** A 1-Wire *read* slot is LOW = 1 (the slave holds the line
+   down for a one); a *write* slot is the opposite, because there the host is
+   the one pulling down. `ph4` sampled with `JZ rb_was_zero` — it read a **zero**
+   from a line the sensor was pulling **down**. Both bytes came back bit-for-bit
+   complemented: `2b → d4`, `01 → fe`. The firmware's own header stated the
+   opposite of its code. Same invisible shape as the DHT11's reversed byte.
+2. **THE READ BYTE COUNTER** was initialised with `STM 10, A` — `dmem[10]` is the
+   **delay routine's** middle-counter target, the slot the write command counter
+   was moved off one commit earlier — and decremented at `dmem[8]`, which nothing
+   writes. So the loop banked the two *correct* bytes and then, with 255 slots
+   left instead of 1, walked the byte index up until it banked over `dmem[5]`
+   (its own index) and came back round to overwrite `dmem[0..1]`. That is why
+   the flush saw `ff ff` from a read path that was right for all sixteen slots.
+
+**The method note matters more than the bugs:** the model was debugged by
+hooking `pc=139` (`ph4`'s `IN`) and `pc=145/149` (the two `STM 4,A`) and reading
+`a`/`dmem[4]` per sample. The wire was never the suspect once the decoded
+samples were seen to be *exactly the complement* of the model's bits. A
+one-bit inversion looks like a protocol bug and is a polarity bug, and the way
+to tell them apart is to look at the accumulator, not the waveform.
+
+**The TB's header had been claiming checks it did not implement.** Implemented:
+the presence pulse inside 60–240 µs *and* the host's `pin_oe` released on every
+clock of it; each write slot's low period inside its own band (1–15 / 60–120 µs);
+exactly 16 read slots; every read slot's initiation pulse inside 1–15 µs; and the
+**sample instant inside the sensor's data window with ≥ 2 µs of margin at both
+ends**. The model gained a `tRDV` response delay at the datasheet's **maximum**
+(15 µs), so "sampled too early" became falsifiable, and its read edges now come
+off the **pads** rather than off its own state — which is what stopped it losing
+the master's next release while still inside the previous bit's hold (that bug
+silently ended the run at 8 slots).
+
+**A recorded limit, not a gloss:** `tLOW` is mid-band and deliberately *not* worst
+case, because with `tLOW` ∈ 15–60 and `tHIGH` ∈ 1–15 the two windows **overlap**
+and no single instant is correct for every legal sensor timing — the guaranteed
+window is one microsecond wide. Claiming the worst case there would be a
+stronger-sounding and false statement.
+
+Measured: reset 485.7 µs, presence 120.0 µs, write 1-low 5.0 µs / 0-low 64.8 µs,
+commands `cc`/`be`, 16 read slots, bytes `2b 01`, initiation pulses 6.2–6.3 µs,
+sample 10.8 µs after the response and 19.2 µs before the hold ends.
+
+`ow-sample-late` and `ow-write1-width` are the cases that justify the two new
+checks: both **decode correctly** and are caught by the margin and the band
+alone. Neither would be caught by a byte comparison, which is exactly why those
+checks exist.
+
+## Act (b) NEC infrared remote — CLOSED, in the regression
+
+Commit `a65e114`. `firmware/nec_ir.pe` (165 words) +
+`tb/tb_pe_soc_ir_nec.v`, and `mutate_timing_tb.sh` goes **26 → 37 cases, all 37
+detected, 0 survived**.
+
+The sharpest timing claim in the repository and the only act with **no wire**:
+the only thing that leaves the pin is light, so a receiver has to *find* a
+38 kHz burst and time the silences between bursts, and nothing resynchronises to
+anything. The carrier is fitted **to the clock**, not to microseconds.
+
+Measured off the pin: **carrier 38,049 Hz (+0.128 %)**, LOW half 787.95–794.95
+clocks, HIGH half 788.95 (spread 0.01), leader 8988.0 µs in 343 carrier cycles,
+leader gap 4504.0 µs, eight data bursts of 552.0 µs, gaps 4 long (zeros) and 4
+short (ones), stop burst 552.0 µs, decoded `a5`. 32 ms of 60 MHz.
+
+The two half-period constants are **separate and fitted separately**, on
+different `(n2,n3)` pairs, because the phase ladder costs 7 clocks more coming
+out of phase 1 than out of phase 0. The fit lands both on 789 clocks — the same
+"equalised branches" discipline the WS2812 act found twice.
+
+**Five firmware defects, all invisible from the waveform's shape:**
+
+1. **The eight-bit immediate, twice.** 9 ms is 342 carrier cycles and
+   `LDI A, 342` assembled to `LDI A, 86` — a perfectly good 38 kHz carrier
+   carrying a 2.3 ms "9 ms" leader. The leader is now `IR_LEADR` runs of
+   `IR_LEAD` cycles. The same truncation hit the leader's gap: `(4,40)` wants
+   529 outer steps and `529 & 0xFF` is 17, so 4.5 ms came out as **136 µs** —
+   which does not look like a truncated constant, it looks like a transmitter in
+   a hurry. It now uses `(3,130)`, whose 1064-clock step reaches the target in
+   255 steps.
+2. **The bursts never re-drove the pin.** A gap is made by releasing the pad and
+   a burst by driving it again; the pad was driven once at the leader, so the
+   program ran the whole frame with it released for every burst but the first
+   and last — emitting a leader, 13.6 ms of silence and one burst. One shared
+   `ir_emit` now, which is the copy the duplication risk warned about.
+3. **A ladder that did not cover its own input domain.** `dmem[6]` held 2/3/4 —
+   the phase numbers, the obvious thing to write — and `ir_burst_end` treated
+   anything past 1 as the stop burst, so the frame ended after the leader.
+   **Third instance in this block.**
+4. **A setup block with no entry point**, so the bit counter was never set and
+   the loop ran 255 times instead of eight.
+5. **A block that fell through into its own caller**, which never emitted.
+
+**Three testbench defects, and the pattern is the same as the WS2812 act's — the
+measuring instrument inventing defects that are not there:**
+
+6. `$time` is scaled to the module's `timeunit` and returns an integer, so
+   timing a 13.1667 µs half period quantises to 0.06 clocks and the carrier
+   appeared to jitter `787/788/789` every sixteen cycles. Every width is now in
+   **tenths of a nanosecond** from `$realtime`: a measuring instrument with 0.4 %
+   quantisation cannot support a 0.06 % claim.
+7. `$rtoi` rounds each edge independently, so touching pulses measured as
+   −0.1 ns; one negative sample dragged the minimum down and then every other
+   half period counted as an outlier against it. A carrier silence is now bounded
+   **below** as well as above.
+8. The burst reconstruction was a running accumulator that reported every burst
+   as 22 carrier cycles while measuring its width correctly — not a combination
+   of numbers any waveform has. Rewritten as two passes. A "whole number of
+   carrier cycles" check was written and then **deleted as unsound**: the burst
+   opens with a two-instruction initiation pulse, so its span is not a whole
+   number of periods, and the check fired on all ten bursts *including the
+   correct ones*. A check that is wrong about what it measures is worse than no
+   check — the first thing anyone would do is loosen the tolerance until it went
+   away.
+
+**The mutation gate found the act's own blind spot, which is the most valuable
+thing here.** Its first run had 3 survivors of 11. One of them — putting **both**
+half periods on the same delay pair — produced a carrier of 788 clocks one way
+and 782 the other: 38.05 kHz against 37.88, **0.4 % asymmetric on every edge**,
+inside every frequency window a real receiver has, and it **passed**. "Each half
+is constant" is not "the two halves are equal". A receiver does not care that the
+carrier is on frequency; it cares that the carrier is a *carrier*, and one whose
+halves differ is a square wave at 38 kHz with the wrong duty cycle. The TB now
+checks the two distributions **against each other**, to within a clock, and that
+check is the act's whole point.
+
+The other two survivors: a burst of 20 carrier cycles (526 µs, −6.4 %, which the
+old ±10 % window accepted — now ±5 %, which admits the two widths a whole number
+of cycles can produce, 21 at −1.7 % and 22 at +2.9 %, and rejects the third);
+and a mutant that was behaviourally a no-op because I wrote its anchor against
+the byte's *load* rather than its *rotate*.
+
+## Act (c) Stepper step/dir ramp — **WIP, NOT GREEN, NOT WIRED IN**
+
+Commit `b8b3b71`. `firmware/stepper_ramp.pe` (94 words) +
+`tb/tb_pe_soc_stepper_ramp.v`. Deliberately **not** in `run_all.sh` or
+`run_firmware_tests.sh`: wiring an act that fails would break the suite.
+
+The claim is the sharpest and the simplest in the block — the only act that
+drives a **mechanism**, where the driver's edge count *is* the motor's position,
+so there is no acknowledgement and nothing to resynchronise to. Every step
+period is an exact instruction count measured on the pin, and the ramp is exactly
+linear **to the clock**: the firmware subtracts ten outer steps of the `(4,40)`
+pair (5110 clocks) per step, so the constancy is *in the program*, not an
+assumption about a table of twelve constants.
+
+**Verified:** the ramp is exact on **8 of its 10** step intervals, measured as an
+equality against 5110 clocks and not a tolerance — 1661.133 µs falling to
+809.501 µs (602 Hz → 1235 Hz), 12 pulses, 12 distinct periods, all strictly
+shortening, all in band, `dmem[14]=1`, and the firmware's ramp counter landing on
+76 after twelve decrements of 10.
+
+**Two faults open:**
+
+1. **Two intervals around the direction change are off by a matched pair.**
+   Interval 4→5 measures 4736.71 clocks and 5→6 measures 5482.67, summing to
+   exactly 2 × 5109.7 — so ~373 clocks of cost have moved one interval later than
+   they belong. 373 is close to `ST_SETUP`'s 418, and the direction change plus
+   its setup delay is the only thing in the program that is not a step, so the
+   mechanism is almost certainly the setup delay landing in the interval after
+   the one it should be in. **Not root-caused** — the phase-3 setup return is the
+   first place to look.
+2. **The direction-change setup-time check is not running at all.** Its first
+   version searched only the first DIR edge, which is the pin-matrix *init*
+   rather than the flip, so it was vacuous by construction; fixing that exposed
+   that the flip's timestamp does not land where the search expects.
+
+**Two firmware defects already fixed, both the shape of ones this block has
+already found.** The ramp counter was `dmem[9]` — the **delay routine's own
+outer counter**, which counts itself to zero — so the program ran twelve steps at
+a constant 2.09 ms: every step read back zero, subtracted ten, and got 246
+again, the unsigned wrap, which is a perfectly plausible step period. *A delay
+routine and its caller must never share a data slot.* And the ramp decremented
+**before its first use**, so the nominal 196 was spent immediately and the first
+interval was exactly one ramp step too long — which is what a counter
+initialised off by one looks like from the outside.
+
+**Two testbench defects, the pattern of the previous three acts:** `$time`
+quantisation (every width here is in tenths of a nanosecond, because this act's
+claim is right to the *clock*), and the ramp first computed in one pass that
+compared each period against the next **before computing it**, so every "ramp"
+equalled a period and every ramp check passed while printing numbers that looked
+like measurements. A check that reads a value the loop has not filled in yet is
+a check that cannot fail.
+
+### Resume point, exactly
+
+Root-cause the 373-clock displacement around the direction change (start with the
+phase-3 setup return in `ph2`), then the DIR edge placement, then wire into
+`run_all.sh` + `run_firmware_tests.sh`, then add the mutation gate. Do not
+plausible-ise fault 1 into an accepted exception until it is explained.
+
+## The pattern across all five acts, stated once
+
+Every one of these defects is **invisible from the waveform's shape alone**: a
+reversed byte, a complemented byte, a truncated immediate, a runner that reads
+back its own zero, a set-up block with no entry point, a ladder that does not
+cover its callers, a counter initialised one step off. In every case the program
+runs, the waveform looks like a protocol, and the only thing that catches it is a
+testbench that **reconstructs the data from the wire and compares it against what
+was sent** — plus a mutation gate that perturbs the fitted constants, because
+three of the five acts *are* a fitted constant and a gate that cannot perturb one
+is not testing the thing the act claims.
+
+And four of the twelve defects were in the **measuring instrument**, not the
+thing measured: a quantised clock, a rounding artefact poisoning a minimum, an
+accumulator reporting numbers no waveform has, and a check reading a value the
+loop had not written. That is worth more than the defects themselves, because a
+defect in the testbench invents a defect that is not there, and the first thing
+anyone does with an invented defect is go looking for it in the design.
