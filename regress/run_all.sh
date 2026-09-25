@@ -46,6 +46,8 @@ JOBS=$(nproc 2>/dev/null || echo 4)
 while [ $# -gt 0 ]; do
   case "$1" in
     --fast)   FAST=1 ;;
+    --cases)  FILTER_CASES="${2:-}"; shift ;;
+    --cases=*) FILTER_CASES="${1#--cases=}" ;;
     -j*)      JOBS="${1#-j}" ;;
     -j)       shift; JOBS="${1:-$JOBS}" ;;
     -h|--help)
@@ -305,6 +307,26 @@ CASES=(
   #     that nothing at all is transmitted.
   "tb_pe_soc_uart_flow|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_uart_flow"
 )
+
+# ---- OPTIONAL case filter (OFF by default; the merge gate's driver) --------
+# `--cases REGEX` runs only the cases whose NAME or TOP matches. Unused, the
+# ordinary full gate is byte-for-byte unchanged. When it IS used it PRINTS the
+# selected and skipped counts, and the summary line says FILTERED, because a
+# gate that silently runs less than it claims is worse than no gate -- that is
+# precisely how a red merge gets pushed.
+if [ -n "${FILTER_CASES:-}" ]; then
+  _sel=(); _skip=0
+  for c in "${CASES[@]}"; do
+    IFS='|' read -r _n _r _t <<< "$c"
+    if printf '%s\n' "$_n $_t" | grep -qE "${FILTER_CASES}"; then _sel+=("$c"); else _skip=$((_skip + 1)); fi
+  done
+  echo "(--cases ${FILTER_CASES}: ${#_sel[@]} selected, ${_skip} skipped)"
+  if [ "${#_sel[@]}" -eq 0 ]; then
+    echo "run_all.sh: --cases '${FILTER_CASES}' matched NO case" >&2
+    exit 2
+  fi
+  CASES=("${_sel[@]}")
+fi
 
 pass=0; fail=0; failed_names=()
 
