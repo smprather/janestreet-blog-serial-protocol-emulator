@@ -130,11 +130,17 @@ def _r2_detail(text: str) -> str:
     """Tag every R2 read-path line with its evidence status.
 
     Chip R2 is landed and chip-confirmed IN SIMULATION (chip repo
-    `tb_pe_ctrl_r2`: all 15 golden steps byte-exact, see
+    `tb_pe_ctrl_r2`: all 18 golden steps byte-exact, see
     `R2-READ-PATH-REVIEW.md`). The hardware run — this script against a real
     Pico and shuttle — is still unexecuted, so the tag says exactly that.
+
+    NOTE ON WHERE THE CHIP RECORD LIVES. `R2-READ-PATH-REVIEW.md` is in the
+    CHIP repository, not this one: `reviews/2026-09-25/R2-READ-PATH-REVIEW.md`
+    (alongside `ETH-TX-FRAME-PATH-REVIEW.md` and `FORMAL-VERIFICATION.md`).
+    The two trees were merged keep-both, so a reader working only from the
+    host side should look there for the wire contract's provenance.
     """
-    return (f"{text} [chip-confirmed in simulation (tb_pe_ctrl_r2, 15/15 "
+    return (f"{text} [chip-confirmed in simulation (tb_pe_ctrl_r2, 18/18 "
             f"byte-exact); hardware acceptance not yet run]")
 
 

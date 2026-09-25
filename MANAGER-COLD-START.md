@@ -98,15 +98,15 @@ worker; this file is the manager's restart prompt.
   the ongoing hunt for the runaway python3's identity (both OOM windows had
   GUI-bridge test activity; unconfirmed). Mapped/simulation evidence only —
   never run physical flow, DRC or LVS.
-- Actively manage the Pi worker's context size. At each check, note its
-  displayed context usage and whether it is working or at a prompt. Choose a
-  `/new` boundary after a coherent task has finished and its findings,
-  commands, and remaining work are recorded in the worker handoff and project
-  review. Before issuing `/new`, confirm the worker is at its prompt and no
-  command or tool is still running; then give it the short startup prompt from
-  `COLD-START.md`. If context is getting high while a task is active, have the
-  worker finish and document that task first, then restart. Never discard
-  unrecorded findings or interrupt active work just to reduce context usage.
+- Actively manage the Pi worker's context size — **flush at ~60% (user
+  standing order 2026-09-25)**. When a worker crosses ~60%, dispatch a WRAP:
+  finish the current sub-task at a clean boundary, record all findings,
+  commands, hashes and remaining work in the review + WORKLOG + ledger,
+  report `DONE-WRAP` and stop. Then `/new` (worker at prompt, no tool
+  running), give the short startup prompt from `COLD-START.md`, and continue
+  the remaining work from the worker's own written record. Never discard
+  unrecorded findings or interrupt active work just to reduce context —
+  wrap first, flush second. Check both workers' context at every wake.
 - When sending a prompt through tmux, type the prompt as literal text and send
   `Enter` as a separate key event. A prior combined send did not submit; this
   was verified by sending literal `Hi!`, sending `Enter` separately, and

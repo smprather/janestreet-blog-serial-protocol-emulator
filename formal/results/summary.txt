@@ -1,0 +1,2 @@
+pinmux_od_invariant|PROVED|16
+eth_tx_safety|PROVED|16

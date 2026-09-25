@@ -439,6 +439,21 @@ else
   stale=1
 fi
 
+# Formal safety proofs (yosys built-in sat; sby and every SMT solver are
+# absent on this host). Proves the pe_pinmux open-drain invariant and the
+# pe_eth_tx frame/IFG/underrun claims. Bounded, and the depth at which each
+# property becomes non-vacuous — plus the two targets that are NOT proved —
+# are documented in reviews/2026-09-25/FORMAL-VERIFICATION.md. A "proved" that
+# never reaches the state it is about is worse than none, so this gate ships
+# with its non-vacuity mutants recorded rather than a bare green tick.
+if bash formal/run_formal.sh > /tmp/run_formal.log 2>&1; then
+  echo "formal safety proofs: OK (pe_pinmux OD invariant, pe_eth_tx bounds/IFG/underrun)"
+else
+  echo "formal safety proofs: FAILED (counterexample or build error)"
+  tail -20 /tmp/run_formal.log
+  stale=1
+fi
+
 # The chip<->host wait-word CROSS-CHECK. The chip's 0xFFFF filler (rtl/pe_ctrl.v)
 # and the host's leading-filler skip (tools/host_bridge/pe_frame.py) are two
 # independent implementations of one contract, and each side's own tests run

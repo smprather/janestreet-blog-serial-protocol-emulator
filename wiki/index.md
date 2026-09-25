@@ -1,7 +1,7 @@
 # Wiki Index
 
 > Content catalog. Every wiki page listed under its type with a one-line summary.
-> Last updated: 2026-09-23 | 32 pages (31 content pages + STATUS; index/log/SCHEMA are meta, raw sources are catalogued under their own section)
+> Last updated: 2026-09-25 | 32 pages (31 content pages + STATUS; index/log/SCHEMA are meta, raw sources are catalogued under their own section)
 
 ## Start here
 
