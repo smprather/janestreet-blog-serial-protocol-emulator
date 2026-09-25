@@ -598,11 +598,11 @@
   ],
   "spec_vs_rtl_discrepancies": [
     {
-      "resolution": "the table's expected response says pc=0, but the RTL answers with the PC AT THE REQUEST and only re-zeroes the core at the same edge, so a following DEBUG_STATUS/STATUS reads 0. The RTL's own comment and the contract's 'Known limits' section both state the RTL behaviour; only the table row disagrees. The golden vector follows the RTL.",
+      "resolution": "the table's expected response says pc=0, but the RTL answers with the PC AT THE REQUEST and only re-zeroes the core at the same edge, so a following DEBUG_STATUS/STATUS reads 0. The RTL's own comment and the contract's 'Known limits' section both state the RTL behaviour; only the table row disagrees. RULED 2026-09-25: the vectors stand, and the table is being corrected chip-side to match the RTL.",
       "where": "vector 11 (debug_bp_clr_while_stopped_is_boot_stop)"
     },
     {
-      "resolution": "the table expects insn=imem[4] while free-running, but pe_cpu fetches at next_pc while executing (next_pc / pc while held / 0 at the boot stop), so a free-running readback reports the word at the LANDING address, not at pc. A TB that wants insn=imem[pc] must hold the core (state 2) or preload the pipeline. The golden vector follows the RTL's fetch mode.",
+      "resolution": "the table expects insn=imem[4] while free-running, but pe_cpu fetches at next_pc while executing (next_pc / pc while held / 0 at the boot stop), so a free-running readback reports the word at the LANDING address, not at pc. A TB that wants insn=imem[pc] must hold the core (state 2) or preload the pipeline. RULED 2026-09-25: the vectors stand (insn is the landing word), and the table is being corrected chip-side.",
       "where": "vector 13 (debug_status_common_prefix)"
     }
   ],
