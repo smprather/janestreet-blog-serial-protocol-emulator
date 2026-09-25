@@ -1,0 +1,10 @@
+===== R3 DEBUG-PATH INVENTORY: pe_soc (/home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r3-sta/sta-pe_soc.v)
+nets found:    
+  dbg_hold     6 occurrence(s) in the mapped netlist
+  dbg_step     7 occurrence(s) in the mapped netlist
+  dbg_next_pc  26 occurrence(s) in the mapped netlist
+  bp_addr      0 occurrence(s) in the mapped netlist
+  bp_en        0 occurrence(s) in the mapped netlist
+  bp_hit       0 occurrence(s) in the mapped netlist
+  dbg_hold_r   0 occurrence(s) in the mapped netlist
+  total cell instances: 6203

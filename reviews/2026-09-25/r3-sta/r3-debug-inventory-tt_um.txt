@@ -1,0 +1,10 @@
+===== R3 DEBUG-PATH INVENTORY: tt_um (/home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r3-sta/sta-tt_um.v)
+nets found:    
+  dbg_hold     16 occurrence(s) in the mapped netlist
+  dbg_step     13 occurrence(s) in the mapped netlist
+  dbg_next_pc  54 occurrence(s) in the mapped netlist
+  bp_addr      48 occurrence(s) in the mapped netlist
+  bp_en        7 occurrence(s) in the mapped netlist
+  bp_hit       6 occurrence(s) in the mapped netlist
+  dbg_hold_r   12 occurrence(s) in the mapped netlist
+  total cell instances: 10034
