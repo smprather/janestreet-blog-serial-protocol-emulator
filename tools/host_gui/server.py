@@ -125,6 +125,9 @@ class Api:
     def status(self) -> dict:
         return {"status": asdict(self.session.status())}
 
+    def read_cpu(self) -> dict:
+        return {"cpu": asdict(self.session.read_cpu())}
+
     def dump(self) -> dict:
         return {"dump": asdict(self.session.dump_core())}
 
@@ -180,6 +183,10 @@ def create_app(api: Api, config: ServerConfig):
     @app.get("/api/status")
     def status():
         return guarded(api.status)()
+
+    @app.get("/api/read_cpu")
+    def read_cpu():
+        return guarded(api.read_cpu)()
 
     @app.post("/api/dump")
     def dump():

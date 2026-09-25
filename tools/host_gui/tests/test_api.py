@@ -101,6 +101,16 @@ class TestApi(unittest.TestCase):
             self.api.load("nope.pe")
         self.assertEqual(ctx.exception.status, 404)
 
+    def test_read_cpu_route_returns_registers_while_running(self):
+        self.api.connect()
+        self.api.load("echo.pe")
+        self.api.start()
+        cpu = self.api.read_cpu()["cpu"]
+        for field in ("pc", "a", "x", "y", "insn", "state"):
+            self.assertIn(field, cpu)
+        self.assertEqual(cpu["state"], 1)          # running
+        self.assertEqual(self.api.status()["status"]["run"], 1)
+
     def test_load_traversal_raises_before_any_io(self):
         with self.assertRaises(SV.ApiError):
             self.api.load("../../etc/passwd.pe")
@@ -144,6 +154,8 @@ class TestOptionalDependencies(unittest.TestCase):
         self.assertEqual(client.post("/api/connect").json()["state"], "PREPARED")
         self.assertEqual(client.post("/api/load", json={"source": "echo.pe"})
                          .json()["load"]["words_written"], 3)
+        client.post("/api/start")
+        self.assertIn("insn", client.get("/api/read_cpu").json()["cpu"])
 
 
 if __name__ == "__main__":
