@@ -162,7 +162,7 @@ ph1b:   IN    A, PIN
 ; rotate the byte right so the next bit 0 is the next bit of the frame.
 ; ===========================================================================
         LDI   A, 2
-        STM   10, A             ; TWO command bytes to send: 0xCC then 0xBE
+        STM   7, A              ; TWO command bytes to send: 0xCC then 0xBE
         LDI   A, 0xCC
         STM   6, A              ; SKIP ROM: one sensor on the bus
 wbyte:  LDI   A, 8
@@ -237,15 +237,17 @@ wbit_tail:
 
         ; ---- the byte is sent. Which one is NEXT? ----
         ;
-        ; dmem[10] counts the command bytes still to send: 2, then 1, then 0.
+        ; dmem[7] counts the command bytes still to send: 2, then 1, then 0.
         ; After the decrement, 0 means BOTH 0xCC and 0xBE are out, so start the
-        ; read. A previous version initialised this to 1 and decremented, so it
-        ; went to the read after 0xCC and the sensor's second command was
-        ; whatever the send register happened to hold. Both errors were found by
-        ; the TB decoding the pads: "command 1: cc, command 2: 00".
-        LDM   A, 10
+        ; read. It was on dmem[10] first, but dmem[10] is the DELAY ROUTINE's
+        ; middle-counter TARGET -- so every delay overwrote the command counter
+        ; and the byte transition read whatever the delay left behind. This is
+        ; the single biggest bug the 1-Wire act found: the delay and the
+        ; protocol must have DISJOINT dmem ownership, and a shared slot between
+        ; them is not a warning, it is a lost phase transition.
+        LDM   A, 7
         SUB   A, 1
-        STM   10, A
+        STM   7, A
         JZ    wr_done           ; both commands are out: start the read
         LDI   A, 0xBE           ; READ SCRATCHPAD, into the SEND register
         STM   6, A
@@ -273,83 +275,59 @@ wr_done:
         STM   5, A              ; the byte index
         LDI   A, 0
         STM   4, A              ; the shift register
-rbit:   LDI   A, OW_DATA        ; 1-Wire READS ARE HOST-INITIATED: the host
-        OUT   PINOE, A          ; pulls the line low to ask for a bit, the
-        LDI   A, 0x00           ; sensor answers with its own edge ~15 us
-        OUT   TXPIN, A          ; later. A previous version only WAITED for
-        LDI   A, 6              ; the sensor to start each slot, and a model
-        STM   12, A             ; that drives slots on a timer never spoke to
-        LDI   A, 6              ; it: 16 slots were sent and zero captured.
-        STM   9, A              ; This is the datasheet's "initiation pulse".
-                                ; Phase 6 (not 4) so it returns to ph4a -- the
-                                ; release-and-wait -- and NOT to ph4, the
-                                ; sample. The read loop and the write loop had
-                                ; both claimed phases 4 and 5, so the read's
-                                ; initiation delay jumped straight into the
-                                ; sample, sampled 6 us in with the line still
-                                ; low, and banked nothing.
+rbit:   LDI   A, OW_DATA        ; 1-Wire READ: the host initiates by pulling
+        OUT   PINOE, A          ; the line low, then the SENSOR presents the
+        LDI   A, 0x00           ; bit as a LEVEL held across a known instant.
+        OUT   TXPIN, A          ;
+        LDI   A, 6              ; the delay returns to phase 6 -> ph4a. A
+        STM   12, A             ; previous version spun for the sensor's own
+        LDI   A, 6              ; falling edge here, and it raced the model's
+        STM   9, A              ; transitions: the line was still low from the
+        LDI   A, 2              ; initiation, so the loop exited at once and
+        STM   10, A             ; every sample landed a slot early. Counting
+        LDI   A, 13             ; to a fixed instant cannot race.
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 6: the initiation pulse is over; release and wait out the slot ----
+ph4a:   LDI   A, 0x00
+        OUT   PINOE, A          ; release: the sensor drives the data level
+        LDI   A, 4              ; the delay returns to phase 4 -> ph4
+        STM   12, A
+        LDI   A, OW_T40         ; a fixed wait after the release; the sensor's
+        STM   9, A              ; bit is stable across this instant
         LDI   A, 2
         STM   10, A
         LDI   A, 13
         STM   13, A
         JMP   dly1
 
-; ---- phase 4a: the initiation pulse is over; release and wait for the data ----
-ph4a:   LDI   A, 0x00
-        OUT   PINOE, A          ; release: the sensor drives the data bit
-ph4b:   IN    A, PIN
-        AND   A, OW_DATA
-        JNZ   ph4b              ; wait for the sensor's falling edge (its data)
-                                ; This is the ONLY edge the read loop waits
-                                ; for. A first version also waited for the
-                                ; line to go HIGH again before sampling, and
-                                ; that reads every bit as a 0: a 1's extra
-                                ; low pulse is OVER by the time the release
-                                ; arrives, so "wait for high, then sample"
-                                ; can only ever see the 0 case. The 1 and
-                                ; the 0 differ INSIDE the slot -- a 1 HOLDS
-                                ; the line low where a 0 releases -- so the
-                                ; sample has to land in that window, which
-                                ; means waiting a fixed time after the
-                                ; initiation edge, not waiting for a release
-                                ; that means opposite things per bit.
-        LDI   A, 4
-        STM   12, A             ; the delay returns to phase 4
-        LDI   A, OW_T40         ; sample this far after the sensor's edge:
-        STM   9, A              ; a 0 has released (high), a 1 still holds
-        LDI   A, 2              ; the line low
-        STM   10, A
-        LDI   A, 13
-        STM   13, A
-        JMP   dly1
-
-; ---- phase 4: SAMPLE ONCE, and shift it in LSB first ----
+; ---- phase 4: SAMPLE THE LEVEL, and shift it in LSB first ----
 ;
-; The accumulator shifts LEFT with the new bit at bit 0, so the FIRST bit read
-; ends up as the LEAST significant — which is 1-Wire's order and the opposite of
-; the DHT11's. The same two instructions, the opposite meaning: this is the one
-; place in the project where a shared accumulator is used backwards on purpose,
-; and the mutation suite checks that a firmware which shifts the other way (and
-; so decodes a byte-reversed frame) is caught rather than accepted.
+; The sensor holds the line LOW for a 1 and releases it for a 0 across the
+; sample instant, so a plain level read at a fixed time is the whole protocol --
+; no edge needed. The accumulator shifts RIGHT with the new bit at the TOP, so
+; the FIRST bit read slides down to bit0 by the eighth: 1-Wire is LSB first,
+; the OPPOSITE of the DHT11. The first version copied the DHT11's shift-LEFT +
+; bit-at-LSB (MSB-first accumulation) and every byte came back REVERSED
+; (0x2b as 0xd4) with the right bit count and the wrong values.
 ph4:    IN    A, PIN
         AND   A, OW_DATA
         JZ    rb_was_zero
         LDM   A, 4
-        MOV   X, A
-        ADD   A, X              ; a = 2*acc: the accumulator shifts LEFT
-        OR    A, 0x01           ; ...and a 1 goes in as the new bit 0
+        SHR   A                 ; SHIFT RIGHT, not left: LSB first
+        OR    A, 0x80           ; ...a 1 goes in at the top
         STM   4, A
         JMP   rb_taken
 rb_was_zero:
         LDM   A, 4
-        MOV   X, A
-        ADD   A, X              ; a 0: the same shift, bit 0 left clear
+        SHR   A                 ; a 0: same shift, bit 7 clear
         STM   4, A
 rb_taken:
         LDM   A, 3
         SUB   A, 1
         STM   3, A
-        JNZ   rbit_done         ; more bits in this byte
+        JNZ   next_rbit         ; more bits in this byte
         ; ---- the byte is complete: bank it, next byte or done ----
         LDM   A, 5
         MOV   X, A
@@ -360,14 +338,14 @@ rb_taken:
         LDM   A, 5
         ADD   A, 1
         STM   5, A
-        LDM   A, 10
+        LDM   A, 8
         SUB   A, 1
-        STM   10, A
+        STM   8, A
         JZ    all_done
         LDI   A, 8
         STM   3, A
-rbit_done:
-        JMP   rbit              ; straight back into the edge waits
+next_rbit:
+        JMP   rbit              ; straight back for the next bit
 
 all_done:
         LDI   A, 1

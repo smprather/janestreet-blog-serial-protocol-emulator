@@ -188,6 +188,31 @@ CONSTS: dict[str, int] = {
     # host synchronises on the line's edges and samples 45 us into each
     # release -- 17 us of margin on the 0 side and 25 us on the 1 side.
     "DHT_DATA": 0x40,  # the sensor's single data wire
+    #
+    # ---------------------------------------------------------------------
+    # 1-WIRE (DS18B20). The only protocol here where the DEVICE initiates: the
+    # reset is a >=480 us low from the host, the sensor answers with a presence
+    # pulse, and every read bit is a slot the host must time. Unlike the DHT11
+    # the host SAMPLES INSIDE the slot, and the bits are LSB first.
+    #
+    # THESE ARE COUNTERS, NOT MICROSECONDS. The delay routine's outer step is 69
+    # clocks (1.22 us) on the (2,13) pair, so a slot is aimed by division --
+    # and writing a duration in as a counter is the mistake this block exists to
+    # prevent: 480 us straight into the outer counter comes out as 1900 us,
+    # because 480 wraps to 224 and the routine counts passes, not us.
+    #   OW_RST   58 -> 485.5 us   the reset pulse,       (n2,n3) = (4,40)
+    #   OW_T5     5 ->   4.7 us   a write-1's low pulse, (2,13)
+    #   OW_T15   14 ->  15.0 us   the settle after the reset
+    #   OW_T40   23 ->  25.4 us   into a read slot, after the sensor's edge
+    #   OW_T55   49 ->  55.3 us   a write-1's high period
+    #   OW_T65   57 ->  64.5 us   a write-0's low pulse
+    "OW_DATA": 0x40,  # the 1-Wire data pin: the same first unclaimed pad
+    "OW_RST": 58,
+    "OW_T5": 5,
+    "OW_T15": 14,
+    "OW_T40": 23,
+    "OW_T55": 49,
+    "OW_T65": 57,
 }
 
 

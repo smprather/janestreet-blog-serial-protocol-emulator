@@ -163,7 +163,7 @@ module tb_pe_soc_ds18b20;
   // correct. A model that does not follow the protocol cannot test it.
   localparam int X_IDLE = 0, X_PRES_LO = 1, X_PRES_HI = 2,
                  X_WRITE = 3, X_SETTLE = 4, X_READY = 5,
-                 X_WAIT_REL = 6, X_READ_DATA = 7, X_DONE = 8;
+                 X_WAIT_REL = 6, X_GAP = 7, X_READ_DATA = 8, X_DONE = 9;
   integer xs = X_IDLE, xend_cyc = 0, xlow_start = -1;
   logic   xarmed = 1'b0, xsaw_start = 1'b0;
   integer w_bits [0:15];
@@ -267,11 +267,26 @@ module tb_pe_soc_ds18b20;
         // sensor moved together and the master -- which waits for a clean
         // falling edge on the line -- never saw one.
         X_WAIT_REL: if (!soc_drives_low) begin
-          xs = X_READ_DATA;                        // answer ~10 us after release
-          xend_cyc = cyc + (10 * (CLK_HZ / 1_000_000))
-                          + ((r_bits[n_read_slots] != 0)
-                             ? (25 * (CLK_HZ / 1_000_000))
-                             : (5  * (CLK_HZ / 1_000_000)));
+          // The master released. Leave the line ALONE for 10 us before the
+          // data edge -- that high gap is what the master's "wait for my own
+          // release" loop is watching for. Pulling low immediately (as this
+          // model did) leaves no gap at all, the loop never sees the high, and
+          // the whole read desyncs.
+          xs = X_GAP;
+          xend_cyc = cyc + (10 * (CLK_HZ / 1_000_000));
+        end
+        X_GAP: if (cyc >= xend_cyc) begin
+          // The sensor's data edge, now; then hold low LONGER for a 1 than for
+          // a 0, so the host's fixed sample point (25.4 us after this edge)
+          // falls between the two releases with real margin on each side:
+          //   a 0: released at +8 us  -> the host reads it 17 us later, HIGH
+          //   a 1: released at +40 us -> the host reads it 15 us earlier, LOW
+          // Holding a 1 for only 25 us put its release one clock from the
+          // sample and the bit was a coin toss.
+          xs = X_READ_DATA;
+          xend_cyc = cyc + ((r_bits[n_read_slots] != 0)
+                            ? (40 * (CLK_HZ / 1_000_000))
+                            : (8  * (CLK_HZ / 1_000_000)));
         end
         X_READ_DATA: if (cyc >= xend_cyc) begin
           n_read_slots = n_read_slots + 1;         // the slot is answered
