@@ -74,6 +74,7 @@ class Spec:
     protocol_extra: dict = field(default_factory=dict)
     load_words: tuple[int, ...] = DEFAULT_LOAD_WORDS
     schema: int | None = None
+    hex_readme_extra_preload: str = ""
 
     @property
     def confirmed_steps(self) -> frozenset[str]:
@@ -151,9 +152,23 @@ class Builder:
 
     # ---- vectors and steps -------------------------------------------------
     def record(self, pe, name: str, opcode: int, payload_words, sequence: int,
-               note: str = "", model_image_id: str | None = None) -> dict:
-        """Drive one request through the model; capture request + response."""
-        request_hex = frame(opcode, sequence, payload_words)
+               note: str = "", model_image_id: str | None = None,
+               target: int | None = None,
+               corrupt_crc: bool = False) -> dict:
+        """Drive one request through the model; capture request + response.
+
+        `corrupt_crc=True` flips the trailing CRC so the recorded request is a
+        genuinely bad frame -- the "a rejected op has no side effect" vectors
+        need the malformed bytes themselves to be part of the golden stream,
+        not a well-formed frame the testbench would have to mangle.
+        `target` selects a non-default target (the loopback vector).
+        """
+        request_hex = frame(opcode, sequence, payload_words,
+                            target if target is not None else TARGET)
+        if corrupt_crc:
+            flipped = bytearray(bytes.fromhex(request_hex))
+            flipped[-1] ^= 0x01
+            request_hex = flipped.hex()
         response_raw = pe.exchange(bytes.fromhex(request_hex))
         assert response_raw is not None, f"no response for {name}"
         decoded = P.decode_frame(response_raw)
@@ -220,20 +235,20 @@ class Builder:
 
 
 def _debug_image(debug: dict) -> dict:
-    """Normalise a debug image declaration into JSON-stable types."""
-    breakpoints = list(debug.get("breakpoints", []))
-    out = {
-        "breakpoints": [None if value is None
-                        else _strict(value, "breakpoint address")
-                        for value in breakpoints],
-        "debug_state": _strict(debug.get("debug_state", F.DEBUG_STOPPED),
-                               "debug_state"),
+    """Normalise a debug image declaration into JSON-stable types.
+
+    The four registers are the R3 contract's actual debug state (ONE
+    breakpoint, not a table). `debug_state` is deliberately NOT here: it is
+    DERIVED by the chip (dbg_hold ? (bp_hit ? 3 : 2) : (run ? 1 : 0)), so an
+    image that declared it could contradict itself and the registers. The TB
+    preloads the registers and the state word follows.
+    """
+    return {
+        "bp_addr": _strict(debug.get("bp_addr", 0), "bp_addr"),
+        "bp_en": bool(debug.get("bp_en", False)),
+        "bp_hit": bool(debug.get("bp_hit", False)),
+        "debug_hold": bool(debug.get("debug_hold", False)),
     }
-    for key in ("hit_slot", "hit_address"):
-        if key in debug:
-            out[key] = (None if debug[key] is None
-                        else _strict(debug[key], key))
-    return out
 
 
 def load_model_from_image(image: dict) -> F.FakePE:
@@ -268,19 +283,22 @@ def load_model_from_image(image: dict) -> F.FakePE:
     pe.selected_target = _strict(state["selected_target"], "selected_target")
     debug = image.get("debug")
     if debug is not None:
-        armed = [None if value is None else _strict(value, "breakpoint address")
-                 for value in debug.get("breakpoints", [])]
-        pe.breakpoints = (armed + [None] * F.MAX_BREAKPOINTS
-                          )[:F.MAX_BREAKPOINTS]
-        pe.debug_state = _strict(debug.get("debug_state", F.DEBUG_STOPPED),
-                                 "debug_state")
-        pe.hit_slot = debug.get("hit_slot")
-        pe.hit_address = debug.get("hit_address")
+        pe.bp_addr = _strict(debug["bp_addr"], "bp_addr") & F.ISA_PC_MASK
+        pe.bp_en = bool(debug["bp_en"])
+        pe.bp_hit = bool(debug["bp_hit"])
+        pe.debug_hold = bool(debug["debug_hold"])
+        # The boot stop (run=0, no hold) holds the PC at 0, so an image that
+        # declared another PC in that state would be describing hardware that
+        # cannot exist. Enforce it rather than ship a contradiction.
+        if not pe.run and not pe.debug_hold:
+            pe.pc = 0
     return pe
 
-def frame(opcode: int, sequence: int, payload_words) -> str:
+def frame(opcode: int, sequence: int, payload_words, target: int | None = None
+          ) -> str:
     """One framed request as hex, for the given target."""
-    return P.encode_frame(opcode, sequence, TARGET,
+    return P.encode_frame(opcode, sequence,
+                          TARGET if target is None else target,
                           b"".join(_strict(word, "payload word").to_bytes(2, "big")
                                    for word in payload_words)).hex()
 
@@ -557,6 +575,7 @@ def hex_readme(spec: Spec, manifest: dict) -> str:
         "//      pc (10b), a/x/y (8b), insn (16b), timer, run, faults,\n"
         "//      words_written\n"
         "// 3. drive the step's request_file and compare against response_file\n"
+        f"{spec.hex_readme_extra_preload}"
         "```\n\n"
         "`imem.hex` is one 16-bit word per line in ascending address order;\n"
         "`dmem.hex` is one byte per line. The per-step request/response files\n"
