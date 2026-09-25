@@ -530,9 +530,37 @@ module tb_pe_soc_midi;
   end
 
   initial begin
+    // 20 ms is four times the 5.6 ms drain window, so the watchdog is a
+    // backstop for a HANG and not a substitute for the drain.
     #20_000_000;
     $display("FAIL: watchdog -- the test did not complete");
-    $display("  pc=%0d bytes=%0d", dbg_pc, n_wire);
+    // THE HANG DIAGNOSTIC, matching tb_pe_soc_dmx512.v's, which is the same
+    // fix applied to the sibling testbench. A bare "watchdog" is the least
+    // informative failure a testbench can emit -- this file's own
+    // self-inflicted list records a truncated stream being mistaken for a
+    // protocol defect -- so it says what it can.
+    //
+    // NOTE HOW RARELY IT IS REACHED, because the difference from the DMX
+    // testbench is structural and worth knowing. This one has a TIME-BOUNDED
+    // drain (N_WIRE_BYTES x 10 cells x 1.25), so a firmware that transmits
+    // nothing produces seven ordinary assertion failures and a clean $finish,
+    // not a hang -- verified, with a mutation parking the firmware immediately:
+    // "exactly 14 bytes on the wire (got 0)" and six more. tb_pe_soc_dmx512.v
+    // CAN hang, because it waits on a negedge per slot with no time bound. So
+    // this watchdog is a backstop for the pathological case -- a receiver that
+    // stops consuming its strobe, or a simulator problem -- and the numbers
+    // below are what would tell you which.
+    $display("  bytes accepted: %0d of %0d   candidates rejected on stop bit: %0d",
+             n_wire, N_WIRE_BYTES, n_framing_errors);
+    if (n_meas > 0) begin
+      $display("  cell measured on %0d frame(s): %.4f us -> %.0f baud (nominal 31250)",
+               n_meas, cell_meas[0]/1000.0, 1.0e9/cell_meas[0]);
+    end else begin
+      $display("  cell: NEVER MEASURED -- not one frame survived its stop bit,");
+      $display("        so there is no rate to report. That is the diagnosis.");
+    end
+    $display("  pc=%0d  (a transmitter stalled in its delay loop; a finished one at park)",
+             dbg_pc);
     $finish;
   end
 
