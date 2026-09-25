@@ -1,5 +1,18 @@
 # Handoff — state of the repo (2026-09-23)
 
+> **Host GUI R2 read-path prep (2026-09-25; host side, NOT chip-confirmed).**
+> `tools/host_gui/r2_reads.py` is the single source of truth for the R2 read
+> obligations (bounded IMEM/DMEM reads, DUMP_CORE==STATUS header, non-halting
+> READ_CPU, run-gating, no-wrap range, full-width debug regs) — each probe
+> marked `chip_confirmed=False`; `FakePE(read_fault_policy=...)` parameterizes
+> the open sticky-fault-on-range-read question instead of deciding it. The
+> acceptance runner now runs five end-to-end R2 read checks
+> (`acceptance.py --fake` → `PASS (21 PASS, 0 FAIL, 1 SKIP)`), each tagged
+> `[not chip-confirmed]`, so chip R2 (plan Tasks 3-5) is validated the moment it
+> lands. No chip-side file touched. Two contract questions (read-range fault
+> latching; READ_CPU/READ_DMEM payload order) are logged as WORKLOG QUESTIONs.
+> Record: `reviews/2026-09-25/HOST-GUI-R2-PREP.md`.
+
 > **Host GUI plan Task 8 — final verification, host scope, DONE (2026-09-25).**
 > The host plan (Tasks 1, 2, 6, 7, 8-host) is implemented and verified on branch
 > `host-controller-gui` (`0681175`, base `153fbde`); recorded in

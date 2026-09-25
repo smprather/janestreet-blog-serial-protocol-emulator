@@ -119,7 +119,9 @@ Evidence levels are kept distinct: **simulator** (fake PE model),
 and **chip-confirmed** (requires the PE host protocol in RTL, plan Tasks 3-5,
 not landed yet). `acceptance.py --fake` is the current end-to-end evidence and
 its checklist is in `tools/host_gui/tests/fixtures/acceptance.md`; the real
-device run is pending hardware and the RTL phases.
+device run is pending hardware and the RTL phases. The R2 read obligations
+themselves live in `tools/host_gui/r2_reads.py`, each marked
+**not chip-confirmed** until the RTL passes the same probes.
 
 ## Layout
 

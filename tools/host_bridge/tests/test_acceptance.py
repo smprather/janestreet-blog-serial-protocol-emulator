@@ -52,6 +52,25 @@ class TestFakeDryRun(unittest.TestCase):
         self.assertEqual(by_name["clear_fault"].status, "PASS")
         self.assertEqual(by_name["reconnect"].status, "PASS")
 
+    def test_fake_dry_run_covers_the_r2_read_contract(self):
+        report = ACC.run_acceptance(fake=True)
+        names = {check.name for check in report.checks}
+        for expected in ("r2_read_imem", "r2_read_dmem", "r2_range",
+                         "r2_read_cpu", "r2_dump_header"):
+            with self.subTest(check=expected):
+                self.assertIn(expected, names)
+        r2 = [c for c in report.checks if c.name.startswith("r2_")]
+        self.assertTrue(r2)
+        for check in r2:
+            with self.subTest(check=check.name):
+                self.assertEqual(check.status, "PASS")
+                self.assertIn("not chip-confirmed", check.detail.lower())
+
+    def test_dry_run_still_reports_uart_as_the_only_skip(self):
+        report = ACC.run_acceptance(fake=True)
+        skipped = [c.name for c in report.checks if c.status == "SKIP"]
+        self.assertEqual(skipped, ["uart"])
+
 
 class TestDeviceOpen(unittest.TestCase):
     def test_permission_error_carries_the_dialout_hint(self):

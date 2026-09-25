@@ -28,7 +28,8 @@ from pathlib import Path
 if __package__ in (None, ""):      # direct script run: put the repo root on path
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from tools.host_gui.fake_pe import FAULT_LOAD
+from tools.host_gui import protocol as P
+from tools.host_gui.fake_pe import FAULT_LOAD, FAULT_RANGE, IMEM_WORDS
 from tools.host_gui.image import ImageError, assemble_program
 from tools.host_gui.session import (
     ControllerSession,
@@ -123,6 +124,12 @@ def build_serial_link(device):
             f"desktop user in the 'dialout' group (sudo usermod -aG dialout "
             f"$USER, then re-login)?") from exc
     return Link(transport=SerialTransport(port))
+
+
+def _r2_detail(text: str) -> str:
+    """Tag every R2 read-path line as not chip-confirmed."""
+    return (f"{text} [not chip-confirmed: the R2 read path is chip-side work "
+            f"under the manager's dispatch; this is a host-model expectation]")
 
 
 def _observe_heartbeat(session, pe, *, tries=3, sleep=time.sleep):
@@ -247,6 +254,18 @@ def run_acceptance(*, fake, device=None, project=DEFAULT_PROJECT, board=None,
     report.record("start", bool(snapshot.run),
                   f"state={snapshot.state} run={snapshot.run}")
 
+    # READ_CPU is the one read that must answer while the core runs (R2).
+    try:
+        cpu = first.transport.request("read_cpu")
+        cpu_ok = (cpu.get("status") == P.STATUS_OK
+                  and all(key in cpu for key in ("pc", "a", "x", "y", "insn")))
+        cpu_detail = (f"status={cpu.get('status')} "
+                      f"pc=0x{cpu.get('pc', 0):04X} "
+                      f"insn=0x{cpu.get('insn', 0):04X} while running")
+    except TransportError as exc:
+        cpu_ok, cpu_detail = False, str(exc)
+    report.record("r2_read_cpu", cpu_ok, _r2_detail(cpu_detail))
+
     heartbeat_ok, heartbeat_detail = _observe_heartbeat(session, first.pe)
     report.record("heartbeat", heartbeat_ok, heartbeat_detail)
 
@@ -265,6 +284,59 @@ def run_acceptance(*, fake, device=None, project=DEFAULT_PROJECT, board=None,
         return report
     report.record("dump", dump.words_written == image.word_count,
                   f"registers captured, words_written={dump.words_written}")
+
+    # ---- R2 read path (plan Tasks 3-5; chip-side, NOT chip-confirmed) ----
+    # These are the end-to-end expectations the chip read path must meet the
+    # moment R2 lands. On hardware before R2 they fail, which is the point:
+    # they are the gate, not decoration.
+    last = image.word_count - 1
+    try:
+        tail = tuple(session.read_imem(last, 1))
+        report.record("r2_read_imem", tail == (image.words[last],),
+                      _r2_detail(f"address={last} count=1 -> "
+                                 f"{tail[0] if tail else 'no word'}"))
+    except SessionError as exc:
+        report.record("r2_read_imem", False, _r2_detail(str(exc)))
+
+    if first.pe is not None:
+        first.pe.dmem[0:4] = b"\x0a\x0b\x0c\x0d"
+    try:
+        dmem = session.read_dmem(0, 4)
+        if first.pe is None:
+            report.record("r2_read_dmem", len(dmem) <= 16,
+                          _r2_detail(f"{len(dmem)} bytes; content is "
+                                     f"firmware-dependent on hardware"))
+        else:
+            report.record("r2_read_dmem", dmem == b"\x0a\x0b\x0c\x0d",
+                          _r2_detail(f"model-seeded pattern read back: "
+                                     f"{dmem.hex()}"))
+    except SessionError as exc:
+        report.record("r2_read_dmem", False, _r2_detail(str(exc)))
+
+    try:
+        session.read_imem(IMEM_WORDS - 1, 2)      # must be RANGE, never wrap
+        report.record("r2_range", False,
+                      _r2_detail("read past the end returned data (wrapped)"))
+    except SessionError as exc:
+        ok = f"status {P.STATUS_RANGE}" in str(exc)
+        detail = str(exc)
+        if first.pe is not None:
+            detail += f"; read-fault policy={first.pe.read_fault_policy}"
+            if first.pe.faults:
+                session.clear_fault(FAULT_RANGE)   # keep the script deterministic
+        report.record("r2_range", ok, _r2_detail(detail))
+
+    try:
+        dump_again = session.dump_core()
+        status_again = session.status()
+        same = all(getattr(dump_again, field) == getattr(status_again, field)
+                   for field in ("state", "run", "pc", "a", "x", "y", "timer",
+                                 "faults", "words_written"))
+        report.record("r2_dump_header", same,
+                      _r2_detail("dump_core header == status header while "
+                                 "stopped"))
+    except SessionError as exc:
+        report.record("r2_dump_header", False, _r2_detail(str(exc)))
 
     chip_only = ("IRQ_N and sticky status faults do not exist until RTL "
                  "phase R1 (chip-side, under the chip-repo manager)")

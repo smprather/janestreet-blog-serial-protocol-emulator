@@ -9,13 +9,16 @@ a step the current contract cannot observe is reported SKIP with the reason.
 python3 tools/host_bridge/acceptance.py --fake
 ```
 
-Expected: `RESULT: PASS (16 PASS, 0 FAIL, 1 SKIP)`. The 16 PASS cover the
+Expected: `RESULT: PASS (21 PASS, 0 FAIL, 1 SKIP)`. The PASS steps cover the
 `hello` clock/pads/SCLK cap, `prepare` (reset + host SPI), assembly of
 `firmware/uart_echo.pe`, load plus 118-word readback, start/STATUS/heartbeat,
 stop, register dump, scripted IRQ -> FAULTED -> CLEAR_FAULT, disconnect and a
-fresh reconnect (session id 2). The SKIP is `uart`: the Task 2 bridge contract
-has no op that reports UART bytes, so observing `uo_out[0]` needs a bridge op
-or operator scope.
+fresh reconnect (session id 2), plus five R2 read-path checks
+(`r2_read_cpu`, `r2_read_imem`, `r2_read_dmem`, `r2_range`, `r2_dump_header`)
+that are explicitly **not chip-confirmed** — they are the end-to-end gate the
+chip read path must meet when R2 lands. The SKIP is `uart`: the Task 2 bridge
+contract has no op that reports UART bytes, so observing `uo_out[0]` needs a
+bridge op or operator scope.
 
 ## Hardware run (Pico + PE board; not yet executed)
 

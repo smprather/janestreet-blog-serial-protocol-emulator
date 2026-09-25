@@ -399,3 +399,29 @@ hardware acceptance run, a UART-bytes bridge op (UART observation is a SKIP
 today), and the RP2040-vs-RP2350 pin/revision mapping. The next host action is
 Task 8's chip-side counterpart (regression + synthesis) once the RTL phases
 land, followed by the manager's merge decision.
+
+---
+
+## 12. R2 read-path prep on the host side (2026-09-25)
+
+The host side is ready to validate chip R2 (plan Tasks 3-5 / rows P16-P17) the
+moment it lands. Record: `reviews/2026-09-25/HOST-GUI-R2-PREP.md`.
+
+- `tools/host_gui/r2_reads.py`: seven named R2 read obligations, each with a
+  probe over the host model and `chip_confirmed=False`. The acceptance runner
+  and (later) the chip TB read the same list so they cannot drift.
+- `FakePE(read_fault_policy="latch"|"status-only")` parameterizes the open
+  question of whether an out-of-range read latches a sticky fault; the host
+  decides neither side.
+- `acceptance.py --fake` now also runs `r2_read_cpu`, `r2_read_imem`,
+  `r2_read_dmem`, `r2_range` and `r2_dump_header` end to end, each tagged
+  `[not chip-confirmed]`; the dry run is `PASS (21 PASS, 0 FAIL, 1 SKIP)`.
+- Suites after the prep: host GUI 167, bridge 65, R2 module 13, ruff and
+  compileall clean; no pre-existing test changed behavior.
+- Two contract questions (read-range fault latching; READ_CPU/READ_DMEM payload
+  order) are logged as WORKLOG `QUESTION`s for the chip side.
+
+No chip-side file was touched; `git diff --name-only main..HEAD` still shows
+none. When R2 lands, the five acceptance checks are the hardware gate (they are
+expected to fail on pre-R2 hardware) and the `chip_confirmed` flags flip only
+with that run as evidence.

@@ -70,9 +70,22 @@ def _payload_bytes(words: Iterable[int]) -> bytes:
 
 
 class FakePE:
-    """The framed-protocol chip model (no USB/JSON layer)."""
+    """The framed-protocol chip model (no USB/JSON layer).
 
-    def __init__(self) -> None:
+    ``read_fault_policy`` parameterizes one open chip contract question: does
+    an out-of-range **read** latch a sticky fault, or answer RANGE with no
+    fault? The plan's read step requires RANGE and "do not wrap" but is silent
+    on the sticky fault, so the model exposes both ("latch" is the historical
+    default, kept so existing tests do not change; "status-only" is the other
+    side of the open question). The chip side settles it; see
+    ``tools/host_gui/r2_reads.py``.
+    """
+
+    def __init__(self, *, read_fault_policy: str = "latch") -> None:
+        if read_fault_policy not in ("latch", "status-only"):
+            raise ValueError("read_fault_policy must be 'latch' or "
+                             "'status-only'")
+        self.read_fault_policy = read_fault_policy
         self.imem: list[int] = [0] * IMEM_WORDS
         self.dmem = bytearray(DMEM_BYTES)
         self.run = False
@@ -203,13 +216,18 @@ class FakePE:
         return (P.STATUS_OK, self.pc, self.a, self.x, self.y, self.insn,
                 self.state)
 
+    def _read_range_fault(self) -> None:
+        """Latch FAULT_RANGE on a read range error only under the 'latch' policy."""
+        if self.read_fault_policy == "latch":
+            self.faults |= FAULT_RANGE
+
     def _read_imem(self, payload: tuple[int, ...]) -> tuple[int, ...]:
         if self.run:
             return (P.STATUS_NOT_READY,)
         address = int(payload[0]) if payload else 0
         count = int(payload[1]) if len(payload) > 1 else 0
         if address < 0 or count < 0 or address + count > IMEM_WORDS:
-            self.faults |= FAULT_RANGE
+            self._read_range_fault()
             return (P.STATUS_RANGE,)
         return (P.STATUS_OK, *self.imem[address:address + count])
 
@@ -219,7 +237,7 @@ class FakePE:
         address = int(payload[0]) if payload else 0
         count = int(payload[1]) if len(payload) > 1 else 0
         if address < 0 or count < 0 or address + count > DMEM_BYTES:
-            self.faults |= FAULT_RANGE
+            self._read_range_fault()
             return (P.STATUS_RANGE,)
         chunk = bytearray(self.dmem[address:address + count])
         if len(chunk) % 2:
