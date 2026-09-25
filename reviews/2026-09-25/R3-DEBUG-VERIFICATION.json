@@ -1,0 +1,1336 @@
+{
+  "artifact": "R3 debug-control verification package",
+  "chip_confirmed": false,
+  "chip_evidence": {
+    "confirmed_steps": [],
+    "conformance": "0 of 14 host golden steps confirmed against the chip. The chip has run its OWN tb_pe_ctrl_r3 with a 7-mutant gate (all caught) and formal proofs for S1-S4; that is the chip's evidence. These host vectors become chip-confirmed only when that TB passes THEM byte-exactly and the citations are recorded here.",
+    "date": "2026-09-25",
+    "harness": "tb_pe_ctrl_r3 (chip repo) loads imem.hex/dmem.hex, applies each vector's model_images[] state -- registers plus bp_addr/bp_en/bp_hit/debug_hold -- drives the step's request_file and compares the response word for word, CRC included, skipping wait words (these ops emit none)",
+    "review": null,
+    "scope": "The host's expectations for the implemented R3 contract. Not evidence about silicon, and the real-board acceptance run (Pico over USB with a physical shuttle) has not been executed and is not claimed.",
+    "testbench": null
+  },
+  "generated_by": "tools/host_gui/r3_vectors.py (build_package)",
+  "memory": {
+    "dmem_bytes": 16,
+    "imem_words": 1024
+  },
+  "model_images": {
+    "v01-bp-set-readback": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v01-bp-set-readback",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v02-bp-set-out-of-range": {
+      "debug": {
+        "bp_addr": 3,
+        "bp_en": true,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v02-bp-set-out-of-range",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v03-bp-set-wrong-length": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v03-bp-set-wrong-length",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v04-step-executes-one": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v04-step-executes-one",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v05-step-sequence": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v05-step-sequence",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v06-step-while-running": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v06-step-while-running",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 7,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v07-step-lands-on-bp": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v07-step-lands-on-bp",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v08-bp-hit-stops-live-core": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": true,
+        "debug_hold": true
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v08-bp-hit-stops-live-core",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 2,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v09-step-off-bp-clears-hit": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": true,
+        "debug_hold": true
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v09-step-off-bp-clears-hit",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 2,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v10-bp-clr-resumes": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": true,
+        "debug_hold": true
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v10-bp-clr-resumes",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 2,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v11-bp-clr-boot-stop": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": true,
+        "bp_hit": false,
+        "debug_hold": true
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v11-bp-clr-boot-stop",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 3,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v12-bad-crc-no-side-effect": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v12-bad-crc-no-side-effect",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v13-status-common-prefix": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v13-status-common-prefix",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 4,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v14-unsupported-target": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v14-unsupported-target",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    }
+  },
+  "model_only_obligations": [
+    {
+      "name": "hit_is_stop_before",
+      "why": "Stop-before is proven across a step (the PC reports the landing address with the hit latched, and the following step executes the instruction there), plus by the chip's own formal claim and mutants; there is no single frame that shows a non-execution."
+    },
+    {
+      "name": "live_core_hit_keeps_the_strap (pre-state half)",
+      "why": "Reaching a live-core hit requires CLOCKING the core until the landing address matches, which is not a framed op. Vector 8 therefore ships the POST-HIT held state as its model image and reads it back with one DEBUG_STATUS, which is exactly what a TB sets up."
+    }
+  ],
+  "notice": "NOT CHIP-CONFIRMED. Reconciled against the implemented R3 contract (chip repo, 2026-09-25), but no step here has been run against the chip's tb_pe_ctrl_r3 yet, so every step is chip_confirmed=false. A passing step in this package is the gate the chip must meet, NOT evidence that it does. The real-board acceptance run has not been executed.",
+  "phase": "R3",
+  "protocol": {
+    "breakpoint": "ONE PC breakpoint (not a table), per the contract's stated scope",
+    "crc": "CRC-16/CCITT-FALSE",
+    "crc_init": 65535,
+    "crc_poly": 4129,
+    "debug_contract": {
+      "0x21 DEBUG_STEP": "(OK, state, pc_next, bp_addr, bp_flags)   request len 0",
+      "0x22 DEBUG_BP_SET": "(OK, state, pc, bp_addr, bp_flags)    request len 1 (address)",
+      "0x23 DEBUG_BP_CLR": "(OK, state, pc, bp_addr_before, bp_flags)  request len 0",
+      "0x24 DEBUG_STATUS": "(OK, state, pc, bp_addr, bp_flags, run, a, x, y, insn)   request len 0",
+      "bp_flags": "bit0 = ARMED, bit1 = HIT latched. bp_addr is the armed address, or 0 when disarmed; address 0 is a legal breakpoint and is told apart from 'disarmed' by bit0, never by the address value.",
+      "refusals": "DEBUG_STEP while free-running is NOT_READY with the full 5-word prefix and the PRE-step state; a wrong payload length is a 1-word BAD_FRAME; DEBUG_BP_SET past IMEM_WORDS is RANGE with NO side effect and NO fault.",
+      "release": "DEBUG_BP_CLR is the only release: it disarms, clears the hit and drops the hold - with run=1 the core resumes, with run=0 the core falls to the boot stop and the PC re-zeroes. Continuing WITH the breakpoint armed costs step -> clear -> re-arm.",
+      "state": {
+        "0": "STOPPED (boot stop, PC held at 0)",
+        "1": "RUNNING (strap high, no hold)",
+        "2": "DEBUG_HOLD (PC preserved)",
+        "3": "BP_HIT (PC preserved, hit latched)"
+      },
+      "wait_words": "zero - all four ops are ready-immediate, answered in the request's own CRC cycle like READ_CPU"
+    },
+    "debug_opcodes": {
+      "0x21": "DEBUG_STEP",
+      "0x22": "DEBUG_BP_SET",
+      "0x23": "DEBUG_BP_CLR",
+      "0x24": "DEBUG_STATUS"
+    },
+    "header": "{version[3:0], opcode[7:0], target[3:0]}",
+    "response_bit": 128,
+    "sync": 42330,
+    "version": 1,
+    "word_order": "big-endian words on the wire; the debug payloads are the fixed shapes above, in opcode order, with no wait words"
+  },
+  "reconciliation_required": "These vectors were generated from the implemented RTL on 2026-09-25. Before any step is marked chip_confirmed, the chip's tb_pe_ctrl_r3 must pass it byte-exactly (CRC included) with the model image preloaded. Where the chip and this package ever disagree, the CHIP wins: fix the host model and regenerate, never the reverse.",
+  "rulings_applied": [
+    "the contract is implemented chip-side; these vectors were reconciled against rtl/pe_ctrl.v's four response builders, not read off the prose (2026-09-25)",
+    "state is dbg_hold ? (bp_hit ? 3 : 2) : (run ? 1 : 0), and R2's STATUS state word carries the SAME encoding",
+    "bp_flags is {bp_hit, bp_en}: bit0 armed, bit1 hit; bp_addr is 0 when disarmed and address 0 is a legal breakpoint",
+    "a hit compares the LANDING address, so the instruction at the breakpoint has NOT executed (stop-before)",
+    "DEBUG_BP_CLR is the only release of the debug hold, and it disarms",
+    "a rejected op has no side effect: wrong length is a 1-word BAD_FRAME, and a BP_SET past IMEM_WORDS is RANGE with no fault",
+    "every step is chip_confirmed=False: 0 of 14 host golden steps confirmed against the chip. The chip has run its OWN tb_pe_ctrl_r3 with a 7-mutant gate (all caught) and formal proofs for S1-S4; that is the chip's evidence. These host vectors become chip-confirmed only when that TB passes THEM byte-exactly and the citations are recorded here."
+  ],
+  "schema": 1,
+  "source_of_truth": [
+    "tools/host_gui/r3_reads.py",
+    "tools/host_gui/fake_pe.py",
+    "tools/host_gui/protocol.py"
+  ],
+  "spec_vs_rtl_discrepancies": [
+    {
+      "resolution": "the table's expected response says pc=0, but the RTL answers with the PC AT THE REQUEST and only re-zeroes the core at the same edge, so a following DEBUG_STATUS/STATUS reads 0. The RTL's own comment and the contract's 'Known limits' section both state the RTL behaviour; only the table row disagrees. RULED 2026-09-25: the vectors stand, and the table is being corrected chip-side to match the RTL.",
+      "where": "vector 11 (debug_bp_clr_while_stopped_is_boot_stop)"
+    },
+    {
+      "resolution": "the table expects insn=imem[4] while free-running, but pe_cpu fetches at next_pc while executing (next_pc / pc while held / 0 at the boot stop), so a free-running readback reports the word at the LANDING address, not at pc. A TB that wants insn=imem[pc] must hold the core (state 2) or preload the pipeline. RULED 2026-09-25: the vectors stand (insn is the landing word), and the table is being corrected chip-side.",
+      "where": "vector 13 (debug_status_common_prefix)"
+    }
+  ],
+  "status_codes": {
+    "STATUS_BAD_FRAME": 2,
+    "STATUS_BUSY": 1,
+    "STATUS_FAULT": 4,
+    "STATUS_NOT_READY": 6,
+    "STATUS_OK": 0,
+    "STATUS_RANGE": 3,
+    "STATUS_UNSUPPORTED": 5
+  },
+  "vectors": [
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v01-bp-set-readback",
+      "name": "debug_bp_set_readback",
+      "obligation": "DEBUG_BP_SET arms the address and reads it straight back in the 5-word prefix.",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v01-bp-set-readback",
+          "name": "bp_set_address_2",
+          "note": "armed at 2 and read back in the prefix: state 0, pc 0, flags 0x01",
+          "opcode": 34,
+          "opcode_name": "OP_DEBUG_BP_SET",
+          "request_hex": "a55a12200001000100027c08",
+          "request_payload_words": [
+            2
+          ],
+          "response_hex": "a55a1a200001000500000000000000020001caf2",
+          "response_payload_words": [
+            0,
+            0,
+            0,
+            2,
+            1
+          ],
+          "sequence": 1,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (5-word prefix)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v02-bp-set-out-of-range",
+      "name": "debug_bp_set_out_of_range",
+      "obligation": "A breakpoint address past IMEM_WORDS is RANGE, changes nothing, and latches NO fault (R3 adds no fault class).",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v02-bp-set-out-of-range",
+          "name": "bp_set_past_imem",
+          "note": "1024 is past a 1024-word IMEM: RANGE with bp_addr and flags unchanged and NO fault latched (R3 adds no fault class)",
+          "opcode": 34,
+          "opcode_name": "OP_DEBUG_BP_SET",
+          "request_hex": "a55a1220000100010400908e",
+          "request_payload_words": [
+            1024
+          ],
+          "response_hex": "a55a1a200001000500030000000000030001d086",
+          "response_payload_words": [
+            3,
+            0,
+            0,
+            3,
+            1
+          ],
+          "sequence": 1,
+          "status": 3
+        }
+      ],
+      "word_order": "n/a (rejected)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v03-bp-set-wrong-length",
+      "name": "debug_bp_set_wrong_length",
+      "obligation": "A wrong payload length is a 1-word BAD_FRAME with no side effect on any debug register (S5).",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 8,
+          "model_image_id": "v03-bp-set-wrong-length",
+          "name": "bp_set_len_0",
+          "note": "BP_SET takes exactly one payload word; len 0 is a BAD_FRAME carrying a SINGLE status word, and arms nothing",
+          "opcode": 34,
+          "opcode_name": "OP_DEBUG_BP_SET",
+          "request_hex": "a55a12200001000048f0",
+          "request_payload_words": [],
+          "response_hex": "a55a1a2000010001000262d2",
+          "response_payload_words": [
+            2
+          ],
+          "sequence": 1,
+          "status": 2
+        }
+      ],
+      "word_order": "n/a (rejected)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v04-step-executes-one",
+      "name": "debug_step_executes_one",
+      "obligation": "DEBUG_STEP executes exactly one instruction and leaves the core in DEBUG_HOLD (S1).",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v04-step-executes-one",
+          "name": "step_from_boot_stop",
+          "note": "executes imem[0] (LDI A,0x55): state 2, pc_next 1",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_hex": "a55a121000010000441e",
+          "request_payload_words": [],
+          "response_hex": "a55a1a100001000500000002000100000000ad9f",
+          "response_payload_words": [
+            0,
+            2,
+            1,
+            0,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v04-step-executes-one",
+          "name": "status_shows_pc_1",
+          "note": "the held PC is 1 and the run strap is still low",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_hex": "a55a124000020000087c",
+          "request_payload_words": [],
+          "response_hex": "a55a1a400002000a00000002000100000000000000550000000000aabbb5",
+          "response_payload_words": [
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            85,
+            0,
+            0,
+            170
+          ],
+          "sequence": 2,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v04-step-executes-one",
+          "name": "read_cpu_shows_a_55",
+          "note": "a=0x55: exactly one instruction retired",
+          "opcode": 18,
+          "opcode_name": "OP_READ_CPU",
+          "request_hex": "a55a112000030000e870",
+          "request_payload_words": [],
+          "response_hex": "a55a19200003000700000001005500000000005500029899",
+          "response_payload_words": [
+            0,
+            1,
+            85,
+            0,
+            0,
+            85,
+            2
+          ],
+          "sequence": 3,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (5-word prefix)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v05-step-sequence",
+      "name": "debug_step_sequence",
+      "obligation": "Two steps retire two instructions: pc 0->1->2 and the LDI at 1 has run exactly once (a=0xAA).",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v05-step-sequence",
+          "name": "step_one",
+          "note": "pc_next 1",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_hex": "a55a121000010000441e",
+          "request_payload_words": [],
+          "response_hex": "a55a1a100001000500000002000100000000ad9f",
+          "response_payload_words": [
+            0,
+            2,
+            1,
+            0,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v05-step-sequence",
+          "name": "step_two",
+          "note": "pc_next 2",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_hex": "a55a1210000200001d4e",
+          "request_payload_words": [],
+          "response_hex": "a55a1a1000020005000000020002000000008ce8",
+          "response_payload_words": [
+            0,
+            2,
+            2,
+            0,
+            0
+          ],
+          "sequence": 2,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v05-step-sequence",
+          "name": "status_shows_a_aa",
+          "note": "a=0xAA: the LDI at 1 ran exactly once",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_hex": "a55a1240000300003f4c",
+          "request_payload_words": [],
+          "response_hex": "a55a1a400003000a00000002000200000000000000aa00000000f0009f8b",
+          "response_payload_words": [
+            0,
+            2,
+            2,
+            0,
+            0,
+            0,
+            170,
+            0,
+            0,
+            61440
+          ],
+          "sequence": 3,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (5-word prefix)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v06-step-while-running",
+      "name": "debug_step_while_running",
+      "obligation": "A free-running core cannot be stepped: NOT_READY with the full 5-word prefix, the pre-step state, and no side effect.",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v06-step-while-running",
+          "name": "step_not_ready",
+          "note": "NOT_READY carrying the full 5-word prefix and the PRE-step state; the PC does not move and no hold is asserted",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_hex": "a55a121000010000441e",
+          "request_payload_words": [],
+          "response_hex": "a55a1a100001000500060001000700000000e210",
+          "response_payload_words": [
+            6,
+            1,
+            7,
+            0,
+            0
+          ],
+          "sequence": 1,
+          "status": 6
+        }
+      ],
+      "word_order": "n/a (5-word prefix)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v07-step-lands-on-bp",
+      "name": "debug_step_lands_on_bp",
+      "obligation": "A step whose landing address is the armed breakpoint reports state 3, the landing PC, and bp_flags 0b11 (S3).",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v07-step-lands-on-bp",
+          "name": "step_one",
+          "note": "0 -> 1, no hit: state 2, flags 0x01",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_hex": "a55a121000010000441e",
+          "request_payload_words": [],
+          "response_hex": "a55a1a100001000500000002000100020001d3de",
+          "response_payload_words": [
+            0,
+            2,
+            1,
+            2,
+            1
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v07-step-lands-on-bp",
+          "name": "step_lands_on_2",
+          "note": "landing on the armed address: state 3, pc_next 2, flags 0x03; the NOP at 2 has NOT executed (stop-before)",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_hex": "a55a1210000200001d4e",
+          "request_payload_words": [],
+          "response_hex": "a55a1a1000020005000000030002000200036a8a",
+          "response_payload_words": [
+            0,
+            3,
+            2,
+            2,
+            3
+          ],
+          "sequence": 2,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v07-step-lands-on-bp",
+          "name": "status_reports_the_hit",
+          "note": "the hit is latched and the core is not executing",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_hex": "a55a1240000300003f4c",
+          "request_payload_words": [],
+          "response_hex": "a55a1a400003000a000000030002000200030000005500000000f000d824",
+          "response_payload_words": [
+            0,
+            3,
+            2,
+            2,
+            3,
+            0,
+            85,
+            0,
+            0,
+            61440
+          ],
+          "sequence": 3,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (5-word prefix)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v08-bp-hit-stops-live-core",
+      "name": "debug_bp_hit_stops_live_core",
+      "obligation": "A free-running core stops on the breakpoint with run still high, and reports state 3 (S3).",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v08-bp-hit-stops-live-core",
+          "name": "status_after_live_hit",
+          "note": "state 3, pc 2, flags 0x03, and run STILL 1: the hit holds the core without touching the strap",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_hex": "a55a124000010000512c",
+          "request_payload_words": [],
+          "response_hex": "a55a1a400001000a000000030002000200030001000000000000f0006a21",
+          "response_payload_words": [
+            0,
+            3,
+            2,
+            2,
+            3,
+            1,
+            0,
+            0,
+            0,
+            61440
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v08-bp-hit-stops-live-core",
+          "name": "status_is_stable",
+          "note": "the held PC is preserved across reads (S2)",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_hex": "a55a124000020000087c",
+          "request_payload_words": [],
+          "response_hex": "a55a1a400002000a000000030002000200030001000000000000f000c53c",
+          "response_payload_words": [
+            0,
+            3,
+            2,
+            2,
+            3,
+            1,
+            0,
+            0,
+            0,
+            61440
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (10-word status)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v09-step-off-bp-clears-hit",
+      "name": "debug_step_off_bp_clears_hit",
+      "obligation": "A step off the breakpoint clears the hit and returns to DEBUG_HOLD with bp_flags 0b01 (S4).",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v09-step-off-bp-clears-hit",
+          "name": "step_off_the_breakpoint",
+          "note": "executes the NOP at 2 and lands at 3: state 2, flags 0x01, so the hit is cleared (S4)",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_hex": "a55a121000010000441e",
+          "request_payload_words": [],
+          "response_hex": "a55a1a100001000500000002000300020001975d",
+          "response_payload_words": [
+            0,
+            2,
+            3,
+            2,
+            1
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v09-step-off-bp-clears-hit",
+          "name": "status_shows_no_hit",
+          "note": "armed but not hit",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_hex": "a55a124000020000087c",
+          "request_payload_words": [],
+          "response_hex": "a55a1a400002000a000000020003000200010001000000000000000f39bf",
+          "response_payload_words": [
+            0,
+            2,
+            3,
+            2,
+            1,
+            1,
+            0,
+            0,
+            0,
+            15
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (5-word prefix)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v10-bp-clr-resumes",
+      "name": "debug_bp_clr_resumes",
+      "obligation": "DEBUG_BP_CLR disarms, clears the hit and RELEASES the hold: run=1 resumes, run=0 falls to the boot stop with PC 0.",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v10-bp-clr-resumes",
+          "name": "bp_clr_releases",
+          "note": "state 1 (released to the high strap), pc 2 as at the request, bp_addr_before 2, flags 0x00",
+          "opcode": 35,
+          "opcode_name": "OP_DEBUG_BP_CLR",
+          "request_hex": "a55a1230000100004caa",
+          "request_payload_words": [],
+          "response_hex": "a55a1a30000100050000000100020002000068bb",
+          "response_payload_words": [
+            0,
+            1,
+            2,
+            2,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v10-bp-clr-resumes",
+          "name": "status_running_again",
+          "note": "the core is running and disarmed",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_hex": "a55a124000020000087c",
+          "request_payload_words": [],
+          "response_hex": "a55a1a400002000a000000010002000200000001000000000000000f7e2c",
+          "response_payload_words": [
+            0,
+            1,
+            2,
+            2,
+            0,
+            1,
+            0,
+            0,
+            0,
+            15
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (5-word prefix)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v11-bp-clr-boot-stop",
+      "name": "debug_bp_clr_while_stopped_is_boot_stop",
+      "obligation": "With run=0, DEBUG_BP_CLR drops the hold to the normal boot stop and the PC re-zeroes; the response reports the PC at the request.",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v11-bp-clr-boot-stop",
+          "name": "bp_clr_to_boot_stop",
+          "note": "state 0, pc 3 AS AT THE REQUEST (the re-zero lands at the same edge, so the next read shows 0). The \u00a73 table expects 0 here; the RTL answers 3 -- see r3_reads.DISCREPANCIES",
+          "opcode": 35,
+          "opcode_name": "OP_DEBUG_BP_CLR",
+          "request_hex": "a55a1230000100004caa",
+          "request_payload_words": [],
+          "response_hex": "a55a1a30000100050000000000030000000014eb",
+          "response_payload_words": [
+            0,
+            0,
+            3,
+            0,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v11-bp-clr-boot-stop",
+          "name": "status_reads_zero",
+          "note": "the boot stop now holds the PC at 0",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_hex": "a55a124000020000087c",
+          "request_payload_words": [],
+          "response_hex": "a55a1a400002000a0000000000000000000000000000000000000055b94d",
+          "response_payload_words": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            85
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (5-word prefix)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v12-bad-crc-no-side-effect",
+      "name": "debug_bad_crc_no_side_effect",
+      "obligation": "A bad CRC arms nothing and executes nothing (S5).",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 2,
+          "model_image_id": "v12-bad-crc-no-side-effect",
+          "name": "bp_set_bad_crc",
+          "note": "the request_file itself carries a corrupt CRC: BAD_FRAME, and nothing is armed",
+          "opcode": 34,
+          "opcode_name": "OP_DEBUG_BP_SET",
+          "request_hex": "a55a12200001000100027c09",
+          "request_payload_words": [
+            2
+          ],
+          "response_hex": "a55a1a2000010001000262d2",
+          "response_payload_words": [
+            2
+          ],
+          "sequence": 1,
+          "status": 2
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 2,
+          "model_image_id": "v12-bad-crc-no-side-effect",
+          "name": "status_shows_not_armed",
+          "note": "flags 0x00: the rejected op left no trace (S5)",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_hex": "a55a124000020000087c",
+          "request_payload_words": [],
+          "response_hex": "a55a1a400002000a0000000000000000000000000000000000000055b94d",
+          "response_payload_words": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            85
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (rejected)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v13-status-common-prefix",
+      "name": "debug_status_common_prefix",
+      "obligation": "DEBUG_STATUS is the 5-word prefix plus run/a/x/y/insn, and it answers while running and while held.",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v13-status-common-prefix",
+          "name": "status_full_readback",
+          "note": "the 5-word prefix plus run/a/x/y/insn; insn follows the RTL's fetch mode (next_pc while executing), so it is the LANDING word, not imem[pc] -- see r3_reads.DISCREPANCIES",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_hex": "a55a124000010000512c",
+          "request_payload_words": [],
+          "response_hex": "a55a1a400001000a000000010004000200010001000000000000f0003d3d",
+          "response_payload_words": [
+            0,
+            1,
+            4,
+            2,
+            1,
+            1,
+            0,
+            0,
+            0,
+            61440
+          ],
+          "sequence": 1,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (10-word status)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v14-unsupported-target",
+      "name": "debug_unsupported_target",
+      "obligation": "Every debug op answers UNSUPPORTED on the loopback target.",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v14-unsupported-target",
+          "name": "step_on_loopback",
+          "note": "the loopback target does not implement the debug ops",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_hex": "a55a121100010000ee4f",
+          "request_payload_words": [],
+          "response_hex": "a55a1a11000100010005f3d9",
+          "response_payload_words": [
+            5
+          ],
+          "sequence": 1,
+          "status": 5
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v14-unsupported-target",
+          "name": "bp_set_on_loopback",
+          "note": "same for BP_SET",
+          "opcode": 34,
+          "opcode_name": "OP_DEBUG_BP_SET",
+          "request_hex": "a55a12210002000100022abb",
+          "request_payload_words": [
+            2
+          ],
+          "response_hex": "a55a1a210002000100054486",
+          "response_payload_words": [
+            5
+          ],
+          "sequence": 2,
+          "status": 5
+        }
+      ],
+      "word_order": "n/a (rejected)"
+    }
+  ]
+}

@@ -15,8 +15,8 @@ VERSION = 1
 
 RESPONSE_BIT = 0x80
 
-HEADER_WORDS = 4          # sync, header, sequence, length
-TRAILER_WORDS = 1         # CRC
+HEADER_WORDS = 4  # sync, header, sequence, length
+TRAILER_WORDS = 1  # CRC
 MIN_FRAME_WORDS = HEADER_WORDS + TRAILER_WORDS
 MAX_PAYLOAD_WORDS = 0xFFFF
 
@@ -29,6 +29,16 @@ OP_READ_DMEM = 0x14
 OP_DUMP_CORE = 0x15
 OP_CLEAR_FAULT = 0x16
 OP_TARGET = 0x20
+
+# R3 debug-control opcodes (NOT chip-confirmed: the R3 contract is a chip-side
+# draft under the manager's dispatch). The opcode NUMBERS are fixed by that
+# dispatch; the response layouts live in tools/host_gui/r3_reads.py and are
+# provisional until rtl/pe_ctrl.v's header lands. This list must stay in parity
+# with tools/host_gui/protocol.py so the Pico can speak the debug ops.
+OP_DEBUG_STEP = 0x21
+OP_DEBUG_BP_SET = 0x22
+OP_DEBUG_BP_CLR = 0x23
+OP_DEBUG_STATUS = 0x24
 
 STATUS_OK = 0
 STATUS_BUSY = 1
@@ -62,11 +72,22 @@ def crc16_ccitt(data):
 
 
 def words_to_bytes(words):
-    """Pack 16-bit words big-endian (the MSB-first wire order)."""
+    """Pack 16-bit words big-endian (the MSB-first wire order).
+
+    Strict on purpose. This used to call ``int(word)`` per word, which is
+    LENIENT rather than safe: ``1.5`` silently encoded as ``1`` and ``"5"``
+    encoded as ``5``, so a caller's bug became a plausible-looking frame on
+    the wire instead of an error. A codec exists to be exact, so a word that
+    is not an int in 0..0xFFFF is rejected here, at the boundary, rather
+    than coerced. MicroPython-safe: isinstance, comparison and raise are all
+    core MicroPython.
+    """
     out = bytearray()
     for word in words:
-        out.append((int(word) >> 8) & 0xFF)
-        out.append(int(word) & 0xFF)
+        if not isinstance(word, int) or not 0 <= word <= 0xFFFF:
+            raise ValueError(f"not a 16-bit word: {word!r}")
+        out.append((word >> 8) & 0xFF)
+        out.append(word & 0xFF)
     return bytes(out)
 
 
@@ -78,7 +99,7 @@ def bytes_to_words(data):
     return tuple(words)
 
 
-MAX_WAIT_WORDS = 15   # the chip's worst-case wait-word count (R2 contract)
+MAX_WAIT_WORDS = 15  # the chip's worst-case wait-word count (R2 contract)
 
 
 def strip_wait_words(raw, max_wait=MAX_WAIT_WORDS):
@@ -93,13 +114,12 @@ def strip_wait_words(raw, max_wait=MAX_WAIT_WORDS):
     """
     if len(raw) < 4:
         raise FrameError("response too short to hold a frame")
-    words = bytes_to_words(raw[:len(raw) - (len(raw) % 2)])
+    words = bytes_to_words(raw[: len(raw) - (len(raw) % 2)])
     index = 0
     while index < len(words) and words[index] == 0xFFFF and index < max_wait:
         index += 1
     if index >= len(words) or words[index] == 0xFFFF:
-        raise FrameError(
-            f"no frame after {index} wait words (chip bound {max_wait})")
+        raise FrameError(f"no frame after {index} wait words (chip bound {max_wait})")
     return words_to_bytes(words[index:])
 
 
@@ -139,5 +159,10 @@ def decode_frame(raw):
     version = (header >> 12) & 0xF
     if version != VERSION:
         raise FrameError(f"unsupported version {version}")
-    return Frame(version, (header >> 4) & 0xFF, words[2], header & 0xF,
-                 tuple(words[HEADER_WORDS:HEADER_WORDS + payload_words]))
+    return Frame(
+        version,
+        (header >> 4) & 0xFF,
+        words[2],
+        header & 0xF,
+        tuple(words[HEADER_WORDS : HEADER_WORDS + payload_words]),
+    )

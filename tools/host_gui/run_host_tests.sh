@@ -24,8 +24,12 @@
 #      connect->load->readback->start->stop->dump->fault->reconnect sequence
 #      over the real host stack and the real bridge against fakes. It never
 #      opens a serial device.
-#   6. the R2 verification package drift check (r2_vectors --check): the
-#      chip-side golden vectors must still match a fresh build of the model.
+#   6. the R2 AND R3 verification package drift checks (r2_vectors/r3_vectors
+#      --check): the chip-side golden vectors must still match a fresh build
+#      of the model. R3 is the debug-control package (opcodes 0x21-0x24),
+#      reconciled against the implemented pe_ctrl.v contract; like R2 it is a
+#      gate the chip must pass, NOT evidence that it does, and every R3 step
+#      is chip_confirmed=false until tb_pe_ctrl_r3 passes it byte-exactly.
 #   7. the MicroPython conformance run of the deployed bridge modules, when a
 #      `micropython` binary is on PATH (skipped with a note otherwise).
 #   8. the deploy helper's dry run (payload manifest; the unit tests also
@@ -76,6 +80,7 @@ fi
 
 run "compileall" python3 -m compileall -q tools/host_gui tools/host_bridge
 run "R2 vector package" python3 -m tools.host_gui.r2_vectors --check
+run "R3 debug vector package" python3 -m tools.host_gui.r3_vectors --check
 run "protocol fuzz" python3 -m tools.host_gui.fuzz_protocol -n 2000
 run "server fuzz" python3 -m tools.host_gui.fuzz_server -n 120 --rounds 10
 run "soak smoke" python3 -m tools.host_gui.soak_host --minutes 0 --cycles 300 \

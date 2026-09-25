@@ -173,15 +173,25 @@ module tb_pe_soc_eth_loop;
 
   int  wrap_pushes, bad_pushes;
   bit  refused_start;
+  // Finding F2's monitor: tx_path must NEVER be high while the SERDES is
+  // transmitting. The owner probe is the case that provokes it (a TXCTRL SET
+  // attempted mid-SERDES).
+  bit  owner_rose_mid_serdes;
+  bit  serdes_word_done;
   int  clk_tick, last_push_tick, max_push_gap;
   bit  push_seen;
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       wrap_pushes <= 0; bad_pushes <= 0; refused_start <= 1'b0;
+      owner_rose_mid_serdes <= 1'b0; serdes_word_done <= 1'b0;
       clk_tick <= 0; last_push_tick <= 0; max_push_gap <= 0;
       push_seen <= 1'b0;
     end else begin
       clk_tick <= clk_tick + 1;
+      // F2: the codec owner must not move to the frame engine while a SERDES
+      // word is in flight.
+      if (dut.ser_tx_busy && dut.tx_path) owner_rose_mid_serdes <= 1'b1;
+      if (dut.ser_tx_done) serdes_word_done <= 1'b1;
       // The push bank must never be addressed outside 16-23 (Task 3 deferral).
       if (dut.eth_push) begin
         wrap_pushes <= wrap_pushes + 1;
@@ -356,6 +366,29 @@ module tb_pe_soc_eth_loop;
              refused_start, dut.dmem[14], n_valid, n_bad);
   endtask
 
+  // The FINDING-F2 directed case (manager ruling 2026-09-25): the SERDES owns
+  // the codec (tx_path is never set) and a TXCTRL tx_path SET is attempted
+  // while ser_tx_busy is high. The symmetric guard must refuse it: the codec
+  // stays with the SERDES for the whole word, and the TXCTRL readback reports
+  // the ACTUAL owner (unclaimed).
+  task automatic run_owner_probe;
+    reset_dut();
+    load_hex("../firmware/eth_tx_owner_probe.hex");
+    run = 1'b1; #1;
+    wait_dmem(2, 8'hA5, "owner probe");
+    run = 1'b0; #1;
+    check(owner_rose_mid_serdes === 1'b0,
+          "owner: tx_path became 1 while the SERDES was transmitting (F2 guard missing)");
+    check((dut.dmem[0] & 8'h04) === 8'h00,
+          $sformatf("owner: TXCTRL readback after the refused set = %02h, bit2 must be the ACTUAL owner (0)",
+                    dut.dmem[0]));
+    check(serdes_word_done === 1'b1,
+          "owner: the SERDES word never completed -- the claim disturbed it");
+    check(dut.tx_path === 1'b0, "owner: tx_path must still be unclaimed at the end");
+    $display("    owner: readback=%02h rose_mid=%0d serdes_done=%0d tx_path=%0d",
+             dut.dmem[0], owner_rose_mid_serdes, serdes_word_done, dut.tx_path);
+  endtask
+
   initial begin
     $dumpfile("tb_pe_soc_eth_loop.vcd");
     $dumpvars(0, tb_pe_soc_eth_loop);
@@ -370,6 +403,7 @@ module tb_pe_soc_eth_loop;
     run_two_frames;
     run_wrap_probe;
     run_busy_probe;
+    run_owner_probe;
 
     if (errors == 0) $display("PASS: tb_pe_soc_eth_loop");
     else             $display("FAILURES: %0d", errors);
