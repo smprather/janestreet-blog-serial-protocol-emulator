@@ -263,13 +263,34 @@ wr_done:
 ;
 ; A read slot is: release, wait for the sensor's initiation low, wait for its
 ; release, wait 40 us, sample. The sample is 1 if the line has been pulled low
-; again (the sensor's 1-15 us "1" pulse) and 0 if it is still high.
+; again (the sensor's 1-15 us "1" pulse) and 0 if it is still high. That
+; polarity is the OPPOSITE of a write slot, where the host pulling the line
+; down IS the zero: the two directions cannot borrow one sampling idiom
+; from each other, and the read path first borrowed the write path's.
 ; ===========================================================================
         LDI   A, 8              ; EIGHT bits in this byte. This was 0 first,
         STM   3, A              ; so the first decrement underflowed to 255 and
         LDI   A, 2              ; the byte never banked: the 1-Wire TB saw 16
-        STM   10, A             ; read slots and dmem[0..1] still unwritten.
+        STM   8, A              ; read slots and dmem[0..1] still unwritten.
                                 ; The same bug as the WS2812 byte counter.
+                                ; It was STM 10 here -- the DELAY ROUTINE's
+                                ; middle-counter TARGET, which the write
+                                ; command counter was moved OFF at wr_done
+                                ; above. dmem[8] is the slot this loop
+                                ; decrements, and nothing else writes it, so
+                                ; the counter started at 0: it banked the two
+                                ; CORRECT bytes and then, with 255 slots left
+                                ; instead of 1, walked the byte index up until
+                                ; it banked over dmem[5] -- its own index --
+                                ; and came back round to overwrite dmem[0..1]
+                                ; with the tail of the bus. The TB's "the two
+                                ; temperature bytes came back" check read
+                                ; ff ff against a read path that was correct
+                                ; for all sixteen slots, and the model's own
+                                ; decoded bits were right the whole way. A
+                                ; runaway loop is a bug in the COUNTER, not
+                                ; in the data, and only the counter was
+                                ; wrong.
 
         LDI   A, 0
         STM   5, A              ; the byte index
@@ -311,12 +332,31 @@ ph4a:   LDI   A, 0x00
 ; the OPPOSITE of the DHT11. The first version copied the DHT11's shift-LEFT +
 ; bit-at-LSB (MSB-first accumulation) and every byte came back REVERSED
 ; (0x2b as 0xd4) with the right bit count and the wrong values.
+;
+; THE POLARITY, and it is the one that was wrong: this branch read
+;
+;         JZ rb_was_zero            ; LOW is a zero  <-- INVERTED
+;
+; so a zero was taken from a line the sensor was PULLING DOWN and a one from
+; a released line. It is the same shape as the DHT11's reversed byte: both
+; bytes still had eight bits and a plausible number of ones, and both came
+; back EXACTLY complemented -- 0x2b as 0xd4 and 0x01 as 0xfe, which is
+; 0x2b|0x80... no, which is ~0x2b and ~0x01, bit for bit. A sensor that
+; transmits its data inverted still transmits DATA, and nothing in the run
+; looks wrong until the bytes are compared.
+;
+; In a 1-Wire READ slot a one is the line LOW (the slave holds it down for
+; the rest of the slot) and a zero is the line released; in a WRITE slot it
+; is the other way about, because there the host is the one pulling down.
+; The model was right and this was wrong, which is the outcome one wants
+; from a testbench whose model is written from the datasheet rather than
+; from the firmware.
 ph4:    IN    A, PIN
         AND   A, OW_DATA
-        JZ    rb_was_zero
-        LDM   A, 4
-        SHR   A                 ; SHIFT RIGHT, not left: LSB first
-        OR    A, 0x80           ; ...a 1 goes in at the top
+        JNZ   rb_was_zero        ; RELEASED (high) is a zero on the wire;
+        LDM   A, 4              ; PULLED DOWN (low) is a one -- the opposite
+        SHR   A                 ; of a write slot, and the reason the two
+        OR    A, 0x80           ; directions cannot share one sample idiom
         STM   4, A
         JMP   rb_taken
 rb_was_zero:

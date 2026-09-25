@@ -5,6 +5,7 @@
     python3 tools/fw/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex
     python3 tools/fw/peasm.py firmware/uart_echo.pe --listing       # addr + bytes + src
     python3 tools/fw/peasm.py firmware/uart_echo.pe --rtl-init      # imem initialiser
+    python3 tools/fw/peasm.py firmware/ds18b20.pe --const OW_RST=40  # perturb a fitted delay
 
 The ISA is deliberately tiny, so this is deliberately small: a table of
 mnemonics, an immediate encoder, and a two-pass label resolver. If the assembler
@@ -523,7 +524,35 @@ def main() -> int:
         action="store_true",
         help="emit a Verilog $readmemh include file (one word per line)",
     )
+    ap.add_argument(
+        "--const",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help=(
+            "override one entry of the CONSTS table for this assembly, e.g. "
+            "--const OW_T40=45. WHY THIS EXISTS: the timing programs name their "
+            "delays as symbols (OW_RST, OW_T40) because the value is a FITTED "
+            "instruction count, not a duration -- see the table's own comment. A "
+            "mutation gate has to be able to perturb that number without editing "
+            "the tree, and a sed of the .pe cannot reach it because the number is "
+            "not in the .pe. The name must already exist, so a typo is an error "
+            "rather than a new symbol that silently assembles."
+        ),
+    )
     args = ap.parse_args()
+
+    for override in args.const:
+        name, eq, value = override.partition("=")
+        name = name.strip()
+        if not eq or name not in CONSTS:
+            print(
+                f"peasm: --const needs NAME=VALUE with NAME already in the CONSTS "
+                f"table; got {override!r}",
+                file=sys.stderr,
+            )
+            return 2
+        CONSTS[name] = int(value.strip(), 0)
 
     try:
         words, listing = assemble(args.source.read_text(encoding="utf-8"))
