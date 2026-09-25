@@ -3,6 +3,7 @@
 **Date entry (UTC):** 2026-09-25T06:47:06Z (`date -u +"%Y-%m-%dT%H:%M:%SZ"`).
 **Branch:** `host-controller-gui` (base `153fbde`; phase 2 bridge at `c28234d`).
 **Code commit:** `f6fdd65` (`test: add host controller board acceptance`).
+**Result-doc commit:** `fdbeae9` (this file, HANDOFF.md and plan-review section 10).
 **Scope:** plan Task 7 — the scripted acceptance runner and the no-hardware
 `--fake` dry run. Step 3 (real Pico acceptance) remains hardware-gated;
 `wiki/STATUS.md` was deferred (ruling below). No chip-side file was touched.
