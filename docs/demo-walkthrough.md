@@ -99,6 +99,15 @@ python3 tools/host_bridge/acceptance.py --fake   # the 7 r3_demo_* beats
    GUI offers this as one action precisely because the naive "clear to get
    going" silently drops your breakpoint.
 
+**One operational trap, worth knowing before you demo it.** Once the core is
+stopped on a breakpoint it is in a *debug hold*, and while held the run strap is
+ignored in **both** directions — pulling it low will not restart the chip, and
+neither will STOP. The only release is `DEBUG_BP_CLR` (which also disarms); a
+hardware reset is the other escape. So if the GUI dies mid-debug you come back
+to a chip that looks powered and configured but will not run until you clear the
+breakpoint. The acceptance demo's own `r3_demo_6_clear_releases` beat depends on
+this release.
+
 Two honest caveats, both on the acceptance output itself: a free-running core
 cannot be stepped at all (the chip answers `NOT_READY` with no fault), and a
 breakpoint is **one PC address** — there is no watchpoint and no data
@@ -131,7 +140,7 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
 ## What is proven, what is simulated, what is pending
 
 | Claim | Status | Evidence |
-|---|---|---|
+| --- | --- | --- |
 | UART / SPI / I2C / 10BASE-T personas run as firmware | **RTL-proven** | `tb_pe_soc_uart`, `tb_pe_soc_spi`, `tb_pe_soc_i2c*`, `tb_pe_soc_eth*`, `tb_pe_eth_tx` |
 | Full regression is green | **RTL-proven** | `./regress/run_all.sh --fast -j8` → exit 0 on a cold clone: **RTL 34/34, firmware 26/26, 12 mutation suites** (R2 and the wait-word gate are registered in `run_all`; see `docs/cold-clone-audit.md`) |
 | 60 MHz maps and routes | **RTL-proven (mapped, not routed)** | area + screen reports; physical flow intentionally out of scope |

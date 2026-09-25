@@ -93,7 +93,7 @@ assuming a problem.
 ## 5. Failure triage
 
 | Symptom (what you see) | Cause | Fix |
-|---|---|---|
+| --- | --- | --- |
 | `FAIL open pyserial is required ...` | host extra not installed | `pip install .[host-gui]` |
 | `FAIL open cannot open /dev/ttyACM0: Permission denied` + dialout hint | user not in `dialout`/`plugdev` | `sudo usermod -aG dialout $USER`, re-login; or the udev rule above |
 | `FAIL open cannot open ... No such file or directory` | board not enumerated / wrong port | `ls /dev/ttyACM*`; try `--device` with the real path; check the cable and that the bridge is running |
@@ -104,7 +104,29 @@ assuming a problem.
 | `r2_read_*` / `r2_dump_header` FAIL, others PASS | the read path is chip-confirmed in simulation but the board disagrees | compare against `R2-READ-VERIFICATION.json`; the 15 steps are the same ones `tb_pe_ctrl_r2` passes - a board-only failure points at the MISO read path or wiring, not the contract |
 | `irq`/`fault` steps FAIL | the fitted shuttle predates R1's `IRQ_N`, or the adapter was built without `irq_enabled` | check the shuttle revision; `irq_n()` returns `None` (SKIP) when IRQ is unavailable |
 | `uart` SKIP | no bridge op reports UART bytes (dropped from this phase by ruling) | revisit at hardware bring-up; not a failure |
+| Chip is stopped and will NOT restart, and the run strap looks correct | **a debug hold is asserted** (an R3 breakpoint hit, or a single step paused it). While held, `cpu_exec = dbg_step \|\| (run && !dbg_hold)`, so the strap is ignored in BOTH directions | send `DEBUG_BP_CLR` — it is the **only** release. Pulling the run strap low will NOT recover the chip, and neither will `STOP`; the other escape is a hardware reset. See the note below |
 | A step hangs then times out | the Pico read loop is blocked and a request never got answered | Ctrl-C the runner; check the board REPL for a traceback; the host never fabricates a success on timeout |
+
+### If the chip will not restart: the run strap is not the answer
+
+Once R3 debug control is in play, a core can be sitting in a **debug hold** —
+latched by a breakpoint hit, or paused by a single step. While held, the
+execute gate is `cpu_exec = dbg_step || (run && !dbg_hold)`, which masks the
+run strap in **both** directions. So the two reflexes that work for every other
+stalled state do **not** work here:
+
+- pulling `run` low will not stop it, because it is already stopped;
+- and it will not start it either, because a held core ignores the strap.
+
+**The only release is `DEBUG_BP_CLR`**, which disarms the breakpoint, clears the
+hit and drops the hold — with the strap high the core resumes, and with the
+strap low it falls to the normal boot stop and the PC re-zeroes. A hardware
+reset is the other escape, since reset clears the hold.
+
+This is not a corner case for us: the host's own acceptance demo
+(`r3_demo_6_clear_releases`) depends on exactly this release, and an operator
+whose GUI died mid-debug will come back to a chip that looks powered and
+configured but will not run until they clear the breakpoint.
 
 The host runner **never reports a timed-out or unacknowledged operation as
 success** — a `FAIL` means the real thing failed, so read the `error` string

@@ -106,6 +106,15 @@ where reachable, or add a reachability assertion so an unreachable pre-state
 must be declared as such (as the boundary step is). Otherwise "25/26
 byte-exact" mixes 25 proven states with an unknown number of unproven ones.
 
+> **UPDATE 2026-09-25 (manager): the boundary case is now CLOSED.** The chip
+> worker proved the boundary pre-state (`pc=4` with `a=0`) is unreachable, so
+> the question I raised for *that* step is answered: the pinned step is pinned
+> for a demonstrated reason, not merely because it was awkward. The 25/26 tally
+> stands with the step pinned. What remains open from this item is only the
+> weaker form: whether the other 25 pre-states are each driven through the pins
+> or hierarchically forced. I have not seen evidence either way, so I am
+> leaving this MEDIUM open rather than marking it done on a summary.
+
 ### MEDIUM 3 — R2's confirmed STATUS / DUMP_CORE now carry state values 2 and 3, untested
 
 `pe_ctrl.v:876` and `:898` report `dbg_state` in the **R2** `STATUS` and
@@ -163,6 +172,15 @@ stays held with the PC preserved. The escape is `DEBUG_BP_CLR` or a reset.
 *Action (chip side / bring-up):* the runbook's triage table should say so
 explicitly. Worth adding to `docs/host-bridge-bringup.md` on the host side too —
 my own acceptance demo depends on this behaviour.
+
+> **DONE on the host side (2026-09-25).** `docs/host-bridge-bringup.md` now has
+> both a triage row ("chip is stopped and will NOT restart, and the run strap
+> looks correct") and a short section, *"If the chip will not restart: the run
+> strap is not the answer"*, which states that the strap is masked in BOTH
+> directions, that `DEBUG_BP_CLR` is the only release, and that a reset is the
+> other escape — and that the host's own `r3_demo_6_clear_releases` beat
+> depends on it. The judge-facing walkthrough carries the same warning. The chip
+> side may still want it in its own runbook.
 
 ### LOW 2 — the host model's `advance_free_running` is a model-only driver
 
