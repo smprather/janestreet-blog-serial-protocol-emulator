@@ -25,10 +25,17 @@
 //      with no start code is the most common way to end up with a working
 //      fixture that lights nothing.
 //
-//   4. THE SLOT COUNT. The ramp is a wrapping 8-bit value, so it repeats
-//      twice in 512 slots and a receiver that loses a slot still sees a valid
-//      pattern. The count is therefore checked as a COUNT, and against the
-//      firmware's own dmem record as well.
+//   4. THE SLOT COUNT, as a second and independent witness. This one was
+//      written wrong first -- "a receiver that loses a slot still sees a valid
+//      pattern, and only a count gives that away" -- and running the
+//      dmx-ramp-steps-by-two mutation by hand is what showed it: a wrong slot
+//      value produces hundreds of PER-SLOT failures, because the ramp is
+//      0, 1, 2, ... so one wrong slot makes every later value wrong. The
+//      per-slot comparison is the defence against a payload error. The count is
+//      here for the other reason: it reads the CPU-s own memory while the
+//      per-slot comparison reads the wire, so the two are independent witnesses
+//      and their disagreement is itself the signal. See the note at the dmem
+//      checks below.
 //
 // AND THE BIT ORDER IS NOT A PALINDROME ANYWHERE. Slot 1 is 0x01 and slot 128
 // is 0x80, so a transmitter that shifted the wrong way produces 0x80 and
@@ -475,9 +482,26 @@ module tb_pe_soc_dmx512;
 
     // ---- the firmware's own record --------------------------------------
     //
-    // The COUNT as well as the pattern, because the ramp repeats twice in 512
-    // slots: a transmitter that dropped a slot would still produce a
-    // valid-looking pattern, and only a count gives that away.
+    // The COUNT as well as the pattern, and the reason is worth stating
+    // precisely because I first wrote it wrongly.
+    //
+    // I had this comment saying "a transmitter that dropped a slot would still
+    // produce a valid-looking pattern, and only a count gives that away". BOTH
+    // HALVES ARE WRONG, and running the dmx-ramp-steps-by-two mutation by hand
+    // is what showed it: a slot carrying the wrong value produces hundreds of
+    // "slot N is fe, expected ff" PER-SLOT failures. The per-slot comparison is
+    // the defence against a payload error, because the ramp is 0, 1, 2, ... so
+    // one wrong or missing slot makes every later value wrong. A payload error
+    // is emphatically NOT a valid-looking pattern.
+    //
+    // So what is the count actually for, and the honest answer is: it is a
+    // SECOND, INDEPENDENT path, not a primary one. The per-slot comparison
+    // reads the wire; these read the CPU-s own memory. They are computed from
+    // different places, so a fault that corrupts one but not the other is
+    // caught by the disagreement -- and a firmware that finished its frame
+    // while its own counters said otherwise, or the reverse, is exactly that.
+    // The transmission is the claim; dmem is the firmware's account of it, and
+    // a receiver that never cross-checks the two is trusting one witness.
     //
     // 513 DOES NOT FIT IN ONE BYTE, and the firmware says so rather than
     // pretending: 513 = 0x201, so dmem[3] -- an 8-bit count -- is 1 and
