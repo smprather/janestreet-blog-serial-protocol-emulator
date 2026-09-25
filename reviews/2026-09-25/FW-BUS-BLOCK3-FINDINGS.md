@@ -459,6 +459,52 @@ cannot see the one change that matters, and the suite will be green and wrong.
 
 ---
 
+## An arithmetic sum in a header, off by one, invisible to every gate
+
+`firmware/midi_xfer.pe` published its cell as a three-row table:
+
+```text
+  22  the code around the loop
+   1  the LDI that loads the loop count
+  146  iterations of a 13-clock body
+```
+
+which sums to **1921**, while the measured cell is **1920** and the line
+immediately below the table said 1920. The 22 already included the LDI, so the
+third row double-counted it.
+
+**The same file carried the correct figure in a second form on the `LDI`
+instruction itself** — `22 + 13*146 = 1920` — so the file held two forms of one
+number, one right and one wrong, and nothing recorded which convention each
+used. `firmware/dmx512.pe`, written hours later on the same reasoning, states
+the identical cell as `21 + 1 + 109*2 = 240`, which is right; the two headers
+disagreing with each other is how the mistake is now visible at all.
+
+The count is four instructions of the data branch (`LDM`, `SHR`, `STM`, `JMP`),
+seven of index advance, eight of dispatch-and-select, and two NOPs — **21**,
+excluding the LDI.
+
+### Why every gate missed it, which is the point
+
+- The **firmware gate** assembles the program. It does not read the arithmetic
+  in a comment.
+- Both **testbenches** measure the pin, and the pin was right: 1920.0000 µs,
+  spread 0.0000. The measurement never consulted the header, so the header
+  could be wrong indefinitely without any disagreement appearing.
+- The **mutation gate** edits firmware instructions. A number in a comment is
+  not an instruction.
+
+So a wrong number in a header is invisible to all three, and this is the third
+time this session that the finding was the same: **nothing in the suite checks
+the artifacts' claims about themselves** — not the testbench's performance
+figure (5.7 M), not its oversampling factor (`quarter` for 8×), not the
+firmware's own arithmetic (22 for 21).
+
+**The generalisable form:** when two independently-written artifacts state the
+same quantity, check them *against each other* — the cross-check is the only
+thing that can catch an error neither owner can see, because each was written
+from inside its own reasoning.
+
 ## Limits
 
 **This section existed before this file was rewritten and was dropped in the

@@ -81,16 +81,31 @@
 ; TWO NOPs THEN THE LDI IS THE FINE ADJUSTMENT, and the loop count is the
 ; coarse one. The cell is
 ;
-;   22  the code around the loop, counted from this cell's OUT to the next
+;   21  the code around the loop, counted from this cell's OUT to the next and
+;       EXCLUDING the LDI, which is the next row because it is the one
+;       instruction here that is not part of either the dispatch or the body
 ;    1  the LDI that loads the loop count
 ;   146  iterations of a 13-clock body
 ;   ---
-;  1920 clocks = 32.000 us = 31,250 baud, 0.00% error.
+;   21 + 1 + 146 x 13 = 1920 clocks = 32.000 us = 31,250 baud, 0.00% error.
+;
+; THE 21 WAS PUBLISHED AS 22 FOR A COMMIT, and the two rows then summed to 1921
+; while the measured cell was 1920. So the header contradicted the pin by one
+; and nothing noticed: the firmware gate assembles the program without reading
+; this arithmetic, the two testbenches measure the pin, and the mutation gate
+; edits firmware -- so a wrong number in THIS comment is invisible to every
+; gate in the suite. It is the same defect as the 5.7M strobe figure and the
+; quarter-bit misnaming: an asserted number, repeated confidently, that
+; nothing checks. The count itself is four instructions of the data branch
+; (LDM, SHR, STM, JMP), seven of index advance, eight of dispatch-and-select
+; (LDM A,7; SUB A,9; JZ; ADD A,9; JZ; LDM A,0; AND A,1; OUT), and two NOPs
+; = 21, and it is the same 21 that firmware/dmx512.pe's header states, which is
+; how the two can be checked against each other.
 ;
 ; The body is ELEVEN NOPs plus SUB and JNZ, and 13 is not a round choice: the
-; delay has to be 1898 clocks (1920 less the 23 around it), and 1898 = 13 x 146
-; is the only factorisation of it whose body is small enough to write out and
-; whose count fits an 8-bit register.
+; delay has to be 1898 clocks (1920 less the 22 around it -- 21 of code and the
+; LDI), and 1898 = 13 x 146 is the only factorisation of it whose body is small
+; enough to write out and whose count fits an 8-bit register.
 ;
 ; KEEP EVERY DELAY-LOOP COUNTER <= 255, and this is not a style rule. The
 ; obvious alternative here is a 3-clock body, which wants 1900/3 = 634
