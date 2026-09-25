@@ -31,7 +31,7 @@ module tb_pe_ps2;
     if (!rst_n) rx_valid_seen <= 0;
     else if (rx_valid) rx_valid_seen <= 1'b1;
 
-  pe_serdes #(.MAXLEN(MAXLEN)) dut (.*);
+  pe_serdes #(.MAXLEN(MAXLEN)) dut (.*, .tx_bit_en(bit_en), .rx_bit_en(bit_en));
 
   initial clk = 0;
   always #5 clk = ~clk;

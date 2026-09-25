@@ -1,0 +1,4 @@
+../rtl/*.v: No such file or directory
+error: Unable to find the root module "tb_pe_soc_eth" in the Verilog source.
+     : Perhaps ``-s tb_pe_soc_eth'' is incorrect?
+1 error(s) during elaboration.

@@ -26,8 +26,8 @@ confidence: medium
 
 - **Macro area, both instances:** 159,347 µm² (one macro is 79,674 µm²).
 - **Macro bounding box:** 483.6 × 336.5 µm.
-- **Logic, mapped (`tt_um_top`):** 59,548 µm² in 3,613 standard cells. (`pe_soc` alone: 53,731 µm², 3,298 cells.)
-- **Logic, with routing/clock/fill:** ×1.69 (the SERDES-measured stdcell→die factor) → 100,900 µm². That factor comes from a
+- **Logic, mapped (`tt_um_top`):** 91,268 µm² in 5,363 standard cells. (`pe_soc` alone: 82,894 µm², 4,961 cells.)
+- **Logic, with routing/clock/fill:** ×1.69 (the SERDES-measured stdcell→die factor) → 154,648 µm². That factor comes from a
   different design; the real SoC run must replace it.
 
 ## Fit by die scenario
@@ -39,27 +39,29 @@ are separate checks.
 
 | die scenario | die (µm) | area (µm²) | macro bbox fits | macros + inflated logic | occupancy |
 |---|---|---|---|---|---|
-| Template 6×4 | 1002 × 432 | 432,864 | yes | 260,248 | 60.1% |
-| Blog-tile 6×4 | 1200 × 600 | 720,000 | yes | 260,248 | 36.1% |
-| Template 8×4 (upside) | 1336 × 432 | 577,152 | yes | 260,248 | 45.1% |
+| Template 6×4 | 1002 × 432 | 432,864 | yes | 313,996 | 72.5% |
+| Blog-tile 6×4 | 1200 × 600 | 720,000 | yes | 313,996 | 43.6% |
+| Template 8×4 (upside) | 1336 × 432 | 577,152 | yes | 313,996 | 54.4% |
 
-## What the flow config actually places
+## What the flow config declares
 
-- `flow/pe_soc.json` `DIE_AREA`: 1002 × 432 µm = the template 6×4 die.
-- The two macros are placed at `u_imem.g_macro.u_sram` (10, 10), `u_eth_fbuf.g_macro.u_sram` (256.8, 10), both `N`.
+- `flow/pe_soc.json` declares `DIE_AREA`: 1002 × 432 µm = the template 6×4 die.
+- The two macro placements are declared at `u_imem.g_macro.u_sram` (10, 10), `u_eth_fbuf.g_macro.u_sram` (256.8, 10), both `N`.
 - The 10 µm placement gap and the die-bound check are enforced on
   every regression by `tools/checks/macro_flow_config.py` (E2): clean.
-- `PDN_CFG` is `./src/pe_soc_pdn.tcl`, which stripes
-  Metal4 for the macros' supplies and steps up to the grid.
+- `PDN_CFG` is `./src/pe_soc_pdn.tcl`. Its script
+  requests Metal4 macro stripes and ordered connects up to the grid;
+  the E2 static check validates these clauses, not physical connectivity.
 
 **The critical caveat: this is a PADLESS CORE flow.** `pe_soc`'s ports
 are pins at the die boundary; there is no `CORE_AREA`, no pad ring and
 no wrapper in the run. The Tiny Tapeout deliverable
 (`tt_um_protocol_emulator`) does have pads, and the shuttle's pad ring
 occupies the perimeter of the same 1002×432 outline, so its usable core
-is smaller. The placements above are proven legal against `DIE_AREA`,
-not against a padded core. Macro `y=10` in particular may sit under the
-ring. That is the first thing a real TT-top floorplan must settle.
+is smaller. The placement coordinates above are statically checked to
+fit the configured `DIE_AREA`, not a padded core. Macro `y=10` in particular
+may sit under the ring. That is the first thing a real TT-top floorplan
+must settle.
 
 ## Assumptions that differ between the blog and the TT template
 
@@ -73,7 +75,7 @@ ring. That is the first thing a real TT-top floorplan must settle.
 
 The two tile figures disagree by +66% in area, and the blog's logic
 figure is inconsistent with the template's own area budget — but
-**neither figure threatens this design**: it maps to 3,613
+**neither figure threatens this design**: it maps to 5,363
 standard cells, well under both. What the tile size *does* decide is
 the macro rectangle, and the template figure is the conservative case.
 
@@ -96,7 +98,7 @@ the macro rectangle, and the template figure is the conservative case.
 4. **Global-routing congestion** at the real utilisation
    (`GRT-0116`/`GRT-0704`), then **detailed-route DRC clear**.
 5. **A utilisation/area report** from the routed run to replace the
-   SERDES-derived ×2 inflation estimate used above.
+   SERDES-derived stdcell-to-die inflation factor used above.
 6. **Macro-alone DRC provenance** (the vendor macro's own violations)
    and LVS, at the flow stage before tapeout.
 7. **The tile size confirmed** by TT/submission docs, then this page

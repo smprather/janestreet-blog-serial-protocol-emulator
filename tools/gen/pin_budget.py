@@ -96,13 +96,17 @@ PROTOCOLS = [
 # The wrapper's committed pinout (rtl/tt_um_protocol_emulator.v + info.yaml),
 # kept as DATA so the direction arithmetic on the rendered page cannot be done
 # by hand. It mirrors the wrapper header; update both together.
+# R1 (2026-09-24): the framed host bus owns uio[4:7] (CS_N/MOSI/MISO/SCK),
+# uo_out[1] is IRQ_N, and the old ui_in[3:5] loader pads are freed.
+# Task 4 (2026-09-24): uo_out[2] is the 10BASE-T eth_tx pad (port bit 7
+# through a bit-identical mux); dbg_pc[0] is its fallback.
 DESIGN_PINOUT = {
-    "ui_in": {0: "UART RX", 1: "run", 2: "10BASE-T RX",
-              3: "loader SCLK", 4: "loader MOSI", 5: "loader CS_N"},
-    "uo_out": {0: "UART TX / SPI SCLK", 1: "heartbeat",
-               2: "dbg_pc[0]", 3: "dbg_pc[1]", 4: "dbg_pc[2]",
+    "ui_in": {0: "UART RX", 1: "run", 2: "10BASE-T RX"},
+    "uo_out": {0: "UART TX / SPI SCLK", 1: "IRQ_N",
+               2: "eth_tx / dbg_pc[0]", 3: "dbg_pc[1]", 4: "dbg_pc[2]",
                5: "dbg_pc[3]", 6: "dbg_pc[4]", 7: "dbg_pc[5]"},
-    "uio": {0: "I2C SDA", 1: "I2C SCL", 2: "SPI MOSI", 3: "SPI CS_N"},
+    "uio": {0: "I2C SDA", 1: "I2C SCL", 2: "SPI MOSI", 3: "SPI CS_N",
+            4: "host CS_N", 5: "host MOSI", 6: "host MISO", 7: "host SCK"},
 }
 
 
@@ -195,13 +199,14 @@ def build() -> tuple[str, list[str]]:
     committed = sum(len(v) for v in DESIGN_PINOUT.values())
     # Remaining demand after the pinned wires: UART (tx out, rx in), SPI (mosi
     # and cs_n are pinned; sclk/miso share the UART pads and are not counted
-    # separately), I2C (2 bidir) and 10BASE-T RX (in).
-    pinned_out, pinned_in, pinned_bi = 3, 2, 2
+    # separately), I2C (2 bidir), and 10BASE-T TX (out, the reclaimed pad) and
+    # RX (in).
+    pinned_out, pinned_in, pinned_bi = 4, 2, 2
     rem_out = n_out - pinned_out
     rem_in = n_in - pinned_in
     rem_bi = n_bi - pinned_bi
     # Reclaiming the six debug pins frees those uo_out pads and only those
-    # (UART TX and the heartbeat stay committed).
+    # (UART TX and IRQ_N stay committed).
     debug_pins = sum(1 for v in DESIGN_PINOUT["uo_out"].values()
                      if v.startswith("dbg_pc"))
     free_rec = {"ui_in": free["ui_in"],
@@ -226,6 +231,17 @@ def build() -> tuple[str, list[str]]:
         free_rec["ui_in"], free_rec["uo_out"], free_rec["uio"])
     short_kept = k_bi_short + k_out_short
     short_reclaimed = r_bi_short + r_out_short
+    # "Every overhead shed": reclaim the six debug pins, IRQ_N and the four
+    # host-row uio pads at runtime (the run strap and the pinned UART/SPI/
+    # I2C/10BASE-T-RX wires stay).
+    host_row = sum(1 for v in DESIGN_PINOUT["uio"].values()
+                   if v.startswith("host"))
+    free_all = {"ui_in": free["ui_in"],
+                "uo_out": free["uo_out"] + debug_pins + 1,   # debug + IRQ_N
+                "uio": free["uio"] + host_row}
+    a_in, a_bi_left, a_bi_short, a_out_short = shortfall(
+        free_all["ui_in"], free_all["uo_out"], free_all["uio"])
+    short_all = a_bi_short + a_out_short
 
     lines += [
         "## The answer",
@@ -263,7 +279,7 @@ def build() -> tuple[str, list[str]]:
         f"| `ui_in` | {len(DESIGN_PINOUT['ui_in'])} "
         f"({', '.join(DESIGN_PINOUT['ui_in'].values())}) | {free['ui_in']} |",
         f"| `uo_out` | {len(DESIGN_PINOUT['uo_out'])} "
-        f"(UART TX / SPI SCLK, heartbeat, dbg_pc[5:0]) | {free['uo_out']} |",
+        f"(UART TX / SPI SCLK, IRQ_N, eth_tx, dbg_pc[5:1]) | {free['uo_out']} |",
         f"| `uio` | {len(DESIGN_PINOUT['uio'])} "
         f"({', '.join(DESIGN_PINOUT['uio'].values())}) | {free['uio']} |",
         f"| **total** | {committed} | **{free['ui_in']+free['uo_out']+free['uio']}** |",
@@ -275,21 +291,23 @@ def build() -> tuple[str, list[str]]:
         f"- **Debug pins kept** (the item-4 decision): "
         f"{free['ui_in']+free['uio']} free pads against "
         f"{rem_out+rem_in+rem_bi} remaining wires — short {short_kept}. The "
-        f"{rem_in} inputs take {free['ui_in']} `ui_in` + {k_in} `uio`; the "
+        f"{rem_in} inputs have {free['ui_in']} free `ui_in` + {k_in} `uio`; the "
         f"{rem_bi} bidir wires need {rem_bi} `uio` but only {k_bi_left} "
         f"remain, so {k_bi_short} bidir pads are missing; every `uo_out` pad "
         f"is taken, so all {k_out_short} outputs are missing.",
         f"- **Debug pins reclaimed:** {free_total} free pads, short "
-        f"{short_reclaimed}: the {rem_in} remaining inputs take the "
+        f"{short_reclaimed}: the {rem_in} remaining inputs have the "
         f"{free_rec['ui_in']} free `ui_in` and {r_in} `uio`; the {rem_bi} "
         f"bidir wires need {rem_bi} `uio` but only {r_bi_left} remain, so "
         f"{r_bi_short} bidir pads are missing; `uo_out` supplies "
         f"{free_rec['uo_out']} of the {rem_out} outputs, so {r_out_short} "
         f"output is missing.",
         "",
-        "**Even shedding every overhead** — the run strap, the heartbeat, the debug",
-        f"pads and the loader's three pads reused at runtime — leaves {n_out} outputs",
-        "for `uo_out`'s 8 plus at most one spare `uio` pad: **one output short**.",
+        "**Even shedding every overhead** — the run strap, IRQ_N, the debug",
+        f"pads and the host row reclaimed at runtime — still leaves {short_all} pad",
+        f"short: the {rem_bi} bidirectional wires have only {free_all['uio']}",
+        f"reclaimed `uio`, while the {rem_out} outputs fit the "
+        f"{free_all['uo_out']} freed `uo_out` bits.",
         "So \"all nine at once\" is not a feasible permanent pinout here, and the raw",
         "23-of-24 count this page used to carry hid both the arithmetic error (UART",
         "plus SPI is 6 wires, not 7) and the direction mix. The permanent-only design",

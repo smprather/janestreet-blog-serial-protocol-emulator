@@ -75,6 +75,13 @@ ENTRIES = [
     dict(name="CRC-16/ARC", target="cross-check only (not a target)", wcrc=16,
          poly=0x8005, init=0x0000, refin=True, xorout=0x0000,
          check=0xBB3D, residue=0x0000, wire="LSB-first"),
+    # The PE host frame engine (rtl/pe_ctrl.v, phase R1) runs this one on a
+    # FORWARD (MSB-first) datapath. The entry is still checked through the
+    # reference implementation and the catalogue check value, so the RTL's
+    # polynomial and seed are documented, derived numbers, never hand-typed.
+    dict(name="CRC-16/CCITT-FALSE", target="PE host frame", wcrc=16,
+         poly=0x1021, init=0xFFFF, refin=False, xorout=0x0000,
+         check=0x29B1, residue=0x0000, wire="MSB-first"),
 ]
 
 
@@ -194,14 +201,15 @@ def build() -> str:
         "updated: 2026-09-20",
         "type: reference",
         "tags: [protocol, architecture, verification]",
-        "sources: [rtl/pe_crc.v, tb/tb_pe_crc.v]",
+        "sources: [rtl/pe_crc.v, rtl/pe_ctrl.v, tb/tb_pe_crc.v]",
         "confidence: high",
         "---",
         "",
         "# CRC Configuration",
         "",
-        "Every constant `rtl/pe_crc.v` has to be loaded with, for every CRC this",
-        "project targets. **Generated and checked by `tools/gen/crc_config.py`**",
+        "Every constant `rtl/pe_crc.v` has to be loaded with, plus the PE host",
+        "frame CRC that `rtl/pe_ctrl.v` runs on its own forward datapath.",
+        "**Generated and checked by `tools/gen/crc_config.py`**",
         "(`--check` runs in `regress/run_all.sh`), so nothing here is typed by hand.",
         "",
         "Each row's `check` and `residue` are the RevEng catalogue's published",
@@ -276,6 +284,13 @@ def build() -> str:
             f"| {f(r['check'])} | {f(r['residue'])} |")
 
     L += [
+        "",
+        "The PE host frame CRC is the one entry read by a block that is not",
+        "`pe_crc`: `rtl/pe_ctrl.v` implements CRC-16/CCITT-FALSE on the forward",
+        "(MSB-first) datapath with polynomial `0x1021` and seed `0xFFFF`. Those",
+        "two constants come from this table's entry, whose catalogue check value",
+        "(`0x29B1` for \"123456789\") is asserted by the generator above; the",
+        "frame TB independently checks every response CRC on the wire.",
         "",
         "Two of these are worth reading twice:",
         "",

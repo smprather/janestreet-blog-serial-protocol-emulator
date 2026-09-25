@@ -1,0 +1,279 @@
+; eth_tx_busy_probe.pe — the start-while-busy directed case (deferred from
+; Task 3; manager Task 11).
+;
+; The SERDES is loaded and started with tx_path=1, so its raw output is
+; muxed away and the wire stays idle; the program then waits until
+; ser_tx_busy is high and issues a frame_start. The SoC's owner arbitration
+; (`eth_start = strobe && !ser_tx_busy`) must REFUSE it: TXSTAT bit0 stays 0.
+; After the SERDES word finishes, a second frame_start is accepted and the
+; frame runs, so the refusal is not a permanent wedge.
+;
+; The TB records `tx_frame_start_strb && ser_tx_busy && !eth_start`; a
+; mutation that removes the gate starts a frame mid-SERDES and fails both
+; that flag and dmem[14] bit0.
+;
+; DMEM (TB-written): [0..13] the 14-byte header frame.
+; DMEM (program): [0..1] len, [2..3] field, [5] sum, [6] counter, [7] 0x5A
+;                 consumed, [8] rejects, [9] raw ETHSTAT, [14] TXSTAT at
+;                 the refused start (bit0 must be 0), [15] 0xA5 done.
+
+        LDI   A, 128
+        OUT   PINOE, A           ; drive port bit 7 (the loopback wire)
+
+        ; --- config: CFG=0x04 (Manchester), DIV=6 ---
+        LDI   A, 1
+        OUT   ENGINE, A
+        LDI   A, 4
+        OUT   ENGINE, A
+        LDI   A, 6
+        OUT   ENGINE, A
+        LDI   A, 0
+        OUT   ENGINE, A
+
+        ; --- word-engine word: TXLEN(4)=16, TXDATA(7..10)=0x0000A5C3 ---
+        IN    A, ENGINE
+        LDI   A, 4
+        OUT   ENGINE, A
+        LDI   A, 16
+        OUT   ENGINE, A          ; REG[4]=16
+        IN    A, ENGINE          ; re-arm
+        LDI   A, 7
+        OUT   ENGINE, A
+        LDI   A, 0xC3
+        OUT   ENGINE, A          ; REG[7]
+        LDI   A, 0xA5
+        OUT   ENGINE, A          ; REG[8]
+        LDI   A, 0
+        OUT   ENGINE, A          ; REG[9]
+        OUT   ENGINE, A          ; REG[10]
+
+        ; --- frame TXLEN=14 (24/25) and tx_path=1 (26) ---
+        IN    A, ENGINE          ; re-arm
+        LDI   A, 24
+        OUT   ENGINE, A
+        LDI   A, 14
+        OUT   ENGINE, A
+        LDI   A, 0
+        OUT   ENGINE, A
+        LDI   A, 4
+        OUT   ENGINE, A          ; TXCTRL bit2 tx_path=1, INDEX=27
+
+        ; --- engine on + tx_load: the SERDES starts (muxed away) ---
+        IN    A, ENGINE          ; re-arm
+        LDI   A, 0
+        OUT   ENGINE, A          ; INDEX=0
+        LDI   A, 3               ; eng_en | tx_load
+        OUT   ENGINE, A
+
+        ; --- wait until the SERDES is BUSY ---
+        IN    A, ENGINE          ; re-arm
+        LDI   A, 6
+        OUT   ENGINE, A          ; INDEX=6 (STATUS)
+sbusy:  IN    A, ENGINE          ; bit0 = ser_tx_busy
+        AND   A, 1
+        JNZ   busy_ok
+        LDI   A, 6
+        OUT   ENGINE, A
+        JMP   sbusy
+busy_ok:
+
+        ; --- push the first 8 bytes of the frame ---
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 16
+        OUT   ENGINE, A
+        LDM   A, 0
+        OUT   ENGINE, A          ; push dmem[0]
+        LDM   A, 1
+        OUT   ENGINE, A          ; push dmem[1]
+        LDM   A, 2
+        OUT   ENGINE, A          ; push dmem[2]
+        LDM   A, 3
+        OUT   ENGINE, A          ; push dmem[3]
+        LDM   A, 4
+        OUT   ENGINE, A          ; push dmem[4]
+        LDM   A, 5
+        OUT   ENGINE, A          ; push dmem[5]
+        LDM   A, 6
+        OUT   ENGINE, A          ; push dmem[6]
+        LDM   A, 7
+        OUT   ENGINE, A          ; push dmem[7]
+
+        ; --- frame_start while ser_tx_busy: MUST be refused ---
+        IN    A, ENGINE          ; re-arm
+        LDI   A, 26
+        OUT   ENGINE, A          ; INDEX=26
+        LDI   A, 5               ; tx_path stays 1 | frame_start
+        OUT   ENGINE, A          ; refused by eth_start, INDEX=27
+
+        ; --- record TXSTAT: bit0 (tx_busy) must be 0 ---
+        IN    A, ENGINE          ; TXSTAT at index 27
+        STM   14, A
+
+        ; --- wait for the SERDES word to finish ---
+        LDI   A, 6
+        OUT   ENGINE, A          ; INDEX=6 (STATUS)
+sdone:  IN    A, ENGINE          ; bit2 = serdes tx_done latched
+        AND   A, 4
+        JNZ   sd_ok
+        LDI   A, 6
+        OUT   ENGINE, A
+        JMP   sdone
+sd_ok:
+        LDI   A, 6
+        OUT   ENGINE, A
+sbi:    IN    A, ENGINE          ; bit0 = ser_tx_busy low
+        AND   A, 1
+        JZ    sbi_ok
+        LDI   A, 6
+        OUT   ENGINE, A
+        JMP   sbi
+sbi_ok:
+
+        ; --- now the frame_start is accepted ---
+        LDI   A, 26
+        OUT   ENGINE, A          ; INDEX=26
+        LDI   A, 5
+        OUT   ENGINE, A          ; frame_start
+
+        ; --- stream dmem[8..13] under fifo_ready backpressure ---
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollbp_8:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushbp_8
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   pollbp_8
+pushbp_8:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 8
+        OUT   ENGINE, A          ; push dmem[8]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollbp_9:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushbp_9
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   pollbp_9
+pushbp_9:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 9
+        OUT   ENGINE, A          ; push dmem[9]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollbp_10:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushbp_10
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   pollbp_10
+pushbp_10:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 10
+        OUT   ENGINE, A          ; push dmem[10]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollbp_11:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushbp_11
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   pollbp_11
+pushbp_11:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 11
+        OUT   ENGINE, A          ; push dmem[11]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollbp_12:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushbp_12
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   pollbp_12
+pushbp_12:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 12
+        OUT   ENGINE, A          ; push dmem[12]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollbp_13:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushbp_13
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   pollbp_13
+pushbp_13:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 13
+        OUT   ENGINE, A          ; push dmem[13]
+
+        ; --- wait for the frame's FCS/IFG ---
+        IN    A, ENGINE          ; re-arm
+        LDI   A, 27
+        OUT   ENGINE, A
+fdone:  IN    A, ENGINE
+        AND   A, 2
+        JNZ   fd_ok
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   fdone
+fd_ok:
+
+        ; ---- consume the looped-back frame (firmware/eth_rx.pe walk) ----
+        LDI   A, 0
+        STM   8, A
+        STM   7, A
+bwpoll: IN    A, ETHSTAT
+        STM   9, A
+        AND   A, 1
+        JNZ   bwgot
+        LDM   A, 9
+        AND   A, 2
+        JZ    bwpoll
+        LDM   A, 8
+        ADD   A, 1
+        STM   8, A
+        JMP   bwpoll
+bwgot:  IN    A, ETHLEN
+        STM   0, A
+        IN    A, ETHLENH
+        STM   1, A
+        IN    A, ETHFLD
+        STM   2, A
+        IN    A, ETHFLDH
+        STM   3, A
+        LDM   A, 0
+        STM   6, A
+        LDI   A, 0
+        STM   5, A
+bwsum:  LDM   A, 6
+        JZ    bwdone
+        IN    A, BUFBYTE
+        MOV   X, A
+        LDM   A, 5
+        ADD   A, X
+        STM   5, A
+        LDM   A, 6
+        SUB   A, 1
+        STM   6, A
+        JMP   bwsum
+bwdone: LDI   A, 1
+        OUT   BUFCTRL, A
+        LDI   A, 0x5A
+        STM   7, A
+        LDI   A, 0xA5
+        STM   15, A
+halt:   JMP   halt

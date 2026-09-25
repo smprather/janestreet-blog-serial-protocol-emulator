@@ -60,18 +60,24 @@ project:
     - "rtl/pe_fbuf.v"
     - "rtl/pe_ctrl.v"
     - "rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v"
+    - "rtl/pe_serdes.v"
+    - "rtl/pe_nrzi.v"
+    - "rtl/pe_bitstuff.v"
+    - "rtl/pe_codec_mux.v"
+    - "rtl/pe_eth_tx.v"
     - "rtl/pe_soc.v"
     - "rtl/tt_um_protocol_emulator.v"
 
 # Pin map. Keep this in step with the header comment of the wrapper: this file
 # is what the TT docs render, and a wrong pinout here is a wrong datasheet.
+# R1 (2026-09-24): the framed PE host bus owns uio[4:7]
+# (CS_N/MOSI/MISO/SCK, lower PMOD SPI row), uo_out[1] is IRQ_N, and the old
+# ui_in[3:5] loader pads are freed. Plan: wiki/plans/host-controller-gui.md
+# (host-controller session); review: reviews/2026-09-24/HOST-CONTROLLER-PLAN-REVIEW.md.
 pinout:
   ui[0]: "UART RX (protocol input pin)"
   ui[1]: "run (1 = execute firmware, 0 = hold at PC 0)"
   ui[2]: "10BASE-T RX (Manchester line input)"
-  ui[3]: "SPI SCLK (pe_ctrl loader clock)"
-  ui[4]: "SPI MOSI (pe_ctrl loader data, MSB-first)"
-  ui[5]: "SPI CS_N (pe_ctrl loader select, active low)"
   ui[3]: ""
   ui[4]: ""
   ui[5]: ""
@@ -79,8 +85,8 @@ pinout:
   ui[7]: ""
 
   uo[0]: "UART TX / SPI SCLK (shared port bit 0; one persona at a time)"
-  uo[1]: "heartbeat (timer bit 7)"
-  uo[2]: "dbg_pc[0]"
+  uo[1]: "IRQ_N (active low; sticky PE fault, released by CLEAR_FAULT)"
+  uo[2]: "eth_tx (10BASE-T TX; dbg_pc[0] when the persona is off)"
   uo[3]: "dbg_pc[1]"
   uo[4]: "dbg_pc[2]"
   uo[5]: "dbg_pc[3]"
@@ -91,10 +97,10 @@ pinout:
   uio[1]: "SCL (open-drain; needs an external pull-up)"
   uio[2]: "SPI MOSI (push-pull, port bit 1)"
   uio[3]: "SPI CS_N (push-pull, active low, port bit 2)"
-  uio[4]: ""
-  uio[5]: ""
-  uio[6]: ""
-  uio[7]: ""
+  uio[4]: "host CS_N (framed PE host bus, lower PMOD SPI row)"
+  uio[5]: "host MOSI (framed PE host bus)"
+  uio[6]: "host MISO (framed PE host bus response; released when idle)"
+  uio[7]: "host SCK (framed PE host bus)"
 
 documentation:
   # The board must supply what the pads cannot: I2C pull-ups today, and per

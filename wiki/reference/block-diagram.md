@@ -30,8 +30,6 @@ bit-bangs pins; the SERDES is a word engine. The completed I2C plan
 
 These blocks pass their own testbenches but no SoC instance drives them:
 
-- `pe_serdes` — word engine: load 8-32 bits, pace with bit_en
-- `pe_codec_mux` — stuff -> nrzi/manchester; cfg selects the subset
 
 ## The built blocks, and where they actually live
 
@@ -39,28 +37,26 @@ These blocks pass their own testbenches but no SoC instance drives them:
 |---|---|---|---|---|
 | `pe_cpu` | the ISA: 16 opcodes, A/Y/X, 8-bit datapath | pe_soc.v | 377 | `tb_pe_cpu` |
 | `pe_imem` | instruction memory; SRAM macro by default | pe_soc.v | 12 | `tb_pe_imem` |
-| `pe_eth_mac` | 10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward | pe_soc.v | 1402 | `tb_pe_eth_mac` |
+| `pe_eth_mac` | 10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward | pe_soc.v | 1681 | `tb_pe_eth_mac` |
 | `pe_fbuf` | frame buffer: 2 KB behind a byte interface, same macro as pe_imem | pe_soc.v | 48 | `tb_pe_fbuf` |
 | `pe_ctrl` | passive SPI load path: host clocks words into imem | tt_um_protocol_emulator.v | 292 | `tb_pe_ctrl` |
+| `pe_serdes` | word engine: load 8-32 bits, pace with tx_bit_en/rx_bit_en (split for stuffing) | pe_soc.v | 539 | `tb_pe_serdes` |
 | `pe_dru` | digital receiver unit: 12x oversampled edge recovery | pe_soc.v | 148 | `tb_pe_dru` |
 | `pe_crc` | CRC/LFSR generator, 8/16/32-bit, catalogue-checked | pe_soc.v | 209 | `tb_pe_crc` |
 | `pe_pinmux` | per-pin direction, open-drain, read-back (the I2C gate) | pe_soc.v | 111 | `tb_pe_pinmux` |
+| `pe_codec_mux` | stuff -> nrzi/manchester; cfg selects the subset; TWO instances in pe_soc (TX/RX) | pe_soc.v | 130 | `tb_pe_codec_mux` |
 | `pe_nrzi` | NRZI encode/decode | pe_codec_mux.v | 15 | `tb_pe_codec_mux` |
 | `pe_manch` | Manchester encode/decode | pe_codec_mux.v | 7 | `tb_pe_codec_mux` |
 | `pe_bitstuff` | bit stuffing (CAN/USB style) | pe_codec_mux.v | 99 | `tb_pe_codec_mux` |
-| `pe_serdes` | word engine: load 8-32 bits, pace with bit_en | **nowhere — orphan** | 539 | `tb_pe_serdes` |
-| `pe_codec_mux` | stuff -> nrzi/manchester; cfg selects the subset | **nowhere — orphan** | 130 | `tb_pe_codec_mux` |
 
 ### Orphans: built, tested, and driving nothing
 
-**2 of 13 blocks are instantiated nowhere in `rtl/`.**
+**0 of 13 blocks are instantiated nowhere in `rtl/`.**
 That is not an accident and not a bug in the diagram — it is the project's
 staging: each block was built and verified standalone before anything
 wired it up. But it is worth stating plainly, because it is the single
 biggest gap between "what is built" and "what the chip does":
 
-- **`pe_serdes`** — word engine: load 8-32 bits, pace with bit_en
-- **`pe_codec_mux`** — stuff -> nrzi/manchester; cfg selects the subset
 
 [[STATUS]] gotcha 14 is the rule this section exists to satisfy:
 **"hardware nothing exercises is hardware you have not tested."** A block
@@ -71,7 +67,6 @@ in the design, and the difference is exactly what this table shows.
 
 | not built yet | what it unblocks |
 |---|---|
-| **pe_serdes + pe_codec_mux into the SoC** | the standalone word engine and codecs are verified, but unconnected; the wire loopback is their first planned SoC consumer |
 
 ## The two memory stories
 

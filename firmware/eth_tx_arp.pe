@@ -1,0 +1,575 @@
+; eth_tx_arp.pe — the FIRST consumer of the 10BASE-T TX frame engine
+; (wiki/plans/eth-tx-frame-path.md, G1/G2/G7).
+;
+; The program pushes a fixed 42-byte ARP request (14-byte Ethernet header,
+; EtherType 0x0806, 28-byte ARP who-has) into the frame engine's 8-byte
+; staging FIFO through the 0xF window's upper bank, then lets hardware
+; own the rest of the wire: preamble, SFD, pad to 60 stored bytes, the
+; FCS, and the inter-frame gap. DMEM[8] = 0xA5 when TXSTAT reports done;
+; the testbench decodes the real Manchester wire and checks every byte.
+;
+; THE WINDOW PHASE MACHINE (rtl/pe_soc.v): a write in INDEX phase sets
+; the 5-bit pointer, a write in DATA phase stores/pushes and increments,
+; and ANY read re-arms INDEX. Each `IN A, ENGINE` marked re-arm is that
+; read. The upper bank is indices 16-23 (push and wrap), 24/25 TXLEN,
+; 26 TXCTRL, 27 TXSTAT.
+;
+; FIFO BACKPRESSURE: the FIFO is 8 bytes, so the program pushes 8, starts
+; the frame, and then pushes the remaining 34 while polling TXSTAT bit4
+; (fifo_ready). Without the poll a full FIFO would silently drop bytes.
+
+        LDI   A, 128
+        OUT   PINOE, A           ; drive port bit 7 (the TX codec pad)
+
+        ; --- config: CFG=0x04 (Manchester), DIV=6 = 100 ns/cell ---
+        LDI   A, 1
+        OUT   ENGINE, A          ; INDEX=1
+        LDI   A, 4
+        OUT   ENGINE, A          ; REG[1]=CFG,   INDEX=2
+        LDI   A, 6
+        OUT   ENGINE, A          ; REG[2]=DIVL=6, INDEX=3
+        LDI   A, 0
+        OUT   ENGINE, A          ; REG[3]=DIVH=0, INDEX=4
+
+        ; --- TXLEN = 42 (indices 24/25), then the owner bit ---
+        IN    A, ENGINE          ; re-arm; INDEX=2
+        LDI   A, 24
+        OUT   ENGINE, A          ; INDEX=24
+        LDI   A, 42
+        OUT   ENGINE, A          ; TXLENL=42, INDEX=25
+        LDI   A, 0
+        OUT   ENGINE, A          ; TXLENH=0,  INDEX=26
+        LDI   A, 4
+        OUT   ENGINE, A          ; TXCTRL bit2: tx_path=1, INDEX=27
+
+        ; --- engine on: CTRL (index 0) bit0. ORDER MATTERS: tx_path is set
+        ;     BEFORE the divider starts, because a Manchester cfg with the
+        ;     codec still owned by the idling SERDES puts a square wave on
+        ;     the wire (raw idle 1 through the Manchester encoder) --- the
+        ;     same idle trap pe_eth_tx's half_phase output avoids. ---
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 0
+        OUT   ENGINE, A          ; INDEX=0
+        LDI   A, 1
+        OUT   ENGINE, A          ; eng_en=1, INDEX=1
+
+        ; --- push the first 8 bytes (bank 16-23 wraps) ---
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A, 255
+        OUT   ENGINE, A          ; push byte 0, INDEX=17
+        LDI   A, 255
+        OUT   ENGINE, A          ; push byte 1, INDEX=18
+        LDI   A, 255
+        OUT   ENGINE, A          ; push byte 2, INDEX=19
+        LDI   A, 255
+        OUT   ENGINE, A          ; push byte 3, INDEX=20
+        LDI   A, 255
+        OUT   ENGINE, A          ; push byte 4, INDEX=21
+        LDI   A, 255
+        OUT   ENGINE, A          ; push byte 5, INDEX=22
+        LDI   A,   2
+        OUT   ENGINE, A          ; push byte 6, INDEX=23
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 7, INDEX=16
+
+        ; --- frame_start (TXCTRL bit0). Bit2 must be written 1 in the same
+        ;     store: TXCTRL is a LEVEL register (bit2 = owner), so a 0 there
+        ;     means "release the codec" and the engine would be disabled. ---
+        IN    A, ENGINE          ; re-arm (reads REG[16]); INDEX=17
+        LDI   A, 26
+        OUT   ENGINE, A          ; INDEX=26
+        LDI   A, 5               ; bit2 tx_path stays 1 | bit0 frame_start
+        OUT   ENGINE, A          ; frame_start, INDEX=27
+
+        ; --- stream bytes 8..41, polling fifo_ready (TXSTAT bit4) ---
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll8:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push8
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll8
+push8:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 8
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll9:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push9
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll9
+push9:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 9
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll10:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push10
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll10
+push10:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 10
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll11:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push11
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll11
+push11:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   1
+        OUT   ENGINE, A          ; push byte 11
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll12:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push12
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll12
+push12:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   8
+        OUT   ENGINE, A          ; push byte 12
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll13:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push13
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll13
+push13:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   6
+        OUT   ENGINE, A          ; push byte 13
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll14:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push14
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll14
+push14:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 14
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll15:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push15
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll15
+push15:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   1
+        OUT   ENGINE, A          ; push byte 15
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll16:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push16
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll16
+push16:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   8
+        OUT   ENGINE, A          ; push byte 16
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll17:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push17
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll17
+push17:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 17
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll18:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push18
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll18
+push18:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   6
+        OUT   ENGINE, A          ; push byte 18
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll19:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push19
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll19
+push19:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   4
+        OUT   ENGINE, A          ; push byte 19
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll20:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push20
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll20
+push20:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 20
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll21:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push21
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll21
+push21:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   1
+        OUT   ENGINE, A          ; push byte 21
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll22:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push22
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll22
+push22:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   2
+        OUT   ENGINE, A          ; push byte 22
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll23:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push23
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll23
+push23:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 23
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll24:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push24
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll24
+push24:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 24
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll25:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push25
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll25
+push25:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 25
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll26:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push26
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll26
+push26:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 26
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll27:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push27
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll27
+push27:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   1
+        OUT   ENGINE, A          ; push byte 27
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll28:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push28
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll28
+push28:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A, 192
+        OUT   ENGINE, A          ; push byte 28
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll29:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push29
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll29
+push29:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A, 168
+        OUT   ENGINE, A          ; push byte 29
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll30:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push30
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll30
+push30:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   1
+        OUT   ENGINE, A          ; push byte 30
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll31:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push31
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll31
+push31:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,  10
+        OUT   ENGINE, A          ; push byte 31
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll32:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push32
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll32
+push32:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 32
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll33:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push33
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll33
+push33:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 33
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll34:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push34
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll34
+push34:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 34
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll35:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push35
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll35
+push35:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 35
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll36:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push36
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll36
+push36:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 36
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll37:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push37
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll37
+push37:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   0
+        OUT   ENGINE, A          ; push byte 37
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll38:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push38
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll38
+push38:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A, 192
+        OUT   ENGINE, A          ; push byte 38
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll39:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push39
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll39
+push39:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A, 168
+        OUT   ENGINE, A          ; push byte 39
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll40:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push40
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll40
+push40:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,   1
+        OUT   ENGINE, A          ; push byte 40
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+poll41:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   push41
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   poll41
+push41:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDI   A,  20
+        OUT   ENGINE, A          ; push byte 41
+
+        ; --- wait for the latched done (TXSTAT bit1), then flag dmem[8] ---
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+donep:  IN    A, ENGINE          ; TXSTAT (set beats clear), INDEX=28
+        AND   A, 2               ; tx_done latched
+        JNZ   ok
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   donep
+ok:     LDI   A, 0xA5
+        STM   8, A               ; the testbench's done flag
+halt:   JMP   halt

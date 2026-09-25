@@ -1,0 +1,120 @@
+; serdes_loop.pe — the FIRST consumer of the 0xF word-engine window
+; (wiki/plans/serdes-integration.md): configure the engine from dmem, wait for
+; the DRU lock when the line code is Manchester, fire one word through the TX
+; codec onto the wire loopback, receive it back through the DRU + RX codec,
+; and leave the received word in dmem for the testbench.
+;
+; THERE IS NO PROTOCOL IN THIS PROGRAM. No framing, no addresses, no timing
+; constants except the divider the testbench chose: the engine does the bit
+; pacing and everything protocol-shaped is a register. This is the first
+; consumer, not a protocol.
+;
+; DMEM contract (the testbench writes [0..3] and the TX word before `run`):
+;   [0]     CFG byte   (codec cfg: stuffing / NRZI / Manchester / run / ones)
+;   [1]     DIV low    (encoded-cell period, low byte)
+;   [2]     DIV high
+;   [3]     CTRL flags (bit4 = cfg_lsb_first, pre-shifted)
+;   [4..7]  TX word, little-endian (byte0 = bits[7:0])
+; On completion the program overwrites [4..7] with the RECEIVED word and
+; writes 0xA5 to [8]; [0..3] are left alone.
+;
+; THE WINDOW PHASE MACHINE — every "re-arm" read below is load-bearing:
+;   OUT in INDEX phase  : sets the 4-bit pointer (and enters DATA phase)
+;   OUT in DATA phase   : stores REG[INDEX] and auto-increments
+;   IN (either phase)   : returns REG[INDEX], auto-increments, AND re-arms
+;                         INDEX phase — so after a data burst the next index
+;                         write must be preceded by a read. Each `IN` marked
+;                         "re-arm" is that read, and it always lands on a
+;                         harmless register (CFG, TXDATA or a STATUS read that
+;                         is itself the next thing wanted).
+
+        LDI   A, 128
+        OUT   PINOE, A          ; drive port bit 7 (the loopback wire)
+
+        ; ---- one burst: CFG, DIVL, DIVH, TXLEN, RXLEN (indices 1..5) ----
+        LDI   A, 1
+        OUT   ENGINE, A         ; INDEX=1 (phase is INDEX after reset)
+        LDM   A, 0
+        OUT   ENGINE, A         ; REG[1]=CFG,   INDEX=2
+        LDM   A, 1
+        OUT   ENGINE, A         ; REG[2]=DIVL,  INDEX=3
+        LDM   A, 2
+        OUT   ENGINE, A         ; REG[3]=DIVH,  INDEX=4
+        LDI   A, 16
+        OUT   ENGINE, A         ; REG[4]=TXLEN=16, INDEX=5
+        OUT   ENGINE, A         ; REG[5]=RXLEN=16, INDEX=6
+
+        ; ---- TXDATA, indices 7..10 (re-arm first: the last write left DATA
+        ;      phase with INDEX=6) ----
+        IN    A, ENGINE         ; re-arm: reads STATUS (no events yet), INDEX=7
+        LDI   A, 7
+        OUT   ENGINE, A         ; INDEX=7, phase=DATA
+        LDM   A, 4
+        OUT   ENGINE, A         ; REG[7]=bits[7:0],    INDEX=8
+        LDM   A, 5
+        OUT   ENGINE, A         ; REG[8]=bits[15:8],   INDEX=9
+        LDM   A, 6
+        OUT   ENGINE, A         ; REG[9]=bits[23:16],  INDEX=10
+        LDM   A, 7
+        OUT   ENGINE, A         ; REG[10]=bits[31:24], INDEX=11
+
+        ; ---- CTRL (index 0): clear both codec instances, enable the engine
+        IN    A, ENGINE         ; re-arm: reads RXDATA[7:0] (still 0), INDEX=12
+        LDI   A, 0
+        OUT   ENGINE, A         ; INDEX=0, phase=DATA
+        LDM   A, 3              ; flags: bit4 = cfg_lsb_first
+        OR    A, 9              ; engine_en (bit0) | clr (bit3)
+        OUT   ENGINE, A         ; one-cycle clr strobe; engine on; grid starts
+
+        ; ---- wait for the DRU lock (Manchester configs only) ----
+        LDM   A, 0
+        AND   A, 4              ; cfg[2] = manch_en
+        JZ    do_start          ; plain: self-timed loopback, no acquisition
+        IN    A, ENGINE         ; re-arm: reads CFG (REG[1]), INDEX=2
+        LDI   A, 6
+        OUT   ENGINE, A         ; INDEX=6 (STATUS)
+poll_lock:
+        IN    A, ENGINE         ; STATUS; INDEX=7; phase=INDEX
+        AND   A, 32             ; bit5 = DRU locked
+        JNZ   do_start
+        LDI   A, 6
+        OUT   ENGINE, A         ; phase INDEX -> pointer back to 6
+        JMP   poll_lock
+
+        ; ---- fire TX and arm RX (one-cycle strobes, grid-aligned) ----
+do_start:
+        IN    A, ENGINE         ; re-arm: both paths converge here
+        LDI   A, 0
+        OUT   ENGINE, A         ; INDEX=0, phase=DATA
+        LDM   A, 3
+        OR    A, 7              ; engine_en | tx_load | rx_start
+        OUT   ENGINE, A         ; strobes pulse; the divider applies them
+
+        ; ---- poll the LATCHED rx_valid (STATUS index 6) ----
+        IN    A, ENGINE         ; re-arm: reads CFG (REG[1]), INDEX=2
+        LDI   A, 6
+        OUT   ENGINE, A         ; INDEX=6
+poll_rx:
+        IN    A, ENGINE         ; STATUS (set beats clear), INDEX=7
+        AND   A, 8              ; bit3 = rx_valid latched
+        JNZ   got_rx
+        LDI   A, 6
+        OUT   ENGINE, A
+        JMP   poll_rx
+
+        ; ---- RXDATA, indices 11..14 -> dmem[4..7] ----
+got_rx:
+        LDI   A, 11
+        OUT   ENGINE, A         ; INDEX=11, phase=DATA
+        IN    A, ENGINE         ; byte0, INDEX=12, phase=INDEX
+        STM   4, A
+        IN    A, ENGINE         ; byte1, INDEX=13
+        STM   5, A
+        IN    A, ENGINE         ; byte2, INDEX=14
+        STM   6, A
+        IN    A, ENGINE         ; byte3, INDEX=15
+        STM   7, A
+        LDI   A, 165            ; 0xA5: the testbench's done flag
+        STM   8, A
+halt:
+        JMP   halt

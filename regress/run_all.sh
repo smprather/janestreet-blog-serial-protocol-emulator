@@ -117,29 +117,29 @@ CASES=(
   # $readmemh's firmware/uart_echo.hex, so run_firmware_tests.sh (below) must have
   # assembled a current copy -- it runs first for exactly that reason.
   "tb_pe_cpu|../rtl/pe_cpu.v|tb_pe_cpu"
-  "tb_pe_soc_uart|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_uart"
+  "tb_pe_soc_uart|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_uart"
   # The STATUS port. Nothing exercised it until firmware/tick_count.pe existed,
   # which is how a two-driver tick_flag survived a green regression: it raced
   # in Icarus and synthesised to a constant 0, and no test read the port.
-  "tb_pe_soc_tick|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_tick"
+  "tb_pe_soc_tick|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_tick"
   # The Tiny Tapeout top level: the pad contract (no X on an output, ena gates
   # nothing, open-drain pins never drive high). This is the only submittable
   # module in the repo.
-  "tb_tt_um_protocol_emulator|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v ../rtl/pe_ctrl.v ../rtl/tt_um_protocol_emulator.v|tb_tt_um_protocol_emulator"
+  "tb_tt_um_protocol_emulator|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v ../rtl/pe_ctrl.v ../rtl/tt_um_protocol_emulator.v|tb_tt_um_protocol_emulator"
   # I2C on the pin matrix: the runtime direction file driven by firmware, and
   # the open-drain property checked on the RTL's own pin_oe output. This is the
   # test that makes "the matrix is enough to speak I2C" a measured claim.
-  "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
+  "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
   # The I2C TRANSACTION layer on real RTL: firmware/i2c_xfer.pe against a
   # Verilog slave FSM that decodes the wire, with timing and grammar asserted
   # on the pads. The emulator check is the fast loop; this is the real CPU,
   # matrix, pads and 1 us tick.
-  "tb_pe_soc_i2c_xfer|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_i2c_xfer"
+  "tb_pe_soc_i2c_xfer|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_i2c_xfer"
   # SPI mode 0 as firmware, with a real mode-0 SLAVE modelled in the TB. SPI is
   # a baseline protocol whose only executable spec was tools/fw/peemu.py -- a model
   # written from the same understanding as the firmware, so it can agree with it
   # about a wrong bit order and pass. The slave here decodes MOSI from the pins.
-  "tb_pe_soc_spi|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_spi"
+  "tb_pe_soc_spi|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_spi"
   # The frame buffer: 2 KB behind a byte interface, on the same SRAM macro
   # as the instruction memory (ADR-003). Byte granularity comes from the
   # macro's bit-mask port and the read lane is a register -- two silent
@@ -149,8 +149,28 @@ CASES=(
   # 10BASE-T on the SoC: wire -> DRU -> Manchester -> MAC + CRC + frame
   # buffer, and firmware/eth_rx.pe consuming an ARP frame through the frame
   # window. tb_pe_eth_mac proves the chain; this proves a PROGRAM can use it.
-  "tb_pe_soc_eth|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v|tb_pe_soc_eth"
+  "tb_pe_soc_eth|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_eth"
 
+  # The word engine inside the SoC: the 0xF window a program drives, the
+  # split payload-only enables under stuffing, two codec instances at
+  # different cadences, the half-cell level, and the wire loopback through
+  # the matrix overlay. Directed stuffed-Manchester case included; the
+  # matching harness is regress/mutate_soc_serdes_tb.sh.
+  "tb_pe_soc_serdes|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_serdes"
+
+  # The 10BASE-T TX frame engine inside the SoC: firmware -> the extended
+  # 0xF window's upper bank -> pe_eth_tx -> the owner mux -> u_tx_codec ->
+  # the Manchester wire. Decodes the frame and its FCS at the codec output,
+  # so the window, the FIFO backpressure, DIV=6 and the pad overlay are all
+  # exercised. Task-3 integration TB for wiki/plans/eth-tx-frame-path.md.
+  "tb_pe_soc_eth_tx|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_eth_tx"
+
+  # The TX frame path closed on itself: pin_out[7] wired to pin_in[7], the
+  # frame loops through the real RX chain and eth_arp_echo.pe walks it back;
+  # plus the two-frame minimum-IFG acceptance and the two directed cases
+  # deferred from Task 3 (the 16-23 push wrap and the start-while-busy
+  # refusal). Task-5 loopback TB for wiki/plans/eth-tx-frame-path.md.
+  "tb_pe_soc_eth_loop|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_eth_loop"
   # The passive SPI loader: pads in, host write port out. Unit TB first; the
   # TT top-level TB then proves a program loaded through the pads executes.
   "tb_pe_ctrl|../rtl/pe_ctrl.v|tb_pe_ctrl"
@@ -160,6 +180,12 @@ CASES=(
   # other Ethernet TB models the framing in the testbench; this drives a
   # wire, so the bytes checked are the bytes a real receiver recovers.
   "tb_pe_eth_mac|../rtl/pe_dru.v ../rtl/pe_nrzi.v ../rtl/pe_manch.v ../rtl/pe_bitstuff.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v|tb_pe_eth_mac"
+
+  # The 10BASE-T TX frame engine, unit level (wiki/plans/eth-tx-frame-path.md).
+  # Firmware-styled stored bytes in, a decoded Manchester frame out: prelude,
+  # pad-to-64, hardware FCS, 96-cell IFG, runt/jabber/underrun faults. Its own
+  # TX-dedicated pe_crc is the second instantiation of the shared engine.
+  "tb_pe_eth_tx|../rtl/pe_eth_tx.v ../rtl/pe_crc.v|tb_pe_eth_tx"
 )
 
 pass=0; fail=0; failed_names=()
@@ -324,11 +350,36 @@ fi
 # instantiates needs a legal placement and hooks for all three of its supplies,
 # or LibreLane leaves it unplaced and unpowered. Static check only -- no
 # physical flow, DRC or LVS.
-if python3 tools/checks/macro_flow_config.py > /tmp/macro_flow.log 2>&1; then
-  echo "macro flow config: OK (placements and supply hooks complete)"
+python3 tools/checks/macro_flow_config.py > /tmp/macro_flow.log 2>&1
+macro_rc=$?
+if [ "$macro_rc" -eq 0 ]; then
+  echo "macro flow config: OK (placements, pin-to-net hooks and the Metal4 ladder complete)"
+elif [ "$macro_rc" -eq 2 ]; then
+  # E2-3: the geometry check cannot run without the PDK LEF. That is an
+  # INCOMPLETE (a supported PDK-less skip), not a regression failure; the
+  # checker returns 2 ONLY for that case, so findings and yosys failures
+  # still land in the FAILED branch below.
+  echo "macro flow config: SKIPPED (required PDK geometry unavailable)"
+  cat /tmp/macro_flow.log
 else
   echo "macro flow config: FAILED"
   cat /tmp/macro_flow.log
+  stale=1
+fi
+# The gate's own negative tests (E2-1/E2-2/E2-3): a wrong pin-to-net mapping,
+# a missing PDN ladder clause, a wrong/reversed layer pair, an exit-2 blanket
+# skip and a yosys-elaboration failure must all behave as designed. The
+# mutations run on a COPY of the flow config/PDN script, never the tracked
+# files, and the harness reports SKIPPED when its baseline is incomplete.
+if ./regress/mutate_macro_flow_config.sh > /tmp/mutate_macro_flow.log 2>&1; then
+  if grep -q "^SKIPPED" /tmp/mutate_macro_flow.log; then
+    echo "macro flow config negatives: SKIPPED (required PDK geometry unavailable)"
+  else
+    echo "macro flow config negatives: OK (pin-to-net, typed views, per-type geometry, ladder, skip and yosys-failure checks)"
+  fi
+else
+  echo "macro flow config negatives: FAILED"
+  tail -20 /tmp/mutate_macro_flow.log
   stale=1
 fi
 # The CRC constants are checked against the RevEng catalogue on every run, not
@@ -469,6 +520,41 @@ if ./regress/mutate_i2c_xfer_tb.sh > /tmp/mutate_i2c_xfer.log 2>&1; then
 else
   echo "i2c_xfer TB mutations: FAILED"
   tail -20 /tmp/mutate_i2c_xfer.log
+  stale=1
+fi
+
+# The word engine's unit suite: the integration split bit_en into tx/rx
+# enables, and the TB's directed split case is what proves the sides are
+# independent.
+if ./regress/mutate_serdes_tb.sh > /tmp/mutate_serdes.log 2>&1; then
+  echo "serdes TB mutations: OK (no unexplained survivors)"
+else
+  echo "serdes TB mutations: FAILED"
+  tail -20 /tmp/mutate_serdes.log
+  stale=1
+fi
+
+# The word-engine integration: the plan's four required mutations (TX hold,
+# RX skip, doubled cell enable, strobe cross-wire) plus the two alignment
+# defects and the grid-aligned load. Each must fail tb_pe_soc_serdes.
+if ./regress/mutate_soc_serdes_tb.sh > /tmp/mutate_soc_serdes.log 2>&1; then
+  echo "soc serdes TB mutations: OK (no unexplained survivors)"
+else
+  echo "soc serdes TB mutations: FAILED"
+  tail -20 /tmp/mutate_soc_serdes.log
+  stale=1
+fi
+
+# The codec pipeline unit TB. The integration instantiated pe_codec_mux twice
+# in pe_soc, so its unit suite now guards shared silicon: the documented CAN
+# preset 0x51, the ones-only cfg[7] rule and the cfg[6:4] run length, the
+# registered clr/rx_err contract (clr reaches every stage), and the pipeline
+# order / bypass subsets / half_phase. All 13 mutations must fail the TB.
+if ./regress/mutate_codec_tb.sh > /tmp/mutate_codec.log 2>&1; then
+  echo "codec TB mutations: OK (no unexplained survivors)"
+else
+  echo "codec TB mutations: FAILED"
+  tail -20 /tmp/mutate_codec.log
   stale=1
 fi
 

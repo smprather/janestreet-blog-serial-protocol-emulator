@@ -131,6 +131,17 @@ module tb_pe_codec_mux;
       rx_step(1'b0, rb, rv);
       check(rv === 1'b0, "can51 rx: stuff slot flagged invalid");
       check(rx_err === 1'b0, "can51 rx: complementary stuff accepted");
+
+      // The NEGATIVE case: a "stuff" slot that repeats the run's polarity is
+      // a violation. rx_err is registered and asserted at the committing
+      // strobe (the positive check above can never see this path).
+      cfg = 8'h51; reset_run();
+      for (int k = 0; k < 5; k++) rx_step(1'b1, rb, rv);
+      rx_step(1'b1, rb, rv);        // same polarity as the 5-run: illegal
+      check(rv === 1'b0, "can51 rx: bad stuff slot flagged invalid");
+      check(rx_err === 1'b1, "can51 rx: non-complementary stuff bit flagged");
+      rx_step(1'b0, rb, rv);        // next committing strobe clears the error
+      check(rx_err === 1'b0, "can51 rx: registered error clears on the next strobe");
     end
 
     // ============ cfg=0xE1: stuff only, run 6, ones-only (USB) ======
@@ -193,6 +204,18 @@ module tb_pe_codec_mux;
       rx_step(1'b1, rb, rv); check(rb === 1'b1, "nrzi rx: hold decodes 1");
     end
 
+    // The frame-boundary clr reaches EVERY stage, not just the stuffer:
+    // NRZI carries a line level across cells, and a USB packet starts from
+    // idle J, so clr must restore it without a chip reset.
+    begin
+      cfg = 8'h02; reset_run();
+      tx_step_nrzi(1'b0, lvl);          // toggle off idle J
+      check(lvl === 1'b0, "nrzi clr: raw 0 toggled off idle J");
+      reset_run();                      // frame boundary
+      tx_step_nrzi(1'b1, lvl);          // raw 1 holds: idle J must be back
+      check(lvl === 1'b1, "nrzi clr: frame boundary restored idle J");
+    end
+
     // =============== cfg=0x04: Manchester only ======================
     begin
       cfg = 8'h04;
@@ -226,6 +249,14 @@ module tb_pe_codec_mux;
       // samples happened to match, which on an idle line is forever.
       @(posedge clk); #1;
       check(rx_err === 1'b0, "manch rx: error clears without a strobe");
+
+      // clr is the frame boundary and must WIN over a pending cell error on
+      // the SAME edge. Without it, a frame that ends on a violation would
+      // carry the error into the next frame.
+      rx_first = 1'b1; rx_second = 1'b1;
+      bit_en = 1; clr = 1; @(posedge clk); #1; clr = 0; bit_en = 0; #1;
+      check(rx_err === 1'b0, "manch clr: frame boundary drops a pending error");
+      rx_first = 1'b0; rx_second = 1'b0;
     end
 
     // ====== cfg=0xE3: stuff(run 6, ones-only) + NRZI, USB-LS =======

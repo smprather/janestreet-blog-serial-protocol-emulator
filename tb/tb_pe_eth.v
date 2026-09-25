@@ -24,7 +24,7 @@ module tb_pe_eth;
   logic [LENW-1:0]   rx_len;
   logic              wire_lvl;
 
-  pe_serdes #(.MAXLEN(MAXLEN)) dut (.*);
+  pe_serdes #(.MAXLEN(MAXLEN)) dut (.*, .tx_bit_en(bit_en), .rx_bit_en(bit_en));
 
   initial clk = 0;
   always #5 clk = ~clk;

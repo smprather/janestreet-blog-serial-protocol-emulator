@@ -130,8 +130,11 @@ module elab_top;
   logic clk = 0, rst_n = 0, we = 0;
   logic [1:0] addr = 0;
   logic [P-1:0] wdata = 0, rdata, pad_in = 0, pad_out, pad_oe;
+  logic [P-1:0] ov_en = 0;
+  logic ov_bit = 0;
   pe_pinmux #(.PINS(P)) dut (.clk(clk), .rst_n(rst_n), .we(we), .addr(addr),
                              .wdata(wdata), .rdata(rdata), .pad_in(pad_in),
+                             .ov_en(ov_en), .ov_bit(ov_bit),
                              .pad_out(pad_out), .pad_oe(pad_oe));
 endmodule
 EOF

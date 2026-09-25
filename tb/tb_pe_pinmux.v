@@ -63,6 +63,11 @@ module tb_pe_pinmux;
   logic [1:0]      addr;
   logic [PINS-1:0] wdata, rdata;
   logic [PINS-1:0] pad_out, pad_oe;
+  // The engine level overlay (a SoC-internal input): when ov_en[i] is set the
+  // pad level comes from ov_bit instead of the OUT register, and the
+  // open-drain gate must key off that overridden level.
+  logic [PINS-1:0] ov_en  = '0;
+  logic            ov_bit = 1'b0;
 
   // ---- the wire ----------------------------------------------------------
   logic [PINS-1:0] other_low = '0;      // another device pulling low
@@ -93,6 +98,7 @@ module tb_pe_pinmux;
   pe_pinmux #(.PINS(PINS)) dut (
     .clk(clk), .rst_n(rst_n),
     .we(we), .addr(addr), .wdata(wdata), .rdata(rdata),
+    .ov_en(ov_en), .ov_bit(ov_bit),
     .pad_in(pad_in), .pad_out(pad_out), .pad_oe(pad_oe)
   );
 
@@ -304,6 +310,31 @@ module tb_pe_pinmux;
     check(pad_in  === 8'hFF, "reset must leave the wire pulled high");
     rd(A_OD);
     check(rd_val === 8'h00, "reset must return OD to push-pull");
+
+    // ======================================= the engine level overlay (A1/integration)
+    // The override lives BEFORE the open-drain gate and must feed both
+    // outputs: pad_out carries the overlay level on the selected pin, and the
+    // od gate must read the OVERIDDEN level -- an engine 0 on an od=1 pin whose
+    // register holds 1 must PULL LOW, not release (that is the exact bug the
+    // plan rejects a post-matrix mux for).
+    wr(A_OUT, 8'hFF); wr(A_OE, 8'hFF); wr(A_OD, 8'h00);
+    ov_en = 8'h04; ov_bit = 1'b0;               // overlay pin 2 low
+    #1;
+    check(pad_out === 8'hFB, "overlay level must replace the register level on the selected pin");
+    check(pad_out[7:3] === 5'h1F, "pins without ov_en keep the register level");
+    check(pad_oe  === 8'hFF, "push-pull overlay pin still drives (oe untouched)");
+    wr(A_OD, 8'h04);                            // pin 2 open-drain, register holds 1
+    #1;
+    check(pad_out[2] === 1'b0, "od gate must see the overlay level (engine 0 pulls low)");
+    check(pad_oe[2]  === 1'b1, "od pin with overlay 0 must DRIVE low, not release");
+    ov_bit = 1'b1;
+    #1;
+    check(pad_oe[2]  === 1'b0, "od pin with overlay 1 must release");
+    ov_en = '0; ov_bit = 1'b0;
+    wr(A_OD, 8'h00); wr(A_OE, 8'h00); wr(A_OUT, 8'hFF);
+    #1;
+    check(pad_out === 8'hFF, "overlay off restores the register level");
+    check(pad_oe  === 8'h00, "overlay off restores the reset drive state");
 
     // ==================================================== the contention count
     // Every deliberate contention above was consumed by resetting the counter.

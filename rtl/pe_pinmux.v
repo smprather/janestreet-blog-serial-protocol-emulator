@@ -95,6 +95,17 @@ module pe_pinmux #(
   input  logic [PINS-1:0]   wdata,
   output logic [PINS-1:0]   rdata,
 
+  // The SoC-internal engine level override (serdes-integration plan): where
+  // ov_en[i] is set, the pad LEVEL comes from ov_bit instead of the OUT
+  // register. It sits BEFORE the open-drain gate and feeds BOTH outputs --
+  // pad_out and the od term of pad_oe -- because an override applied only to
+  // pad_out would leave pad_oe keyed to the un-overridden register level: an
+  // engine 0 on an od=1 pin holding 1 would RELEASE instead of pulling low.
+  // Firmware still owns oe/od; ov_en resets to 0, so every existing user (and
+  // the reset state) is bit-identical.
+  input  logic [PINS-1:0]   ov_en,
+  input  logic              ov_bit,
+
   // The pads.
   input  logic [PINS-1:0]   pad_in,     // the level on the pin, driven or not
   output logic [PINS-1:0]   pad_out,    // level to drive
@@ -154,10 +165,16 @@ module pe_pinmux #(
     end
   end
 
+  // The effective level: overlay where enabled, the register elsewhere.
+  logic [PINS-1:0] eff_out;
+  assign eff_out = (reg_out & ~ov_en) | ({PINS{ov_bit}} & ov_en);
+
   // The open-drain gate. This single expression is the safety property:
-  // in od mode a pin holding a 1 is released rather than driven high.
-  assign pad_oe  = reg_oe & ~(reg_od & reg_out);
-  assign pad_out = reg_out;
+  // in od mode a pin holding a 1 is released rather than driven high -- and
+  // it reads the EFFECTIVE level, so the engine overlay participates in the
+  // open-drain contract like any firmware-written value.
+  assign pad_oe  = reg_oe & ~(reg_od & eff_out);
+  assign pad_out = eff_out;
 
   // Read port. OUT, OE and OD are readable so firmware can do read-modify-write
   // without a dmem shadow (the ISA has OR and AND, so composing a new value

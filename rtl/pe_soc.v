@@ -1,12 +1,19 @@
 // pe_soc.v — the smallest processor + RAM that can speak a protocol.
 //
-// There is NO protocol hardware in this file. No UART state machine, no shift
-// register, no framing logic, no baud generator that knows what a bit is.
-// There is a CPU, a tick counter, a generalised pin port, and the rest is
+// There is no protocol-SPECIFIC hardware in this file. No UART state machine,
+// no framing logic, no baud generator that knows what a bit is. There is a CPU,
+// a tick counter, a generalised pin port, a shared WORD ENGINE (pe_serdes plus
+// two codec pipelines — wiki/plans/serdes-integration.md), and the rest is
 // software (firmware/uart_echo.pe).
 //
 // That is the whole point: swap the program and this speaks I2C, or SWD, or
-// something nobody has written yet, with the gates unchanged.
+// something nobody has written yet, with the gates unchanged. The engine is a
+// PACING resource, not a mode: it exists because firmware cannot bit-bang
+// 20 MHz half-cells or USB's NRZI+stuffing chain. Word width, bit order, line
+// code and strobe cadence are registers firmware writes through port 0xF;
+// nothing in the engine knows framing, addresses, ACKs, or a protocol name.
+// It is disabled at reset and the pad overlay is off, so every baseline
+// persona and firmware image stays bit-identical (see the engine section).
 //
 // Memory map — the CPU's entire 4-bit IO space:
 //
@@ -34,6 +41,29 @@
 //                    the MAC's read pointer moves to the current BUFBYTE
 //                    window position. Safe while the next frame is arriving:
 //                    it never touches the write pointer.
+//   0xF  ENGINE  r/w the 32-entry indexed window shared by the word engine
+//                    and the 10BASE-T TX frame engine: a write in INDEX phase
+//                    sets the 5-bit pointer, a write in DATA phase stores and
+//                    auto-increments (a burst is one index write plus N data
+//                    writes), and ANY read returns REG[INDEX], auto-
+//                    increments, and re-arms INDEX phase. Lower bank (0-15) =
+//                    the word engine's registers (CFG/DIV/TXLEN/RXLEN/TXDATA/
+//                    RXDATA/STATUS; see the engine section). Upper bank:
+//                      16-23  push a byte into the TX engine's 8-byte
+//                             staging FIFO; the pointer wraps inside 16-23 so
+//                             a burst can never land in TXLEN/TXCTRL
+//                      24/25  TXLENL / TXLENH[2:0] (stored bytes, 14..1514)
+//                      26     TXCTRL: bit0 frame_start strobe, bit1
+//                             frame_abort strobe, bit2 tx_path (persistent
+//                             codec owner, reads back). tx_path is a LEVEL:
+//                             every TXCTRL write sets it to bit2, and the
+//                             clear is refused while tx_busy (the set is not).
+//                             A frame_start write therefore includes bit2=1.
+//                      27     TXSTAT read: {2'b0, ifg_active, fifo_ready,
+//                             tx_overlong, tx_underrun, tx_done, tx_busy}
+//                             with the three event bits set-beats-clear on
+//                             the read
+//                      28-31  spare
 //
 // PORTS 0x2 AND 0x3 ARE THE I2C MILESTONE. Everything before them assumed pin
 // direction was a BUILD-TIME decision, and that was true and cheap: UART and
@@ -336,6 +366,14 @@ module pe_soc #(
   logic       pinmux_we;
   logic [1:0] pinmux_waddr, pinmux_raddr;
 
+  // The word engine's pad overlay (declared HERE because the matrix sits
+  // above the engine section, which comes after the 10BASE-T chain): a
+  // per-pin level override feeding the matrix BEFORE its open-drain gate.
+  // eng_ov_en is all-zero unless the engine is enabled, so the matrix is
+  // bit-identical at reset and for every baseline persona.
+  wire [7:0] eng_ov_en;
+  wire       eng_tx_wire;
+
   // THE TWO NUMBERING SCHEMES ARE NOT THE SAME, and assuming they were is a bug
   // that hung the UART testbench:
   //
@@ -398,6 +436,8 @@ module pe_soc #(
     .addr(pinmux_we ? pinmux_waddr : pinmux_raddr),
     .wdata(io_wdata),
     .rdata(pinmux_rdata),
+    .ov_en(eng_ov_en),
+    .ov_bit(eng_tx_wire),
     .pad_in(pin_in),
     .pad_out(pin_out),
     .pad_oe(pin_oe)
@@ -637,6 +677,426 @@ module pe_soc #(
     end
   end
 
+  // =========================================================================
+  // The word engine: pe_serdes + TWO pe_codec_mux instances + the 0xF window
+  // =========================================================================
+  //
+  // WHY IT EXISTS AND WHY IT IS NOT "PROTOCOL HARDWARE". Firmware cannot
+  // bit-bang 10BASE-T's 20 MHz half-cells or USB's NRZI+stuffing chain, so
+  // the bit pacing is hardware -- but everything protocol-shaped (word
+  // length, bit order, line code, cadence) is a register firmware writes
+  // through the last free IO port, and the engine is DISABLED at reset with
+  // the pad overlay off, so every baseline TB and firmware image is
+  // bit-identical. See wiki/plans/serdes-integration.md and
+  // reviews/2026-09-24/SERDES-INTEGRATION-REVIEW.md.
+  //
+  // TOPOLOGY (the follow-up review's amended shape):
+  //   * ONE pe_serdes with SPLIT payload-only enables (tx_bit_en/rx_bit_en):
+  //     with stuffing, TX must HOLD on each inserted cell while RX SKIPS
+  //     each received one, and the wire loopback runs both directions at
+  //     once, so one shared strobe cannot serve both sides;
+  //   * TWO pe_codec_mux instances, unmodified -- one bit_en per ENCODED
+  //     cell (payload + stuff slots), never per half-cell;
+  //   * half_phase is a LEVEL (2x toggle from the divider) presented in the
+  //     TX instance's cfg[3]; the RX instance carries 0 there (Manchester RX
+  //     decodes from rx_first/rx_second);
+  //   * the payload gates are CURRENT-cycle semantics, source-grounded in
+  //     rtl/pe_bitstuff.v: during an inserted stuff cell tx_stuffed is the
+  //     combinational output of the registered tx_pend for that whole
+  //     strobe, and rx_bit_valid is low for a received stuff cell;
+  //   * ONE capture path: the RX side takes the EXISTING DRU (u_eth_dru) for
+  //     Manchester (strobe = eth_bit_en, halves = rx_first/rx_second) and
+  //     the divider's cell strobe over the DRU's synchronized level for
+  //     plain/NRZI/stuffed. Plain RX has NO phase acquisition -- self-timed
+  //     wire-loopback scope only (the recommended default; recorded limit);
+  //   * the TX wire reaches the pad through the matrix's level overlay
+  //     (ov_en/ov_bit) BEFORE the open-drain gate; firmware still owns oe/od.
+  //
+  // CONTROL/STATUS: a 32-entry indexed window on port 0xF (the only free
+  // port). INDEX-phase writes set the pointer, DATA-phase writes burst and
+  // auto-increment, any read returns REG[INDEX]/auto-increments/re-arms INDEX
+  // phase. tx_load, rx_start and clr are ONE-CYCLE write-triggered strobes
+  // (the engines treat a held level as a restart or a permanent clear).
+  // tx_done / rx_valid / rx_err event pulses are LATCHED for CPU polling
+  // with set-beats-clear on a STATUS (index 6) read, so a poll loop cannot
+  // miss them. The divider free-runs while the engine is enabled, which is
+  // what keeps the timing block active through a possible TRAILING stuff
+  // cell after serdes.tx_busy falls.
+  //
+  // START ALIGNMENT: tx_load/rx_start wait for the next cell boundary
+  // (tx_load_pend/rx_start_pend), so bit0 occupies a full cell and the plain
+  // RX path -- which samples the DRU's synchronized level a few clocks behind
+  // the pad -- always sees it.
+  //
+  // THE 10BASE-T TX FRAME ENGINE shares this cadence and ONE codec instance.
+  // pe_eth_tx (below, after the codecs) owns u_tx_codec.tx_bit while its
+  // `tx_path` bit is set (owner mux below), and is otherwise held in IDLE by
+  // `enable = eng_en && tx_path`. A frame start is refused while ser_tx_busy
+  // so the two owners can never interleave mid-cell, and tx_path refuses to
+  // clear while the frame engine is busy, so the owner cannot change under a
+  // running frame. 10BASE-T personas select DIV=6 (100 ns/cell at the locked
+  // 60 MHz) and cfg=0x04 (Manchester, no stuffing); the extended window's
+  // upper bank above is how firmware feeds it. Reset keeps tx_path=0, so the
+  // mux selects the SERDES and every pre-existing persona is bit-identical.
+
+  localparam int SERDES_LENW = 6;   // 1..32 bits: LENW = clog2(MAXLEN+1) = 6
+
+  // ---- the 0xF indexed window -------------------------------------------
+  logic       win_phase;              // 0 = INDEX, 1 = DATA
+  logic [4:0] win_index;
+  logic [7:0] win_regs [0:31];
+  logic [7:0] win_rdata;
+  wire        win_we = io_we && (io_port == 4'hF);
+  wire        win_re = io_re && (io_port == 4'hF);
+
+  // ---- engine control state ---------------------------------------------
+  logic eng_en, eng_lsb, eng_txsel;
+  logic tx_load_strb, rx_start_strb, eng_clr_strb;
+
+  // ---- 10BASE-T TX frame engine control/status --------------------------
+  // tx_path is the codec owner bit; the two *_strb wires are one-cycle
+  // strobes decoded from TXCTRL (index 26); push is a one-cycle strobe from
+  // the window's push bank (16-23). The engine's outputs are declared with
+  // the other instance wires below; eth_tx_busy must be visible to the
+  // window process above them.
+  logic       tx_path;
+  logic       tx_frame_start_strb, tx_frame_abort_strb;
+  logic       eth_push;
+  logic [7:0] eth_push_byte;
+  wire        eth_tx_bit, eth_tx_busy, eth_tx_done, eth_tx_underrun,
+              eth_tx_overlong, eth_ifg_active, eth_fifo_ready, eth_start;
+  wire        eth_tx_owner;
+
+  logic [7:0]  cfg_w;
+  logic [15:0] div_w;
+  logic [5:0]  tx_len_w, rx_len_w;
+  logic [31:0] tx_word_w;
+  always_comb begin
+    cfg_w     = win_regs[1];                              // 1 CFG
+    div_w     = {win_regs[3], win_regs[2]};               // 3:2 DIVH:DIVL
+    tx_len_w  = win_regs[4][5:0];                         // 4 TXLEN
+    rx_len_w  = win_regs[5][5:0];                         // 5 RXLEN
+    tx_word_w = {win_regs[10], win_regs[9], win_regs[8], win_regs[7]};
+  end
+
+  wire manch_mode = cfg_w[2];
+
+  // Window write/read + the control strobes. One process: the strobes are
+  // one-cycle pulses (default-clear, set only by a CTRL/TXCTRL write bit),
+  // and the readbacks store only the persistent bits (strobe bits read 0).
+  // The upper bank's push/strobes are decoded here, not in a second process,
+  // so there is exactly one writer per window register.
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      win_phase    <= 1'b0;
+      win_index    <= '0;
+      for (int i = 0; i < 32; i++) win_regs[i] <= '0;
+      eng_en       <= 1'b0;
+      eng_lsb      <= 1'b0;
+      eng_txsel    <= 1'b0;
+      tx_load_strb <= 1'b0;
+      rx_start_strb<= 1'b0;
+      eng_clr_strb <= 1'b0;
+      tx_path          <= 1'b0;
+      tx_frame_start_strb <= 1'b0;
+      tx_frame_abort_strb <= 1'b0;
+      eth_push         <= 1'b0;
+      eth_push_byte    <= 8'h00;
+    end else begin
+      tx_load_strb  <= 1'b0;
+      rx_start_strb <= 1'b0;
+      eng_clr_strb  <= 1'b0;
+      tx_frame_start_strb <= 1'b0;
+      tx_frame_abort_strb <= 1'b0;
+      eth_push            <= 1'b0;
+
+      if (win_we) begin
+        if (!win_phase) begin
+          win_index <= io_wdata[4:0];           // INDEX phase: set the pointer
+          win_phase <= 1'b1;
+        end else begin
+          // DATA phase. CTRL (index 0) splits into the stored enables plus
+          // the one-cycle strobes; 16-23 push into the TX staging FIFO and
+          // wrap inside their own bank; TXCTRL (26) splits into strobes, the
+          // persistent tx_path owner bit and its readback; everything else
+          // stores the byte and the burst advances (phase stays DATA).
+          if (win_index == 5'd0) begin
+            eng_en        <= io_wdata[0];
+            tx_load_strb  <= io_wdata[1];
+            rx_start_strb <= io_wdata[2];
+            eng_clr_strb  <= io_wdata[3];
+            eng_lsb       <= io_wdata[4];
+            eng_txsel     <= io_wdata[5];
+            win_regs[0]   <= {2'b00, io_wdata[5], io_wdata[4],
+                              3'b000, io_wdata[0]};
+            win_index     <= 5'd1;
+          end else if (win_index >= 5'd16 && win_index <= 5'd23) begin
+            eth_push      <= 1'b1;
+            eth_push_byte <= io_wdata;
+            win_index     <= (win_index == 5'd23) ? 5'd16 : win_index + 5'd1;
+          end else if (win_index == 5'd26) begin
+            tx_frame_start_strb <= io_wdata[0];
+            tx_frame_abort_strb <= io_wdata[1];
+            // Persistent owner bit. Setting wins; clearing is refused while
+            // the frame engine is busy so the codec owner cannot change under
+            // a running frame (a frame start in the same write still needs
+            // tx_path already set: `enable` reads the register).
+            if (io_wdata[2]) begin
+              tx_path <= 1'b1;
+            end else if (!eth_tx_busy) begin
+              tx_path <= 1'b0;
+            end
+            win_regs[26] <= {5'b0,
+                             io_wdata[2] ? 1'b1
+                                         : (eth_tx_busy ? tx_path : 1'b0),
+                             2'b00};
+            win_index    <= 5'd27;
+          end else begin
+            win_regs[win_index] <= io_wdata;
+            win_index           <= win_index + 5'd1;
+          end
+        end
+      end
+      if (win_re) begin
+        win_index <= win_index + 5'd1;
+        win_phase <= 1'b0;                         // any read re-arms INDEX
+      end
+    end
+  end
+  // ---- the timing/cadence block: cell strobe + half-cell level ----------
+  // The divider sets the ENCODED-cell period; half_phase is derived from it,
+  // not from a second divisor. It free-runs while eng_en is set, which keeps
+  // the timing block active through a possible trailing stuff cell after
+  // serdes.tx_busy falls (the plan's directed trailing-stuff requirement).
+  // cell_div < 2 (including the reset value 0) holds the block quiet.
+  logic [15:0] cell_cnt;
+  logic        cell_en;
+  logic        half_phase;
+  wire  [15:0] cell_div = div_w;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      cell_cnt   <= '0;
+      cell_en    <= 1'b0;
+      half_phase <= 1'b0;
+    end else begin
+      cell_en <= 1'b0;
+      if (!eng_en || eng_clr_strb || cell_div < 16'd2) begin
+        cell_cnt   <= '0;
+        half_phase <= 1'b0;
+      end else begin
+        if (cell_cnt == cell_div - 16'd1) begin
+          cell_cnt <= '0;
+          cell_en  <= 1'b1;                  // one pulse per encoded cell
+        end else begin
+          cell_cnt <= cell_cnt + 16'd1;
+        end
+        if (!manch_mode) begin
+          half_phase <= 1'b0;                // only Manchester TX toggles it
+        end else if (cell_cnt == ((cell_div >> 1) - 16'd1)
+                     || cell_cnt == cell_div - 16'd1) begin
+          // TWO toggles per cell: at the mid-cell boundary AND at the cell
+          // boundary (the cell-boundary toggle lands on the cell_en cycle,
+          // so the wire's first half starts exactly where a cell starts --
+          // which is what phases the DRU's grid at the load boundary).
+          half_phase <= ~half_phase;         // a LEVEL: 2 toggles per cell
+        end
+      end
+    end
+  end
+
+  // ---- grid-aligned starts ----------------------------------------------
+  // The load/start strobes from a CTRL write wait for the next cell boundary,
+  // so bit0 occupies a full cell and the plain RX path (which samples the
+  // DRU's synchronized level a few clocks behind the pad) always sees it.
+
+  // The frame engine's advance strobe: high on the cell's LAST clock, one
+  // clock before the shared codec's registered committing edge (cell_en).
+  // Pacing the engine on cell_en instead put its raw-bit transition one clock
+  // INTO each first half, so the DRU could not frame the engine's Manchester
+  // from a constant idle; the Task-5 wire loopback caught it. The codec's own
+  // timing is untouched -- only the frame engine's advance point moves, which
+  // makes each Manchester half exactly three clocks (textbook waveform).
+  wire eth_cell_start = eng_en && !eng_clr_strb && (cell_div >= 16'd2)
+                        && (cell_cnt == cell_div - 16'd1);
+  //
+  // Manchester start is anchored one step further: the DRU emits a decode
+  // for the IDLE cell in flight just after the load boundary (it fires at
+  // load+2 clk with pre-word content). If the serdes started at the load,
+  // that decode would be captured as payload bit 0 and shift the whole word.
+  // So rx_start is applied at the FIRST DRU decode after the grid-aligned
+  // load: the start pulse consumes exactly that decode (serdes start beats a
+  // same-cycle capture) and the first captured cell is decode(cell0).
+  logic tx_load_pend, rx_start_pend, rx_anchor;
+  wire  tx_load_grid  = tx_load_pend  && cell_en;
+  wire  rx_start_grid = rx_start_pend
+                        && (manch_mode ? (rx_anchor && eth_bit_en) : cell_en);
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      tx_load_pend  <= 1'b0;
+      rx_start_pend <= 1'b0;
+      rx_anchor     <= 1'b0;
+    end else begin
+      if (tx_load_grid)  tx_load_pend  <= 1'b0;
+      if (rx_start_grid) rx_start_pend <= 1'b0;
+      if (tx_load_grid)  rx_anchor     <= 1'b1;   // the load is applied
+      if (rx_start_grid) rx_anchor     <= 1'b0;
+      if (tx_load_strb)  tx_load_pend  <= 1'b1;   // a strb wins a same-cycle tie
+      if (rx_start_strb) rx_start_pend <= 1'b1;
+    end
+  end
+
+  // ---- instance wires (declared before the gates that consume them) ------
+  wire        ser_tx, ser_tx_busy, ser_tx_done;
+  wire        ser_rx_busy, ser_rx_valid;
+  wire [31:0] ser_rx_word;
+  wire        tx_stuffed_w;                  // u_tx_codec
+  wire        rx_bit_w, rx_bit_valid_w, rx_err_w;   // u_rx_codec
+  wire        tx_rx_bit_u, tx_rx_valid_u, tx_rx_err_u;   // TX codec's dead RX side
+  wire        rx_tx_wire_u, rx_tx_stuffed_u;           // RX codec's dead TX side
+
+  // The 10BASE-T TX engine's owner arbitration: a start waits for the SERDES
+  // TX to be idle (never interleave mid-cell), and the mux swaps u_tx_codec's
+  // raw input. Reset keeps tx_path=0 so this is bit-identical to the
+  // pre-TX topology (the additive proof).
+  assign eth_start    = tx_frame_start_strb && !ser_tx_busy;
+  assign eth_tx_owner = tx_path ? eth_tx_bit : ser_tx;
+
+  // ---- cell strobes and payload-only gates (the cadence handshake) -------
+  // MUTATION ANCHORS (regress/mutate_soc_serdes_tb.sh): removing either
+  // payload gate, doubling the cell enable, or cross-wiring the RX strobe to
+  // the TX cadence must fail tb_pe_soc_serdes.
+  wire tx_cell_en  = cell_en;
+  wire rx_cell_en  = eng_en && (manch_mode ? eth_bit_en : cell_en);
+  wire serdes_tx_bit_en = tx_cell_en && !tx_stuffed_w;
+  wire serdes_rx_bit_en = rx_cell_en && rx_bit_valid_w;
+
+  wire [7:0] cfg_tx = {cfg_w[7:4], half_phase, cfg_w[2:0]};
+  wire [7:0] cfg_rx = {cfg_w[7:4], 1'b0,       cfg_w[2:0]};
+
+  pe_serdes #(.MAXLEN(32), .LENW(SERDES_LENW)) u_serdes (
+    .clk(clk), .rst_n(rst_n),
+    .cfg_lsb_first(eng_lsb),
+    .tx_bit_en(serdes_tx_bit_en),
+    .tx_load(tx_load_grid), .tx_data(tx_word_w), .tx_len(tx_len_w),
+    .tx_ser(ser_tx), .tx_busy(ser_tx_busy), .tx_done(ser_tx_done),
+    .rx_bit_en(serdes_rx_bit_en),
+    .rx_ser(rx_bit_w), .rx_start(rx_start_grid), .rx_len(rx_len_w),
+    .rx_data(ser_rx_word), .rx_busy(ser_rx_busy), .rx_valid(ser_rx_valid)
+  );
+
+  pe_codec_mux u_tx_codec (
+    .clk(clk), .rst_n(rst_n),
+    .cfg(cfg_tx), .bit_en(tx_cell_en), .clr(eng_clr_strb),
+    .tx_bit(eth_tx_owner), .tx_wire(eng_tx_wire), .tx_stuffed(tx_stuffed_w),
+    .rx_wire(1'b0), .rx_first(1'b0), .rx_second(1'b0),
+    .rx_bit(tx_rx_bit_u), .rx_bit_valid(tx_rx_valid_u), .rx_err(tx_rx_err_u)
+  );
+
+  // The 10BASE-T TX frame engine: pacing from the SAME divider (but on the
+  // cell-BOUNDARY strobe, above) and encoding from the SAME u_tx_codec as the
+  // SERDES (the owner mux above). Its own 12-bit frame_len comes from the
+  // extended window's TXLEN bank; start waits for ser_tx_busy to fall
+  // (eth_start above); abort is a write-triggered strobe. Enabled only when
+  // the engine is on AND tx_path owns the codec.
+  pe_eth_tx #(.MAX_STORED(1514)) u_eth_tx (
+    .clk(clk), .rst_n(rst_n),
+    .enable(eng_en && tx_path),
+    .cell_start(eth_cell_start), .half_phase(half_phase),
+    .push(eth_push), .push_byte(eth_push_byte), .push_ready(eth_fifo_ready),
+    .frame_len({1'b0, win_regs[25][2:0], win_regs[24]}),   // 11 bits -> 12
+    .start(eth_start), .frame_abort(tx_frame_abort_strb),
+    .tx_busy(eth_tx_busy), .tx_done(eth_tx_done),
+    .tx_underrun(eth_tx_underrun), .tx_overlong(eth_tx_overlong),
+    .ifg_active(eth_ifg_active),
+    .tx_bit(eth_tx_bit)
+  );
+
+  // One capture path: the EXISTING DRU (u_eth_dru) feeds this instance.
+  // Manchester takes the DRU's per-decoded-cell strobe and half-cell levels;
+  // plain/NRZI/stuffed take the divider's cell strobe over the DRU's
+  // synchronized level (self-timed loopback scope -- no phase acquisition).
+  pe_codec_mux u_rx_codec (
+    .clk(clk), .rst_n(rst_n),
+    .cfg(cfg_rx), .bit_en(rx_cell_en), .clr(eng_clr_strb),
+    .tx_bit(1'b0), .tx_wire(rx_tx_wire_u), .tx_stuffed(rx_tx_stuffed_u),
+    .rx_wire(eth_rx_wire), .rx_first(eth_rx_first), .rx_second(eth_rx_second),
+    .rx_bit(rx_bit_w), .rx_bit_valid(rx_bit_valid_w), .rx_err(rx_err_w)
+  );
+
+  // ---- status: live levels + LATCHED events (set beats clear) -----------
+  logic tx_done_lat, rx_valid_lat, rx_err_lat;
+  logic eth_done_lat, eth_underrun_lat, eth_overlong_lat;
+  wire  status_idx_rd = win_re && (win_index == 5'd6);
+  wire  txstat_idx_rd = win_re && (win_index == 5'd27);
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      tx_done_lat  <= 1'b0;
+      rx_valid_lat <= 1'b0;
+      rx_err_lat   <= 1'b0;
+    end else begin
+      if (status_idx_rd) begin
+        if (!ser_tx_done)  tx_done_lat  <= 1'b0;
+        if (!ser_rx_valid) rx_valid_lat <= 1'b0;
+        if (!rx_err_w)     rx_err_lat   <= 1'b0;
+      end
+      if (ser_tx_done)  tx_done_lat  <= 1'b1;   // set beats clear
+      if (ser_rx_valid) rx_valid_lat <= 1'b1;
+      if (rx_err_w)     rx_err_lat   <= 1'b1;
+    end
+  end
+
+  // TXSTAT (index 27): the frame engine's events, latched for CPU polling
+  // with the same set-beats-clear rule as STATUS (index 6). The engine emits
+  // one-cycle pulses; a poll loop must not miss them.
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      eth_done_lat     <= 1'b0;
+      eth_underrun_lat <= 1'b0;
+      eth_overlong_lat <= 1'b0;
+    end else begin
+      if (txstat_idx_rd) begin
+        if (!eth_tx_done)     eth_done_lat     <= 1'b0;
+        if (!eth_tx_underrun) eth_underrun_lat <= 1'b0;
+        if (!eth_tx_overlong) eth_overlong_lat <= 1'b0;
+      end
+      if (eth_tx_done)     eth_done_lat     <= 1'b1;   // set beats clear
+      if (eth_tx_underrun) eth_underrun_lat <= 1'b1;
+      if (eth_tx_overlong) eth_overlong_lat <= 1'b1;
+    end
+  end
+
+  // STATUS (index 6), TXSTAT (index 27) and RXDATA (11-14) are computed
+  // views, not stored registers; everything else reads back what was written.
+  always_comb begin
+    case (win_index)
+      5'd6:    win_rdata = {1'b0, eng_en, eth_locked, rx_err_lat,
+                            rx_valid_lat, tx_done_lat, ser_rx_busy,
+                            ser_tx_busy};
+      5'd11:   win_rdata = ser_rx_word[7:0];
+      5'd12:   win_rdata = ser_rx_word[15:8];
+      5'd13:   win_rdata = ser_rx_word[23:16];
+      5'd14:   win_rdata = ser_rx_word[31:24];
+      5'd27:   win_rdata = {2'b00, eth_ifg_active, eth_fifo_ready,
+                            eth_overlong_lat, eth_underrun_lat,
+                            eth_done_lat, eth_tx_busy};
+      default: win_rdata = win_regs[win_index];
+    endcase
+  end
+
+  // The pad overlay: ONE selected pin carries the TX wire while the engine
+  // is enabled; oe/od remain firmware's. All-zero when disabled -- which is
+  // bit-identical to the matrix without an overlay (reset default).
+  assign eng_ov_en = eng_en ? (eng_txsel ? 8'h01 : 8'h80) : 8'h00;
+
+  // Unused-direction sinks: this repo accepts no lint waivers. cfg_w[3] is
+  // deliberately overridden on BOTH instances (half_phase on TX, 0 on RX --
+  // see the plan), so firmware's cfg[3] is not consumed anywhere.
+  wire _unused_engine = &{1'b0, tx_rx_bit_u, tx_rx_valid_u, tx_rx_err_u,
+                          rx_tx_wire_u, rx_tx_stuffed_u, cfg_w[3]};
+
   // The port read mux.
   //
   // Port 0/1 keep the OLD combined view -- driven pins read back what firmware
@@ -669,6 +1129,7 @@ module pe_soc #(
       4'hC:    io_rdata = eth_field[15:8];
       4'hD:    io_rdata = eth_buf_rdata;      // pe_fbuf's registered read output
       4'hE:    io_rdata = 8'h00;              // BUFCTRL is write-only
+      4'hF:    io_rdata = win_rdata;          // the word-engine window
       default: io_rdata = 8'h00;
     endcase
   end

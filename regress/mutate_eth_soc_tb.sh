@@ -15,7 +15,7 @@ ROOT="$PWD"
 RTL="$ROOT/rtl/pe_soc.v"
 TB="$ROOT/tb/tb_pe_soc_eth.v"
 SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
-SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v $SRAM_MODEL $TB"
+SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v $SRAM_MODEL $TB"
 LOG=/tmp/mutate_eth_soc.log
 BAK=$(mktemp /tmp/pe_soc.XXXXXX.v)
 

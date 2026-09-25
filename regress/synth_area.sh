@@ -16,8 +16,9 @@ rc=0
 
 report() {   # name, rtl files, top, optional chparam
   local name=$1 rtl=$2 top=$3 chparam=${4:-}
-  local out
+  local out yrc
   out=$(yosys -p "read_verilog -sv $rtl; hierarchy -check -top $top $chparam; proc; opt; fsm; opt; memory; opt; techmap; opt; dfflibmap -liberty $LIB; abc -liberty $LIB; stat -liberty $LIB" 2>&1)
+  yrc=$?
   local cells area
   # Hierarchical designs print per-module lines then a design total. The total
   # line is the one WITHOUT a module name in front of it, so match that shape
@@ -57,6 +58,23 @@ report() {   # name, rtl files, top, optional chparam
   bad=$(grep -E "Driver-driver conflict|implicitly declared|Warning: Wire .* is used but has no driver" <<< "$out")
   if [ -n "$bad" ]; then
     sed 's/^/    !! /' <<< "$bad"
+    rc=1
+  fi
+
+  # A yosys ERROR is a FAILED REPORT, not a blank one. The number-greps above
+  # find nothing in an error-only output, so a parse failure used to print
+  # "- cells - um2" and the script still exited 0 -- the second half of gotcha
+  # 13. lint.sh caught the R1 pe_ctrl `return` parse error while this gate did
+  # not. Fail loudly on a non-zero yosys status or any ERROR line, and print
+  # the diagnostic; the clean-run output above is unchanged.
+  local yerr
+  yerr=$(grep -E "ERROR" <<< "$out" || true)
+  if [ "$yrc" -ne 0 ] || [ -n "$yerr" ]; then
+    if [ -n "$yerr" ]; then
+      sed 's/^/    !! /' <<< "$yerr" | head -5
+    else
+      echo "    !! yosys exited $yrc with no ERROR line"
+    fi
     rc=1
   fi
 }
@@ -104,13 +122,17 @@ report pe_fbuf_macro  "rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist
   # write port -- so this is the whole cost of the hardware-vs-firmware
   # decision wiki/concepts/ethernet-scope.md argues for.
   report pe_eth_mac "rtl/pe_eth_mac.v" pe_eth_mac
+  # The 10BASE-T TX frame engine and its OWN CRC instance. Kept visible from
+  # the first commit: the engine is the new cost, and doubling pe_crc is the
+  # deliberate price of independent TX/RX directions (plan G4).
+  report pe_eth_tx  "rtl/pe_eth_tx.v rtl/pe_crc.v" pe_eth_tx
 # Note on the SoC: the instruction memory is the SRAM macro, and the frame
 # buffer is the same part; both contribute area from their LEF, not gates. The
 # receive chain's logic is part of this build now, so its sources are listed --
 # the same list flow/pe_soc.json and info.yaml carry.
-report pe_soc  "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_soc.v" pe_soc
+report pe_soc  "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_serdes.v rtl/pe_nrzi.v rtl/pe_bitstuff.v rtl/pe_codec_mux.v rtl/pe_eth_tx.v rtl/pe_soc.v" pe_soc
 # The deliverable: the only module Tiny Tapeout will instantiate.
-report tt_um_top    "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/pe_ctrl.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_soc.v rtl/tt_um_protocol_emulator.v" tt_um_protocol_emulator
+report tt_um_top    "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/pe_ctrl.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_serdes.v rtl/pe_nrzi.v rtl/pe_bitstuff.v rtl/pe_codec_mux.v rtl/pe_eth_tx.v rtl/pe_soc.v rtl/tt_um_protocol_emulator.v" tt_um_protocol_emulator
 echo "-----------------------------------------------"
 echo "routed reference: pe_serdes = 17,211 um2 cells / 29,164 um2 die @78% util"
 echo "reproduce it with: flow/run_librelane.sh flow/pe_serdes.json"

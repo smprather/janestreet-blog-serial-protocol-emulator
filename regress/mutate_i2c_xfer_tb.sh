@@ -17,7 +17,7 @@ PE="$ROOT/firmware/i2c_xfer.pe"
 HEX="$ROOT/firmware/i2c_xfer.hex"
 TB="$ROOT/tb/tb_pe_soc_i2c_xfer.v"
 SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
-SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_soc.v $SRAM_MODEL"
+SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v $SRAM_MODEL"
 # run_all.sh captures this script's stdout in /tmp/mutate_i2c_xfer.log; keep
 # each simulator run on a different path so it cannot truncate the outer log.
 LOG=/tmp/mutate_i2c_xfer_case.log

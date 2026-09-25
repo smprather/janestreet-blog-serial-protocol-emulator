@@ -101,20 +101,21 @@ bidirectional wire needs a `uio` pad, an input needs `ui_in` or a released
 
 | Bank | committed | free |
 |---|---|---|
-| `ui_in` | 6 (UART RX, run, 10BASE-T RX, loader SCLK, loader MOSI, loader CS_N) | 2 |
-| `uo_out` | 8 (UART TX / SPI SCLK, heartbeat, dbg_pc[5:0]) | 0 |
-| `uio` | 4 (I2C SDA, I2C SCL, SPI MOSI, SPI CS_N) | 4 |
-| **total** | 18 | **6** |
+| `ui_in` | 3 (UART RX, run, 10BASE-T RX) | 5 |
+| `uo_out` | 8 (UART TX / SPI SCLK, IRQ_N, eth_tx, dbg_pc[5:1]) | 0 |
+| `uio` | 8 (I2C SDA, I2C SCL, SPI MOSI, SPI CS_N, host CS_N, host MOSI, host MISO, host SCK) | 0 |
+| **total** | 19 | **5** |
 
 After the pinned UART, SPI MOSI/CS_N, I2C and 10BASE-T-RX wires, the remaining protocols
-need 7 outputs, 3 inputs and 5 bidir:
+need 6 outputs, 3 inputs and 5 bidir:
 
-- **Debug pins kept** (the item-4 decision): 6 free pads against 15 remaining wires — short 9. The 3 inputs take 2 `ui_in` + 1 `uio`; the 5 bidir wires need 5 `uio` but only 3 remain, so 2 bidir pads are missing; every `uo_out` pad is taken, so all 7 outputs are missing.
-- **Debug pins reclaimed:** 12 free pads, short 3: the 3 remaining inputs take the 2 free `ui_in` and 1 `uio`; the 5 bidir wires need 5 `uio` but only 3 remain, so 2 bidir pads are missing; `uo_out` supplies 6 of the 7 outputs, so 1 output is missing.
+- **Debug pins kept** (the item-4 decision): 5 free pads against 14 remaining wires — short 11. The 3 inputs have 5 free `ui_in` + 0 `uio`; the 5 bidir wires need 5 `uio` but only 0 remain, so 5 bidir pads are missing; every `uo_out` pad is taken, so all 6 outputs are missing.
+- **Debug pins reclaimed:** 10 free pads, short 6: the 3 remaining inputs have the 5 free `ui_in` and 0 `uio`; the 5 bidir wires need 5 `uio` but only 0 remain, so 5 bidir pads are missing; `uo_out` supplies 5 of the 6 outputs, so 1 output is missing.
 
-**Even shedding every overhead** — the run strap, the heartbeat, the debug
-pads and the loader's three pads reused at runtime — leaves 10 outputs
-for `uo_out`'s 8 plus at most one spare `uio` pad: **one output short**.
+**Even shedding every overhead** — the run strap, IRQ_N, the debug
+pads and the host row reclaimed at runtime — still leaves 1 pad
+short: the 5 bidirectional wires have only 4
+reclaimed `uio`, while the 6 outputs fit the 6 freed `uo_out` bits.
 So "all nine at once" is not a feasible permanent pinout here, and the raw
 23-of-24 count this page used to carry hid both the arithmetic error (UART
 plus SPI is 6 wires, not 7) and the direction mix. The permanent-only design

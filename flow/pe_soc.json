@@ -58,6 +58,11 @@
     "./src/pe_crc.v",
     "./src/pe_eth_mac.v",
     "./src/pe_fbuf.v",
+    "./src/pe_serdes.v",
+    "./src/pe_nrzi.v",
+    "./src/pe_bitstuff.v",
+    "./src/pe_codec_mux.v",
+    "./src/pe_eth_tx.v",
     "./src/pe_soc.v"
   ],
   "EXTRA_VERILOG_MODELS": [

@@ -1,0 +1,347 @@
+; eth_tx_two.pe — the two-frame minimum-IFG acceptance for the 10BASE-T TX
+; engine (wiki/plans/eth-tx-frame-path.md Task 5 Step 4).
+;
+; The TB preloads dmem[0..13] with a 14-byte Ethernet header (broadcast dst,
+; 02:00:00:00:00:01 src, EtherType 0x0806). The program pushes dmem[0..7]
+; into the 8-byte staging FIFO, starts frame 1, streams dmem[8..13] under
+; TXSTAT fifo_ready backpressure, waits the FCS/IFG out, then starts frame 2
+; the moment tx_busy falls — the engine's 96-cell IFG is the only gap. It
+; then runs the firmware/eth_rx.pe walk over the looped-back frame.
+;
+; DMEM contract (TB-written): [0..13] header bytes.
+; DMEM contract (program): [0..1] len, [2..3] field, [5] sum, [6] counter,
+; [7] 0x5A consumed, [8] rejects, [9] raw ETHSTAT, [10] 0xA5 done.
+
+        LDI   A, 128
+        OUT   PINOE, A           ; drive port bit 7 (the loopback wire)
+
+        ; --- config: CFG=0x04 (Manchester), DIV=6 ---
+        LDI   A, 1
+        OUT   ENGINE, A
+        LDI   A, 4
+        OUT   ENGINE, A
+        LDI   A, 6
+        OUT   ENGINE, A
+        LDI   A, 0
+        OUT   ENGINE, A
+
+        ; --- TXLEN=14 and tx_path (before eng_en) ---
+        IN    A, ENGINE
+        LDI   A, 24
+        OUT   ENGINE, A
+        LDI   A, 14
+        OUT   ENGINE, A
+        LDI   A, 0
+        OUT   ENGINE, A
+        LDI   A, 4
+        OUT   ENGINE, A
+
+        ; --- engine on ---
+        IN    A, ENGINE
+        LDI   A, 0
+        OUT   ENGINE, A
+        LDI   A, 1
+        OUT   ENGINE, A
+
+        ; ================= frame 1 ===================
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 0
+        OUT   ENGINE, A          ; push dmem[0]
+        LDM   A, 1
+        OUT   ENGINE, A          ; push dmem[1]
+        LDM   A, 2
+        OUT   ENGINE, A          ; push dmem[2]
+        LDM   A, 3
+        OUT   ENGINE, A          ; push dmem[3]
+        LDM   A, 4
+        OUT   ENGINE, A          ; push dmem[4]
+        LDM   A, 5
+        OUT   ENGINE, A          ; push dmem[5]
+        LDM   A, 6
+        OUT   ENGINE, A          ; push dmem[6]
+        LDM   A, 7
+        OUT   ENGINE, A          ; push dmem[7]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 26
+        OUT   ENGINE, A          ; INDEX=26 (TXCTRL)
+        LDI   A, 5               ; bit2 tx_path stays 1 | bit0 frame_start
+        OUT   ENGINE, A          ; frame_start, INDEX=27
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf1_8:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf1_8
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf1_8
+pushf1_8:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 8
+        OUT   ENGINE, A          ; push dmem[8]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf1_9:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf1_9
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf1_9
+pushf1_9:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 9
+        OUT   ENGINE, A          ; push dmem[9]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf1_10:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf1_10
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf1_10
+pushf1_10:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 10
+        OUT   ENGINE, A          ; push dmem[10]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf1_11:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf1_11
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf1_11
+pushf1_11:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 11
+        OUT   ENGINE, A          ; push dmem[11]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf1_12:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf1_12
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf1_12
+pushf1_12:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 12
+        OUT   ENGINE, A          ; push dmem[12]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf1_13:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf1_13
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf1_13
+pushf1_13:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 13
+        OUT   ENGINE, A          ; push dmem[13]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+donef1:  IN    A, ENGINE          ; TXSTAT (set beats clear)
+        AND   A, 2               ; tx_done latched
+        JNZ   okf1
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   donef1
+okf1:
+
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+idlef1:  IN    A, ENGINE          ; bit0 = tx_busy (includes the IFG)
+        AND   A, 1
+        JZ    gof1
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   idlef1
+gof1:
+
+
+        ; ================= frame 2 (min IFG) =========
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 0
+        OUT   ENGINE, A          ; push dmem[0]
+        LDM   A, 1
+        OUT   ENGINE, A          ; push dmem[1]
+        LDM   A, 2
+        OUT   ENGINE, A          ; push dmem[2]
+        LDM   A, 3
+        OUT   ENGINE, A          ; push dmem[3]
+        LDM   A, 4
+        OUT   ENGINE, A          ; push dmem[4]
+        LDM   A, 5
+        OUT   ENGINE, A          ; push dmem[5]
+        LDM   A, 6
+        OUT   ENGINE, A          ; push dmem[6]
+        LDM   A, 7
+        OUT   ENGINE, A          ; push dmem[7]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 26
+        OUT   ENGINE, A          ; INDEX=26 (TXCTRL)
+        LDI   A, 5               ; bit2 tx_path stays 1 | bit0 frame_start
+        OUT   ENGINE, A          ; frame_start, INDEX=27
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf2_8:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf2_8
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf2_8
+pushf2_8:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 8
+        OUT   ENGINE, A          ; push dmem[8]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf2_9:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf2_9
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf2_9
+pushf2_9:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 9
+        OUT   ENGINE, A          ; push dmem[9]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf2_10:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf2_10
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf2_10
+pushf2_10:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 10
+        OUT   ENGINE, A          ; push dmem[10]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf2_11:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf2_11
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf2_11
+pushf2_11:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 11
+        OUT   ENGINE, A          ; push dmem[11]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf2_12:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf2_12
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf2_12
+pushf2_12:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 12
+        OUT   ENGINE, A          ; push dmem[12]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+pollf2_13:  IN    A, ENGINE          ; TXSTAT, INDEX=28
+        AND   A, 16              ; fifo_ready
+        JNZ   pushf2_13
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 again
+        JMP   pollf2_13
+pushf2_13:  LDI   A, 16
+        OUT   ENGINE, A          ; INDEX=16
+        LDM   A, 13
+        OUT   ENGINE, A          ; push dmem[13]
+
+        IN    A, ENGINE          ; re-arm; INDEX=next
+        LDI   A, 27
+        OUT   ENGINE, A          ; INDEX=27 (TXSTAT)
+donef2:  IN    A, ENGINE          ; TXSTAT (set beats clear)
+        AND   A, 2               ; tx_done latched
+        JNZ   okf2
+        LDI   A, 27
+        OUT   ENGINE, A
+        JMP   donef2
+okf2:
+
+
+        ; ---- consume the looped-back frame (firmware/eth_rx.pe walk) ----
+        LDI   A, 0
+        STM   8, A                 ; rejected count
+        STM   7, A                 ; consumed flag
+        STM   10, A                ; whole-program done flag
+rwpoll: IN    A, ETHSTAT           ; returns is_type|bad|valid; clears events
+        STM   9, A
+        AND   A, 1
+        JNZ   rwgot
+        LDM   A, 9
+        AND   A, 2
+        JZ    rwpoll
+        LDM   A, 8
+        ADD   A, 1
+        STM   8, A
+        JMP   rwpoll
+rwgot:  IN    A, ETHLEN
+        STM   0, A
+        IN    A, ETHLENH
+        STM   1, A
+        IN    A, ETHFLD
+        STM   2, A
+        IN    A, ETHFLDH
+        STM   3, A
+        LDM   A, 0
+        STM   6, A
+        LDI   A, 0
+        STM   5, A
+rwsum:  LDM   A, 6
+        JZ    rwdone
+        IN    A, BUFBYTE
+        MOV   X, A
+        LDM   A, 5
+        ADD   A, X
+        STM   5, A
+        LDM   A, 6
+        SUB   A, 1
+        STM   6, A
+        JMP   rwsum
+rwdone: LDI   A, 1
+        OUT   BUFCTRL, A
+        LDI   A, 0x5A
+        STM   7, A
+        LDI   A, 0xA5
+        STM   10, A
+halt:   JMP   halt

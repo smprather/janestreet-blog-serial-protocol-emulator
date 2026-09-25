@@ -32,7 +32,7 @@ module tb_pe_uart;
       if (rx_valid) rx_valid_seen <= 1'b1;
     end
 
-  pe_serdes #(.MAXLEN(MAXLEN)) dut (.*);
+  pe_serdes #(.MAXLEN(MAXLEN)) dut (.*, .tx_bit_en(bit_en), .rx_bit_en(bit_en));
 
   initial clk = 0;
   always #5 clk = ~clk;

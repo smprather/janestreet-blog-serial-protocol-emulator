@@ -452,23 +452,23 @@ module tb_pe_eth_mac;
       // ---- buffer ownership: a consume is non-destructive ----------------
       // The producer's pointer must not move; only room and rptr do.
       check(u_mac.rptr === 11'd0, "rptr starts at 0");
-      buf_consume = 1'b1; buf_consume_addr = 11'd46;
+      buf_consume = 1'b1; buf_consume_addr = 11'd23;
       @(posedge clk); #1;
       buf_consume = 1'b0;
       repeat (2) @(posedge clk); #1;
-      check(u_mac.rptr === 11'd46,
-            $sformatf("consume: rptr=%0d want 46", u_mac.rptr));
+      check(u_mac.rptr === 11'd23,
+            $sformatf("consume: rptr=%0d want 23", u_mac.rptr));
       check(frame_ptr === 11'd46,
             $sformatf("consume moved the WRITE pointer to %0d", frame_ptr));
-      check(u_mac.room === 12'd2048,
-            $sformatf("consume: room=%0d want 2048", u_mac.room));
+      check(u_mac.room === 12'd2025,
+            $sformatf("consume: room=%0d want 2025", u_mac.room));
 
       // A duplicate consume frees nothing ...
-      buf_consume = 1'b1; buf_consume_addr = 11'd46;
+      buf_consume = 1'b1; buf_consume_addr = 11'd23;
       @(posedge clk); #1;
       buf_consume = 1'b0;
       repeat (2) @(posedge clk); #1;
-      check(u_mac.room === 12'd2048, "duplicate consume over-credited room");
+      check(u_mac.room === 12'd2025, "duplicate consume over-credited room");
 
       // ... and a backward address is ignored, not clamped: rptr and room
       // must stay consistent (over-crediting would hand out live memory).
@@ -476,8 +476,8 @@ module tb_pe_eth_mac;
       @(posedge clk); #1;
       buf_consume = 1'b0;
       repeat (2) @(posedge clk); #1;
-      check(u_mac.rptr === 11'd46, "backward consume moved rptr");
-      check(u_mac.room === 12'd2048, "backward consume over-credited room");
+      check(u_mac.rptr === 11'd23, "backward consume moved rptr");
+      check(u_mac.room === 12'd2025, "backward consume over-credited room");
 
     end
 
@@ -498,18 +498,38 @@ module tb_pe_eth_mac;
       for (int i = 0; i < data; i++) frame[14+i] = want[i];
       nframe = 14 + data;            // 60 bytes + 4 FCS = 64
       fcs = ref_crc32(nframe);
-      // Pulse buf_consume WHILE frame 2 is mid-payload, naming the previous
-      // frame's end (the same address rptr already holds). A consume that
+    // Pulse buf_consume WHILE frame 2 is mid-payload, advancing partway
+    // through the previous frame. A consume that
       // touched wptr would rebase this frame, and the read-back below would
       // return shifted bytes.
       fork
         begin
-          while (!(u_mac.state == 3'd2 && u_mac.pay_cnt >= 16'd5))
-            @(posedge clk);
-          buf_consume      = 1'b1;
-          buf_consume_addr = 11'd46;
-          @(posedge clk); #1;
-          buf_consume      = 1'b0;
+          // Bounded for the same reason as the collision watcher below: a
+          // mutant that rejects this ARP frame at its header never reaches
+          // S_PAYLOAD, and an unbounded wait would hang the whole TB (and be
+          // mis-counted as a detected mutation by the timeout).
+          bit hit;
+          logic [10:0] wptr_before;
+          hit = 1'b0;
+          for (int guard = 0; guard < 20_000; guard++) begin
+            @(posedge clk); #1;
+            if (u_mac.state == 3'd2 && u_mac.pay_cnt >= 16'd5) begin
+              hit = 1'b1;
+              break;
+            end
+          end
+          if (!hit) begin
+            check(1'b0,
+                  "mid-payload consume: no S_PAYLOAD after 20,000 cycles");
+          end else begin
+            wptr_before = frame_ptr;
+            buf_consume      = 1'b1;
+            buf_consume_addr = 11'd30;
+            @(posedge clk); #1;
+            buf_consume      = 1'b0;
+            check(frame_ptr === wptr_before,
+                  "mid-payload consume: producer pointer unchanged");
+          end
         end
         send_frame(1'b1);
       join
@@ -848,6 +868,551 @@ module tb_pe_eth_mac;
         check(u_mac.room === 12'd2048 && frame_ptr === 11'd0,
               $sformatf("partial byte +%0d: allocation untouched", extra));
       end
+    end
+
+    // ===== E1-1: a release that WRAPS the ring frees exactly its bytes =====
+    // The producer reaches address 1996 (a 1996-byte TYPE payload stores 1996
+    // bytes: the receiver also counts the 4 FCS bytes it receives, then winds
+    // them back); the consumer releases it. A second 196-byte payload then
+    // starts at 1996 and ends, after the same windback, at 144, so its release
+    // wraps. The forward distance must be measured modulo BUF_BYTES (196). A
+    // 12-bit (AW+1) subtraction instead produces 2244, which the
+    // `freed <= used` guard rejects -- leaking all 196 bytes for the life of
+    // the ring.
+    begin
+      int pay_a = 1996;              // stores 1996 bytes (TYPE frame)
+      int pay_b = 196;               // stores 196 bytes, wrapping
+      int nv0, nb0;
+      nv0 = nvalid; nb0 = nbad;
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+
+      // Frame A: fills the ring up to address 1996.
+      for (int i = 0; i < pay_a; i++) want[i] = 8'h30 + i[7:0];
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);   // TYPE: no header bound
+      for (int i = 0; i < pay_a; i++) frame[14+i] = want[i];
+      nframe = 14 + pay_a;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24);
+      repeat (6) @(posedge clk); #1;
+      check(nvalid === nv0 + 1, "wrap: frame A accepted");
+      check(frame_ptr === 11'd1996,
+            $sformatf("wrap: pointer after A = %0d, want 1996", frame_ptr));
+      check(u_mac.room === 12'd52,
+            $sformatf("wrap: room after A = %0d, want 52", u_mac.room));
+
+      // Release frame A; the consumer is now at 1996.
+      buf_consume = 1'b1; buf_consume_addr = 11'd1996;
+      @(posedge clk); #1;
+      buf_consume = 1'b0;
+      repeat (2) @(posedge clk); #1;
+      check(u_mac.rptr === 11'd1996,
+            $sformatf("wrap: rptr after A = %0d, want 1996", u_mac.rptr));
+      check(u_mac.room === 12'd2048,
+            $sformatf("wrap: room after A release = %0d, want 2048", u_mac.room));
+
+      // Frame B: 196 stored bytes, from 1996 across the wrap, ending at 144.
+      for (int i = 0; i < pay_b; i++) want[i] = 8'h50 + i[7:0];
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);
+      for (int i = 0; i < pay_b; i++) frame[14+i] = want[i];
+      nframe = 14 + pay_b;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24);
+      repeat (6) @(posedge clk); #1;
+      check(nvalid === nv0 + 2, "wrap: frame B accepted");
+      check(frame_ptr === 11'd144,
+            $sformatf("wrap: pointer after B = %0d, want 144", frame_ptr));
+      check(u_mac.room === 12'd1852,
+            $sformatf("wrap: room after B = %0d, want 1852", u_mac.room));
+
+      // THE WRAP RELEASE: distance 196 with the address numerically below
+      // rptr. Both rptr and room must move.
+      buf_consume = 1'b1; buf_consume_addr = 11'd144;
+      @(posedge clk); #1;
+      buf_consume = 1'b0;
+      repeat (2) @(posedge clk); #1;
+      check(u_mac.rptr === 11'd144,
+            $sformatf("wrap release: rptr = %0d, want 144 (release rejected)",
+                      u_mac.rptr));
+      check(u_mac.room === 12'd2048,
+            $sformatf("wrap release: room = %0d, want 2048 (196 freed, was 1852)",
+                      u_mac.room));
+      check(nbad === nb0, "wrap: no rejects");
+    end
+
+    // ===== E1-2: consume coincident with a payload byte keeps both deltas ===
+    // The consumer and the producer both update `room` on the same edge. The
+    // consumer's rptr and the producer's wptr/pay_cnt updates must survive,
+    // and `room` must move by +freed-1 -- not by the producer's -1 alone.
+    // Before the fix the later S_PAYLOAD assignment overwrote the consume's
+    // +freed (nonblocking: last assignment wins).
+    begin
+      int pay = 46;
+      int nv0, nb0;
+      bit synced;
+      logic [11:0] room_before;
+      logic [10:0] wptr_before;
+      nv0 = nvalid; nb0 = nbad;
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+
+      // Frame A: accepted and deliberately NOT released, so the consumer has
+      // a nonzero distance to release while frame B is arriving. A LENGTH
+      // frame: its FCS is not stored, so the allocation is exactly 46 bytes.
+      for (int i = 0; i < pay; i++) want[i] = 8'h60 + i[7:0];
+      build_header(48'hFFFFFFFFFFFF, 16'd46);
+      for (int i = 0; i < pay; i++) frame[14+i] = want[i];
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24);
+      repeat (6) @(posedge clk); #1;
+      check(nvalid === nv0 + 1, "collision: frame A accepted");
+      check(frame_ptr === 11'd46, "collision: pointer after A = 46");
+      check(u_mac.rptr === 11'd0 && u_mac.room === 12'd2002,
+            $sformatf("collision: A left ring allocated (rptr=%0d room=%0d)",
+                      u_mac.rptr, u_mac.room));
+
+      // Frame B: pulse a nonzero consume exactly on a payload byte-write edge.
+      for (int i = 0; i < pay; i++) want[i] = 8'h80 + i[7:0];
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);
+      for (int i = 0; i < pay; i++) frame[14+i] = want[i];
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe);
+      fork
+        begin
+          // The byte that commits at the next posedge: fbuf_we is the DUT's
+          // combinational byte-write enable, sampled in the cycle before it.
+          // BOUNDED: a design that never reaches S_PAYLOAD (e.g. a mutant that
+          // mis-sizes the TYPE field) would otherwise spin here forever and
+          // the mutation harness would count the timeout as a detected
+          // failure. The budget is far above the ~1.1k clocks a 64-byte frame
+          // needs to reach its first payload byte.
+          synced = 1'b0;
+          for (int guard = 0; guard < 20_000; guard++) begin
+            @(posedge clk); #1;
+            if (u_mac.state == 3'd2 && u_mac.bit_cnt == 3'd7 && fbuf_we) begin
+              synced = 1'b1;
+              break;
+            end
+          end
+          if (!synced) begin
+            check(1'b0,
+                  "collision: no payload byte-write edge within 20,000 cycles");
+          end else begin
+            room_before = u_mac.room;
+            wptr_before = frame_ptr;
+            buf_consume = 1'b1; buf_consume_addr = 11'd46;
+            @(posedge clk); #1;
+            buf_consume = 1'b0;
+            repeat (2) @(posedge clk); #1;
+            check(u_mac.rptr === 11'd46,
+                  $sformatf("collision: rptr = %0d, want 46", u_mac.rptr));
+            check(frame_ptr === wptr_before + 11'd1,
+                  $sformatf("collision: wptr = %0d, want %0d",
+                            frame_ptr, wptr_before + 11'd1));
+            check(u_mac.room === room_before + 12'd46 - 12'd1,
+                  $sformatf("collision: room = %0d, want %0d (=%0d+46-1)",
+                            u_mac.room, room_before + 12'd46 - 12'd1,
+                            room_before));
+          end
+        end
+        send_frame(1'b1);
+      join
+      send_idle(24);
+      repeat (6) @(posedge clk); #1;
+      check(nvalid === nv0 + 2, "collision: frame B accepted");
+      check(nbad === nb0, "collision: no rejects");
+    end
+
+    // ===== E1-2: consumer credit survives producer settle/rollback =========
+    // A consume may coincide with the final S_SETTLE room assignment or with
+    // S_ERR's reclaim. These are separate nonblocking assignments from the
+    // payload-byte case above; dropping consume_credit at any site advances
+    // rptr without returning the released space to room.
+    begin
+      int pay = 46;
+      int nv0, nb0;
+      logic [11:0] room_before;
+      bit synced;
+      nv0 = nvalid; nb0 = nbad;
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'h96 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'd46);
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nvalid === nv0 + 1, "settle type: release target accepted");
+      check(frame_ptr === 11'd46, "settle type: release target ends at 46");
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'hA6 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe);
+      fork
+        begin
+          synced = 1'b0;
+          for (int guard = 0; guard < 20_000; guard++) begin
+            @(posedge clk); #1;
+            if (u_mac.state == 3'd5 && u_mac.settle == 2'd2) begin
+              synced = 1'b1;
+              break;
+            end
+          end
+          if (!synced) check(1'b0, "settle type: no verdict cycle");
+          else begin
+            room_before = u_mac.room;
+            buf_consume = 1'b1; buf_consume_addr = 11'd46;
+            @(posedge clk); #1;
+            buf_consume = 1'b0;
+            repeat (2) @(posedge clk); #1;
+            check(u_mac.rptr === 11'd46, "settle type: rptr");
+            check(u_mac.room === room_before + 12'd46 + 12'd4,
+                  "settle type: room keeps consume credit and FCS reclaim");
+          end
+        end
+        send_frame(1'b1);
+      join
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nvalid === nv0 + 2, "settle type: frame accepted");
+      check(nbad === nb0, "settle type: no rejects");
+      check(u_mac.published_used === 12'd46,
+            $sformatf("settle type: published_used=%0d, want 46",
+                      u_mac.published_used));
+    end
+
+    // A length-frame completion and consume can share the same settle edge.
+    // The old committed frame is released as the new frame is published, so
+    // published_used must finish at exactly the new frame's 46 bytes.
+    begin
+      int pay = 46;
+      int nv0, nb0;
+      logic [11:0] room_before;
+      bit synced;
+      nv0 = nvalid; nb0 = nbad;
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'hD6 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'd46);
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(u_mac.published_used === 12'd46,
+            "settle length: prior frame published");
+
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'hE6 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'd46);
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe);
+      fork
+        begin
+          synced = 1'b0;
+          for (int guard = 0; guard < 20_000; guard++) begin
+            @(posedge clk); #1;
+            if (u_mac.state == 3'd5 && u_mac.settle == 2'd2) begin
+              synced = 1'b1;
+              break;
+            end
+          end
+          if (!synced) check(1'b0, "settle length: no verdict cycle");
+          else begin
+            room_before = u_mac.room;
+            buf_consume = 1'b1; buf_consume_addr = 11'd46;
+            @(posedge clk); #1;
+            buf_consume = 1'b0;
+            check(u_mac.rptr === 11'd46, "settle length: rptr");
+            check(u_mac.published_used === 12'd46,
+                  $sformatf("settle length: published_used=%0d, want 46",
+                            u_mac.published_used));
+            check(u_mac.room === room_before + 12'd46,
+                  "settle length: consumer credit retained");
+          end
+        end
+        send_frame(1'b1);
+      join
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nvalid === nv0 + 2, "settle length: both frames accepted");
+      check(nbad === nb0, "settle length: no rejects");
+    end
+
+    begin
+      int pay = 46;
+      int nv0, nb0;
+      logic [11:0] room_before;
+      bit synced;
+      nv0 = nvalid; nb0 = nbad;
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'hB6 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'd46);
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(u_mac.room === 12'd2002, "settle bad: setup allocation");
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'hC6 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe) ^ 32'h0000_0001;
+      fork
+        begin
+          synced = 1'b0;
+          for (int guard = 0; guard < 20_000; guard++) begin
+            @(posedge clk); #1;
+            if (u_mac.state == 3'd5 && u_mac.settle == 2'd2) begin
+              synced = 1'b1;
+              break;
+            end
+          end
+          if (!synced) check(1'b0, "settle bad: no verdict cycle");
+          else begin
+            room_before = u_mac.room;
+            buf_consume = 1'b1; buf_consume_addr = 11'd23;
+            @(posedge clk); #1;
+            buf_consume = 1'b0;
+            repeat (2) @(posedge clk); #1;
+            check(u_mac.rptr === 11'd23, "settle bad: rptr");
+            check(u_mac.room === room_before + 12'd23 + 12'd50,
+                  "settle bad: room keeps consume credit and frame reclaim");
+            check(u_mac.published_used === 12'd23,
+                  $sformatf("settle bad: published_used=%0d, want 23",
+                            u_mac.published_used));
+          end
+        end
+        send_frame(1'b1);
+      join
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nbad === nb0 + 1, "settle bad: frame rejected");
+      check(nvalid === nv0 + 1, "settle bad: setup frame accepted");
+    end
+
+    begin
+      int nv0, nb0;
+      logic [11:0] room_before;
+      logic [11:0] reclaim_before;
+      bit synced;
+      nv0 = nvalid; nb0 = nbad;
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+      for (int i = 0; i < 1500; i++) begin
+        want[i] = 8'h40 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'd1500);
+      nframe = 14 + 1500;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(u_mac.room === 12'd548, "S_ERR collision: setup allocation");
+      for (int i = 0; i < 1000; i++) frame[14+i] = 8'h80 + i[7:0];
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);
+      nframe = 14 + 1000;
+      fcs = ref_crc32(nframe);
+      fork
+        begin
+          synced = 1'b0;
+          for (int guard = 0; guard < 200_000; guard++) begin
+            @(posedge clk); #1;
+            if (u_mac.state == 3'd6) begin
+              synced = 1'b1;
+              break;
+            end
+          end
+          if (!synced) check(1'b0, "S_ERR collision: no error cycle");
+          else begin
+            room_before = u_mac.room;
+            reclaim_before = u_mac.pay_cnt[11:0];
+            check(reclaim_before != 0,
+                  "S_ERR collision: partial payload was allocated");
+            buf_consume = 1'b1; buf_consume_addr = 11'd23;
+            @(posedge clk); #1;
+            buf_consume = 1'b0;
+            repeat (2) @(posedge clk); #1;
+            check(u_mac.rptr === 11'd23, "S_ERR collision: rptr");
+            check(u_mac.room === room_before + 12'd23 + reclaim_before,
+                  "S_ERR collision: room keeps consume credit and partial reclaim");
+            check(u_mac.published_used === 12'd1477,
+                  $sformatf("S_ERR collision: published_used=%0d, want 1477",
+                            u_mac.published_used));
+            check(frame_ptr === 11'd1500,
+                  "S_ERR collision: partial frame rolled back");
+          end
+        end
+        send_frame(1'b1);
+      join
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nbad === nb0 + 1, "S_ERR collision: oversized frame rejected");
+      check(nvalid === nv0 + 1, "S_ERR collision: setup frame accepted");
+    end
+
+    // A bad full-size TYPE frame allocates all 2,048 bytes before its CRC
+    // verdict. The bad-settle reclaim must retain pay_cnt[AW], or room remains
+    // zero and every later frame is rejected. Corrupt the FCS, check the
+    // full-width reclaim, and prove a short recovery frame is accepted.
+    begin
+      int pay = 2044;
+      int nv0, nb0;
+      nv0 = nvalid; nb0 = nbad;
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'hD0 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe) ^ 32'h0000_0001;
+      send_frame(1'b1);
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nbad === nb0 + 1, "bad full ring: corrupted TYPE frame rejected");
+      check(u_mac.pay_cnt === 16'd2048,
+            $sformatf("bad full ring: pay_cnt = %0d, want 2048", u_mac.pay_cnt));
+      check(u_mac.room === 12'd2048,
+            $sformatf("bad full ring: room = %0d, want full reclaim", u_mac.room));
+      check(frame_ptr === 11'd0, "bad full ring: write pointer rolled back");
+
+      for (int i = 0; i < 46; i++) begin
+        want[i] = 8'hE0 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'd46);
+      nframe = 14 + 46;
+      fcs = ref_crc32(nframe);
+      send_frame(1'b1);
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nvalid === nv0 + 1, "bad full ring: recovery frame accepted");
+      check(frame_ptr === 11'd46, "bad full ring: recovery pointer");
+    end
+
+    // A consumer address must stop at the last published frame. The existing
+    // `freed <= used` check also counts bytes of the frame currently arriving,
+    // so an over-read can credit those bytes here and the later rollback or
+    // TYPE FCS windback credits them a second time.
+    begin
+      int pay = 96;
+      int nv0, nb0;
+      bit synced;
+      nv0 = nvalid; nb0 = nbad;
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'h31 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe) ^ 32'h0000_0001;
+      fork
+        begin
+          synced = 1'b0;
+          for (int guard = 0; guard < 200_000; guard++) begin
+            @(posedge clk); #1;
+            if (u_mac.state == 3'd2 && u_mac.pay_cnt == 16'd50) begin
+              synced = 1'b1;
+              break;
+            end
+          end
+          if (!synced) check(1'b0, "unpublished bad frame: no 50-byte point");
+          else begin
+            buf_consume = 1'b1; buf_consume_addr = 11'd50;
+            @(posedge clk); #1;
+            buf_consume = 1'b0;
+          end
+        end
+        send_frame(1'b1);
+      join
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nbad === nb0 + 1, "unpublished bad frame: rejected");
+      check(u_mac.rptr === 11'd0,
+            "unpublished bad frame: consumer release ignored");
+      check(u_mac.room === 12'd2048,
+            $sformatf("unpublished bad frame: room=%0d, want 2048",
+                      u_mac.room));
+      check(frame_ptr === 11'd0, "unpublished bad frame: producer rolled back");
+      check(nvalid === nv0, "unpublished bad frame: no published frame");
+    end
+
+    begin
+      int pay = 96;
+      int nv0, nb0;
+      bit synced;
+      nv0 = nvalid; nb0 = nbad;
+      buf_reset = 1'b1; repeat (2) @(posedge clk); #1; buf_reset = 1'b0;
+      send_idle(24); repeat (4) @(posedge clk); #1;
+      for (int i = 0; i < pay; i++) begin
+        want[i] = 8'h41 + i[7:0];
+        frame[14+i] = want[i];
+      end
+      build_header(48'hFFFFFFFFFFFF, 16'h0806);
+      nframe = 14 + pay;
+      fcs = ref_crc32(nframe);
+      fork
+        begin
+          synced = 1'b0;
+          for (int guard = 0; guard < 200_000; guard++) begin
+            @(posedge clk); #1;
+            if (u_mac.state == 3'd5 && u_mac.settle == 2'd2) begin
+              synced = 1'b1;
+              break;
+            end
+          end
+          if (!synced) check(1'b0, "unpublished type frame: no verdict cycle");
+          else begin
+            // This endpoint includes the four transient FCS bytes. It is not
+            // consumable until the frame commits and the MAC winds them back.
+            buf_consume = 1'b1; buf_consume_addr = 11'd100;
+            @(posedge clk); #1;
+            buf_consume = 1'b0;
+          end
+        end
+        send_frame(1'b1);
+      join
+      send_idle(24); repeat (6) @(posedge clk); #1;
+      check(nvalid === nv0 + 1, "unpublished type frame: accepted");
+      check(nbad === nb0, "unpublished type frame: no rejects");
+      check(u_mac.rptr === 11'd0,
+            "unpublished type frame: consumer release ignored");
+      check(frame_ptr === 11'd96,
+            $sformatf("unpublished type frame: pointer=%0d, want 96", frame_ptr));
+      check(u_mac.room === 12'd1952,
+            $sformatf("unpublished type frame: room=%0d, want 1952",
+                      u_mac.room));
+      check(frame_len === 16'd96, "unpublished type frame: published length");
+      check(u_mac.published_used === 12'd96,
+            $sformatf("unpublished type frame: published_used=%0d, want 96",
+                      u_mac.published_used));
+
+      // The newly committed bytes become consumable after the verdict edge.
+      buf_consume = 1'b1; buf_consume_addr = 11'd96;
+      @(posedge clk); #1;
+      buf_consume = 1'b0;
+      repeat (2) @(posedge clk); #1;
+      check(u_mac.rptr === 11'd96,
+            "published type frame: consumer release accepted");
+      check(u_mac.room === 12'd2048,
+            $sformatf("published type frame: room=%0d, want 2048", u_mac.room));
     end
 
     if (errors == 0) $display("PASS: all checks");

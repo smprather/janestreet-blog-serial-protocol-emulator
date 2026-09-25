@@ -138,9 +138,10 @@
 //
 // The ring has one write pointer (`wptr`) and one read pointer (`rptr`).
 // `room` is the free space ahead of the producer; `used = BUF_BYTES - room` is
-// what is allocated. The consumer moves `rptr` with `buf_consume`, naming the
-// address it has read up to; the producer never touches `rptr`, and the
-// consumer never touches `wptr`.
+// what is allocated. `published_used` is the subset committed as complete
+// frames. The consumer moves `rptr` with `buf_consume`, naming the address it
+// has read up to; only committed bytes can be released. The producer never
+// touches `rptr`, and the consumer never touches `wptr`.
 //
 // That separation is what makes a reclaim safe while the NEXT frame is already
 // arriving. The whole-ring reset (`buf_reset`) moves BOTH pointers to zero and
@@ -151,9 +152,11 @@
 // (reviews/2026-09-23/ETHERNET-SOC-REVIEW.md E1).
 //
 // A consume is accepted only when the named address is a FORWARD distance no
-// greater than `used`; a duplicate (distance 0) is a no-op and a backward
-// address is ignored, so a firmware mistake cannot over-credit `room` and hand
-// out memory that still holds an unconsumed frame.
+// greater than both `used` and `published_used`; an in-flight frame can later
+// be rolled back or have its FCS reclaimed, so allocated bytes alone are not
+// releasable. A duplicate (distance 0) is a no-op and a backward address is
+// ignored, so a firmware mistake cannot over-credit `room` or release bytes
+// still owned by an uncommitted frame.
 
 // No `timescale here on purpose: all RTL in this repo is timescale-free so the
 // unit is the consumer's (the testbenches set their own). pe_eth_mac was the
@@ -304,8 +307,11 @@ module pe_eth_mac #(
   logic [AW-1:0] wptr;
   logic [AW-1:0] frame_start;
   logic [AW-1:0] rptr;         // consumer read pointer (buffer ownership)
-  logic [AW:0]   freed, used;  // consume accounting, AW+1 bits
+  logic [AW:0]   freed;        // guarded consumer credit for this cycle
+  logic [AW:0]   used;         // producer allocation since rptr
+  logic [AW:0]   published_used; // committed bytes available to the consumer
   logic [AW:0]   room;
+  logic [AW:0]   consume_credit;
   logic [1:0]    settle;
   // Structural completeness, independent of the CRC. A residue can match on a
   // frame that never had a complete structure -- the review's 14-byte runt
@@ -325,10 +331,45 @@ module pe_eth_mac #(
   assign dbg_state     = state;
 
   // Consumer accounting: `used` is what the producer has allocated since the
-  // consumer's position; `freed` is how far a consume pulse advances it. Both
-  // are AW+1 bits so the modular subtraction cannot lose the full-ring case.
+  // consumer's position; `published_used` is the committed subset available
+  // to firmware; `freed` is how far a consume pulse advances the consumer.
+  //
+  // The subtraction is AW bits wide BEFORE the zero-extension, so it measures
+  // the forward distance AROUND THE RING, modulo BUF_BYTES. An AW+1-bit
+  // subtraction measures modulo 2*BUF_BYTES, which adds BUF_BYTES to every
+  // wrapped release (address numerically below rptr); the `freed <= used`
+  // guard then rejects it and the released capacity is lost for the life of
+  // the ring. A valid release must also stay within `published_used`; checking
+  // only allocated bytes could release an in-flight frame that may be rolled
+  // back or have its stored FCS reclaimed later.
+  //
+  // E1-3 (kept): a release of exactly BUF_BYTES ends on the address it started
+  // from, so this address-only API cannot distinguish it from a duplicate and
+  // treats it as distance 0. Current Ethernet use never releases a full ring
+  // in one pulse (the largest type frame stores 2044 bytes); resolving it in
+  // general needs an explicit count or wrap bit -- a scope decision.
   assign used  = BUF_BYTES[AW:0] - room;
-  assign freed = {1'b0, buf_consume_addr} - {1'b0, rptr};
+  assign freed = {1'b0, (buf_consume_addr - rptr)};
+
+  // The consumer may release only bytes from completed, published frames.
+  // `used` also includes bytes in the current uncommitted frame, so checking
+  // only freed <= used lets an over-read advance rptr into that frame; its
+  // later bad-frame reclaim or TYPE FCS windback then credits the same bytes a
+  // second time. Keep both bounds: published_used enforces ownership, while
+  // used remains the producer's allocation bound.
+  //
+  // The consumer's release, already validated for this cycle. It is folded
+  // into BOTH the consume branch and every producer branch that updates
+  // `room`, because a consume and a producer update can land on the same
+  // clock edge. The consume branch runs first in the always_ff below, so a
+  // later S_PAYLOAD/S_SETTLE/S_ERR `room` assignment would otherwise win
+  // (nonblocking: the last assignment for the edge takes effect) and drop the
+  // freed bytes permanently -- rptr advances but the credit never returns.
+  // Do NOT solve this by moving the consume after the case: that inverts the
+  // bug and drops the producer's delta instead.
+  assign consume_credit = (buf_consume && !buf_reset &&
+                           (freed <= used) && (freed <= published_used))
+                          ? freed : '0;
 
   assign crc_field_out = 1'b0;   // a receiver folds the field as ordinary data
   // The fold is one cycle behind the strobe and skipped for invalid cells, so
@@ -369,6 +410,7 @@ module pe_eth_mac #(
       wptr        <= '0;
       frame_start <= '0;
       rptr        <= '0;
+      published_used <= '0;
       room        <= BUF_BYTES[AW:0];
       settle      <= '0;
       frame_valid <= 1'b0;
@@ -384,6 +426,7 @@ module pe_eth_mac #(
       if (buf_reset) begin
         wptr  <= '0;
         rptr  <= '0;
+        published_used <= '0;
         room  <= BUF_BYTES[AW:0];
       end
 
@@ -393,12 +436,16 @@ module pe_eth_mac #(
       // untouched. That is what makes the reclaim legal while the next frame
       // is arriving: it cannot rebase the frame that will be published.
       if (buf_consume && !buf_reset) begin
-        if (freed <= used) begin
+        if (consume_credit != '0) begin
           rptr <= buf_consume_addr;
-          room <= room + freed;
+          published_used <= published_used - consume_credit;
+          // The credit is folded into every producer `room` assignment below;
+          // this default covers the common idle consume. On a collision the
+          // later branch carries the same `consume_credit`, so the freed bytes
+          // survive. A duplicate or invalid/unpublished release has zero
+          // credit and leaves all ownership state unchanged.
+          room <= room + consume_credit;
         end
-        // else: a duplicate is a no-op; a backward address is ignored rather
-        // than clamped, so `rptr` and `room` can never disagree.
       end
 
       // ---- latch the strobe -------------------------------------------
@@ -515,7 +562,7 @@ module pe_eth_mac #(
                 state <= S_ERR;
               end else begin
                 wptr    <= wptr + 1'b1;
-                room    <= room - 1'b1;
+                room    <= room + consume_credit - 1'b1;
                 pay_cnt <= pay_cnt + 16'd1;
                 if (!is_type && (pay_cnt + 16'd1 >= field)) begin
                   // A length frame ends by count. If the declared length is
@@ -606,10 +653,16 @@ module pe_eth_mac #(
               // frame on.
               if (is_type) begin
                 wptr      <= wptr - AW'(FCS_BYTES);
-                room      <= room + {{(AW-2){1'b0}}, FCS_BYTES};
+                room      <= room + consume_credit
+                             + {{(AW-2){1'b0}}, FCS_BYTES};
+                published_used <= published_used + pay_cnt[AW:0]
+                                   - {{(AW-2){1'b0}}, FCS_BYTES}
+                                   - consume_credit;
                 frame_len <= pay_cnt - 16'd4;
               end else begin
                 frame_len <= pay_cnt;
+                published_used <= published_used + pay_cnt[AW:0]
+                                   - consume_credit;
               end
             end else begin
               frame_bad <= 1'b1;
@@ -624,7 +677,10 @@ module pe_eth_mac #(
               // `pay_cnt[AW:0]` is AW+1 bits, matching `room`, and the sum
               // cannot overflow because room + pay_cnt is <= BUF_BYTES: every
               // byte in pay_cnt was subtracted from room as it was written.
-              room  <= room + pay_cnt[AW:0];
+              // The published-byte guard makes `consume_credit` disjoint from
+              // this frame's reclaim, so room + pay_cnt + freed is also <=
+              // BUF_BYTES even if a consumer over-reads during reception.
+              room  <= room + consume_credit + pay_cnt[AW:0];
             end
             state <= S_SEARCH;
           end
@@ -641,7 +697,7 @@ module pe_eth_mac #(
           wptr      <= frame_start;
           // Full-width reclaim; see the bad-FCS branch for why AW-1:0 was the
           // permanent-exhaustion bug.
-          room      <= room + pay_cnt[AW:0];
+          room      <= room + consume_credit + pay_cnt[AW:0];
           state     <= S_SEARCH;
         end
 

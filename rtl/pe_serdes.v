@@ -10,9 +10,16 @@
 //   corrupting an in-flight transfer (cfg = 1 UART LSB-first, 0 SPI-style).
 // * Transfer length 1..MAXLEN bits, captured on load/start. Lengths above
 //   MAXLEN or 0 are out of contract (0 is ignored; >MAXLEN is not clamped).
-// * bit_en is the per-bit-cell strobe from the core/DRU timing logic.
-//   The RX serial input is expected to be already synchronized (latch-pair
-//   dual-edge capture flop, ADR-002); this block is single-edge.
+// * bit_en was ONE port; the integration splits it into `tx_bit_en` and
+//   `rx_bit_en` (one pulse per payload bit cell, per side). The two enable
+//   networks already existed inside the module -- with stuffing the two
+//   directions need different payload-only sequences (TX holds on each
+//   inserted stuff cell, RX skips each received one), and the loopback runs
+//   both directions at once, so one shared enable cannot serve both.
+//   Unit TBs that run one side (or both in lockstep) alias the same strobe to
+//   both ports at the instantiation. The RX serial input is expected to be
+//   already synchronized (latch-pair dual-edge capture flop, ADR-002); this
+//   block is single-edge.
 // * tx_ser idles HIGH (suits UART; SPI is CS-gated; I2C/SWD direction is
 //   handled by the pin-matrix OE logic, not here).
 // * A load/start while busy restarts the transfer (start on the final bit
@@ -33,9 +40,9 @@ module pe_serdes #(
   input  logic                 rst_n,
 
   input  logic                 cfg_lsb_first,
-  input  logic                 bit_en,
 
   // Transmit side
+  input  logic                 tx_bit_en,
   input  logic                 tx_load,
   input  logic [MAXLEN-1:0]    tx_data,
   input  logic [LENW-1:0]      tx_len,
@@ -44,6 +51,7 @@ module pe_serdes #(
   output logic                 tx_done,
 
   // Receive side
+  input  logic                 rx_bit_en,
   input  logic                 rx_ser,
   input  logic                 rx_start,
   input  logic [LENW-1:0]      rx_len,
@@ -86,7 +94,7 @@ module pe_serdes #(
         tx_cnt     <= '0;
         cfg_lsb_tx <= cfg_lsb_first;
         tx_busy    <= 1'b1;
-      end else if (bit_en && tx_busy) begin
+      end else if (tx_bit_en && tx_busy) begin
         if (tx_cnt == tx_nbits - 1'b1) begin
           tx_busy <= 1'b0;
           tx_done <= 1'b1;
@@ -137,7 +145,7 @@ module pe_serdes #(
         rx_pos     <= cfg_lsb_first ? '0 : IDXW'(rx_len - 1'b1);
         cfg_lsb_rx <= cfg_lsb_first;
         rx_busy    <= 1'b1;
-      end else if (bit_en && rx_busy) begin
+      end else if (rx_bit_en && rx_busy) begin
         rx_shreg[rx_pos] <= rx_ser;
         if (rx_cnt == rx_nbits - 1'b1) begin
           rx_busy <= 1'b0;

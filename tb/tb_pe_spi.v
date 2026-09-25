@@ -35,7 +35,7 @@ module tb_pe_spi;
   logic [MAXLEN-1:0] sl_rx_sr;  // slave->master shadow (data master sent)
   logic [MAXLEN-1:0] sl_tx_sr;  // master->slave response shift
 
-  pe_serdes #(.MAXLEN(MAXLEN)) dut (.*);
+  pe_serdes #(.MAXLEN(MAXLEN)) dut (.*, .tx_bit_en(bit_en), .rx_bit_en(bit_en));
 
   initial clk = 0;
   always #5 clk = ~clk;

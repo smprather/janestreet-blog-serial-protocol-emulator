@@ -12,6 +12,6 @@ pe_imem_flop 61057
 pe_imem_macro 12
 pe_fbuf_flop 45557
 pe_fbuf_macro 48
-pe_eth_mac 1402
-pe_soc 3298
-tt_um_top 3613
+pe_eth_mac 1681
+pe_soc 3571
+tt_um_top 3888

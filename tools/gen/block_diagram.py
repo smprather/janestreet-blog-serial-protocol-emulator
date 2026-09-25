@@ -94,8 +94,8 @@ BLOCKS = [
     dict(
         name="pe_serdes",
         source_file="pe_serdes.v",
-        role="word engine: load 8-32 bits, pace with bit_en",
-        instantiated_in=None,  # 539 cells routed; no SoC instance yet
+        role="word engine: load 8-32 bits, pace with tx_bit_en/rx_bit_en (split for stuffing)",
+        instantiated_in="pe_soc.v",
         tb="tb_pe_serdes.v",
     ),
     dict(
@@ -127,8 +127,8 @@ BLOCKS = [
     dict(
         name="pe_codec_mux",
         source_file="pe_codec_mux.v",
-        role="stuff -> nrzi/manchester; cfg selects the subset",
-        instantiated_in=None,
+        role="stuff -> nrzi/manchester; cfg selects the subset; TWO instances in pe_soc (TX/RX)",
+        instantiated_in="pe_soc.v",
         tb="tb_pe_codec_mux.v",
     ),
     dict(
@@ -155,15 +155,13 @@ BLOCKS = [
 ]
 
 # ---- planned, not built -------------------------------------------------------
-PLANNED = [
-    (
-        "pe_serdes + pe_codec_mux into the SoC",
-        "the standalone word engine and codecs are verified, but unconnected; the wire loopback is their first planned SoC consumer",
-    ),
-]
+PLANNED = []
 # Removed as BUILT: "pe_pinmux into the SoC" and "I2C 1 us tick divider"
 # (2026-09-23, adr-006-pin-matrix), and "frame buffer (2nd SRAM)" -- that is
-# rtl/pe_fbuf.v, the 1024x16 macro at 2 KB per ADR-003. A "planned" table is a
+# rtl/pe_fbuf.v, the 1024x16 macro at 2 KB per ADR-003 -- and "pe_serdes +
+# pe_codec_mux into the SoC" (2026-09-24, wiki/plans/serdes-integration.md:
+# two codec instances, split enables, the 0xF window, the pad overlay and the
+# stuffed wire loopback all landed). A "planned" table is a
 # claim about the design like any other, so it is maintained with the same
 # intent as the orphan table: an entry that has shipped is a stale claim.
 

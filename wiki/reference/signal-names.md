@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen/signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-15 modules, 182 ports.
+16 modules, 205 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -45,13 +45,14 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `clk` | inp | 1 | System clock. The DUT counts strobes, not cycles. |
 | `rst_n` | inp | 1 | Active-low async reset. |
 | `cfg_lsb_first` | inp | 1 | Bit order. 1 = LSB first (UART), 0 = MSB first (SPI). **Snapshotted** into `cfg_lsb_tx`/`cfg_lsb_rx` at load/start, so the core may rewrite it mid-transfer without corrupting an in-flight word. |
-| `bit_en` | inp | 1 | **The strobe** — one-cycle pulse meaning "this is the moment". The only thing that advances TX or captures RX. Supplied by the timing block/DRU, never by this block. See [[concepts/strobe-and-committing-edge]]. |
+| `tx_bit_en` | inp | 1 | **The TX-side strobe** — one-cycle pulse per PAYLOAD bit cell; the only thing that advances `tx_shreg`. Supplied by the integration's payload-only gate (`tx_cell_en && !tx_stuffed`), so the shifter HOLDS across an inserted stuff cell. Split from the old single `bit_en` because with stuffing the two directions need different sequences. See [[concepts/strobe-and-committing-edge]]. |
 | `tx_load` | inp | 1 | Starts a transmit. Captures `tx_data`, `tx_len`, and the bit order. Ignored when `tx_len == 0`. |
 | `tx_data` | inp | `[MAXLEN-1:0]` | Word to send. Shifted out one bit per strobe. |
 | `tx_len` | inp | `[LENW-1:0]` | Bits to send, 1..MAXLEN. Captured at load; not clamped above MAXLEN (out of contract). |
 | `tx_ser` | out | 1 | Serial output. Idles **high** (UART idle), driven only while `tx_busy`. |
 | `tx_busy` | out | 1 | High from load until the final strobe. |
 | `tx_done` | out | 1 | One-cycle pulse on the final strobe. TX-only event — see the sticky-flag note in the testbenches. |
+| `rx_bit_en` | inp | 1 | **The RX-side strobe** — one-cycle pulse per PAYLOAD bit cell; the only thing that captures `rx_ser`. Supplied by the integration's payload-only gate (`rx_cell_en && rx_bit_valid`), so a received stuff cell is SKIPPED. See [[concepts/strobe-and-committing-edge]]. |
 | `rx_ser` | inp | 1 | Serial input, **expected already synchronized** (latch-pair dual-edge capture flop, ADR-002). This block is single-edge. |
 | `rx_start` | inp | 1 | Starts a receive. Captures `rx_len` and the bit order. Ignored when `rx_len == 0`. |
 | `rx_len` | inp | `[LENW-1:0]` | Bits to receive, 1..MAXLEN. |
@@ -139,18 +140,22 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 |---|---|---|---|
 | `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
 | `rst_n` | inp | 1 | Active-low asynchronous reset. |
-| `spi_sclk` | inp | 1 | The loader clock pad. **Asynchronous**: synchronized with 2 flops and sampled on the rising edge (SPI mode 0). ≤ ~10 MHz at the 60 MHz core. |
-| `spi_mosi` | inp | 1 | Loader data, MSB-first, sampled on the rising SCLK edge while CS_N is low. |
-| `spi_cs_n` | inp | 1 | Active-low load select. A falling edge resets the word address to 0 and clears the sticky error; a rising edge ends the load and discards a partial word. |
-| `run` | inp | 1 | The core's run strap. Every receive and write path is gated on `!run`, so a load can never overwrite executing code. |
-| `host_we` | out | 1 | One-cycle write pulse, one per completed 16-bit word, into the SoC's host port. |
-| `host_imem_sel` | out | 1 | Held 1: v1 loads instruction memory only. |
+| `spi_sclk` | inp | 1 | The host SCK pad. **Asynchronous**: synchronized with 2 flops; one bit per detected rising edge (SPI mode 0). The write ceiling at the 60 MHz core is ~10 MHz; the host's first-pass guard is 5 MHz because responses have their own mode-0 margin. |
+| `spi_mosi` | inp | 1 | Host data in, MSB-first, sampled on the rising SCLK edge while CS_N is low. |
+| `spi_cs_n` | inp | 1 | Active-low transaction select. A falling edge starts a new frame and resets the frame FSM; sticky faults, `words_written`, the echo and the selected target persist. A rising edge ends the transaction and latches FAULT_PROTOCOL if a word was mid-shift. |
+| `spi_miso` | out | 1 | Framed response data, MSB-first, mode 0 (changes on the detected falling edge): sync `16'hA55A`, header `{version,opcode,target}`, sequence, length, payload, CRC-16/CCITT-FALSE. Driven only while a response shifts. |
+| `miso_oe` | out | 1 | Pad output-enable (wrapper `uio_oe[6]`): asserted only while a response frame shifts, held through the last bit's sampling edge, released one falling edge later or immediately when `CS_N` rises. |
+| `irq_n` | out | 1 | Active low; asserted while any sticky fault bit is set and released when CLEAR_FAULT masks them. A STATUS read does not clear faults. |
+| `run` | inp | 1 | The core's run strap. A LOAD while `run` is high answers NOT_READY with no fault; a queued word aborted by `run` rising never commits, counts or echoes. |
+| `host_we` | out | 1 | One-cycle write pulse, one per COMMITTED LOAD payload word, into the SoC's host write port. |
+| `host_imem_sel` | out | 1 | Held 1: R1 loads instruction memory only. |
 | `host_addr` | out | `[((((WORDS <= 2) ? 1 : $clog2(WORDS)) > 8)
-                 ? ((WORDS <= 2) ? 1 : $clog2(WORDS)) : 8)-1:0]` | Word address, incremented per completed word (0..WORDS-1). |
-| `host_wdata` | out | `[15:0]` | The assembled MSB-first 16-bit word. |
+                 ? ((WORDS <= 2) ? 1 : $clog2(WORDS)) : 8)-1:0]` | Word address, incremented per committed word (0..WORDS-1); a word past the end latches FAULT_RANGE and the response answers ST_RANGE. |
+| `host_wdata` | out | `[15:0]` | The queued LOAD payload word, committed on the next write pulse. |
 | `load_active` | out | 1 | Level: selected (`CS_N` low) and `run` low. |
-| `load_error` | out | 1 | Sticky until the next `CS_N` falling edge: a partial word, or a load longer than `WORDS`, was discarded. |
-| `words_written` | out | `[15:0]` | Count of words handed to the host port since the current `CS_N` fell (debug/observability). |
+| `load_error` | out | 1 | Mirror of `faults[0]` (FAULT_LOAD): a queued word was aborted by `run` rising. Sticky until CLEAR_FAULT masks it. |
+| `words_written` | out | `[15:0]` | Count of words committed since the current LOAD header was accepted (frame-scoped, not CS-scoped); reset at the header and incremented only on a commit. |
+| `faults` | out | `[15:0]` | Sticky fault register: FAULT_LOAD 0x1 (run abort), FAULT_CRC 0x2, FAULT_RANGE 0x4, FAULT_PROTOCOL 0x8. CLEAR_FAULT applies its mask; STATUS reports without clearing. |
 
 ## `pe_dru`
 
@@ -197,6 +202,27 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `frame_is_type` | out | 1 | _no note yet_ |
 | `frame_ptr` | out | `[AW-1:0]` | _no note yet_ |
 | `dbg_state` | out | `[2:0]` | _no note yet_ |
+
+## `pe_eth_tx`
+
+| Port | Dir | Width | Meaning |
+|---|---|---|---|
+| `clk` | inp | 1 | System clock. Blocks count strobes, not cycles. |
+| `enable` | inp | 1 | _no note yet_ |
+| `cell_start` | inp | 1 | _no note yet_ |
+| `half_phase` | inp | 1 | _no note yet_ |
+| `push` | inp | 1 | _no note yet_ |
+| `push_byte` | inp | `[7:0]` | _no note yet_ |
+| `push_ready` | out | 1 | _no note yet_ |
+| `frame_len` | inp | `[11:0]` | _no note yet_ |
+| `start` | inp | 1 | _no note yet_ |
+| `frame_abort` | inp | 1 | _no note yet_ |
+| `tx_busy` | out | 1 | _no note yet_ |
+| `tx_done` | out | 1 | _no note yet_ |
+| `tx_underrun` | out | 1 | _no note yet_ |
+| `tx_overlong` | out | 1 | _no note yet_ |
+| `ifg_active` | out | 1 | _no note yet_ |
+| `tx_bit` | out | 1 | _no note yet_ |
 
 ## `pe_fbuf`
 
@@ -261,6 +287,8 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `addr` | inp | `[1:0]` | Register select: 0 = OUT, 1 = OE, 2 = IN (**read-only**; a write here is a no-op, not an error), 3 = OD. |
 | `wdata` | inp | `[PINS-1:0]` | Value to write to the selected register. One bit per pin; bits above `PINS` are ignored. |
 | `rdata` | out | `[PINS-1:0]` | Value of the selected register. Reading IN returns the **pad level**, sampled combinationally — not a stored copy, which would report the previous bit cell and make arbitration read as a pass while the bus was being fought. |
+| `ov_en` | inp | `[PINS-1:0]` | _no note yet_ |
+| `ov_bit` | inp | 1 | _no note yet_ |
 | `pad_in` | inp | `[PINS-1:0]` | The level on each pin, driven or not. The external pull-up owns a released line, and wired-AND means any driver pulling low drags the whole wire down. |
 | `pad_out` | out | `[PINS-1:0]` | Level to drive. Only reaches the pad where `pad_oe` is high. |
 | `pad_oe` | out | `[PINS-1:0]` | 1 = this pin may drive. **In OD mode this is `oe & ~out`**, so a pin holding a 1 is RELEASED rather than driven high — that gate is the bus-contention safety property, and it is why the same firmware (`out=1` to send a 1, `out=0` to send a 0) works in both modes. See [[concepts/pin-matrix]].<br>**Open-drain** (I2C, PS/2): never drive high; release and let the board's pull-up do it.<br>**Tristate** (I2C arbitration): read back the pad level to see whether another master won the bit.<br>**Push-pull** (UART, SPI, CAN, USB): `oe=1` and toggle `out`. |

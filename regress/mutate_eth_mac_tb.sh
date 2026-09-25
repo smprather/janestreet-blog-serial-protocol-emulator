@@ -2,7 +2,7 @@
 # Mutation-test tb_pe_eth_mac.v: every check it makes must be able to FAIL.
 #
 # The TB passed on its first clean run, which by itself proves only that it
-# agrees with the RTL. This harness breaks the RTL in sixteen ways that each
+# agrees with the RTL. This harness breaks the RTL in thirty ways that each
 # target one claim the TB makes, and requires the TB to notice every one.
 #
 # The mutations are chosen to be SUBTLE, not obvious: each is a plausible
@@ -51,13 +51,34 @@ pass=0
 fail=0
 survived=0
 
+# A mutation is "detected" only when the TB PRINTS a failure. A timeout, a
+# compile error, a simulator crash or unparseable output is a HARNESS error,
+# not a detection: without this, a mutation that hangs a directed wait (for
+# example one that never reaches the state the wait polls) is silently counted
+# as detected. `timeout` returns 124 on expiry.
 run_tb() {
   iverilog -g2012 -s tb_pe_eth_mac -o /tmp/mut_eth.vvp $SRCS >/tmp/mut_eth_cc.log 2>&1
   if [ $? -ne 0 ]; then
     return 2
   fi
   timeout 300 vvp /tmp/mut_eth.vvp >"$LOG" 2>&1
-  grep -qE "^PASS" "$LOG"
+  local rc=$?
+  if [ $rc -eq 124 ]; then
+    echo "    (timeout after 300 s -- harness error, not a detected mutation)"
+    return 2
+  fi
+  if [ $rc -ne 0 ]; then
+    echo "    (vvp exited $rc -- harness error)"
+    return 2
+  fi
+  if grep -qE "^PASS" "$LOG"; then
+    return 0
+  fi
+  if grep -qE "^(FAIL|FAILURES:)" "$LOG"; then
+    return 1
+  fi
+  echo "    (no PASS or FAIL line in the output -- harness error)"
+  return 2
 }
 
 restore() {
@@ -192,8 +213,8 @@ check_mutation "no-pad" \
 #     bytes leaves pay_cnt = 2048 = 11'h000, so the reclaim adds nothing and
 #     `room` stays 0 forever. This is the finding the TB's frame 9 exists for.
 check_mutation "truncated-reclaim" \
-  "          room      <= room + pay_cnt[AW:0];" \
-  "          room      <= room + {1'b0, pay_cnt[AW-1:0]};  // MUTANT: truncated reclaim"
+  "          room      <= room + consume_credit + pay_cnt[AW:0];" \
+  "          room      <= room + consume_credit + {1'b0, pay_cnt[AW-1:0]};  // MUTANT: truncated reclaim"
 
 # 11. The structural verdict: accept on the CRC residue alone again. Frame 10
 #     is a valid-residue 14-byte runt, so this mutant accepts it and winds the
@@ -215,32 +236,135 @@ check_mutation "no-byte-align" \
   "            if ((crc_state == CRC_RESIDUE) && hdr_done && (bit_cnt == 3'd0) &&" \
   "            if ((crc_state == CRC_RESIDUE) && hdr_done &&   // MUTANT: no byte alignment"
 
-# 14. Consume rebases the write pointer: the E1 bug. The block TB pulses a
-#     consume at the previous frame's end while frame 2 is mid-payload; a
-#     rebase shifts the frame's bytes under the read-back.
+# 14. Consume rebases the write pointer: the E1 bug. The block TB partially
+#     releases a prior published frame while frame 2 is mid-payload, with
+#     rptr and wptr at distinct addresses; a rebase corrupts the write side.
 check_mutation "consume-rebases-wptr" \
+  "          rptr <= buf_consume_addr;" \
   "          rptr <= buf_consume_addr;
-          room <= room + freed;" \
-  "          rptr <= buf_consume_addr;
-          wptr <= buf_consume_addr;   // MUTANT: rebases the write pointer
-          room <= room + freed;"
+          wptr <= buf_consume_addr;   // MUTANT: rebases the write pointer"
 
 # 15. Consume is ignored: room never comes back and rptr never moves.
 check_mutation "consume-ignored" \
-  "        if (freed <= used) begin
-          rptr <= buf_consume_addr;
-          room <= room + freed;
-        end" \
-  "        if (1'b0) begin
-          rptr <= buf_consume_addr;
-          room <= room + freed;
-        end   // MUTANT: consume ignored"
+  "      if (buf_consume && !buf_reset) begin" \
+  "      if (1'b0) begin   // MUTANT: consume ignored"
 
 # 16. No forward-distance guard: a backward consume over-credits room and
 #     hands back memory that still holds an unconsumed frame.
 check_mutation "consume-no-guard" \
-  "        if (freed <= used) begin" \
-  "        if (1'b1) begin   // MUTANT: no forward-distance guard"
+  "&&
+                           (freed <= used) && (freed <= published_used)" \
+  "&&
+                           1'b1"
+
+# 17. The wrap distance measured modulo 2*BUF_BYTES again (the E1-1 bug): an
+#     AW+1-bit subtraction rejects every wrapped release and leaks it. The new
+#     wrapped-release case must catch this as a printed rptr/room failure.
+check_mutation "consume-wrap-aw1" \
+  "  assign freed = {1'b0, (buf_consume_addr - rptr)};" \
+  "  assign freed = {1'b0, buf_consume_addr} - {1'b0, rptr};   // MUTANT: AW+1 subtraction"
+
+# 18. The E1-2 bug: a payload byte forgets the consumer's credit, so a
+#     coincident consume loses its freed bytes (room ends at room-1 instead of
+#     room+freed-1). The simultaneous-event case must catch it.
+check_mutation "no-consume-credit-payload" \
+  "                room    <= room + consume_credit - 1'b1;" \
+  "                room    <= room - 1'b1;   // MUTANT: drops the consume credit"
+
+# 19. A valid type-frame verdict winds back four FCS bytes in the same room
+#    assignment. It must preserve a simultaneous release as well as reclaiming
+#    those four bytes.
+check_mutation "no-consume-credit-type-settle" \
+  "                room      <= room + consume_credit
+                             + {{(AW-2){1'b0}}, FCS_BYTES};" \
+  "                room      <= room
+                             + {{(AW-2){1'b0}}, FCS_BYTES};  // MUTANT: drops consume credit"
+
+# 20. A bad-CRC verdict rolls back all bytes allocated by the frame. A release
+#    on that verdict edge must survive the rollback assignment.
+check_mutation "no-consume-credit-bad-settle" \
+  "              room  <= room + consume_credit + pay_cnt[AW:0];
+            end
+            state <= S_SEARCH;" \
+  "              room  <= room + pay_cnt[AW:0];
+            end
+            state <= S_SEARCH;   // MUTANT: drops consume credit"
+
+# 21. A type overflow enters S_ERR after partially allocating the frame. A simultaneous
+#    consume must be added to the same room update.
+check_mutation "no-consume-credit-error" \
+  "          room      <= room + consume_credit + pay_cnt[AW:0];
+          state     <= S_SEARCH;" \
+  "          room      <= room + pay_cnt[AW:0];
+          state     <= S_SEARCH;   // MUTANT: drops consume credit"
+
+# 22. A bad type frame can fill the ring before its CRC verdict. The settle
+#    rollback must keep the full-width pay_cnt bit that represents 2,048 bytes.
+check_mutation "truncated-reclaim-bad-settle" \
+  "              room  <= room + consume_credit + pay_cnt[AW:0];" \
+  "              room  <= room + consume_credit + {1'b0, pay_cnt[AW-1:0]};  // MUTANT: truncated bad-settle reclaim"
+
+# 23. Allocated bytes are not necessarily published: the current frame's
+#     bad-frame reclaim or TYPE FCS windback will credit them later. The new
+#     in-flight over-read tests must reject a consume based on `used` alone.
+check_mutation "consume-unpublished-bytes" \
+  "&& (freed <= published_used)" \
+  "&& (freed <= used) /* MUTANT: no published-byte bound */"
+
+# 24. A successful TYPE frame publishes pay_cnt minus its four stored FCS
+#     bytes. The post-commit release test must catch a missing publication.
+check_mutation "type-publication-omitted" \
+  "                published_used <= published_used + pay_cnt[AW:0]
+                                   - {{(AW-2){1'b0}}, FCS_BYTES}
+                                   - consume_credit;" \
+  "                published_used <= published_used - consume_credit;  // MUTANT: drops TYPE bytes"
+
+# 25. A successful length frame publishes the declared payload; its FCS and
+#     any pad bytes are not in the ring. Existing in-flight collision cases
+#     release this committed length-frame storage.
+check_mutation "length-publication-omitted" \
+  "                published_used <= published_used + pay_cnt[AW:0]
+                                   - consume_credit;" \
+  "                published_used <= published_used - consume_credit;  // MUTANT: drops length bytes"
+
+# 26. TYPE publication excludes the four transient FCS bytes that are wound
+#     back from the producer pointer and room count.
+check_mutation "type-fcs-published" \
+  "                published_used <= published_used + pay_cnt[AW:0]
+                                   - {{(AW-2){1'b0}}, FCS_BYTES}
+                                   - consume_credit;" \
+  "                published_used <= published_used + pay_cnt[AW:0]
+                                   - consume_credit;  // MUTANT: publishes TYPE FCS"
+
+# 27. A consume coincident with TYPE publication must be subtracted once from
+#     the old committed count plus the newly published TYPE data.
+check_mutation "type-credit-dropped-from-publication" \
+  "                published_used <= published_used + pay_cnt[AW:0]
+                                   - {{(AW-2){1'b0}}, FCS_BYTES}
+                                   - consume_credit;" \
+  "                published_used <= published_used + pay_cnt[AW:0]
+                                   - {{(AW-2){1'b0}}, FCS_BYTES};  // MUTANT: drops consume"
+
+# 28. A consume coincident with length-frame publication must likewise be
+#     subtracted from the next committed-byte count.
+check_mutation "length-credit-dropped-from-publication" \
+  "                published_used <= published_used + pay_cnt[AW:0]
+                                   - consume_credit;" \
+  "                published_used <= published_used + pay_cnt[AW:0];  // MUTANT: drops consume"
+
+# 29. A bad frame rolls back only its own unpublished allocation; it must not
+#     discard the publication count of an older frame still owned by firmware.
+check_mutation "bad-settle-clears-published" \
+  "              room  <= room + consume_credit + pay_cnt[AW:0];" \
+  "              published_used <= '0;  // MUTANT: loses older committed bytes
+              room  <= room + consume_credit + pay_cnt[AW:0];"
+
+# 30. S_ERR has the same ownership rule as bad-FCS settlement: reclaim the
+#     failing frame, preserving any older committed bytes not yet consumed.
+check_mutation "s-err-clears-published" \
+  "          room      <= room + consume_credit + pay_cnt[AW:0];" \
+  "          published_used <= '0;  // MUTANT: loses older committed bytes
+          room      <= room + consume_credit + pay_cnt[AW:0];"
 
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="

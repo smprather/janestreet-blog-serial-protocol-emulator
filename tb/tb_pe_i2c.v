@@ -24,7 +24,7 @@ module tb_pe_i2c;
 
   logic [7:0] sl_sr;  // slave shift register (read path)
 
-  pe_serdes #(.MAXLEN(MAXLEN)) dut (.*);
+  pe_serdes #(.MAXLEN(MAXLEN)) dut (.*, .tx_bit_en(bit_en), .rx_bit_en(bit_en));
 
   initial clk = 0;
   always #5 clk = ~clk;

@@ -97,6 +97,45 @@ printf '%-34s PASS (%s words)\n' "assemble i2c_xfer" \
   "$(grep -c . firmware/i2c_xfer.hex)"
 pass=$((pass+1))
 
+# serdes_loop.pe is the word-engine window's first consumer: tb_pe_soc_serdes.v
+# $readmemh's the hex it produces (four loopback configs), so a stale image
+# would be a silent pass on the integration this firmware configures.
+if ! $PY tools/fw/peasm.py firmware/serdes_loop.pe -o firmware/serdes_loop.hex >/dev/null 2>&1; then
+  echo "assemble serdes_loop                    FAIL"
+  $PY tools/fw/peasm.py firmware/serdes_loop.pe 2>&1 | head -3 | sed 's/^/    /'
+  exit 1
+fi
+printf '%-34s PASS (%s words)\n' "assemble serdes_loop" \
+  "$(grep -c . firmware/serdes_loop.hex)"
+pass=$((pass+1))
+
+# eth_tx_arp.pe is the 10BASE-T TX frame engine's first consumer:
+# tb_pe_soc_eth_tx.v $readmemh's the hex it produces, so a stale image would
+# be a silent pass on the window/owner/FIFO integration it exercises.
+if ! $PY tools/fw/peasm.py firmware/eth_tx_arp.pe -o firmware/eth_tx_arp.hex >/dev/null 2>&1; then
+  echo "assemble eth_tx_arp                   FAIL"
+  $PY tools/fw/peasm.py firmware/eth_tx_arp.pe 2>&1 | head -3 | sed 's/^/    /'
+  exit 1
+fi
+printf '%-34s PASS (%s words)\n' "assemble eth_tx_arp" \
+  "$(grep -c . firmware/eth_tx_arp.hex)"
+pass=$((pass+1))
+
+# Task 5's firmwares: the TX->RX loopback consumer plus the three test-only
+# probes (two-frame min IFG, the 16-23 wrap directed case, and the
+# start-while-busy directed case). tb_pe_soc_eth_loop.v $readmemh's each hex,
+# so a stale image would be a silent pass on the integration it exercises.
+for prog in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe; do
+  if ! $PY tools/fw/peasm.py "firmware/$prog.pe" -o "firmware/$prog.hex" >/dev/null 2>&1; then
+    echo "assemble $prog FAIL"
+    $PY tools/fw/peasm.py "firmware/$prog.pe" 2>&1 | head -3 | sed 's/^/    /'
+    exit 1
+  fi
+  printf '%-34s PASS (%s words)\n' "assemble $prog" \
+    "$(grep -c . "firmware/$prog.hex")"
+  pass=$((pass+1))
+done
+
 # 2. single byte
 run_case "emulate: one byte" \
   $PY tools/fw/peemu.py firmware/uart_echo.hex --send 41 --max-cycles 900000

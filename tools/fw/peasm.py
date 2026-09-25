@@ -76,6 +76,9 @@ PORTS: dict[str, int] = {
     "ETHFLDH": 0xC,  # frame_field[15:8]
     "BUFBYTE": 0xD,  # next frame byte; the read advances the pointer
     "BUFCTRL": 0xE,  # bit0 pulse: reclaim the frame buffer
+    # The word-engine window (rtl/pe_soc.v, wiki/plans/serdes-integration.md).
+    # INDEX phase sets the pointer, DATA phase bursts, any read re-arms INDEX.
+    "ENGINE":  0xF,
 }
 
 MOV_SEL = {

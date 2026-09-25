@@ -4,14 +4,15 @@ created: 2026-09-20
 updated: 2026-09-20
 type: reference
 tags: [protocol, architecture, verification]
-sources: [rtl/pe_crc.v, tb/tb_pe_crc.v]
+sources: [rtl/pe_crc.v, rtl/pe_ctrl.v, tb/tb_pe_crc.v]
 confidence: high
 ---
 
 # CRC Configuration
 
-Every constant `rtl/pe_crc.v` has to be loaded with, for every CRC this
-project targets. **Generated and checked by `tools/gen/crc_config.py`**
+Every constant `rtl/pe_crc.v` has to be loaded with, plus the PE host
+frame CRC that `rtl/pe_ctrl.v` runs on its own forward datapath.
+**Generated and checked by `tools/gen/crc_config.py`**
 (`--check` runs in `regress/run_all.sh`), so nothing here is typed by hand.
 
 Each row's `check` and `residue` are the RevEng catalogue's published
@@ -68,6 +69,7 @@ That is what makes `crc_zero` a plain full-register compare.
 | CRC-15/CAN | 15 | `R[31:15]` = 0 | yes |
 | CRC-8/SMBUS | 8 | `R[31:8]` = 0 | yes |
 | CRC-16/ARC | 16 | `R[31:16]` = 0 | yes |
+| CRC-16/CCITT-FALSE | 16 | `R[31:16]` = 0 | yes |
 
 ## Derived constants
 
@@ -82,6 +84,14 @@ out as `R[0] ^ cfg_out_inv` shifting.
 | CAN 2.0 classic | CRC-15/CAN | 15 | MSB-first | `0x4CD1` | `0x0000` | `0` | `0x059E` | `0x0000` |
 | SMBus / I2C PEC | CRC-8/SMBUS | 8 | MSB-first | `0xE0` | `0x00` | `0` | `0xF4` | `0x00` |
 | cross-check only (not a target) | CRC-16/ARC | 16 | LSB-first | `0xA001` | `0x0000` | `0` | `0xBB3D` | `0x0000` |
+| PE host frame | CRC-16/CCITT-FALSE | 16 | MSB-first | `0x8408` | `0xFFFF` | `0` | `0x29B1` | `0x0000` |
+
+The PE host frame CRC is the one entry read by a block that is not
+`pe_crc`: `rtl/pe_ctrl.v` implements CRC-16/CCITT-FALSE on the forward
+(MSB-first) datapath with polynomial `0x1021` and seed `0xFFFF`. Those
+two constants come from this table's entry, whose catalogue check value
+(`0x29B1` for "123456789") is asserted by the generator above; the
+frame TB independently checks every response CRC on the wire.
 
 Two of these are worth reading twice:
 

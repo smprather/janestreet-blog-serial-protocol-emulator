@@ -182,28 +182,30 @@ def build(scenarios) -> str:
     add("")
 
     # ---- what the flow config says ---------------------------------------
-    add("## What the flow config actually places")
+    add("## What the flow config declares")
     add("")
-    add(f"- `flow/pe_soc.json` `DIE_AREA`: "
+    add(f"- `flow/pe_soc.json` declares `DIE_AREA`: "
         f"{die_cfg[2]:g} × {die_cfg[3]:g} µm = the template 6×4 die.")
-    add(f"- The two macros are placed at " +
+    add(f"- The two macro placements are declared at " +
         ", ".join(f"`{path}` ({x:g}, {y:g})" for path, _, x, y, _ in plc) +
         ", both `N`.")
     over = overlaps(plc)
     add(f"- The 10 µm placement gap and the die-bound check are enforced on")
     add(f"  every regression by `tools/checks/macro_flow_config.py` (E2): "
         f"{'clean' if not over else 'OVERLAP: ' + ', '.join(over)}.")
-    add(f"- `PDN_CFG` is `{cfg.get('PDN_CFG', '**missing**')}`, which stripes")
-    add("  Metal4 for the macros' supplies and steps up to the grid.")
+    add(f"- `PDN_CFG` is `{cfg.get('PDN_CFG', '**missing**')}`. Its script")
+    add("  requests Metal4 macro stripes and ordered connects up to the grid;")
+    add("  the E2 static check validates these clauses, not physical connectivity.")
     add("")
     add("**The critical caveat: this is a PADLESS CORE flow.** `pe_soc`'s ports")
     add("are pins at the die boundary; there is no `CORE_AREA`, no pad ring and")
     add("no wrapper in the run. The Tiny Tapeout deliverable")
     add("(`tt_um_protocol_emulator`) does have pads, and the shuttle's pad ring")
     add("occupies the perimeter of the same 1002×432 outline, so its usable core")
-    add("is smaller. The placements above are proven legal against `DIE_AREA`,")
-    add("not against a padded core. Macro `y=10` in particular may sit under the")
-    add("ring. That is the first thing a real TT-top floorplan must settle.")
+    add("is smaller. The placement coordinates above are statically checked to")
+    add("fit the configured `DIE_AREA`, not a padded core. Macro `y=10` in particular")
+    add("may sit under the ring. That is the first thing a real TT-top floorplan")
+    add("must settle.")
     add("")
 
     # ---- assumptions that differ -----------------------------------------
@@ -242,7 +244,7 @@ def build(scenarios) -> str:
     add("4. **Global-routing congestion** at the real utilisation")
     add("   (`GRT-0116`/`GRT-0704`), then **detailed-route DRC clear**.")
     add("5. **A utilisation/area report** from the routed run to replace the")
-    add("   SERDES-derived ×2 inflation estimate used above.")
+    add("   SERDES-derived stdcell-to-die inflation factor used above.")
     add("6. **Macro-alone DRC provenance** (the vendor macro's own violations)")
     add("   and LVS, at the flow stage before tapeout.")
     add("7. **The tile size confirmed** by TT/submission docs, then this page")
