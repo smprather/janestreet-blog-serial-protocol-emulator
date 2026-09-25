@@ -204,7 +204,7 @@ class TestLatchedInsnRule(unittest.TestCase):
 
     def test_held_reports_the_fetched_word_at_pc(self):
         pe = R.loaded(pc=0)
-        pe.request(P.OP_DEBUG_STEP)          # executes imem[0], pc -> 1, held
+        pe.request(P.OP_DEBUG_STEP)  # executes imem[0], pc -> 1, held
         self.assertTrue(pe.debug_hold)
         self.assertEqual(pe.latched_insn, R.PROGRAM[1])
         self.assertNotEqual(pe.latched_insn, pe.insn)
@@ -236,10 +236,12 @@ class TestLatchedInsnRule(unittest.TestCase):
             for step in vector["steps"]:
                 if step["opcode_name"] == "OP_READ_CPU":
                     pe = V.load_model_from_image(
-                        package["model_images"][step["model_image_id"]])
+                        package["model_images"][step["model_image_id"]]
+                    )
                     fetched[(vector["name"], step["name"])] = (
                         step["response_payload_words"][5],
-                        pe.imem[pe.fetch_address])
+                        pe.imem[pe.fetch_address],
+                    )
         self.assertTrue(fetched)
         for key, (expected, would_report) in fetched.items():
             with self.subTest(vector=key):
@@ -249,6 +251,7 @@ class TestLatchedInsnRule(unittest.TestCase):
     def test_r2_still_checks_clean(self):
         self.assertEqual(V2.check_package(), 0)
         self.assertEqual(V2.check_hex_export(), 0)
+
 
 class TestChipConformanceCorrections(unittest.TestCase):
     """Semantics the chip's conformance run proved this host model had wrong.
