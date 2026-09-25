@@ -3,6 +3,7 @@
 **Date entry (UTC):** 2026-09-25T06:30:18Z (`date -u +"%Y-%m-%dT%H:%M:%SZ"`).
 **Branch:** `host-controller-gui` (base `153fbde`; phase 1b code at `c12734e`).
 **Code commit:** `c28234d` (`feat: add Pico USB SPI bridge`).
+**Result-doc commit:** `164208a` (this file, HANDOFF.md and plan-review section 9).
 **Scope:** plan Task 2 — `tools/host_bridge/` (`pe_frame.py`, `tt_adapter.py`,
 `main.py`, `tests/`) plus the shared-golden-vector half of
 `tools/host_gui/tests/test_protocol.py`. The phase arrived written but
