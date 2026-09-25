@@ -291,6 +291,14 @@ module tb_pe_soc_dmx512;
 
   real    t_brk_start = 0.0, t_mark_start = 0.0, t_first_start = 0.0;
   real    t_slot = 0.0;
+  // How far the frame got, for the watchdog. A hang is the LEAST informative
+  // failure a testbench can produce, and this file's own self-inflicted list
+  // records why: a truncated stream that looks like a protocol defect is
+  // exactly the cost of a diagnostic that says only "watchdog". So the
+  // watchdog reports the slot index against the expected total, which
+  // distinguishes "never started" from "stopped at slot 300" -- and those two
+  // point at completely different firmware.
+  integer n_slots_seen = 0;
   logic [7:0] slot_byte;
   bit          slot_ok;
 
@@ -366,6 +374,7 @@ module tb_pe_soc_dmx512;
     // has stopped rather than letting the loop wait for ever.
     t_slot = t_first_start;
     for (int s = 0; s < N_SLOTS; s++) begin
+      n_slots_seen = s;                  // for the watchdog's diagnostic
       if (s > 0) begin
         real t_want;
         t_want = t_slot + 9.5 * cell_ns;
@@ -532,7 +541,19 @@ module tb_pe_soc_dmx512;
     // a hang.
     #30_000_000;
     $display("FAIL: watchdog -- the test did not complete");
-    $display("  pc=%0d slots measured=%0d", dbg_pc, n_meas);
+    // THE HANG DIAGNOSTIC, and it is the point of this block. See the note on
+    // n_slots_seen: a bare "watchdog" is the least informative failure a
+    // testbench can emit, and this file's own history is a truncated stream
+    // being mistaken for a protocol defect. So say HOW FAR it got, and
+    // whether the frame layer had already finished -- which separates "the
+    // transmitter stalled" from "the frame layer ended early" from "nothing
+    // was ever transmitted".
+    $display("  slots reached: %0d of %0d   measured: %0d   cells measured: %0d",
+             n_slots_seen, N_SLOTS, n_slots_seen, n_meas);
+    $display("  frame layer finished: %b   break seen: %b   mark seen: %b",
+             dut.dmem[10] == 8'hA5, t_brk_start > 0.0, t_mark_start > 0.0);
+    $display("  pc=%0d  (a stalled transmitter sits in sb_rem; a finished one in park)",
+             dbg_pc);
     $finish;
   end
 

@@ -523,6 +523,55 @@ it by assertion. That is a previous block's testbench, so it is raised as a
 QUESTION rather than fixed here — but it is the first concrete, named, counted
 instance of the gap this block kept hitting.
 
+## The parallel-worker `/tmp` collision, which is not about MIDI or DMX at all
+
+The most transferable thing in this block, and it is about the harness rather
+than the protocols. It is here because it was found while auditing this block's
+own mutation score and it is worth more to the project than either of the two
+firmware programs.
+
+**The claim that is false.** `regress/run_lock.sh` takes a **per-worktree** lock
+on purpose and documents the reasoning:
+
+> concurrent runs in DIFFERENT worktrees are safe (disjoint files); the hazard
+> is concurrent runs in the SAME worktree
+
+Both halves are right about the *repository* and the second is the whole point of
+the lock. The first is **false for `/tmp`**, which is shared across worktrees:
+every mutation gate writes to a bare `/tmp/mutate_<name>.log`, so two suites in
+different worktrees run concurrently *by design* and overwrite each other's
+evidence. There are four copies of `regress/mutate_fwbus_tb.sh` on this machine
+at the time of writing — this branch's (22 mutation calls, reporting which
+assertion caught each) and three others (13 calls, older format) — and they all
+write `/tmp/mutate_fwbus.log`.
+
+**How it was caught, and why it nearly wasn't.** This block's harness reported
+`detected: 12` twice while the same code run standalone reported 21 in the same
+session. I dismissed it once as a stale log and then wrote a **WORKLOG
+correction asserting it was stale** — which was itself wrong. It was never stale.
+`/tmp` at that moment also carried `mutate_timing.log`, `mutate_eth.log` and
+`mutate_ctrl_r3.log`, none of which are gates in this branch's `run_all.sh`; the
+twelve was another worktree's harness, and the log had been written 30 seconds
+before I read it.
+
+The error is worth keeping because of its shape: **"stale" and "someone else
+wrote it" both explain a wrong number**, and I reached for the one that did not
+implicate the project. When a number disagrees with what you just measured, the
+first hypothesis to discard is your own.
+
+**Fixed for the paths this harness owns** (case log, assemble and compile logs,
+the five `.vvp` paths, the `mktemp` backup) using the same worktree digest the
+lock already computes, `git rev-parse --show-toplevel | md5sum | cut -c1-8`,
+verified distinct across three worktrees. **Not fixed here:** the outer paths,
+one per gate in a shared `run_all.sh` — thirteen gates, not mine to change, and
+raised as a QUESTION.
+
+**The uncomfortable part.** This block's own harness header had been reassuring
+itself about precisely this hazard — *"keep each simulator run on a different
+path so it cannot truncate the outer log"* — while the outer log it was
+protecting was the one that collided. Being careful about one instance of a
+problem while missing its parent is a very ordinary way to be wrong.
+
 ## The one durable lesson
 
 > **A delay built by counting instructions is arithmetic, and arithmetic that is
