@@ -505,6 +505,31 @@ same quantity, check them *against each other* — the cross-check is the only
 thing that can catch an error neither owner can see, because each was written
 from inside its own reasoning.
 
+### The mildest instance, and the one that generalises best
+
+Applying that check to the rest of this block's numbers turned up a fourth case
+where **nothing was false** and the two files simply disagreed:
+
+| | `dmx512.pe` header | `tb_pe_soc_dmx512.v` measured |
+| --- | --- | --- |
+| break | 22 cells = **88.0 µs** | **88.06 µs** |
+| mark | 3 cells = **12.0 µs** | **12.38 µs** |
+
+The break gap is 0.07 % and the mark gap is **3.2 %**. Both figures are correct
+and they measure different intervals: the header states what the *loops* hold
+the line for, while the testbench measures the break from the fall to the first
+rise (loop + the 4 clocks before it) and the mark **from the break's end to the
+first start bit** (loop + the frame layer's whole 22-instruction prologue,
+0.367 µs). A reader comparing the two files had no way to tell whether one was
+wrong, and the natural reading — "the header is a round number, the measurement
+is the truth, one of them is off" — would have sent them looking for a
+transmitter bug that does not exist.
+
+That is the version of this defect worth carrying: **it is not always a wrong
+number. Often it is two true numbers about two different intervals, side by side
+in two files, with nothing saying which is which.** And the cost of not saying so
+is that a reader cannot tell a true measurement from a defect.
+
 ## Limits
 
 **This section existed before this file was rewritten and was dropped in the

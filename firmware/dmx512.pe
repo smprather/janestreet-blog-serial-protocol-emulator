@@ -107,6 +107,32 @@
 ;   break  22 cells = 22 x 4.000 us = 88.0 us   (>= 87.5 us required)
 ;   mark    3 cells =  3 x 4.000 us = 12.0 us   (>=  8.0 us required)
 ;
+; THOSE TWO FIGURES ARE THE LOOPS, AND THE TESTBENCH MEASURES 88.06 us AND
+; 12.38 us. Both are right; they are different intervals, and until this line
+; existed neither file said so -- the two disagreed by 3.2% on the mark and a
+; reader comparing them had no way to tell whether one was wrong. Worth
+; recording because that is the fourth instance in this block of an artifact
+; disagreeing with another artifact, and the mildest: nothing here is false.
+;
+;   what the loop holds HIGH or LOW      what the TB measures
+;   ----------------------------------  ------------------------------------
+;   break  22 x 240 = 5280 clks         the fall to the first rise, so it
+;            = 88.000 us                 includes the 4 clocks of LDI/STM/OUT
+;                                         before the loop: 88.0 + 0.07 = 88.06
+;   mark    3 x 240 =  720 clks         the break's end to the FIRST START
+;            = 12.000 us                 BIT, so it includes the whole frame
+;                                         layer's prologue -- 22 instructions
+;                                         counted out of the listing, 0.367
+;                                         us: 12.0 + 0.367 = 12.367 ~ 12.38
+;
+; The mark's 22 are the mark loop's back edge, the start code's four
+; instructions, the transmitter's eight (load the byte, park it, drive the
+; idle level, arm the cell count) and the seven-instruction dispatch to cell 0.
+; Both floors are cleared either way, and both are cleared by more than the
+; margin the standard asks for -- but a receiver measures the second column,
+; not the first, so the second column is the one that has to clear 87.5 us and
+; 8 us. It does, with 0.56 us and 4.37 us of margin.
+;
 ; 87.5 / 4 = 21.875, so 22 cells is the smallest whole number of cells that
 ; clears the break minimum, and it clears it by 0.5 us. The mark uses three
 ; cells rather than two: two is 8.000 us, exactly the minimum, and "exactly the

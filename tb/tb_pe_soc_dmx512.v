@@ -116,7 +116,21 @@ module tb_pe_soc_dmx512;
   // tolerance would admit all three and the rate check would be decorative.
   localparam real DMX_BIT_NS  = 4_000.0;
   localparam real RATE_TOL    = 0.003;           // +/-0.3%
-  // The floors from the standard, as minimums and not as targets.
+  // The floors from the standard, as minimums and not as targets. Note WHAT
+  // EACH IS MEASURED OVER, because firmware/dmx512.pe's header states the LOOPS
+  // as 88.0 us and 12.0 us and this TB prints 88.06 and 12.38 -- both correct,
+  // different intervals, and until the header said so the two files simply
+  // disagreed by 3.2% on the mark:
+  //
+  //   break  fall to first rise    = the loop PLUS the 4 clocks of LDI/STM/OUT
+  //                                  before it
+  //   mark   break's end to the FIRST START BIT, not to the mark loop's end
+  //                                  = the loop PLUS the frame layer's whole
+  //                                  22-instruction prologue (0.367 us)
+  //
+  // So the numbers compared against the floors below are the ones a receiver
+  // would actually see, which is the whole reason the floors are checked here
+  // and not in the firmware.
   localparam real BREAK_MIN_NS = 87_500.0;
   localparam real MARK_MIN_NS  =  8_000.0;
   // 8N2: start + 8 data + 2 stop.
