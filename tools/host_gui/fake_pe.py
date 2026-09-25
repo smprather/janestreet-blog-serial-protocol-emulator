@@ -65,6 +65,26 @@ class FakeBridgeError(Exception):
     """A bridge request that cannot be dispatched."""
 
 
+# Chip register widths — the ISA is the source of truth (manager ruling,
+# 2026-09-25). These mirror rtl/pe_cpu.v on the chip side and are enforced in
+# the model so it can never report a field the hardware could not hold:
+#   * a, x, y are `logic [7:0]`                            -> 8 bits
+#   * pc is `logic [PCW-1:0]`, PCW = max(8, IAW); the SoC instantiates
+#     IMEM_WORDS=1024 so IAW=10 and PCW=10                 -> 10 bits
+#     ("full width" means all 10 PC bits, not invented bits)
+#   * an instruction word is 16 bits (`imem_rdata`)         -> 16 bits
+# The R2 package once encoded a=0x1FFF (13 bits), which no chip can produce;
+# test_r2_reads pins these against the RTL text so it cannot recur.
+ISA_A_BITS = 8
+ISA_X_BITS = 8
+ISA_Y_BITS = 8
+ISA_PC_BITS = 10
+ISA_INSN_BITS = 16
+ISA_PC_MASK = (1 << ISA_PC_BITS) - 1
+ISA_REG_MASK = (1 << ISA_A_BITS) - 1
+ISA_INSN_MASK = (1 << ISA_INSN_BITS) - 1
+
+
 def _payload_bytes(words: Iterable[int]) -> bytes:
     return b"".join(int(w).to_bytes(2, "big") for w in words)
 
@@ -79,6 +99,10 @@ class FakePE:
     default, kept so existing tests do not change; "status-only" is the other
     side of the open question). The chip side settles it; see
     ``tools/host_gui/r2_reads.py``.
+
+    Every register the model reports is masked to its ISA width
+    (``ISA_*_BITS`` above), so a test that pokes an over-wide value still gets a
+    chip-plausible answer instead of a field the silicon could not hold.
     """
 
     def __init__(self, *, read_fault_policy: str = "latch") -> None:
@@ -207,14 +231,21 @@ class FakePE:
             self.words_written += 1
         return (P.STATUS_OK, self.words_written, self.faults, self._echo())
 
+    def _regs(self) -> tuple[int, int, int, int, int]:
+        """The CPU registers, masked to the ISA widths the chip can hold."""
+        return (self.pc & ISA_PC_MASK, self.a & ISA_REG_MASK,
+                self.x & ISA_REG_MASK, self.y & ISA_REG_MASK,
+                self.insn & ISA_INSN_MASK)
+
     def _status(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
+        pc, a, x, y, _insn = self._regs()
         return (P.STATUS_OK, self.state, 1 if self.run else 0,
-                self.selected_target, self.pc, self.a, self.x, self.y,
+                self.selected_target, pc, a, x, y,
                 self.timer, self.faults, self.words_written)
 
     def _read_cpu(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
-        return (P.STATUS_OK, self.pc, self.a, self.x, self.y, self.insn,
-                self.state)
+        pc, a, x, y, insn = self._regs()
+        return (P.STATUS_OK, pc, a, x, y, insn, self.state)
 
     def _read_range_fault(self) -> None:
         """Latch FAULT_RANGE on a read range error only under the 'latch' policy."""

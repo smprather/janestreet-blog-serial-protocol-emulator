@@ -48,6 +48,25 @@ with that run as evidence.
   never wrapped (the `range_never_wraps` vector: `READ_IMEM(1023,1)` reads the
   last word; `READ_IMEM(1023,2)` and `READ_DMEM(15,2)` are `RANGE`).
 
+## Register widths (ISA is the source of truth)
+
+Manager ruling (2026-09-25): **the ISA is the source of truth and no field may
+lie.** These widths mirror `rtl/pe_cpu.v`:
+
+| Field | Width | RTL evidence |
+|---|---|---|
+| `pc` | **10 bits** | `logic [PCW-1:0] pc;` with `PCW = max(8, IAW)`; the SoC instantiates `IMEM_WORDS=1024` so `IAW=10` |
+| `a`, `x`, `y` | **8 bits** | `logic [7:0] a, y, x;` |
+| `insn` | **16 bits** | the instruction word is `logic [15:0]` (`imem_rdata`) |
+
+"Full width" in the R2 obligation means *every bit the ISA has* — R2 must not
+truncate the PC to 8 bits the way the current `dbg_pc = pc[7:0]` does. It does
+**not** mean wider than the ISA. The host `FakePE` now masks every register to
+these widths so the model can never emit a field the hardware could not hold,
+and `tools/host_gui/tests/test_r2_reads.py` pins the constants against the
+RTL text itself. (An earlier package encoded `a=0x1FFF`, 13 bits — a field no
+chip can produce; it is corrected here.)
+
 ## The obligations, in vector form
 
 | Vector | Obligation the chip must satisfy |
@@ -56,7 +75,7 @@ with that run as evidence.
 | `read_dmem_bounded` | `READ_DMEM` returns the requested byte range packed big-endian per word. |
 | `dump_core_header` | `DUMP_CORE` while stopped equals the `STATUS` register header. |
 | `read_cpu_non_halting` | `READ_CPU` answers while `run=1` and exposes full-width `pc/a/x/y/insn` (R2 removes the 8-bit `dbg_pc`/`dbg_a` truncation). |
-| `full_width_debug_regs` | The same full-width `READ_CPU` header, pinned word for word (the anti-truncation vector). |
+| `full_width_debug_regs` | The register header, ISA-native: `pc` 10 bits, `a`/`x`/`y` 8, `insn` 16 (the anti-truncation vector). |
 | `read_while_running_rejected` | `READ_IMEM`/`READ_DMEM`/`DUMP_CORE` answer `NOT_READY` (6) while `run=1` (chip-side rejection, not just the Pico). |
 | `range_never_wraps` | Past-the-end reads are `RANGE` (3), never wrapped. |
 | `read_range_fault_lifecycle` | A bad read latches sticky `FAULT_RANGE`; `STATUS` shows it; `CLEAR_FAULT` clears it. |

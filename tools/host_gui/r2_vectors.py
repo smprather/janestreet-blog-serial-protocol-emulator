@@ -39,6 +39,12 @@ README = REPO_ROOT / "reviews" / "2026-09-25" / "R2-READ-VERIFICATION.md"
 TARGET = P.TARGET_HOST
 LOAD_WORDS = (0x0041, 0x1001, 0x4002)
 
+# Chip-native register maxima, from rtl/pe_cpu.v (the ISA is the source of
+# truth): pc is 10 bits at IMEM_WORDS=1024, a/x/y are 8, insn is 16.
+ISA_PC_MAX = (1 << F.ISA_PC_BITS) - 1
+ISA_REG_MAX = (1 << F.ISA_A_BITS) - 1
+ISA_INSN_MAX = (1 << F.ISA_INSN_BITS) - 1
+
 
 def _frame(opcode, sequence, payload_words):
     return P.encode_frame(opcode, sequence, TARGET,
@@ -112,7 +118,7 @@ def build_package() -> dict:
                  "bytes 0..3 -> 0x0A0B, 0x0C0D")]))
 
     # 3. DUMP_CORE header equals the STATUS header while stopped.
-    pe = _loaded_model(pc=0x123, a=0x456, x=0x789, y=0xABC, timer=7)
+    pe = _loaded_model(pc=0x123, a=0x45, x=0x78, y=0x9A, timer=7)
     dump = _record(pe, "dump_core_header", P.OP_DUMP_CORE, (), 1)
     status = _record(pe, "status_header", P.OP_STATUS, (), 2)
     vectors.append(_vector(
@@ -121,21 +127,25 @@ def build_package() -> dict:
         [dump, status]))
 
     # 4. READ_CPU is non-halting and carries full-width registers.
-    pe = _loaded_model(pc=0x3FF, a=0x1FFF, x=0x2AA, y=0x155, insn=0xFFFF,
-                       running=True)
+    pe = _loaded_model(pc=ISA_PC_MAX, a=ISA_REG_MAX, x=ISA_REG_MAX,
+                       y=ISA_REG_MAX, insn=ISA_INSN_MAX, running=True)
     vectors.append(_vector(
         "read_cpu_non_halting", R.by_name()["read_cpu_non_halting"].description,
         "n/a (register header)",
         [_record(pe, "read_cpu_while_running", P.OP_READ_CPU, (), 1,
                  "answers while run=1; pc/a/x/y/insn full width")]))
 
-    # 4b. Full-width debug registers (R2 removes the 8-bit truncation).
-    pe = _loaded_model(pc=0x3FF, a=0x1FFF, x=0x2AA, y=0x155, insn=0xFFFF)
+    # 4b. Full-width debug registers (the anti-truncation vector). Widths are
+    # the ISA's: pc 10 bits, a/x/y 8, insn 16 - the "full width" obligation is
+    # that R2 exposes every bit the chip has, not that more exist.
+    pe = _loaded_model(pc=ISA_PC_MAX, a=ISA_REG_MAX, x=ISA_REG_MAX,
+                       y=ISA_REG_MAX, insn=ISA_INSN_MAX)
     vectors.append(_vector(
         "full_width_debug_regs", R.by_name()["full_width_debug_regs"].description,
         "n/a (register header)",
         [_record(pe, "read_cpu_full_width_regs", P.OP_READ_CPU, (), 1,
-                 "pc=0x3FF, a=0x1FFF, x=0x2AA, y=0x155, insn=0xFFFF")]))
+                 f"pc=0x{ISA_PC_MAX:03X}, a=x=y=0x{ISA_REG_MAX:02X}, "
+                 f"insn=0x{ISA_INSN_MAX:04X}")]))
 
     # 5. Reads while running are rejected (chip-side, R2).
     pe = _loaded_model(running=True)

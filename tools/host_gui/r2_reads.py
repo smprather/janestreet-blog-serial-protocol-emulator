@@ -72,7 +72,8 @@ def _read_dmem_bounded(pe: F.FakePE) -> bool:
 
 def _dump_core_header(pe: F.FakePE) -> bool:
     pe.request(P.OP_LOAD, payload_words=(0x0041,))
-    pe.pc, pe.a, pe.x, pe.y = 0x123, 0x456, 0x789, 0xABC
+    # ISA-native widths: a/x/y are 8 bits, pc is 10 at IMEM_WORDS=1024.
+    pe.pc, pe.a, pe.x, pe.y = 0x123, 0x45, 0x78, 0x9A
     return (pe.request(P.OP_DUMP_CORE).payload
             == pe.request(P.OP_STATUS).payload)
 
@@ -108,9 +109,12 @@ def _range_never_wraps(pe: F.FakePE) -> bool:
 
 
 def _full_width_debug_regs(pe: F.FakePE) -> bool:
-    pe.pc, pe.a, pe.x, pe.y, pe.insn = (0x3FF, 0x1FFF, 0x2AA, 0x155, 0xFFFF)
-    return pe.request(P.OP_READ_CPU).payload[1:6] == (0x3FF, 0x1FFF, 0x2AA,
-                                                     0x155, 0xFFFF)
+    # "Full width" = every bit the ISA has: pc 10, a/x/y 8, insn 16. Setting a
+    # value wider than the register must not produce a wider field (the model
+    # masks to the ISA, so an over-wide poke cannot lie in a response).
+    pe.pc, pe.a, pe.x, pe.y, pe.insn = (0x3FF, 0xFF, 0xFF, 0xFF, 0xFFFF)
+    payload = pe.request(P.OP_READ_CPU).payload
+    return payload[1:6] == (0x3FF, 0xFF, 0xFF, 0xFF, 0xFFFF)
 
 
 OBLIGATIONS: tuple[Obligation, ...] = (
@@ -140,8 +144,9 @@ OBLIGATIONS: tuple[Obligation, ...] = (
         _range_never_wraps),
     Obligation(
         "full_width_debug_regs",
-        "READ_CPU exposes full-width PC/A/X/Y/insn (R2 removes the 8-bit "
-        "dbg_pc/dbg_a truncation).",
+        "READ_CPU exposes every ISA register bit: pc 10 (PCW at "
+        "IMEM_WORDS=1024), a/x/y 8, insn 16 - the obligation is no "
+        "truncation, not invented bits.",
         _full_width_debug_regs),
 )
 

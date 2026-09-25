@@ -217,16 +217,18 @@ class TestReadbackAndDump(unittest.TestCase):
             session.read_cpu()
 
     def test_read_cpu_full_width_registers(self):
-        # Manager RULING: R2 exposes full-width PC/A/X/Y/insn (the old RTL
-        # truncated dbg_pc/dbg_a to 8 bits); the host must carry them whole.
+        # Manager RULING: the ISA is the source of truth. R2 exposes every bit
+        # the chip has - pc 10, a/x/y 8, insn 16 - not more; the old
+        # dbg_pc = pc[7:0] truncation is what R2 removes.
         session, bridge, _, _ = make_stack()
         session.connect()
         session.load(ECHO)
-        bridge.pe.pc, bridge.pe.a, bridge.pe.x = 0x3FF, 0x1FFF, 0x2AA
-        bridge.pe.y, bridge.pe.insn = 0x155, 0xFFFF
+        bridge.pe.pc = 0x3FF
+        bridge.pe.a = bridge.pe.x = bridge.pe.y = 0xFF
+        bridge.pe.insn = 0xFFFF
         cpu = session.read_cpu()
         self.assertEqual((cpu.pc, cpu.a, cpu.x, cpu.y, cpu.insn),
-                         (0x3FF, 0x1FFF, 0x2AA, 0x155, 0xFFFF))
+                         (0x3FF, 0xFF, 0xFF, 0xFF, 0xFFFF))
 
 
 class TestFaultsAndEvents(unittest.TestCase):
