@@ -24,6 +24,8 @@
 #      connect->load->readback->start->stop->dump->fault->reconnect sequence
 #      over the real host stack and the real bridge against fakes. It never
 #      opens a serial device.
+#   6. the R2 verification package drift check (r2_vectors --check): the
+#      chip-side golden vectors must still match a fresh build of the model.
 #
 # IT IS NOT A CHIP GATE. Nothing here runs a testbench, the regression, or
 # synthesis, and nothing here is evidence about silicon: the PE host protocol
@@ -58,6 +60,7 @@ else
 fi
 
 run "compileall" python3 -m compileall -q tools/host_gui tools/host_bridge
+run "R2 vector package" python3 -m tools.host_gui.r2_vectors --check
 run "acceptance --fake" python3 tools/host_bridge/acceptance.py --fake
 
 printf '\n=== host gate: %s ===\n' "$([ "$failed" -eq 0 ] && echo PASS || echo FAIL)"

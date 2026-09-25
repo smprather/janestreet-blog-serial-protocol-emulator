@@ -1,0 +1,403 @@
+{
+  "artifact": "R2 read-path verification package",
+  "chip_confirmed": false,
+  "generated_by": "tools/host_gui/r2_vectors.py (build_package)",
+  "memory": {
+    "dmem_bytes": 16,
+    "imem_words": 1024
+  },
+  "notice": "These probes run against the host FakePE model. They are NOT chip-confirmed: the R2 read path is chip-side work under the manager's dispatch and is unverified until it lands and passes the same probes on hardware.",
+  "protocol": {
+    "crc": "CRC-16/CCITT-FALSE",
+    "crc_init": 65535,
+    "crc_poly": 4129,
+    "header": "{version[3:0], opcode[7:0], target[3:0]}",
+    "response_bit": 128,
+    "sync": 42330,
+    "version": 1,
+    "word_order": "big-endian words on the wire; READ payload low-word-first ascending"
+  },
+  "rulings_applied": [
+    "out-of-range READ latches sticky FAULT_RANGE (0x4); CLEAR_FAULT clears it (manager ruling 2026-09-25)",
+    "READ payload is low-word-first ascending, matching LOAD (manager ruling 2026-09-25)"
+  ],
+  "source_of_truth": [
+    "tools/host_gui/r2_reads.py",
+    "tools/host_gui/fake_pe.py",
+    "tools/host_gui/protocol.py"
+  ],
+  "status_codes": {
+    "STATUS_BAD_FRAME": 2,
+    "STATUS_BUSY": 1,
+    "STATUS_FAULT": 4,
+    "STATUS_NOT_READY": 6,
+    "STATUS_OK": 0,
+    "STATUS_RANGE": 3,
+    "STATUS_UNSUPPORTED": 5
+  },
+  "vectors": [
+    {
+      "chip_confirmed": false,
+      "name": "read_imem_bounded",
+      "obligation": "READ_IMEM returns the requested address..address+count words.",
+      "steps": [
+        {
+          "model_faults": 0,
+          "name": "read_imem_address_1_count_2",
+          "note": "words 1,2 returned in ascending order",
+          "opcode": 19,
+          "opcode_name": "OP_READ_IMEM",
+          "request_hex": "a55a11300001000200010002b9cd",
+          "request_payload_words": [
+            1,
+            2
+          ],
+          "response_hex": "a55a193000010003000010014002ca95",
+          "response_payload_words": [
+            0,
+            4097,
+            16386
+          ],
+          "sequence": 1,
+          "status": 0
+        }
+      ],
+      "word_order": "low-word-first ascending"
+    },
+    {
+      "chip_confirmed": false,
+      "name": "read_dmem_bounded",
+      "obligation": "READ_DMEM returns the requested byte range packed big-endian.",
+      "steps": [
+        {
+          "model_faults": 0,
+          "name": "read_dmem_address_0_count_4",
+          "note": "bytes 0..3 -> 0x0A0B, 0x0C0D",
+          "opcode": 20,
+          "opcode_name": "OP_READ_DMEM",
+          "request_hex": "a55a1140000100020000000445e0",
+          "request_payload_words": [
+            0,
+            4
+          ],
+          "response_hex": "a55a19400001000300000a0b0c0d7c84",
+          "response_payload_words": [
+            0,
+            2571,
+            3085
+          ],
+          "sequence": 1,
+          "status": 0
+        }
+      ],
+      "word_order": "bytes big-endian per word, ascending"
+    },
+    {
+      "chip_confirmed": false,
+      "name": "dump_core_header",
+      "obligation": "DUMP_CORE while stopped equals the STATUS register header.",
+      "steps": [
+        {
+          "model_faults": 0,
+          "name": "dump_core_header",
+          "note": "",
+          "opcode": 21,
+          "opcode_name": "OP_DUMP_CORE",
+          "request_hex": "a55a1150000100009b96",
+          "request_payload_words": [],
+          "response_hex": "a55a19500001000b00000000000000000123045607890abc0007000000037bcc",
+          "response_payload_words": [
+            0,
+            0,
+            0,
+            0,
+            291,
+            1110,
+            1929,
+            2748,
+            7,
+            0,
+            3
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "model_faults": 0,
+          "name": "status_header",
+          "note": "",
+          "opcode": 17,
+          "opcode_name": "OP_STATUS",
+          "request_hex": "a55a111000020000d3ae",
+          "request_payload_words": [],
+          "response_hex": "a55a19100002000b00000000000000000123045607890abc000700000003bc35",
+          "response_payload_words": [
+            0,
+            0,
+            0,
+            0,
+            291,
+            1110,
+            1929,
+            2748,
+            7,
+            0,
+            3
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (register header)"
+    },
+    {
+      "chip_confirmed": false,
+      "name": "read_cpu_non_halting",
+      "obligation": "READ_CPU answers while run=1 (the only non-halting read).",
+      "steps": [
+        {
+          "model_faults": 0,
+          "name": "read_cpu_while_running",
+          "note": "answers while run=1; pc/a/x/y/insn full width",
+          "opcode": 18,
+          "opcode_name": "OP_READ_CPU",
+          "request_hex": "a55a1120000100008610",
+          "request_payload_words": [],
+          "response_hex": "a55a192000010007000003ff1fff02aa0155ffff000123ce",
+          "response_payload_words": [
+            0,
+            1023,
+            8191,
+            682,
+            341,
+            65535,
+            1
+          ],
+          "sequence": 1,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (register header)"
+    },
+    {
+      "chip_confirmed": false,
+      "name": "full_width_debug_regs",
+      "obligation": "READ_CPU exposes full-width PC/A/X/Y/insn (R2 removes the 8-bit dbg_pc/dbg_a truncation).",
+      "steps": [
+        {
+          "model_faults": 0,
+          "name": "read_cpu_full_width_regs",
+          "note": "pc=0x3FF, a=0x1FFF, x=0x2AA, y=0x155, insn=0xFFFF",
+          "opcode": 18,
+          "opcode_name": "OP_READ_CPU",
+          "request_hex": "a55a1120000100008610",
+          "request_payload_words": [],
+          "response_hex": "a55a192000010007000003ff1fff02aa0155ffff000033ef",
+          "response_payload_words": [
+            0,
+            1023,
+            8191,
+            682,
+            341,
+            65535,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (register header)"
+    },
+    {
+      "chip_confirmed": false,
+      "name": "read_while_running_rejected",
+      "obligation": "READ_IMEM/READ_DMEM/DUMP_CORE answer NOT_READY while run=1.",
+      "steps": [
+        {
+          "model_faults": 0,
+          "name": "read_imem_not_ready",
+          "note": "",
+          "opcode": 19,
+          "opcode_name": "OP_READ_IMEM",
+          "request_hex": "a55a11300001000200000001be9e",
+          "request_payload_words": [
+            0,
+            1
+          ],
+          "response_hex": "a55a1930000100010006dd58",
+          "response_payload_words": [
+            6
+          ],
+          "sequence": 1,
+          "status": 6
+        },
+        {
+          "model_faults": 0,
+          "name": "read_dmem_not_ready",
+          "note": "",
+          "opcode": 20,
+          "opcode_name": "OP_READ_DMEM",
+          "request_hex": "a55a11400002000200000001cdc7",
+          "request_payload_words": [
+            0,
+            1
+          ],
+          "response_hex": "a55a1940000200010006b7eb",
+          "response_payload_words": [
+            6
+          ],
+          "sequence": 2,
+          "status": 6
+        },
+        {
+          "model_faults": 0,
+          "name": "dump_core_not_ready",
+          "note": "",
+          "opcode": 21,
+          "opcode_name": "OP_DUMP_CORE",
+          "request_hex": "a55a115000030000f5f6",
+          "request_payload_words": [],
+          "response_hex": "a55a19500003000100062ac1",
+          "response_payload_words": [
+            6
+          ],
+          "sequence": 3,
+          "status": 6
+        }
+      ],
+      "word_order": "n/a (status only)"
+    },
+    {
+      "chip_confirmed": false,
+      "name": "range_never_wraps",
+      "obligation": "address+count past the memory end is RANGE, never a wrapped read.",
+      "steps": [
+        {
+          "model_faults": 0,
+          "name": "read_imem_last_word",
+          "note": "the last word is readable",
+          "opcode": 19,
+          "opcode_name": "OP_READ_IMEM",
+          "request_hex": "a55a11300001000203ff0001ea21",
+          "request_payload_words": [
+            1023,
+            1
+          ],
+          "response_hex": "a55a19300001000200000000e4f4",
+          "response_payload_words": [
+            0,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "model_faults": 4,
+          "name": "read_imem_past_end_no_wrap",
+          "note": "RANGE, never a wrapped read",
+          "opcode": 19,
+          "opcode_name": "OP_READ_IMEM",
+          "request_hex": "a55a11300002000203ff000202c0",
+          "request_payload_words": [
+            1023,
+            2
+          ],
+          "response_hex": "a55a1930000200010003632f",
+          "response_payload_words": [
+            3
+          ],
+          "sequence": 2,
+          "status": 3
+        },
+        {
+          "model_faults": 4,
+          "name": "read_dmem_past_end_no_wrap",
+          "note": "RANGE, never a wrapped read",
+          "opcode": 20,
+          "opcode_name": "OP_READ_DMEM",
+          "request_hex": "a55a114000030002000f000269f4",
+          "request_payload_words": [
+            15,
+            2
+          ],
+          "response_hex": "a55a19400003000100034d1f",
+          "response_payload_words": [
+            3
+          ],
+          "sequence": 3,
+          "status": 3
+        }
+      ],
+      "word_order": "n/a (rejected)"
+    },
+    {
+      "chip_confirmed": false,
+      "name": "read_range_fault_lifecycle",
+      "obligation": "An out-of-range READ latches sticky FAULT_RANGE and CLEAR_FAULT clears it (manager ruling).",
+      "steps": [
+        {
+          "model_faults": 4,
+          "name": "bad_read_answers_range",
+          "note": "out-of-range read: RANGE and latches sticky FAULT_RANGE",
+          "opcode": 19,
+          "opcode_name": "OP_READ_IMEM",
+          "request_hex": "a55a11300001000207d000018a27",
+          "request_payload_words": [
+            2000,
+            1
+          ],
+          "response_hex": "a55a19300001000100038dfd",
+          "response_payload_words": [
+            3
+          ],
+          "sequence": 1,
+          "status": 3
+        },
+        {
+          "model_faults": 4,
+          "name": "status_shows_sticky_fault",
+          "note": "the sticky fault bit is visible before any clear",
+          "opcode": 17,
+          "opcode_name": "OP_STATUS",
+          "request_hex": "a55a111000020000d3ae",
+          "request_payload_words": [],
+          "response_hex": "a55a19100002000b0000000000000000000000000000000000000004000323b2",
+          "response_payload_words": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            4,
+            3
+          ],
+          "sequence": 2,
+          "status": 0
+        },
+        {
+          "model_faults": 0,
+          "name": "clear_fault_clears_the_bit",
+          "note": "CLEAR_FAULT(0x4) returns faults=0",
+          "opcode": 22,
+          "opcode_name": "OP_CLEAR_FAULT",
+          "request_hex": "a55a11600003000100044dd4",
+          "request_payload_words": [
+            4
+          ],
+          "response_hex": "a55a196000030002000000008830",
+          "response_payload_words": [
+            0,
+            0
+          ],
+          "sequence": 3,
+          "status": 0
+        }
+      ],
+      "word_order": "n/a (status/lifecycle)"
+    }
+  ]
+}
