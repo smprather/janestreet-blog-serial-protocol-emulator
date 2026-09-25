@@ -40,8 +40,12 @@ class TestDebugStateEncoding(unittest.TestCase):
 
     def test_bp_flags_is_hit_then_armed(self):
         # wire [1:0] bp_flags = {bp_hit, bp_en}
-        for en, hit, expected in ((False, False, 0b00), (True, False, 0b01),
-                                  (False, True, 0b10), (True, True, 0b11)):
+        for en, hit, expected in (
+            (False, False, 0b00),
+            (True, False, 0b01),
+            (False, True, 0b10),
+            (True, True, 0b11),
+        ):
             with self.subTest(en=en, hit=hit):
                 pe = F.FakePE()
                 pe.bp_en, pe.bp_hit = en, hit
@@ -83,7 +87,7 @@ class TestDebugOps(unittest.TestCase):
         self.assertEqual(payload, (P.STATUS_NOT_READY, F.DEBUG_RUNNING, 7, 0, 0))
         self.assertFalse(pe.debug_hold)
         self.assertEqual(pe.pc, 7)
-        self.assertEqual(pe.faults, 0)      # a refusal latches no fault
+        self.assertEqual(pe.faults, 0)  # a refusal latches no fault
 
     def test_bp_set_reports_the_new_address_with_pre_state(self):
         payload = self.pe.request(P.OP_DEBUG_BP_SET, payload_words=(2,)).payload
@@ -91,16 +95,14 @@ class TestDebugOps(unittest.TestCase):
 
     def test_bp_set_past_imem_is_range_and_changes_nothing(self):
         pe = R.loaded(pc=0, bp_addr=3, bp_en=True)
-        payload = pe.request(P.OP_DEBUG_BP_SET,
-                             payload_words=(F.IMEM_WORDS,)).payload
+        payload = pe.request(P.OP_DEBUG_BP_SET, payload_words=(F.IMEM_WORDS,)).payload
         self.assertEqual(payload[0], P.STATUS_RANGE)
-        self.assertEqual(payload[3:], (3, 0b01))     # unchanged
+        self.assertEqual(payload[3:], (3, 0b01))  # unchanged
         self.assertEqual(pe.bp_addr, 3)
-        self.assertEqual(pe.faults, 0)               # R3 adds no fault class
+        self.assertEqual(pe.faults, 0)  # R3 adds no fault class
 
     def test_bp_clr_releases_to_running_when_the_strap_is_high(self):
-        pe = R.loaded(pc=2, run=True, bp_addr=2, bp_en=True, bp_hit=True,
-                      debug_hold=True)
+        pe = R.loaded(pc=2, run=True, bp_addr=2, bp_en=True, bp_hit=True, debug_hold=True)
         payload = pe.request(P.OP_DEBUG_BP_CLR).payload
         self.assertEqual(payload, (P.STATUS_OK, F.DEBUG_RUNNING, 2, 2, 0))
         self.assertTrue(pe.run)
@@ -122,12 +124,16 @@ class TestDebugOps(unittest.TestCase):
         self.assertEqual(payload[0], P.STATUS_OK)
 
     def test_debug_ops_are_unsupported_on_the_loopback_target(self):
-        for opcode, payload in ((P.OP_DEBUG_STEP, ()), (P.OP_DEBUG_BP_CLR, ()),
-                                (P.OP_DEBUG_STATUS, ()),
-                                (P.OP_DEBUG_BP_SET, (2,))):
+        for opcode, payload in (
+            (P.OP_DEBUG_STEP, ()),
+            (P.OP_DEBUG_BP_CLR, ()),
+            (P.OP_DEBUG_STATUS, ()),
+            (P.OP_DEBUG_BP_SET, (2,)),
+        ):
             with self.subTest(opcode=opcode):
-                frame = self.pe.request(opcode, target=P.TARGET_LOOPBACK,
-                                        payload_words=payload)
+                frame = self.pe.request(
+                    opcode, target=P.TARGET_LOOPBACK, payload_words=payload
+                )
                 self.assertEqual(frame.payload[0], P.STATUS_UNSUPPORTED)
 
 
@@ -136,7 +142,7 @@ class TestStopBefore(unittest.TestCase):
 
     def test_the_instruction_at_the_breakpoint_did_not_run(self):
         pe = R.loaded(pc=0)
-        pe.request(P.OP_DEBUG_STEP)              # 0 -> 1
+        pe.request(P.OP_DEBUG_STEP)  # 0 -> 1
         pe.bp_addr, pe.bp_en = 2, True
         payload = pe.request(P.OP_DEBUG_STEP).payload
         self.assertEqual(payload, (P.STATUS_OK, F.DEBUG_BP_HIT, 2, 2, 0b11))
@@ -145,7 +151,7 @@ class TestStopBefore(unittest.TestCase):
         self.assertEqual(pe.pc, 2)
         self.assertTrue(pe.bp_hit)
         self.assertEqual(pe.request(P.OP_DEBUG_STEP).payload[2], 3)
-        self.assertFalse(pe.bp_hit)              # stepping off clears it (S4)
+        self.assertFalse(pe.bp_hit)  # stepping off clears it (S4)
 
     def test_a_live_core_stops_with_the_strap_still_high(self):
         pe = R.loaded(pc=0, run=True, bp_addr=2, bp_en=True)
@@ -154,7 +160,7 @@ class TestStopBefore(unittest.TestCase):
         payload = pe.request(P.OP_DEBUG_STATUS).payload
         self.assertEqual(payload[1], F.DEBUG_BP_HIT)
         self.assertEqual(payload[2], 2)
-        self.assertEqual(payload[5], 1)          # the run strap is STILL high
+        self.assertEqual(payload[5], 1)  # the run strap is STILL high
 
 
 class TestIsaExecution(unittest.TestCase):
@@ -166,14 +172,14 @@ class TestIsaExecution(unittest.TestCase):
 
     def test_ldi_and_jmp(self):
         pe = R.loaded(pc=0)
-        pe.request(P.OP_DEBUG_STEP)              # LDI A,0x55
+        pe.request(P.OP_DEBUG_STEP)  # LDI A,0x55
         self.assertEqual(pe.a, 0x55)
-        pe.request(P.OP_DEBUG_STEP)              # LDI A,0xAA
+        pe.request(P.OP_DEBUG_STEP)  # LDI A,0xAA
         self.assertEqual(pe.a, 0xAA)
-        pe.request(P.OP_DEBUG_STEP)              # NOP
-        pe.request(P.OP_DEBUG_STEP)              # LDI A,0x0F
+        pe.request(P.OP_DEBUG_STEP)  # NOP
+        pe.request(P.OP_DEBUG_STEP)  # LDI A,0x0F
         self.assertEqual(pe.a, 0x0F)
-        pe.request(P.OP_DEBUG_STEP)              # JMP 2
+        pe.request(P.OP_DEBUG_STEP)  # JMP 2
         self.assertEqual(pe.pc, 2)
 
     def test_a_held_pc_is_stable_across_reads(self):
@@ -194,8 +200,10 @@ class TestObligations(unittest.TestCase):
     def test_probes_are_order_independent(self):
         """Each probe gets its own model, so a green run is reproducible."""
         forward = R.run_all_probes()
-        backward = {name: bool(R.by_name()[name].probe(F.FakePE()))
-                    for name in reversed(list(forward))}
+        backward = {
+            name: bool(R.by_name()[name].probe(F.FakePE()))
+            for name in reversed(list(forward))
+        }
         self.assertEqual(forward, backward)
 
     def test_nothing_is_chip_confirmed_yet(self):
@@ -212,17 +220,31 @@ class TestObligations(unittest.TestCase):
 class TestPackage(unittest.TestCase):
     def test_package_has_the_r2_shape(self):
         package = V3.build_package()
-        for key in ("vectors", "model_images", "chip_evidence", "notice",
-                    "protocol", "memory", "status_codes", "schema", "phase"):
+        for key in (
+            "vectors",
+            "model_images",
+            "chip_evidence",
+            "notice",
+            "protocol",
+            "memory",
+            "status_codes",
+            "schema",
+            "phase",
+        ):
             self.assertIn(key, package)
         self.assertEqual(package["schema"], V.SCHEMA_VERSION)
         self.assertEqual(package["phase"], "R3")
         for vector in package["vectors"]:
             self.assertIn("steps", vector)
             for step in vector["steps"]:
-                for key in ("request_hex", "response_hex", "status",
-                            "response_payload_words", "model_image_id",
-                            "chip_confirmed"):
+                for key in (
+                    "request_hex",
+                    "response_hex",
+                    "status",
+                    "response_payload_words",
+                    "model_image_id",
+                    "chip_confirmed",
+                ):
                     self.assertIn(key, step)
 
     def test_there_are_fourteen_contract_vectors(self):
@@ -249,8 +271,9 @@ class TestPackage(unittest.TestCase):
     def test_images_declare_the_debug_registers_not_the_state_word(self):
         for image in V3.build_package()["model_images"].values():
             self.assertIn("debug", image)
-            self.assertEqual(set(image["debug"]),
-                             {"bp_addr", "bp_en", "bp_hit", "debug_hold"})
+            self.assertEqual(
+                set(image["debug"]), {"bp_addr", "bp_en", "bp_hit", "debug_hold"}
+            )
             self.assertNotIn("debug_state", image["debug"])
 
     def test_an_image_cannot_contradict_the_boot_stop(self):
@@ -261,11 +284,13 @@ class TestPackage(unittest.TestCase):
         self.assertEqual(pe.state, F.DEBUG_STOPPED)
 
     def test_the_bad_crc_step_ships_the_corrupt_bytes(self):
-        vector = next(v for v in V3.build_package()["vectors"]
-                      if v["name"] == "debug_bad_crc_no_side_effect")
+        vector = next(
+            v
+            for v in V3.build_package()["vectors"]
+            if v["name"] == "debug_bad_crc_no_side_effect"
+        )
         step = next(s for s in vector["steps"] if s["name"] == "bp_set_bad_crc")
-        clean = P.encode_frame(P.OP_DEBUG_BP_SET, step["sequence"], 0,
-                               b"\x00\x02")
+        clean = P.encode_frame(P.OP_DEBUG_BP_SET, step["sequence"], 0, b"\x00\x02")
         self.assertNotEqual(step["request_hex"], clean.hex())
         self.assertEqual(step["status"], P.STATUS_BAD_FRAME)
 
@@ -275,8 +300,8 @@ class TestPackage(unittest.TestCase):
 
     def test_the_artifact_on_disk_matches_a_fresh_build(self):
         self.assertEqual(
-            json.loads(V3.ARTIFACT.read_text(encoding="utf-8")),
-            V3.build_package())
+            json.loads(V3.ARTIFACT.read_text(encoding="utf-8")), V3.build_package()
+        )
 
     def test_regenerating_does_not_change_anything(self):
         before = V3.ARTIFACT.read_text(encoding="utf-8")
@@ -285,8 +310,7 @@ class TestPackage(unittest.TestCase):
 
     def test_the_spec_vs_rtl_discrepancies_are_published(self):
         package = V3.build_package()
-        self.assertEqual(len(package["spec_vs_rtl_discrepancies"]),
-                         len(R.DISCREPANCIES))
+        self.assertEqual(len(package["spec_vs_rtl_discrepancies"]), len(R.DISCREPANCIES))
 
 
 class TestFrameworkIsSharedAndR2IsUntouched(unittest.TestCase):
@@ -297,7 +321,7 @@ class TestFrameworkIsSharedAndR2IsUntouched(unittest.TestCase):
 
     def test_both_phases_use_the_one_framework(self):
         self.assertIs(V2.V, V3.V)
-        self.assertEqual(V2.SPEC.schema, None)        # R2 predates the stamp
+        self.assertEqual(V2.SPEC.schema, None)  # R2 predates the stamp
         self.assertEqual(V3.SPEC.schema, V.SCHEMA_VERSION)
 
 

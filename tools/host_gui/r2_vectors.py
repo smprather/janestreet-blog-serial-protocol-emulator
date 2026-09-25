@@ -69,16 +69,16 @@ CHIP_EVIDENCE = {
         "read_dmem_zero_count",
     },
     "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md "
-              "(section 'Conformance', per-vector table)",
+    "(section 'Conformance', per-vector table)",
     "testbench": "chip repo: tb/tb_pe_ctrl_r2.v",
     "harness": "chip-side TB loads imem.hex/dmem.hex, applies each vector's "
-               "sparse overrides and register state, replays the 3-word LOAD "
-               "precondition as a real framed frame, and compares every "
-               "response byte (skipping wait words) to the golden stream",
+    "sparse overrides and register state, replays the 3-word LOAD "
+    "precondition as a real framed frame, and compares every "
+    "response byte (skipping wait words) to the golden stream",
     "conformance": "18/18 golden steps PASS, byte-exact including CRC",
     "scope": "This confirms the chip RTL in SIMULATION against the golden "
-             "package. The real-board acceptance run (Pico over USB, physical "
-             "shuttle) is still unexecuted and is not claimed here.",
+    "package. The real-board acceptance run (Pico over USB, physical "
+    "shuttle) is still unexecuted and is not claimed here.",
     "date": "2026-09-25",
 }
 
@@ -92,7 +92,8 @@ PACKAGE_NOTICE = (
     "real-board acceptance run (Pico over USB CDC with a physical shuttle) has "
     "NOT been executed and is not claimed here. The host probes in "
     "r2_reads.py still run against the FakePE model; what the chip confirms is "
-    "that the RTL matches these same expectations.")
+    "that the RTL matches these same expectations."
+)
 
 # The R2 package is the FIRST package, so it predates the framework's schema
 # stamp: `schema=None` keeps its JSON and manifest keys exactly as they were,
@@ -104,28 +105,40 @@ SPEC = V.Spec(
     notice=PACKAGE_NOTICE,
     artifact=ARTIFACT,
     hex_dir=HEX_DIR,
-    source_of_truth=("tools/host_gui/r2_reads.py",
-                     "tools/host_gui/fake_pe.py",
-                     "tools/host_gui/protocol.py"),
+    source_of_truth=(
+        "tools/host_gui/r2_reads.py",
+        "tools/host_gui/fake_pe.py",
+        "tools/host_gui/protocol.py",
+    ),
     rulings=(
-        ("out-of-range READ latches sticky FAULT_RANGE (0x4); "
-         "CLEAR_FAULT clears it (manager ruling 2026-09-25)"),
-        ("READ payload is low-word-first ascending, matching LOAD "
-         "(manager ruling 2026-09-25)"),
-        ("the package ships the MODEL IMAGE (imem/dmem/registers) each "
-         "vector assumes, so data-path reads prove data, not just "
-         "framing (manager ruling 2026-09-25)"),
-        ("register widths are the ISA's: pc 10, a/x/y 8, insn 16 "
-         "(manager ruling 2026-09-25)"),
-        (f"chip R2 CONFIRMED: {CHIP_EVIDENCE['conformance']} "
-         f"({CHIP_EVIDENCE['testbench']})"),
+        (
+            "out-of-range READ latches sticky FAULT_RANGE (0x4); "
+            "CLEAR_FAULT clears it (manager ruling 2026-09-25)"
+        ),
+        (
+            "READ payload is low-word-first ascending, matching LOAD "
+            "(manager ruling 2026-09-25)"
+        ),
+        (
+            "the package ships the MODEL IMAGE (imem/dmem/registers) each "
+            "vector assumes, so data-path reads prove data, not just "
+            "framing (manager ruling 2026-09-25)"
+        ),
+        (
+            "register widths are the ISA's: pc 10, a/x/y 8, insn 16 "
+            "(manager ruling 2026-09-25)"
+        ),
+        (
+            f"chip R2 CONFIRMED: {CHIP_EVIDENCE['conformance']} "
+            f"({CHIP_EVIDENCE['testbench']})"
+        ),
     ),
     evidence=CHIP_EVIDENCE,
-    word_order="big-endian words on the wire; READ payload "
-               "low-word-first ascending",
+    word_order="big-endian words on the wire; READ payload low-word-first ascending",
     readmemh_usage=(
-        "$readmemh(\"<file>\", mem); with an 8-bit mem[] filled from "
-        "address 0; the stream is the frame's bytes in wire order."),
+        '$readmemh("<file>", mem); with an 8-bit mem[] filled from '
+        "address 0; the stream is the frame's bytes in wire order."
+    ),
     load_procedure=(
         "1) imem.hex: one 16-bit word per line, ascending address, for "
         "$readmemh into a 16-bit imem[0:1023]. 2) dmem.hex: one byte per "
@@ -133,13 +146,16 @@ SPEC = V.Spec(
         "registers from model_images[].state (pc/a/x/y/insn/timer/run/"
         "faults/words_written) for the vector under test. 4) drive the "
         "step's request_file and compare the response against "
-        "response_file."),
+        "response_file."
+    ),
     hex_readme_title="# R2 read vectors - $readmemh export",
     hex_artifact="R2 read-path $readmemh export",
     hex_generated_by="tools/host_gui/r2_vectors.py (--hex)",
     hex_readme_command="python3 -m tools.host_gui.r2_vectors --hex",
-    hex_readme_intro=("from the same\nbuild as `../R2-READ-VERIFICATION.json`; "
-                      "`--check` proves every file\n"),
+    hex_readme_intro=(
+        "from the same\nbuild as `../R2-READ-VERIFICATION.json`; "
+        "`--check` proves every file\n"
+    ),
     labels=("r2 verification package", "r2 $readmemh export"),
     load_words=LOAD_WORDS,
     schema=None,
@@ -165,124 +181,291 @@ def build_package() -> dict:
 
     # 1. Bounded IMEM read, low word first ascending.
     image, pe = image_and_model("v01-read_imem_bounded")
-    vectors.append(b.vector(
-        "read_imem_bounded", R.by_name()["read_imem_bounded"].description,
-        "low-word-first ascending",
-        [b.record(pe, "read_imem_address_1_count_2", P.OP_READ_IMEM, (1, 2), 1,
-                 "words 1,2 returned in ascending order", image["id"])],
-        image))
+    vectors.append(
+        b.vector(
+            "read_imem_bounded",
+            R.by_name()["read_imem_bounded"].description,
+            "low-word-first ascending",
+            [
+                b.record(
+                    pe,
+                    "read_imem_address_1_count_2",
+                    P.OP_READ_IMEM,
+                    (1, 2),
+                    1,
+                    "words 1,2 returned in ascending order",
+                    image["id"],
+                )
+            ],
+            image,
+        )
+    )
 
     # 2. Bounded DMEM read: bytes packed big-endian per word.
-    image, pe = image_and_model("v02-read_dmem_bounded",
-                                dmem={0: 0x0A, 1: 0x0B, 2: 0x0C, 3: 0x0D})
-    vectors.append(b.vector(
-        "read_dmem_bounded", R.by_name()["read_dmem_bounded"].description,
-        "bytes big-endian per word, ascending",
-        [b.record(pe, "read_dmem_address_0_count_4", P.OP_READ_DMEM, (0, 4), 1,
-                 "bytes 0..3 -> 0x0A0B, 0x0C0D", image["id"])],
-        image))
+    image, pe = image_and_model(
+        "v02-read_dmem_bounded", dmem={0: 0x0A, 1: 0x0B, 2: 0x0C, 3: 0x0D}
+    )
+    vectors.append(
+        b.vector(
+            "read_dmem_bounded",
+            R.by_name()["read_dmem_bounded"].description,
+            "bytes big-endian per word, ascending",
+            [
+                b.record(
+                    pe,
+                    "read_dmem_address_0_count_4",
+                    P.OP_READ_DMEM,
+                    (0, 4),
+                    1,
+                    "bytes 0..3 -> 0x0A0B, 0x0C0D",
+                    image["id"],
+                )
+            ],
+            image,
+        )
+    )
 
     # 3. DUMP_CORE header equals the STATUS header while stopped.
-    image, pe = image_and_model("v03-dump_core_header", pc=0x123, a=0x45,
-                                x=0x78, y=0x9A, timer=7)
-    vectors.append(b.vector(
-        "dump_core_header", R.by_name()["dump_core_header"].description,
-        "n/a (register header)",
-        [b.record(pe, "dump_core_header", P.OP_DUMP_CORE, (), 1,
-                 "stable register header while stopped", image["id"]),
-         b.record(pe, "status_header", P.OP_STATUS, (), 2,
-                 "must equal the dump_core header", image["id"])],
-        image))
+    image, pe = image_and_model(
+        "v03-dump_core_header", pc=0x123, a=0x45, x=0x78, y=0x9A, timer=7
+    )
+    vectors.append(
+        b.vector(
+            "dump_core_header",
+            R.by_name()["dump_core_header"].description,
+            "n/a (register header)",
+            [
+                b.record(
+                    pe,
+                    "dump_core_header",
+                    P.OP_DUMP_CORE,
+                    (),
+                    1,
+                    "stable register header while stopped",
+                    image["id"],
+                ),
+                b.record(
+                    pe,
+                    "status_header",
+                    P.OP_STATUS,
+                    (),
+                    2,
+                    "must equal the dump_core header",
+                    image["id"],
+                ),
+            ],
+            image,
+        )
+    )
 
     # 4. READ_CPU is non-halting and carries full-width registers.
-    image, pe = image_and_model("v04-read_cpu_non_halting", pc=ISA_PC_MAX,
-                                a=ISA_REG_MAX, x=ISA_REG_MAX, y=ISA_REG_MAX,
-                                insn=ISA_INSN_MAX, run=1)
-    vectors.append(b.vector(
-        "read_cpu_non_halting", R.by_name()["read_cpu_non_halting"].description,
-        "n/a (register header)",
-        [b.record(pe, "read_cpu_while_running", P.OP_READ_CPU, (), 1,
-                 "answers while run=1; pc/a/x/y/insn full width", image["id"])],
-        image))
+    image, pe = image_and_model(
+        "v04-read_cpu_non_halting",
+        pc=ISA_PC_MAX,
+        a=ISA_REG_MAX,
+        x=ISA_REG_MAX,
+        y=ISA_REG_MAX,
+        insn=ISA_INSN_MAX,
+        run=1,
+    )
+    vectors.append(
+        b.vector(
+            "read_cpu_non_halting",
+            R.by_name()["read_cpu_non_halting"].description,
+            "n/a (register header)",
+            [
+                b.record(
+                    pe,
+                    "read_cpu_while_running",
+                    P.OP_READ_CPU,
+                    (),
+                    1,
+                    "answers while run=1; pc/a/x/y/insn full width",
+                    image["id"],
+                )
+            ],
+            image,
+        )
+    )
 
     # 4b. Full-width debug registers (the anti-truncation vector). Widths are
     # the ISA's: pc 10 bits, a/x/y 8, insn 16 - the "full width" obligation is
     # that R2 exposes every bit the chip has, not that more exist.
-    image, pe = image_and_model("v05-full_width_debug_regs", pc=ISA_PC_MAX,
-                                a=ISA_REG_MAX, x=ISA_REG_MAX, y=ISA_REG_MAX,
-                                insn=ISA_INSN_MAX)
-    vectors.append(b.vector(
-        "full_width_debug_regs",
-        R.by_name()["full_width_debug_regs"].description,
-        "n/a (register header)",
-        [b.record(pe, "read_cpu_full_width_regs", P.OP_READ_CPU, (), 1,
-                 f"pc=0x{ISA_PC_MAX:03X}, a=x=y=0x{ISA_REG_MAX:02X}, "
-                 f"insn=0x{ISA_INSN_MAX:04X}", image["id"])],
-        image))
+    image, pe = image_and_model(
+        "v05-full_width_debug_regs",
+        pc=ISA_PC_MAX,
+        a=ISA_REG_MAX,
+        x=ISA_REG_MAX,
+        y=ISA_REG_MAX,
+        insn=ISA_INSN_MAX,
+    )
+    vectors.append(
+        b.vector(
+            "full_width_debug_regs",
+            R.by_name()["full_width_debug_regs"].description,
+            "n/a (register header)",
+            [
+                b.record(
+                    pe,
+                    "read_cpu_full_width_regs",
+                    P.OP_READ_CPU,
+                    (),
+                    1,
+                    f"pc=0x{ISA_PC_MAX:03X}, a=x=y=0x{ISA_REG_MAX:02X}, "
+                    f"insn=0x{ISA_INSN_MAX:04X}",
+                    image["id"],
+                )
+            ],
+            image,
+        )
+    )
 
     # 5. Reads while running are rejected (chip-side, R2).
     image, pe = image_and_model("v06-read_while_running_rejected", run=1)
-    vectors.append(b.vector(
-        "read_while_running_rejected",
-        R.by_name()["read_while_running_rejected"].description,
-        "n/a (status only)",
-        [b.record(pe, "read_imem_not_ready", P.OP_READ_IMEM, (0, 1), 1, "",
-                 image["id"]),
-         b.record(pe, "read_dmem_not_ready", P.OP_READ_DMEM, (0, 1), 2, "",
-                 image["id"]),
-         b.record(pe, "dump_core_not_ready", P.OP_DUMP_CORE, (), 3, "",
-                 image["id"])],
-        image))
+    vectors.append(
+        b.vector(
+            "read_while_running_rejected",
+            R.by_name()["read_while_running_rejected"].description,
+            "n/a (status only)",
+            [
+                b.record(
+                    pe, "read_imem_not_ready", P.OP_READ_IMEM, (0, 1), 1, "", image["id"]
+                ),
+                b.record(
+                    pe, "read_dmem_not_ready", P.OP_READ_DMEM, (0, 1), 2, "", image["id"]
+                ),
+                b.record(
+                    pe, "dump_core_not_ready", P.OP_DUMP_CORE, (), 3, "", image["id"]
+                ),
+            ],
+            image,
+        )
+    )
 
     # 6. Range never wraps: past-the-end reads are RANGE, not wrapped data.
     image, pe = image_and_model("v07-range_never_wraps")
-    vectors.append(b.vector(
-        "range_never_wraps", R.by_name()["range_never_wraps"].description,
-        "n/a (rejected)",
-        [b.record(pe, "read_imem_last_word", P.OP_READ_IMEM, (1023, 1), 1,
-                 "the last word is readable", image["id"]),
-         b.record(pe, "read_imem_past_end_no_wrap", P.OP_READ_IMEM, (1023, 2), 2,
-                 "RANGE, never a wrapped read", image["id"]),
-         b.record(pe, "read_dmem_past_end_no_wrap", P.OP_READ_DMEM, (15, 2), 3,
-                 "RANGE, never a wrapped read", image["id"])],
-        image))
+    vectors.append(
+        b.vector(
+            "range_never_wraps",
+            R.by_name()["range_never_wraps"].description,
+            "n/a (rejected)",
+            [
+                b.record(
+                    pe,
+                    "read_imem_last_word",
+                    P.OP_READ_IMEM,
+                    (1023, 1),
+                    1,
+                    "the last word is readable",
+                    image["id"],
+                ),
+                b.record(
+                    pe,
+                    "read_imem_past_end_no_wrap",
+                    P.OP_READ_IMEM,
+                    (1023, 2),
+                    2,
+                    "RANGE, never a wrapped read",
+                    image["id"],
+                ),
+                b.record(
+                    pe,
+                    "read_dmem_past_end_no_wrap",
+                    P.OP_READ_DMEM,
+                    (15, 2),
+                    3,
+                    "RANGE, never a wrapped read",
+                    image["id"],
+                ),
+            ],
+            image,
+        )
+    )
 
     # 6b. Ceiling and zero-count rejection (chip MAX_READ_WORDS=15; the
     # independent chip review found the model used to accept a larger read).
     image, pe = image_and_model("v07b-read_ceiling_and_zero")
-    vectors.append(b.vector(
-        "read_ceiling_and_zero_count",
-        "A count over MAX_READ_WORDS=15 (or 0) is RANGE so the host splits; "
-        "the model enforces the chip's ceiling (independent chip review).",
-        "n/a (rejected)",
-        [b.record(pe, "read_imem_at_ceiling_15", P.OP_READ_IMEM, (0, 15), 1,
-                 "15 words is the ceiling and succeeds", image["id"]),
-         b.record(pe, "read_imem_over_ceiling", P.OP_READ_IMEM, (0, 16), 2,
-                 "over the ceiling -> RANGE, host must split", image["id"]),
-         b.record(pe, "read_dmem_zero_count", P.OP_READ_DMEM, (0, 0), 3,
-                 "a zero-byte read is RANGE", image["id"])],
-        image))
+    vectors.append(
+        b.vector(
+            "read_ceiling_and_zero_count",
+            "A count over MAX_READ_WORDS=15 (or 0) is RANGE so the host splits; "
+            "the model enforces the chip's ceiling (independent chip review).",
+            "n/a (rejected)",
+            [
+                b.record(
+                    pe,
+                    "read_imem_at_ceiling_15",
+                    P.OP_READ_IMEM,
+                    (0, 15),
+                    1,
+                    "15 words is the ceiling and succeeds",
+                    image["id"],
+                ),
+                b.record(
+                    pe,
+                    "read_imem_over_ceiling",
+                    P.OP_READ_IMEM,
+                    (0, 16),
+                    2,
+                    "over the ceiling -> RANGE, host must split",
+                    image["id"],
+                ),
+                b.record(
+                    pe,
+                    "read_dmem_zero_count",
+                    P.OP_READ_DMEM,
+                    (0, 0),
+                    3,
+                    "a zero-byte read is RANGE",
+                    image["id"],
+                ),
+            ],
+            image,
+        )
+    )
 
     # 7. The sticky-fault lifecycle: bad read -> RANGE + FAULT_RANGE, status
     #    shows the sticky bit, CLEAR_FAULT clears it (manager ruling).
     image, pe = image_and_model("v08-read_range_fault_lifecycle")
     lifecycle = [
-        b.record(pe, "bad_read_answers_range", P.OP_READ_IMEM, (2000, 1), 1,
-                "out-of-range read: RANGE and latches sticky FAULT_RANGE",
-                image["id"]),
-        b.record(pe, "status_shows_sticky_fault", P.OP_STATUS, (), 2,
-                "the sticky fault bit is visible before any clear", image["id"]),
-        b.record(pe, "clear_fault_clears_the_bit", P.OP_CLEAR_FAULT,
-                (F.FAULT_RANGE,), 3, "CLEAR_FAULT(0x4) returns faults=0",
-                image["id"]),
+        b.record(
+            pe,
+            "bad_read_answers_range",
+            P.OP_READ_IMEM,
+            (2000, 1),
+            1,
+            "out-of-range read: RANGE and latches sticky FAULT_RANGE",
+            image["id"],
+        ),
+        b.record(
+            pe,
+            "status_shows_sticky_fault",
+            P.OP_STATUS,
+            (),
+            2,
+            "the sticky fault bit is visible before any clear",
+            image["id"],
+        ),
+        b.record(
+            pe,
+            "clear_fault_clears_the_bit",
+            P.OP_CLEAR_FAULT,
+            (F.FAULT_RANGE,),
+            3,
+            "CLEAR_FAULT(0x4) returns faults=0",
+            image["id"],
+        ),
     ]
-    vectors.append(b.vector(
-        "read_range_fault_lifecycle",
-        "An out-of-range READ latches sticky FAULT_RANGE and CLEAR_FAULT "
-        "clears it (manager ruling).",
-        "n/a (status/lifecycle)",
-        lifecycle,
-        image))
+    vectors.append(
+        b.vector(
+            "read_range_fault_lifecycle",
+            "An out-of-range READ latches sticky FAULT_RANGE and CLEAR_FAULT "
+            "clears it (manager ruling).",
+            "n/a (status/lifecycle)",
+            lifecycle,
+            image,
+        )
+    )
 
     return b.package(vectors)
 
@@ -293,23 +476,23 @@ load_model_from_image = V.load_model_from_image
 
 
 def write_package(path=None) -> Path:
-    return V.write_package(SPEC, build_package(),
-                           SPEC.artifact if path is None else path)
+    return V.write_package(SPEC, build_package(), SPEC.artifact if path is None else path)
 
 
 def check_package(path=None) -> int:
-    return V.check_package(SPEC, build_package,
-                           SPEC.artifact if path is None else path)
+    return V.check_package(SPEC, build_package, SPEC.artifact if path is None else path)
 
 
 def write_hex_export(directory=None) -> dict:
-    return V.write_hex_export(SPEC, build_package(),
-                              SPEC.hex_dir if directory is None else directory)
+    return V.write_hex_export(
+        SPEC, build_package(), SPEC.hex_dir if directory is None else directory
+    )
 
 
 def check_hex_export(directory=None) -> int:
-    return V.check_hex_export(SPEC, build_package,
-                              SPEC.hex_dir if directory is None else directory)
+    return V.check_hex_export(
+        SPEC, build_package, SPEC.hex_dir if directory is None else directory
+    )
 
 
 def main(argv=None) -> int:

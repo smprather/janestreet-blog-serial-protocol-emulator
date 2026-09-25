@@ -123,8 +123,18 @@ ISA_LDM = 0xD
 ISA_STM = 0xE
 ISA_NOP = 0xF
 
-STATUS_KEYS = ("state", "run", "target", "pc", "a", "x", "y", "timer",
-               "faults", "words_written")
+STATUS_KEYS = (
+    "state",
+    "run",
+    "target",
+    "pc",
+    "a",
+    "x",
+    "y",
+    "timer",
+    "faults",
+    "words_written",
+)
 
 
 class PEFrameError(Exception):
@@ -184,8 +194,7 @@ def _payload_bytes(words: Iterable[int]) -> bytes:
     """
     out = bytearray()
     for word in words:
-        if isinstance(word, bool) or not isinstance(word, int) \
-                or not 0 <= word <= 0xFFFF:
+        if isinstance(word, bool) or not isinstance(word, int) or not 0 <= word <= 0xFFFF:
             raise ValueError(f"not a 16-bit payload word: {word!r}")
         out += word.to_bytes(2, "big")
     return bytes(out)
@@ -209,8 +218,7 @@ class FakePE:
 
     def __init__(self, *, read_fault_policy: str = "latch") -> None:
         if read_fault_policy not in ("latch", "status-only"):
-            raise ValueError("read_fault_policy must be 'latch' or "
-                             "'status-only'")
+            raise ValueError("read_fault_policy must be 'latch' or 'status-only'")
         self.read_fault_policy = read_fault_policy
         self.imem: list[int] = [0] * IMEM_WORDS
         self.dmem = bytearray(DMEM_BYTES)
@@ -248,8 +256,7 @@ class FakePE:
     @property
     def bp_flags(self) -> int:
         """{bp_hit, bp_en}: bit0 armed, bit1 hit latched."""
-        return ((BP_FLAG_HIT if self.bp_hit else 0)
-                | (BP_FLAG_ARMED if self.bp_en else 0))
+        return (BP_FLAG_HIT if self.bp_hit else 0) | (BP_FLAG_ARMED if self.bp_en else 0)
 
     @property
     def fetch_address(self) -> int:
@@ -274,7 +281,7 @@ class FakePE:
         """Drive the run STRAP. With no hold, dropping run is the boot stop."""
         self.run = bool(active)
         if not self.run and not self.debug_hold:
-            self.pc = 0            # the boot stop re-zeroes the PC
+            self.pc = 0  # the boot stop re-zeroes the PC
 
     def _next_pc(self, insn: int, pc: int) -> int:
         """The combinational next PC for ``insn`` fetched at ``pc``."""
@@ -360,7 +367,7 @@ class FakePE:
             # bp_addr"), but the instruction AT it has NOT executed.
             self.pc = landing
         else:
-            self._execute_one()          # a landing executes; a stop does not
+            self._execute_one()  # a landing executes; a stop does not
         self.debug_hold = True
         self.bp_hit = hit
         return self.state, self.pc, self.bp_flags
@@ -389,8 +396,13 @@ class FakePE:
         return False
 
     # ---- framed interface -------------------------------------------------
-    def request(self, opcode: int, sequence: int = 0, target: int = 0,
-                payload_words: Iterable[int] = ()) -> P.Frame:
+    def request(
+        self,
+        opcode: int,
+        sequence: int = 0,
+        target: int = 0,
+        payload_words: Iterable[int] = (),
+    ) -> P.Frame:
         """Encode a request, exchange it, decode the response frame."""
         raw = P.encode_frame(opcode, sequence, target, _payload_bytes(payload_words))
         response = self.exchange(raw)
@@ -410,16 +422,16 @@ class FakePE:
             else:
                 self.faults |= FAULT_PROTOCOL
             opcode, sequence, target = self._salvage(raw)
-            return self._response(opcode, sequence, target,
-                                  (P.STATUS_BAD_FRAME,))
+            return self._response(opcode, sequence, target, (P.STATUS_BAD_FRAME,))
         return self._dispatch(frame)
 
     # ---- dispatch ---------------------------------------------------------
     def _dispatch(self, frame: P.Frame) -> bytes:
         opcode, sequence, target = frame.opcode, frame.sequence, frame.target
         if opcode & P.RESPONSE_BIT:
-            return self._response(opcode & ~P.RESPONSE_BIT, sequence, target,
-                                  (P.STATUS_UNSUPPORTED,))
+            return self._response(
+                opcode & ~P.RESPONSE_BIT, sequence, target, (P.STATUS_UNSUPPORTED,)
+            )
         if target == P.TARGET_LOOPBACK:
             return self._loopback(opcode, sequence, target)
         if target != P.TARGET_HOST:
@@ -432,8 +444,7 @@ class FakePE:
         expected = DEBUG_REQUEST_WORDS.get(opcode)
         if expected is not None and len(frame.payload) != expected:
             self.faults |= FAULT_PROTOCOL
-            return self._response(opcode, sequence, target,
-                                  (P.STATUS_BAD_FRAME,))
+            return self._response(opcode, sequence, target, (P.STATUS_BAD_FRAME,))
         handler = {
             P.OP_PING: self._ping,
             P.OP_LOAD: self._load,
@@ -450,8 +461,7 @@ class FakePE:
             P.OP_DEBUG_STATUS: self._debug_status,
         }.get(opcode)
         if handler is None:
-            return self._response(opcode, sequence, target,
-                                  (P.STATUS_UNSUPPORTED,))
+            return self._response(opcode, sequence, target, (P.STATUS_UNSUPPORTED,))
         return self._response(opcode, sequence, target, handler(frame.payload))
 
     def _loopback(self, opcode: int, sequence: int, target: int) -> bytes:
@@ -463,10 +473,12 @@ class FakePE:
             payload = (P.STATUS_UNSUPPORTED,)
         return self._response(opcode, sequence, target, payload)
 
-    def _response(self, opcode: int, sequence: int, target: int,
-                  payload: tuple[int, ...]) -> bytes:
-        return P.encode_frame(opcode | P.RESPONSE_BIT, sequence, target,
-                              _payload_bytes(payload))
+    def _response(
+        self, opcode: int, sequence: int, target: int, payload: tuple[int, ...]
+    ) -> bytes:
+        return P.encode_frame(
+            opcode | P.RESPONSE_BIT, sequence, target, _payload_bytes(payload)
+        )
 
     @staticmethod
     def _salvage(raw: bytes) -> tuple[int, int, int]:
@@ -486,8 +498,7 @@ class FakePE:
 
     def _load(self, payload: tuple[int, ...]) -> tuple[int, ...]:
         if self.run:
-            return (P.STATUS_NOT_READY, self.words_written, self.faults,
-                    self._echo())
+            return (P.STATUS_NOT_READY, self.words_written, self.faults, self._echo())
         self.words_written = 0
         self.committed_words = []
         abort_after = self.abort_after_words
@@ -495,13 +506,11 @@ class FakePE:
         for index, word in enumerate(payload):
             if index >= IMEM_WORDS:
                 self.faults |= FAULT_RANGE
-                return (P.STATUS_RANGE, self.words_written, self.faults,
-                        self._echo())
+                return (P.STATUS_RANGE, self.words_written, self.faults, self._echo())
             if abort_after is not None and index == abort_after:
                 self.run = True
                 self.faults |= FAULT_LOAD
-                return (P.STATUS_FAULT, self.words_written, self.faults,
-                        self._echo())
+                return (P.STATUS_FAULT, self.words_written, self.faults, self._echo())
             self.imem[index] = word
             self.committed_words.append(word)
             self.words_written += 1
@@ -509,15 +518,29 @@ class FakePE:
 
     def _regs(self) -> tuple[int, int, int, int, int]:
         """The CPU registers, masked to the ISA widths the chip can hold."""
-        return (self.pc & ISA_PC_MASK, self.a & ISA_REG_MASK,
-                self.x & ISA_REG_MASK, self.y & ISA_REG_MASK,
-                self.insn & ISA_INSN_MASK)
+        return (
+            self.pc & ISA_PC_MASK,
+            self.a & ISA_REG_MASK,
+            self.x & ISA_REG_MASK,
+            self.y & ISA_REG_MASK,
+            self.insn & ISA_INSN_MASK,
+        )
 
     def _status(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
         pc, a, x, y, _insn = self._regs()
-        return (P.STATUS_OK, self.state, 1 if self.run else 0,
-                self.selected_target, pc, a, x, y,
-                self.timer, self.faults, self.words_written)
+        return (
+            P.STATUS_OK,
+            self.state,
+            1 if self.run else 0,
+            self.selected_target,
+            pc,
+            a,
+            x,
+            y,
+            self.timer,
+            self.faults,
+            self.words_written,
+        )
 
     def _read_cpu(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
         pc, a, x, y, insn = self._regs()
@@ -533,27 +556,38 @@ class FakePE:
             return (P.STATUS_NOT_READY,)
         address = _word(payload, 0)
         count = _word(payload, 1)
-        if (address < 0 or count < 0 or address + count > IMEM_WORDS
-                or count == 0 or count > MAX_READ_WORDS):
+        if (
+            address < 0
+            or count < 0
+            or address + count > IMEM_WORDS
+            or count == 0
+            or count > MAX_READ_WORDS
+        ):
             self._read_range_fault()
             return (P.STATUS_RANGE,)
-        return (P.STATUS_OK, *self.imem[address:address + count])
+        return (P.STATUS_OK, *self.imem[address : address + count])
 
     def _read_dmem(self, payload: tuple[int, ...]) -> tuple[int, ...]:
         if self.run:
             return (P.STATUS_NOT_READY,)
         address = _word(payload, 0)
         count = _word(payload, 1)
-        if (address < 0 or count < 0 or address + count > DMEM_BYTES
-                or count == 0 or count > MAX_READ_DMEM_BYTES):
+        if (
+            address < 0
+            or count < 0
+            or address + count > DMEM_BYTES
+            or count == 0
+            or count > MAX_READ_DMEM_BYTES
+        ):
             self._read_range_fault()
             return (P.STATUS_RANGE,)
-        chunk = bytearray(self.dmem[address:address + count])
+        chunk = bytearray(self.dmem[address : address + count])
         if len(chunk) % 2:
-            chunk.append(0)                       # zero-pad the last word
-        return (P.STATUS_OK,
-                *(int.from_bytes(chunk[i:i + 2], "big")
-                  for i in range(0, len(chunk), 2)))
+            chunk.append(0)  # zero-pad the last word
+        return (
+            P.STATUS_OK,
+            *(int.from_bytes(chunk[i : i + 2], "big") for i in range(0, len(chunk), 2)),
+        )
 
     def _dump_core(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
         if self.run:
@@ -624,7 +658,7 @@ class FakePE:
         self.bp_hit = False
         self.debug_hold = False
         if not self.run:
-            self.pc = 0            # the boot stop re-zeroes the PC
+            self.pc = 0  # the boot stop re-zeroes the PC
         return answer
 
     def _debug_status(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
@@ -633,9 +667,18 @@ class FakePE:
         # follows pe_cpu's three fetch modes (next_pc while executing, pc
         # while held, zero at the boot stop) rather than imem[pc] blindly.
         pc, a, x, y, _insn = self._regs()
-        return (P.STATUS_OK, self.state, pc, self.bp_addr, self.bp_flags,
-                1 if self.run else 0, a, x, y,
-                self.imem[self.fetch_address] & ISA_INSN_MASK)
+        return (
+            P.STATUS_OK,
+            self.state,
+            pc,
+            self.bp_addr,
+            self.bp_flags,
+            1 if self.run else 0,
+            a,
+            x,
+            y,
+            self.imem[self.fetch_address] & ISA_INSN_MASK,
+        )
 
 
 def _arg_int(args: dict, key: str, default: int = 0) -> int:
@@ -668,36 +711,42 @@ class FakeBridge:
         try:
             message = json.loads(line)
         except ValueError:
-            return [self._event_line("protocol.error",
-                                     {"error": "malformed JSON"})]
-        if (not isinstance(message, dict) or message.get("v") != 1
-                or not isinstance(message.get("id"), int)
-                or not isinstance(message.get("op"), str)):
-            replies = [self._event_line("protocol.error",
-                                        {"error": "malformed request"})]
+            return [self._event_line("protocol.error", {"error": "malformed JSON"})]
+        if (
+            not isinstance(message, dict)
+            or message.get("v") != 1
+            or not isinstance(message.get("id"), int)
+            or not isinstance(message.get("op"), str)
+        ):
+            replies = [self._event_line("protocol.error", {"error": "malformed request"})]
             request_id = message.get("id") if isinstance(message, dict) else None
             if isinstance(request_id, int):
-                replies.append(self._response_line(
-                    request_id, False, None, "malformed request"))
+                replies.append(
+                    self._response_line(request_id, False, None, "malformed request")
+                )
             return replies
 
         request_id = message["id"]
         op = message["op"]
         args = message.get("args") or {}
         if not isinstance(args, dict):
-            return [self._event_line("protocol.error",
-                                     {"error": "args must be an object"}),
-                    self._response_line(request_id, False, None,
-                                        "args must be an object")]
+            return [
+                self._event_line("protocol.error", {"error": "args must be an object"}),
+                self._response_line(request_id, False, None, "args must be an object"),
+            ]
         try:
             result = self._dispatch(op, args)
         except FakeBridgeError as exc:
             self._emit_fault_events()
-            return [*self._drain_events(),
-                    self._response_line(request_id, False, None, str(exc))]
+            return [
+                *self._drain_events(),
+                self._response_line(request_id, False, None, str(exc)),
+            ]
         self._emit_fault_events()
-        return [*self._drain_events(),
-                self._response_line(request_id, True, result, None)]
+        return [
+            *self._drain_events(),
+            self._response_line(request_id, True, result, None),
+        ]
 
     # ---- operations --------------------------------------------------------
     def _dispatch(self, op: str, args: dict) -> dict:
@@ -720,17 +769,20 @@ class FakeBridge:
             frame = self.pe.request(P.OP_PING, target=target)
             return {"status": frame.payload[0]}
         if op == "load":
-            self.pe.run = False          # LOAD forces run=0 (plan Task 2)
+            self.pe.run = False  # LOAD forces run=0 (plan Task 2)
             words = args.get("words", [])
             if not isinstance(words, list) or not all(
-                    isinstance(w, int) and 0 <= w <= 0xFFFF for w in words):
+                isinstance(w, int) and 0 <= w <= 0xFFFF for w in words
+            ):
                 raise FakeBridgeError("load words must be 16-bit integers")
             frame = self.pe.request(P.OP_LOAD, payload_words=words)
-            result = {"status": frame.payload[0],
-                      "words_written": frame.payload[1],
-                      "faults": frame.payload[2],
-                      "echo": frame.payload[3],
-                      "target": frame.target}
+            result = {
+                "status": frame.payload[0],
+                "words_written": frame.payload[1],
+                "faults": frame.payload[2],
+                "echo": frame.payload[3],
+                "target": frame.target,
+            }
             self._event("chip.status", dict(result))
             return result
         if op == "start":
@@ -747,86 +799,131 @@ class FakeBridge:
             self._event("chip.status", dict(result))
             return result
         if op == "status":
-            return self._status_result(self.pe.request(P.OP_STATUS,
-                                                       target=target))
+            return self._status_result(self.pe.request(P.OP_STATUS, target=target))
         if op == "dump_core":
-            return self._status_result(self.pe.request(P.OP_DUMP_CORE,
-                                                       target=target))
+            return self._status_result(self.pe.request(P.OP_DUMP_CORE, target=target))
         if op == "read_cpu":
             values = self.pe.request(P.OP_READ_CPU, target=target).payload
-            return {"status": values[0], "pc": values[1], "a": values[2],
-                    "x": values[3], "y": values[4], "insn": values[5],
-                    "state": values[6]}
+            return {
+                "status": values[0],
+                "pc": values[1],
+                "a": values[2],
+                "x": values[3],
+                "y": values[4],
+                "insn": values[5],
+                "state": values[6],
+            }
         if op == "read_imem":
             address = _arg_int(args, "address")
             count = _arg_int(args, "count")
-            frame = self.pe.request(P.OP_READ_IMEM, target=target,
-                                    payload_words=(address, count))
+            frame = self.pe.request(
+                P.OP_READ_IMEM, target=target, payload_words=(address, count)
+            )
             ok = frame.payload[0] == P.STATUS_OK
-            return {"status": frame.payload[0], "address": address,
-                    "words": list(frame.payload[1:]) if ok else []}
+            return {
+                "status": frame.payload[0],
+                "address": address,
+                "words": list(frame.payload[1:]) if ok else [],
+            }
         if op == "read_dmem":
             address = _arg_int(args, "address")
             count = _arg_int(args, "count")
-            frame = self.pe.request(P.OP_READ_DMEM, target=target,
-                                    payload_words=(address, count))
+            frame = self.pe.request(
+                P.OP_READ_DMEM, target=target, payload_words=(address, count)
+            )
             ok = frame.payload[0] == P.STATUS_OK
             packed = _payload_bytes(frame.payload[1:]) if ok else b""
-            return {"status": frame.payload[0], "address": address,
-                    "bytes": list(packed[:count]) if ok else []}
+            return {
+                "status": frame.payload[0],
+                "address": address,
+                "bytes": list(packed[:count]) if ok else [],
+            }
         if op == "clear_fault":
             mask = _arg_int(args, "mask", 0xFFFF)
-            frame = self.pe.request(P.OP_CLEAR_FAULT, target=target,
-                                    payload_words=(mask,))
+            frame = self.pe.request(
+                P.OP_CLEAR_FAULT, target=target, payload_words=(mask,)
+            )
             return {"status": frame.payload[0], "faults": frame.payload[1]}
         if op == "target":
             requested = _arg_int(args, "target", P.TARGET_HOST)
             frame = self.pe.request(P.OP_TARGET, payload_words=(requested,))
             ok = frame.payload[0] == P.STATUS_OK
-            return {"status": frame.payload[0],
-                    "target": frame.payload[1] if ok else self.pe.selected_target,
-                    "capabilities": frame.payload[2] if ok else 0}
+            return {
+                "status": frame.payload[0],
+                "target": frame.payload[1] if ok else self.pe.selected_target,
+                "capabilities": frame.payload[2] if ok else 0,
+            }
         # ---- R3 debug control (per the implemented pe_ctrl.v contract) -----
         if op == "debug_step":
             frame = self.pe.request(P.OP_DEBUG_STEP, target=target)
             p = frame.payload
             if p[0] != P.STATUS_OK:
-                return {"status": p[0], "state": p[1], "pc": p[2],
-                        "bp_addr": p[3], "bp_flags": p[4]}
-            return {"status": p[0], "state": p[1], "pc_next": p[2],
-                    "bp_addr": p[3], "bp_flags": p[4],
-                    "hit": bool(p[4] & BP_FLAG_HIT),
-                    "debug_state_name": DEBUG_STATE_NAMES.get(
-                        p[1], f"UNKNOWN({p[1]})")}
+                return {
+                    "status": p[0],
+                    "state": p[1],
+                    "pc": p[2],
+                    "bp_addr": p[3],
+                    "bp_flags": p[4],
+                }
+            return {
+                "status": p[0],
+                "state": p[1],
+                "pc_next": p[2],
+                "bp_addr": p[3],
+                "bp_flags": p[4],
+                "hit": bool(p[4] & BP_FLAG_HIT),
+                "debug_state_name": DEBUG_STATE_NAMES.get(p[1], f"UNKNOWN({p[1]})"),
+            }
         if op == "bp_set":
             address = _arg_int(args, "address")
-            frame = self.pe.request(P.OP_DEBUG_BP_SET, target=target,
-                                    payload_words=(address,))
+            frame = self.pe.request(
+                P.OP_DEBUG_BP_SET, target=target, payload_words=(address,)
+            )
             p = frame.payload
-            return {"status": p[0], "state": p[1], "pc": p[2], "bp_addr": p[3],
-                    "bp_flags": p[4], "requested": address,
-                    "armed": bool(p[4] & BP_FLAG_ARMED)}
+            return {
+                "status": p[0],
+                "state": p[1],
+                "pc": p[2],
+                "bp_addr": p[3],
+                "bp_flags": p[4],
+                "requested": address,
+                "armed": bool(p[4] & BP_FLAG_ARMED),
+            }
         if op == "bp_clr":
             frame = self.pe.request(P.OP_DEBUG_BP_CLR, target=target)
             p = frame.payload
-            return {"status": p[0], "state": p[1], "pc": p[2],
-                    "bp_addr_before": p[3], "bp_flags": p[4]}
+            return {
+                "status": p[0],
+                "state": p[1],
+                "pc": p[2],
+                "bp_addr_before": p[3],
+                "bp_flags": p[4],
+            }
         if op == "debug_status":
             p = self.pe.request(P.OP_DEBUG_STATUS, target=target).payload
-            return {"status": p[0], "state": p[1], "pc": p[2], "bp_addr": p[3],
-                    "bp_flags": p[4], "run": p[5], "a": p[6], "x": p[7],
-                    "y": p[8], "insn": p[9],
-                    "armed": bool(p[4] & BP_FLAG_ARMED),
-                    "hit": bool(p[4] & BP_FLAG_HIT),
-                    "debug_state_name": DEBUG_STATE_NAMES.get(
-                        p[1], f"UNKNOWN({p[1]})")}
+            return {
+                "status": p[0],
+                "state": p[1],
+                "pc": p[2],
+                "bp_addr": p[3],
+                "bp_flags": p[4],
+                "run": p[5],
+                "a": p[6],
+                "x": p[7],
+                "y": p[8],
+                "insn": p[9],
+                "armed": bool(p[4] & BP_FLAG_ARMED),
+                "hit": bool(p[4] & BP_FLAG_HIT),
+                "debug_state_name": DEBUG_STATE_NAMES.get(p[1], f"UNKNOWN({p[1]})"),
+            }
         raise FakeBridgeError(f"unknown op {op!r}")
 
     # ---- helpers -----------------------------------------------------------
     @staticmethod
     def _status_result(frame: P.Frame) -> dict:
         result: dict[str, int] = {
-            "status": frame.payload[0] if frame.payload else P.STATUS_BAD_FRAME}
+            "status": frame.payload[0] if frame.payload else P.STATUS_BAD_FRAME
+        }
         for key, value in zip(STATUS_KEYS, frame.payload[1:]):
             result[key] = value
         return result
@@ -840,8 +937,9 @@ class FakeBridge:
             # Read STATUS before emitting the event (plan Task 2 Step 6). The
             # read does not clear the sticky fault.
             status = self._status_result(self.pe.request(P.OP_STATUS))
-            self._event("chip.irq", {"faults": self.pe.faults, "new": new,
-                                     "status": status})
+            self._event(
+                "chip.irq", {"faults": self.pe.faults, "new": new, "status": status}
+            )
         self._known_faults = self.pe.faults
 
     def _drain_events(self) -> list[str]:
@@ -850,10 +948,10 @@ class FakeBridge:
         return out
 
     @staticmethod
-    def _response_line(request_id: int, ok: bool, result,
-                       error: str | None) -> str:
-        return json.dumps({"v": 1, "id": request_id, "ok": ok,
-                           "result": result, "error": error})
+    def _response_line(request_id: int, ok: bool, result, error: str | None) -> str:
+        return json.dumps(
+            {"v": 1, "id": request_id, "ok": ok, "result": result, "error": error}
+        )
 
     @staticmethod
     def _event_line(name: str, data: dict) -> str:

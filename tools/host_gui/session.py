@@ -398,8 +398,9 @@ class ControllerSession:
         if status != P.STATUS_OK:
             self.state = SessionState.STOPPED if self._loaded else SessionState.PREPARED
             raise SessionError(f"load failed with status {status}")
-        expected_echo = _require_int(image.words[-1], "image word") \
-            if image.word_count else 0
+        expected_echo = (
+            _require_int(image.words[-1], "image word") if image.word_count else 0
+        )
         if words_written != image.word_count or echo != expected_echo:
             self._integrity_fault(
                 "load response does not match the image: "
@@ -496,8 +497,11 @@ class ControllerSession:
     def read_imem(self, address: int, count: int) -> tuple[int, ...]:
         self._require_stopped_read("read_imem")
         result = self._request(
-            "read_imem", {"address": _require_int(address, "address"),
-                          "count": _require_int(count, "count")}
+            "read_imem",
+            {
+                "address": _require_int(address, "address"),
+                "count": _require_int(count, "count"),
+            },
         )
         status = _result_int(result, "status", -1)
         if status != P.STATUS_OK:
@@ -508,8 +512,11 @@ class ControllerSession:
     def read_dmem(self, address: int, count: int) -> bytes:
         self._require_stopped_read("read_dmem")
         result = self._request(
-            "read_dmem", {"address": _require_int(address, "address"),
-                          "count": _require_int(count, "count")}
+            "read_dmem",
+            {
+                "address": _require_int(address, "address"),
+                "count": _require_int(count, "count"),
+            },
         )
         status = _result_int(result, "status", -1)
         if status != P.STATUS_OK:
@@ -542,8 +549,7 @@ class ControllerSession:
         elif prefix.state == DEBUG_RUNNING:
             self.state = SessionState.RUNNING
         elif self.state in (SessionState.DEBUG_HOLD, SessionState.BP_HIT):
-            self.state = (SessionState.STOPPED if self._loaded
-                          else SessionState.PREPARED)
+            self.state = SessionState.STOPPED if self._loaded else SessionState.PREPARED
 
     @_serialized
     def debug_status(self) -> DebugSnapshot:
@@ -567,8 +573,7 @@ class ControllerSession:
         # authority for it.
         self._run = bool(snapshot.run)
         if not snapshot.run and self.state == SessionState.RUNNING:
-            self.state = (SessionState.STOPPED if self._loaded
-                          else SessionState.PREPARED)
+            self.state = SessionState.STOPPED if self._loaded else SessionState.PREPARED
         return snapshot
 
     @_serialized
@@ -578,12 +583,12 @@ class ControllerSession:
         if self.state == SessionState.RUNNING:
             raise SessionStateError(
                 "a free-running core cannot be stepped; DEBUG_BP_CLR releases "
-                "the hold first (and disarms the breakpoint)")
+                "the hold first (and disarms the breakpoint)"
+            )
         result = self._request("debug_step")
         prefix = _debug_prefix(result, "debug_step")
         _require_ok(prefix, "debug_step")
-        step = StepResult(**asdict(prefix),
-                          pc_next=_result_int(result, "pc_next", 0))
+        step = StepResult(**asdict(prefix), pc_next=_result_int(result, "pc_next", 0))
         self._debug_state_from(step)
         return step
 
@@ -591,8 +596,7 @@ class ControllerSession:
     def bp_set(self, address: int) -> DebugPrefix:
         """Arm the one breakpoint. Allowed while running (it stops the core)."""
         self._require_connected()
-        result = self._request("bp_set",
-                              {"address": _require_int(address, "address")})
+        result = self._request("bp_set", {"address": _require_int(address, "address")})
         prefix = _debug_prefix(result, "bp_set")
         _require_ok(prefix, "bp_set")
         return prefix
@@ -656,8 +660,8 @@ class ControllerSession:
                 self.state = SessionState.PREPARED
             elif name == "chip.irq":
                 self._faults = _require_int(
-                    event.get("data", {}).get("faults", self._faults),
-                    "chip.irq faults")
+                    event.get("data", {}).get("faults", self._faults), "chip.irq faults"
+                )
                 self.state = SessionState.FAULTED
                 self.last_fault = event
             elif name in ("spi.timeout", "protocol.error"):

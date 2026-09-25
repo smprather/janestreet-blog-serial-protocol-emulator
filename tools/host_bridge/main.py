@@ -29,9 +29,9 @@ import sys
 import time
 from collections import deque
 
-try:                            # package import (CPython tests)
+try:  # package import (CPython tests)
     from . import pe_frame
-except ImportError:             # flat MicroPython deployment
+except ImportError:  # flat MicroPython deployment
     import pe_frame
 
 BRIDGE_VERSION = "pe-bridge-1"
@@ -49,8 +49,18 @@ MAX_EVENT_QUEUE = 16
 # Plan mapping (review R0): host SPI is uio[4..7].
 PADS = {"cs_n": 4, "mosi": 5, "miso": 6, "sck": 7}
 
-_STATUS_KEYS = ("state", "run", "target", "pc", "a", "x", "y", "timer",
-                "faults", "words_written")
+_STATUS_KEYS = (
+    "state",
+    "run",
+    "target",
+    "pc",
+    "a",
+    "x",
+    "y",
+    "timer",
+    "faults",
+    "words_written",
+)
 
 
 class BridgeError(Exception):
@@ -76,8 +86,9 @@ class USBRequest:
 
     @classmethod
     def from_message(cls, message):
-        return cls(message.get("id"), message.get("op"), message.get("args"),
-                   message.get("v", 1))
+        return cls(
+            message.get("id"), message.get("op"), message.get("args"), message.get("v", 1)
+        )
 
 
 class USBResponse:
@@ -90,16 +101,27 @@ class USBResponse:
         self.error = error
 
     def to_message(self):
-        return {"v": 1, "id": self.id, "ok": self.ok, "result": self.result,
-                "error": self.error}
+        return {
+            "v": 1,
+            "id": self.id,
+            "ok": self.ok,
+            "result": self.result,
+            "error": self.error,
+        }
 
 
 class PicoBridge:
     # MicroPython (1.30) does not accept keyword-only parameters (`*,`) in a
     # def, so these stay ordinary defaulted parameters; callers still pass
     # them by name.
-    def __init__(self, adapter, project=None, clock_hz=60_000_000,
-                 sleep=None, max_line=DEFAULT_MAX_LINE):
+    def __init__(
+        self,
+        adapter,
+        project=None,
+        clock_hz=60_000_000,
+        sleep=None,
+        max_line=DEFAULT_MAX_LINE,
+    ):
         self._adapter = adapter
         self._project = project
         self._clock_hz = int(clock_hz)
@@ -145,36 +167,56 @@ class PicoBridge:
             line = line.decode("utf-8")
         line = line.strip()
         if len(line) > self._max_line:
-            return [json.dumps({"v": 1, "event": "protocol.error",
-                                "data": {"error": "line exceeds max_line"}},
-                               separators=(",", ":"))]
+            return [
+                json.dumps(
+                    {
+                        "v": 1,
+                        "event": "protocol.error",
+                        "data": {"error": "line exceeds max_line"},
+                    },
+                    separators=(",", ":"),
+                )
+            ]
         try:
             message = json.loads(line)
         except ValueError:
-            return [json.dumps({"v": 1, "event": "protocol.error",
-                                "data": {"error": "malformed JSON"}},
-                               separators=(",", ":"))]
-        return [json.dumps(m, separators=(",", ":"))
-                for m in self.handle_message(message)]
+            return [
+                json.dumps(
+                    {
+                        "v": 1,
+                        "event": "protocol.error",
+                        "data": {"error": "malformed JSON"},
+                    },
+                    separators=(",", ":"),
+                )
+            ]
+        return [
+            json.dumps(m, separators=(",", ":")) for m in self.handle_message(message)
+        ]
 
     def handle_message(self, message):
         """Validate one request object; return event dicts + response dict."""
-        if (not isinstance(message, dict) or message.get("v") != 1
-                or not isinstance(message.get("id"), int)
-                or not isinstance(message.get("op"), str)):
-            messages = [self._event("protocol.error",
-                                    {"error": "malformed request"})]
+        if (
+            not isinstance(message, dict)
+            or message.get("v") != 1
+            or not isinstance(message.get("id"), int)
+            or not isinstance(message.get("op"), str)
+        ):
+            messages = [self._event("protocol.error", {"error": "malformed request"})]
             request_id = message.get("id") if isinstance(message, dict) else None
             if isinstance(request_id, int):
-                messages.append(USBResponse(
-                    request_id, False, None, "malformed request").to_message())
+                messages.append(
+                    USBResponse(request_id, False, None, "malformed request").to_message()
+                )
             return messages
         args = message.get("args") or {}
         if not isinstance(args, dict):
-            return [self._event("protocol.error",
-                                {"error": "args must be an object"}),
-                    USBResponse(message["id"], False, None,
-                                "args must be an object").to_message()]
+            return [
+                self._event("protocol.error", {"error": "args must be an object"}),
+                USBResponse(
+                    message["id"], False, None, "args must be an object"
+                ).to_message(),
+            ]
         response = self.handle(USBRequest.from_message(message))
         # MicroPython's parser rejects starred unpacking inside a list
         # display (`[*events, response]`), so build the list the plain way.
@@ -186,8 +228,7 @@ class PicoBridge:
         """Dispatch one ``USBRequest``; returns a ``USBResponse``."""
         handler = self._handlers.get(request.op)
         if handler is None:
-            return USBResponse(request.id, False, None,
-                               f"unknown op {request.op!r}")
+            return USBResponse(request.id, False, None, f"unknown op {request.op!r}")
         try:
             result = handler(request.args)
         except BridgeError as exc:
@@ -198,8 +239,9 @@ class PicoBridge:
             # request with a typed error and stay alive. SPI transfer failures
             # are already converted to BridgeError + spi.timeout in
             # _pe_request, so they never reach this branch.
-            return USBResponse(request.id, False, None,
-                               f"board error during {request.op}: {exc}")
+            return USBResponse(
+                request.id, False, None, f"board error during {request.op}: {exc}"
+            )
         return USBResponse(request.id, True, result, None)
 
     def serve_io(self, readline, write):
@@ -210,9 +252,9 @@ class PicoBridge:
             line = readline()
             if not line:
                 try:
-                    self._write_message(write, {"v": 1,
-                                                "event": "usb.disconnect",
-                                                "data": {}})
+                    self._write_message(
+                        write, {"v": 1, "event": "usb.disconnect", "data": {}}
+                    )
                 except OSError:
                     pass
                 return
@@ -223,9 +265,9 @@ class PicoBridge:
     def poll_irq(self):
         """Return pending ``chip.irq`` events (one per asserted edge)."""
         level = self._adapter.irq_n()
-        if level is None:                     # no IRQ input (RTL phase R1)
+        if level is None:  # no IRQ input (RTL phase R1)
             return []
-        if not level:                         # released: re-arm the edge
+        if not level:  # released: re-arm the edge
             self._irq_latched = False
             return self.drain_events()
         if self._irq_latched:
@@ -234,10 +276,9 @@ class PicoBridge:
         try:
             frame = self._pe_request(pe_frame.OP_STATUS)
             result = self._status_result(frame)
-            self._event("chip.irq", {"faults": result.get("faults", 0),
-                                     "status": result})
+            self._event("chip.irq", {"faults": result.get("faults", 0), "status": result})
         except BridgeError:
-            pass                              # error event already queued
+            pass  # error event already queued
         return self.drain_events()
 
     # ---- request helpers ----------------------------------------------------
@@ -289,8 +330,9 @@ class PicoBridge:
     def _pe_request(self, opcode, payload_words=()):
         sequence = self._sequence
         self._sequence = (self._sequence + 1) & 0xFFFF
-        raw = pe_frame.encode_frame(opcode, sequence, pe_frame.TARGET_HOST,
-                                    pe_frame.words_to_bytes(payload_words))
+        raw = pe_frame.encode_frame(
+            opcode, sequence, pe_frame.TARGET_HOST, pe_frame.words_to_bytes(payload_words)
+        )
         read_words = self._response_words(opcode, payload_words)
         try:
             response = self._adapter.host_spi_transfer(raw, read_words)
@@ -313,19 +355,22 @@ class PicoBridge:
             self._event("protocol.error", {"opcode": opcode, "error": str(exc)})
             raise BridgeError(f"bad PE response: {exc}")
         if not frame.opcode & pe_frame.RESPONSE_BIT:
-            self._event("protocol.error", {"opcode": opcode,
-                                           "error": "not a response frame"})
+            self._event(
+                "protocol.error", {"opcode": opcode, "error": "not a response frame"}
+            )
             raise BridgeError("PE response is not a response frame")
         return frame
 
     @staticmethod
     def _load_result(frame):
         payload = frame.payload
-        return {"status": payload[0] if len(payload) > 0 else pe_frame.STATUS_BAD_FRAME,
-                "words_written": payload[1] if len(payload) > 1 else 0,
-                "faults": payload[2] if len(payload) > 2 else 0,
-                "echo": payload[3] if len(payload) > 3 else 0,
-                "target": frame.target}
+        return {
+            "status": payload[0] if len(payload) > 0 else pe_frame.STATUS_BAD_FRAME,
+            "words_written": payload[1] if len(payload) > 1 else 0,
+            "faults": payload[2] if len(payload) > 2 else 0,
+            "echo": payload[3] if len(payload) > 3 else 0,
+            "target": frame.target,
+        }
 
     @staticmethod
     def _status_result(frame):
@@ -340,10 +385,14 @@ class PicoBridge:
         if self._project and not self._project_enabled:
             self._adapter.enable_project(self._project)
             self._project_enabled = True
-        self._ensure_clock()                  # start after project selection
-        return {"protocol_version": 1, "bridge_version": BRIDGE_VERSION,
-                "clock_hz": self._clock_hz, "sclk_hz_max": self._sclk_max(),
-                "pads": dict(PADS)}
+        self._ensure_clock()  # start after project selection
+        return {
+            "protocol_version": 1,
+            "bridge_version": BRIDGE_VERSION,
+            "clock_hz": self._clock_hz,
+            "sclk_hz_max": self._sclk_max(),
+            "pads": dict(PADS),
+        }
 
     def _op_prepare(self, args):
         self._ensure_clock()
@@ -362,21 +411,21 @@ class PicoBridge:
 
     def _op_ping(self, args):
         frame = self._pe_request(pe_frame.OP_PING)
-        return {"status": frame.payload[0] if frame.payload
-                else pe_frame.STATUS_BAD_FRAME}
+        return {
+            "status": frame.payload[0] if frame.payload else pe_frame.STATUS_BAD_FRAME
+        }
 
     def _op_load(self, args):
         words = args.get("words", [])
         if not isinstance(words, list) or any(
-                not isinstance(word, int) or not 0 <= word <= 0xFFFF
-                for word in words):
+            not isinstance(word, int) or not 0 <= word <= 0xFFFF for word in words
+        ):
             raise BridgeError("load words must be 16-bit integers")
-        self._adapter.set_run(False)          # LOAD forces run=0 (plan)
+        self._adapter.set_run(False)  # LOAD forces run=0 (plan)
         self._run = False
         frame = self._pe_request(pe_frame.OP_LOAD, words)
         result = self._load_result(frame)
-        self._loaded = (result["status"] == pe_frame.STATUS_OK
-                        and result["faults"] == 0)
+        self._loaded = result["status"] == pe_frame.STATUS_OK and result["faults"] == 0
         self._event("chip.status", dict(result))
         return result
 
@@ -403,40 +452,42 @@ class PicoBridge:
 
     def _op_read_cpu(self, args):
         payload = self._pe_request(pe_frame.OP_READ_CPU).payload
-        return {"status": payload[0] if payload else pe_frame.STATUS_BAD_FRAME,
-                "pc": payload[1] if len(payload) > 1 else 0,
-                "a": payload[2] if len(payload) > 2 else 0,
-                "x": payload[3] if len(payload) > 3 else 0,
-                "y": payload[4] if len(payload) > 4 else 0,
-                "insn": payload[5] if len(payload) > 5 else 0,
-                "state": payload[6] if len(payload) > 6 else 0}
+        return {
+            "status": payload[0] if payload else pe_frame.STATUS_BAD_FRAME,
+            "pc": payload[1] if len(payload) > 1 else 0,
+            "a": payload[2] if len(payload) > 2 else 0,
+            "x": payload[3] if len(payload) > 3 else 0,
+            "y": payload[4] if len(payload) > 4 else 0,
+            "insn": payload[5] if len(payload) > 5 else 0,
+            "state": payload[6] if len(payload) > 6 else 0,
+        }
 
     def _op_read_imem(self, args):
         address = _int_arg(args, "address", 0)
         count = _int_arg(args, "count", 0)
-        if self._run:                         # run=0 gating (review section 8)
-            return {"status": pe_frame.STATUS_NOT_READY, "address": address,
-                    "words": []}
+        if self._run:  # run=0 gating (review section 8)
+            return {"status": pe_frame.STATUS_NOT_READY, "address": address, "words": []}
         frame = self._pe_request(pe_frame.OP_READ_IMEM, (address, count))
         ok = frame.payload and frame.payload[0] == pe_frame.STATUS_OK
-        return {"status": frame.payload[0] if frame.payload
-                else pe_frame.STATUS_BAD_FRAME,
-                "address": address,
-                "words": list(frame.payload[1:]) if ok else []}
+        return {
+            "status": frame.payload[0] if frame.payload else pe_frame.STATUS_BAD_FRAME,
+            "address": address,
+            "words": list(frame.payload[1:]) if ok else [],
+        }
 
     def _op_read_dmem(self, args):
         address = _int_arg(args, "address", 0)
         count = _int_arg(args, "count", 0)
         if self._run:
-            return {"status": pe_frame.STATUS_NOT_READY, "address": address,
-                    "bytes": []}
+            return {"status": pe_frame.STATUS_NOT_READY, "address": address, "bytes": []}
         frame = self._pe_request(pe_frame.OP_READ_DMEM, (address, count))
         ok = frame.payload and frame.payload[0] == pe_frame.STATUS_OK
         packed = pe_frame.words_to_bytes(frame.payload[1:]) if ok else b""
-        return {"status": frame.payload[0] if frame.payload
-                else pe_frame.STATUS_BAD_FRAME,
-                "address": address,
-                "bytes": list(packed[:count]) if ok else []}
+        return {
+            "status": frame.payload[0] if frame.payload else pe_frame.STATUS_BAD_FRAME,
+            "address": address,
+            "bytes": list(packed[:count]) if ok else [],
+        }
 
     def _op_dump_core(self, args):
         if self._run:
@@ -449,18 +500,20 @@ class PicoBridge:
         faults = frame.payload[1] if len(frame.payload) > 1 else 0
         if faults == 0:
             self._irq_latched = False
-        return {"status": frame.payload[0] if frame.payload
-                else pe_frame.STATUS_BAD_FRAME, "faults": faults}
+        return {
+            "status": frame.payload[0] if frame.payload else pe_frame.STATUS_BAD_FRAME,
+            "faults": faults,
+        }
 
     def _op_target(self, args):
         requested = _int_arg(args, "target", pe_frame.TARGET_HOST)
         frame = self._pe_request(pe_frame.OP_TARGET, (requested,))
         ok = frame.payload and frame.payload[0] == pe_frame.STATUS_OK
-        return {"status": frame.payload[0] if frame.payload
-                else pe_frame.STATUS_BAD_FRAME,
-                "target": frame.payload[1] if ok else requested,
-                "capabilities": frame.payload[2] if ok and len(frame.payload) > 2
-                else 0}
+        return {
+            "status": frame.payload[0] if frame.payload else pe_frame.STATUS_BAD_FRAME,
+            "target": frame.payload[1] if ok else requested,
+            "capabilities": frame.payload[2] if ok and len(frame.payload) > 2 else 0,
+        }
 
     def _op_set_sclk(self, args):
         hz = _int_arg(args, "hz", 0)
@@ -468,7 +521,7 @@ class PicoBridge:
         if hz <= 0 or hz > cap:
             raise BridgeError(
                 f"requested SCLK {hz} Hz is outside 0..{cap} Hz (negotiated cap)"
-                )
+            )
         self._adapter.configure_host_spi(hz)
         self._sclk_hz = hz
         return {"sclk_hz": hz, "sclk_hz_max": cap}
@@ -490,46 +543,70 @@ class PicoBridge:
         if not payload or payload[0] != pe_frame.STATUS_OK:
             # A refusal (NOT_READY) still answers the full prefix; a bad frame
             # is a single status word. Forward whatever came back verbatim.
-            return {"status": payload[0] if payload
-                    else pe_frame.STATUS_BAD_FRAME, "payload": list(payload)}
-        return {"status": payload[0], "state": payload[1], "pc_next": payload[2],
-                "bp_addr": payload[3], "bp_flags": payload[4],
-                "hit": bool(payload[4] & 0b10)}
+            return {
+                "status": payload[0] if payload else pe_frame.STATUS_BAD_FRAME,
+                "payload": list(payload),
+            }
+        return {
+            "status": payload[0],
+            "state": payload[1],
+            "pc_next": payload[2],
+            "bp_addr": payload[3],
+            "bp_flags": payload[4],
+            "hit": bool(payload[4] & 0b10),
+        }
 
     def _op_bp_set(self, args):
         address = _int_arg(args, "address", 0)
         payload = self._pe_request(pe_frame.OP_DEBUG_BP_SET, (address,)).payload
         if not payload:
             return {"status": pe_frame.STATUS_BAD_FRAME}
-        return {"status": payload[0], "state": payload[1], "pc": payload[2],
-                "bp_addr": payload[3], "bp_flags": payload[4],
-                "armed": bool(payload[4] & 0b01)}
+        return {
+            "status": payload[0],
+            "state": payload[1],
+            "pc": payload[2],
+            "bp_addr": payload[3],
+            "bp_flags": payload[4],
+            "armed": bool(payload[4] & 0b01),
+        }
 
     def _op_bp_clr(self, args):
         payload = self._pe_request(pe_frame.OP_DEBUG_BP_CLR).payload
         if not payload:
             return {"status": pe_frame.STATUS_BAD_FRAME}
-        return {"status": payload[0], "state": payload[1], "pc": payload[2],
-                "bp_addr_before": payload[3], "bp_flags": payload[4]}
+        return {
+            "status": payload[0],
+            "state": payload[1],
+            "pc": payload[2],
+            "bp_addr_before": payload[3],
+            "bp_flags": payload[4],
+        }
 
     def _op_debug_status(self, args):
         payload = self._pe_request(pe_frame.OP_DEBUG_STATUS).payload
         if not payload or payload[0] != pe_frame.STATUS_OK:
-            return {"status": payload[0] if payload
-                    else pe_frame.STATUS_BAD_FRAME}
-        return {"status": payload[0], "state": payload[1], "pc": payload[2],
-                "bp_addr": payload[3], "bp_flags": payload[4], "run": payload[5],
-                "a": payload[6], "x": payload[7], "y": payload[8],
-                "insn": payload[9],
-                "armed": bool(payload[4] & 0b01),
-                "hit": bool(payload[4] & 0b10)}
+            return {"status": payload[0] if payload else pe_frame.STATUS_BAD_FRAME}
+        return {
+            "status": payload[0],
+            "state": payload[1],
+            "pc": payload[2],
+            "bp_addr": payload[3],
+            "bp_flags": payload[4],
+            "run": payload[5],
+            "a": payload[6],
+            "x": payload[7],
+            "y": payload[8],
+            "insn": payload[9],
+            "armed": bool(payload[4] & 0b01),
+            "hit": bool(payload[4] & 0b10),
+        }
 
 
 def run(project=None, clock_hz=60_000_000):
     """Board entry point: serve the USB CDC console as the bridge endpoint."""
-    try:                          # package import (CPython)
+    try:  # package import (CPython)
         from .tt_adapter import TTAdapter
-    except ImportError:           # flat MicroPython deployment
+    except ImportError:  # flat MicroPython deployment
         from tt_adapter import TTAdapter
     bridge = PicoBridge(TTAdapter(), project=project, clock_hz=clock_hz)
 

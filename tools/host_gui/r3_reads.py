@@ -73,18 +73,26 @@ PROGRAM = (0x0055, 0x00AA, 0xF000, 0x000F, 0x4002)
 # The chip is the source of truth, so the golden vectors follow the RTL, and
 # these are reported rather than silently smoothed over.
 DISCREPANCIES = (
-    ("vector 11 (debug_bp_clr_while_stopped_is_boot_stop)",
-     ("the table's expected response says pc=0, but the RTL answers with the PC "
-     "AT THE REQUEST and only re-zeroes the core at the same edge, so a "
-     "following DEBUG_STATUS/STATUS reads 0. The RTL's own comment and the "
-     "contract's 'Known limits' section both state the RTL behaviour; only the "
-     "table row disagrees. The golden vector follows the RTL.")),
-    ("vector 13 (debug_status_common_prefix)",
-     ("the table expects insn=imem[4] while free-running, but pe_cpu fetches at "
-     "next_pc while executing (next_pc / pc while held / 0 at the boot stop), "
-     "so a free-running readback reports the word at the LANDING address, not "
-     "at pc. A TB that wants insn=imem[pc] must hold the core (state 2) or "
-     "preload the pipeline. The golden vector follows the RTL's fetch mode.")),
+    (
+        "vector 11 (debug_bp_clr_while_stopped_is_boot_stop)",
+        (
+            "the table's expected response says pc=0, but the RTL answers with the PC "
+            "AT THE REQUEST and only re-zeroes the core at the same edge, so a "
+            "following DEBUG_STATUS/STATUS reads 0. The RTL's own comment and the "
+            "contract's 'Known limits' section both state the RTL behaviour; only the "
+            "table row disagrees. The golden vector follows the RTL."
+        ),
+    ),
+    (
+        "vector 13 (debug_status_common_prefix)",
+        (
+            "the table expects insn=imem[4] while free-running, but pe_cpu fetches at "
+            "next_pc while executing (next_pc / pc while held / 0 at the boot stop), "
+            "so a free-running readback reports the word at the LANDING address, not "
+            "at pc. A TB that wants insn=imem[pc] must hold the core (state 2) or "
+            "preload the pipeline. The golden vector follows the RTL's fetch mode."
+        ),
+    ),
 )
 
 
@@ -98,8 +106,9 @@ class Obligation:
     chip_confirmed: bool = False
 
 
-def loaded(pe: F.FakePE | None = None, *, pc: int = 0, run: bool = False,
-           words=PROGRAM, **debug) -> F.FakePE:
+def loaded(
+    pe: F.FakePE | None = None, *, pc: int = 0, run: bool = False, words=PROGRAM, **debug
+) -> F.FakePE:
     """A model with the contract program loaded and the debug state preloaded.
 
     `debug` accepts bp_addr/bp_en/bp_hit/debug_hold, which is exactly what a
@@ -118,7 +127,7 @@ def loaded(pe: F.FakePE | None = None, *, pc: int = 0, run: bool = False,
         model.debug_hold = bool(debug["debug_hold"])
     model.run = bool(run)
     if not run and not model.debug_hold:
-        model.pc = 0            # the boot stop holds the PC at 0
+        model.pc = 0  # the boot stop holds the PC at 0
     return model
 
 
@@ -127,8 +136,13 @@ def _step_executes_exactly_one(pe: F.FakePE) -> bool:
     pe = loaded(pe, pc=0)
     payload = pe.request(P.OP_DEBUG_STEP).payload
     # (OK, state=2 DEBUG_HOLD, pc_next, bp_addr, bp_flags)
-    return (payload[0] == P.STATUS_OK and payload[1] == F.DEBUG_HOLD
-            and payload[2] == 1 and pe.a == 0x55 and pe.pc == 1)
+    return (
+        payload[0] == P.STATUS_OK
+        and payload[1] == F.DEBUG_HOLD
+        and payload[2] == 1
+        and pe.a == 0x55
+        and pe.pc == 1
+    )
 
 
 def _step_sequence_accumulates(pe: F.FakePE) -> bool:
@@ -136,9 +150,12 @@ def _step_sequence_accumulates(pe: F.FakePE) -> bool:
     first = pe.request(P.OP_DEBUG_STEP).payload
     second = pe.request(P.OP_DEBUG_STEP).payload
     status = pe.request(P.OP_DEBUG_STATUS).payload
-    return (first[2] == 1 and second[2] == 2
-            and status[6] == 0xAA          # a: the LDI at 1 ran exactly once
-            and status[2] == 2)
+    return (
+        first[2] == 1
+        and second[2] == 2
+        and status[6] == 0xAA  # a: the LDI at 1 ran exactly once
+        and status[2] == 2
+    )
 
 
 def _held_pc_is_stable(pe: F.FakePE) -> bool:
@@ -154,14 +171,19 @@ def _held_pc_is_stable(pe: F.FakePE) -> bool:
 # ---- S3: a hit stops the core, stop-before, distinguishably -----------------
 def _step_onto_breakpoint_hits(pe: F.FakePE) -> bool:
     pe = loaded(pe, pc=0, bp_addr=2, bp_en=True)
-    pe.request(P.OP_DEBUG_STEP)          # 0 -> 1, no hit
+    pe.request(P.OP_DEBUG_STEP)  # 0 -> 1, no hit
     payload = pe.request(P.OP_DEBUG_STEP).payload
     status = pe.request(P.OP_DEBUG_STATUS).payload
     # Landing on the armed address: state 3, pc_next 2, flags 0b11.
-    return (payload[1] == F.DEBUG_BP_HIT and payload[2] == 2
-            and payload[4] == (F.BP_FLAG_ARMED | F.BP_FLAG_HIT)
-            and status[1] == F.DEBUG_BP_HIT and status[2] == 2
-            and status[4] == 0b11 and status[5] == 0)
+    return (
+        payload[1] == F.DEBUG_BP_HIT
+        and payload[2] == 2
+        and payload[4] == (F.BP_FLAG_ARMED | F.BP_FLAG_HIT)
+        and status[1] == F.DEBUG_BP_HIT
+        and status[2] == 2
+        and status[4] == 0b11
+        and status[5] == 0
+    )
 
 
 def _hit_is_stop_before(pe: F.FakePE) -> bool:
@@ -170,7 +192,7 @@ def _hit_is_stop_before(pe: F.FakePE) -> bool:
     # reachable by STEPPING, which is also what raises the hold. Reaching the
     # state the way the hardware does keeps the probe meaningful.
     pe = loaded(pe, pc=0)
-    pe.request(P.OP_DEBUG_STEP)          # 0 -> 1, now held
+    pe.request(P.OP_DEBUG_STEP)  # 0 -> 1, now held
     pe.bp_addr, pe.bp_en = 2, True
     payload = pe.request(P.OP_DEBUG_STEP).payload
     # The hit must be observed AT the landing: the next step off the
@@ -181,9 +203,13 @@ def _hit_is_stop_before(pe: F.FakePE) -> bool:
     # step executing 2 and landing at 3.
     pe.request(P.OP_DEBUG_STEP)
     after = pe.request(P.OP_DEBUG_STATUS).payload
-    return (payload[2] == 2 and latched
-            and payload[4] == (F.BP_FLAG_ARMED | F.BP_FLAG_HIT)
-            and after[2] == 3 and not pe.bp_hit)
+    return (
+        payload[2] == 2
+        and latched
+        and payload[4] == (F.BP_FLAG_ARMED | F.BP_FLAG_HIT)
+        and after[2] == 3
+        and not pe.bp_hit
+    )
 
 
 def _live_core_hit_keeps_the_strap(pe: F.FakePE) -> bool:
@@ -191,38 +217,50 @@ def _live_core_hit_keeps_the_strap(pe: F.FakePE) -> bool:
     pe = loaded(pe, pc=0, run=True, bp_addr=2, bp_en=True)
     stopped = pe.advance_free_running()
     payload = pe.request(P.OP_DEBUG_STATUS).payload
-    return (stopped and payload[1] == F.DEBUG_BP_HIT and payload[2] == 2
-            and payload[4] == 0b11 and payload[5] == 1)
+    return (
+        stopped
+        and payload[1] == F.DEBUG_BP_HIT
+        and payload[2] == 2
+        and payload[4] == 0b11
+        and payload[5] == 1
+    )
 
 
 # ---- S4: a step off the breakpoint clears the hit -------------------------
 def _step_off_breakpoint_clears_hit(pe: F.FakePE) -> bool:
     pe = loaded(pe, pc=0, run=True, bp_addr=2, bp_en=True)
-    pe.advance_free_running()            # the live core stops on the breakpoint
+    pe.advance_free_running()  # the live core stops on the breakpoint
     if not pe.bp_hit:
         return False
     payload = pe.request(P.OP_DEBUG_STEP).payload
     status = pe.request(P.OP_DEBUG_STATUS).payload
-    return (payload[1] == F.DEBUG_HOLD and payload[2] == 3
-            and payload[4] == F.BP_FLAG_ARMED and status[4] == 0b01)
+    return (
+        payload[1] == F.DEBUG_HOLD
+        and payload[2] == 3
+        and payload[4] == F.BP_FLAG_ARMED
+        and status[4] == 0b01
+    )
 
 
 def _step_lands_again_keeps_the_hit(pe: F.FakePE) -> bool:
     """A step that lands on the armed address again relatches the hit."""
     pe = loaded(pe, pc=0, bp_addr=2, bp_en=True)
-    pe.request(P.OP_DEBUG_STEP)          # 0 -> 1
-    payload = pe.request(P.OP_DEBUG_STEP).payload    # 1 -> 2, lands on 2
-    return (payload[1] == F.DEBUG_BP_HIT and payload[4] == 0b11
-            and pe.bp_hit)
+    pe.request(P.OP_DEBUG_STEP)  # 0 -> 1
+    payload = pe.request(P.OP_DEBUG_STEP).payload  # 1 -> 2, lands on 2
+    return payload[1] == F.DEBUG_BP_HIT and payload[4] == 0b11 and pe.bp_hit
 
 
 # ---- breakpoint arm / disarm ----------------------------------------------
 def _bp_set_readback(pe: F.FakePE) -> bool:
     pe = loaded(pe, pc=0)
     payload = pe.request(P.OP_DEBUG_BP_SET, payload_words=(2,)).payload
-    return (payload[0] == P.STATUS_OK and payload[1] == F.DEBUG_STOPPED
-            and payload[2] == 0 and payload[3] == 2
-            and payload[4] == F.BP_FLAG_ARMED)
+    return (
+        payload[0] == P.STATUS_OK
+        and payload[1] == F.DEBUG_STOPPED
+        and payload[2] == 0
+        and payload[3] == 2
+        and payload[4] == F.BP_FLAG_ARMED
+    )
 
 
 def _bp_set_while_running_is_allowed(pe: F.FakePE) -> bool:
@@ -230,14 +268,15 @@ def _bp_set_while_running_is_allowed(pe: F.FakePE) -> bool:
     pe = loaded(pe, pc=0, run=True)
     armed = pe.request(P.OP_DEBUG_BP_SET, payload_words=(2,)).payload
     stopped = pe.advance_free_running()
-    return (armed[0] == P.STATUS_OK and armed[1] == F.DEBUG_RUNNING
-            and stopped and pe.bp_hit)
+    return (
+        armed[0] == P.STATUS_OK and armed[1] == F.DEBUG_RUNNING and stopped and pe.bp_hit
+    )
 
 
 def _bp_set_clears_a_stale_hit(pe: F.FakePE) -> bool:
     pe = loaded(pe, pc=0, bp_addr=2, bp_en=True)
     pe.request(P.OP_DEBUG_STEP)
-    pe.request(P.OP_DEBUG_STEP)          # land on 2 -> hit
+    pe.request(P.OP_DEBUG_STEP)  # land on 2 -> hit
     if not pe.bp_hit:
         return False
     pe.request(P.OP_DEBUG_BP_SET, payload_words=(5,))
@@ -247,11 +286,17 @@ def _bp_set_clears_a_stale_hit(pe: F.FakePE) -> bool:
 def _bp_clr_releases_the_hold(pe: F.FakePE) -> bool:
     """With run=1 the clear resumes the core; with run=0 it is the boot stop."""
     pe = loaded(pe, pc=0, run=True, bp_addr=2, bp_en=True)
-    pe.advance_free_running()            # the live core stops on the breakpoint
+    pe.advance_free_running()  # the live core stops on the breakpoint
     payload = pe.request(P.OP_DEBUG_BP_CLR).payload
-    resumed = (payload[0] == P.STATUS_OK and payload[1] == F.DEBUG_RUNNING
-               and payload[2] == 2 and payload[3] == 2
-               and payload[4] == 0 and pe.run and not pe.debug_hold)
+    resumed = (
+        payload[0] == P.STATUS_OK
+        and payload[1] == F.DEBUG_RUNNING
+        and payload[2] == 2
+        and payload[3] == 2
+        and payload[4] == 0
+        and pe.run
+        and not pe.debug_hold
+    )
     pe.set_run(False)
     pe.request(P.OP_DEBUG_BP_CLR)
     return resumed and not pe.run and pe.pc == 0
@@ -265,10 +310,16 @@ def _step_while_running_is_not_ready(pe: F.FakePE) -> bool:
     """
     pe = loaded(pe, pc=4, run=True, bp_addr=2, bp_en=True)
     payload = pe.request(P.OP_DEBUG_STEP).payload
-    return (payload[0] == P.STATUS_NOT_READY and payload[1] == F.DEBUG_RUNNING
-            and payload[2] == 4 and payload[3] == 2
-            and payload[4] == F.BP_FLAG_ARMED
-            and not pe.debug_hold and pe.pc == 4 and not pe.bp_hit)
+    return (
+        payload[0] == P.STATUS_NOT_READY
+        and payload[1] == F.DEBUG_RUNNING
+        and payload[2] == 4
+        and payload[3] == 2
+        and payload[4] == F.BP_FLAG_ARMED
+        and not pe.debug_hold
+        and pe.pc == 4
+        and not pe.bp_hit
+    )
 
 
 def _bp_set_past_imem_is_range_without_a_fault(pe: F.FakePE) -> bool:
@@ -276,9 +327,14 @@ def _bp_set_past_imem_is_range_without_a_fault(pe: F.FakePE) -> bool:
     pe = loaded(pe, pc=0, bp_addr=3, bp_en=True)
     payload = pe.request(P.OP_DEBUG_BP_SET, payload_words=(F.IMEM_WORDS + 1,))
     payload = payload.payload
-    return (payload[0] == P.STATUS_RANGE and payload[3] == 3
-            and payload[4] == F.BP_FLAG_ARMED
-            and pe.bp_addr == 3 and pe.bp_en and pe.faults == 0)
+    return (
+        payload[0] == P.STATUS_RANGE
+        and payload[3] == 3
+        and payload[4] == F.BP_FLAG_ARMED
+        and pe.bp_addr == 3
+        and pe.bp_en
+        and pe.faults == 0
+    )
 
 
 def _wrong_payload_length_is_bad_frame(pe: F.FakePE) -> bool:
@@ -286,18 +342,21 @@ def _wrong_payload_length_is_bad_frame(pe: F.FakePE) -> bool:
     pe = loaded(pe, pc=0)
     set_no_len = pe.request(P.OP_DEBUG_BP_SET).payload
     step_with_len = pe.request(P.OP_DEBUG_STEP, payload_words=(1,)).payload
-    return (set_no_len[0] == P.STATUS_BAD_FRAME and len(set_no_len) == 1
-            and not pe.bp_en
-            and step_with_len[0] == P.STATUS_BAD_FRAME
-            and len(step_with_len) == 1
-            and not pe.debug_hold and pe.pc == 0)
+    return (
+        set_no_len[0] == P.STATUS_BAD_FRAME
+        and len(set_no_len) == 1
+        and not pe.bp_en
+        and step_with_len[0] == P.STATUS_BAD_FRAME
+        and len(step_with_len) == 1
+        and not pe.debug_hold
+        and pe.pc == 0
+    )
 
 
 def _bad_frame_leaves_no_trace(pe: F.FakePE) -> bool:
     """A bad CRC arms nothing (S5), exactly like a bad length."""
-    raw = bytearray(P.encode_frame(P.OP_DEBUG_BP_SET, 1, P.TARGET_HOST,
-                                   b"\x00\x02"))
-    raw[-1] ^= 0x01                       # corrupt the CRC
+    raw = bytearray(P.encode_frame(P.OP_DEBUG_BP_SET, 1, P.TARGET_HOST, b"\x00\x02"))
+    raw[-1] ^= 0x01  # corrupt the CRC
     pe = loaded(pe, pc=0)
     response = pe.exchange(bytes(raw))
     if response is None:
@@ -306,28 +365,36 @@ def _bad_frame_leaves_no_trace(pe: F.FakePE) -> bool:
         # nothing", which is exactly the distinction under test.
         raise AssertionError("a bad frame must still get a BAD_FRAME answer")
     frame = P.decode_frame(response)
-    return (frame.payload[0] == P.STATUS_BAD_FRAME and not pe.bp_en
-            and pe.pc == 0)
+    return frame.payload[0] == P.STATUS_BAD_FRAME and not pe.bp_en and pe.pc == 0
 
 
 def _debug_ops_are_host_target_only(pe: F.FakePE) -> bool:
     """The loopback target answers UNSUPPORTED for every debug op."""
     pe = loaded(pe)
     return all(
-        pe.request(opcode, target=P.TARGET_LOOPBACK,
-                   payload_words=((2,) if opcode == P.OP_DEBUG_BP_SET else ())
-                   ).payload[0] == P.STATUS_UNSUPPORTED
-        for opcode in P.R3_OPCODES)
+        pe.request(
+            opcode,
+            target=P.TARGET_LOOPBACK,
+            payload_words=((2,) if opcode == P.OP_DEBUG_BP_SET else ()),
+        ).payload[0]
+        == P.STATUS_UNSUPPORTED
+        for opcode in P.R3_OPCODES
+    )
 
 
 def _debug_status_is_the_full_readback(pe: F.FakePE) -> bool:
     """The 5-word prefix plus run/a/x/y/insn, non-halting."""
     pe = loaded(pe, pc=1, run=True, bp_addr=2, bp_en=True)
     payload = pe.request(P.OP_DEBUG_STATUS).payload
-    return (len(payload) == 10 and payload[0] == P.STATUS_OK
-            and payload[1] == F.DEBUG_RUNNING and payload[2] == 1
-            and payload[3] == 2 and payload[4] == F.BP_FLAG_ARMED
-            and payload[5] == 1)
+    return (
+        len(payload) == 10
+        and payload[0] == P.STATUS_OK
+        and payload[1] == F.DEBUG_RUNNING
+        and payload[2] == 1
+        and payload[3] == 2
+        and payload[4] == F.BP_FLAG_ARMED
+        and payload[5] == 1
+    )
 
 
 def _breakpoint_at_address_zero_is_armed(pe: F.FakePE) -> bool:
@@ -335,8 +402,12 @@ def _breakpoint_at_address_zero_is_armed(pe: F.FakePE) -> bool:
     pe = loaded(pe, pc=0)
     payload = pe.request(P.OP_DEBUG_BP_SET, payload_words=(0,)).payload
     status = pe.request(P.OP_DEBUG_STATUS).payload
-    return (payload[0] == P.STATUS_OK and payload[3] == 0
-            and payload[4] == F.BP_FLAG_ARMED and status[4] == 0b01)
+    return (
+        payload[0] == P.STATUS_OK
+        and payload[3] == 0
+        and payload[4] == F.BP_FLAG_ARMED
+        and status[4] == 0b01
+    )
 
 
 def _boot_stop_holds_pc_at_zero(pe: F.FakePE) -> bool:
@@ -348,82 +419,119 @@ def _boot_stop_holds_pc_at_zero(pe: F.FakePE) -> bool:
 
 
 OBLIGATIONS: tuple[Obligation, ...] = (
-    Obligation("step_executes_exactly_one",
-               "DEBUG_STEP executes exactly one instruction and leaves the "
-               "core in DEBUG_HOLD (S1).",
-               _step_executes_exactly_one),
-    Obligation("step_sequence_accumulates",
-               "Two steps retire two instructions: pc 0->1->2 and the LDI at "
-               "1 has run exactly once (a=0xAA).",
-               _step_sequence_accumulates),
-    Obligation("held_pc_is_stable",
-               "While held and not stepping, the PC and the registers are "
-               "frozen across arbitrarily many reads (S2).",
-               _held_pc_is_stable),
-    Obligation("step_onto_breakpoint_hits",
-               "A step whose landing address is the armed breakpoint reports "
-               "state 3, the landing PC, and bp_flags 0b11 (S3).",
-               _step_onto_breakpoint_hits),
-    Obligation("hit_is_stop_before",
-               "The instruction AT the armed address has NOT executed when the "
-               "core stops: the hit compares the LANDING address (S3).",
-               _hit_is_stop_before),
-    Obligation("live_core_hit_keeps_the_strap",
-               "A free-running core stops on the breakpoint with run still "
-               "high, and reports state 3 (S3).",
-               _live_core_hit_keeps_the_strap),
-    Obligation("step_off_breakpoint_clears_hit",
-               "A step off the breakpoint clears the hit and returns to "
-               "DEBUG_HOLD with bp_flags 0b01 (S4).",
-               _step_off_breakpoint_clears_hit),
-    Obligation("step_lands_again_keeps_the_hit",
-               "A step that lands on the armed address again relatches the "
-               "hit (S4).",
-               _step_lands_again_keeps_the_hit),
-    Obligation("bp_set_readback",
-               "DEBUG_BP_SET arms the address and reads it straight back in "
-               "the 5-word prefix.",
-               _bp_set_readback),
-    Obligation("bp_set_while_running_is_allowed",
-               "Arming is allowed while the core runs, and the hit then stops "
-               "the live core.",
-               _bp_set_while_running_is_allowed),
-    Obligation("bp_set_clears_a_stale_hit",
-               "Arming clears a stale hit and reports the new address.",
-               _bp_set_clears_a_stale_hit),
-    Obligation("bp_clr_releases_the_hold",
-               "DEBUG_BP_CLR disarms, clears the hit and RELEASES the hold: "
-               "run=1 resumes, run=0 falls to the boot stop with PC 0.",
-               _bp_clr_releases_the_hold),
-    Obligation("step_while_running_is_not_ready",
-               "A free-running core cannot be stepped: NOT_READY with the "
-               "full 5-word prefix, the pre-step state, and no side effect.",
-               _step_while_running_is_not_ready),
-    Obligation("bp_set_past_imem_is_range_without_a_fault",
-               "A breakpoint address past IMEM_WORDS is RANGE, changes "
-               "nothing, and latches NO fault (R3 adds no fault class).",
-               _bp_set_past_imem_is_range_without_a_fault),
-    Obligation("wrong_payload_length_is_bad_frame",
-               "A wrong payload length is a 1-word BAD_FRAME with no side "
-               "effect on any debug register (S5).",
-               _wrong_payload_length_is_bad_frame),
-    Obligation("bad_frame_leaves_no_trace",
-               "A bad CRC arms nothing and executes nothing (S5).",
-               _bad_frame_leaves_no_trace),
-    Obligation("debug_ops_are_host_target_only",
-               "Every debug op answers UNSUPPORTED on the loopback target.",
-               _debug_ops_are_host_target_only),
-    Obligation("debug_status_is_the_full_readback",
-               "DEBUG_STATUS is the 5-word prefix plus run/a/x/y/insn, and it "
-               "answers while running and while held.",
-               _debug_status_is_the_full_readback),
-    Obligation("breakpoint_at_address_zero_is_armed",
-               "Address 0 is a legal breakpoint, distinguished from 'disarmed' "
-               "by bp_flags bit0 rather than by the address value.",
-               _breakpoint_at_address_zero_is_armed),
-    Obligation("boot_stop_holds_pc_at_zero",
-               "run=0 with no hold is the boot stop: the PC is held at 0.",
-               _boot_stop_holds_pc_at_zero),
+    Obligation(
+        "step_executes_exactly_one",
+        "DEBUG_STEP executes exactly one instruction and leaves the "
+        "core in DEBUG_HOLD (S1).",
+        _step_executes_exactly_one,
+    ),
+    Obligation(
+        "step_sequence_accumulates",
+        "Two steps retire two instructions: pc 0->1->2 and the LDI at "
+        "1 has run exactly once (a=0xAA).",
+        _step_sequence_accumulates,
+    ),
+    Obligation(
+        "held_pc_is_stable",
+        "While held and not stepping, the PC and the registers are "
+        "frozen across arbitrarily many reads (S2).",
+        _held_pc_is_stable,
+    ),
+    Obligation(
+        "step_onto_breakpoint_hits",
+        "A step whose landing address is the armed breakpoint reports "
+        "state 3, the landing PC, and bp_flags 0b11 (S3).",
+        _step_onto_breakpoint_hits,
+    ),
+    Obligation(
+        "hit_is_stop_before",
+        "The instruction AT the armed address has NOT executed when the "
+        "core stops: the hit compares the LANDING address (S3).",
+        _hit_is_stop_before,
+    ),
+    Obligation(
+        "live_core_hit_keeps_the_strap",
+        "A free-running core stops on the breakpoint with run still "
+        "high, and reports state 3 (S3).",
+        _live_core_hit_keeps_the_strap,
+    ),
+    Obligation(
+        "step_off_breakpoint_clears_hit",
+        "A step off the breakpoint clears the hit and returns to "
+        "DEBUG_HOLD with bp_flags 0b01 (S4).",
+        _step_off_breakpoint_clears_hit,
+    ),
+    Obligation(
+        "step_lands_again_keeps_the_hit",
+        "A step that lands on the armed address again relatches the hit (S4).",
+        _step_lands_again_keeps_the_hit,
+    ),
+    Obligation(
+        "bp_set_readback",
+        "DEBUG_BP_SET arms the address and reads it straight back in the 5-word prefix.",
+        _bp_set_readback,
+    ),
+    Obligation(
+        "bp_set_while_running_is_allowed",
+        "Arming is allowed while the core runs, and the hit then stops the live core.",
+        _bp_set_while_running_is_allowed,
+    ),
+    Obligation(
+        "bp_set_clears_a_stale_hit",
+        "Arming clears a stale hit and reports the new address.",
+        _bp_set_clears_a_stale_hit,
+    ),
+    Obligation(
+        "bp_clr_releases_the_hold",
+        "DEBUG_BP_CLR disarms, clears the hit and RELEASES the hold: "
+        "run=1 resumes, run=0 falls to the boot stop with PC 0.",
+        _bp_clr_releases_the_hold,
+    ),
+    Obligation(
+        "step_while_running_is_not_ready",
+        "A free-running core cannot be stepped: NOT_READY with the "
+        "full 5-word prefix, the pre-step state, and no side effect.",
+        _step_while_running_is_not_ready,
+    ),
+    Obligation(
+        "bp_set_past_imem_is_range_without_a_fault",
+        "A breakpoint address past IMEM_WORDS is RANGE, changes "
+        "nothing, and latches NO fault (R3 adds no fault class).",
+        _bp_set_past_imem_is_range_without_a_fault,
+    ),
+    Obligation(
+        "wrong_payload_length_is_bad_frame",
+        "A wrong payload length is a 1-word BAD_FRAME with no side "
+        "effect on any debug register (S5).",
+        _wrong_payload_length_is_bad_frame,
+    ),
+    Obligation(
+        "bad_frame_leaves_no_trace",
+        "A bad CRC arms nothing and executes nothing (S5).",
+        _bad_frame_leaves_no_trace,
+    ),
+    Obligation(
+        "debug_ops_are_host_target_only",
+        "Every debug op answers UNSUPPORTED on the loopback target.",
+        _debug_ops_are_host_target_only,
+    ),
+    Obligation(
+        "debug_status_is_the_full_readback",
+        "DEBUG_STATUS is the 5-word prefix plus run/a/x/y/insn, and it "
+        "answers while running and while held.",
+        _debug_status_is_the_full_readback,
+    ),
+    Obligation(
+        "breakpoint_at_address_zero_is_armed",
+        "Address 0 is a legal breakpoint, distinguished from 'disarmed' "
+        "by bp_flags bit0 rather than by the address value.",
+        _breakpoint_at_address_zero_is_armed,
+    ),
+    Obligation(
+        "boot_stop_holds_pc_at_zero",
+        "run=0 with no hold is the boot stop: the PC is held at 0.",
+        _boot_stop_holds_pc_at_zero,
+    ),
 )
 
 
@@ -442,10 +550,10 @@ def run_all_probes(pe: F.FakePE | None = None) -> dict[str, bool]:
     exactly the kind of green that is not reproducible.
     """
     if pe is not None:
-        return {obligation.name: bool(obligation.probe(pe))
-                for obligation in OBLIGATIONS}
-    return {obligation.name: bool(obligation.probe(F.FakePE()))
-            for obligation in OBLIGATIONS}
+        return {obligation.name: bool(obligation.probe(pe)) for obligation in OBLIGATIONS}
+    return {
+        obligation.name: bool(obligation.probe(F.FakePE())) for obligation in OBLIGATIONS
+    }
 
 
 def unconfirmed_names() -> list[str]:

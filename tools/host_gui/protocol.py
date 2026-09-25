@@ -32,11 +32,11 @@ SYNC = 0xA55A
 VERSION = 1
 
 # {version[3:0], opcode[7:0], target[3:0]}
-HEADER_WORDS = 4          # sync, header, sequence, length
-TRAILER_WORDS = 1         # CRC
+HEADER_WORDS = 4  # sync, header, sequence, length
+TRAILER_WORDS = 1  # CRC
 MIN_FRAME_WORDS = HEADER_WORDS + TRAILER_WORDS
 
-RESPONSE_BIT = 0x80       # response opcodes set bit 7
+RESPONSE_BIT = 0x80  # response opcodes set bit 7
 
 MAX_OPCODE = 0xFF
 MAX_SEQUENCE = 0xFFFF
@@ -125,8 +125,7 @@ def crc16_ccitt(data: bytes) -> int:
 
 
 def _words_from_bytes(raw: bytes) -> tuple[int, ...]:
-    return tuple(int.from_bytes(raw[i:i + 2], "big")
-                 for i in range(0, len(raw), 2))
+    return tuple(int.from_bytes(raw[i : i + 2], "big") for i in range(0, len(raw), 2))
 
 
 def _bytes_from_words(words: tuple[int, ...]) -> bytes:
@@ -159,12 +158,10 @@ class Frame:
         return _bytes_from_words(self.payload)
 
     def to_bytes(self) -> bytes:
-        return encode_frame(self.opcode, self.sequence, self.target,
-                            self.payload_bytes)
+        return encode_frame(self.opcode, self.sequence, self.target, self.payload_bytes)
 
 
-def encode_frame(opcode: int, sequence: int, target: int,
-                 payload: bytes = b"") -> bytes:
+def encode_frame(opcode: int, sequence: int, target: int, payload: bytes = b"") -> bytes:
     """Encode one frame. ``payload`` is big-endian 16-bit words as bytes."""
     if not 0 <= opcode <= MAX_OPCODE:
         raise FrameValueError(f"opcode {opcode!r} does not fit 8 bits")
@@ -176,19 +173,19 @@ def encode_frame(opcode: int, sequence: int, target: int,
         raise FrameValueError("payload must be bytes")
     payload = bytes(payload)
     if len(payload) % 2 != 0:
-        raise FrameValueError(
-            f"payload is {len(payload)} bytes, not whole 16-bit words")
+        raise FrameValueError(f"payload is {len(payload)} bytes, not whole 16-bit words")
     payload_words = len(payload) // 2
     if payload_words > MAX_PAYLOAD_WORDS:
         raise FrameValueError(
-            f"payload is {payload_words} words, over the 16-bit length field")
+            f"payload is {payload_words} words, over the 16-bit length field"
+        )
 
     header = (VERSION << 12) | (opcode << 4) | target
     body = _bytes_from_words((SYNC, header, sequence, payload_words)) + payload
     return body + crc16_ccitt(body).to_bytes(2, "big")
 
 
-MAX_WAIT_WORDS = 15   # the chip's worst-case wait words (R2 read contract)
+MAX_WAIT_WORDS = 15  # the chip's worst-case wait words (R2 read contract)
 
 
 def strip_wait_words(raw: bytes, max_wait: int = MAX_WAIT_WORDS) -> bytes:
@@ -202,13 +199,12 @@ def strip_wait_words(raw: bytes, max_wait: int = MAX_WAIT_WORDS) -> bytes:
     """
     if len(raw) < 4:
         raise FrameLengthError("response too short to hold a frame")
-    words = _words_from_bytes(bytes(raw)[:len(raw) - (len(raw) % 2)])
+    words = _words_from_bytes(bytes(raw)[: len(raw) - (len(raw) % 2)])
     index = 0
     while index < len(words) and words[index] == 0xFFFF and index < max_wait:
         index += 1
     if index >= len(words) or words[index] == 0xFFFF:
-        raise FrameCRCError(
-            f"no frame after {index} wait words (chip bound {max_wait})")
+        raise FrameCRCError(f"no frame after {index} wait words (chip bound {max_wait})")
     return _bytes_from_words(words[index:])
 
 
@@ -218,36 +214,39 @@ def decode_frame(raw: bytes) -> Frame:
         raise FrameLengthError("frame must be bytes")
     raw = bytes(raw)
     if len(raw) % 2 != 0:
-        raise FrameLengthError(
-            f"frame is {len(raw)} bytes, not whole 16-bit words")
+        raise FrameLengthError(f"frame is {len(raw)} bytes, not whole 16-bit words")
     if len(raw) < MIN_FRAME_WORDS * 2:
         raise FrameLengthError(
-            f"frame is {len(raw)} bytes, under the {MIN_FRAME_WORDS}-word minimum")
+            f"frame is {len(raw)} bytes, under the {MIN_FRAME_WORDS}-word minimum"
+        )
 
     words = _words_from_bytes(raw)
     if words[0] != SYNC:
-        raise FrameSyncError(
-            f"first word is 0x{words[0]:04X}, expected 0x{SYNC:04X}")
+        raise FrameSyncError(f"first word is 0x{words[0]:04X}, expected 0x{SYNC:04X}")
 
     payload_words = words[3]
     expected_words = HEADER_WORDS + payload_words + TRAILER_WORDS
     if len(words) != expected_words:
         raise FrameLengthError(
             f"frame carries {len(words)} words; the length field declares "
-            f"{payload_words} payload words, so {expected_words} were expected")
+            f"{payload_words} payload words, so {expected_words} were expected"
+        )
 
     if crc16_ccitt(raw[:-2]) != words[-1]:
         raise FrameCRCError(
-            f"CRC is 0x{words[-1]:04X}, computed 0x{crc16_ccitt(raw[:-2]):04X}")
+            f"CRC is 0x{words[-1]:04X}, computed 0x{crc16_ccitt(raw[:-2]):04X}"
+        )
 
     header = words[1]
     version = (header >> 12) & 0xF
     if version != VERSION:
         raise FrameVersionError(
-            f"version {version} is not supported (this host speaks {VERSION})")
+            f"version {version} is not supported (this host speaks {VERSION})"
+        )
 
     opcode = (header >> 4) & 0xFF
     target = header & 0xF
-    payload = tuple(words[HEADER_WORDS:HEADER_WORDS + payload_words])
-    return Frame(version=version, opcode=opcode, sequence=words[2],
-                 target=target, payload=payload)
+    payload = tuple(words[HEADER_WORDS : HEADER_WORDS + payload_words])
+    return Frame(
+        version=version, opcode=opcode, sequence=words[2], target=target, payload=payload
+    )

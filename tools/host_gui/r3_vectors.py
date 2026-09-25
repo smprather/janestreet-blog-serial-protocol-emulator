@@ -76,32 +76,43 @@ CHIP_EVIDENCE = {
         "vector's model_images[] state -- registers plus bp_addr/bp_en/"
         "bp_hit/debug_hold -- drives the step's request_file and compares the "
         "response word for word, CRC included, skipping wait words (these ops "
-        "emit none)"),
+        "emit none)"
+    ),
     "conformance": (
         "0 of 14 host golden steps confirmed against the chip. The chip has "
         "run its OWN tb_pe_ctrl_r3 with a 7-mutant gate (all caught) and "
         "formal proofs for S1-S4; that is the chip's evidence. These host "
         "vectors become chip-confirmed only when that TB passes THEM "
-        "byte-exactly and the citations are recorded here."),
+        "byte-exactly and the citations are recorded here."
+    ),
     "scope": (
         "The host's expectations for the implemented R3 contract. Not "
         "evidence about silicon, and the real-board acceptance run (Pico over "
         "USB with a physical shuttle) has not been executed and is not "
-        "claimed."),
+        "claimed."
+    ),
     "date": "2026-09-25",
 }
 
 MODEL_ONLY_OBLIGATIONS = (
-    ("hit_is_stop_before",
-     ("Stop-before is proven across a step (the PC reports the landing "
-      "address with the hit latched, and the following step executes the "
-      "instruction there), plus by the chip's own formal claim and mutants; "
-      "there is no single frame that shows a non-execution.")),
-    ("live_core_hit_keeps_the_strap (pre-state half)",
-     ("Reaching a live-core hit requires CLOCKING the core until the landing "
-      "address matches, which is not a framed op. Vector 8 therefore ships "
-      "the POST-HIT held state as its model image and reads it back with one "
-      "DEBUG_STATUS, which is exactly what a TB sets up.")),
+    (
+        "hit_is_stop_before",
+        (
+            "Stop-before is proven across a step (the PC reports the landing "
+            "address with the hit latched, and the following step executes the "
+            "instruction there), plus by the chip's own formal claim and mutants; "
+            "there is no single frame that shows a non-execution."
+        ),
+    ),
+    (
+        "live_core_hit_keeps_the_strap (pre-state half)",
+        (
+            "Reaching a live-core hit requires CLOCKING the core until the landing "
+            "address matches, which is not a framed op. Vector 8 therefore ships "
+            "the POST-HIT held state as its model image and reads it back with one "
+            "DEBUG_STATUS, which is exactly what a TB sets up."
+        ),
+    ),
 )
 
 PACKAGE_NOTICE = (
@@ -109,37 +120,38 @@ PACKAGE_NOTICE = (
     "(chip repo, 2026-09-25), but no step here has been run against the chip's "
     "tb_pe_ctrl_r3 yet, so every step is chip_confirmed=false. A passing step "
     "in this package is the gate the chip must meet, NOT evidence that it "
-    "does. The real-board acceptance run has not been executed.")
+    "does. The real-board acceptance run has not been executed."
+)
 
 # The response shapes, spelled out once so the manifest documents the wire
 # contract a testbench compares against. Transcribed from pe_ctrl.v.
 RESPONSE_LAYOUTS = {
     "0x21 DEBUG_STEP": "(OK, state, pc_next, bp_addr, bp_flags)   request len 0",
-    "0x22 DEBUG_BP_SET": "(OK, state, pc, bp_addr, bp_flags)    request len 1 "
-                         "(address)",
-    "0x23 DEBUG_BP_CLR": "(OK, state, pc, bp_addr_before, bp_flags)  request "
-                         "len 0",
+    "0x22 DEBUG_BP_SET": "(OK, state, pc, bp_addr, bp_flags)    request len 1 (address)",
+    "0x23 DEBUG_BP_CLR": "(OK, state, pc, bp_addr_before, bp_flags)  request len 0",
     "0x24 DEBUG_STATUS": "(OK, state, pc, bp_addr, bp_flags, run, a, x, y, insn)"
-                         "   request len 0",
-    "state": {str(F.DEBUG_STOPPED): "STOPPED (boot stop, PC held at 0)",
-              str(F.DEBUG_RUNNING): "RUNNING (strap high, no hold)",
-              str(F.DEBUG_HOLD): "DEBUG_HOLD (PC preserved)",
-              str(F.DEBUG_BP_HIT): "BP_HIT (PC preserved, hit latched)"},
+    "   request len 0",
+    "state": {
+        str(F.DEBUG_STOPPED): "STOPPED (boot stop, PC held at 0)",
+        str(F.DEBUG_RUNNING): "RUNNING (strap high, no hold)",
+        str(F.DEBUG_HOLD): "DEBUG_HOLD (PC preserved)",
+        str(F.DEBUG_BP_HIT): "BP_HIT (PC preserved, hit latched)",
+    },
     "bp_flags": "bit0 = ARMED, bit1 = HIT latched. bp_addr is the armed "
-                "address, or 0 when disarmed; address 0 is a legal breakpoint "
-                "and is told apart from 'disarmed' by bit0, never by the "
-                "address value.",
+    "address, or 0 when disarmed; address 0 is a legal breakpoint "
+    "and is told apart from 'disarmed' by bit0, never by the "
+    "address value.",
     "wait_words": "zero - all four ops are ready-immediate, answered in the "
-                  "request's own CRC cycle like READ_CPU",
+    "request's own CRC cycle like READ_CPU",
     "refusals": "DEBUG_STEP while free-running is NOT_READY with the full "
-                "5-word prefix and the PRE-step state; a wrong payload length "
-                "is a 1-word BAD_FRAME; DEBUG_BP_SET past IMEM_WORDS is RANGE "
-                "with NO side effect and NO fault.",
+    "5-word prefix and the PRE-step state; a wrong payload length "
+    "is a 1-word BAD_FRAME; DEBUG_BP_SET past IMEM_WORDS is RANGE "
+    "with NO side effect and NO fault.",
     "release": "DEBUG_BP_CLR is the only release: it disarms, clears the hit "
-               "and drops the hold - with run=1 the core resumes, with run=0 "
-               "the core falls to the boot stop and the PC re-zeroes. "
-               "Continuing WITH the breakpoint armed costs step -> clear -> "
-               "re-arm.",
+    "and drops the hold - with run=1 the core resumes, with run=0 "
+    "the core falls to the boot stop and the PC re-zeroes. "
+    "Continuing WITH the breakpoint armed costs step -> clear -> "
+    "re-arm.",
 }
 
 SPEC = V.Spec(
@@ -149,30 +161,43 @@ SPEC = V.Spec(
     notice=PACKAGE_NOTICE,
     artifact=ARTIFACT,
     hex_dir=HEX_DIR,
-    source_of_truth=("tools/host_gui/r3_reads.py",
-                     "tools/host_gui/fake_pe.py",
-                     "tools/host_gui/protocol.py"),
+    source_of_truth=(
+        "tools/host_gui/r3_reads.py",
+        "tools/host_gui/fake_pe.py",
+        "tools/host_gui/protocol.py",
+    ),
     rulings=(
-        ("the contract is implemented chip-side; these vectors were reconciled "
-         "against rtl/pe_ctrl.v's four response builders, not read off the "
-         "prose (2026-09-25)"),
-        ("state is dbg_hold ? (bp_hit ? 3 : 2) : (run ? 1 : 0), and R2's "
-         "STATUS state word carries the SAME encoding"),
-        ("bp_flags is {bp_hit, bp_en}: bit0 armed, bit1 hit; bp_addr is 0 when "
-         "disarmed and address 0 is a legal breakpoint"),
-        ("a hit compares the LANDING address, so the instruction at the "
-         "breakpoint has NOT executed (stop-before)"),
+        (
+            "the contract is implemented chip-side; these vectors were reconciled "
+            "against rtl/pe_ctrl.v's four response builders, not read off the "
+            "prose (2026-09-25)"
+        ),
+        (
+            "state is dbg_hold ? (bp_hit ? 3 : 2) : (run ? 1 : 0), and R2's "
+            "STATUS state word carries the SAME encoding"
+        ),
+        (
+            "bp_flags is {bp_hit, bp_en}: bit0 armed, bit1 hit; bp_addr is 0 when "
+            "disarmed and address 0 is a legal breakpoint"
+        ),
+        (
+            "a hit compares the LANDING address, so the instruction at the "
+            "breakpoint has NOT executed (stop-before)"
+        ),
         ("DEBUG_BP_CLR is the only release of the debug hold, and it disarms"),
-        ("a rejected op has no side effect: wrong length is a 1-word "
-         "BAD_FRAME, and a BP_SET past IMEM_WORDS is RANGE with no fault"),
+        (
+            "a rejected op has no side effect: wrong length is a 1-word "
+            "BAD_FRAME, and a BP_SET past IMEM_WORDS is RANGE with no fault"
+        ),
         (f"every step is chip_confirmed=False: {CHIP_EVIDENCE['conformance']}"),
     ),
     evidence=CHIP_EVIDENCE,
     word_order="big-endian words on the wire; the debug payloads are the "
-               "fixed shapes above, in opcode order, with no wait words",
+    "fixed shapes above, in opcode order, with no wait words",
     readmemh_usage=(
-        "$readmemh(\"<file>\", mem); with an 8-bit mem[] filled from address 0; "
-        "the stream is the frame's bytes in wire order."),
+        '$readmemh("<file>", mem); with an 8-bit mem[] filled from address 0; '
+        "the stream is the frame's bytes in wire order."
+    ),
     load_procedure=(
         "1) imem.hex: one 16-bit word per line, ascending address, for "
         "$readmemh into a 16-bit imem[0:1023]. 2) dmem.hex: one byte per "
@@ -182,25 +207,32 @@ SPEC = V.Spec(
         "model_images[].debug (bp_addr, bp_en, bp_hit, debug_hold). The state "
         "word is DERIVED by the chip from those, so it is not preloaded. 4) "
         "drive the step's request_file and compare the response word for word; "
-        "these ops emit no wait words, so there is nothing to skip."),
+        "these ops emit no wait words, so there is nothing to skip."
+    ),
     hex_readme_title="# R3 debug vectors - $readmemh export",
     hex_artifact="R3 debug-control $readmemh export",
     hex_generated_by="tools/host_gui/r3_vectors.py (--hex)",
     hex_readme_command="python3 -m tools.host_gui.r3_vectors --hex",
-    hex_readme_intro=("from the same\nbuild as `../R3-DEBUG-VERIFICATION.json`; "
-                      "`--check` proves every file\n"),
+    hex_readme_intro=(
+        "from the same\nbuild as `../R3-DEBUG-VERIFICATION.json`; "
+        "`--check` proves every file\n"
+    ),
     labels=("r3 verification package", "r3 $readmemh export"),
     load_words=PROGRAM,
     schema=V.SCHEMA_VERSION,
     hex_readme_extra_preload=(
         "//    and model_images[].debug: bp_addr, bp_en, bp_hit,\n"
-        "//    debug_hold (the state word is DERIVED from these)\n"),
+        "//    debug_hold (the state word is DERIVED from these)\n"
+    ),
     protocol_extra={
-        "debug_opcodes": {"0x21": "DEBUG_STEP", "0x22": "DEBUG_BP_SET",
-                          "0x23": "DEBUG_BP_CLR", "0x24": "DEBUG_STATUS"},
+        "debug_opcodes": {
+            "0x21": "DEBUG_STEP",
+            "0x22": "DEBUG_BP_SET",
+            "0x23": "DEBUG_BP_CLR",
+            "0x24": "DEBUG_STATUS",
+        },
         "debug_contract": RESPONSE_LAYOUTS,
-        "breakpoint": "ONE PC breakpoint (not a table), per the contract's "
-                      "stated scope",
+        "breakpoint": "ONE PC breakpoint (not a table), per the contract's stated scope",
     },
 )
 
@@ -218,145 +250,333 @@ def build_package() -> dict:
     b = V.Builder(SPEC)
 
     def image(image_id, *, pc=0, a=0, x=0, y=0, insn=0, run=0, **debug):
-        state = {"bp_addr": 0, "bp_en": False, "bp_hit": False,
-                 "debug_hold": False}
+        state = {"bp_addr": 0, "bp_en": False, "bp_hit": False, "debug_hold": False}
         state.update(debug)
-        built = b.image(image_id, pc=pc, a=a, x=x, y=y, insn=insn, run=run,
-                        debug=state)
+        built = b.image(image_id, pc=pc, a=a, x=x, y=y, insn=insn, run=run, debug=state)
         return built, b.model(built)
 
     def rec(pe, img, name, opcode, payload, sequence, note="", **kw):
         """One recorded step: the model drives it, the bytes are captured."""
-        return b.record(pe, name, opcode, payload, sequence, note=note,
-                        model_image_id=img["id"], **kw)
+        return b.record(
+            pe, name, opcode, payload, sequence, note=note, model_image_id=img["id"], **kw
+        )
 
     # 1. Arming reads straight back in the common prefix.
     img, pe = image("v01-bp-set-readback")
-    vectors.append(b.vector(
-        "debug_bp_set_readback", R.by_name()["bp_set_readback"].description,
-        "n/a (5-word prefix)",
-        [rec(pe, img, "bp_set_address_2", P.OP_DEBUG_BP_SET, (2,), 1,
-             "armed at 2 and read back in the prefix: state 0, pc 0, "
-             "flags 0x01")],
-        img))
+    vectors.append(
+        b.vector(
+            "debug_bp_set_readback",
+            R.by_name()["bp_set_readback"].description,
+            "n/a (5-word prefix)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "bp_set_address_2",
+                    P.OP_DEBUG_BP_SET,
+                    (2,),
+                    1,
+                    "armed at 2 and read back in the prefix: state 0, pc 0, flags 0x01",
+                )
+            ],
+            img,
+        )
+    )
 
     # 2. Past the end of IMEM is RANGE, changes nothing, latches no fault.
     img, pe = image("v02-bp-set-out-of-range", bp_addr=3, bp_en=True)
-    vectors.append(b.vector(
-        "debug_bp_set_out_of_range",
-        R.by_name()["bp_set_past_imem_is_range_without_a_fault"].description,
-        "n/a (rejected)",
-        [rec(pe, img, "bp_set_past_imem", P.OP_DEBUG_BP_SET,
-             (F.IMEM_WORDS,), 1,
-             "1024 is past a 1024-word IMEM: RANGE with bp_addr and flags "
-             "unchanged and NO fault latched (R3 adds no fault class)")],
-        img))
+    vectors.append(
+        b.vector(
+            "debug_bp_set_out_of_range",
+            R.by_name()["bp_set_past_imem_is_range_without_a_fault"].description,
+            "n/a (rejected)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "bp_set_past_imem",
+                    P.OP_DEBUG_BP_SET,
+                    (F.IMEM_WORDS,),
+                    1,
+                    "1024 is past a 1024-word IMEM: RANGE with bp_addr and flags "
+                    "unchanged and NO fault latched (R3 adds no fault class)",
+                )
+            ],
+            img,
+        )
+    )
 
     # 3. A wrong payload length is a 1-word BAD_FRAME with no side effect.
     img, pe = image("v03-bp-set-wrong-length")
-    vectors.append(b.vector(
-        "debug_bp_set_wrong_length",
-        R.by_name()["wrong_payload_length_is_bad_frame"].description,
-        "n/a (rejected)",
-        [rec(pe, img, "bp_set_len_0", P.OP_DEBUG_BP_SET, (), 1,
-             "BP_SET takes exactly one payload word; len 0 is a BAD_FRAME "
-             "carrying a SINGLE status word, and arms nothing")],
-        img))
+    vectors.append(
+        b.vector(
+            "debug_bp_set_wrong_length",
+            R.by_name()["wrong_payload_length_is_bad_frame"].description,
+            "n/a (rejected)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "bp_set_len_0",
+                    P.OP_DEBUG_BP_SET,
+                    (),
+                    1,
+                    "BP_SET takes exactly one payload word; len 0 is a BAD_FRAME "
+                    "carrying a SINGLE status word, and arms nothing",
+                )
+            ],
+            img,
+        )
+    )
 
     # 4. One step executes exactly one instruction (LDI A,0x55 at 0).
     img, pe = image("v04-step-executes-one")
-    vectors.append(b.vector(
-        "debug_step_executes_one",
-        R.by_name()["step_executes_exactly_one"].description,
-        "n/a (5-word prefix)",
-        [rec(pe, img, "step_from_boot_stop", P.OP_DEBUG_STEP, (), 1,
-             "executes imem[0] (LDI A,0x55): state 2, pc_next 1"),
-         rec(pe, img, "status_shows_pc_1", P.OP_DEBUG_STATUS, (), 2,
-             "the held PC is 1 and the run strap is still low"),
-         rec(pe, img, "read_cpu_shows_a_55", P.OP_READ_CPU, (), 3,
-             "a=0x55: exactly one instruction retired")],
-        img))
+    vectors.append(
+        b.vector(
+            "debug_step_executes_one",
+            R.by_name()["step_executes_exactly_one"].description,
+            "n/a (5-word prefix)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "step_from_boot_stop",
+                    P.OP_DEBUG_STEP,
+                    (),
+                    1,
+                    "executes imem[0] (LDI A,0x55): state 2, pc_next 1",
+                ),
+                rec(
+                    pe,
+                    img,
+                    "status_shows_pc_1",
+                    P.OP_DEBUG_STATUS,
+                    (),
+                    2,
+                    "the held PC is 1 and the run strap is still low",
+                ),
+                rec(
+                    pe,
+                    img,
+                    "read_cpu_shows_a_55",
+                    P.OP_READ_CPU,
+                    (),
+                    3,
+                    "a=0x55: exactly one instruction retired",
+                ),
+            ],
+            img,
+        )
+    )
 
     # 5. Two steps retire two instructions, in order.
     img, pe = image("v05-step-sequence")
-    vectors.append(b.vector(
-        "debug_step_sequence",
-        R.by_name()["step_sequence_accumulates"].description,
-        "n/a (5-word prefix)",
-        [rec(pe, img, "step_one", P.OP_DEBUG_STEP, (), 1, "pc_next 1"),
-         rec(pe, img, "step_two", P.OP_DEBUG_STEP, (), 2, "pc_next 2"),
-         rec(pe, img, "status_shows_a_aa", P.OP_DEBUG_STATUS, (), 3,
-             "a=0xAA: the LDI at 1 ran exactly once")],
-        img))
+    vectors.append(
+        b.vector(
+            "debug_step_sequence",
+            R.by_name()["step_sequence_accumulates"].description,
+            "n/a (5-word prefix)",
+            [
+                rec(pe, img, "step_one", P.OP_DEBUG_STEP, (), 1, "pc_next 1"),
+                rec(pe, img, "step_two", P.OP_DEBUG_STEP, (), 2, "pc_next 2"),
+                rec(
+                    pe,
+                    img,
+                    "status_shows_a_aa",
+                    P.OP_DEBUG_STATUS,
+                    (),
+                    3,
+                    "a=0xAA: the LDI at 1 ran exactly once",
+                ),
+            ],
+            img,
+        )
+    )
 
     # 6. A free-running core cannot be stepped.
     img, pe = image("v06-step-while-running", pc=7, run=1)
-    vectors.append(b.vector(
-        "debug_step_while_running",
-        R.by_name()["step_while_running_is_not_ready"].description,
-        "n/a (5-word prefix)",
-        [rec(pe, img, "step_not_ready", P.OP_DEBUG_STEP, (), 1,
-             "NOT_READY carrying the full 5-word prefix and the PRE-step "
-             "state; the PC does not move and no hold is asserted")],
-        img))
+    vectors.append(
+        b.vector(
+            "debug_step_while_running",
+            R.by_name()["step_while_running_is_not_ready"].description,
+            "n/a (5-word prefix)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "step_not_ready",
+                    P.OP_DEBUG_STEP,
+                    (),
+                    1,
+                    "NOT_READY carrying the full 5-word prefix and the PRE-step "
+                    "state; the PC does not move and no hold is asserted",
+                )
+            ],
+            img,
+        )
+    )
 
     # 7. A step that lands on the armed address reports the hit.
     img, pe = image("v07-step-lands-on-bp", bp_addr=2, bp_en=True)
-    vectors.append(b.vector(
-        "debug_step_lands_on_bp",
-        R.by_name()["step_onto_breakpoint_hits"].description,
-        "n/a (5-word prefix)",
-        [rec(pe, img, "step_one", P.OP_DEBUG_STEP, (), 1,
-             "0 -> 1, no hit: state 2, flags 0x01"),
-         rec(pe, img, "step_lands_on_2", P.OP_DEBUG_STEP, (), 2,
-             "landing on the armed address: state 3, pc_next 2, flags 0x03; "
-             "the NOP at 2 has NOT executed (stop-before)"),
-         rec(pe, img, "status_reports_the_hit", P.OP_DEBUG_STATUS, (), 3,
-             "the hit is latched and the core is not executing")],
-        img))
+    vectors.append(
+        b.vector(
+            "debug_step_lands_on_bp",
+            R.by_name()["step_onto_breakpoint_hits"].description,
+            "n/a (5-word prefix)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "step_one",
+                    P.OP_DEBUG_STEP,
+                    (),
+                    1,
+                    "0 -> 1, no hit: state 2, flags 0x01",
+                ),
+                rec(
+                    pe,
+                    img,
+                    "step_lands_on_2",
+                    P.OP_DEBUG_STEP,
+                    (),
+                    2,
+                    "landing on the armed address: state 3, pc_next 2, flags 0x03; "
+                    "the NOP at 2 has NOT executed (stop-before)",
+                ),
+                rec(
+                    pe,
+                    img,
+                    "status_reports_the_hit",
+                    P.OP_DEBUG_STATUS,
+                    (),
+                    3,
+                    "the hit is latched and the core is not executing",
+                ),
+            ],
+            img,
+        )
+    )
 
     # 8. A live core stopped on the breakpoint. The image IS the post-hit held
     #    state, because reaching it takes clocking, not a frame.
-    img, pe = image("v08-bp-hit-stops-live-core", pc=2, run=1, bp_addr=2,
-                    bp_en=True, bp_hit=True, debug_hold=True)
-    vectors.append(b.vector(
-        "debug_bp_hit_stops_live_core",
-        R.by_name()["live_core_hit_keeps_the_strap"].description,
-        "n/a (10-word status)",
-        [rec(pe, img, "status_after_live_hit", P.OP_DEBUG_STATUS, (), 1,
-             "state 3, pc 2, flags 0x03, and run STILL 1: the hit holds the "
-             "core without touching the strap"),
-         rec(pe, img, "status_is_stable", P.OP_DEBUG_STATUS, (), 2,
-             "the held PC is preserved across reads (S2)")],
-        img))
+    img, pe = image(
+        "v08-bp-hit-stops-live-core",
+        pc=2,
+        run=1,
+        bp_addr=2,
+        bp_en=True,
+        bp_hit=True,
+        debug_hold=True,
+    )
+    vectors.append(
+        b.vector(
+            "debug_bp_hit_stops_live_core",
+            R.by_name()["live_core_hit_keeps_the_strap"].description,
+            "n/a (10-word status)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "status_after_live_hit",
+                    P.OP_DEBUG_STATUS,
+                    (),
+                    1,
+                    "state 3, pc 2, flags 0x03, and run STILL 1: the hit holds the "
+                    "core without touching the strap",
+                ),
+                rec(
+                    pe,
+                    img,
+                    "status_is_stable",
+                    P.OP_DEBUG_STATUS,
+                    (),
+                    2,
+                    "the held PC is preserved across reads (S2)",
+                ),
+            ],
+            img,
+        )
+    )
 
     # 9. Stepping off the breakpoint clears the hit.
-    img, pe = image("v09-step-off-bp-clears-hit", pc=2, run=1, bp_addr=2,
-                    bp_en=True, bp_hit=True, debug_hold=True)
-    vectors.append(b.vector(
-        "debug_step_off_bp_clears_hit",
-        R.by_name()["step_off_breakpoint_clears_hit"].description,
-        "n/a (5-word prefix)",
-        [rec(pe, img, "step_off_the_breakpoint", P.OP_DEBUG_STEP, (), 1,
-             "executes the NOP at 2 and lands at 3: state 2, flags 0x01, so "
-             "the hit is cleared (S4)"),
-         rec(pe, img, "status_shows_no_hit", P.OP_DEBUG_STATUS, (), 2,
-             "armed but not hit")],
-        img))
+    img, pe = image(
+        "v09-step-off-bp-clears-hit",
+        pc=2,
+        run=1,
+        bp_addr=2,
+        bp_en=True,
+        bp_hit=True,
+        debug_hold=True,
+    )
+    vectors.append(
+        b.vector(
+            "debug_step_off_bp_clears_hit",
+            R.by_name()["step_off_breakpoint_clears_hit"].description,
+            "n/a (5-word prefix)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "step_off_the_breakpoint",
+                    P.OP_DEBUG_STEP,
+                    (),
+                    1,
+                    "executes the NOP at 2 and lands at 3: state 2, flags 0x01, so "
+                    "the hit is cleared (S4)",
+                ),
+                rec(
+                    pe,
+                    img,
+                    "status_shows_no_hit",
+                    P.OP_DEBUG_STATUS,
+                    (),
+                    2,
+                    "armed but not hit",
+                ),
+            ],
+            img,
+        )
+    )
 
     # 10. BP_CLR is the only release; with run=1 the core resumes.
-    img, pe = image("v10-bp-clr-resumes", pc=2, run=1, bp_addr=2, bp_en=True,
-                    bp_hit=True, debug_hold=True)
-    vectors.append(b.vector(
-        "debug_bp_clr_resumes",
-        R.by_name()["bp_clr_releases_the_hold"].description,
-        "n/a (5-word prefix)",
-        [rec(pe, img, "bp_clr_releases", P.OP_DEBUG_BP_CLR, (), 1,
-             "state 1 (released to the high strap), pc 2 as at the request, "
-             "bp_addr_before 2, flags 0x00"),
-         rec(pe, img, "status_running_again", P.OP_DEBUG_STATUS, (), 2,
-             "the core is running and disarmed")],
-        img))
+    img, pe = image(
+        "v10-bp-clr-resumes",
+        pc=2,
+        run=1,
+        bp_addr=2,
+        bp_en=True,
+        bp_hit=True,
+        debug_hold=True,
+    )
+    vectors.append(
+        b.vector(
+            "debug_bp_clr_resumes",
+            R.by_name()["bp_clr_releases_the_hold"].description,
+            "n/a (5-word prefix)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "bp_clr_releases",
+                    P.OP_DEBUG_BP_CLR,
+                    (),
+                    1,
+                    "state 1 (released to the high strap), pc 2 as at the request, "
+                    "bp_addr_before 2, flags 0x00",
+                ),
+                rec(
+                    pe,
+                    img,
+                    "status_running_again",
+                    P.OP_DEBUG_STATUS,
+                    (),
+                    2,
+                    "the core is running and disarmed",
+                ),
+            ],
+            img,
+        )
+    )
 
     # 11. With run=0 the same clear falls to the boot stop and the PC
     #     re-zeroes. NOTE: the response pc is the PC AT THE REQUEST (the RTL's
@@ -364,60 +584,130 @@ def build_package() -> dict:
     #     the re-zero shows up in the NEXT read. The §3 table row says 0 here --
     #     see r3_reads.DISCREPANCIES.
     img, pe = image("v11-bp-clr-boot-stop", pc=3, bp_en=True, debug_hold=True)
-    vectors.append(b.vector(
-        "debug_bp_clr_while_stopped_is_boot_stop",
-        "With run=0, DEBUG_BP_CLR drops the hold to the normal boot stop and "
-        "the PC re-zeroes; the response reports the PC at the request.",
-        "n/a (5-word prefix)",
-        [rec(pe, img, "bp_clr_to_boot_stop", P.OP_DEBUG_BP_CLR, (), 1,
-             "state 0, pc 3 AS AT THE REQUEST (the re-zero lands at the same "
-             "edge, so the next read shows 0). The §3 table expects 0 here; "
-             "the RTL answers 3 -- see r3_reads.DISCREPANCIES"),
-         rec(pe, img, "status_reads_zero", P.OP_DEBUG_STATUS, (), 2,
-             "the boot stop now holds the PC at 0")],
-        img))
+    vectors.append(
+        b.vector(
+            "debug_bp_clr_while_stopped_is_boot_stop",
+            "With run=0, DEBUG_BP_CLR drops the hold to the normal boot stop and "
+            "the PC re-zeroes; the response reports the PC at the request.",
+            "n/a (5-word prefix)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "bp_clr_to_boot_stop",
+                    P.OP_DEBUG_BP_CLR,
+                    (),
+                    1,
+                    "state 0, pc 3 AS AT THE REQUEST (the re-zero lands at the same "
+                    "edge, so the next read shows 0). The §3 table expects 0 here; "
+                    "the RTL answers 3 -- see r3_reads.DISCREPANCIES",
+                ),
+                rec(
+                    pe,
+                    img,
+                    "status_reads_zero",
+                    P.OP_DEBUG_STATUS,
+                    (),
+                    2,
+                    "the boot stop now holds the PC at 0",
+                ),
+            ],
+            img,
+        )
+    )
 
     # 12. A bad CRC arms nothing. The recorded request IS the corrupt stream.
     img, pe = image("v12-bad-crc-no-side-effect")
-    vectors.append(b.vector(
-        "debug_bad_crc_no_side_effect",
-        R.by_name()["bad_frame_leaves_no_trace"].description,
-        "n/a (rejected)",
-        [rec(pe, img, "bp_set_bad_crc", P.OP_DEBUG_BP_SET, (2,), 1,
-             "the request_file itself carries a corrupt CRC: BAD_FRAME, and "
-             "nothing is armed", corrupt_crc=True),
-         rec(pe, img, "status_shows_not_armed", P.OP_DEBUG_STATUS, (), 2,
-             "flags 0x00: the rejected op left no trace (S5)")],
-        img))
+    vectors.append(
+        b.vector(
+            "debug_bad_crc_no_side_effect",
+            R.by_name()["bad_frame_leaves_no_trace"].description,
+            "n/a (rejected)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "bp_set_bad_crc",
+                    P.OP_DEBUG_BP_SET,
+                    (2,),
+                    1,
+                    "the request_file itself carries a corrupt CRC: BAD_FRAME, and "
+                    "nothing is armed",
+                    corrupt_crc=True,
+                ),
+                rec(
+                    pe,
+                    img,
+                    "status_shows_not_armed",
+                    P.OP_DEBUG_STATUS,
+                    (),
+                    2,
+                    "flags 0x00: the rejected op left no trace (S5)",
+                ),
+            ],
+            img,
+        )
+    )
 
     # 13. The full readback: the prefix plus run/a/x/y/insn. NOTE on insn: the
     #     contract's table says imem[4] while free-running, but pe_cpu fetches
     #     at next_pc while executing, so the RTL reports the word at the
     #     LANDING address. Recorded in r3_reads.DISCREPANCIES; the RTL wins.
-    img, pe = image("v13-status-common-prefix", pc=4, run=1, bp_addr=2,
-                    bp_en=True)
-    vectors.append(b.vector(
-        "debug_status_common_prefix",
-        R.by_name()["debug_status_is_the_full_readback"].description,
-        "n/a (10-word status)",
-        [rec(pe, img, "status_full_readback", P.OP_DEBUG_STATUS, (), 1,
-             "the 5-word prefix plus run/a/x/y/insn; insn follows the RTL's "
-             "fetch mode (next_pc while executing), so it is the LANDING "
-             "word, not imem[pc] -- see r3_reads.DISCREPANCIES")],
-        img))
+    img, pe = image("v13-status-common-prefix", pc=4, run=1, bp_addr=2, bp_en=True)
+    vectors.append(
+        b.vector(
+            "debug_status_common_prefix",
+            R.by_name()["debug_status_is_the_full_readback"].description,
+            "n/a (10-word status)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "status_full_readback",
+                    P.OP_DEBUG_STATUS,
+                    (),
+                    1,
+                    "the 5-word prefix plus run/a/x/y/insn; insn follows the RTL's "
+                    "fetch mode (next_pc while executing), so it is the LANDING "
+                    "word, not imem[pc] -- see r3_reads.DISCREPANCIES",
+                )
+            ],
+            img,
+        )
+    )
 
     # 14. The debug ops are TARGET_HOST only.
     img, pe = image("v14-unsupported-target")
-    vectors.append(b.vector(
-        "debug_unsupported_target",
-        R.by_name()["debug_ops_are_host_target_only"].description,
-        "n/a (rejected)",
-        [rec(pe, img, "step_on_loopback", P.OP_DEBUG_STEP, (), 1,
-             "the loopback target does not implement the debug ops",
-             target=P.TARGET_LOOPBACK),
-         rec(pe, img, "bp_set_on_loopback", P.OP_DEBUG_BP_SET, (2,), 2,
-             "same for BP_SET", target=P.TARGET_LOOPBACK)],
-        img))
+    vectors.append(
+        b.vector(
+            "debug_unsupported_target",
+            R.by_name()["debug_ops_are_host_target_only"].description,
+            "n/a (rejected)",
+            [
+                rec(
+                    pe,
+                    img,
+                    "step_on_loopback",
+                    P.OP_DEBUG_STEP,
+                    (),
+                    1,
+                    "the loopback target does not implement the debug ops",
+                    target=P.TARGET_LOOPBACK,
+                ),
+                rec(
+                    pe,
+                    img,
+                    "bp_set_on_loopback",
+                    P.OP_DEBUG_BP_SET,
+                    (2,),
+                    2,
+                    "same for BP_SET",
+                    target=P.TARGET_LOOPBACK,
+                ),
+            ],
+            img,
+        )
+    )
 
     package = b.package(vectors)
     package["model_only_obligations"] = [
@@ -431,28 +721,29 @@ def build_package() -> dict:
         "Before any step is marked chip_confirmed, the chip's tb_pe_ctrl_r3 "
         "must pass it byte-exactly (CRC included) with the model image "
         "preloaded. Where the chip and this package ever disagree, the CHIP "
-        "wins: fix the host model and regenerate, never the reverse.")
+        "wins: fix the host model and regenerate, never the reverse."
+    )
     return package
 
 
 def write_package(path: Path | None = None) -> Path:
-    return V.write_package(SPEC, build_package(),
-                           SPEC.artifact if path is None else path)
+    return V.write_package(SPEC, build_package(), SPEC.artifact if path is None else path)
 
 
 def check_package(path: Path | None = None) -> int:
-    return V.check_package(SPEC, build_package,
-                           SPEC.artifact if path is None else path)
+    return V.check_package(SPEC, build_package, SPEC.artifact if path is None else path)
 
 
 def write_hex_export(directory: Path | None = None) -> dict:
-    return V.write_hex_export(SPEC, build_package(),
-                              SPEC.hex_dir if directory is None else directory)
+    return V.write_hex_export(
+        SPEC, build_package(), SPEC.hex_dir if directory is None else directory
+    )
 
 
 def check_hex_export(directory: Path | None = None) -> int:
-    return V.check_hex_export(SPEC, build_package,
-                              SPEC.hex_dir if directory is None else directory)
+    return V.check_hex_export(
+        SPEC, build_package, SPEC.hex_dir if directory is None else directory
+    )
 
 
 def main(argv=None) -> int:

@@ -15,8 +15,8 @@ VERSION = 1
 
 RESPONSE_BIT = 0x80
 
-HEADER_WORDS = 4          # sync, header, sequence, length
-TRAILER_WORDS = 1         # CRC
+HEADER_WORDS = 4  # sync, header, sequence, length
+TRAILER_WORDS = 1  # CRC
 MIN_FRAME_WORDS = HEADER_WORDS + TRAILER_WORDS
 MAX_PAYLOAD_WORDS = 0xFFFF
 
@@ -99,7 +99,7 @@ def bytes_to_words(data):
     return tuple(words)
 
 
-MAX_WAIT_WORDS = 15   # the chip's worst-case wait-word count (R2 contract)
+MAX_WAIT_WORDS = 15  # the chip's worst-case wait-word count (R2 contract)
 
 
 def strip_wait_words(raw, max_wait=MAX_WAIT_WORDS):
@@ -114,13 +114,12 @@ def strip_wait_words(raw, max_wait=MAX_WAIT_WORDS):
     """
     if len(raw) < 4:
         raise FrameError("response too short to hold a frame")
-    words = bytes_to_words(raw[:len(raw) - (len(raw) % 2)])
+    words = bytes_to_words(raw[: len(raw) - (len(raw) % 2)])
     index = 0
     while index < len(words) and words[index] == 0xFFFF and index < max_wait:
         index += 1
     if index >= len(words) or words[index] == 0xFFFF:
-        raise FrameError(
-            f"no frame after {index} wait words (chip bound {max_wait})")
+        raise FrameError(f"no frame after {index} wait words (chip bound {max_wait})")
     return words_to_bytes(words[index:])
 
 
@@ -160,5 +159,10 @@ def decode_frame(raw):
     version = (header >> 12) & 0xF
     if version != VERSION:
         raise FrameError(f"unsupported version {version}")
-    return Frame(version, (header >> 4) & 0xFF, words[2], header & 0xF,
-                 tuple(words[HEADER_WORDS:HEADER_WORDS + payload_words]))
+    return Frame(
+        version,
+        (header >> 4) & 0xFF,
+        words[2],
+        header & 0xF,
+        tuple(words[HEADER_WORDS : HEADER_WORDS + payload_words]),
+    )

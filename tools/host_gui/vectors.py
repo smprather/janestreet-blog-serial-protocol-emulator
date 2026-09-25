@@ -70,7 +70,7 @@ class Spec:
     hex_generated_by: str
     hex_readme_command: str
     hex_readme_intro: str
-    labels: tuple[str, str]          # (package, export) CLI status labels
+    labels: tuple[str, str]  # (package, export) CLI status labels
     protocol_extra: dict = field(default_factory=dict)
     load_words: tuple[int, ...] = DEFAULT_LOAD_WORDS
     schema: int | None = None
@@ -106,9 +106,24 @@ class Builder:
         self.images: dict[str, dict] = {}
 
     # ---- model images ------------------------------------------------------
-    def image(self, image_id: str, *, imem=None, dmem=None, pc=0, a=0, x=0,
-              y=0, insn=0, timer=0, run=0, faults=0, words_written=None,
-              selected_target=0, debug=None) -> dict:
+    def image(
+        self,
+        image_id: str,
+        *,
+        imem=None,
+        dmem=None,
+        pc=0,
+        a=0,
+        x=0,
+        y=0,
+        insn=0,
+        timer=0,
+        run=0,
+        faults=0,
+        words_written=None,
+        selected_target=0,
+        debug=None,
+    ) -> dict:
         """The exact model image a vector's steps assume, registered by id.
 
         Ships with the package so a chip testbench can preload the same bytes
@@ -118,9 +133,11 @@ class Builder:
         breakpoints and debug state. `debug` is omitted entirely when None, so
         a data-path phase's manifest keeps exactly the keys it always had.
         """
-        imem_sparse = (dict(imem) if imem is not None
-                       else {str(index): word for index, word
-                             in enumerate(self.spec.load_words)})
+        imem_sparse = (
+            dict(imem)
+            if imem is not None
+            else {str(index): word for index, word in enumerate(self.spec.load_words)}
+        )
         # Addresses are string keys from the start so the in-memory build and
         # the JSON round-trip compare equal (the drift gate caught exactly
         # that once).
@@ -132,10 +149,18 @@ class Builder:
             "id": image_id,
             "imem": {"words": F.IMEM_WORDS, "fill": 0x0000, "sparse": imem_sparse},
             "dmem": {"bytes": F.DMEM_BYTES, "fill": 0x00, "sparse": dmem_sparse},
-            "state": {"pc": pc, "a": a, "x": x, "y": y, "insn": insn,
-                      "timer": timer, "run": run, "faults": faults,
-                      "words_written": words_written,
-                      "selected_target": selected_target},
+            "state": {
+                "pc": pc,
+                "a": a,
+                "x": x,
+                "y": y,
+                "insn": insn,
+                "timer": timer,
+                "run": run,
+                "faults": faults,
+                "words_written": words_written,
+                "selected_target": selected_target,
+            },
         }
         if debug is not None:
             image["debug"] = _debug_image(debug)
@@ -151,10 +176,18 @@ class Builder:
         return image, self.model(image)
 
     # ---- vectors and steps -------------------------------------------------
-    def record(self, pe, name: str, opcode: int, payload_words, sequence: int,
-               note: str = "", model_image_id: str | None = None,
-               target: int | None = None,
-               corrupt_crc: bool = False) -> dict:
+    def record(
+        self,
+        pe,
+        name: str,
+        opcode: int,
+        payload_words,
+        sequence: int,
+        note: str = "",
+        model_image_id: str | None = None,
+        target: int | None = None,
+        corrupt_crc: bool = False,
+    ) -> dict:
         """Drive one request through the model; capture request + response.
 
         `corrupt_crc=True` flips the trailing CRC so the recorded request is a
@@ -163,8 +196,9 @@ class Builder:
         not a well-formed frame the testbench would have to mangle.
         `target` selects a non-default target (the loopback vector).
         """
-        request_hex = frame(opcode, sequence, payload_words,
-                            target if target is not None else TARGET)
+        request_hex = frame(
+            opcode, sequence, payload_words, target if target is not None else TARGET
+        )
         if corrupt_crc:
             flipped = bytearray(bytes.fromhex(request_hex))
             flipped[-1] ^= 0x01
@@ -193,13 +227,17 @@ class Builder:
             record["chip_evidence"] = evidence
         return record
 
-    def vector(self, name: str, obligation: str, word_order: str, steps: list,
-               image: dict) -> dict:
-        return {"name": name, "obligation": obligation,
-                "word_order": word_order,
-                "chip_confirmed": all(step["chip_confirmed"] for step in steps),
-                "model_image_id": image["id"],
-                "steps": steps}
+    def vector(
+        self, name: str, obligation: str, word_order: str, steps: list, image: dict
+    ) -> dict:
+        return {
+            "name": name,
+            "obligation": obligation,
+            "word_order": word_order,
+            "chip_confirmed": all(step["chip_confirmed"] for step in steps),
+            "model_image_id": image["id"],
+            "steps": steps,
+        }
 
     def package(self, vectors: list) -> dict:
         """Assemble the phase's package dict from its vectors."""
@@ -223,8 +261,9 @@ class Builder:
                 **self.spec.protocol_extra,
             },
             "memory": {"imem_words": F.IMEM_WORDS, "dmem_bytes": F.DMEM_BYTES},
-            "status_codes": {name: getattr(P, name) for name in dir(P)
-                             if name.startswith("STATUS_")},
+            "status_codes": {
+                name: getattr(P, name) for name in dir(P) if name.startswith("STATUS_")
+            },
             "model_images": self.images,
             "vectors": vectors,
         }
@@ -262,14 +301,11 @@ def load_model_from_image(image: dict) -> F.FakePE:
     fill = _strict(image["imem"]["fill"], "imem fill")
     pe.imem = [fill] * _strict(image["imem"]["words"], "imem words")
     for address, word in image["imem"]["sparse"].items():
-        pe.imem[_strict(address, "imem address")] = (
-            _strict(word, "imem word") & 0xFFFF)
+        pe.imem[_strict(address, "imem address")] = _strict(word, "imem word") & 0xFFFF
     dmem_fill = _strict(image["dmem"]["fill"], "dmem fill") & 0xFF
-    pe.dmem = bytearray([dmem_fill]) * _strict(image["dmem"]["bytes"],
-                                               "dmem bytes")
+    pe.dmem = bytearray([dmem_fill]) * _strict(image["dmem"]["bytes"], "dmem bytes")
     for address, byte in image["dmem"]["sparse"].items():
-        pe.dmem[_strict(address, "dmem address")] = (
-            _strict(byte, "dmem byte") & 0xFF)
+        pe.dmem[_strict(address, "dmem address")] = _strict(byte, "dmem byte") & 0xFF
     state = image["state"]
     pe.pc = _strict(state["pc"], "pc") & F.ISA_PC_MASK
     pe.a = _strict(state["a"], "a") & F.ISA_REG_MASK
@@ -294,13 +330,17 @@ def load_model_from_image(image: dict) -> F.FakePE:
             pe.pc = 0
     return pe
 
-def frame(opcode: int, sequence: int, payload_words, target: int | None = None
-          ) -> str:
+
+def frame(opcode: int, sequence: int, payload_words, target: int | None = None) -> str:
     """One framed request as hex, for the given target."""
-    return P.encode_frame(opcode, sequence,
-                          TARGET if target is None else target,
-                          b"".join(_strict(word, "payload word").to_bytes(2, "big")
-                                   for word in payload_words)).hex()
+    return P.encode_frame(
+        opcode,
+        sequence,
+        TARGET if target is None else target,
+        b"".join(
+            _strict(word, "payload word").to_bytes(2, "big") for word in payload_words
+        ),
+    ).hex()
 
 
 def opcode_name(opcode: int) -> str:
@@ -325,11 +365,9 @@ def _strict(value, what: str) -> int:
         text = value.strip()
         negative = text.startswith("-")
         digits = text[1:] if negative else text
-        if not digits or not all(char in "0123456789abcdefABCDEF"
-                                 for char in digits):
+        if not digits or not all(char in "0123456789abcdefABCDEF" for char in digits):
             raise ValueError(f"{what} must be an integer, got {value!r}")
-        value = int(digits, 16) if digits[:2].lower() == "0x" \
-            else int(digits, 10)
+        value = int(digits, 16) if digits[:2].lower() == "0x" else int(digits, 10)
         return -value if negative else value
     return value
 
@@ -369,18 +407,20 @@ def write_image_hex(spec: Spec, images: dict, directory: Path) -> dict:
     default_id = min(images)
     words, data = _expand_image(images[default_id])
     (directory / "imem.hex").write_text(
-        "".join(f"{word:04x}\n" for word in words), encoding="utf-8")
+        "".join(f"{word:04x}\n" for word in words), encoding="utf-8"
+    )
     (directory / "dmem.hex").write_text(
-        "".join(f"{byte:02x}\n" for byte in data), encoding="utf-8")
-    return {"imem_file": "imem.hex", "dmem_file": "dmem.hex",
-            "image_id": default_id}
+        "".join(f"{byte:02x}\n" for byte in data), encoding="utf-8"
+    )
+    return {"imem_file": "imem.hex", "dmem_file": "dmem.hex", "image_id": default_id}
 
 
 def write_package(spec: Spec, package: dict, path: Path | None = None) -> Path:
     path = Path(path or spec.artifact)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(package, indent=2, sort_keys=True) + "\n",
-                    encoding="utf-8")
+    path.write_text(
+        json.dumps(package, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return path
 
 
@@ -411,8 +451,7 @@ def check_package(spec: Spec, build, path: Path | None = None) -> int:
     return 0
 
 
-def write_hex_export(spec: Spec, package: dict,
-                     directory: Path | None = None) -> dict:
+def write_hex_export(spec: Spec, package: dict, directory: Path | None = None) -> dict:
     """Write per-step request/response .hex files plus a manifest."""
     directory = Path(directory or spec.hex_dir)
     directory.mkdir(parents=True, exist_ok=True)
@@ -424,31 +463,39 @@ def write_hex_export(spec: Spec, package: dict,
             request_file = f"{base}.req.hex"
             response_file = f"{base}.rsp.hex"
             (directory / request_file).write_text(
-                _hex_bytes(step["request_hex"]), encoding="utf-8")
+                _hex_bytes(step["request_hex"]), encoding="utf-8"
+            )
             (directory / response_file).write_text(
-                _hex_bytes(step["response_hex"]), encoding="utf-8")
-            steps.append({
-                "name": step["name"],
-                "opcode": step["opcode"],
-                "opcode_name": step["opcode_name"],
-                "sequence": step["sequence"],
-                "model_image_id": step.get("model_image_id"),
-                "chip_confirmed": step.get("chip_confirmed", False),
-                "chip_evidence": step.get("chip_evidence"),
-                "request_file": request_file,
-                "request_bytes": len(step["request_hex"]) // 2,
-                "response_file": response_file,
-                "response_bytes": len(step["response_hex"]) // 2,
-                "response_hex": step["response_hex"],
-                "status": step["status"],
-                "response_payload_words": step["response_payload_words"],
-                "model_faults": step["model_faults"],
-            })
-        vectors.append({"name": vector["name"],
-                        "obligation": vector["obligation"],
-                        "chip_confirmed": vector["chip_confirmed"],
-                        "model_image_id": vector["model_image_id"],
-                        "steps": steps})
+                _hex_bytes(step["response_hex"]), encoding="utf-8"
+            )
+            steps.append(
+                {
+                    "name": step["name"],
+                    "opcode": step["opcode"],
+                    "opcode_name": step["opcode_name"],
+                    "sequence": step["sequence"],
+                    "model_image_id": step.get("model_image_id"),
+                    "chip_confirmed": step.get("chip_confirmed", False),
+                    "chip_evidence": step.get("chip_evidence"),
+                    "request_file": request_file,
+                    "request_bytes": len(step["request_hex"]) // 2,
+                    "response_file": response_file,
+                    "response_bytes": len(step["response_hex"]) // 2,
+                    "response_hex": step["response_hex"],
+                    "status": step["status"],
+                    "response_payload_words": step["response_payload_words"],
+                    "model_faults": step["model_faults"],
+                }
+            )
+        vectors.append(
+            {
+                "name": vector["name"],
+                "obligation": vector["obligation"],
+                "chip_confirmed": vector["chip_confirmed"],
+                "model_image_id": vector["model_image_id"],
+                "steps": steps,
+            }
+        )
     image_files = write_image_hex(spec, package["model_images"], directory)
     manifest = {
         "artifact": spec.hex_artifact,
@@ -468,10 +515,9 @@ def write_hex_export(spec: Spec, package: dict,
         manifest["schema"] = spec.schema
         manifest["phase"] = spec.phase
     (directory / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8")
-    (directory / "README.md").write_text(hex_readme(spec, manifest),
-                                         encoding="utf-8")
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    (directory / "README.md").write_text(hex_readme(spec, manifest), encoding="utf-8")
     return manifest
 
 
@@ -507,8 +553,10 @@ def check_hex_export(spec: Spec, build, directory: Path | None = None) -> int:
             if step.get("model_image_id") != expected.get("model_image_id"):
                 print(f"step image reference drifted: {vector['name']}")
                 return 1
-            for key, raw in (("request_file", expected["request_hex"]),
-                             ("response_file", expected["response_hex"])):
+            for key, raw in (
+                ("request_file", expected["request_hex"]),
+                ("response_file", expected["response_hex"]),
+            ):
                 path = directory / step[key]
                 if not path.is_file():
                     print(f"missing hex file: {path}")
@@ -520,8 +568,7 @@ def check_hex_export(spec: Spec, build, directory: Path | None = None) -> int:
     if images != package["model_images"]:
         print("hex manifest images do not match a fresh build")
         return 1
-    return _check_image_files(directory, images,
-                              manifest.get("image_files", {}))
+    return _check_image_files(directory, images, manifest.get("image_files", {}))
 
 
 def _check_image_files(directory: Path, images: dict, image_files: dict) -> int:
@@ -533,7 +580,8 @@ def _check_image_files(directory: Path, images: dict, image_files: dict) -> int:
         return 1
     words, data = _expand_image(images[image_files["image_id"]])
     if _read_hex(directory / imem_file) != b"".join(
-            word.to_bytes(2, "big") for word in words):
+        word.to_bytes(2, "big") for word in words
+    ):
         print(f"{imem_file} does not match the shipped model image")
         return 1
     if _read_hex(directory / dmem_file) != bytes(data):
@@ -543,16 +591,20 @@ def _check_image_files(directory: Path, images: dict, image_files: dict) -> int:
 
 
 def hex_readme(spec: Spec, manifest: dict) -> str:
-    rows = ["| vector | image | step | request | response | status |",
-            "|---|---|---|---|---|---|"]
+    rows = [
+        "| vector | image | step | request | response | status |",
+        "|---|---|---|---|---|---|",
+    ]
     for vector in manifest["vectors"]:
         for step in vector["steps"]:
-            rows.append(f"| `{vector['name']}` | "
-                        f"`{vector.get('model_image_id', '-')}` | "
-                        f"`{step['name']}` | "
-                        f"`{step['request_file']}` ({step['request_bytes']} B) | "
-                        f"`{step['response_file']}` ({step['response_bytes']} B) | "
-                        f"{step['status']} |")
+            rows.append(
+                f"| `{vector['name']}` | "
+                f"`{vector.get('model_image_id', '-')}` | "
+                f"`{step['name']}` | "
+                f"`{step['request_file']}` ({step['request_bytes']} B) | "
+                f"`{step['response_file']}` ({step['response_bytes']} B) | "
+                f"{step['status']} |"
+            )
     images = manifest.get("image_files", {})
     return (
         f"{spec.hex_readme_title}\n\n"
@@ -566,9 +618,9 @@ def hex_readme(spec: Spec, manifest: dict) -> str:
         "// 1. the model image: 1024 IMEM words, 16 DMEM bytes\n"
         "initial begin\n"
         f'  $readmemh("{images.get("imem_file", "imem.hex")}", imem);'
-        f'   // logic [15:0] imem [0:1023]\n'
+        f"   // logic [15:0] imem [0:1023]\n"
         f'  $readmemh("{images.get("dmem_file", "dmem.hex")}", dmem);'
-        f'   // logic [7:0]  dmem [0:15]\n'
+        f"   // logic [7:0]  dmem [0:15]\n"
         "end\n"
         "// 2. preload the registers for the vector under test from\n"
         "//    model_images[].state in manifest.json:\n"
@@ -580,20 +632,25 @@ def hex_readme(spec: Spec, manifest: dict) -> str:
         "`imem.hex` is one 16-bit word per line in ascending address order;\n"
         "`dmem.hex` is one byte per line. The per-step request/response files\n"
         "are one byte per line in wire order.\n\n"
-        "## Files\n\n" + "\n".join(rows) + "\n")
+        "## Files\n\n" + "\n".join(rows) + "\n"
+    )
 
 
 def run_cli(spec: Spec, build, argv=None) -> int:
     """The shared --write/--check/--hex entry point for a phase module."""
     parser = argparse.ArgumentParser(
-        description=f"Generate/check the {spec.phase} verification package.")
+        description=f"Generate/check the {spec.phase} verification package."
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--write", action="store_true",
-                      help="write the artifact from a fresh build")
-    mode.add_argument("--check", action="store_true",
-                      help="fail if the checked-in artifact is stale")
-    mode.add_argument("--hex", action="store_true",
-                      help="write the $readmemh .hex export + manifest")
+    mode.add_argument(
+        "--write", action="store_true", help="write the artifact from a fresh build"
+    )
+    mode.add_argument(
+        "--check", action="store_true", help="fail if the checked-in artifact is stale"
+    )
+    mode.add_argument(
+        "--hex", action="store_true", help="write the $readmemh .hex export + manifest"
+    )
     args = parser.parse_args(argv)
     if args.write:
         print(f"wrote {write_package(spec, build())}")
@@ -605,8 +662,6 @@ def run_cli(spec: Spec, build, argv=None) -> int:
         return 0
     result = check_package(spec, build)
     hex_result = check_hex_export(spec, build)
-    print(f"{spec.labels[0]}: "
-          f"{'up to date' if result == 0 else 'STALE'}")
-    print(f"{spec.labels[1]}: "
-          f"{'up to date' if hex_result == 0 else 'STALE'}")
+    print(f"{spec.labels[0]}: {'up to date' if result == 0 else 'STALE'}")
+    print(f"{spec.labels[1]}: {'up to date' if hex_result == 0 else 'STALE'}")
     return result or hex_result
