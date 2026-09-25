@@ -360,3 +360,34 @@ therefore has `a=0x0F`, and `(pc=4, a=0)` is a state the chip cannot occupy. Its
 expected `insn` is consequently not contract-determined for a preloaded pc — which
 is precisely why that step stays `chip_confirmed=false` with its divergence
 pinned. The impossibility is the reason, and it is derived, not asserted.
+
+### M3 — the R2 `STATUS` debug-state surface: COVERAGE ADDED, residual pinned
+
+The reviewer's point was that R2's `STATUS`/`DUMP_CORE` now report states 2/3 but
+no R2 vector exercises that surface. Scoped down to the real gap, it is one cell:
+
+| R2 `STATUS` (0x11) reporting | covered by | before |
+|---|---|---|
+| state 0 (STOPPED) | `tb_pe_ctrl_r3` C12 | yes |
+| state 1 (RUNNING) | C12 | yes |
+| state 2 (DEBUG_HOLD) | C13 | yes |
+| **state 3 (BP_HIT)** | **new case, M3** | **NO — the live-hit case read `DEBUG_STATUS` (0x24)** |
+
+So a chip that reported the debug states correctly on 0x24 and wrongly on 0x11
+would have passed everything. The new case drives `OP_STATUS` while the core is
+held on the breakpoint and asserts `state=3`, `run=1` (the hit holds the core, it
+does not drop the strap) and `pc=2`. Green, and **RED-proven**: flipping the
+expected state to 2 makes the case fail, so it is not a rubber stamp.
+
+A note on how it was written: the first version also asserted `bp_addr`/`flags`
+on the `STATUS` response and failed — correctly, because the R2 `STATUS` layout is
+`{status, state, run, target, pc, a, x, y, …}` (`pe_ctrl.v:885-897`) and does
+**not** carry the breakpoint context; that belongs to the debug ops. The failure
+caught my own misreading of the shape, which is the case earning its keep.
+
+**Residual, pinned honestly rather than implied away:** the R2 **golden package**
+(the host's artefact) still contains no `STATUS` step at state 2 or 3. The chip
+side now covers the surface (C12/C13 + this case), so the chip is not relying on
+that package for it; regenerating the R2 package to carry the cells would be
+host-side work and would need its citations re-established. Recorded here rather
+than left for a reader to assume the R2 vectors cover it.

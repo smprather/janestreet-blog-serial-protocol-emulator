@@ -429,6 +429,23 @@ module tb_pe_ctrl_r3;
     check(rxf[6] === 16'd2, "live hit: pc is the breakpoint");
     check(rxf[8] === 16'd3, $sformatf("live hit: flags=%0d want 3", rxf[8]));
     check(rxf[9] === 16'd1, "live hit: the STRAP is still high");
+    // ---- M3: the R2 STATUS opcode must also report the HIT state ----------
+    // C12 covers STATUS in states 0/1 and C13 covers it in state 2, but the
+    // live-hit case above reads DEBUG_STATUS (0x24). Before this case the R2
+    // golden vectors and this TB never drove OP_STATUS while the core was in
+    // BP_HIT, so a chip that reported the debug states correctly on 0x24 but
+    // wrongly on 0x11 would have passed everything. The core is still held on
+    // the breakpoint here, so this reads the same state through the other op.
+    //
+    // The R2 STATUS layout is {status, state, run, target, pc, a, x, y, ...}
+    // (pe_ctrl.v:885-897) -- it does NOT carry bp_addr/flags; those belong to
+    // the debug ops, and asserting them here would be asserting the wrong
+    // contract. The state word is rxf[5], run is rxf[6], pc is rxf[8].
+    exchange(OP_STATUS, 16'h2142, 4'h0, 0, 1'b0);
+    check_status(ST_OK, "r2 status while BP_HIT");
+    check(rxf[5] === 16'd3, $sformatf("r2 status BP_HIT: state=%0d want 3", rxf[5]));
+    check(rxf[6] === 16'd1, $sformatf("r2 status BP_HIT: run=%0d want 1 (hit holds the core, not the strap)", rxf[6]));
+    check(rxf[8] === 16'd2, $sformatf("r2 status BP_HIT: pc=%0d want 2", rxf[8]));
 
     // ============ C9: stepping off the breakpoint clears the hit ============
     exchange(OP_STEP, 16'h2150, 4'h0, 0, 1'b0);
