@@ -1,213 +1,394 @@
-# BLOCK 3 — UART rate flexibility: findings and handoff (2026-09-25)
+# BLOCK 3 — UART rate flexibility: findings (2026-09-25)
 
 Worker `fw-bus`, branch `fw-bus-protocols`. BLOCK 2 landed as `02c9101` +
-`a4a9772`. **BLOCK 3 is partial and is NOT committed** — see
-[WIP inventory](#wip-inventory-deliberately-uncommitted) and
-[Why this stopped where it did](#why-this-stopped-where-it-did).
+`a4a9772`. **BLOCK 3 is complete and committed.**
 
-The point of this file is that the measurements below cost a full working
-session to obtain, and none of them are recoverable from the code alone. The
-next session should not have to re-derive any of them.
-
----
-
-## Measured results, one line
-
-> firmware/midi_xfer.pe (109 words) assembles and runs, and its own record is
-> `dmem bytes=14, status_bytes=2, finished=0xA5` — six two-data-byte MIDI
-> messages over fourteen wire bytes with two status bytes, which *is* the
-> running-status saving (18 bytes without it); a raw edge trace of the TX pin
-> measured every half-bit at 16.283–16.433 µs, i.e. **30,420–30,704 baud
-> against a nominal 31,250, −1.8% to −2.7%**, inside the 3% the act needs — so
-> **the transmitter is right and the testbench's receiver is the defect**.
-
----
-
-## Finding 1 — the target-wait idiom gives (N−1, N] ticks, not N
-
-`pe_soc`'s target idiom — read the counter, add N, poll until it equals the
-target — **does not give N ticks**. The read lands at a random phase within
-the counter's 260-clock window, so a 3-tick wait completes anywhere in
-**(520, 780] clocks**, a 260-clock spread.
-
-`firmware/uart_echo.pe` records exactly this for the 1-tick case:
-
-> "a wait that snapshots the count and loops until it changes therefore returns
-> after anywhere in (0, 1] ticks"
-
-Nobody had written down that it **scales**. The consequence:
-
-| rate | cell | (N−1,N] spread as a fraction | usable? |
-| --- | --- | --- |---|
-| 115200 8N1 | 8.67 µs | 1.2% of a bit | yes — the receiver re-synchronises on every start bit |
-| 31250 8N1 | 32 µs | 27% of a **half-bit** | **no** — the grid walks out of its cell within eight bits |
-
-**Therefore both BLOCK 3 acts are timed from counted instructions alone and use
-the timer zero times.** The measured symptom before the fix: the half-bit came
-out at 17.7 µs instead of 16.03, the testbench's sampling grid drifted 3.4 µs
-per bit, and the payload decoded correctly for the first two bytes (`0x20`,
-`0x40`) and wrong from the third (`0x21` → `0x10`). A UART cannot repair a
-transmitter that jitters; only a deterministic delay can.
-
-This closes the follow-up recorded in `wiki/plans/through-i2c.md`
-("removing it needs a sub-tick delay, roughly 130 clocks of counted NOPs").
-
-## Finding 2 — the factorisation is the trick, and 8-bit counters truncate silently
-
-The MIDI half-bit is 960 clocks. The delay shape is two NOPs, an `LDI A, N`,
-then N iterations of a body:
-
-```text
-cost = 2 + 1 + N x (body) + 2 OUT register latencies
-```
-
-`960 − 3 = 957`, and `957 = 3 x 319 = 9 x 106.33 = 33 x 29 = 11 x 87`. The
-**only** split with both factors inside an 8-bit counter is **11 × 87** (a body
-of nine NOPs plus `SUB` and `JNZ`, 87 iterations).
-
-A 319-iteration loop **assembles, runs, and silently truncates to 63
-iterations** — a 192-clock delay, i.e. 156 kbaud. This is not hypothetical: the
-first probe written for this act did precisely that and reported a
-"measurement" that was silently the time since reset. The next session must
-keep every delay-loop counter ≤ 255.
-
-Measured on the real CPU: **961.92 clocks = 16.032 µs = 31,188 baud**, −0.2%.
-
-## Finding 3 — a counted-NOP delay is 3N + 5 clocks *pin to pin*, not 3N
-
-The `+5` is the `LDI` plus two `OUT` register latencies. Omitting it is a
-**2-clocks-per-cell** error: 0.13% on the rate, small enough to decode
-successfully, which is exactly why it survives review. The same figure applies
-to the DMX case below, where it is the difference between 118 and 120 clocks.
-
-`1 instruction = 1 clock` is now **measured, not assumed**: differencing two
-loop lengths on the real CPU gives `NOP/SUB+JNZ` = **3.000 clocks** per
-iteration.
-
-## Finding 4 — DMX 250 kbaud is exact with no timer at all
-
-A 2 µs half-bit is **shorter than one 260-clock tick**, so at 250 kbaud the
-timer cannot be used even once. And the delay can be made exact:
-
-```text
-2 + 1 + 23 x 5 + 2 = 120 clocks = 2.0000 us = 250,000 baud   (measured exactly)
-```
-
-The two acts bracket the problem nicely: **MIDI is the rate a fractional tick
-cannot express; DMX is the rate a tick cannot express at all.**
+> ## THE HEADLINE CORRECTION, and it reverses this file's own earlier conclusion
+>
+> The previous version of this file ended with:
+>
+> > "the transmitter is right and the testbench's receiver is the defect"
+>
+> **That was wrong, and every part of it was wrong for the same reason: the
+> transmitter's arithmetic was never checked against the wire.** A clock-resolution
+> probe of the TX pin shows the pin carrying a bit cell of 979 clocks — a
+> transmitter running at 61 kbaud on a MIDI wire — with every byte arriving
+> shifted right by two. Nothing about the receiver could have found that,
+> because the receiver was being written to agree with a wrong wire.
+>
+> Seven real firmware defects were found in the two programs, and **none of them
+> was found by reading the code**. All seven were found by a testbench that
+> measured the pin. Four of them produced output that was *mostly correct*,
+> which is the shape of bug that survives review, and one of them was found only
+> because the receiver was built to verify a stop bit.
+>
+> The one durable lesson is at the bottom: **a delay built by counting
+> instructions is arithmetic, and arithmetic that is only ever compared with
+> itself has never been tested.**
 
 ---
 
-## WIP inventory (deliberately uncommitted)
+## Measured results, one line each
 
-These three files exist in `/tmp/worktrees/fw-bus` and are **intentionally not
-committed**, so that a `git add -A` in the worktree cannot land a **red**
-testbench. The committed branch is green.
+> **MIDI.** All fourteen wire bytes exact (`90 20 40 21 41 22 42 80 23 43 24 44 25 45`),
+> running status replacing rather than accumulating (six messages, **2** status
+> bytes on the wire, 14 bytes not 18), **0 framing errors**, and a bit cell
+> measured at **31.9987 µs = 31,251 baud with a spread of 0.0000 µs across all
+> fourteen frames** — i.e. 1920 clocks exactly, where 1920 clocks *is* 31,250
+> baud.
+>
+> **DMX512-A.** Break **88.06 µs** (floor 87.5), mark **12.38 µs** (floor 8.0),
+> **513 of 513** slots decoded with **both** stop bits verified on every one,
+> every slot value equal to the recomputed ramp, and a cell measured at
+> **3.9998 µs = 250,010 baud, spread 0.0000 µs across all 513 slots** — 240
+> clocks exactly, where 240 clocks *is* 250,000 baud.
 
-| File | State |
-| --- | --- |
-| `firmware/midi_xfer.pe` | **complete and working** — 109 words, assembles, message layer proven by its own record |
-| `firmware/midi_xfer.hex` | current build of the above |
-| `tb/tb_pe_soc_midi.v` | **RED** — the receiver cannot frame the stream (four failed versions, diagnosed below) |
-| `regress/dev_tb.sh` | dev-only helper, unquoted `$SOC` is intentional word-splitting; not part of the regression |
+Both programs are timed by counted instructions, and both land on their nominal
+rate to the clock. That is the result the block exists to produce, and it took
+seven defects and a receiver rewrite to reach it.
 
-Reproduce with:
+---
 
-```bash
-cd /tmp/worktrees/fw-bus
-python3 tools/fw/peasm.py firmware/midi_xfer.pe -o firmware/midi_xfer.hex
-./regress/dev_tb.sh tb_pe_soc_midi tb_pe_soc_midi
-```
+## Defect 1 — the rate was TWICE the MIDI rate
 
-## Why this stopped where it did
+The old header said "half-bit at 31.25 kbaud = 960 clocks = 16.000 µs", which is
+**true**, and then built 960 clocks *per bit cell*. A cell is a whole bit, not a
+half. Measured: 16.316 µs per cell, i.e. **61,286 baud on a MIDI wire**.
 
-The transmitter is proven; the testbench is not. Committing a testbench nobody
-has seen pass is worse than not having one — it manufactures a green tick for
-a claim nothing checks. A `PASS` line in `run_all.sh` that has never been
-observed is exactly the failure mode this project's own house rules exist to
-prevent, and the BLOCK 2 mutation gate had just caught two of mine for the same
-reason (a vacuous SCLK check, and a mutation that was not a defect at all).
+The old header went on to report "31,188 baud, 0.2 % from nominal" — a number
+produced by dividing the measured cell by two, which is asking the wrong question
+of the right measurement. It is worth keeping that in the record: the error was
+not a typo in a constant, it was a unit confusion that *looked* like a
+carefully-measured number, and only the wire could catch it.
 
-## The MIDI receiver: four failed versions and the actual lesson
+**The TB's rate window is anchored to 32.000 µs, never to the firmware's own
+arithmetic**, and that is the only reason this was catchable at all.
 
-`tb_pe_soc_midi.v` is red for **one** reason, and it is a receiver problem
-rather than a firmware one.
+## Defect 2 — every byte lost its two lowest bits
 
-**The lesson: in a back-to-back 8N1 stream a falling edge is not a start bit
-and a rising edge is not a stop bit.** A data bit going 1→0 falls exactly like
-a start bit, and a data bit going 0→1 rises exactly like the stop bit. Every
-edge-based scheme therefore fails:
+`sb_hold` was the common tail of all ten cells and the shift lived there, so the
+**stop cell and the start cell each shifted the working copy**. Ten shifts for
+eight bits. The wire carried `source >> 2` on all fourteen frames: `0x90` went
+out as `0x24`, `0x20` as `0x08`, `0x40` as `0x10`.
+
+Only the two highest bits of a MIDI status byte survive that, so a receiver
+would have decoded six well-formed messages built from the wrong data. The
+shift now lives in the **data branch only**: *a cell that carries no data bit
+must not consume one.*
+
+## Defect 3 — there was no stop bit at the end of the frame, and the byte check did not find it
+
+The cell dispatch tested the index for zero, so cell 0 drove 1 and cell 1 drove
+0: the frame was `[stop][start][d0..d7]`, one cell out of phase, and the only
+high cell in a frame was the *next* frame's leading cell.
+
+Because the stream is back-to-back, that is a **well-formed** frame — the missing
+stop bit is the next frame's first cell. The receiver decoded **thirteen of the
+fourteen bytes correctly**, including `0x90` and the running-status flip to
+`0x80`. It failed only on the **last** frame, which has no following frame to
+supply a stop bit, and it failed as a single stop sample reading low.
+
+So: neither the byte comparisons nor the rate check found this. The one check
+that did is the receiver's — *a frame is accepted only if its stop bit reads
+high*. **Thirteen of fourteen is a failure, not a near-miss**, and that is the
+argument for building a receiver that verifies rather than a position counter
+that counts.
+
+## Defect 4 — a cell's length belongs to the PATH BETWEEN TWO CELLS
+
+This is the most expensive fact in both files, and `midi_xfer.pe` paid for it
+twice.
+
+The obvious model is "each cell drives its bit, waits, repeats". Under that
+model the padding NOPs look like arbitrary constants. They are not: the time
+from one cell's **output** to the next cell's **output** depends on *which cell
+is next*, because the dispatch that selects the next cell's code is only partly
+executed on each path. Reaching a data cell runs six instructions of dispatch;
+reaching the start bit runs five; the first stop runs two and the second three.
+
+Measured in DMX, at clock resolution, on one frame: cells of **241, 240 and
+1917 clocks**. The TB reported a mean of 4.0114 µs and a spread of 0.0148 µs,
+which is not a rate at all — it was half the slots at 4.0165 µs and half at
+4.0000 µs. Only a histogram of the *distinct* measurements says that, and that
+histogram is now printed.
+
+The fix is padding NOPs whose counts are not a matter of taste:
+
+| | MIDI | DMX |
+| --- | --- | --- |
+| data cell (the reference) | 1920 clocks | 240 clocks |
+| padding needed | 3 in `sb_start`, 3 + 5 in `sb_stop` | 3 in `sb_start`, 5 in `sb_stop`, 2 + 4 in `sb_stop2` |
+| cells per frame | 10 | 11 |
+
+## Defect 5 — the page counter was incremented per slot, not per page
+
+DMX's first version counted slots and pages in one byte, so the frame ended
+after **two data slots**. Caught as a watchdog timeout 250 µs into a 22.6 ms
+frame with three slots decoded correctly — which is the shape a "the frame
+stopped early" bug always has: everything that was decoded was *right*.
+
+The fix is two bytes and the arithmetic that separates them: a slot counter
+within a page (which wraps on its own, so it needs no comparison at all) and a
+page counter beside it.
+
+## Defect 6 — the page counter was never initialised, so the frame never ended
+
+`dmem[9]` was written only at a page boundary, so at the first one it was `x`;
+`x + 1` is `x`, and `SUB A, 2` on an `x` is an `x`. The comparison could never
+be true and the firmware transmitted for ever. The wire was **perfect** — 513
+correct slots — and the symptom was a watchdog timeout with the transmitter
+still running.
+
+Worth recording next to defect 5: both are "the frame ended at the wrong time",
+one from counting the wrong thing and one from counting an `x`, and both present
+as *the wire looks perfect*.
+
+## Defect 7 — the start code's exit advanced the payload ramp
+
+The transmitter has one exit, and the start code's exit landed in the same
+place a data slot's did. The payload became "data slot *k* + 1" instead of
+"*k*": still a ramp, still a legal fixture, and one index out of step with every
+document describing it. A flag in `dmem[7]` and one branch fix it, because a
+shared transmitter on an ISA with no `CALL/RET` needs the frame layer to say
+what leaving it means.
+
+---
+
+## The receiver, and the four versions that failed first
+
+`tb_pe_soc_midi.v` is a **free-running oversampling search**: a background
+quarter-bit strobe on its own timeline, a high-to-low transition as a
+*candidate* start bit, eight samples at mid-points, and **the stop bit verified
+before the frame is accepted**. A candidate whose stop reads low is discarded and
+the search continues, which costs nothing because the sampler never waited for
+the decoder.
+
+Four earlier versions decoded from edges and every one failed on a back-to-back
+8N1 stream, for one reason: **in a back-to-back 8N1 stream a falling edge is not
+a start bit and a rising edge is not a stop bit.** A data bit going 1→0 falls
+exactly like a start bit.
 
 | version | what it tried | how it failed |
 | --- | --- | --- |
-| 1 | `@(negedge tx_pin)` starts a decode | data transitions start decodes mid-frame; returned `0xa8` where `0x90` went out |
+| 1 | `@(negedge tx_pin)` starts a decode | a data transition starts a decode mid-frame; returned `0xa8` where `0x90` went out |
 | 2 | a `decoding` flag blocking 9.5 bit periods | consumed the real start bit whenever a data edge woke it early; missed ~2 frames in 3 |
-| 3 | require ≥1.5 bit periods of HIGH before a fall | for the data pattern 1,1,0 the preceding high run is two whole bits, which is indistinguishable from a stop bit |
-| 4 | anchor on the stop bit, measured | **the rate check now differences consecutive POSEDGES, and data-bit rises are counted** — `t_stop_rise` is not the stop bit, so the frame period came out 5× short and 12 of 14 stop bits read low |
+| 3 | require ≥1.5 bit periods of HIGH before a fall | for the data pattern 1,1,0 the preceding high run is two whole bits, indistinguishable from a stop bit |
+| 4 | anchor on the stop bit, measured | the rate check differenced consecutive POSEDGES and counted data-bit rises, so the frame period came out 5× short and 12 of 14 stop bits read low — a phase-error detector wearing a rate check's clothes |
 
-**The fix the next session should build: a free-running oversampling
-receiver** (a sampler every quarter-bit, on its own timeline, never blocking),
-which searches for a high→low transition, samples eight bits at the mid-points
-**verifying the stop bit is high before accepting the frame**, and returns to
-the search immediately on a framing error. The verification is what makes it
-safe: a data transition produces a candidate whose stop bit reads low, and is
-discarded without consuming the timeline. Two further requirements:
+**And the one distinction the finished receiver keeps:** an edge monitor
+timestamps transitions to the picosecond, because using an edge for *timing* is
+not the same as using it to *decide*. The stop-bit sample decides; the monitor
+only measures. A receiver that takes both decisions from edges is version 1.
 
-- sample at the **measured** bit period (from two consecutive verified stop-bit
-  edges), not the nominal 32 µs — the transmitter runs 1.85% fast, and a
-  nominal grid accumulates 0.18 of a bit per frame;
-- re-anchor on the **verified** stop edge every frame, so the rate error never
-  accumulates.
+## The rate window is 0.3 %, and that number is not a preference
 
-## Self-inflicted testbench defects recorded so they are not repeated
+The transmitters are counted-instruction dividers on a known 60 MHz clock, so the
+only rates they *can* produce near nominal sit on a grid set by the delay loop's
+body:
 
-Three of these cost more time than the firmware did, and all three produced
-failures that *looked* like protocol defects:
+| | MIDI (13-clock body) | DMX (2-clock body) |
+| --- | --- | --- |
+| cell | 1920 clocks = 32.000 µs | 240 clocks = 4.000 µs |
+| neighbours | 1907 / 1933 clocks, ±0.68 % | 238 / 242 clocks, ±0.83 % |
+| TB window | ±0.3 % | ±0.3 % |
 
-1. **A drain cap that was not derived from the rate.** The first version allowed
+MIDI 1.0 allows ±2 %. A ±2 % window would admit all three of MIDI's achievable
+rates, the rate check would be decoration, and **the counted-delay mutation would
+survive it**. The window is narrower than the quantisation so that it admits
+exactly one achievable value — which is the only reason the mutation gate can
+prove the check is not vacuous.
+
+## The cell is measured INSIDE a frame, and why that is not a detail
+
+The obvious measurement is "difference consecutive start bits". It is **wrong**:
+consecutive frames are ten cells *plus the message layer's inter-frame gap*, and
+that gap depends on which branch the message layer takes — sending a status byte
+costs more instructions than running status does. Measured that way, the TB
+reported 32.0437 µs for a transmitter putting 32.0000 µs on the wire; the
+0.0437 is the message layer, not the transmitter.
+
+What *is* exact is a pair of edges inside one frame, because a frame's cells are
+all one length and nothing else comes between them. The TB takes the start bit's
+falling edge, takes the next edge on the wire, counts the cells between them from
+the byte it just decoded, and divides. The count comes from a byte the verified
+stop bit has already vouched for and which the expected-byte checks hold to a
+fixed list, so the measurement is not circular: **the bytes are known before the
+rate is asked for.**
+
+That measurement found defect 4, and it found the DMX page counter bugs are
+invisible to it (as they should be — those are frame-level, not cell-level).
+
+## The "every cell is the same length" assertion, and why the window could not do it
+
+One clock is 0.05 % of a MIDI bit. So is a single padding NOP. **The ±0.3 %
+window is blind to it by a factor of six** — and a mutation adding one NOP to
+`sb_start` survives the window while breaking the frame's rate.
+
+Both TBs therefore also assert that every in-frame measurement agrees to within
+a picosecond. The clean firmware measures **exactly zero** spread, because a pure
+divider has nothing to be inexact about. That check is what makes
+`midi-cell-padding-nop` a detected mutation rather than a survivor.
+
+## The factorisation, and the 8-bit counter that eats it
+
+| | delay needed | body | iterations | result |
+| --- | --- | --- | --- | --- |
+| MIDI | 1898 clocks | 13 (11 NOPs + `SUB` + `JNZ`) | 146 | 1920 clocks = 31,250 baud |
+| MIDI break/mark | 236 clocks/iteration | 2 (`SUB` + `JNZ`) | 117 | 240 clocks = one bit cell |
+| DMX | 219 clocks | 2 | 109 | 240 clocks = 250,000 baud |
+| DMX break/mark | 236 clocks | 2 | 117 | 240 clocks = one bit cell |
+
+`1 instruction = 1 clock` is **measured, not assumed**: the first version of
+MIDI's loop counted 979 instructions from one cell's `OUT` to the next, and a
+clock-resolution probe of the TX pin measured 979 clocks (16.316 µs). That exact
+agreement is the single fact both cell budgets rest on, and it is why the
+arithmetic is written as arithmetic and the TB measures the pin.
+
+**Keep every delay-loop counter ≤ 255.** This is not a style rule. A count that
+does not fit the 8-bit counter is not a build error — the assembler is silent,
+the loop runs `count mod 256` times, and nothing else in the system can tell. The
+first probe written for the MIDI act did exactly that with a 319-iteration loop
+and reported a "measurement" that was silently the time since reset. The nearest
+DMX trap is a 3-clock body wanting `634 / 3`, which rounds to a count that fits
+and is wrong by 3 %.
+
+## DMX-512-A: the rate a tick cannot express at all
+
+A DMX bit is 4 µs and the shared tick is 4.3333 µs, so a bit is **0.923 of a
+tick** and the timer cannot be used even once. The two acts bracket the problem
+exactly: **MIDI is the rate a fractional tick cannot express; DMX is the rate a
+tick cannot express at all.**
+
+Break (≥ 87.5 µs) and mark (≥ 8.0 µs) are expressed in **whole bit cells of the
+same counted delay** — 22 and 3 — so there is no second timing constant in the
+file to get wrong. 87.5/4 = 21.875, so 22 is the smallest whole number of cells
+that clears the floor, and it clears it by 0.5 µs. The mark uses three cells
+rather than two: two is 8.000 µs, *exactly* the minimum, and "exactly the
+minimum" is not a place to build a design when one more cell costs nothing.
+
+**The 512-slot payload is a wrapping 8-bit ramp**, because an 8-bit register
+incremented with an 8-bit add *is* one — two instructions per slot, recomputed
+independently by the TB. It cannot be faked by a transmitter with the bit order
+reversed, because a 512-slot ramp is not a palindrome in either order: slot 1 is
+`0x01` and slot 128 is `0x80`, and swapping the orders turns the first into
+`0x80`.
+
+## The lean testbench, and what "lean" had to mean
+
+One DMX512-A frame is **22.6 ms of simulated time = 1.37 million clocks**, and
+`tb_pe_soc_dmx512.v` finishes in ~27 s.
+
+The first plan was to reuse the MIDI receiver's free-running strobe. Following
+it literally would have meant **5.7 million strobe events** across the frame — the
+testbench would have spent more time on its own sampler than on the DUT. So this
+receiver **samples only while decoding a slot**: eleven waits per slot, 5,643 in
+the whole frame, and the idle time between slots costs nothing at all. It keeps
+the property that matters (both stop bits verified) and drops the shape that
+does not fit the frame length.
+
+The `$dumpvars` is the TB scope only, also for arithmetic rather than taste: a
+full-hierarchy dump over 1.37 M clocks is a file of hundreds of megabytes that
+the regression would write on every run, for a waveform whose only moving part is
+a 4 µs square wave the assertions already measure on the pin.
+
+## Self-inflicted testbench defects, recorded so they are not repeated
+
+1. **A drain cap that is not derived from the rate.** The first version allowed
    900 µs for 14 bytes × 320 µs = 4480 µs of stream — five times too little — so
    the run stopped after two and a half messages and every check failed on a
-   truncated stream. **Any cap in a receiver must be computed from the rate.**
-2. **A task that both positioned and sampled.** `frame_from_stop` sampled and
-   its caller sampled too, so each iteration decoded two frames and the output
-   was the odd bytes of a stream read at double rate. One job per task.
-3. **`$readmemh` images and probe assumptions.** The very first timing probe
-   assumed pin 0 resets LOW; it resets **HIGH** (the UART idle level), so the
-   `LDI A, 1` produced no edge and the "measurement" was the time since reset —
-   a constant 1808 clocks for three different loop lengths. **Record every edge
-   rather than the first and last**, and re-check the reset level of any pin
-   used as a probe.
+   truncated stream that looked exactly like a protocol defect. **Any cap in a
+   receiver must be computed from the rate.**
+2. **A task that both positioned and sampled**, so each iteration decoded two
+   frames and the output was the odd bytes of a stream read at double rate. One
+   job per task.
+3. **`$readmemh` images and probe assumptions.** A probe assumed pin 0 resets
+   LOW; it resets **HIGH** (the UART idle level), so a measurement came out as
+   the time since reset. **Record every edge, and re-check the reset level of any
+   pin used as a probe.** A second probe counted clocks in an `integer` that was
+   never initialised, so every timestamp in the file was `x` and `x + 1` is `x`.
+4. **Sampling on the timeline you are measuring.** The first DMX version found
+   the start bit's fall, waited for the cell-9 rise in order to measure the cell,
+   and only then decoded the slot — by which time the simulation clock was nine
+   cells past the slot it was about to sample, every sample landed in the past,
+   took no delay, and read whatever the line was doing. It decoded the start code
+   as `0xff`: eight ones, from eight samples taken at one instant. Sample on the
+   nominal grid and refine afterwards.
+5. **Reading the DUT before it has run.** The last DMX check read `dmem` half a
+   cell before the frame layer had executed and reported `slots_low=0, pages=x,
+   finished=00` for a frame that had just gone out complete.
+6. Icarus rejects an unpacked array `localparam` outright ("unpacked array
+   parameters are not supported yet"). Use packed vectors, and remember a
+   concatenation is MSB-first, so the **last** literal is index 0.
+7. `$dumpvars(0, top, "exclusions...")` makes Icarus emit `cannot dump a
+   vpiConstant` for every localparam in the excluded scopes. Exclude nothing;
+   narrow the scope instead.
 
-Also: Icarus rejects an unpacked array `localparam` outright
-("unpacked array parameters are not supported yet") — the same wall
-`tb_pe_soc_spi.v` documented. Use packed vectors and remember a concatenation
-is MSB-first, so the **last** literal is index 0.
+---
 
-## Next session's checklist
+## What is committed, and what is deliberately not
 
-1. Rewrite `tb_pe_soc_midi.v`'s receiver as the oversampling search above. The
-   firmware does not need to change; verify with the existing transcript
-   (`wire byte 1..14`, `running status now ..`, `dmem: bytes=14 status_bytes=2
-   finished=a5`).
-2. RED-first, as always: point the finished TB at `firmware/spi_xfer.hex` (or
-   any 115200 firmware) and record the failures before repairing it.
-3. Act 5: `firmware/dmx512.pe` + `tb/tb_pe_soc_dmx512.v`. **The frame is 22.6 ms
-   of simulated time** (513 slots × 11 bits × 4 µs), so the TB must be lean —
-   no per-clock `$sformatf`, sample on TX edges, and expect a long run. The
-   transmitter is timed at exactly 120 clocks per half-bit (Finding 4); the
-   frame is break (≥ 87.5 µs) + mark (≥ 8 µs) + start code + 512 slots, and the
-   512 slot values are a wrapping 8-bit ramp, which is the natural thing for an
-   8-bit slot counter to generate and for the TB to recompute.
-4. Extend `regress/mutate_fwbus_tb.sh` with mutations for both new programs —
-   including at least one that changes the counted delay constant, since that is
-   the defect class both acts exist to prevent and the mutation gate is the only
-   thing that will prove the rate check is not vacuous.
-5. Same-list wiring: 2 TBs into `regress/run_all.sh`, 2 firmwares into
-   `regress/run_firmware_tests.sh`, then the full regression and a commit.
+| Path | State |
+| --- | --- |
+| `firmware/midi_xfer.pe` / `.hex` | **committed** — 123 words, 31,250 baud measured on the pin |
+| `firmware/dmx512.pe` / `.hex` | **committed** — 126 words, 250,000 baud measured on the pin |
+| `tb/tb_pe_soc_midi.v` | **committed** — oversampling receiver, stop bit verified |
+| `tb/tb_pe_soc_dmx512.v` | **committed** — lean receiver, 513 slots, both stops verified |
+| `regress/mutate_fwbus_tb.sh` | **committed** — 21 mutations, 21 detected, 0 survived |
+| `regress/run_all.sh`, `regress/run_firmware_tests.sh` | **committed** — same-list wiring: 2 TBs, 2 firmwares |
+| `regress/dev_tb.sh` | **NOT committed** — dev-only helper; a second way to run a TB is one more thing that can drift from the first |
 
-## Limits
+## The mutation gate, and the two mutations the block exists for
 
-Simulated and mapped evidence only. No synthesis or STA screen was run for
-BLOCK 3, because no RTL changed — the acts are programs on the same CPU, pin
-matrix and tick that `firmware/i2c_xfer.pe` and `firmware/spi_xfer.pe` already
-use, which is the thesis being demonstrated. No physical flow, DRC or LVS.
+`regress/mutate_fwbus_tb.sh` now mutation-tests **five** firmware DUTs — 21
+mutations, **21 detected, 0 survived, 0 harness errors**, tree byte-clean after
+the run. Nine are new. The two that matter most:
+
+- **`midi-cell-count-minus-one`** — `146 → 145` iterations. The cell becomes
+  1907 clocks, 0.68 % fast. A receiver resynchronises on the next start bit and
+  never notices, which is precisely why it survives review.
+- **`dmx-cell-count-minus-one`** — `109 → 108`. 238 clocks, 0.83 % slow.
+
+Both are **the defect class both acts exist to prevent**, and both are caught only
+because the rate window is narrower than the delay loop's own quantisation.
+
+The third new mutation is the instructive one: **`midi-cell-padding-nop`**. One
+extra NOP in `sb_start` is 0.05 %, which the rate window cannot see, and it is
+caught by the *every cell measures the same* assertion. A mutation that a
+tolerance cannot see is exactly the kind that produces a green tick for a claim
+nothing checks.
+
+Also new: the stop bit driven low (both acts), the shift removed (replaced by a
+NOP so the cell length is unchanged and the mutation tests the payload alone),
+running status negated, DMX's break one cell short, and the DMX ramp stepping by
+two.
+
+The gate now costs **3 m 46 s**, almost all of it the four DMX cases at ~27 s
+each. That is the price of proving a protocol whose frame is a quarter of a
+second long, and it is paid knowingly rather than discovered as a mysteriously
+slow suite.
+
+---
+
+## The one durable lesson
+
+> **A delay built by counting instructions is arithmetic, and arithmetic that is
+> only ever compared with itself has never been tested.**
+
+Both `pe_soc` timer idioms return `(N−1, N]`, not `N` — the read lands at a
+random phase inside the counter's 260-clock window, so a 3-tick wait is anywhere
+in (520, 780] clocks. Both new programs therefore use the timer **zero times**
+and count instructions instead. And then, on the very next line, the
+instruction count was wrong: a cell is a bit and not a half-bit, a shift in a
+common tail is a shift on all ten cells, a dispatch is partly executed on some
+paths and not others, and a page counter compared against 2 counts pages.
+
+Every one of those was found by measuring the pin, and **not one of them would
+have been found by a testbench that compared the firmware's own arithmetic with
+the firmware's own arithmetic.** That closes the follow-up recorded in
+`wiki/plans/through-i2c.md` ("removing it needs a sub-tick delay, roughly 130
+clocks of counted NOPs") — 1898 clocks of them, for MIDI, and 219 for DMX.
+
+The consequence worth carrying to the next bit-banged protocol: **build the
+delay, then measure it on the pin, then assert the measurement is inside a window
+narrower than the delay's own quantisation step** — otherwise the assertion
+cannot see the one change that matters, and the suite will be green and wrong.

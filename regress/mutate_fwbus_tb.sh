@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# mutate_fwbus_tb.sh — mutation-test the three advanced-bus protocol TBs
-# together: tb_pe_soc_i2c_adv, tb_pe_soc_spi3 and tb_pe_soc_uart_flow.
+# mutate_fwbus_tb.sh — mutation-test the five advanced-bus protocol TBs
+# together: tb_pe_soc_i2c_adv, tb_pe_soc_spi3, tb_pe_soc_uart_flow,
+# tb_pe_soc_midi and tb_pe_soc_dmx512.
 #
-# WHY ONE HARNESS FOR THREE TBs. Each of these testbenches has the same shape
+# WHY ONE HARNESS FOR FIVE TBs. Each of these testbenches has the same shape
 # -- the DUT is a FIRMWARE program, the RTL underneath is the already-verified
 # CPU, pin matrix, pads and tick -- so the mutations are firmware edits and
 # every harness would be the same script with a different name and a different
 # anchor list. The existing suite keeps one harness per TB (mutate_i2c_tb,
 # mutate_spi_tb, mutate_ctrl_tb, ...) because those are separate BLOCKS with
-# separate RTL. These three are one deliverable -- the advanced bus protocols --
-# and splitting them would triple the boilerplate to say the same thing. The
+# separate RTL. These five are one deliverable -- the advanced bus protocols --
+# and splitting them would quintuple the boilerplate to say the same thing. The
 # per-mutation verdicts are still printed one line each, so nothing is lost.
 #
 # RESTORES BOTH the .pe AND the .hex of every firmware it touches, verified by
@@ -47,8 +48,14 @@ SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl
 LOG=/tmp/mutate_fwbus_case.log
 BAK=$(mktemp -d /tmp/fwbus_mut.XXXXXX)
 
-# The three (firmware, testbench) pairs. The firmware is the DUT of each.
-FWS="i2c_adv spi_mode3 uart_flow"
+# The five (firmware, testbench) pairs. The firmware is the DUT of each.
+#
+# dmx512 IS THE SLOW ONE: one DMX512-A frame is 22.6 ms of simulated time, or
+# 1.37 million clocks, so each of its four mutations costs about half a minute
+# of wall clock and the whole gate is minutes rather than seconds. That is the
+# price of proving a protocol whose frame is a quarter of a second long, and it
+# is paid knowingly rather than discovered as a mysteriously slow suite.
+FWS="i2c_adv spi_mode3 uart_flow midi_xfer dmx512"
 
 cleanup() {
   for f in $FWS; do
@@ -128,9 +135,10 @@ check_mutation() {
   restore; verify_restore
 }
 
-echo "=== mutation-testing the three advanced-bus protocol TBs ==="
+echo "=== mutation-testing the five advanced-bus protocol TBs ==="
 for pair in "i2c_adv tb_pe_soc_i2c_adv" "spi_mode3 tb_pe_soc_spi3" \
-            "uart_flow tb_pe_soc_uart_flow"; do
+            "uart_flow tb_pe_soc_uart_flow" "midi_xfer tb_pe_soc_midi" \
+            "dmx512 tb_pe_soc_dmx512"; do
   set -- $pair
   if run_tb "$1" "$2"; then
     echo "  [baseline] $2 passes on the unmutated firmware"
@@ -286,6 +294,130 @@ check_mutation "uart-rts-dropped-mid-frame" uart_flow tb_pe_soc_uart_flow \
 check_mutation "uart-payload-dispatch" uart_flow tb_pe_soc_uart_flow \
   "pay1:   LDM   A, 9" \
   "pay1:   LDM   A, 10              ; MUTANT: the wrong payload slot"
+
+# ---------------------------------------------------------------------------
+# (4) MIDI 31.25 kBAUD -- the counted delay, a cell's padding, the stop bit,
+#     the shift, and the running status.
+# ---------------------------------------------------------------------------
+
+# THE COUNTED-DELAY CONSTANT, and this is the mutation both BLOCK 3 acts exist
+# to be able to catch, so it is the one this gate is really here for.
+#
+# ONE ITERATION. midi_xfer.pe's cell is 22 + 13*146 = 1920 clocks, so 145
+# iterations makes it 1907: 0.68% fast. That is a rate error a forgiving
+# receiver repairs by resynchronising on the next start bit, which is exactly
+# why it survives review -- and it is 0.68% because the delay loop's body is 13
+# clocks long. The quantisation, not a tolerance somebody chose. The TB's
+# window is +/-0.3% for that reason and for no other: a window at MIDI's own
+# +/-2% would admit 1907, 1920 and 1933 clocks alike, this mutation would
+# SURVIVE, and the rate check would be decoration.
+check_mutation "midi-cell-count-minus-one" midi_xfer tb_pe_soc_midi \
+  "        LDI   A, 146             ; 22 + 13*146 = 1920 clocks, which is" \
+  "        LDI   A, 145             ; MUTANT: one iteration fewer = 0.68% fast"
+
+# A CELL'S PADDING, which the window above CANNOT see and the spread check can.
+# Three NOPs in sb_start; a fourth makes the start cell 1921 clocks while the
+# other nine stay at 1920. The mean barely moves, every measurement that starts
+# in that cell moves by a clock, and the frame stops having one rate. One
+# clock is 0.05%, so this is a mutation the rate window is blind to by a factor
+# of six, and it is why the TB asserts that every cell measures the same.
+check_mutation "midi-cell-padding-nop" midi_xfer tb_pe_soc_midi \
+  "        NOP                      ; three NOPs, and their number is not a
+        NOP                      ; matter of taste. See the header, \"A CELL'S
+        NOP                      ;  LENGTH BELONGS TO THE PATH BETWEEN TWO" \
+  "        NOP                      ; MUTANT: a fourth NOP in the start cell
+        NOP                      ; three NOPs, and their number is not a
+        NOP                      ; matter of taste. See the header, \"A CELL'S
+        NOP                      ;  LENGTH BELONGS TO THE PATH BETWEEN TWO"
+
+# THE STOP BIT, driven low. This is MIDI defect (3) from the firmware's own
+# header reproduced as a mutation, and it is the one mutation in this harness
+# whose detection depends on the RECEIVER rather than on a comparison. The
+# stop cell is the last cell of a frame and the next frame's start bit supplies
+# a high cell immediately after it, so a receiver that does not verify its
+# stop bit sees thirteen perfectly good bytes instead of fourteen and never
+# notices. Caught here on all fourteen frames.
+check_mutation "midi-stop-bit-driven-low" midi_xfer tb_pe_soc_midi \
+  "        LDI   A, 1
+        OUT   TXPIN, A
+        NOP                      ; five more, AFTER the output this time: the" \
+  "        LDI   A, 0
+        OUT   TXPIN, A
+        NOP                      ; MUTANT: the stop bit is driven LOW"
+
+# THE SHIFT, replaced by a NOP rather than deleted, so the cell length is
+# unchanged and the mutation tests the payload alone: all eight data cells then
+# drive bit 0 of a byte that never moves, and 0x90 goes out as eight zero bits.
+# Deleting the instruction would also shorten every cell by a clock, and a
+# mutation that trips two checks at once proves less than one that trips the
+# check it was written for.
+check_mutation "midi-never-shifts-the-byte" midi_xfer tb_pe_soc_midi \
+  "        LDM   A, 0
+        SHR   A
+        STM   0, A
+        JMP   sb_hold" \
+  "        LDM   A, 0
+        NOP                      ; MUTANT: the byte is never shifted
+        STM   0, A
+        JMP   sb_hold"
+
+# RUNNING STATUS, negated: the mod-3 counter that decides where a status byte
+# goes is compared against 1 instead of 3, so it is always zero and all six
+# messages carry their status byte. Eighteen bytes and six status bytes on the
+# wire -- still perfectly well formed, and a receiver that ignored running
+# status would reconstruct the same six messages. The claim this act makes is
+# the SAVING, so this is the mutation that tests the claim.
+check_mutation "midi-status-byte-every-message" midi_xfer tb_pe_soc_midi \
+  "        LDM   A, 2
+        ADD   A, 1
+        SUB   A, 3
+        JZ    mod3_zero" \
+  "        LDM   A, 2
+        ADD   A, 1
+        SUB   A, 1
+        JZ    mod3_zero             ; MUTANT: a status byte on every message"
+
+# ---------------------------------------------------------------------------
+# (5) DMX512-A 250 kBAUD -- the counted delay, the break floor, the stop bit
+#     and the payload ramp.
+# ---------------------------------------------------------------------------
+
+# THE COUNTED-DELAY CONSTANT again, and this time the error is larger: the cell
+# is 21 + 1 + 109*2 = 240 clocks, so 108 iterations makes it 238 -- 0.83%
+# slow. A DMX receiver resynchronises on every slot and would decode the frame
+# anyway, and that is exactly the point: the defect both these acts exist to
+# prevent is one that a receiver's resynchronisation HIDES.
+check_mutation "dmx-cell-count-minus-one" dmx512 tb_pe_soc_dmx512 \
+  "        LDI   A, 109             ; 21 + 1 + 109*2 = 240 clocks, pin to pin" \
+  "        LDI   A, 108             ; MUTANT: one iteration fewer = 0.83% slow"
+
+# THE BREAK, one cell short: 21 cells is 84.0 us against a floor of 87.5, so
+# the result is not a slow frame, it is not a frame. The floor is why the
+# firmware uses 22 whole cells and not 21.875, and this is the mutation that
+# proves the break check is measuring something rather than passing.
+check_mutation "dmx-break-too-short" dmx512 tb_pe_soc_dmx512 \
+  "        LDI   A, 22" \
+  "        LDI   A, 21              ; MUTANT: 84.0 us, under the 87.5 us floor"
+
+# THE FIRST STOP BIT, driven low. 8N2 is an obligation and not a habit: with
+# the first stop low the line is only high for the second, so a receiver that
+# checks both rejects all 513 slots and the per-slot comparisons never run.
+check_mutation "dmx-first-stop-driven-low" dmx512 tb_pe_soc_dmx512 \
+  "        LDI   A, 1
+        OUT   TXPIN, A
+        NOP                      ; two NOPs, for cell 9 rather than this one:" \
+  "        LDI   A, 0
+        OUT   TXPIN, A
+        NOP                      ; MUTANT: the first stop bit is driven LOW"
+
+# THE PAYLOAD RAMP, stepping by two. 0, 2, 4, ... is still a perfectly good
+# universe of values and the frame is still well formed; only the per-slot
+# comparison knows that data slot 1 should have been 0x01. Half the slots fail
+# and half pass, which is the shape a payload bug always has and the reason
+# every slot is compared rather than the first and the last.
+check_mutation "dmx-ramp-steps-by-two" dmx512 tb_pe_soc_dmx512 \
+  "        ADD   A, 1               ; 8 bits, so this wraps at 255 by itself" \
+  "        ADD   A, 2               ; MUTANT: the ramp steps by two"
 
 echo
 echo "  detected: $pass   survived: $survived   harness errors: $fail"

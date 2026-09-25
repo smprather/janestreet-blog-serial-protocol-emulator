@@ -142,7 +142,7 @@ for prog in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe; do
   pass=$((pass+1))
 done
 
-# The three advanced BUS protocols' firmwares. Each is the DUT of one of the
+# The advanced BUS protocols' firmwares. Each is the DUT of one of the
 # SoC testbenches in run_all.sh, which $readmemh's its hex, so a stale image
 # would be a silent pass on the integration it configures:
 #
@@ -152,7 +152,19 @@ done
 #              software in an ISA whose ALU has no XOR
 #   uart_flow  RTS/CTS flow control, where the claim is about the TX pin
 #              rather than about a counter
-for prog in i2c_adv spi_mode3 uart_flow; do
+#   midi_xfer  31.25 kbaud 8N1 with running status, six messages as fourteen
+#              wire bytes -- the rate a FRACTIONAL TICK cannot express, so the
+#              bit cell is counted in instructions
+#   dmx512     250 kbaud 8N2, break + mark + a start code + 512 slots, at the
+#              rate the tick cannot express AT ALL (a 4 us bit is 0.923 of a
+#              4.3333 us tick)
+#
+# BOTH OF THE LAST TWO ARE ASSEMBLED HERE AND NOT EMULATED, deliberately. Their
+# TBs are the specification: a receiver in Verilog that measures the pin, and a
+# model written from the same understanding as the firmware can agree with it
+# about a wrong bit order and pass. The emulated cases above are the ones whose
+# claim is a byte buffer rather than a waveform.
+for prog in i2c_adv spi_mode3 uart_flow midi_xfer dmx512; do
   if ! $PY tools/fw/peasm.py "firmware/$prog.pe" -o "firmware/$prog.hex" >/dev/null 2>&1; then
     echo "assemble $prog FAIL"
     $PY tools/fw/peasm.py "firmware/$prog.pe" 2>&1 | head -3 | sed 's/^/    /'

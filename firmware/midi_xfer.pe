@@ -1,0 +1,415 @@
+; midi_xfer.pe — a MIDI 1.0 transmitter in software, at 31.25 kbaud, using
+; RUNNING STATUS.
+;
+; The first half of the rate-flexibility act, and the reason it is not
+; uart_echo.pe with a different constant is the timing: at 31.25 kbaud a bit is
+; 32 us and the SoC's shared tick is 4.3333 us, so a bit is 7.38 ticks. The
+; tick cannot express a fraction. This program builds the bit cell out of
+; WHOLE INSTRUCTIONS, and that is the piece wiki/plans/through-i2c.md records
+; as a known follow-up ("removing it needs a sub-tick delay, roughly 130
+; clocks of counted NOPs").
+;
+; ---------------------------------------------------------------------------
+; TWO DEFECTS THIS FILE HAD, BOTH FOUND BY MEASURING THE PIN
+;
+; Both were found by the testbench, and both are recorded here because the
+; arithmetic in the old header was confidently WRONG in a way only a
+; measurement could catch. Neither is a subtle bit-order slip: both would
+; decode as SOMETHING under a forgiving receiver, which is the worst shape a
+; bug can have.
+;
+; (1) THE RATE WAS TWICE THE MIDI RATE. The old header said "half-bit at
+;     31.25 kbaud = 960 clocks = 16.000 us", which is true, and then built
+;     960 clocks PER BIT CELL. A cell is a whole bit, not a half: 16.316 us
+;     measured on the pin is 61,286 baud, not 31,250. The old header went on
+;     to report "31,188 baud, 0.2% from nominal" -- a number produced by
+;     dividing the measured cell by two, i.e. by asking the wrong question of
+;     the right measurement. The testbench's rate window caught it only
+;     because it is anchored to 32.000 us and not to the firmware's own
+;     arithmetic.
+;
+; (2) EVERY BYTE LOST ITS TWO LOWEST BITS. The delay, the shift and the cell
+;     index advance all lived in sb_hold, the common tail, so the STOP cell
+;     and the START cell shifted the working copy as well. Ten cells therefore
+;     shifted ten times for eight bits, and what went on the wire was the
+;     source byte shifted right by two: 0x90 arrived as 0x24, 0x20 as 0x08,
+;     0x40 as 0x10, on all fourteen frames. Only the two highest bits of every
+;     MIDI status byte survive that, so a receiver would have decoded six
+;     well-formed messages built out of the wrong data. The shift now lives
+;     in the DATA branch, and the rule is: a cell that does not carry a data
+;     bit must not consume one.
+;
+; There was also a third, smaller one: the prologue drove the raw byte on the
+; pin, so for any byte with bit 0 clear (0x90, 0x20, 0x40 -- half of MIDI's
+; range) the line went low for ~150 ns on an idle-HIGH line between bytes. A
+; real receiver may read that as a false start. The prologue now drives the
+; idle level it means, which costs one instruction outside the timed cells.
+;
+; (3) THERE WAS NO STOP BIT AT THE END OF THE FRAME, and this one is the
+;     argument for the receiver in tb_pe_soc_midi.v. The cell dispatch tested
+;     the index for ZERO first, so cell 0 drove 1 and cell 1 drove 0: the wire
+;     carried the cells in the order [stop][start][d0..d7], one cell out of
+;     phase, and the only high cell in a frame was the NEXT frame's first one.
+;     A back-to-back stream is therefore perfectly well formed -- the missing
+;     stop bit is the next frame's leading cell -- and the receiver decoded
+;     THIRTEEN OF THE FOURTEEN BYTES CORRECTLY, including the 0x90 and the
+;     running-status flip to 0x80. It failed only on the last frame, which
+;     has no following frame to supply a stop bit, and the way it failed was a
+;     single stop sample reading low.
+;
+;     So the byte-comparison checks did not find this and the rate check did
+;     not either. The one check that did is the receiver's: a frame is
+;     ACCEPTED ONLY IF ITS STOP BIT READS HIGH, and a candidate whose stop
+;     reads low is discarded. That is the whole reason the receiver is
+;     written as an oversampling search with a verified stop bit rather than
+;     as a position counter, and it is worth writing down that a 13-of-14
+;     pass is a failure, not a near-miss.
+;
+; ---------------------------------------------------------------------------
+; THE TIMING, AND WHERE EVERY NUMBER COMES FROM
+;
+;   1 clock                  16.667 ns           (60 MHz, rtl/pe_soc.v)
+;   bit at 31.25 kbaud       1920 clocks = 32.000 us
+;   -> the whole thing, counted instructions
+;
+; ONE INSTRUCTION IS ONE CLOCK IS MEASURED, NOT ASSUMED. The old version of
+; this loop counted 979 instructions from one cell's OUT to the next and a
+; clock-resolution probe of the TX pin measured 979 clocks (16.316 us). That
+; exact agreement is what makes the arithmetic below load-bearing rather than
+; decorative, and it is the single fact the whole file rests on.
+;
+; TWO NOPs THEN THE LDI IS THE FINE ADJUSTMENT, and the loop count is the
+; coarse one. The cell is
+;
+;   22  the code around the loop, counted from this cell's OUT to the next
+;    1  the LDI that loads the loop count
+;   146  iterations of a 13-clock body
+;   ---
+;  1920 clocks = 32.000 us = 31,250 baud, 0.00% error.
+;
+; The body is ELEVEN NOPs plus SUB and JNZ, and 13 is not a round choice: the
+; delay has to be 1898 clocks (1920 less the 23 around it), and 1898 = 13 x 146
+; is the only factorisation of it whose body is small enough to write out and
+; whose count fits an 8-bit register.
+;
+; KEEP EVERY DELAY-LOOP COUNTER <= 255, and this is not a style rule. The
+; obvious alternative here is a 3-clock body, which wants 1900/3 = 634
+; iterations: an 8-bit register cannot hold that, the assembler does not
+; complain, and the loop silently runs 634 mod 256 = 122 iterations and
+; produces a bit period of 20% of the intended one. A previous version of this
+; file did exactly that with a 319-iteration loop, measured "the delay", and
+; reported the time since reset as the result. A delay that is measured only
+; against a value the firmware itself computes cannot catch this.
+;
+; A CELL'S LENGTH BELONGS TO THE PATH BETWEEN TWO CELLS, and this is the
+; single most expensive piece of knowledge in the file, because it is the one
+; that is invisible until you measure the wire cell by cell.
+;
+; The obvious model is "each cell drives its bit, waits, and repeats", and
+; under that model the padding NOPs below look like arbitrary constants. They
+; are not: the time from one cell's OUTPUT to the next cell's OUTPUT depends on
+; WHICH CELL IS NEXT, because the dispatch that chooses the next cell's code
+; is only partly executed on each path. Reaching the stop branch runs three
+; instructions of the dispatch; reaching the start branch or the data branch
+; runs five, and then the start branch's own body is one instruction shorter
+; than the data branch's. So the cells in a frame measure:
+;
+;   cell 0  start   1920   after three NOPs in sb_start
+;   cells 1-7 data   1920   the reference: no padding anywhere
+;   cell 8  d7      1917   WITHOUT the three NOPs at the top of sb_stop,
+;                          because the last data bit's destination is the
+;                          stop and that dispatch is the short one
+;   cell 9  stop    1920 + the message layer's inter-frame gap
+;
+; and cell 0 came out at 1921 with four NOPs instead of three. All of that is
+; measured, at clock resolution, on the pin -- an intermediate version of this
+; file put cells of 1921, 1920 and 1917 in the same frame and the testbench
+; reported a 32.0086 us cell with a 0.9-clock spread, which is a rate error
+; with no obvious source. A receiver tolerates it; an assertion about the rate
+; does not, and the whole point of this act is the assertion.
+;
+; So the padding is eleven NOPs in total, all of which exist only to make some
+; OTHER cell's duration come out at 1920. That is the honest cost of a bit
+; banged protocol in an ISA with no timer worth using, and it is also the
+; argument for the 0.3% rate window in the testbench: the transmitter is
+; exact to the clock, so the window can be tight enough to see a one-iteration
+; change in the loop count.
+;
+; ---------------------------------------------------------------------------
+; WHY THE TIMER IS NOT USED AT ALL, and this is the most useful thing here.
+;
+; The obvious construction is a few whole ticks plus a remainder, and it does
+; not work. pe_soc's target idiom -- read the counter, add N, poll until it
+; equals the target -- does NOT give N ticks: it gives anywhere in (N-1, N]
+; ticks, for exactly the reason firmware/uart_echo.pe's header records for the
+; 1-tick case ("a wait that snapshots the count and loops until it changes
+; therefore returns after anywhere in (0, 1] ticks"). The read lands at a
+; random phase within the counter's 260-clock window, so a 3-tick wait is
+; anywhere in (520, 780] clocks -- a 260-clock spread, which on a 1920-clock
+; cell is 13.5%.
+;
+; That is survivable at 115200, where a receiver re-synchronises on every
+; start bit and the jitter is 1.2% of a bit. It is NOT survivable here: an
+; earlier version built the cell from three whole ticks plus a remainder, the
+; sampling grid drifted, and after eight bits it was a third of a cell away
+; from where it started -- which is why that run decoded 0x20 and 0x40
+; correctly and 0x21 as 0x10. A UART cannot fix a transmitter that jitters;
+; only a deterministic delay can. So MIDI, like DMX, is timed from counted
+; instructions alone, and the consequence worth recording is that this act is
+; really about the TIMER's granularity, not about MIDI.
+;
+; The testbench MEASURES the bit period on the pin INSIDE each frame, between
+; two edges that are a whole number of cells apart and therefore immune to
+; the message layer's inter-frame gap, and checks it against a window narrower
+; than the delay loop's own quantisation. So none of the arithmetic above is
+; load-bearing on faith, and a one-iteration change to the count (0.678%)
+; falls outside that window -- which is what makes the mutation in
+; regress/mutate_fwbus_tb.sh a real test rather than a formality.
+;
+; ---------------------------------------------------------------------------
+; THE MESSAGES, AND WHAT RUNNING STATUS IS FOR
+;
+; Six two-data-byte messages on channel 0, fourteen bytes on the wire:
+;
+;   m  status  note  vel
+;   0  0x90    0x20   0x40     the status byte IS sent
+;   1  --      0x21   0x41     running status 0x90
+;   2  --      0x22   0x42     running status 0x90
+;   3  0x80    0x23   0x43     a NEW status byte: note-off, and it REPLACES
+;   4  --      0x24   0x44     the running status
+;   5  --      0x25   0x45     running status 0x80
+;
+; Six messages cost eighteen bytes if every one repeats its status byte.
+; Running status is what makes it fourteen, and that saving is the point of the
+; feature: a 31.25 kbaud wire saturates near 3,900 bytes per second and the
+; status bytes are a fifth of them.
+;
+; THE PART THAT IS EASY TO GET WRONG, and which the testbench checks: a new
+; status byte REPLACES the running status rather than adding to it. A receiver
+; that kept 0x90 after seeing 0x80 would decode messages 4 and 5 as note-ONS.
+; The firmware sends 0x80 exactly once, at m=3, and the testbench's expected
+; event list puts messages 4-6 under 0x80 -- so a receiver with the wrong rule
+; reconstructs three different messages and fails.
+;
+; Every data byte is < 0x80, which is what makes the wire self-delimiting: a
+; receiver decides "status or data" from the top bit alone. (MIDI 1.0 confines
+; data bytes to 0x00-0x7F; the escape for a larger value is the 0xF7 prefix,
+; which this firmware never needs because every value it sends fits.)
+;
+; ---------------------------------------------------------------------------
+; dmem IS THE OBSERVABLE INTERFACE
+;
+;   dmem[0]  the byte being shifted out (the working copy)
+;   dmem[1]  the message counter, 0..5
+;   dmem[2]  the mod-3 counter that decides where a status byte goes
+;   dmem[3]  the current status byte
+;   dmem[4]  bytes transmitted
+;   dmem[5]  STATUS bytes transmitted -- the running-status claim, made
+;            observable. The testbench requires 2 against 6 messages, so a
+;            firmware that repeated the status fails on the COUNT and not
+;            merely on a byte value.
+;   dmem[6]  bit cells remaining in the frame (10: start + 8 data + stop)
+;   dmem[7]  the cell index, 0 = start bit, 9 = stop bit
+;   dmem[8]  scratch (it held the tick target until the half-bit became
+;            counted-only -- see the header for why the timer is not usable)
+;   dmem[9]  scratch
+;   dmem[10] scratch
+;   dmem[11] 0xA5 once all six messages are out
+;   dmem[12] the byte the message layer hands to the transmitter
+;   dmem[13] the transmitter's RETURN POINT: 0 = next message, 1 = the note,
+;            2 = the velocity. The ISA has no CALL/RET, so a shared
+;            transmitter gets an explicit continuation rather than being
+;            written out three times.
+;   dmem[14] scratch
+;   dmem[15] scratch
+
+        LDI   A, 1               ; TX idle is HIGH: stated, not inherited
+        OUT   TXPIN, A
+        LDI   A, 0
+        STM   1, A
+        STM   2, A
+        STM   3, A
+        STM   4, A
+        STM   5, A
+        STM   11, A
+
+; ===========================================================================
+; The message layer decides WHAT goes on the wire. The transmitter below only
+; knows how to put a byte out at 31.25 kbaud.
+; ===========================================================================
+main:   LDM   A, 1
+        SUB   A, 6
+        JZ    done
+        ; ---- does this message carry a status byte? -------------------
+        ; A mod-3 counter rather than a division: the ISA has neither, and
+        ; that is why DECX exists. Status bytes fall on m = 0 and m = 3.
+        LDM   A, 2
+        JNZ   go_note
+        ; The status byte, and the reason it is sent at all: the direction
+        ; flips at m=3 and a receiver may not assume it, so the wire has to
+        ; say so. It is only ever sent at those two points, so the same
+        ; comparison that finds the point decides the byte.
+        LDM   A, 1
+        JZ    stat_on
+        LDI   A, 0x80
+        JMP   stat_go
+stat_on:
+        LDI   A, 0x90
+stat_go:
+        STM   3, A
+        STM   12, A
+        LDM   A, 5               ; the running-status claim, made observable
+        ADD   A, 1
+        STM   5, A               ; raised HERE, not in the transmitter: the
+        LDI   A, 1               ; transmitter cannot tell a status byte
+        STM   13, A              ; from a data byte, and must not guess
+        JMP   send_byte
+
+; ---- the note ----------------------------------------------------------
+go_note:
+        LDM   A, 1
+        ADD   A, 0x20            ; note = 0x20 + m
+        STM   12, A
+        LDI   A, 2               ; return: the velocity follows
+        STM   13, A
+        JMP   send_byte
+
+; ---- the velocity ------------------------------------------------------
+go_vel:
+        LDM   A, 1
+        ADD   A, 0x40            ; velocity = 0x40 + m
+        STM   12, A
+        LDI   A, 0               ; return: the message is complete
+        STM   13, A
+        JMP   send_byte
+
+; ---- advance the message and the mod-3 counter ------------------------
+next_msg:
+        LDM   A, 2
+        ADD   A, 1
+        SUB   A, 3
+        JZ    mod3_zero
+        LDM   A, 2
+        ADD   A, 1
+        STM   2, A
+        JMP   msg_adv
+mod3_zero:
+        LDI   A, 0
+        STM   2, A
+msg_adv:
+        LDM   A, 1
+        ADD   A, 1
+        STM   1, A
+        JMP   main
+
+done:   LDI   A, 0xA5
+        STM   11, A
+park:   JMP   park
+
+; ===========================================================================
+; The transmitter: 31.25 kbaud, 8N1, LSB first, as ONE loop over the ten bit
+; cells of a frame.
+;
+; ONE LOOP RATHER THAN A SUBROUTINE, and that is a deliberate consequence of
+; the ISA. There is no CALL/RET, so a shared cell routine would need a
+; return address in a dmem slot and a dispatch to get back -- more state, and
+; one more thing to get wrong, in exchange for nothing. Ten cells in a loop is
+; also how the wire is actually shaped, so the code reads as the frame does.
+;
+; `OUT TXPIN, A` with A = 0 or 1 drives the WHOLE byte, so bit 0 is TX and the
+; rest of the port is don't-care here. That is the same shared 8-bit port
+; uart_echo.pe, i2c_xfer.pe and spi_mode3.pe use: nothing in the RTL knows
+; which protocol is running.
+; ===========================================================================
+send_byte:
+        LDM   A, 12
+        STM   0, A               ; the working copy: the WHOLE byte, and the
+        LDI   A, 1               ; only thing that ever shifts it
+        OUT   TXPIN, A           ; the line idles HIGH between bytes
+        LDI   A, 10
+        STM   6, A               ; ten bit cells
+        LDI   A, 0
+        STM   7, A               ; cell 0
+
+sbit:   LDM   A, 7
+        SUB   A, 9
+        JZ    sb_stop            ; cell 9 is the stop bit
+        ADD   A, 9               ; eight-bit arithmetic wraps, so this is
+        JZ    sb_start           ; the index again -- but see below
+        LDM   A, 0
+        AND   A, 1               ; a data bit, and the byte goes LSB first
+        OUT   TXPIN, A
+        ; ---- THE SHIFT LIVES HERE AND NOT IN sb_hold -------------------
+        ; A cell that carries no data bit must not consume one. With the
+        ; shift in the common tail the stop and start cells each shifted as
+        ; well, ten shifts for eight bits, and every byte arrived on the wire
+        ; shifted right by two -- see the header's second defect. Moving three
+        ; instructions out of the shared path is what the padding NOPs below
+        ; are paying for.
+        LDM   A, 0
+        SHR   A
+        STM   0, A
+        JMP   sb_hold
+sb_start:
+        LDI   A, 0
+        OUT   TXPIN, A
+        NOP                      ; three NOPs, and their number is not a
+        NOP                      ; matter of taste. See the header, "A CELL'S
+        NOP                      ;  LENGTH BELONGS TO THE PATH BETWEEN TWO
+        JMP   sb_hold            ;  CELLS": this branch's dispatch to a DATA
+sb_stop:                         ;  cell is two instructions longer than the
+        NOP                      ;  data branch's own head, and these make up
+        NOP                      ;  the difference.
+        NOP
+        LDI   A, 1
+        OUT   TXPIN, A
+        NOP                      ; five more, AFTER the output this time: the
+        NOP                      ; stop cell's own length is the path from its
+        NOP                      ; output to the next frame's start bit, and
+        NOP                      ; the stop branch's dispatch to a start is
+        NOP                      ; one instruction shorter than to a data cell
+
+; ---- the bit cell: THE PIECE THIS ACT EXISTS FOR ----------------------
+;
+; ELEVEN NOPs THEN SUB AND JNZ IS NOT AROUNDING. It is 146 iterations of a
+; 13-clock body, and 13 is what makes 1920 fit an 8-bit counter (see the
+; header's factorisation). The first version of this file used three whole
+; timer ticks plus a 182-clock remainder -- the shape every other firmware
+; here uses -- and it produced a half-bit anywhere in (952, 1212] clocks,
+; enough jitter that the testbench's sampling grid walked out of its cell and
+; the payload decoded wrong from the third message on.
+sb_hold:
+        NOP
+        NOP
+        LDI   A, 146             ; 22 + 13*146 = 1920 clocks, which is
+sb_rem: NOP                     ; 32.000 us and exactly 31,250 baud
+        NOP
+        NOP
+        NOP
+        NOP
+        NOP
+        NOP
+        NOP
+        NOP
+        NOP
+        NOP
+        SUB   A, 1
+        JNZ   sb_rem
+        ; ---- advance to the next cell -----------------------------------
+        LDM   A, 7
+        ADD   A, 1
+        STM   7, A
+        LDM   A, 6
+        SUB   A, 1
+        STM   6, A
+        JNZ   sbit
+        ; ---- the frame is out ------------------------------------------
+        LDM   A, 4
+        ADD   A, 1
+        STM   4, A               ; bytes transmitted
+        ; back to the message layer, at the point it asked for
+        LDM   A, 13
+        JZ    next_msg
+        SUB   A, 1
+        JZ    go_note
+        JMP   go_vel

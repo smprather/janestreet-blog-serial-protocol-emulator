@@ -1,0 +1,441 @@
+; dmx512.pe — a DMX512-A transmitter in software, at 250 kbaud, with the
+; BREAK and MARK a DMX receiver requires before it will accept a frame.
+;
+; The second half of the rate-flexibility act, and the mirror image of
+; midi_xfer.pe. That program was the rate a FRACTIONAL TICK cannot express: a
+; 32 us bit against a 4.3333 us tick is 7.38 ticks. This one is the rate a tick
+; cannot express AT ALL: a DMX bit is 4 us, so
+;
+;     one bit cell   = 0.923 of a tick
+;
+; The shared tick (260 clocks = 4.3333 us) is LONGER than the bit it would
+; have to measure, so no integer number of ticks is even close, and reading the
+; counter cannot help: the delay does not jitter, it rounds the wrong way. The
+; timer is therefore not used once in this file, and the delay is counted in
+; instructions.
+;
+; The two acts bracket the problem exactly: MIDI is the rate a fractional tick
+; cannot express, DMX is the rate a tick cannot express at all.
+;
+; ---------------------------------------------------------------------------
+; THE TIMING, AND WHERE EVERY NUMBER COMES FROM
+;
+;   1 clock                    16.667 ns         (60 MHz, rtl/pe_soc.v)
+;   DMX bit at 250 kbaud       240 clocks = 4.000 us
+;   -> the whole thing, counted instructions
+;
+; ONE INSTRUCTION IS ONE CLOCK IS MEASURED, NOT ASSUMED, and it was measured
+; in the other act: midi_xfer.pe counted 979 instructions from one cell's OUT
+; to the next, and a clock-resolution probe of the TX pin measured 979 clocks.
+; This is the second file in a row where a header's arithmetic and the wire
+; disagreed, so the arithmetic below is written as arithmetic and
+; tb_pe_soc_dmx512.v MEASURES the cell on the pin.
+;
+; THE BIT CELL IS 240 CLOCKS EXACTLY, and the factorisation is the whole trick.
+; A data cell is
+;
+;    21  the code around the loop, counted from this cell's OUT to the next
+;   219  the delay block
+;   ---
+;   240 clocks = 4.000 us = exactly 250,000 baud
+;
+; and the delay block is
+;
+;   219  =  1 (the LDI)  +  109 x 2
+;
+; so the loop is 109 iterations of a TWO-instruction body, which is the
+; shortest loop this ISA can express. The other factorisation of 218 is
+; 109 x 2 read the other way round -- a 109-instruction body run twice -- which
+; is the same arithmetic written 107 NOPs longer. There is no third option:
+; 109 is prime.
+;
+; KEEP EVERY DELAY-LOOP COUNTER <= 255. This is not a style rule. A count that
+; does not fit the 8-bit counter is not a build error, it is a wrong number on
+; the wire: the assembler is silent, the loop runs count mod 256 times, and
+; nothing else in the system can tell. midi_xfer.pe's header records the same
+; lesson at 319 iterations, where the result was a 156 kbaud transmitter and a
+; probe that measured "the delay" and reported the time since reset. A delay
+; that is only ever measured against a value the firmware computes for itself
+; cannot catch this, which is why both of these testbenches measure the pin.
+;
+; ---------------------------------------------------------------------------
+; ELEVEN CELLS PER SLOT, AND WHY THE FOURTEEN PADDING NOPs ARE WHERE THEY ARE
+;
+; DMX512-A is 8N2: one start bit, eight data bits LSB first, and TWO stop
+; bits, so a slot is 11 cells and a frame is 513 x 11 x 4.000 us = 22.57 ms.
+; Two stop bits are a real obligation and not a belt-and-braces habit: a
+; receiver is entitled to assume two, and a one-stop version puts 513 slots on
+; the wire that a strict receiver may discard.
+;
+; A CELL'S LENGTH BELONGS TO THE PATH BETWEEN TWO CELLS. This is the single
+; most expensive fact in this file, and it is the one midi_xfer.pe paid for
+; twice, so it is stated here as a rule rather than discovered again:
+;
+;   the time from one cell's OUTPUT to the next cell's OUTPUT depends on WHICH
+;   CELL IS NEXT, because the dispatch that selects the next cell's code is
+;   only partly executed on each path. Reaching a data cell runs seven
+;   instructions of dispatch, reaching the start bit runs the same seven, the
+;   first stop runs two and the second stop runs three. Fifteen NOPs exist in
+;   this file for no reason other than to make those four paths the same
+;   length, and every one of them makes some OTHER cell the right size.
+;
+;   cell 0   start   240 clocks   three NOPs
+;   cells 1-8 data    240 clocks   the reference: no padding anywhere
+;   cell 9   stop    240 clocks   five NOPs, because the dispatch to the
+;   cell 10  stop    240 clocks   first stop is the shortest in the file and
+;                                the cell it must make correct is cell 8
+;   after cell 10    255 clocks   240 plus the frame layer's inter-slot work
+;
+; The inter-slot gap after the second stop bit is NOT constant, and
+; deliberately so: it is the frame layer's loop, and its length depends on
+; which branch it takes. That is legal -- a DMX receiver resynchronises on
+; every start bit, and the mark between slots has a MINIMUM, not a fixed
+; length -- and it is also why the testbench measures the cell from two edges
+; INSIDE one slot rather than by differencing slot starts. The mark here is
+; 255 clocks against a 240-clock minimum, so it clears its floor by
+; construction and cannot be short however the loop behaves.
+;
+; ---------------------------------------------------------------------------
+; THE BREAK AND THE MARK, which are the parts of DMX that MIDI does not have
+;
+; A DMX receiver will not look at a frame that does not begin with a BREAK: a
+; LOW of at least 87.5 us, followed by a MARK of at least 8 us. Both are
+; expressed here in BIT CELLS of the same counted delay, which is the elegant
+; part -- there is no second timing constant in this file to get wrong, and
+; each iteration of both loops is exactly 240 clocks, one bit:
+;
+;   break  22 cells = 22 x 4.000 us = 88.0 us   (>= 87.5 us required)
+;   mark    3 cells =  3 x 4.000 us = 12.0 us   (>=  8.0 us required)
+;
+; 87.5 / 4 = 21.875, so 22 cells is the smallest whole number of cells that
+; clears the break minimum, and it clears it by 0.5 us. The mark uses three
+; cells rather than two: two is 8.000 us, exactly the minimum, and "exactly the
+; minimum" is not a place to build a design when one extra cell costs nothing
+; and buys 50% of margin on a timing the standard bounds only from below.
+;
+; THE BREAK AND MARK DELAY IS 236 CLOCKS, NOT 219, and the 17-clock difference
+; is not a discrepancy: the transmitter's loop spends seven instructions per
+; iteration on the cell index and the two loops here spend four, so a
+; 240-clock iteration needs a 236-clock delay block here and a 219-clock one
+; there. Both count to 240 per iteration, which is the number that matters.
+;
+; ---------------------------------------------------------------------------
+; THE FRAME, AND THE 512 SLOT VALUES
+;
+; DMX512-A is 513 slots: a START CODE and 512 data slots. The start code is
+; what tells a receiver what the 512 slots MEAN, and sending 512 slots with no
+; start code is the most common way to end up with a working fixture that
+; lights nothing -- so it goes out through the SAME transmitter as the data
+; slots, and there is one bit format in this file rather than two.
+;
+; THE 512 SLOT VALUES ARE A WRAPPING 8-BIT RAMP, and that is not a
+; simplification for its own sake: an 8-bit register incremented with an 8-bit
+; add IS a wrapping ramp, so the payload costs two instructions per slot to
+; produce and the testbench recomputes all 512 independently. It also cannot
+; be faked by a transmitter with the bit order reversed, because a 512-slot
+; ramp is not a palindrome in either bit order -- slot 1 is 0x01 and slot 128
+; is 0x80, and swapping the two orders turns the first into 0x80.
+;
+; 512 SLOTS IN AN 8-BIT COUNTER, so the frame layer counts a slot counter
+; WITHIN a page and a page counter beside it. That is a real constraint rather
+; than an awkwardness: a single 8-bit counter cannot reach 512, and the obvious
+; "count to 0xFF and stop" version would send 255 slots. The first version of
+; this file had one counter asked to do both jobs and sent two slots; see the
+; note at slot_done.
+;
+; ---------------------------------------------------------------------------
+; dmem IS THE OBSERVABLE INTERFACE
+;
+;   dmem[0]  the byte being shifted out (the working copy)
+;   dmem[1]  the slot counter WITHIN a page, 0..255, wrapping on its own
+;   dmem[2]  the ramp, i.e. the slot value
+;   dmem[3]  bytes transmitted, MODULO 256 -- 513 slots do not fit in one
+;            byte, and the firmware says so here rather than pretending: the
+;            count is 513 = 0x201, so this is 1 and dmem[9] is 2, and
+;            tb_pe_soc_dmx512.v checks both halves with that arithmetic in the
+;            assertion text. The wire is the real count; this is the firmware
+;            agreeing with it.
+;   dmem[4]  bit cells remaining in the slot (11)
+;   dmem[5]  the cell index, 0 = start, 9 and 10 = the two stop bits
+;   dmem[6]  cells left in the break, then in the mark
+;   dmem[7]  0 while the start code is going out, 1 for a data slot
+;   dmem[8]  the byte the frame layer hands to the transmitter
+;   dmem[9]  the number of pages finished, 0..2
+;   dmem[10] 0xA5 once all 513 slots are out
+;   dmem[11] scratch
+;   dmem[12] scratch
+;   dmem[13] scratch
+;   dmem[14] scratch
+;   dmem[15] scratch
+
+        LDI   A, 1
+        OUT   TXPIN, A           ; TX idle is HIGH: stated, not inherited
+        LDI   A, 0
+        STM   1, A
+        STM   2, A
+        STM   3, A
+        STM   6, A
+        STM   7, A
+        STM   10, A
+
+; ===========================================================================
+; THE FRAME LAYER: break, mark, start code, 512 slots.
+; ===========================================================================
+frame:  ; ---- the BREAK: 22 cells of LOW, 88.0 us --------------------------
+        ;
+        ; 87.5 us is the standard's floor and 21.875 cells is what that works
+        ; out to, so 22 is the smallest whole number of cells that clears it.
+        LDI   A, 0
+        OUT   TXPIN, A           ; the line goes LOW: that IS the break
+        LDI   A, 22
+        STM   6, A
+brk:    NOP                      ; 236 clocks, so that with the four loop
+        LDI   A, 117             ; instructions below, one iteration of this
+brk_r:  SUB   A, 1               ; loop is exactly one bit cell: 240 clocks
+        JNZ   brk_r
+        LDM   A, 6
+        SUB   A, 1
+        STM   6, A
+        JNZ   brk
+
+        ; ---- the MARK: 3 cells of HIGH, 12.0 us ------------------------
+        ;
+        ; The line is released here rather than in the loop, and only once:
+        ; the loop's whole job is to be 240 clocks long, and an OUT inside it
+        ; would make the mark depend on which iteration it was.
+        LDI   A, 1
+        OUT   TXPIN, A
+        LDI   A, 3
+        STM   6, A
+mrk:    NOP                      ; the same 236-clock block: see the header
+        LDI   A, 117
+mrk_r:  SUB   A, 1
+        JNZ   mrk_r
+        LDM   A, 6
+        SUB   A, 1
+        STM   6, A
+        JNZ   mrk
+
+        ; ---- the START CODE --------------------------------------------
+        ;
+        ; 0x00 is the all-slot start code in DMX512-A. It goes out through the
+        ; SAME transmitter as the data slots, so there is one bit format in
+        ; this file and not two -- and a start code sent by a different code
+        ; path is a start code that can disagree with the slots.
+        ;
+        ; dmem[7] IS "THIS SLOT IS A DATA SLOT", and it is 0 here. It has to
+        ; exist because the transmitter has ONE exit and the start code must
+        ; not ADVANCE the ramp: the payload is deliberately "data slot k has
+        ; value k", so the first data slot is 0x00, and an exit that advanced
+        ; the ramp on the way past the start code would make the first data
+        ; slot 0x01 and the payload "k + 1" -- still a ramp, still a legal
+        ; fixture, and one index out of step with every document that would
+        ; describe it. The first version of this file had exactly that bug and
+        ; the testbench caught it as a single mismatched slot, which is the
+        ; cheapest possible way to catch an off-by-one in a 513-slot frame.
+        LDI   A, 0
+        STM   7, A
+        STM   8, A
+        JMP   tx_byte
+
+; ---- the 512 data slots: a wrapping 8-bit ramp, two pages of 256 --------
+slots:  LDM   A, 2
+        STM   8, A               ; the slot value IS the ramp
+        LDI   A, 1
+        STM   7, A               ; this one IS a data slot
+        JMP   tx_byte
+
+; ---- after the START CODE: the payload has not started yet --------------
+;
+; The ramp and the page counter are INITIALISED here rather than at reset,
+; because the start code's exit lands in the same place a data slot's does and
+; the two must do different things. One flag, one branch, and the payload's
+; first slot is 0x00 as documented.
+first_data:
+        LDI   A, 0
+        STM   1, A               ; the slot counter within the page
+        STM   2, A               ; the ramp
+        STM   9, A               ; THE PAGE COUNTER, and this line is the
+                                ; whole difference between a frame that ends
+                                ; and a transmitter that runs for ever. The
+                                ; counter was left uninitialised, so at the
+                                ; first page boundary it was x, x+1 is x, and
+                                ; `SUB A,2` on an x is an x: the comparison
+                                ; could never be true and the frame never
+                                ; stopped. The wire was perfect -- 513 correct
+                                ; slots -- and the testbench saw a watchdog
+                                ; timeout with the firmware still transmitting.
+        JMP   slots
+
+; ---- after a DATA slot: advance the ramp and the slot counter ----------
+;
+; THE PAGE COUNTER IS NOT INCREMENTED HERE, and the first version of this file
+; incremented it on every slot, which ended the frame after TWO data slots --
+; because 2 was the page count and the page counter was being asked to count
+; slots. Two dmem bytes, and the arithmetic that separates them:
+;
+;   dmem[1]  the slot counter WITHIN a page, 0..255, and it wraps on its own
+;   dmem[9]  the number of pages finished, 0..2, and 512 = 2 x 256
+;
+; The wrap of dmem[1] is the page boundary, so the inner counter needs no
+; comparison at all -- only the outer one does, and it is compared against 2.
+; The TB found this as a watchdog timeout 250 us into a 22.6 ms frame with
+; three slots decoded correctly, which is the shape a "the frame stopped early"
+; bug always has: everything that was decoded was RIGHT.
+slot_done:
+        LDM   A, 2
+        ADD   A, 1               ; 8 bits, so this wraps at 255 by itself
+        STM   2, A
+        LDM   A, 1
+        ADD   A, 1
+        STM   1, A
+        JZ    page_end           ; 256 slots: a page is finished
+        JMP   slots
+page_end:
+        LDM   A, 9
+        ADD   A, 1
+        STM   9, A
+        LDM   A, 9
+        SUB   A, 2               ; two pages of 256 is the whole frame
+        JZ    done
+        JMP   slots
+
+done:   LDI   A, 0xA5
+        STM   10, A
+park:   JMP   park
+
+; ===========================================================================
+; THE TRANSMITTER: 250 kbaud, 8N2, LSB first, ONE loop over the eleven bit
+; cells of a slot.
+;
+; ONE LOOP RATHER THAN A SUBROUTINE, for midi_xfer.pe's reason: there is no
+; CALL/RET, so a shared cell routine would need a return address in a dmem
+; slot and a dispatch to get back. The frame layer therefore REACHES this by a
+; JMP and LEAVES by falling out of the last cell, which is a continuation the
+; program counter already provides -- see the note at slot_out.
+;
+; `OUT TXPIN, A` with A = 0 or 1 drives the WHOLE byte, so bit 0 is TX and
+; nothing in the RTL knows which protocol is running: the same shared 8-bit
+; port uart_echo.pe, i2c_xfer.pe and midi_xfer.pe use.
+;
+; THE DISPATCH, and its four different lengths, which is what the padding NOPs
+; are paying for:
+;
+;   cells 1-8  data   7 instructions of dispatch, then LDM + AND + OUT
+;   cell 0     start  the same 7, the last JZ taken
+;   cell 9     stop   2 instructions of dispatch, then LDI + OUT
+;   cell 10    stop   3 instructions of dispatch, then LDI + OUT
+;
+; The second stop bit's test is one instruction longer than the first because A
+; already holds the index less nine when it runs, so `SUB A,1` finds cell 10
+; where a fresh `SUB A,10` would have been needed. That is not a trick for its
+; own sake: it is one clock, and this file cares about one clock, because one
+; clock here is 0.42% of a bit.
+; ===========================================================================
+tx_byte:
+        LDM   A, 8
+        STM   0, A               ; the working copy: the WHOLE byte, and the
+        LDI   A, 1               ; only thing that ever shifts it
+        OUT   TXPIN, A           ; the line idles HIGH between slots
+        LDI   A, 11
+        STM   4, A               ; eleven bit cells
+        LDI   A, 0
+        STM   5, A               ; cell 0
+
+sbit:   LDM   A, 5
+        SUB   A, 9
+        JZ    sb_stop            ; cell 9 is the first stop bit
+        SUB   A, 1
+        JZ    sb_stop2           ; cell 10 is the second, and A is already
+        LDM   A, 5               ; the index less nine by the time it runs
+        JZ    sb_start           ; cell 0 is the start bit
+        LDM   A, 0
+        AND   A, 1               ; a data bit, LSB first
+        OUT   TXPIN, A
+        ; ---- THE SHIFT LIVES HERE AND NOT IN sb_hold -------------------
+        ; A cell that carries no data bit must not consume one. midi_xfer.pe
+        ; had this in the common tail and every byte it sent lost its two
+        ; lowest bits; the same mistake here would cost the two LOW bits of
+        ; every one of 513 slots, and on a ramp that is the difference between
+        ; a fixture that works and one that does not.
+        LDM   A, 0
+        SHR   A
+        STM   0, A
+        JMP   sb_hold
+
+; ---- the start bit: cell 0 ----------------------------------------------
+sb_start:
+        LDI   A, 0
+        OUT   TXPIN, A
+        NOP                      ; three NOPs. This dispatch is one
+        NOP                      ; instruction shorter than a data cell's, and
+        NOP                      ; the cell that has to be 240 clocks is the
+        JMP   sb_hold            ; DATA cell after it, not this one -- which is
+        JMP   sb_hold            ; "A CELL'S LENGTH BELONGS TO THE PATH
+                                ; BETWEEN TWO CELLS" in the header
+
+; ---- the first stop bit: cell 9 ------------------------------------------
+sb_stop:
+        NOP                      ; five NOPs. This is the shortest dispatch
+        NOP                      ; in the file, and the cell it has to make
+        NOP                      ; correct is cell 8, the last data bit,
+        NOP                      ; whose successor is this one.
+        NOP
+        LDI   A, 1
+        OUT   TXPIN, A
+        NOP                      ; two NOPs, for cell 9 rather than this one:
+        NOP                      ; cell 9's successor is the second stop bit
+        JMP   sb_hold
+
+; ---- the second stop bit: cell 10 ----------------------------------------
+;
+; FALLS THROUGH into sb_hold, and that is the point: this is the LAST cell of a
+; slot, so it has no successor whose length has to be matched to anything.
+sb_stop2:
+        NOP                      ; four NOPs, and they are here for cell 9's
+        NOP                      ; sake, not this cell's: the cell that ends
+        NOP                      ; here is cell 9, and it is 240 clocks
+        NOP                      ; because of them.
+        LDI   A, 1
+        OUT   TXPIN, A
+
+; ---- the bit cell: THE PIECE THIS ACT EXISTS FOR -------------------------
+;
+; TWO INSTRUCTIONS AND A JNZ IS NOT A STUNT, it is the only way to reach 219
+; clocks. 218 = 2 x 109, and 109 is prime, so the alternatives are this or a
+; 109-instruction body run twice, which is the same arithmetic written out in
+; 107 NOPs. At 250 kbaud a bit is 4 us and the shared tick is 4.3333 us, so
+; this delay cannot be built from ticks at all: the tick is LONGER than the
+; bit it is supposed to measure.
+sb_hold:
+        LDI   A, 109             ; 21 + 1 + 109*2 = 240 clocks, pin to pin
+sb_rem: SUB   A, 1
+        JNZ   sb_rem
+        ; ---- advance to the next cell -----------------------------------
+        LDM   A, 5
+        ADD   A, 1
+        STM   5, A
+        LDM   A, 4
+        SUB   A, 1
+        STM   4, A
+        JNZ   sbit
+
+; ---- the slot is out -----------------------------------------------------
+;
+; NO RETURN POINT AND NO DISPATCH, and the reason is worth recording. The ISA
+; has no CALL/RET, so a shared transmitter normally needs a continuation kept
+; in a dmem slot, with a load, a compare and a jump around every call. Here
+; the frame layer JMPs in and this block falls out of the transmitter's last
+; cell, so the continuation IS the program counter and the dmem slot is not
+; needed at all. Noticing that the control flow already provides the thing the
+; ISA lacks is worth more than the slot would have been.
+slot_out:
+        LDM   A, 3
+        ADD   A, 1
+        STM   3, A               ; bytes transmitted
+        ; ONE EXIT FOR ALL 513 SLOTS, and the flag decides what leaving it
+        ; means: the start code's exit starts the payload, a data slot's exit
+        ; advances it. See the note at the start code.
+        LDM   A, 7
+        JZ    first_data
+        JMP   slot_done
