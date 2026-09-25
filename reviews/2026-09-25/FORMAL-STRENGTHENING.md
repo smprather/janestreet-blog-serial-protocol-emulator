@@ -210,3 +210,34 @@ proven unbounded rather than at depth 16**, and its mutant is killed under the
 same engine and shape (rule 1). `eth_tx_safety` is honestly recorded as still
 bounded; the full `pe_ctrl_r2` set is bounded by the four hard claims, which
 remain the manager's claim-authoring call.
+
+## 6. Closing off the "just reformulate it" option (measured, negative)
+
+The pending manager decision is a claim-authoring call, so the useful thing was
+to MEASURE the reformulations rather than leave the question open. Result: the
+obvious reformulations do NOT close the claims, so there is no cheap win.
+
+| reformulation tried | k=3 | k=6 | verdict |
+|---|---|---|---|
+| claim 4 → compare `fv_resp_idx` to the CURRENT `fv_resp_len` (not the lagged `p_resp_len`) | FAILED | FAILED | does not close |
+| claims 2+3 → assert the accept-loaded bound only (drop the `p_` snapshot compare) | FAILED (joint) | — | does not close |
+
+The current-length reformulation of claim 4 is the sharpest negative: even when
+the lagged snapshot is removed entirely, the free **observation-port** register
+`fv_resp_idx` is itself an independent state bit in the model, so the induction
+antecedent can still be met with an unreachable value. This is why both engines
+fail it the same way.
+
+**So the complete, evidence-backed option set for the four pe_ctrl claims is:**
+1. **accept them as depth-16 proven** (current shipped state — safe, and the
+   gold vectors + TBs back the boundary behaviour), or
+2. **hand-prove a genuinely inductive invariant set** (assume-guarantee) that
+   the engine can consume, per claim — a real claim/design effort, and the
+   simple history helper already failed (§2b), or
+3. a **reachability-constrained** induction backend — note that `yosys-smtbmc -i`
+   is still arbitrary-pre-state k-induction, so the SMT unlock alone does not
+   provide this.
+
+None of (2)/(3) is mechanical, and all are claim-semantics/toolchain decisions
+for the manager, not silent solver effort. This section exists so that decision
+is made on measurements, not on the hope that a reformulation would help.
