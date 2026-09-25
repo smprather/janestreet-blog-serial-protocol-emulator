@@ -152,16 +152,69 @@ covered it.
 
 ---
 
+## 4. The demo act (re-reviewed after `5b4731f`; my first pass predated it)
+
+The manager pointed me at `docs/demo-walkthrough.md` §"The debug act" and the
+`r3_demo_*` beats in `tools/host_bridge/acceptance.py`. Both are now reviewed; this
+closes the coverage gap I flagged rather than leaving it open.
+
+**Walkthrough: PASS, and it is the clearest statement of the contract on the
+host side.** Each beat matches the frozen contract, including the parts a
+judge-facing story is most likely to fudge:
+
+* beat 3 is the strongest: it asserts `state=3` **and `run=1`** and says why —
+  *"the hit holds the core, it does not drop the run strap"* — which is exactly my
+  S3/live-core-hit semantics, and it contrasts states 0/2/3 and notes R2's `STATUS`
+  shares the encoding.
+* beat 4 states the `READ_CPU` last word is the **run strap, not the debug state**,
+  and credits the chip's conformance run for catching the host's own error there.
+* beat 5 is a faithful, explicit statement of my §3b correction: *"retires exactly
+  one instruction, so `a` visibly changes… stop-before is about the instruction
+  **at** the breakpoint, which had **not** run — which is what lets a debugger
+  inspect that instruction and then step **it**."*
+* beat 6 matches the corrected row 11 (BP_CLR is the only release, it disarms,
+  strap-high → resume, strap-low → boot stop with PC re-zero).
+* The two caveats are honest and correct: a free-running core cannot be stepped
+  (`NOT_READY`, no fault) and a breakpoint is one PC address (no watchpoint).
+
+**F2 (MEDIUM) — the `r3_demo_5_step_across` beat asserts the PC advance and the
+hit-clear, but never asserts the register effect it claims.**
+`acceptance.py:666` checks `step.state_name == "DEBUG_HOLD" and after.pc ==
+DEMO_BP + 1 and not after.hit`. `before_a` is captured at `:661` and used **only
+in the printed message** (`:667-668`, "a 0x.. -> 0x.."); it is not in the pass
+condition. So a regression that **withholds the instruction's execution** — the
+exact host-model bug my conformance run caught and the gui-worker fixed — would
+still PASS this beat, while printing a self-contradictory "a 0x55 -> 0x55" that
+nobody would flag as a failure. The beat's own prose and the walkthrough
+("`a` visibly changes") both promise the check; the assertion does not make it.
+Adding `and after.a != before_a` to the condition would close it.
+
+**F3 (LOW) — the same stale pre-flip prose as F1, in a second place.**
+`_r3_detail`'s docstring (`acceptance.py:201-204`) still says the package "keeps
+its own `chip_confirmed` flags false until the chip's citation is recorded",
+which the 25/26 flip made false. Notably the **tag it emits is correct** —
+`:210-213` accurately reports "25 of 26 package steps now carry
+chip_confirmed=true … the 1 exception is the pinned TB model boundary" — so this
+is prose drift only, not an output defect. Read together with F1 it is a pattern:
+the pre-flip "nothing is confirmed" sentence survived in two human-written
+places (the generator notice, this docstring) while every machine-generated value
+was updated correctly.
+
+---
+
 ## Summary
 
 One substantive finding (**F1**, HIGH: a generated, stale, false `notice` in the
 shipped manifest + verification JSON + obligations string — the only chip-confirmed
-integrity issue, and it regenerates wrong until the host constant is updated).
-Everything else I checked conforms to the frozen contract, and the citation
-arithmetic and test discipline are stronger than I expected — the two host-side
-defects my conformance run found were fixed with citations back to the RTL. The
-demo act was not locatable and is unreviewed.
+integrity issue, and it regenerates wrong until the host constant is updated),
+plus two from the demo-act pass: **F2** (MEDIUM: `r3_demo_5_step_across` never
+asserts the register effect it claims, so the exact regression my conformance run
+caught would pass it) and **F3** (LOW: the same stale pre-flip prose in
+`_r3_detail`'s docstring, while its emitted tag is correct). Everything else
+conforms to the frozen contract, and the citation arithmetic and test discipline
+are stronger than I expected — the two host-side defects my conformance run found
+were fixed with citations back to the RTL. The demo act is a faithful,
+judge-facing statement of the contract.
 
-**No host file was modified.** The single fix (F1) is a text change in the host's
-`r3_vectors.py` `PACKAGE_NOTICE` + regenerating the two artifacts; it is the
-gui-worker's to make.
+**No host file was modified.** The fixes (F1 the notice, F2 one added conjunct,
+F3 the docstring) are the gui-worker's to make.
