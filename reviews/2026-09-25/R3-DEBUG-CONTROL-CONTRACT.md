@@ -173,13 +173,26 @@ FETCHING, which follows the fetch mode — `imem[next_pc]` while executing,
 `imem[pc]`.
 
 **At a freeze, `insn` reports the LATCHED pipeline word** — whatever the fetch
-presented last (the fill `0xF000` when the pipeline holds nothing), and NOT a
-word re-derived from `pc` or `next_pc` at the instant of the read. A test
-harness that synthesises a mid-execution snapshot (pinning `pc` every cycle to
-hold a core that is genuinely running) collapses the pipeline, so its `insn` is
-the collapsed one; a model must latch the same word rather than recompute
-`imem[next_pc]`. **No RTL changes for this** — `pe_cpu` already reports the
-latched word; the disagreement was in how the snapshot was synthesised. The `run` strap is a pin, not a host-bus register, so a vector that
+presented last — and NOT a word re-derived from `pc` or `next_pc` at the instant
+of the read. A test harness that synthesises a mid-execution snapshot (pinning
+`pc` every cycle to hold a core that is genuinely running) collapses the fetch
+pipeline, so its `insn` is the collapsed one. **No RTL changes for this** —
+`pe_cpu` already reports the latched word; the disagreement was in how the
+snapshot was synthesised.
+
+*Measured, 2026-09-25 (this line was corrected once, against the chip).* For the
+one vector still pinned, at `pc=4` the chip reports `0x0000` with a freeze in
+force, and `0x4002` = `imem[pc]` when the same pc is HELD. An earlier draft of
+this line said the collapsed value was the fill `0xF000`; it is not — `0xF000` is
+the NOP at address 2, while the collapsed fetch lands in the **0-filled** region
+beyond the program and reports `0x0000`. The package's `0xF000` is the LANDING
+word of the `JMP 2` at 4, i.e. the one-cycle state in which the jump has been
+decoded and the fetch has moved to 2 but the PC has not advanced. A held core
+reports `imem[pc]` deterministically (asserted on every held-core step in
+`tb_pe_ctrl_r3_conf.v`); a free-running one follows `next_pc` and does not sit
+still to be sampled. `(pc=4, a=0, insn=imem[2])` is therefore not a state the
+chip can occupy: reaching address 4 means executing address 3, which is
+`LDI A,0x0F`. The `run` strap is a pin, not a host-bus register, so a vector that
 needs the core running declares it as pre-state (and the TB drives `ui_in[1]`).
 
 Rows 11 and 13 of this table were WRONG and have been corrected against the

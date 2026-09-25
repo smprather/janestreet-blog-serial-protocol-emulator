@@ -364,10 +364,29 @@ module tb_pe_ctrl_r3_conf;
 
     spi_cs_n = 1'b1; half_tick();
     repeat (8) @(posedge clk);
-    // The post-step fault register is part of the contract too.
+    // THE POST-STEP FAULT REGISTER is part of the contract too.
     if (faults !== want_faults)
       note_divergence($sformatf("%s faults: chip %04h, package-derived %04h",
                                 tag, faults, want_faults));
+
+    // HELD-CORE FETCH, ASSERTED (R3.1). While the debug hold is up the core is
+    // not executing, and the contract says the fetch address is `pc` -- so the
+    // instruction the chip reports MUST be imem[pc], deterministically, with no
+    // dependence on where a fetch pipeline happens to be latched.
+    //
+    // This is a plain `check`, not a note_divergence: it is a claim about the
+    // CHIP, it is decidable on its own, and it needs no model freeze to decide
+    // it. It is the piece of the held-core semantics the golden vectors already
+    // imply (v04 pc=1/insn=imem[1], v07 pc=2/insn=imem[2], v09 pc=3/insn=imem[3],
+    // v11 pc=0/insn=imem[0]) and it is now enforced rather than assumed.
+    //
+    // It deliberately says NOTHING about a free-running core: there the fetch
+    // follows next_pc, and that is where the one pinned divergence lives.
+    if (dbg_hold === 1'b1)
+      check(cpu_insn === r3_imem[cpu_pc],
+            $sformatf("%s: core is HELD at pc=%0d but insn = %04h, not imem[pc] = %04h",
+                      tag, cpu_pc, cpu_insn, r3_imem[cpu_pc]));
+
     $display("  [%s] %s", tag, (errors == errs_before) ? "PASS" : "FAIL");
     // (a known divergence is not a step failure; it is printed above as such)
     if (errors == errs_before) steps_passed = steps_passed + 1;

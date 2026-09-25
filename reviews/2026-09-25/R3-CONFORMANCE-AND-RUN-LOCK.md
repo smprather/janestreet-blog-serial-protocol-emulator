@@ -275,3 +275,66 @@ the induction step, inside yosys's own banner).
 * The R3 conformance TB **is** wired now: 14/14 vectors, 26/26 steps, with seven
   words across three steps pinned as known divergences by a lock that turns red
   on any change (section 2).
+
+
+### R3.1 — the held-core semantics, landed; the last step stays pinned, with the
+### measured reason
+
+The dispatch was to model HOLD semantics for the held-core steps so `insn` is
+deterministic, and to flip the last step if it then passed. The modelling landed
+and is enforced: `tb_pe_ctrl_r3_conf` now **asserts**, on every held-core step,
+that the chip's reported `insn` is `imem[pc]` — a claim about the chip, decidable
+without any model freeze, and one the golden vectors already implied
+(`v04` pc=1/imem[1], `v07` pc=2/imem[2], `v09` pc=3/imem[3], `v11` pc=0/imem[0]).
+All 25 confirmed steps are preserved unchanged.
+
+`status_full_readback` **still diverges, so it stays pinned** — and the reason is
+now measured in every regime rather than asserted:
+
+| regime at `pc=4` | `insn` reported |
+|---|---|
+| HELD (the real debug hold) | `0x4002` = `imem[pc]` |
+| free-running + the model freeze | `0x0000` (the 0-filled region; the freeze collapses the fetch) |
+| free-running, unpinned | the core does not stay at 4 to be sampled — the `JMP 2` leaves |
+| package expects | `0xF000` = `imem[2]`, the **landing** word |
+
+`0xF000` is the NOP at address 2: the one-cycle state in which the jump at 4 has
+been decoded and the fetch has moved to 2 but the PC has not yet advanced. And
+the vector's whole pre-state is **unreachable**: reaching address 4 means
+executing address 3, which is `LDI A,0x0F`, so `a` would be `0x0F` — not the
+package's `a=0`. So `(pc=4, a=0, insn=imem[2])` is not a state the chip can
+occupy, and a conformance gate must not chase it by racing a clock. Neither side
+was bent.
+
+That measurement also **corrected a doc line of mine**: I had written that a
+collapsed freeze reports the fill `0xF000`. It does not — `0xF000` is the NOP at
+2, and the collapsed fetch reports the **0-fill** `0x0000`. The contract's freeze
+rule now carries the measured values.
+
+**Final: 25/26 `chip_confirmed`**, one pinned with its reason, and the
+conformance gate green with both directions proven.
+
+
+### Synthesis screen after R3 (the phase had never been through it)
+
+`regress/synth_area.sh` (sg13g2 typ, mapped, pre-route) exits 0 with no
+diagnostics — no driver-driver conflict, no undriven wire, no yosys ERROR — so
+the R3 netlist is not quietly broken. The interesting number is the DELTA, and
+that needed measuring rather than reading a recorded baseline, because every
+recorded baseline predates the R2 read engine:
+
+| block | pre-R3 (`5cc5152~1`) | post-R3 | delta |
+|---|---|---|---|
+| `pe_cpu` | 377 cells | 401 | **+24** (+6.4%) |
+| `pe_ctrl` | 3,771 cells | 4,054 | **+283** (+7.5%) |
+| `pe_soc` | 6,334 cells / 110,421 µm² | 6,355 / 110,570 | **+21** (+0.3%) |
+
+Both sides measured with the same liberty and the same script, the pre-R3 sources
+taken from git, so the comparison is like for like.
+
+**A stale baseline worth correcting in the record:** the figures in the reviews
+(`pe_ctrl` 463 cells, `pe_soc` 4,961, `tt_um_top` 7,960) are R1-era and are not
+comparable to today's design — `pe_ctrl` is 4,054 today, and the gap is the R2
+read engine, not R3. Anyone comparing a fresh screen against those numbers would
+read a 3.6x regression that never happened. The numbers above supersede them for
+the R3 delta; the older ones should be re-baselined or annotated.

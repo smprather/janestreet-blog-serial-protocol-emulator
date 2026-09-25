@@ -22,12 +22,21 @@
 #
 # status_full_readback word 13 (insn): 0xF000 expected — the manager-ruled
 #   LANDING word, since pc=4 holds a JMP 2 and a free-running core fetches at
-#   next_pc. The chip reports 0x0000 because this vector's pre-state is a
-#   mid-execution SNAPSHOT (pc=4 with a=0 has not executed the LDI at 3), and
-#   the model freeze that holds such a snapshot pins pc every cycle, which
-#   collapses the fetch pipeline onto the fill word. The contract now states the
-#   rule (at a freeze, `insn` is the latched pipeline word) and NO RTL changes.
-#   Holding the core instead of freezing it would make this word deterministic at
-#   imem[pc] and provable — optional future polish, deliberately not now.
+#   next_pc. R3.1 measured what the chip does at pc=4 in EVERY regime it can be
+#   put into, and none of them produces 0xF000:
+#     * HELD at pc=4            -> 0x4002 = imem[pc]  (measured, and now ASSERTED
+#       on every held-core step by tb_pe_ctrl_r3_conf, freeze-free)
+#     * free-running + the model freeze -> 0x0000, the 0-filled region beyond the
+#       program: pinning pc every cycle collapses the fetch pipeline
+#     * free-running, unpinned  -> the core does not sit at 4 to be sampled; it
+#       leaves (the JMP targets 2)
+#   0xF000 is imem[2], the NOP: the one-cycle state in which the jump at 4 has
+#   been decoded and the fetch has moved to 2 but the PC has not advanced. And
+#   the vector's whole pre-state is unreachable: reaching address 4 means
+#   executing address 3, which is `LDI A,0x0F`, so a would be 0x0F, not the
+#   package's a=0. So (pc=4, a=0, insn=imem[2]) is not a state the chip can
+#   OCCUPY, and a conformance gate must not chase it by racing a clock.
+#   The contract states the freeze rule (corrected against this measurement:
+#   the collapsed value is the 0-fill 0x0000, not 0xF000) and NO RTL changes.
 status_full_readback word 13: chip 0000, package f000
 status_full_readback word 14: chip 2efc, package 3d3d

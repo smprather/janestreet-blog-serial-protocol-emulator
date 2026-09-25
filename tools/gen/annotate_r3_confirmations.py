@@ -163,10 +163,7 @@ def annotate(manifest: dict, pinned: set[str]) -> dict:
                 confirmed.append(s["name"])
         v["chip_confirmed"] = all(s["chip_confirmed"] for s in v["steps"])
 
-    if (
-        len(confirmed) != EXPECT_CONFIRMED
-        or len(not_confirmed) != EXPECT_NOT_CONFIRMED
-    ):
+    if len(confirmed) != EXPECT_CONFIRMED or len(not_confirmed) != EXPECT_NOT_CONFIRMED:
         raise SystemExit(
             f"refusing to write: {len(confirmed)} confirmed / "
             f"{len(not_confirmed)} not, expected "
@@ -198,12 +195,8 @@ def annotate(manifest: dict, pinned: set[str]) -> dict:
             "pins the measured divergences and the harness fails if the observed "
             "set ever differs from it"
         ),
-        "not_confirmed_steps": [
-            {"step": n, "reason": REASON[n]} for n in not_confirmed
-        ],
-        "resolved_steps": [
-            {"step": n, "resolution": RESOLVED[n]} for n in RESOLVED
-        ],
+        "not_confirmed_steps": [{"step": n, "reason": REASON[n]} for n in not_confirmed],
+        "resolved_steps": [{"step": n, "resolution": RESOLVED[n]} for n in RESOLVED],
         "review": "reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md",
         "scope": (
             "The chip's answers to the host's bytes, in simulation. Not evidence "
@@ -240,7 +233,9 @@ def main() -> int:
     # the evidence fields say. A harness that compared the chip's own edits to
     # itself would prove nothing.
     if structure(current) != structure(host):
-        print("the TB-side manifest no longer matches the host's structure", file=sys.stderr)
+        print(
+            "the TB-side manifest no longer matches the host's structure", file=sys.stderr
+        )
         return 1
 
     derived = annotate(json.loads(json.dumps(host)), pinned)
