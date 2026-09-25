@@ -766,6 +766,13 @@ module pe_ctrl #(
                       rstate      <= R_START;
                     end else if (frm_op == OP_RDIMEM) begin
                       // imem: address is a WORD index, count in words.
+                      //
+                      // count == 0 is RANGE, deliberately, NOT a zero-length
+                      // frame: an empty read is a host bug, and answering OK
+                      // with no words would leave the host unable to tell
+                      // "nothing requested" from "read refused". This is pinned
+                      // by the read_ceiling_and_zero_count golden vector, so
+                      // the chip and the host model cannot drift apart on it.
                       if ((32'(pay0) + 32'(pay1)) > 32'(WORDS) ||
                           pay1 == 16'd0 || pay1 > 16'(MAX_READ_WORDS)) begin
                         resp_len    <= 16'd1;

@@ -27,8 +27,8 @@
 > (`reviews/2026-09-25/r2-sta/`, 12 screens): **no new violation class** —
 > `pe_soc` unchanged (hold -0.87/-0.61/-0.48) and `tt_um_top` hold IMPROVED
 > (-0.59/-0.45/-0.38, zero == board), the new classes appearing only in the
-> pre-existing external-output class. Contract in `rtl/pe_ctrl.v`'s header;
-> merge sequenced after R2.
+> pre-existing external-output class. Contract in `rtl/pe_ctrl.v`'s header.
+> **The host branch is MERGED and PUSHED** (1cbc0bc).
 
 > **10BASE-T TX frame path — COMPLETE, plan Tasks 1-7 (2026-09-25, manager
 > Task 11 close-out + the chained Task 6/7 pass).** The last unbuilt block in

@@ -86,7 +86,7 @@ user (separate session); no GUI/bridge implementation is dispatched here.
 > byte-exact but the golden package must ship the model image its vectors
 > assume; no `chip_confirmed` flipped yet and the TB is kept out of the
 > regression so it cannot make a false red about the chip. Contract in
-> `rtl/pe_ctrl.v`'s header; merge sequenced after R2.
+> `rtl/pe_ctrl.v`'s header. **The merge is EXECUTED and PUSHED** (1cbc0bc).
 
 <!-- BEGIN gui-worker host block (top notes) - keep whole; place BESIDE the
      chip-side top-of-file blocks when merging, do not interleave -->

@@ -196,7 +196,7 @@ module tb_pe_ctrl_r2;
   // from the gui-worker's manifest, read with $fgets/$sscanf so Icarus needs no
   // string arrays. Nothing about a vector is re-derived here: the file names
   // point at the golden .hex streams and the numbers are the manifest's.
-  localparam int R2_NUM_STEPS = 15;
+  localparam int R2_NUM_STEPS = 18;
 
 
   // Replay the session's opening LOAD (3 words) so the DUT's words_written
@@ -247,6 +247,41 @@ module tb_pe_ctrl_r2;
                                              input logic [15:0] w);
     return r2_crc16(r2_crc16(crc, w[15:8]), w[7:0]);
   endfunction
+
+
+  // Establish a vector's stated precondition: the sticky fault register back
+  // to 0. faults lives INSIDE the DUT and is only host-writable through
+  // CLEAR_FAULT, so this is the faithful way to reach the model_image[].state
+  // the vectors assume — not a relaxation of the chip. The opening LOAD replay
+  // (words_written=3) happens once per r2_run_all; this just clears faults
+  // between vectors so a fault latched by one vector does not leak into the
+  // next, which is exactly what the read_imem_at_ceiling_15 step exposed.
+  task automatic r2_clear_faults;
+    logic [15:0] fr [0:6];
+    logic [15:0] crc;
+    fr[0] = 16'hA55A;
+    fr[1] = {4'h1, 8'h16, 4'h0};        // version, CLEAR_FAULT, host target
+    fr[2] = 16'hFFF0;                   // sequence
+    fr[3] = 16'd1;                      // payload: the mask
+    fr[4] = 16'hFFFF;                   // clear every bit
+    crc = 16'hFFFF;
+    for (int k = 0; k < 5; k++) crc = r2_crcw(crc, fr[k]);
+    fr[5] = crc;
+
+    r2_run = 1'b0;
+    spi_cs_n = 1'b1; half_tick();
+    spi_cs_n = 1'b0; half_tick();
+    for (int k = 0; k < 6; k++) send_word(fr[k]);
+    for (int k = 0; k < 4 + 2; k++) begin
+      logic [15:0] w;
+      recv_word(w);
+    end
+    spi_cs_n = 1'b1; half_tick();
+    repeat (8) @(posedge clk);
+    if (faults !== 16'h0000)
+      check(0, $sformatf("precondition: faults = %04h after CLEAR_FAULT, want 0",
+                         faults));
+  endtask
 
   `include "../tb/r2-vectors/R2_CONFORMANCE_RUN.vh"
 
