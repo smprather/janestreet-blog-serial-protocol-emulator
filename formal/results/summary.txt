@@ -1,10 +1,11 @@
 name|result|depth|shape|peak_rss
-pinmux_od_invariant|PROVED|16|bmc|MEM: 46.61 MB peak
-eth_tx_safety|PROVED|16|bmc|MEM: 102.37 MB peak
-eth_tx_reach_busy|REACHABLE|16|bmc|MEMCAP-or-killed (no MEM line)
-eth_tx_reach_tx_done|VACUOUS|16|bmc|MEM: 87.38 MB peak
-eth_tx_ifg_floor|PROVED|1|induct|MEM: 52.33 MB peak
-pe_ctrl_r2|PROVED|16|bmc|MEM: 315.25 MB peak
-pe_ctrl_r2_induct|PROVED|1|induct|MEM: 131.86 MB peak
-pe_soc_owner_gate_depth|PROVED|16|bmc|MEM: 955.91 MB peak
-pe_soc_owner_guard|PROVED|1|induct|MEM: 366.55 MB peak
+pinmux_od_invariant|PROVED|16|bmc|MEM: 46.21 MB peak
+eth_tx_safety|PROVED|16|bmc|MEM: 102.07 MB peak
+eth_tx_reach_busy|REACHABLE|16|bmc|no-MEM-line (killed while printing the model)
+eth_tx_reach_tx_done|VACUOUS|16|bmc|MEM: 87.00 MB peak
+eth_tx_ifg_floor|PROVED|1|induct|MEM: 51.04 MB peak
+pe_ctrl_r2|PROVED|16|bmc|MEM: 325.06 MB peak
+pe_ctrl_r2_induct|PROVED|1|induct|MEM: 133.35 MB peak
+pe_cpu_debug_hold|PROVED|1|induct|MEM: 41.82 MB peak
+pe_soc_owner_gate_depth|PROVED|16|bmc|MEM: 963.24 MB peak
+pe_soc_owner_guard|PROVED|1|induct|MEM: 364.91 MB peak

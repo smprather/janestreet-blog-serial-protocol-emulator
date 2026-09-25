@@ -258,6 +258,37 @@ if apply_mutation "$TMP/mut_owner.py"; then
     -DFV_INDUCT formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
   restore_and_verify
 fi
+# ------------------------------------------- 12/13. R3 debug-control claims
+# Both run against the pe_ctrl INDUCTIVE subset (the shape the clean claims are
+# proved in): H1 (a hit implies the hold) and H3 (an armed address is inside
+# instruction memory). The step/hold mutants live in regress/mutate_ctrl_r3_tb.sh,
+# where the TB is the authority: the pe_cpu formal target takes dbg_hold/dbg_step
+# as FREE inputs, so it proves the core's RESPONSE to them, not that pe_ctrl
+# asserts them.
+cat > "$TMP/mut_bp_hit_hold.py" <<'PYMUT'
+import pathlib, sys
+p = pathlib.Path('rtl/pe_ctrl.v'); t = p.read_text()
+needle = """        bp_hit     <= 1'b1;
+        dbg_hold_r <= 1'b1;
+      end"""
+if needle not in t: sys.exit("no hit/hold pair")
+print("  breakpoint hit no longer asserts the hold (H1)")
+p.write_text(t.replace(needle, """        bp_hit     <= 1'b1;
+      end""", 1))
+PYMUT
+if apply_mutation "$TMP/mut_bp_hit_hold.py"; then
+  FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=6 \
+  fv_case pe_ctrl_bp_hit_no_hold 1 formal_pe_ctrl \
+    -DFV_INDUCT formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
+  restore_and_verify
+fi
+cat > "$TMP/mut_bp_range.py" <<'PYMUT'
+# H3 (the bound) is NOT mutated here: the claim was VACUOUS and was removed (see
+# formal_pe_ctrl.v). The bound is enforced by the TB's C2 case and its
+# `bp-set-no-range` mutation in regress/mutate_ctrl_r3_tb.sh, where it IS
+# differential (clean TB passes, mutant TB fails).
+PYMUT
+
 # F2's SET-side guard is NOT in this harness ON PURPOSE. Its formal claim (C2)
 # is labelled gate-depth-only in formal_pe_soc.v: it is not inductive on this
 # toolchain, so the clean design does not close the full target either -- a
