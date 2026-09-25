@@ -56,6 +56,55 @@ frame in the demos is checked against.
    wire bits). Firmware programs drive both (`eth_arp_echo`, `eth_tx_two`, a
    wrap probe and a busy probe).
 
+## The debug act — arm a breakpoint, hit it, step across it, resume (R3)
+
+The four acts above are firmware personas. This one is the thing you cannot do
+with `peemu.py`: **the chip is stopped by a host command, on a real instruction
+boundary.** It is the act that turns "the host can read the chip" into "the
+host can debug the chip", and it runs entirely over the same framed bus as the
+load — no side channel, no simulation-only hook.
+
+Run it yourself, no board needed:
+
+```
+python3 tools/host_bridge/acceptance.py --fake   # the 7 r3_demo_* beats
+```
+
+1. **Arm.** `DEBUG_BP_SET(2)` over the host bus. The response's five-word
+   prefix reads back the address it just armed and `bp_flags=0x01`.
+2. **Run, and hit.** Raise the `run` strap. The core advances until its
+   *landing* address equals the armed one, and stops there. The demo clocks
+   the model to that point because `FakePE` does not self-advance; a real core
+   gets there on its own.
+3. **The hit is a distinct state, not "stopped".** `DEBUG_STATUS` reports
+   `state=3` (**BP_HIT**), `pc=2`, `bp_flags=0x03` (bit0 armed + bit1 hit) —
+   and `run=1`. That last one is the point: **the hit holds the core, it does
+   not drop the run strap.** A plain stop is `state=0`; a single-step pause is
+   `state=2`. All four are in one 2-bit word, and R2's own `STATUS` reports the
+   same encoding, so old host code keeps its meaning.
+4. **Inspect.** `READ_CPU` gives `pc/a/x/y/insn` — with `insn` the word *at*
+   the held PC, which is exactly the instruction you are about to single-step.
+   `DEBUG_STATUS` adds the breakpoint address and flags on top. (Its last word
+   is the **run strap**, not the debug state: a detail this repo's own vectors
+   initially got wrong and the chip's conformance run caught.)
+5. **Step across it — and both halves matter.** One `DEBUG_STEP` retires
+   **exactly one instruction**, so `a` visibly changes and the PC advances to 3.
+   Stop-before is about the instruction *at* the breakpoint, which had **not**
+   run — which is what lets a debugger inspect that instruction and then step
+   *it*. Stepping off the breakpoint clears the hit.
+6. **Clear.** `DEBUG_BP_CLR` is the **only** release, and it also disarms: with
+   the strap high the core resumes; with the strap low it falls to the boot
+   stop and the PC re-zeroes. So a core can never be stranded on a hold.
+7. **Resume with the breakpoint still wanted.** Step off → clear → re-arm. The
+   GUI offers this as one action precisely because the naive "clear to get
+   going" silently drops your breakpoint.
+
+Two honest caveats, both on the acceptance output itself: a free-running core
+cannot be stepped at all (the chip answers `NOT_READY` with no fault), and a
+breakpoint is **one PC address** — there is no watchpoint and no data
+breakpoint in R3.
+
+
 ## How the host controller fits in the demo
 
 The GUI is not a mock: it speaks the real wire protocol to the real bridge.
@@ -86,12 +135,13 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
 | UART / SPI / I2C / 10BASE-T personas run as firmware | **RTL-proven** | `tb_pe_soc_uart`, `tb_pe_soc_spi`, `tb_pe_soc_i2c*`, `tb_pe_soc_eth*`, `tb_pe_eth_tx` |
 | Full regression is green | **RTL-proven** | `./regress/run_all.sh --fast -j8` → exit 0 on a cold clone: **RTL 34/34, firmware 26/26, 12 mutation suites** (R2 and the wait-word gate are registered in `run_all`; see `docs/cold-clone-audit.md`) |
 | 60 MHz maps and routes | **RTL-proven (mapped, not routed)** | area + screen reports; physical flow intentionally out of scope |
-| Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, both fuzz campaigns, soak smoke, MicroPython conformance, acceptance `--fake` → 22 PASS / 0 FAIL / 1 SKIP) |
+| Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, both fuzz campaigns, soak smoke, MicroPython conformance, acceptance `--fake` → 35 PASS, 0 FAIL, 1 SKIP) |
 | Bridge on a real MicroPython | **measured** | built the MicroPython unix port and ran the deployed modules on it; found and fixed 5 deployment blockers (`reviews/2026-09-25/HOST-BRIDGE-MICROPYTHON.md`) |
 | Framed host bus (PING/LOAD/STATUS/CLEAR_FAULT/TARGET, target-1 loopback, sticky faults, `IRQ_N`) | **RTL-proven** | chip-side R1 landed and verified with mutation coverage; the host's bridge/acceptance drive the same contract |
 | Host protocol on real silicon (R1) | **LANDED + verified** | the chip team landed the framed bus, `IRQ_N` and target 1; the host stack speaks that exact contract today |
 | Memory/register readback (R2) | **chip-confirmed (simulation)** | chip R2 landed and registered in `run_all`: `tb_pe_ctrl_r2` reports **18/18** golden steps PASS, byte-exact (CRC included) with the model image loaded per vector, the opening 3-word LOAD replayed as a real frame, and `pe_ctrl` STA-screened. The record lives in the **chip** repo (`reviews/2026-09-25/R2-READ-PATH-REVIEW.md`); this repo's package consumed those same steps as its acceptance spec (`reviews/2026-09-25/R2-READ-VERIFICATION.json`) |
 | Liveness is observable (P3) | **chip-confirmed (simulation)** | R2's STATUS is 11 words incl. `pc/a/x/y/timer` at native widths, and `READ_CPU` is the one **non-halting** read, so a host can watch a RUNNING program (chip P3 finding closed; host GUI surfacing is this branch) |
+| Debug control: arm / hit / inspect / step / clear / resume (R3) | **chip-confirmed (simulation), 25/26 steps** | chip R3 landed; the chip's own `tb_pe_ctrl_r3_conf` is **GREEN 26/26** against the contract, with a 7-mutant gate (all caught) and formal proofs for S1–S4. It covers **25 of the 26** steps in this repo's golden package byte-exactly, and those 25 now carry `chip_confirmed=true` with the chip's citations; the one exception is a step whose expected `insn` is not contract-determined for a free-running core (a freeze-snapshot TB model boundary), which **both sides leave unproven** rather than "fixing" to match a testbench. The host's GUI panel, session state machine and the 7-beat `r3_demo_*` acceptance act drive the same contract; see `reviews/2026-09-25/R3-DEBUG-VERIFICATION.json` and `R3-VECTOR-BYTES.md`. **Not** hardware-confirmed |
 | Board-in-the-loop acceptance | **pending** | runner + runbook exist (`docs/host-bridge-bringup.md`); needs a board. This is the one thing the demo table marks not-done |
 | Physical flow (DRC/LVS) | **out of scope by design** | deferred in the plan; no physical tools run |
 
@@ -122,7 +172,7 @@ If there is no board on the table, the whole story still runs, in order of
 1. **Show the GUI against the bridge on the same laptop.** Start the host
    stack; the acceptance runner's `--fake` mode is a complete, honest
    end-to-end run: real GUI/session/transport/bridge, a modelled chip.
-   `python3 tools/host_bridge/acceptance.py --fake` → 22 PASS / 0 FAIL / 1
+   `python3 tools/host_bridge/acceptance.py --fake` → 35 PASS, 0 FAIL, 1 SKIP
    SKIP, and you can drive the same sequence from the browser.
 2. **Show the firmware on the emulator.** `python3 tools/fw/peemu.py
    firmware/uart_echo.hex --send "41 42"` — the exact words the hardware

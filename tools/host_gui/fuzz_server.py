@@ -887,10 +887,17 @@ def campaign_debug_control(rng, report: Report, iterations: int) -> None:
             continue
 
         # 1. The boundary of the breakpoint address.
-        for address, expect_ok in ((0, True), (2, True), (1023, True),
-                                   (1024, False), (0xFFFF, False), (-1, False)):
-            report.counters["debug/bp-address"] = \
+        for address, expect_ok in (
+            (0, True),
+            (2, True),
+            (1023, True),
+            (1024, False),
+            (0xFFFF, False),
+            (-1, False),
+        ):
+            report.counters["debug/bp-address"] = (
                 report.counters.get("debug/bp-address", 0) + 1
+            )
             try:
                 stack.session.bp_set(address)
                 ok = expect_ok
@@ -904,44 +911,65 @@ def campaign_debug_control(rng, report: Report, iterations: int) -> None:
             _expect(report, f"debug/bp-address/{address}", ok, detail, iteration)
 
         # 2. A free-running core must refuse a step, typed.
-        report.counters["debug/step-while-running"] = \
+        report.counters["debug/step-while-running"] = (
             report.counters.get("debug/step-while-running", 0) + 1
+        )
         stack.session.start()
         try:
             stack.session.debug_step()
-            _expect(report, "debug/step-while-running", False,
-                    "a free-running core accepted a step", iteration)
+            _expect(
+                report,
+                "debug/step-while-running",
+                False,
+                "a free-running core accepted a step",
+                iteration,
+            )
         except S.SessionStateError:
-            _expect(report, "debug/step-while-running", True,
-                    "refused before the wire, as a typed state error", iteration)
+            _expect(
+                report,
+                "debug/step-while-running",
+                True,
+                "refused before the wire, as a typed state error",
+                iteration,
+            )
         except Exception as exc:  # noqa: BLE001
             _unexpected(report, "debug/step-while-running", exc, iteration)
 
         # 3. The clear releases the hold, whichever way the strap points.
         for label, strap in (("held-stopped", False), ("held-running", True)):
-            report.counters[f"debug/release/{label}"] = \
+            report.counters[f"debug/release/{label}"] = (
                 report.counters.get(f"debug/release/{label}", 0) + 1
+            )
             stack.session.bp_set(2)
-            stack.session.set_run(strap) if hasattr(stack.session, "set_run") \
-                else None
+            stack.session.set_run(strap) if hasattr(stack.session, "set_run") else None
             stack.session.debug_status()
             try:
                 stack.session.bp_clr()
             except Exception as exc:  # noqa: BLE001
                 _unexpected(report, f"debug/release/{label}", exc, iteration)
                 continue
-            stuck = stack.session.state in (S.SessionState.DEBUG_HOLD,
-                                            S.SessionState.BP_HIT)
-            _expect(report, f"debug/release/{label}", not stuck,
-                    f"after bp_clr the session is {stack.session.state} "
-                    f"(must not still be held)", iteration)
+            stuck = stack.session.state in (
+                S.SessionState.DEBUG_HOLD,
+                S.SessionState.BP_HIT,
+            )
+            _expect(
+                report,
+                f"debug/release/{label}",
+                not stuck,
+                f"after bp_clr the session is {stack.session.state} "
+                f"(must not still be held)",
+                iteration,
+            )
 
         # 4. Whatever happened, the state machine is on a legal value and the
         #    whole stack still works afterwards.
         if stack.session.state not in legal_states:
-            _finding(report, "debug/illegal-state",
-                     f"session state {stack.session.state!r} is not a "
-                     f"SessionState", iteration)
+            _finding(
+                report,
+                "debug/illegal-state",
+                f"session state {stack.session.state!r} is not a SessionState",
+                iteration,
+            )
         _check_state(report, stack, iteration, "debug/after-sequence")
         _check_ids(report, stack, iteration)
 
@@ -1017,21 +1045,19 @@ def run(
     """Run the campaign; returns a Report (never raises on a finding)."""
     started = time.monotonic()
     report = Report(seed=seed, iterations=iterations, seconds=0.0)
+
     def stream(name: str) -> random.Random:
         """A per-campaign stream, reproducible and independent of the others."""
         return random.Random(f"{seed}:{name}")
 
-    _campaign(report, campaign_state_sequences, stream("state"), report,
-              iterations)
-    _campaign(report, campaign_hostile_bridge, stream("hostile"), report,
-              iterations)
+    _campaign(report, campaign_state_sequences, stream("state"), report, iterations)
+    _campaign(report, campaign_hostile_bridge, stream("hostile"), report, iterations)
     _campaign(report, campaign_http, stream("http"), report, iterations)
-    _campaign(report, campaign_concurrency, stream("concurrency"), report,
-              rounds, threads)
-    _campaign(report, campaign_debug_control, stream("debug"), report,
-              iterations)
-    _campaign(report, campaign_reconnect_storm, stream("storm"), report,
-              iterations)
+    _campaign(
+        report, campaign_concurrency, stream("concurrency"), report, rounds, threads
+    )
+    _campaign(report, campaign_debug_control, stream("debug"), report, iterations)
+    _campaign(report, campaign_reconnect_storm, stream("storm"), report, iterations)
     elapsed = time.monotonic() - started
     if elapsed > budget_s:  # bounded: report, do not extend
         _finding(

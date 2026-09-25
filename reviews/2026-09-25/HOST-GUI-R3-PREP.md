@@ -112,6 +112,37 @@ hit takes **clocking**, which is not a framed op — vector 8 therefore ships th
 post-hit held state as its model image and reads it back with one
 `DEBUG_STATUS`.
 
+## Corrected against the chip's conformance run (2026-09-25)
+
+`tb_pe_ctrl_r3_conf` is GREEN 26/26 with three pinned divergences in which the
+CHIP was right. Two were host-side vector defects, fixed here:
+
+- **`read_cpu_shows_a_55`** — the host's READ_CPU builder put the debug *state*
+  in the slot the contract gives to *run* (`resp_buf[6] <= {15'b0, run}`), and
+  reported the last-executed word as `insn` instead of the fetched one. It now
+  reports `run` and, while a hold is asserted, `imem[pc]` — the contract's fetch
+  mode. Scoped to the hold on purpose: R2's READ_CPU vectors preload `insn` and
+  the chip passes them 18/18, so the register must survive there, and R2's
+  byte-identity is asserted by a test after the change.
+- **`status_reports_the_hit`** — the host model *skipped the execute* whenever
+  the landing address matched the breakpoint, which withheld the wrong
+  instruction. A step is exactly one instruction and it RUNS; the hold is what
+  keeps the instruction *at* the breakpoint from running. So a step from 1 to 2
+  does retire the `LDI A,0xAA` at address 1.
+
+One is a TB model boundary and is deliberately **left alone**:
+`status_full_readback` expects the ruled landing word 0xF000 where the chip's
+freeze-snapshot model reports 0x0000, because a model that pins `pc` every cycle
+collapses the fetch pipeline onto the fill word. The chip's own doc calls this
+"not a disagreement about the contract; not proven here, and not claimed", so
+bending a contract value to match a testbench artefact would be the wrong fix.
+It is recorded in the package as `model_boundaries`, `chip_confirmed` stays
+false, and the note records that holding the core would make the word
+deterministic and therefore provable.
+
+Exactly 2 of 26 steps moved; the other 24 are byte-identical, and R2's
+chip-confirmed package is untouched.
+
 ## Defects found and fixed while building this
 
 Not cosmetics; each was found by a gate, not by reading:

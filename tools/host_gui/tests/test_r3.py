@@ -191,6 +191,182 @@ class TestIsaExecution(unittest.TestCase):
         self.assertEqual((pe.pc, pe.a, pe.insn), snapshot)
 
 
+class TestLatchedInsnRule(unittest.TestCase):
+    """BOTH halves of the insn rule, which is a cross-phase constraint.
+
+    Fixing READ_CPU introduced an asymmetry: the FETCHED word while a debug hold
+    is asserted, the LATCHED register otherwise. The held half is what R3 needs
+    (a debugger must see the landing instruction). The un-held half is what
+    R2 needs, and it is the half nobody would think to protect: both
+    chip-confirmed R2 READ_CPU vectors PRELOAD insn=0xFFFF and expect it back,
+    while the word their fetch address would give is something else entirely.
+    """
+
+    def test_held_reports_the_fetched_word_at_pc(self):
+        pe = R.loaded(pc=0)
+        pe.request(P.OP_DEBUG_STEP)  # executes imem[0], pc -> 1, held
+        self.assertTrue(pe.debug_hold)
+        self.assertEqual(pe.latched_insn, R.PROGRAM[1])
+        self.assertNotEqual(pe.latched_insn, pe.insn)
+
+    def test_unheld_preserves_the_latched_register(self):
+        """The half a 'cleanup' would break, and the R2 vectors depend on it."""
+        for image_id in ("v04-read_cpu_non_halting", "v05-full_width_debug_regs"):
+            with self.subTest(image=image_id):
+                image = V2.build_package()["model_images"][image_id]
+                pe = V.load_model_from_image(image)
+                self.assertFalse(pe.debug_hold)
+                # The preloaded register survives...
+                self.assertEqual(pe.latched_insn, 0xFFFF)
+                # ...even though the word the fetch address would give differs,
+                # which is the whole reason the rule is two-sided.
+                self.assertNotEqual(pe.imem[pe.fetch_address], 0xFFFF)
+
+    def test_simplifying_the_rule_would_break_the_chip_confirmed_r2_package(self):
+        """The concrete consequence, so the trade-off is not folklore.
+
+        Both R2 READ_CPU vectors expect 0xFFFF because a conformance-TB snapshot
+        preloads the register. Reporting the fetched word unconditionally would
+        hand them 0x0041 and 0x0000 respectively, and the chip passes them
+        byte-exactly today (18/18).
+        """
+        package = V2.build_package()
+        fetched = {}
+        for vector in package["vectors"]:
+            for step in vector["steps"]:
+                if step["opcode_name"] == "OP_READ_CPU":
+                    pe = V.load_model_from_image(
+                        package["model_images"][step["model_image_id"]]
+                    )
+                    fetched[(vector["name"], step["name"])] = (
+                        step["response_payload_words"][5],
+                        pe.imem[pe.fetch_address],
+                    )
+        self.assertTrue(fetched)
+        for key, (expected, would_report) in fetched.items():
+            with self.subTest(vector=key):
+                self.assertEqual(expected, 0xFFFF)
+                self.assertNotEqual(would_report, expected)
+
+    def test_r2_still_checks_clean(self):
+        self.assertEqual(V2.check_package(), 0)
+        self.assertEqual(V2.check_hex_export(), 0)
+
+
+class TestChipConformanceCorrections(unittest.TestCase):
+    """Semantics the chip's conformance run proved this host model had wrong.
+
+    Two host-side vector defects and one TB model boundary, from the chip's
+    tb_pe_ctrl_r3_conf (its pinned R3_KNOWN_DIVERGENCES list). The chip is
+    right in all three; these pin the corrected semantics so they cannot
+    silently regress.
+    """
+
+    def test_read_cpu_reports_run_not_the_debug_state(self):
+        """The last READ_CPU word is the run STRAP, not the debug state.
+
+        pe_ctrl's OP_RDCPU builder is `resp_buf[6] <= {15'b0, run}`, and the R2
+        header agrees. The host builder used to put the debug STATE there, which
+        matched only while no hold was asserted and disagreed the moment one
+        was -- exactly the word a debugger reads to decide whether the core is
+        executing.
+        """
+        pe = R.loaded(pc=0)
+        pe.request(P.OP_DEBUG_STEP)  # now held: state 2, run 0
+        self.assertEqual(pe.state, F.DEBUG_HOLD)
+        payload = pe.request(P.OP_READ_CPU).payload
+        self.assertEqual(payload[0], P.STATUS_OK)
+        self.assertEqual(payload[6], 0, "last word is run, and the strap is low")
+        self.assertNotEqual(payload[6], pe.state)
+
+    def test_read_cpu_while_held_reports_the_fetched_word(self):
+        """While held, the fetch mode is pc, so insn is the word AT that pc."""
+        pe = R.loaded(pc=0)
+        pe.request(P.OP_DEBUG_STEP)  # executes imem[0], pc -> 1
+        payload = pe.request(P.OP_READ_CPU).payload
+        self.assertEqual(payload[1], 1)  # pc
+        self.assertEqual(payload[2], 0x55)  # a = LDI retired
+        self.assertEqual(
+            payload[5], R.PROGRAM[1], "insn is imem[pc], not the last-executed word"
+        )
+
+    def test_a_step_executes_one_instruction_and_the_hold_protects_the_next(self):
+        """Stop-before withholds the LANDING instruction, not the stepped one.
+
+        The host model used to skip the execute whenever the landing address
+        matched, which suppressed the wrong instruction: a step from 1 to 2
+        really does retire the LDI A,0xAA at address 1, and the hold is what
+        keeps the instruction AT the breakpoint from running.
+        """
+        pe = R.loaded(pc=0, bp_addr=2, bp_en=True)
+        pe.request(P.OP_DEBUG_STEP)  # 0 -> 1, retires LDI A,0x55
+        self.assertEqual(pe.a, 0x55)
+        payload = pe.request(P.OP_DEBUG_STEP).payload  # 1 -> 2, lands on bp
+        self.assertEqual(pe.a, 0xAA, "the step from 1 to 2 retires the LDI at 1")
+        self.assertEqual(payload[1], F.DEBUG_BP_HIT)
+        self.assertEqual(payload[2], 2)
+        self.assertEqual(payload[4], F.BP_FLAG_ARMED | F.BP_FLAG_HIT)
+        self.assertEqual(pe.pc, 2)
+        # The instruction at the breakpoint has NOT run: the next step retires
+        # imem[2] (NOP) and lands at 3.
+        self.assertEqual(pe.request(P.OP_DEBUG_STEP).payload[2], 3)
+
+    def test_the_two_corrected_steps_match_the_chips_observed_bytes(self):
+        """The exact frame words the chip reported, so the vectors cannot drift."""
+        package = V3.build_package()
+        steps = {
+            (v["name"], s["name"]): s for v in package["vectors"] for s in v["steps"]
+        }
+
+        def words(key):
+            raw = bytes.fromhex(steps[key]["response_hex"])
+            return [
+                f"{int.from_bytes(raw[i : i + 2], 'big'):04X}"
+                for i in range(0, len(raw), 2)
+            ]
+
+        # 0-based frame words: 0=SYNC 1=header 2=seq 3=len 4=OK ... last=CRC.
+        self.assertEqual(
+            words(("debug_step_executes_one", "read_cpu_shows_a_55"))[9:12],
+            ["00AA", "0000", "77B8"],
+        )
+        self.assertEqual(
+            words(("debug_step_lands_on_bp", "status_reports_the_hit"))[10], "00AA"
+        )
+        self.assertEqual(
+            words(("debug_step_lands_on_bp", "status_reports_the_hit"))[14], "7D55"
+        )
+
+    def test_the_model_boundary_stays_unproven_and_unchanged(self):
+        """insn is not contract-determined for a free-running core.
+
+        The chip's freeze-snapshot TB reports 0x0000 where the ruled landing
+        word is 0xF000. That is a TB artefact -- its own doc says it is "not a
+        disagreement about the contract" -- so the expectation stays the ruled
+        value, the step stays chip_confirmed=false, and the boundary is
+        recorded rather than quietly "fixed" to match a testbench.
+        """
+        package = V3.build_package()
+        step = next(
+            s
+            for v in package["vectors"]
+            if v["name"] == "debug_status_common_prefix"
+            for s in v["steps"]
+            if s["name"] == "status_full_readback"
+        )
+        raw = bytes.fromhex(step["response_hex"])
+        insn = f"{int.from_bytes(raw[26:28], 'big'):04X}"
+        self.assertEqual(insn, "F000")
+        self.assertFalse(step["chip_confirmed"])
+        self.assertTrue(package["model_boundaries"])
+        self.assertFalse(package["model_boundaries"][0]["chip_confirmed"])
+
+    def test_r2_is_still_byte_identical_after_the_read_cpu_change(self):
+        """The READ_CPU fix must not perturb the chip-confirmed R2 package."""
+        self.assertEqual(V2.check_package(), 0)
+        self.assertEqual(V2.check_hex_export(), 0)
+
+
 class TestObligations(unittest.TestCase):
     def test_every_probe_passes(self):
         results = R.run_all_probes()
@@ -206,9 +382,15 @@ class TestObligations(unittest.TestCase):
         }
         self.assertEqual(forward, backward)
 
-    def test_nothing_is_chip_confirmed_yet(self):
-        # The R2 discipline: the host model is never evidence about silicon, so
-        # no host obligation may claim confirmation on its own.
+    def test_obligations_stay_unconfirmed_even_though_the_steps_do_not(self):
+        """Two different things, deliberately not collapsed into one flag.
+
+        The VECTOR STEPS are chip-confirmed (the chip's conformance TB ran
+        them). The r3_reads OBLIGATIONS stay unconfirmed: those are host-side
+        probes of the model, and a host probe is never evidence about silicon
+        no matter how many of them pass. A flag that covered both would let a
+        green host suite imply confirmation.
+        """
         self.assertEqual(R.unconfirmed_names(), list(R.by_name()))
 
     def test_the_provisional_table_is_gone(self):
@@ -251,13 +433,50 @@ class TestPackage(unittest.TestCase):
         package = V3.build_package()
         self.assertEqual(len(package["vectors"]), 14)
 
-    def test_no_step_is_chip_confirmed(self):
-        """chip_confirmed stays False until the chip's TB passes the vectors."""
+    def test_exactly_the_confirmed_steps_are_confirmed(self):
+        """25 of 26, and the 26th is the pinned TB model boundary.
+
+        The chip's tb_pe_ctrl_r3_conf is GREEN and its citations are recorded,
+        so the steps it ran byte-exactly are confirmed. The one exception is
+        `status_full_readback`, which BOTH sides deliberately leave unproven.
+        The package-level flag therefore stays False, because not every vector
+        is confirmed -- that is the honest aggregate, not an oversight.
+        """
         package = V3.build_package()
-        steps = [s for v in package["vectors"] for s in v["steps"]]
-        self.assertTrue(steps)
-        self.assertTrue(all(not s["chip_confirmed"] for s in steps))
+        steps = [(v["name"], s) for v in package["vectors"] for s in v["steps"]]
+        boundary = package["model_boundaries"][0]["step"]
+        self.assertEqual(len(steps), 26)
+        # `steps` is (vector_name, step) pairs, so the STEP name comes from the
+        # step dict -- not from the vector.
+        confirmed = [s["name"] for _, s in steps if s["chip_confirmed"]]
+        unconfirmed = [s["name"] for _, s in steps if not s["chip_confirmed"]]
+        self.assertEqual(len(confirmed), 25)
+        self.assertEqual(unconfirmed, [boundary])
+        self.assertEqual(boundary, "status_full_readback")
         self.assertFalse(package["chip_confirmed"])
+
+    def test_duplicate_step_names_cannot_drift_apart_silently(self):
+        """Evidence is keyed by step NAME, and `step_one` names two steps.
+
+        The framework keys confirmation by step name, so a name shared by two
+        vectors confirms both. That is right today (both are confirmed), but
+        it is only safe while they agree -- so pin that they do, rather than
+        leaving it to a reader to notice.
+        """
+        package = V3.build_package()
+        seen = {}
+        for vector in package["vectors"]:
+            for step in vector["steps"]:
+                seen.setdefault(step["name"], []).append(
+                    (vector["name"], step["chip_confirmed"]))
+        shared = {n: v for n, v in seen.items() if len(v) > 1}
+        self.assertIn("step_one", shared, "the name collision this guards")
+        for name, entries in shared.items():
+            with self.subTest(step=name):
+                self.assertEqual({flag for _, flag in entries}, {True},
+                                 f"steps sharing the name {name!r} disagree "
+                                 f"on confirmation, which name-keyed evidence "
+                                 f"cannot express: {entries}")
 
     def test_a_confirmed_step_must_cite_the_evidence(self):
         """The R2 discipline: confirmation is a citation, never an assertion."""
@@ -266,7 +485,13 @@ class TestPackage(unittest.TestCase):
                 if step["chip_confirmed"]:
                     self.assertIn("chip_evidence", step)
                     self.assertTrue(step["chip_evidence"]["review"])
-        self.assertEqual(V3.CHIP_EVIDENCE["confirmed_steps"], set())
+        confirmed = V3.CHIP_EVIDENCE["confirmed_steps"]
+        self.assertEqual(len(confirmed), 24, "distinct names; step_one covers "
+                                              "two steps, so 25 steps")
+        self.assertNotIn("status_full_readback", confirmed)
+        for key in ("review", "testbench", "harness", "conformance", "scope"):
+            with self.subTest(citation=key):
+                self.assertTrue(V3.CHIP_EVIDENCE[key])
 
     def test_images_declare_the_debug_registers_not_the_state_word(self):
         for image in V3.build_package()["model_images"].values():
