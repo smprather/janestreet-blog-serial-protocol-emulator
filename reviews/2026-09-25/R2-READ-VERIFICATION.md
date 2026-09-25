@@ -56,6 +56,43 @@ with that run as evidence.
   never wrapped (the `range_never_wraps` vector: `READ_IMEM(1023,1)` reads the
   last word; `READ_IMEM(1023,2)` and `READ_DMEM(15,2)` are `RANGE`).
 
+## The model image the vectors assume (manager ruling, 2026-09-25)
+
+Without the memory contents, a data-path read proves only the **framing**,
+not the data. The package therefore ships the exact model image for every
+vector, and every step names the image it assumes:
+
+- `model_images[<id>].imem` — 1024 words: a sparse `{address: word}` map plus
+  a `fill` default (the demo image holds `0x0041, 0x1001, 0x4002` at words
+  0-2 and zero elsewhere).
+- `model_images[<id>].dmem` — 16 bytes, same sparse-map shape.
+- `model_images[<id>].state` — the architectural register/timer state the
+  STATUS and DUMP_CORE vectors assume: `pc, a, x, y, insn, timer, run, faults,
+  words_written, selected_target`.
+- Each step carries `model_image_id` pointing at its image.
+
+The images come from the same `build_package()` that produces the frames, and
+`load_model_from_image()` is its exact inverse, so a test can rebuild the
+model from the shipped image and replay a vector to get the shipped bytes
+back. A test does exactly that (steps replayed **in order**, because the
+lifecycle vector's first step latches the fault its second step observes).
+
+### Loading it in a Verilog testbench
+
+`r2-hex/` ships the full images as `$readmemh` files:
+
+```verilog
+initial begin
+  $readmemh("imem.hex", imem);   // logic [15:0] imem [0:1023]
+  $readmemh("dmem.hex", dmem);   // logic [7:0]  dmem [0:15]
+end
+```
+
+`imem.hex` is one 16-bit word per line in ascending address order; `dmem.hex`
+is one byte per line. Preload the registers from `model_images[].state` in
+`manifest.json` for the vector under test, then drive the step's
+`request_file` and compare the response against `response_file`.
+
 ## Register widths (ISA is the source of truth)
 
 Manager ruling (2026-09-25): **the ISA is the source of truth and no field may

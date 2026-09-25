@@ -2,6 +2,251 @@
   "artifact": "R2 read-path $readmemh export",
   "chip_confirmed": false,
   "generated_by": "tools/host_gui/r2_vectors.py (--hex)",
+  "image_files": {
+    "dmem_file": "dmem.hex",
+    "image_id": "v01-read_imem_bounded",
+    "imem_file": "imem.hex"
+  },
+  "load_procedure": "1) imem.hex: one 16-bit word per line, ascending address, for $readmemh into a 16-bit imem[0:1023]. 2) dmem.hex: one byte per line for $readmemh into an 8-bit dmem[0:15]. 3) preload the registers from model_images[].state (pc/a/x/y/insn/timer/run/faults/words_written) for the vector under test. 4) drive the step's request_file and compare the response against response_file.",
+  "model_images": {
+    "v01-read_imem_bounded": {
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v01-read_imem_bounded",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 3,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v02-read_dmem_bounded": {
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {
+          "0": 10,
+          "1": 11,
+          "2": 12,
+          "3": 13
+        }
+      },
+      "id": "v02-read_dmem_bounded",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 3,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v03-dump_core_header": {
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v03-dump_core_header",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 69,
+        "faults": 0,
+        "insn": 0,
+        "pc": 291,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 7,
+        "words_written": 3,
+        "x": 120,
+        "y": 154
+      }
+    },
+    "v04-read_cpu_non_halting": {
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v04-read_cpu_non_halting",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 255,
+        "faults": 0,
+        "insn": 65535,
+        "pc": 1023,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 3,
+        "x": 255,
+        "y": 255
+      }
+    },
+    "v05-full_width_debug_regs": {
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v05-full_width_debug_regs",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 255,
+        "faults": 0,
+        "insn": 65535,
+        "pc": 1023,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 3,
+        "x": 255,
+        "y": 255
+      }
+    },
+    "v06-read_while_running_rejected": {
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v06-read_while_running_rejected",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 3,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v07-range_never_wraps": {
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v07-range_never_wraps",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 3,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v08-read_range_fault_lifecycle": {
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v08-read_range_fault_lifecycle",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 3,
+        "x": 0,
+        "y": 0
+      }
+    }
+  },
   "notice": "These probes run against the host FakePE model. They are NOT chip-confirmed: the R2 read path is chip-side work under the manager's dispatch and is unverified until it lands and passes the same probes on hardware.",
   "readmemh_usage": "$readmemh(\"<file>\", mem); with an 8-bit mem[] filled from address 0; the stream is the frame's bytes in wire order.",
   "source_of_truth": [
@@ -12,11 +257,13 @@
   "vectors": [
     {
       "chip_confirmed": false,
+      "model_image_id": "v01-read_imem_bounded",
       "name": "read_imem_bounded",
       "obligation": "READ_IMEM returns the requested address..address+count words.",
       "steps": [
         {
           "model_faults": 0,
+          "model_image_id": "v01-read_imem_bounded",
           "name": "read_imem_address_1_count_2",
           "opcode": 19,
           "opcode_name": "OP_READ_IMEM",
@@ -37,11 +284,13 @@
     },
     {
       "chip_confirmed": false,
+      "model_image_id": "v02-read_dmem_bounded",
       "name": "read_dmem_bounded",
       "obligation": "READ_DMEM returns the requested byte range packed big-endian.",
       "steps": [
         {
           "model_faults": 0,
+          "model_image_id": "v02-read_dmem_bounded",
           "name": "read_dmem_address_0_count_4",
           "opcode": 20,
           "opcode_name": "OP_READ_DMEM",
@@ -62,11 +311,13 @@
     },
     {
       "chip_confirmed": false,
+      "model_image_id": "v03-dump_core_header",
       "name": "dump_core_header",
       "obligation": "DUMP_CORE while stopped equals the STATUS register header.",
       "steps": [
         {
           "model_faults": 0,
+          "model_image_id": "v03-dump_core_header",
           "name": "dump_core_header",
           "opcode": 21,
           "opcode_name": "OP_DUMP_CORE",
@@ -93,6 +344,7 @@
         },
         {
           "model_faults": 0,
+          "model_image_id": "v03-dump_core_header",
           "name": "status_header",
           "opcode": 17,
           "opcode_name": "OP_STATUS",
@@ -121,11 +373,13 @@
     },
     {
       "chip_confirmed": false,
+      "model_image_id": "v04-read_cpu_non_halting",
       "name": "read_cpu_non_halting",
       "obligation": "READ_CPU answers while run=1 (the only non-halting read).",
       "steps": [
         {
           "model_faults": 0,
+          "model_image_id": "v04-read_cpu_non_halting",
           "name": "read_cpu_while_running",
           "opcode": 18,
           "opcode_name": "OP_READ_CPU",
@@ -150,11 +404,13 @@
     },
     {
       "chip_confirmed": false,
+      "model_image_id": "v05-full_width_debug_regs",
       "name": "full_width_debug_regs",
       "obligation": "READ_CPU exposes every ISA register bit: pc 10 (PCW at IMEM_WORDS=1024), a/x/y 8, insn 16 - the obligation is no truncation, not invented bits.",
       "steps": [
         {
           "model_faults": 0,
+          "model_image_id": "v05-full_width_debug_regs",
           "name": "read_cpu_full_width_regs",
           "opcode": 18,
           "opcode_name": "OP_READ_CPU",
@@ -179,11 +435,13 @@
     },
     {
       "chip_confirmed": false,
+      "model_image_id": "v06-read_while_running_rejected",
       "name": "read_while_running_rejected",
       "obligation": "READ_IMEM/READ_DMEM/DUMP_CORE answer NOT_READY while run=1.",
       "steps": [
         {
           "model_faults": 0,
+          "model_image_id": "v06-read_while_running_rejected",
           "name": "read_imem_not_ready",
           "opcode": 19,
           "opcode_name": "OP_READ_IMEM",
@@ -200,6 +458,7 @@
         },
         {
           "model_faults": 0,
+          "model_image_id": "v06-read_while_running_rejected",
           "name": "read_dmem_not_ready",
           "opcode": 20,
           "opcode_name": "OP_READ_DMEM",
@@ -216,6 +475,7 @@
         },
         {
           "model_faults": 0,
+          "model_image_id": "v06-read_while_running_rejected",
           "name": "dump_core_not_ready",
           "opcode": 21,
           "opcode_name": "OP_DUMP_CORE",
@@ -234,11 +494,13 @@
     },
     {
       "chip_confirmed": false,
+      "model_image_id": "v07-range_never_wraps",
       "name": "range_never_wraps",
       "obligation": "address+count past the memory end is RANGE, never a wrapped read.",
       "steps": [
         {
           "model_faults": 0,
+          "model_image_id": "v07-range_never_wraps",
           "name": "read_imem_last_word",
           "opcode": 19,
           "opcode_name": "OP_READ_IMEM",
@@ -256,6 +518,7 @@
         },
         {
           "model_faults": 4,
+          "model_image_id": "v07-range_never_wraps",
           "name": "read_imem_past_end_no_wrap",
           "opcode": 19,
           "opcode_name": "OP_READ_IMEM",
@@ -272,6 +535,7 @@
         },
         {
           "model_faults": 4,
+          "model_image_id": "v07-range_never_wraps",
           "name": "read_dmem_past_end_no_wrap",
           "opcode": 20,
           "opcode_name": "OP_READ_DMEM",
@@ -290,11 +554,13 @@
     },
     {
       "chip_confirmed": false,
+      "model_image_id": "v08-read_range_fault_lifecycle",
       "name": "read_range_fault_lifecycle",
       "obligation": "An out-of-range READ latches sticky FAULT_RANGE and CLEAR_FAULT clears it (manager ruling).",
       "steps": [
         {
           "model_faults": 4,
+          "model_image_id": "v08-read_range_fault_lifecycle",
           "name": "bad_read_answers_range",
           "opcode": 19,
           "opcode_name": "OP_READ_IMEM",
@@ -311,6 +577,7 @@
         },
         {
           "model_faults": 4,
+          "model_image_id": "v08-read_range_fault_lifecycle",
           "name": "status_shows_sticky_fault",
           "opcode": 17,
           "opcode_name": "OP_STATUS",
@@ -337,6 +604,7 @@
         },
         {
           "model_faults": 0,
+          "model_image_id": "v08-read_range_fault_lifecycle",
           "name": "clear_fault_clears_the_bit",
           "opcode": 22,
           "opcode_name": "OP_CLEAR_FAULT",

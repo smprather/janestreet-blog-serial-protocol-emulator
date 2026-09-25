@@ -16,6 +16,7 @@ import json
 import unittest
 from pathlib import Path
 
+from tools.host_gui import fake_pe as F
 from tools.host_gui import protocol as P
 from tools.host_gui import r2_vectors as V
 
@@ -192,6 +193,121 @@ class TestReadmemhExport(unittest.TestCase):
         self.assertIn("$readmemh", readme)
         self.assertIn("not chip-confirmed", readme.lower())
         self.assertIn("manifest.json", readme)
+
+
+class TestModelImageShipsWithTheVectors(unittest.TestCase):
+    """The package must ship the model image the vectors were made against.
+
+    Without it, a data-path read proves only the framing, not the data
+    (manager ruling 2026-09-25). These tests prove the image is present, that
+    the hex image files decode to it, and - the point of the whole exercise -
+    that re-running every step against a model rebuilt FROM THE SHIPPED IMAGE
+    reproduces the shipped response bytes exactly.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.package = V.build_package()
+        cls.on_disk = json.loads(
+            PACKAGE_JSON.read_text(encoding="utf-8"))
+        cls.manifest = json.loads(
+            (V.HEX_DIR / "manifest.json").read_text(encoding="utf-8"))
+
+    def _read_hex(self, path):
+        return bytes.fromhex("".join(path.read_text(encoding="utf-8").split()))
+
+    def test_every_vector_and_step_references_a_shipped_image(self):
+        images = self.on_disk["model_images"]
+        self.assertTrue(images)
+        for vector in self.on_disk["vectors"]:
+            with self.subTest(vector=vector["name"]):
+                self.assertIn(vector["model_image_id"], images)
+                for step in vector["steps"]:
+                    self.assertEqual(step["model_image_id"],
+                                     vector["model_image_id"])
+
+    def test_image_declares_imem_dmem_and_register_state(self):
+        for image_id, image in self.on_disk["model_images"].items():
+            with self.subTest(image=image_id):
+                self.assertEqual(image["imem"]["words"], 1024)
+                self.assertEqual(image["dmem"]["bytes"], 16)
+                state = image["state"]
+                for field in ("pc", "a", "x", "y", "insn", "timer", "run",
+                              "faults", "words_written"):
+                    self.assertIn(field, state)
+                self.assertLess(state["pc"], 1 << F.ISA_PC_BITS)
+                self.assertLess(state["a"], 1 << F.ISA_A_BITS)
+                self.assertLess(state["x"], 1 << F.ISA_X_BITS)
+                self.assertLess(state["y"], 1 << F.ISA_Y_BITS)
+                self.assertLess(state["insn"], 1 << F.ISA_INSN_BITS)
+
+    def test_vectors_regenerate_from_the_shipped_image_byte_identically(self):
+        """The point of shipping the image: replay it and get the same bytes.
+
+        Steps are replayed IN ORDER from the initial image, because a vector is
+        a sequence (the lifecycle vector's first step latches the sticky fault
+        its second step observes); the image is the state before step 1.
+        """
+        images = self.on_disk["model_images"]
+        for vector in self.on_disk["vectors"]:
+            image = images[vector["model_image_id"]]
+            pe = V.load_model_from_image(image)     # the shipped initial state
+            for step in vector["steps"]:
+                with self.subTest(vector=vector["name"], step=step["name"]):
+                    response = pe.exchange(bytes.fromhex(step["request_hex"]))
+                    self.assertIsNotNone(response)
+                    self.assertEqual(response.hex(), step["response_hex"])
+                    self.assertEqual(pe.faults, step["model_faults"])
+
+    def test_the_lifecycle_vector_is_stateful_from_its_image(self):
+        # Guard the semantics: step 2 only makes sense after step 1 latched.
+        vector = next(v for v in self.on_disk["vectors"]
+                      if v["name"] == "read_range_fault_lifecycle")
+        image = self.on_disk["model_images"][vector["model_image_id"]]
+        self.assertEqual(image["state"]["faults"], 0)
+        pe = V.load_model_from_image(image)
+        pe.exchange(bytes.fromhex(vector["steps"][0]["request_hex"]))
+        self.assertEqual(pe.faults & 0x0004, 0x0004)
+        second = pe.exchange(bytes.fromhex(vector["steps"][1]["request_hex"]))
+        self.assertEqual(second.hex(), vector["steps"][1]["response_hex"])
+
+    def test_a_tampered_image_changes_the_data_the_vector_proves(self):
+        image = json.loads(json.dumps(
+            self.on_disk["model_images"]["v01-read_imem_bounded"]))
+        image["imem"]["sparse"]["1"] = 0xDEAD       # not the shipped word
+        pe = V.load_model_from_image(image)
+        response = pe.exchange(bytes.fromhex(
+            self.on_disk["vectors"][0]["steps"][0]["request_hex"]))
+        self.assertNotEqual(response.hex(),
+                            self.on_disk["vectors"][0]["steps"][0]["response_hex"])
+    def test_imem_hex_file_decodes_to_the_shipped_image(self):
+        image = self.manifest["model_images"][
+            self.manifest["image_files"]["image_id"]]
+        data = self._read_hex(V.HEX_DIR / self.manifest["image_files"]["imem_file"])
+        self.assertEqual(len(data), 2 * image["imem"]["words"])
+        fill = int(str(image["imem"]["fill"]), 0)
+        words = [int.from_bytes(data[i:i + 2], "big")
+                 for i in range(0, len(data), 2)]
+        self.assertEqual(words[0], int(image["imem"]["sparse"]["0"]))
+        self.assertEqual(words[1], int(image["imem"]["sparse"]["1"]))
+        self.assertEqual(words[2], int(image["imem"]["sparse"]["2"]))
+        self.assertEqual(words[500], fill)          # the fill default holds
+
+    def test_dmem_hex_file_decodes_to_the_shipped_image(self):
+        image = self.manifest["model_images"][
+            self.manifest["image_files"]["image_id"]]
+        data = self._read_hex(V.HEX_DIR / self.manifest["image_files"]["dmem_file"])
+        self.assertEqual(len(data), image["dmem"]["bytes"])
+        for address, byte in image["dmem"]["sparse"].items():
+            self.assertEqual(data[int(address)], int(byte))
+
+    def test_manifest_documents_the_load_procedure(self):
+        self.assertIn("$readmemh", self.manifest["load_procedure"])
+        readme = (V.HEX_DIR / "README.md").read_text(encoding="utf-8")
+        self.assertIn("$readmemh", readme)
+        self.assertIn("imem.hex", readme)
+        self.assertIn("dmem.hex", readme)
+        self.assertIn("not chip-confirmed", readme.lower())
 
 
 if __name__ == "__main__":
