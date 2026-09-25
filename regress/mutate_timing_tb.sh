@@ -57,12 +57,13 @@ TB_DH="$ROOT/tb/tb_pe_soc_dht11.v"
 TB_DS="$ROOT/tb/tb_pe_soc_ds18b20.v"
 TB_NEC="$ROOT/tb/tb_pe_soc_ir_nec.v"
 TB_STP="$ROOT/tb/tb_pe_soc_stepper_ramp.v"
+TB_FM="$ROOT/tb/tb_pe_soc_freqmeter.v"
 JOBS="${MUTATE_TIMING_JOBS:-6}"
 mkdir -p "$ROOT/sim"
 
 # ---- the tree must not change ---------------------------------------------
 SNAP=$(mktemp -d /tmp/mut_timing_snap.XXXXXX)
-for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp; do
+for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter; do
   cp "$ROOT/firmware/$f.pe"  "$SNAP/$f.pe"
   cp "$ROOT/firmware/$f.hex" "$SNAP/$f.hex"
 done
@@ -120,7 +121,7 @@ PYEOF
   return $rc
 }
 export -f run_case
-export ROOT SRCS SRAM_MODEL TB_WS TB_SV TB_DH TB_DS TB_NEC TB_STP
+export ROOT SRCS SRAM_MODEL TB_WS TB_SV TB_DH TB_DS TB_NEC TB_STP TB_FM
 
 # ---- the cases --------------------------------------------------------------
 # Each one is a defect a real firmware of this shape can have, chosen so the
@@ -177,6 +178,16 @@ st-release-drops-dir|stepper_ramp|PINOE written with 0x00 to release STEP, which
 st-dir-never-on-pin|stepper_ramp|the direction change updates the register but never writes the pin, so the second run is stepped in the OLD direction
 st-no-ramp|stepper_ramp|the ramp never shortened, so the twelve steps are at one period
 st-shared-slot|stepper_ramp|the ramp counter back in dmem[9], which the delay routine counts to zero
+fm-tick-port|freqmeter|the timebase read from TIMER (the 4.33 us UART half-bit counter) instead of the 1 us one
+fm-t-high-byte|freqmeter|the period counter's high byte never incremented, so 10 000 us wraps to 16
+fm-h-high-byte|freqmeter|the high-time counter's high byte never incremented
+fm-wrong-pad|freqmeter|the pad mask moved to bit 5, so the pad never appears to change
+fm-no-rearm|freqmeter|the counters not reset at the rising edge, so each period is the sum of all of them
+fm-double-count|freqmeter|the period counter advanced twice per elapsed microsecond
+fm-idx-stuck|freqmeter|the slot index never advanced, so both points report the first one
+fm-finishes-early|freqmeter|the run declared finished after ONE point, leaving the second slot unwritten
+fm-high-byte-order|freqmeter|the high time banked high byte first, which reads as a real measurement times 256
+fm-per-base|freqmeter|the period slot's base address shifted, so the periods land on the high times
 CASES_EOF
 
 # The counts come from the $results file, not from four shell variables set
@@ -198,6 +209,7 @@ run_one() {
     ow-*) stem=ds18b20;      tb="$TB_DS"; def=DS18B20_HEX ;;
     ir-*) stem=nec_ir;       tb="$TB_NEC"; def=NEC_HEX ;;
     st-*) stem=stepper_ramp; tb="$TB_STP"; def=STEPPER_HEX ;;
+    fm-*) stem=freqmeter;    tb="$TB_FM"; def=FREQMETER_HEX ;;
     *) echo "HARNESS ERROR: unknown case id $id" >> "$results"; return 2 ;;
   esac
   case "$id" in
@@ -524,6 +536,130 @@ run_one() {
         STM   4, A"
       repl="        LDI   A, ST_GAP0
         STM   9, A              ; MUTANT: dmem[9] is the DELAY's own counter" ;;
+    fm-tick-port)
+      # THE TRAP THIS ACT FELL INTO ITSELF, kept as a case. The timebase read
+      # from TIMER is the UART HALF-BIT tick: 260 clocks, 4.33 us, because it
+      # exists to place a serial sample mid-cell. Every period in the sweep is
+      # then reported a factor of 4.33 out, and the error is in the WRONG
+      # DIRECTION at every point (a longer period reads shorter), which is the
+      # shape a systematic timebase mistake always has.
+      anchor='        IN    A, I2CTICK       ; the free-running 1 us counter'
+      repl='        IN    A, TIMER         ; MUTANT: the 4.33 us UART half-bit tick' ;;
+    fm-t-high-byte)
+      # THE 16-BIT CLAIM, and the reason the sweep goes down to 100 Hz. The
+      # low byte still counts, so the program runs, reports plausible numbers
+      # at every fast point, and reports 16 us for a 100 Hz signal. Nothing
+      # about that is visible in the log except at the one point where the
+      # claim is made.
+      anchor="        LDM   A, 1
+        ADD   A, 1
+        STM   1, A"
+      repl="        NOP                      ; MUTANT: the high byte never increments
+        NOP
+        NOP" ;;
+    fm-h-high-byte)
+      # The same defect in the OTHER counter. It is a separate case because a
+      # gate that only ever perturbs the first counter would not know whether
+      # the high-time path is exercised at all: the longest high time in the
+      # sweep is 6000 us and the longest period 10 000, so the two counters
+      # are not interchangeable and neither check covers the other.
+      anchor="        LDM   A, 3
+        ADD   A, 1
+        STM   3, A"
+      repl="        NOP                      ; MUTANT: the high byte never increments
+        NOP
+        NOP" ;;
+    fm-wrong-pad)
+      # A counted CONSTANT rather than a text edit, because FM_IN lives in
+      # peasm's CONSTS table and the harness reaches those with --const: a
+      # harness that only knew how to sed a .pe would silently cover no
+      # constant at all, which is the failure mode the 1-Wire act already
+      # found once. Bit 5 is held high by the testbench's pad drive, so the
+      # level never appears to change and no edge is ever detected -- which is
+      # the whole failure mode of a firmware pointed at the wrong pad.
+      extra='--const FM_IN=0x20'
+      anchor="        LDI   A, FM_IN
+        STM   4, A             ; the line idles high (see the header)"
+      repl="        LDI   A, FM_IN
+        STM   4, A             ; MUTANT: the fitted constant is overridden" ;;
+    fm-per-base)
+      # The other constant. On a SIXTEEN-BYTE machine a shifted slot base
+      # overlaps the working counters rather than running off the end of
+      # memory, so this does not read as an addressing bug: the periods land
+      # on the high times and vice versa, and both still look like numbers.
+      extra='--const FM_PER_BASE=10'
+      anchor='        LDI   A, FM_PER_BASE'
+      repl='        LDI   A, FM_PER_BASE     ; MUTANT: the fitted constant is overridden' ;;
+    fm-no-rearm)
+      # The reset that makes the whole design work: without it the counters
+      # are absolute times rather than elapsed times, every "period" is the
+      # sum of all of them, and the FIRST point still looks right -- so a
+      # check that only looked at the first point would pass.
+      anchor="rearm:
+        LDI   A, 0
+        STM   0, A
+        STM   1, A
+        STM   2, A
+        STM   3, A
+        JMP   main"
+      repl="rearm:
+        NOP                      ; MUTANT: the counters are never reset
+        NOP
+        NOP
+        NOP
+        NOP
+        JMP   main" ;;
+    fm-double-count)
+      anchor="        LDM   A, 0
+        ADD   A, X
+        STM   0, A"
+      repl="        LDM   A, 0
+        ADD   A, X
+        ADD   A, X              ; MUTANT: counted twice
+        STM   0, A" ;;
+    fm-idx-stuck)
+      anchor="        LDI   A, 1
+        STM   5, A
+        JMP   rearm"
+      repl="        LDI   A, 1
+        NOP                      ; MUTANT: the index never advances
+        JMP   rearm" ;;
+    fm-finishes-early)
+      # The run ends after ONE point, so the second slot is never written. The
+      # testbench has an explicit "was it actually written" check for exactly
+      # this, because every arithmetic check in it is silently satisfied by an
+      # X: a comparison against an unknown is false in Verilog, so an unwritten
+      # result passes the period, the high time and the duty checks.
+      anchor="        LDM   A, 5
+        JNZ   fin               ; IDX was 1, so both slots are now full"
+      repl="        LDM   A, 5
+        JNZ   rearm             ; MUTANT: finished after one point" ;;
+    fm-high-byte-order)
+      # The high time banked HIGH BYTE FIRST. The ISA has no 16-bit data path,
+      # so every 16-bit quantity in this program is two byte stores and the
+      # order is a decision rather than a property -- and getting it wrong
+      # produces a number that is a real measurement times 256, which reads as
+      # a distance rather than as an addressing fault. The testbench reads the
+      # pair little-endian and names that order, so this is caught by the
+      # high-time check and by the duty.
+      anchor="        LDM   A, 2
+        STS   [X], A
+        INCX
+        LDM   A, 3
+        STS   [X], A"
+      repl="        LDM   A, 3              ; MUTANT: the bytes are swapped
+        STS   [X], A
+        INCX
+        LDM   A, 2
+        STS   [X], A" ;;
+    fm-per-base)
+      # The other counted constant, and the other half of the map. A shifted
+      # slot base on a SIXTEEN-BYTE machine does not run off the end of
+      # memory, it overlaps the working counters -- so the mutant reads as
+      # plausible numbers rather than as an addressing fault.
+      extra='--const FM_PER_BASE=10'
+      anchor='        LDI   A, FM_PER_BASE'
+      repl='        LDI   A, FM_PER_BASE     ; MUTANT: the fitted constant is overridden' ;;
     ow-presence-edge)
       anchor='ph1b:   IN    A, PIN
         AND   A, OW_DATA
@@ -591,11 +727,11 @@ rm -f "$CASES" "$results" "$CASELOG"
 
 # ---- the tree must not have changed ----------------------------------------
 stale=0
-for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp; do
+for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter; do
   cmp -s "$SNAP/$f.pe" "$ROOT/firmware/$f.pe"  || { echo "FATAL: firmware/$f.pe was modified"; stale=1; }
   cmp -s "$SNAP/$f.hex" "$ROOT/firmware/$f.hex" || { echo "FATAL: firmware/$f.hex was modified"; stale=1; }
 done
-[ "$stale" -eq 0 ] && echo "firmware tree byte-identical after the run (cmp-verified, all 12 files: 6 programs, .pe and .hex)"
+[ "$stale" -eq 0 ] && echo "firmware tree byte-identical after the run (cmp-verified, all 14 files: 7 programs, .pe and .hex)"
 
 echo
 echo "timing-TB mutations: $n_cases cases, $n_ok detected, $n_surv survived, $n_err harness errors"

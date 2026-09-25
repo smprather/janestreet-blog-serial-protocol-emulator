@@ -327,10 +327,34 @@ CONSTS: dict[str, int] = {
     # bookkeeping. An arithmetic error in the comment beside a fitted constant
     # is the same defect as an error in the constant, and cheaper to make.
     "ST_PULSE": 2,  # the low pulse, (2-1)*69+4 = 73 clocks = 1.2 us; a
-                    # driver wants at least 1 us
+    # driver wants at least 1 us
     "ST_SETUP": 6,  # the direction setup, (6-1)*69+4 = 349 clocks = 5.8 us;
-                    # a driver wants at least 5 us
+    # a driver wants at least 5 us
     "ST_GAP0": 196,  # the first step period, on (4,40): 196 * 511 + 4
+    #
+    # ---------------------------------------------------------------------
+    # INPUT FREQUENCY + DUTY METER. The one act here whose pin is an INPUT:
+    # the PWM arrives from outside and the firmware recovers a period and a
+    # high time from a waveform it does not control, so the number that is
+    # the claim is the accuracy of a count rather than the accuracy of a
+    # delay. The 100 Hz point is the point of the act -- its period is
+    # 10 000 us, which does not fit in a byte, so a firmware counting into
+    # one reports a plausible-looking wrong answer that has no symptom at
+    # 10 kHz.
+    #
+    #   FM_IN  bit 6: the PWM pad, the same first unclaimed pad the WS2812,
+    #         servo, DHT11, 1-Wire and stepper acts already use. It is an
+    #         INPUT here, so the program never drives it and never writes
+    #         TXPIN -- the edge detector reads the PAD through PIN.
+    #
+    # The two base addresses are constants rather than literals because they
+    # are the program's data-memory MAP: the machine has sixteen bytes
+    # (DMEM_BYTES = 16 in rtl/pe_soc.v) and all sixteen are used, so a
+    # shifted base overlaps the working counters rather than running off the
+    # end. The mutation gate perturbs them for exactly that reason.
+    "FM_IN": 0x40,
+    "FM_PER_BASE": 8,   # the period of slot n is at 8 + 4n
+    "FM_HI_BASE": 10,   # its high time is at 10 + 4n
 }
 
 

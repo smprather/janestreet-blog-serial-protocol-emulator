@@ -195,6 +195,20 @@ CASES=(
   # in the program that is not a step -- is pinned by a SUM with its
   # neighbour rather than excused. ~14 ms of 60 MHz, the sum of the periods.
   "tb_pe_soc_stepper_ramp|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_stepper_ramp"
+  # The INPUT acts: the pin is an INPUT and the firmware recovers numbers from
+  # a waveform it does not control, so the number that is the claim is the
+  # ACCURACY OF A COUNT. Twelve banked points from 158 Hz to 10 kHz with a
+  # varying duty, each checked against a SECOND, independent measurement of the
+  # pad (the receiver in the TB) rather than against the generator's table --
+  # a generator that knew the answer would agree with a firmware that had the
+  # sweep wrong. The 100 Hz point is the point of the act: 10 000 us does not
+  # fit in a byte, and a firmware counting into one reports 16 us with no
+  # symptom at 10 kHz. The sweep is six runs of three periods because the
+  # MACHINE HAS SIXTEEN BYTES of data memory and a period plus a high time is
+  # four of them. ~43 ms of 60 MHz, the largest simulation in the repository;
+  # the generator is edge-driven with absolute delays rather than clocked,
+  # which is what keeps it inside ~55 s of wall.
+  "tb_pe_soc_freqmeter|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_freqmeter"
   "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
   # The I2C TRANSACTION layer on real RTL: firmware/i2c_xfer.pe against a
   # Verilog slave FSM that decodes the wire, with timing and grammar asserted
