@@ -220,7 +220,17 @@ def _unexpected(report: Report, where: str, exc: BaseException, iteration: int) 
 
 
 def _campaign(report: Report, fn, *args, **kwargs) -> None:
-    """Run one campaign; a crash is a finding, not a traceback."""
+    """Run one campaign; a crash is a finding, not a traceback.
+
+    Each campaign gets its OWN random stream, derived from the run seed. They
+    used to share one, which meant adding a campaign silently changed what every
+    OTHER campaign exercised for a given seed -- the R3 debug campaign landed
+    and `test_campaign_exercises_every_class` caught it, because the shared
+    draws shifted and the hostile/drop mode stopped being selected. A new
+    campaign must be a pure addition: with per-campaign streams, adding one
+    cannot alter another campaign's coverage or make an old finding stop
+    reproducing.
+    """
     try:
         fn(*args, **kwargs)
     except Exception as exc:  # noqa: BLE001 - the crash IS a finding
@@ -294,6 +304,15 @@ STATE_OPS = (
     "sources",
     "health",
     "disconnect",
+    # R3 debug control: the same hostile mix as every other op, so the debug
+    # state machine is attacked in the same wrong-state orders the core ops are.
+    "debug_status",
+    "debug_status",
+    "debug_step",
+    "debug_step",
+    "bp_set",
+    "bp_clr",
+    "resume_with_breakpoint",
 )
 
 POSTCONDITIONS = {
@@ -335,6 +354,18 @@ def _apply_op(name: str, stack):
         return stack.api.health()
     if name == "disconnect":
         return stack.session.disconnect()
+    if name == "debug_status":
+        return stack.session.debug_status()
+    if name == "debug_step":
+        return stack.session.debug_step()
+    if name == "bp_set":
+        # Addresses deliberately straddle the legal boundary: 0 is a LEGAL
+        # breakpoint, IMEM_WORDS is the first illegal one.
+        return stack.session.bp_set(random.choice((0, 1, 2, 17, 1023, 1024)))
+    if name == "bp_clr":
+        return stack.session.bp_clr()
+    if name == "resume_with_breakpoint":
+        return stack.session.resume_with_breakpoint(random.choice((0, 2, 1023)))
     raise AssertionError(name)
 
 
@@ -516,6 +547,43 @@ HTTP_SEQUENCES = (
         ),
     ),
     ("stop-connect", (("POST", "/api/stop", None), ("POST", "/api/connect", None))),
+    # R3 debug routes: wrong state, hostile bodies, and the release recipe.
+    (
+        "debug-wrong-state",
+        (
+            ("POST", "/api/connect", None),
+            ("GET", "/api/debug", None),
+            ("POST", "/api/debug/step", None),
+            ("POST", "/api/debug/bp_clr", None),
+            ("POST", "/api/debug/resume", {"address": 1}),
+        ),
+    ),
+    (
+        "debug-hostile-address",
+        (
+            ("POST", "/api/connect", None),
+            ("POST", "/api/load", {"source": "uart_echo.pe"}),
+            ("POST", "/api/debug/bp_set", {"address": "abc"}),
+            ("POST", "/api/debug/bp_set", {"address": None}),
+            ("POST", "/api/debug/bp_set", {"address": 1.5}),
+            ("POST", "/api/debug/bp_set", {"address": [1]}),
+            ("POST", "/api/debug/bp_set", {}),
+            ("POST", "/api/debug/resume", {"address": "x"}),
+        ),
+    ),
+    (
+        "debug-step-hold-release",
+        (
+            ("POST", "/api/connect", None),
+            ("POST", "/api/load", {"source": "uart_echo.pe"}),
+            ("POST", "/api/debug/bp_set", {"address": 0}),
+            ("POST", "/api/debug/step", None),
+            ("POST", "/api/debug/step", None),
+            ("GET", "/api/debug", None),
+            ("POST", "/api/debug/bp_clr", None),
+            ("GET", "/api/debug", None),
+        ),
+    ),
     (
         "traversal-and-list",
         (
@@ -770,6 +838,97 @@ def campaign_concurrency(
 
 
 # ---- campaign 5: reconnect storms -------------------------------------------
+def campaign_debug_control(rng, report: Report, iterations: int) -> None:
+    """Attack the R3 debug surface, which the state mix alone does not reach.
+
+    The state mix drives the debug ops in random orders, which proves they
+    cannot brick a session. This campaign checks the contract's own edges
+    instead, because each of these is a place a plausible implementation is
+    wrong in a way random ordering would never notice:
+
+      * address 0 is a LEGAL breakpoint (bp_flags bit0, not the address, is
+        what says armed) and IMEM_WORDS is the first illegal one;
+      * a free-running core refuses a step with a TYPED error;
+      * DEBUG_BP_CLR is the ONLY release, so after it the core is not held;
+      * every debug failure is a SessionError, never an unhandled exception --
+        the debug handlers are the newest code in the stack and the least
+        covered by the older campaigns.
+    """
+    legal_states = set(S.SessionState)
+
+    for iteration in range(iterations):
+        stack = _stack()
+        try:
+            stack.session.connect()
+            stack.session.load(_image())
+        except Exception as exc:  # noqa: BLE001
+            _unexpected(report, "debug/setup", exc, iteration)
+            continue
+
+        # 1. The boundary of the breakpoint address.
+        for address, expect_ok in ((0, True), (2, True), (1023, True),
+                                   (1024, False), (0xFFFF, False), (-1, False)):
+            report.counters["debug/bp-address"] = \
+                report.counters.get("debug/bp-address", 0) + 1
+            try:
+                stack.session.bp_set(address)
+                ok = expect_ok
+                detail = f"bp_set({address}) accepted"
+            except S.SessionError:
+                ok = not expect_ok
+                detail = f"bp_set({address}) refused with a typed error"
+            except Exception as exc:  # noqa: BLE001
+                _unexpected(report, f"debug/bp_set({address})", exc, iteration)
+                continue
+            _expect(report, f"debug/bp-address/{address}", ok, detail, iteration)
+
+        # 2. A free-running core must refuse a step, typed.
+        report.counters["debug/step-while-running"] = \
+            report.counters.get("debug/step-while-running", 0) + 1
+        stack.session.start()
+        try:
+            stack.session.debug_step()
+            _expect(report, "debug/step-while-running", False,
+                    "a free-running core accepted a step", iteration)
+        except S.SessionStateError:
+            _expect(report, "debug/step-while-running", True,
+                    "refused before the wire, as a typed state error", iteration)
+        except Exception as exc:  # noqa: BLE001
+            _unexpected(report, "debug/step-while-running", exc, iteration)
+
+        # 3. The clear releases the hold, whichever way the strap points.
+        for label, strap in (("held-stopped", False), ("held-running", True)):
+            report.counters[f"debug/release/{label}"] = \
+                report.counters.get(f"debug/release/{label}", 0) + 1
+            stack.session.bp_set(2)
+            stack.session.set_run(strap) if hasattr(stack.session, "set_run") \
+                else None
+            stack.session.debug_status()
+            try:
+                stack.session.bp_clr()
+            except Exception as exc:  # noqa: BLE001
+                _unexpected(report, f"debug/release/{label}", exc, iteration)
+                continue
+            stuck = stack.session.state in (S.SessionState.DEBUG_HOLD,
+                                            S.SessionState.BP_HIT)
+            _expect(report, f"debug/release/{label}", not stuck,
+                    f"after bp_clr the session is {stack.session.state} "
+                    f"(must not still be held)", iteration)
+
+        # 4. Whatever happened, the state machine is on a legal value and the
+        #    whole stack still works afterwards.
+        if stack.session.state not in legal_states:
+            _finding(report, "debug/illegal-state",
+                     f"session state {stack.session.state!r} is not a "
+                     f"SessionState", iteration)
+        _check_state(report, stack, iteration, "debug/after-sequence")
+        _check_ids(report, stack, iteration)
+
+        # 5. A recovery cycle must still work: the debug ops leave the stack
+        #    usable, which is the R2 lesson about stuck state.
+        _recovery_cycle(report, iteration, "after-debug")
+
+
 def campaign_reconnect_storm(rng, report: Report, iterations: int) -> None:
     """Rapid connect/disconnect cycles: fresh ids, then a full cycle works."""
     storms = max(1, iterations // 10)
@@ -837,12 +996,21 @@ def run(
     """Run the campaign; returns a Report (never raises on a finding)."""
     started = time.monotonic()
     report = Report(seed=seed, iterations=iterations, seconds=0.0)
-    rng = random.Random(seed)
-    _campaign(report, campaign_state_sequences, rng, report, iterations)
-    _campaign(report, campaign_hostile_bridge, rng, report, iterations)
-    _campaign(report, campaign_http, rng, report, iterations)
-    _campaign(report, campaign_concurrency, rng, report, rounds, threads)
-    _campaign(report, campaign_reconnect_storm, rng, report, iterations)
+    def stream(name: str) -> random.Random:
+        """A per-campaign stream, reproducible and independent of the others."""
+        return random.Random(f"{seed}:{name}")
+
+    _campaign(report, campaign_state_sequences, stream("state"), report,
+              iterations)
+    _campaign(report, campaign_hostile_bridge, stream("hostile"), report,
+              iterations)
+    _campaign(report, campaign_http, stream("http"), report, iterations)
+    _campaign(report, campaign_concurrency, stream("concurrency"), report,
+              rounds, threads)
+    _campaign(report, campaign_debug_control, stream("debug"), report,
+              iterations)
+    _campaign(report, campaign_reconnect_storm, stream("storm"), report,
+              iterations)
     elapsed = time.monotonic() - started
     if elapsed > budget_s:  # bounded: report, do not extend
         _finding(

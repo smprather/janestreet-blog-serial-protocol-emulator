@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from typing import cast
 
 from tools.host_gui import board
 from tools.host_gui import fake_pe as F
@@ -55,6 +56,69 @@ def make_reconnect_stack():
 
 def push_event(port, name: str, data: dict | None = None) -> None:
     port.incoming.append(json.dumps({"v": 1, "event": name, "data": data or {}}).encode())
+
+
+class TestPayloadWordValidation(unittest.TestCase):
+    """A caller value that cannot be a frame word must fail TYPED.
+
+    Found by the R3 debug fuzz campaign: `session.bp_set(-1)` reached the
+    payload encoder and raised a bare ValueError, which the API's error handler
+    does not catch -- an unhandled 500 rather than a 409. The old lenient
+    encoder raised OverflowError for the same input, so the 500 predates R3 and
+    affected the R2 read ops too; this pins the whole family.
+    """
+
+    def setUp(self):
+        self.session, self.bridge, self.port, self.transport = make_stack()
+        self.session.connect()
+        self.session.load(ECHO)
+
+    def test_unencodable_values_are_typed_session_errors(self):
+        cases = (
+            ("bp_set", (-1,)),
+            ("bp_set", (0x10000,)),
+            ("read_imem", (-1, 4)),
+            ("read_imem", (0, -1)),
+            ("read_imem", (0, 0x10000)),
+            ("read_dmem", (-1, 4)),
+            ("clear_fault", (-1,)),
+        )
+        for name, args in cases:
+            with self.subTest(op=name, args=args):
+                call = getattr(self.session, name)
+                with self.assertRaises(S.SessionError):
+                    call(*args)
+
+    def test_a_non_integer_is_also_a_typed_error(self):
+        # `address: int` is the CONTRACT, and it stays useful for every
+        # legitimate caller. These values are deliberately below it: the point
+        # is that the session validates at RUNTIME, because the API hands it raw
+        # JSON. The cast says "on purpose" instead of silencing a diagnostic or
+        # weakening an annotation that should be trusted.
+        for bad in cast("tuple[object, ...]", ("2", None, 1.5, [1], {"a": 1})):
+            with self.subTest(value=bad), self.assertRaises(S.SessionError):
+                self.session.bp_set(bad)  # type: ignore[arg-type]
+
+    def test_in_range_but_past_imem_stays_the_chips_answer(self):
+        """The session validates the FRAME, not the chip's memory size.
+
+        1024 fits a frame word, so it must reach the chip and be answered
+        RANGE; pre-empting that here would hide the chip's own contract.
+        """
+        with self.assertRaises(S.SessionError) as caught:
+            self.session.bp_set(F.IMEM_WORDS)
+        self.assertIn("status", str(caught.exception))
+
+    def test_address_zero_is_legal(self):
+        """Address 0 is a real breakpoint, told apart by bp_flags bit0."""
+        self.assertTrue(self.session.bp_set(0).armed)
+
+    def test_the_session_still_works_afterwards(self):
+        """A rejected value must leave the session usable."""
+        with self.assertRaises(S.SessionError):
+            self.session.bp_set(-1)
+        self.assertEqual(self.session.debug_status().state, F.DEBUG_STOPPED)
+        self.assertEqual(self.session.debug_step().pc_next, 1)
 
 
 class TestBoardDecisions(unittest.TestCase):

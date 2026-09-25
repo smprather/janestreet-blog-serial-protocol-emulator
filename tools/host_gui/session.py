@@ -227,6 +227,28 @@ def _require_int(value, what: str) -> int:
     return value
 
 
+def _require_word(value, what: str) -> int:
+    """Require a value that can be encoded as ONE 16-bit frame word.
+
+    This is the FRAME constraint, not the chip's: a payload word is 0..0xFFFF,
+    so a negative or oversize value cannot go on the wire at all. Validated
+    here, at the layer that owns caller input, so it surfaces as a typed
+    SessionError (-> 409) instead of escaping the encoder as ValueError /
+    OverflowError and becoming an unhandled 500. (Found by the R3 debug fuzz
+    campaign, on the R2 read ops as well as the new ones -- the old lenient
+    encoder raised OverflowError for the same input, so the 500 predates R3.)
+
+    Whether the value is MEANINGFUL stays the chip's call: an in-range address
+    past the end of IMEM is still answered RANGE by the chip, and this helper
+    must not pre-empt that.
+    """
+    value = _require_int(value, what)
+    if not 0 <= value <= 0xFFFF:
+        raise SessionError(
+            f"{what} must fit one 16-bit frame word (0..0xFFFF), got {value}")
+    return value
+
+
 def _result_int(result: dict, key: str, default: int = 0) -> int:
     """One integer field from a bridge result, as a typed SessionError.
 
@@ -499,8 +521,8 @@ class ControllerSession:
         result = self._request(
             "read_imem",
             {
-                "address": _require_int(address, "address"),
-                "count": _require_int(count, "count"),
+                "address": _require_word(address, "address"),
+                "count": _require_word(count, "count"),
             },
         )
         status = _result_int(result, "status", -1)
@@ -514,8 +536,8 @@ class ControllerSession:
         result = self._request(
             "read_dmem",
             {
-                "address": _require_int(address, "address"),
-                "count": _require_int(count, "count"),
+                "address": _require_word(address, "address"),
+                "count": _require_word(count, "count"),
             },
         )
         status = _result_int(result, "status", -1)
@@ -596,7 +618,7 @@ class ControllerSession:
     def bp_set(self, address: int) -> DebugPrefix:
         """Arm the one breakpoint. Allowed while running (it stops the core)."""
         self._require_connected()
-        result = self._request("bp_set", {"address": _require_int(address, "address")})
+        result = self._request("bp_set", {"address": _require_word(address, "address")})
         prefix = _debug_prefix(result, "bp_set")
         _require_ok(prefix, "bp_set")
         return prefix
@@ -633,7 +655,7 @@ class ControllerSession:
     @_serialized
     def clear_fault(self, mask: int = 0xFFFF) -> int:
         self._require_connected()
-        result = self._request("clear_fault", {"mask": _require_int(mask, "mask")})
+        result = self._request("clear_fault", {"mask": _require_word(mask, "mask")})
         self._faults = _result_int(result, "faults", 0)
         if self._faults == 0 and self.state == SessionState.FAULTED:
             self.state = SessionState.STOPPED if self._loaded else SessionState.PREPARED
