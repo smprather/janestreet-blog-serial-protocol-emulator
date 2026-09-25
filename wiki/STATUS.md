@@ -368,12 +368,16 @@ about `main`'s chip state.**
 | Pico bridge | `tools/host_bridge/{pe_frame,tt_adapter,main}.py` | MicroPython frame codec, TT SDK HAL (project/clock/reset/run/`uio_oe_pico`/CS_N), newline-JSON endpoint with framed SPI, LOAD-forces-run-0, start-after-load, IRQ polling, 5 MHz first-pass SCLK cap | 43 cases; 8 fake-`ttboard` cases; 4 cases with the real host stack over the real bridge |
 | Acceptance runner | `tools/host_bridge/acceptance.py` | one scripted sequence for `--fake` (no device) and `--device` (hardware); per-step PASS/FAIL/SKIP + manifest; `dialout` hint instead of a traceback | `RESULT: PASS (22 PASS, 0 FAIL, 1 SKIP)` |
 | R2 read contract (host side) | `tools/host_gui/r2_reads.py` | the seven R2 read obligations as named probes; read-range latches sticky `FAULT_RANGE`, READ payload low-word-first ascending, ISA widths (pc 10, a/x/y 8, insn 16) — **chip-confirmed in simulation**: `tb_pe_ctrl_r2` passes all 15 golden steps byte-exact (chip repo `R2-READ-PATH-REVIEW.md`) | 15 cases, green; package `chip_confirmed: true` |
+| Protocol fuzzer | `tools/host_gui/fuzz_protocol.py` | seeded hostile campaign over both frame decoders and the FakePE model (valid/bitflip/sync/truncation/frame-after-frame/wait-word edges/hostile host requests) | gate step (2000 iterations) clean; heavy run 200 k cases clean; found the host-copy wait-word drift |
+| Server/API fuzzer | `tools/host_gui/fuzz_server.py` | seeded hostile campaign over the FastAPI routes, the session state machine, a broken bridge (garbage/wrong-id/drop/oversize/ok=false/bad-version) and concurrent/poller requests, with recovery invariants | RED at seed `20260926` found two real defects (stuck `LOADING` after a failed load; crossed/stolen wire replies under concurrency), both fixed and pinned; heavy run 400×60×12 PASS; gate step |
+| Host soak (RSS watch) | `tools/host_gui/soak_host.py` | bounded bridge+session+API loop (run/stop, real image assembly, reconnects, hostile timeouts, fuzz chunks, optional HTTP) with RSS + live-GC-object sampling and a pure `summarize()` verdict | 22 min / 1,891,812 cycles: **bounded** (RSS 57.3–57.6 MB after warmup, last-half slope 0.40 MB/h, GC objects +511) — `reviews/2026-09-25/HOST-SOAK-API-FUZZ.md` |
 
 Full result records, commands and limits: `reviews/2026-09-24/HOST-GUI-PHASE1B.md`,
 `reviews/2026-09-25/HOST-GUI-PHASE2-BRIDGE.md`,
 `reviews/2026-09-25/HOST-GUI-PHASE3-ACCEPTANCE.md`,
 `reviews/2026-09-25/HOST-GUI-R2-PREP.md`,
-`reviews/2026-09-25/HOST-GUI-TASK8-FINAL.md`. Operator steps: README's
+`reviews/2026-09-25/HOST-GUI-TASK8-FINAL.md`,
+`reviews/2026-09-25/HOST-SOAK-API-FUZZ.md`. Operator steps: README's
 "Host controller" section and `tools/host_gui/tests/fixtures/acceptance.md`.
 The page shows the live CPU header (`/api/read_cpu`) and keeps a status poll
 running while connected so a chip fault on an idle board surfaces.

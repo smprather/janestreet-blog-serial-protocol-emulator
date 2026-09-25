@@ -35,7 +35,9 @@
 > two real defects, both fixed: a failed `load` left the session stuck in
 > `LOADING` until reconnect, and concurrent requests/pollers crossed or stole
 > replies on the wire (the transport and session now serialize state + wire
-> access). Full record: `reviews/2026-09-25/HOST-SOAK-API-FUZZ.md`.
+> access). The soak is bounded: 22 min / 1,891,812 cycles, RSS flat at
+> 57.3–57.6 MB after warmup (last-half slope 0.40 MB/h), GC objects +511,
+> PASS. Full record: `reviews/2026-09-25/HOST-SOAK-API-FUZZ.md`.
 <!-- END gui-worker host block (top notes) -->
 
 > **Host GUI plan Task 8 — final verification, host scope, DONE (2026-09-25).**
