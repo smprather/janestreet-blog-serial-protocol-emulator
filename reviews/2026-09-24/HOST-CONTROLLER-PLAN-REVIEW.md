@@ -361,3 +361,41 @@ Plan Task 7's scripted runner and no-hardware dry run are committed at
 
 Remaining: Task 8 final verification (whole-suite + regression + synthesis
 screen) when the host phases and the chip RTL phases are ready to meet.
+
+---
+
+## 11. Host plan status after Task 8 (host scope, 2026-09-25)
+
+Task 8's final verification is complete **for the host stack**, and the record
+merge that the Task 7 ruling postponed is done. This is the roll-up the next
+session should read before the plan continues.
+
+| Plan task | Scope | State (host branch `host-controller-gui`) |
+|---|---|---|
+| Task 1 | image + frame contracts | **DONE** — `c12734e`, `153fbde` (reviewed as phase 1a) |
+| Task 2 | USB transport + Pico bridge | **DONE** — code `c28234d`, record phase 2 |
+| Task 3 | PE bidirectional host protocol (RTL) | OPEN — chip-side, chip-repo manager |
+| Task 4 | SoC + memory readback (RTL) | OPEN — chip-side, chip-repo manager |
+| Task 5 | wrapper/pin remap (RTL + docs) | OPEN — chip-side, chip-repo manager |
+| Task 6 | local web GUI | **DONE (host side)** — `c12734e` (reviewed as phase 1b); page/transport/session/API covered, the real run needs the chip phases |
+| Task 7 | board-in-the-loop acceptance | **DONE (dry run)** — code `f6fdd65`, record phase 3; the real device run is hardware-gated and still unexecuted |
+| Task 8 | final verification + handoff | **DONE (host scope)** — this section; the RTL regression/synthesis steps stay with the chip manager's own verification, and the branch merge is the manager's integration call |
+
+Final host numbers (fresh, this dispatch): 154/154 host-GUI (1 skip: FastAPI
+route test on the system interpreter), 63/63 bridge, 34/34 protocol, ruff and
+compileall clean, `acceptance.py --fake` 16 PASS / 0 FAIL / 1 SKIP. The
+optional-dependency boundary was re-closed this dispatch in the phase-1b venv
+(154/154 with 2 dependency-absent skips, so the FastAPI route test really runs
+there and the pyserial-absent checks really run in the system interpreter).
+
+The branch touches **no** chip-side file (verified by
+`git diff --name-only main..HEAD`: only `tools/host_gui/`, `tools/host_bridge/`,
+`reviews/`, `wiki/plans/host-controller-gui.md`, `wiki/STATUS.md` (this
+branch's copy only), `README.md`, `HANDOFF.md`, `pyproject.toml`). `main`
+itself is untouched by this worktree.
+
+Open items the plan already lists and this dispatch does not change: the
+hardware acceptance run, a UART-bytes bridge op (UART observation is a SKIP
+today), and the RP2040-vs-RP2350 pin/revision mapping. The next host action is
+Task 8's chip-side counterpart (regression + synthesis) once the RTL phases
+land, followed by the manager's merge decision.

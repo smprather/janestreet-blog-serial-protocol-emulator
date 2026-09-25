@@ -1,5 +1,21 @@
 # Handoff — state of the repo (2026-09-23)
 
+> **Host GUI plan Task 8 — final verification, host scope, DONE (2026-09-25).**
+> The host plan (Tasks 1, 2, 6, 7, 8-host) is implemented and verified on branch
+> `host-controller-gui` (`0681175`, base `153fbde`); recorded in
+> `reviews/2026-09-25/HOST-GUI-TASK8-FINAL.md` with the phase records it
+> supersedes. Fresh final numbers: 154/154 host-GUI, 63/63 bridge, 34/34
+> protocol, ruff/compileall clean, `acceptance.py --fake` 16 PASS / 0 FAIL /
+> 1 SKIP, and the optional-dependency boundary re-closed in the venv (154/154
+> with the FastAPI route test running). The branch touches **no** chip-side file
+> (`git diff --name-only main..HEAD`); `main` was never checked out or modified
+> here. This branch's `wiki/STATUS.md` and plan-review §11 carry the status
+> roll-up. The plan is **not** complete: Tasks 3–5 (PE protocol, readback, pin
+> remap) are chip-side under the manager, the real Pico/USB run is
+> hardware-gated, and the chip regression/synthesis steps stay with the
+> manager's own verification. Merge is the manager's call; branch and worktree
+> are preserved.
+
 > **Host GUI phase 3 — acceptance runner and `--fake` dry run (2026-09-25).**
 > `tools/host_bridge/acceptance.py` is committed at `f6fdd65` and recorded in
 > `reviews/2026-09-25/HOST-GUI-PHASE3-ACCEPTANCE.md`: the dry run passes
