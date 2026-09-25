@@ -40,12 +40,28 @@ mkdir -p "$OUT"
 pass=0; fail=0; live=0; vacuous=0; findings=0
 declare -a SUMMARY
 
-# peak RSS recorded from the yosys log ("MEM: x MB peak"); a run killed by the
-# cap never prints it, and that absence is itself the signal.
+# What the run's memory story actually was. yosys prints "MEM: x MB peak" in its
+# end-of-script line, so a log WITHOUT that line is a run that did not finish --
+# and the reason matters, because the old label claimed "MEMCAP" on no evidence
+# at all. A proof killed by the cap, one killed by a timeout and one killed by
+# the OOM killer all look the same in the log, so the label says only what the
+# log shows:
+#   * the MEM line            -> the number
+#   * "model found", no end   -> killed WHILE PRINTING the counterexample model
+#   * otherwise, no end       -> killed before the end of the script
+# Claiming a cause the log cannot support is how a memory problem gets
+# misdiagnosed as a cap problem, so it is not claimed.
 peak_of() {
   local p
   p=$(grep -oE "MEM: [0-9.]+ MB peak" "$1" 2>/dev/null | tail -1)
-  printf '%s' "${p:-MEMCAP-or-killed (no MEM line)}"
+  if [ -n "$p" ]; then printf '%s' "$p"; return 0; fi
+  if grep -q "^End of script\." "$1" 2>/dev/null; then
+    printf '%s' "no-MEM-line (end of script, but no MEM line?)"
+  elif grep -q "model found" "$1" 2>/dev/null; then
+    printf '%s' "no-MEM-line (killed while printing the model)"
+  else
+    printf '%s' "no-MEM-line (killed before end of script)"
+  fi
 }
 
 # run_target <name> <top> <depth> <mode> <sources...>
@@ -118,7 +134,7 @@ FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-6}" \
   formal/pe_eth_tx/formal_pe_eth_tx_ifg.v rtl/pe_eth_tx.v rtl/pe_crc.v
 unset FORMAL_SAT_MODE FORMAL_INDUCT_MAX
 
-echo "--- target 2: pe_ctrl R2 (no wrap / sticky RANGE / word-aligned serializer)"
+echo "--- target 2 + R3: pe_ctrl (R2 read claims; R3 hit/hold/state/bound)"
 run_target pe_ctrl_r2 formal_pe_ctrl "$DEPTH" prove \
   formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
 echo "    (the inductive subset: the claims that close by k-induction; the rest"
@@ -126,6 +142,12 @@ echo "     are gate-depth only and are labelled as such in the review)"
 FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-6}" \
   run_target pe_ctrl_r2_induct formal_pe_ctrl 1 prove \
   -DFV_INDUCT formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
+unset FORMAL_SAT_MODE FORMAL_INDUCT_MAX
+
+echo "--- R3 debug control: the core's hold/step invariants (UNBOUNDED)"
+FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-8}" \
+  run_target pe_cpu_debug_hold formal_pe_cpu 1 prove \
+  formal/pe_cpu/formal_pe_cpu.v rtl/pe_cpu.v
 unset FORMAL_SAT_MODE FORMAL_INDUCT_MAX
 
 echo "--- target 4: pe_soc owner-mux exclusivity"

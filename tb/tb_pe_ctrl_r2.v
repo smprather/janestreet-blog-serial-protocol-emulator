@@ -272,7 +272,23 @@ module tb_pe_ctrl_r2;
     spi_cs_n = 1'b1; half_tick();
     spi_cs_n = 1'b0; half_tick();
     for (int k = 0; k < 6; k++) send_word(fr[k]);
-    for (int k = 0; k < 4 + 2; k++) begin
+    // 5 + rlen, not 4 + rlen (fixed 2026-09-25, manager-approved). CLEAR_FAULT
+    // answers with TWO payload words (status, faults), so its frame on MISO is
+    // 5 + 2 = 7 words: sync, header, sequence, length, two payload, CRC.
+    //
+    // This under-read was MASKED, which is exactly why it was dangerous: the
+    // helper threw the 7th word away, leaving the chip one word from finishing
+    // its response when the next CS_N fell -- so the NEXT frame's first word
+    // was the tail of THIS one. It passed only because every R2 vector happens
+    // to be preceded by a frame whose next read is a leading-filler skip, which
+    // swallows the stray word. The R3 conformance harness (same helper shape)
+    // hit it for real, with no filler to hide behind, and saw every frame
+    // arrive skewed by one word.
+    //
+    // The evidence that this change is safe is the conformance result itself:
+    // the suite is byte-exact, so 18/18 golden steps must still pass, and did
+    // (before: 18/18, after: 18/18).
+    for (int k = 0; k < 5 + 2; k++) begin
       logic [15:0] w;
       recv_word(w);
     end
