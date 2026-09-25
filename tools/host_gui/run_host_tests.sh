@@ -30,6 +30,9 @@
 #      `micropython` binary is on PATH (skipped with a note otherwise).
 #   8. the deploy helper's dry run (payload manifest; the unit tests also
 #      exercise the real install and its refusals).
+#   9. a bounded protocol-fuzz campaign against both frame decoders and the
+#      chip-side model (hostile frames/requests; every crash or misdecode is
+#      a finding).
 #
 # IT IS NOT A CHIP GATE. Nothing here runs a testbench, the regression, or
 # synthesis, and nothing here is evidence about silicon: the PE host protocol
@@ -66,6 +69,7 @@ fi
 
 run "compileall" python3 -m compileall -q tools/host_gui tools/host_bridge
 run "R2 vector package" python3 -m tools.host_gui.r2_vectors --check
+run "protocol fuzz" python3 -m tools.host_gui.fuzz_protocol -n 2000
 run "acceptance --fake" python3 tools/host_bridge/acceptance.py --fake
 
 # The deployed bridge must import and run on MicroPython. This runs the same

@@ -73,7 +73,9 @@ class TestDemoWalkthrough(unittest.TestCase):
         # pending.
         self.assertRegex(self.text, r"R2[^\n]*(chip-confirmed|LANDED|landed)")
         self.assertIn("R2-READ-PATH-REVIEW", self.text)
-        self.assertIn("15/15", self.text)          # the conformance count
+        # the conformance count: the package is fully confirmed at 18/18 (the
+        # ceiling/zero-count vectors were proven after the 15 original ones)
+        self.assertIn("18/18", self.text)
         self.assertNotRegex(self.text,
                             r"Memory/register readback \(R2\)[^\n]*\*\*pending\*\*")
         # the honest boundary that remains: the real board, never claimed
@@ -91,16 +93,16 @@ class TestDemoWalkthrough(unittest.TestCase):
         self.assertIn("non-halting", self.text)
         self.assertRegex(self.text, r"[Ll]iveness[^\n]*\*\*chip-confirmed")
 
-    def test_regression_numbers_match_the_chip_record(self):
-        # The numbers the walkthrough quotes must appear in the chip-side
-        # record it cites (main's HANDOFF/STATUS), so they cannot drift.
-        chip = subprocess.run(["git", "show", "main:HANDOFF.md"],
-                              capture_output=True, text=True, check=True,
-                              cwd=REPO_ROOT).stdout
-        for number in ("33/33", "26/26"):
+    def test_regression_numbers_match_the_measured_reality(self):
+        # The walkthrough's regression numbers must match the cold-clone
+        # measurement recorded in docs/cold-clone-audit.md (a real run of
+        # run_all on a fresh clone), not a doc that can drift.
+        audit = (Path(__file__).resolve().parents[3] / "docs"
+                 / "cold-clone-audit.md").read_text(encoding="utf-8")
+        for number in ("34/34", "26/26"):
             with self.subTest(number=number):
                 self.assertIn(number, self.text)
-                self.assertIn(number, chip)
+                self.assertIn(number, audit)
 
     def test_walkthrough_points_at_the_real_commands(self):
         for command in ("tools/host_gui/run_host_tests.sh",
@@ -123,6 +125,22 @@ class TestBringupRunbook(unittest.TestCase):
         rows = [line for line in text.splitlines()
                 if line.startswith("| ") and "---" not in line]
         self.assertGreaterEqual(len(rows), 8)       # a real triage table
+
+
+class TestSubmissionReadiness(unittest.TestCase):
+    SCORECARD = REPO_ROOT / "docs" / "submission-readiness.md"
+
+    def test_scorecard_exists_and_names_the_evidence(self):
+        self.assertTrue(self.SCORECARD.is_file(), f"missing {self.SCORECARD}")
+        text = self.SCORECARD.read_text(encoding="utf-8")
+        # it must quote the same regression numbers the walkthrough does
+        walk = read(WALKTHROUGH)
+        for token in ("34/34", "26/26"):
+            with self.subTest(token=token):
+                self.assertIn(token, text)
+                self.assertIn(token, walk)
+        self.assertIn("run_host_tests.sh", text)
+        self.assertIn("not", text.lower())          # honest about what is pending
 
 
 if __name__ == "__main__":

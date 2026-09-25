@@ -60,7 +60,7 @@ frame in the demos is checked against.
 
 The GUI is not a mock: it speaks the real wire protocol to the real bridge.
 
-- **Assemble.** Pick `uart_echo.pe`; the host runs the existing assembler
+- **Assemble.** Pick `firmware/uart_echo.pe`; the host runs the existing assembler
   (`tools/fw/peasm.py`), refuses >1024 words, and shows the word count, a
   SHA-256 of the canonical image and a terminal-jump warning.
 - **Load.** The words are framed (sync `A55A`, version/opcode/target,
@@ -75,22 +75,22 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
   bits and words written; a register dump and bounded memory reads are
   available while stopped. A chip fault surfaces as an event and the GUI
   labels what is *host-commanded*, *board-observed* or *chip-confirmed*.
-- **The bridge is real firmware.** `main.py` runs on the Pico, owns reset,
-  the 60 MHz project clock and the SPI pins, and was verified on a real
-  MicroPython interpreter (not just by inspection).
+- **The bridge is real firmware.** `tools/host_bridge/main.py` runs on the
+  Pico, owns reset, the 60 MHz project clock and the SPI pins, and was
+  verified on a real MicroPython interpreter (not just by inspection).
 
 ## What is proven, what is simulated, what is pending
 
 | Claim | Status | Evidence |
 |---|---|---|
 | UART / SPI / I2C / 10BASE-T personas run as firmware | **RTL-proven** | `tb_pe_soc_uart`, `tb_pe_soc_spi`, `tb_pe_soc_i2c*`, `tb_pe_soc_eth*`, `tb_pe_eth_tx` |
-| Full regression is green | **RTL-proven** | `run_all.sh --fast -j8` → exit 0: **RTL 33/33, firmware 26/26, lint clean, 12 gates, 10 mutation suites** (R2 is registered in `run_all`) |
+| Full regression is green | **RTL-proven** | `./regress/run_all.sh --fast -j8` → exit 0 on a cold clone: **RTL 34/34, firmware 26/26, 12 mutation suites** (R2 and the wait-word gate are registered in `run_all`; see `docs/cold-clone-audit.md`) |
 | 60 MHz maps and routes | **RTL-proven (mapped, not routed)** | area + screen reports; physical flow intentionally out of scope |
 | Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, MicroPython conformance, acceptance `--fake` → 22 PASS / 0 FAIL / 1 SKIP) |
 | Bridge on a real MicroPython | **measured** | built the MicroPython unix port and ran the deployed modules on it; found and fixed 5 deployment blockers (`reviews/2026-09-25/HOST-BRIDGE-MICROPYTHON.md`) |
 | Framed host bus (PING/LOAD/STATUS/CLEAR_FAULT/TARGET, target-1 loopback, sticky faults, `IRQ_N`) | **RTL-proven** | chip-side R1 landed and verified with mutation coverage; the host's bridge/acceptance drive the same contract |
 | Host protocol on real silicon (R1) | **LANDED + verified** | the chip team landed the framed bus, `IRQ_N` and target 1; the host stack speaks that exact contract today |
-| Memory/register readback (R2) | **chip-confirmed (simulation)** | chip R2 landed and registered in `run_all`: `tb_pe_ctrl_r2` reports **15/15** golden steps PASS, byte-exact (CRC included) with the model image loaded per vector, the opening 3-word LOAD replayed as a real frame, and `pe_ctrl` STA-screened (chip repo: `R2-READ-PATH-REVIEW.md`); the host consumed those same steps as its acceptance spec (`reviews/2026-09-25/R2-READ-VERIFICATION.json`) |
+| Memory/register readback (R2) | **chip-confirmed (simulation)** | chip R2 landed and registered in `run_all`: `tb_pe_ctrl_r2` reports **18/18** golden steps PASS, byte-exact (CRC included) with the model image loaded per vector, the opening 3-word LOAD replayed as a real frame, and `pe_ctrl` STA-screened. The record lives in the **chip** repo (`reviews/2026-09-25/R2-READ-PATH-REVIEW.md`); this repo's package consumed those same steps as its acceptance spec (`reviews/2026-09-25/R2-READ-VERIFICATION.json`) |
 | Liveness is observable (P3) | **chip-confirmed (simulation)** | R2's STATUS is 11 words incl. `pc/a/x/y/timer` at native widths, and `READ_CPU` is the one **non-halting** read, so a host can watch a RUNNING program (chip P3 finding closed; host GUI surfacing is this branch) |
 | Board-in-the-loop acceptance | **pending** | runner + runbook exist (`docs/host-bridge-bringup.md`); needs a board. This is the one thing the demo table marks not-done |
 | Physical flow (DRC/LVS) | **out of scope by design** | deferred in the plan; no physical tools run |

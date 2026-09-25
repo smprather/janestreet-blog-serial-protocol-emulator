@@ -133,7 +133,17 @@ The host runner **never reports a timed-out or unacknowledged operation as
 success** — a `FAIL` means the real thing failed, so read the `error` string
 in the report before retrying.
 
-## 6. After a green run
+## 7. Running the host gate (and the optional MicroPython step)
+
+`tools/host_gui/run_host_tests.sh` is the one-command host gate and needs
+nothing but `python3` (it skips cleanly when `ruff` or `micropython` are
+absent). Its MicroPython-conformance step only runs when a `micropython`
+binary is on `PATH`; to enable it, build the unix port from a MicroPython
+checkout (`git clone https://github.com/micropython/micropython && make -C
+ports/unix`) and put the binary on `PATH` — the gate then runs the deployed
+bridge modules on a real interpreter.
+
+## 8. After a green run
 
 - The acceptance output is the bring-up record: keep the board revision, the
   clock/SCLK values, the image digest and word count, and the observed

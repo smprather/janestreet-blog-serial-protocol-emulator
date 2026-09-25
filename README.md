@@ -8,12 +8,16 @@ dedicated protocol logic. Target: IHP 130 nm CMOS5L via Tiny Tapeout, 6×4 tiles
 submission 2027-01-18.
 
 **Status: the programmable core runs UART, SPI mode 0, and a complete I2C
-write/read transaction as firmware on real RTL. The wrapper also has a passive
-SPI program loader, and the SoC integrates the 10BASE-T receive path plus the
-TX frame path (the chip exchanges a real frame with itself over the wire
-loopback). See
-[`wiki/STATUS.md`](wiki/STATUS.md) for integration details and the ordered work
-list.**
+write/read transaction as firmware on real RTL. The wrapper has a passive SPI
+program loader, and the SoC integrates 10BASE-T **receive and transmit**
+hardware (real Manchester on the pad, both directions proven by testbench).
+The chip also implements a framed host bus (R1: PING / LOAD / STATUS /
+CLEAR_FAULT / TARGET, sticky faults, `IRQ_N`, target-1 loopback) and a host
+read path (R2: `READ_CPU` / `READ_IMEM` / `READ_DMEM` / `DUMP_CORE`), so a
+laptop can load, run, observe and debug it over USB via the host controller
+below. See [`wiki/STATUS.md`](wiki/STATUS.md) for integration details and the
+ordered work list, and [`docs/demo-walkthrough.md`](docs/demo-walkthrough.md)
+for the judge-facing demo script (with a no-board fallback).
 
 > Picking this up cold (human or agent)? Read **[`HANDOFF.md`](HANDOFF.md)** first
 > — current verified state, the traps worth not rediscovering, and the next step.
