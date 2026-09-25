@@ -128,6 +128,48 @@ counterexamples were the unconstrained-init artifact, not a real bug. I
 **reverted the RTL change**. Shipping an unproven modification to a verified
 design is its own defect, and the record is more valuable than the churn.
 
+## CAMPAIGN STATE AT WRAP (2026-09-25, for continuation on fresh context)
+
+Wrap requested by the manager at a clean boundary. **No new properties were
+started.** The campaign is HALF done; everything needed to continue is here.
+
+| # | Property | Status at wrap | Depth | Path |
+|---|---|---|---|---|
+| 1 | `pe_pinmux` open-drain never drives high | **PROVED (bounded)** + non-vacuity shown | 16 | `formal/pe_pinmux/formal_pe_pinmux.v` |
+| 2 | `pe_ctrl` R2: no wrap / RANGE sticks / word-aligned serializer | **NOT PROVED** — blocked on RTL observation ports | — | needs `formal/pe_ctrl/formal_pe_ctrl.v` |
+| 3a | `pe_eth_tx`: frame never <14 or >1514 | **PROVED weakly; runt/JABBER GUARD NOT YET PROVEN** (runt mutant survives at depth 240) | 16 (240 checked) | `formal/pe_eth_tx/formal_pe_eth_tx.v` |
+| 3b | `pe_eth_tx`: IFG >= 96 cells | **PROVED (bounded), but vacuous at depth 16** (needs >~215 to reach end-of-frame) | 16 | same |
+| 3c | `pe_eth_tx`: underrun abandons, no partial FCS | **PROVED (bounded)** | 16 | same |
+| 4 | `pe_soc` `tx_path` owner-mux exclusivity | **NOT PROVED** — blocked on RTL observation ports | — | needs `formal/pe_soc/formal_pe_soc.v` |
+
+Runner: `formal/run_formal.sh` (fast subset, wired into `run_all.sh` as a gate;
+`--full` for the deeper set). Logs + summary in `formal/results/`.
+Full regression with the gate: **exit 0 — RTL 34/34, firmware 26/26, lint clean,
+12 mutation suites, formal safety proofs OK, wait-word cross-check OK.**
+
+### What the next session should do, in order
+
+1. **Close the 3a gap (highest value, no RTL change needed).** The runt mutant
+   survives because the P1 assertion's shadow of the in-flight length does not
+   tightly bound the completed frame. Pin the engine's OWN accepted length
+   rather than a wrapper-side sample — the clean way is to compare `tx_done`
+   against a shadow that records the length at the cell boundary (when the
+   engine applies the start), then re-run the runt and jabber mutants until BOTH
+   fail. **A property that does not kill its mutant is not a proof.**
+2. **Re-check 3b's vacuity**: rerun the IFG mutant at depth >= 240 and confirm
+   it now FAILS. Only then is 3b a real proof.
+3. **Targets 2 and 4** need the manager's go-ahead for `ifdef FORMAL`
+   observation ports (exact signatures in the section above), then the wrappers.
+
+### Mutant table (the non-vacuity evidence, at wrap)
+
+| mutant | target | result | meaning |
+|---|---|---|---|
+| `pad_oe = reg_oe` (the real 18:43 m1) | 1 | **FAIL (caught)** | harness is live |
+| IFG shortened to 90 cells | 3b | survives at 16 | vacuous — too shallow |
+| runt accepted (`len_ok >= 0`) | 3a | survives at 16 and 240 | **modelling gap, not depth** |
+| pad removed (`stored_bytes < 0`) | — | survives | expected: padding is not in 3a/3b/3c |
+
 ## Limits
 
 - All results are **bounded**, not inductive: `sat -seq N` proves safety up to N
