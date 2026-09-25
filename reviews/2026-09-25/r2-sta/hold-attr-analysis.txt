@@ -1,0 +1,100 @@
+== /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-pe_soc-slow.txt
+   external-input (data): 122 paths, worst -0.8692
+      host_wdata[0] (input)  =>  u_imem.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 965 paths, worst -0.0490
+      rst_n (input)  =>  _06346_/RESET_B (sg13g2_dfrbpq_1)
+   internal-reg-reg (pre-CTS): 71 paths, worst -0.5519
+      _06523_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   internal-within-unc (screening): 1 paths, worst -0.2372
+      _09194_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+
+== comparison: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-pe_soc-slow.txt  vs  /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-pe_soc-slow-board.txt
+   external-input (data)              zero:   122 paths worst  -0.8692 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   965 paths worst  -0.0490 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:    71 paths worst  -0.5519 | board:    71 paths worst  -0.5519
+   internal-within-unc (screening)    zero:     1 paths worst  -0.2372 | board:    29 paths worst  -0.2372
+== /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-pe_soc-typ.txt
+   external-input (data): 126 paths, worst -0.6067
+      host_addr[1] (input)  =>  u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 965 paths, worst -0.1230
+      rst_n (input)  =>  _06346_/RESET_B (sg13g2_dfrbpq_1)
+   external-output: 98 paths, worst -0.0521
+      _07199_/Q (pe_soc)  =>  dbg_pc[7] (output)
+   internal-reg-reg (pre-CTS): 71 paths, worst -0.4249
+      _06523_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   internal-within-unc (screening): 89 paths, worst -0.2403
+      _09194_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+
+== comparison: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-pe_soc-typ.txt  vs  /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-pe_soc-typ-board.txt
+   external-input (data)              zero:   126 paths worst  -0.6067 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   965 paths worst  -0.1230 | board:     0 paths worst        -
+   external-output                    zero:    98 paths worst  -0.0521 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:    71 paths worst  -0.4249 | board:    71 paths worst  -0.4249
+   internal-within-unc (screening)    zero:    89 paths worst  -0.2403 | board:   128 paths worst  -0.2403
+== /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-pe_soc-fast.txt
+   external-input (data): 126 paths, worst -0.4778
+      host_addr[1] (input)  =>  u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 965 paths, worst -0.1637
+      rst_n (input)  =>  _06346_/RESET_B (sg13g2_dfrbpq_1)
+   external-output: 134 paths, worst -0.1149
+      _07199_/Q (pe_soc)  =>  dbg_pc[7] (output)
+   internal-reg-reg (pre-CTS): 71 paths, worst -0.3666
+      _06523_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   internal-within-unc (screening): 669 paths, worst -0.2366
+      _09194_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+
+== comparison: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-pe_soc-fast.txt  vs  /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-pe_soc-fast-board.txt
+   external-input (data)              zero:   126 paths worst  -0.4778 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   965 paths worst  -0.1637 | board:     0 paths worst        -
+   external-output                    zero:   134 paths worst  -0.1149 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:    71 paths worst  -0.3666 | board:    71 paths worst  -0.3666
+   internal-within-unc (screening)    zero:   669 paths worst  -0.2366 | board:   929 paths worst  -0.2366
+== /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-tt_um-slow.txt
+   external-input (data): 122 paths, worst -0.5718
+      ui_in[1] (input)  =>  u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 1000 paths, worst -0.0490
+      rst_n (input)  =>  _10991_/RESET_B (sg13g2_dfrbpq_1)
+   internal-reg-reg (pre-CTS): 110 paths, worst -0.5891
+      _11283_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+
+== comparison: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-tt_um-slow.txt  vs  /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-tt_um-slow-board.txt
+   external-input (data)              zero:   122 paths worst  -0.5718 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:  1000 paths worst  -0.0490 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:   110 paths worst  -0.5891 | board:   135 paths worst  -0.5891
+   internal-within-unc (screening)    zero:     0 paths worst        - | board:     9 paths worst  -0.2331
+== /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-tt_um-typ.txt
+   external-input (data): 172 paths, worst -0.4376
+      ui_in[1] (input)  =>  u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 1000 paths, worst -0.1230
+      rst_n (input)  =>  _10991_/RESET_B (sg13g2_dfrbpq_1)
+   external-output: 11 paths, worst -0.0524
+      _11304_/Q (tt_um_protocol_emulator)  =>  uio_out[6] (output)
+   internal-reg-reg (pre-CTS): 110 paths, worst -0.4541
+      _11283_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   internal-within-unc (screening): 102 paths, worst -0.0664
+      _11588_/Q (sg13g2_dfrbpq_1)  =>  _11589_/D (sg13g2_dfrbpq_1)
+
+== comparison: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-tt_um-typ.txt  vs  /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-tt_um-typ-board.txt
+   external-input (data)              zero:   172 paths worst  -0.4376 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:  1000 paths worst  -0.1230 | board:     0 paths worst        -
+   external-output                    zero:    11 paths worst  -0.0524 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:   110 paths worst  -0.4541 | board:   135 paths worst  -0.4541
+   internal-within-unc (screening)    zero:   102 paths worst  -0.0664 | board:   111 paths worst  -0.2374
+== /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-tt_um-fast.txt
+   external-input (data): 177 paths, worst -0.3730
+      ui_in[1] (input)  =>  u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 1000 paths, worst -0.1637
+      rst_n (input)  =>  _10991_/RESET_B (sg13g2_dfrbpq_1)
+   external-output: 22 paths, worst -0.1152
+      _11304_/Q (tt_um_protocol_emulator)  =>  uio_out[6] (output)
+   internal-reg-reg (pre-CTS): 109 paths, worst -0.3820
+      _11283_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   internal-within-unc (screening): 692 paths, worst -0.2480
+      _16068_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+
+== comparison: /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-tt_um-fast.txt  vs  /home/mylesp/janestreet-blog-serial-protocol-emulator/reviews/2026-09-25/r2-sta/sta-tt_um-fast-board.txt
+   external-input (data)              zero:   177 paths worst  -0.3730 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:  1000 paths worst  -0.1637 | board:     0 paths worst        -
+   external-output                    zero:    22 paths worst  -0.1152 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:   109 paths worst  -0.3820 | board:   134 paths worst  -0.3820
+   internal-within-unc (screening)    zero:   692 paths worst  -0.2480 | board:   866 paths worst  -0.2480

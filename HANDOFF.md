@@ -439,11 +439,15 @@ user (separate session); no GUI/bridge implementation is dispatched here.
 > moved to R1; `tools/gen/pin_budget.py` +
 > `wiki/reference/protocol-pin-budget.md` regenerated for the R1 direction
 > arithmetic; `tools/gen/signal_glossary.py` + `wiki/reference/signal-names.md`
-> regenerated with the R1 `pe_ctrl` notes. **OPEN FINDING (a) — P3 liveness
-> gap:** `uo_out[1]` is `IRQ_N` and the heartbeat pad is retired, while
-> timer/PC/A/X/Y are deliberately absent from the R1 STATUS layout (no field
-> may lie about R2), so nothing shows liveness on a scope until the R2 read
-> path lands. **(b) P21 sweep — closed** by the directed case above; no R1
+> regenerated with the R1 `pe_ctrl` notes. **FINDING (a) — P3 liveness gap:
+> CLOSED on the chip side by R2 (2026-09-25).** `uo_out[1]` is `IRQ_N` and the
+> heartbeat pad is retired, while R1 deliberately kept timer/PC/A/X/Y out of
+> STATUS (no field may lie about R2). R2 is what that decision was waiting for:
+> `STATUS` is now 11 words including `pc`, `a`, `x`, `y` and `timer` at native
+> widths, and `READ_CPU` is the one non-halting read, so liveness is observable
+> even while firmware runs. The remaining piece is host-side (surfacing it in
+> the GUI), which is the host-controller branch's queue.
+> **(b) P21 sweep — closed** by the directed case above; no R1
 > test gap remains. Mapped/simulation evidence only — no physical flow, DRC
 > or LVS.
 

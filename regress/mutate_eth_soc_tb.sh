@@ -19,9 +19,20 @@ SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl
 LOG=/tmp/mutate_eth_soc.log
 BAK=$(mktemp /tmp/pe_soc.XXXXXX.v)
 
+# EVERY file this harness can mutate is snapshotted, not just pe_soc.v. The
+# I2C suite's m1 survivor (2026-09-24 18:43) and a local rerun interrupted
+# mid-case (2026-09-25 06:51) both left a MUTANT on disk because the file they
+# touched was not in the backup set: a killed harness cannot restore what it
+# never copied, and a stale mutant then makes every later run report nonsense.
+# The mutation list below is the contract -- if a mutation is added here, its
+# file must be in MUTABLE.
+MUTABLE="rtl/pe_soc.v rtl/pe_eth_mac.v"
+PRISTINE=$(mktemp -d /tmp/pristine_eth_soc.XXXXXX)
+
 cleanup() {
-  cp "$BAK" "$RTL" 2>/dev/null
+  for f in $MUTABLE; do cp "$PRISTINE/$(basename "$f")" "$ROOT/$f" 2>/dev/null; done
   rm -f "$BAK"
+  rm -rf "$PRISTINE"
   rmdir "$ROOT/sim" 2>/dev/null
 }
 on_signal() {
@@ -36,10 +47,13 @@ mkdir -p "$ROOT/sim"
 cd "$ROOT/sim"
 
 cp "$RTL" "$BAK"
-if ! cmp -s "$RTL" "$BAK"; then
-  echo "FATAL: could not snapshot $RTL"
-  exit 2
-fi
+for f in $MUTABLE; do
+  cp "$ROOT/$f" "$PRISTINE/$(basename "$f")"
+  if ! cmp -s "$ROOT/$f" "$PRISTINE/$(basename "$f")"; then
+    echo "FATAL: could not snapshot $f"
+    exit 2
+  fi
+done
 
 pass=0
 fail=0
@@ -55,14 +69,17 @@ run_tb() {
 }
 
 restore() {
+  for f in $MUTABLE; do cp "$PRISTINE/$(basename "$f")" "$ROOT/$f"; done
   cp "$BAK" "$RTL"
 }
 
 verify_restore() {
-  if ! cmp -s "$BAK" "$RTL"; then
-    echo "  FATAL: $RTL does not match the snapshot after restore."
-    exit 3
-  fi
+  for f in $MUTABLE; do
+    if ! cmp -s "$PRISTINE/$(basename "$f")" "$ROOT/$f"; then
+      echo "  FATAL: $f does not match the pristine snapshot after restore."
+      exit 3
+    fi
+  done
 }
 
 mutate() {

@@ -91,13 +91,32 @@ TB is the 34th), firmware **26/26**, lint clean, 12 generated gates, **12**
 mutation suites including `mutate_ctrl_tb.sh` **29/29** and the two eth_tx
 suites **18/18** and **7/7** (`/tmp/run_all_r2_done.log`).
 
+## Mapped timing screen (added after the conformance run)
+
+`reviews/2026-09-25/r2-sta/`, 16.667 ns, `pe_soc` and `tt_um_top`, slow/typ/fast,
+ZERO and BOARD variants (12 screens, runner exit 0). The R2 read port, the
+full-width debug bus and the wait-word filler are in these netlists.
+
+- `pe_soc` is UNCHANGED against the eth-tx screen: setup 0.00, hold
+  -0.87/-0.61/-0.48 (zero) and -0.55/-0.42/-0.37 (board).
+- `tt_um_top` hold IMPROVED: -0.59/-0.45/-0.38 (zero) against -0.71/-0.52/-0.43,
+  and the zero and board variants now AGREE at every corner — the external
+  worst class is no longer what the top level reports.
+- The new R2 classes (`dbg_rd_data`, `dbg_pc`, and the `uio_out[6]` MISO pad)
+  appear only inside the PRE-EXISTING external-output class, all shallower than
+  that class's worst, and all cleared by the 1.0 ns board floor.
+
+**No new violation class.** Mapped pre-layout screen only: no placement,
+routing, DRC or LVS.
+
 ## Limits
 
-- Simulation only; no STA screen for the new read path yet (mapped synthesis is
-  allowed but the R2 timing has not been re-screened — the plan's Task 7 screen
-  predates R2).
+- Simulation and mapped pre-layout screening only; no physical flow, DRC or
+  LVS.
 - The conformance TB depends on the golden package being present in
   `tb/r2-vectors/`; the drift gate that keeps the image and the streams in step
   lives in the host package, and the copy here is refreshed when it lands.
-- The P3 liveness gap's remaining half (a liveness indicator on a pad) still
-  needs R2's host side; this phase is the read path only.
+- The P3 liveness gap is CLOSED on the chip side by this phase: `STATUS`
+  now carries `pc`/`a`/`x`/`y`/`timer` at native widths and `READ_CPU`
+  answers while `run=1`, so a host can see a running program. Only the
+  host-side surfacing (the GUI) remains, in the host-controller branch.

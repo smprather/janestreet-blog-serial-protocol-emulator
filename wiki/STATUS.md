@@ -209,10 +209,16 @@
 > suites); `mutate_ctrl_tb.sh` **29 detected / 0 survived / 0 harness errors**;
 > `synth_area.sh` exit 0 — `pe_ctrl` **1,731 cells / 30,662.11 µm²**,
 > `tt_um_top` **6,633 / 113,254.89 µm²**; seven generator checks OK. Hashes
-> and the full contract: `HANDOFF.md` top block. **OPEN FINDING (a) — P3
-> liveness gap:** the heartbeat pad is gone (`uo_out[1]` is IRQ_N) and the R1
-> STATUS layout deliberately omits timer/PC/A/X/Y, so nothing shows liveness
-> until the R2 read path. **(b) P21 sweep closed** by the new directed case.
+> and the full contract: `HANDOFF.md` top block. **FINDING (a) — P3
+> liveness gap: CLOSED on the chip side by R2 (2026-09-25).** The heartbeat
+> pad is gone (`uo_out[1]` is IRQ_N) and the R1 STATUS layout deliberately
+> omitted timer/PC/A/X/Y, so nothing showed liveness until the R2 read path.
+> R2 supplies both halves: `STATUS` is now 11 words including `pc`, `a`, `x`,
+> `y` and `timer` at their native widths, and `READ_CPU` is the ONE
+> non-halting read, so a host can observe a RUNNING program rather than only a
+> stopped one. What remains is host-side: surfacing it in the GUI, which is the
+> separate host-controller branch's queue, not the chip's.
+> **(b) P21 sweep closed** by the new directed case.
 
 > **Diagram squarer layout + hold-screen attribution (2026-09-24, Tasks 5a/5b).**
 > **5a — both maps re-laid out:** `project-plan.puml` 4180×2520 (1.6587) →
@@ -396,7 +402,8 @@
 > recorded, following the closeout hardening (mapped STA refresh for the
 > SERDES integration + the codec mutation suite) and, earlier the same day,
 > the word-engine integration in `pe_soc` and the A1 readback in `pe_ctrl`;
-> the 10BASE-T TX frame-path plan (item 9) was then authored.
+> the 10BASE-T TX frame-path plan (item 9) was then authored, and both it
+> and the PE host read path (item 10) have since landed.
 > The code is reorganized: `tb/` holds
 > testbenches only, `regress/` the harnesses, `tools/{fw,gen,checks}/` the
 > Python, `rtl/pe_soc.v` is the SoC (was `pe_uart_soc`), the line codecs are one
@@ -1870,18 +1877,22 @@ Evidence:
 did not modify) is not yet written. The full 10BASE-T TX frame path
 (preamble/SFD/FCS/IFG/source) remains a separate block and plan.
 
-### 8. Linux demo-host GUI — TODO
+### 8. Linux demo-host GUI — LANDED and MERGED (host branch, merge 1cbc0bc)
 
-Plan a GUI application for the connected Linux PC that operates the SoC through
-the RP2040 controller on the Tiny Tapeout demo board. Define the operator
-workflow (load a program, start it, and observe available status), the PC-to-
-board transport and control API, which board-side support is needed, the
-program-image format, error handling, packaging, and an acceptance-test plan.
-Keep the current contract visible: `pe_ctrl` is a passive SPI loader, `run` is
-the `ui_in[1]` strap, and readback is still undecided. The transport, clock
-control, and status/readback strategy are open; do not assume pad mappings or
-that the GUI can verify a load until those choices are made. This item is
-planning only; no GUI or bridge firmware has been started.
+The GUI is no longer a plan. The host-controller branch built and verified it:
+the **R1 framed host bus** on the chip side, the **Pico bridge**, the host
+FakePE model, and the GUI phases 1a/1b/2/3 plus host Tasks 7/8, all merged into
+`main` (merge 1cbc0bc). Chip-side evidence: [[reviews/2026-09-24/HOST-CONTROLLER-PLAN-REVIEW]] (R1) and [[reviews/2026-09-25/R2-READ-PATH-REVIEW]] (R2, item 10). Host-side evidence lives on the host branch.
+
+What is LANDED: the operator workflow (load a program, start it, observe
+status), the R1/R2 framed protocol on the chip, the Pico bridge in
+MicroPython, the host model, and the golden-vector acceptance package with a
+drift gate. The contract this replaced is now concrete: `pe_ctrl` is the
+framed host bus on `uio[4:7]` with `IRQ_N` on `uo_out[1]` (19 of 24 pads
+committed), and R2 adds the read path, so readback is **no longer undecided**.
+
+The **hardware-gated remainder** is the real Pico/USB acceptance run on a
+board (item 11) — everything up to it is simulation and host-side.
 
 ### 9. 10BASE-T TX frame path (`eth_tx`) — COMPLETE (Tasks 1-7, 2026-09-25)
 
@@ -1929,12 +1940,52 @@ worst gap (52 clk) exceeds the 48-clk wire-byte period and is absorbed by the
 8-byte staging FIFO; per-class STA probes are limited by this OpenSTA build's
 hashed net names; the R2 read path is a separate phase.
 
+### 10. PE host R2 read path — DONE (2026-09-25)
+
+The host can now READ the chip. `READ_CPU` (0x12, the one non-halting read,
+registers at native widths so `dbg_pc` is no longer truncated to 8 bits),
+bounded `READ_IMEM`/`READ_DMEM` (0x13/0x14; dmem packs two bytes per response
+word, high byte first), `DUMP_CORE` (0x15), an 11-word `STATUS`, the
+**wait-word contract** (0xFFFF fillers while a read fetches; the frame starts
+at the first non-0xFFFF word; worst case 15), and sticky `FAULT_RANGE` on an
+out-of-range read cleared by `CLEAR_FAULT` (never a wrapped read).
+
+Evidence: **15/15 golden steps pass byte-exactly** against the gui-worker
+package (`tb_pe_ctrl_r2`, registered in `run_all.sh`; the conformance TB is the
+34th RTL test); the read path has its own mapped STA screen with **no new
+violation class** (`reviews/2026-09-25/r2-sta/`); the ctrl mutation suite grew
+to **37** covering the read path, the wait-word contract, both bound checks and
+the sticky-fault latch; regression **exit 0 — RTL 34/34, firmware 26/26, 12
+mutation suites**. Record: [[reviews/2026-09-25/R2-READ-PATH-REVIEW]]. This
+also **closes the P3 chip-side liveness gap** (STATUS now carries
+pc/a/x/y/timer and READ_CPU answers while running).
+
+### 11. Real Pico/USB acceptance run — OPEN (hardware-gated)
+
+The one acceptance step that cannot be done in simulation: run the Pico
+bridge and GUI against a real RP2040 on the Tiny Tapeout demo board over USB,
+load a program, start it, and confirm liveness. Blocked on hardware, not on
+design or software. Everything preceding it is done and green.
+
+### 12. P3 host-side liveness surfacing — OPEN (host branch queue)
+
+The chip now supplies liveness (STATUS pc/a/x/y/timer, READ_CPU while running);
+showing it in the GUI is the host-controller branch's work.
+
+### 13. Demo walkthrough + `chip_confirmed` flips — OPEN (host, in flight)
+
+Refresh the demo walkthrough for the R2-landed state and have the gui-worker
+flip each golden vector's `chip_confirmed` now that 15/15 pass byte-exactly on
+the chip.
+
 ## Reading order for a fresh session
 
 1. This file.
 2. `wiki/decisions/adr-007-pe-ctrl-passive-slave.md` and
-   `wiki/reference/protocol-pin-budget.md` — constraints for evaluating the
-   `pe_ctrl` readback candidate; no readback interface has been decided.
+   `wiki/reference/protocol-pin-budget.md` — the loader's constraints and the
+   pad map. The readback question is now DECIDED and LANDED: the framed host
+   bus (R1) plus the read path (R2), item 10 above; the contract is in
+   `rtl/pe_ctrl.v`'s header.
 3. `wiki/index.md` → then `concepts/competition-overview.md` (rules, budget).
 4. `concepts/factored-hardware-blocks.md` (what exists / what's planned) and
    `concepts/tx-timing-generation.md` (timing + signoff policy).

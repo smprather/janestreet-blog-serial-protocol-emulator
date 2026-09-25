@@ -271,9 +271,76 @@ check_wrapper_mutation "host-input-driven" \
   "  assign uio_oe[4]    = 1'b0;            // CS_N input" \
   "  assign uio_oe[4]    = 1'b1;   // MUTANT: the chip drives its own CS_N input"
 
+# ---- R2: the read path, the wait-word contract, and the R2 bounds --------
+# The 29 mutations above are all R1 behaviour. R2 added a read engine, a
+# transport-level wait-word rule, a bounds check and a sticky-fault lifecycle,
+# and every one of those is a claim a testbench could be vacuously passing.
+# Same house convention: a plausible wrong implementation, and the TB must
+# notice. Anchors are quoted verbatim so a rename is a HARNESS ERROR, never a
+# silent survivor.
+
+# 1. The filler drives zeros instead of ones. A host skips LEADING 0xFFFF, so
+#    0x0000 fillers are not skipped and the frame is read from the wrong place.
+check_mutation "r2-filler-not-ones" \
+  "          spi_miso  <= 1'b1;" \
+  "          spi_miso  <= 1'b0;   // MUTANT: filler is 0x0000, not 0xFFFF"
+
+# 2. The response is released mid-word instead of on a word boundary, so the
+#    host's 16-bit reader starts half a word in.
+check_mutation "r2-launch-unaligned" \
+  "          if (fill_pos == 4'd15) begin" \
+  "          if (fill_pos == 4'd7) begin   // MUTANT: launch off a half word"
+
+# 3. The imem bound check is removed: a read past the end WRAPS instead of
+#    answering RANGE. This is the "never a wrapped read" obligation.
+check_mutation "r2-imem-range-off" \
+  "                      if ((32'(pay0) + 32'(pay1)) > 32'(WORDS) ||" \
+  "                      if (1'b0 ||   // MUTANT: imem bound check removed"
+
+# 4. The dmem bound check is removed, the byte version of the same promise.
+check_mutation "r2-dmem-range-off" \
+  "                      if ((32'(pay0) + 32'(pay1)) > 32'(DMEM_BYTES) ||" \
+  "                      if (1'b0 ||   // MUTANT: dmem bound check removed"
+
+# 5. An out-of-range READ no longer latches sticky FAULT_RANGE.
+check_mutation "r2-range-fault-not-sticky" \
+  "                        faults      <= faults | FAULT_RANGE;" \
+  "                        faults      <= faults;   // MUTANT: RANGE not latched"
+
+# 6. A bounded read answers while run=1 instead of NOT_READY. The CPU is
+#    fetching, and the read would borrow its address bus.
+check_mutation "r2-read-not-ready-off" \
+  "                    if (run) begin
+                      resp_len    <= 16'd1;
+                      resp_buf[0] <= ST_NOTREADY;
+                      r_imm       <= 1'b1;" \
+  "                    if (1'b0) begin   // MUTANT: no run gate on the reads
+                      resp_len    <= 16'd1;
+                      resp_buf[0] <= ST_NOTREADY;
+                      r_imm       <= 1'b1;"
+
+# 7. The trailing byte of an ODD-length dmem read is dropped, leaving the
+#    response a word short of its declared length.
+check_mutation "r2-dmem-odd-flush-off" \
+  "              if (r_dmem && r_first)" \
+  "              if (1'b0)   // MUTANT: odd trailing byte dropped"
+
+# 8. DUMP_CORE no longer refuses while run=1, so the core header reports a
+#    moving target as if it were a stable one.
+check_mutation "r2-dumpcore-notready-off" \
+  "                    if (run) begin
+                      resp_len    <= 16'd1;
+                      resp_buf[0] <= ST_NOTREADY;
+                    end else begin" \
+  "                    if (1'b0) begin   // MUTANT: DUMP_CORE ignores run
+                      resp_len    <= 16'd1;
+                      resp_buf[0] <= ST_NOTREADY;
+                    end else begin"
+
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="
 [ $survived -gt 0 ] && { echo "SURVIVORS: the TB does not test what it claims."; exit 1; }
 [ $fail -gt 0 ] && { echo "HARNESS ERRORS: fix the harness first."; exit 1; }
-echo "OK: every R1 framed-host-bus mutation is detected by its testbench."
+echo "OK: every framed-host-bus mutation (R1 + R2 read path) is detected by its testbench."
 exit 0
+
