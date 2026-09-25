@@ -1,0 +1,1326 @@
+OpenSTA 3.1.0 8572175ac4 Copyright (c) 2026, Parallax Software, Inc.
+License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
+
+This is free software, and you are free to change and redistribute it
+under certain conditions; type `show_copying' for details. 
+This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _07462_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _07462_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _07462_/CLK (sg13g2_dfrbpq_1)
+  -0.1478   15.5192   library recovery time
+            15.5192   data required time
+-------------------------------------------------------------
+            15.5192   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.1858   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _07463_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _07463_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _07463_/CLK (sg13g2_dfrbpq_1)
+  -0.1478   15.5192   library recovery time
+            15.5192   data required time
+-------------------------------------------------------------
+            15.5192   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.1858   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _07464_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _07464_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _07464_/CLK (sg13g2_dfrbpq_1)
+  -0.1478   15.5192   library recovery time
+            15.5192   data required time
+-------------------------------------------------------------
+            15.5192   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.1858   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _07465_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _07465_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _07465_/CLK (sg13g2_dfrbpq_1)
+  -0.1478   15.5192   library recovery time
+            15.5192   data required time
+-------------------------------------------------------------
+            15.5192   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.1858   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _07466_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _07466_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _07466_/CLK (sg13g2_dfrbpq_1)
+  -0.1478   15.5192   library recovery time
+            15.5192   data required time
+-------------------------------------------------------------
+            15.5192   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.1858   slack (MET)
+
+
+Startpoint: ui_in[2] (input port clocked by clk)
+Endpoint: _10491_ (positive level-sensitive latch clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ ui_in[2] (in)
+   0.0000    3.3334 ^ _10491_/D (sg13g2_dlhq_1)
+             3.3334   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+  -1.0000   -1.0000   clock uncertainty
+   0.0000   -1.0000   clock reconvergence pessimism
+            -1.0000 ^ _10491_/GATE (sg13g2_dlhq_1)
+   4.3334    3.3334   time borrowed from endpoint
+             3.3334   data required time
+-------------------------------------------------------------
+             3.3334   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+             0.0000   slack (MET)
+
+Time Borrowing Information
+----------------------------------------------
+clk pulse width                         8.3335
+library setup time                     -0.1216
+----------------------------------------------
+max time borrow                         8.2119
+----------------------------------------------
+actual time borrow                      4.3334
+open edge uncertainty                  -1.0000
+----------------------------------------------
+time given to startpoint                3.3334
+----------------------------------------------
+
+
+Startpoint: _10491_ (positive level-sensitive latch clocked by clk)
+Endpoint: _10492_ (positive level-sensitive latch clocked by clk')
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334   time given to startpoint
+   0.0000    3.3334 ^ _10491_/D (sg13g2_dlhq_1)
+   0.2154    3.5488 ^ _10491_/Q (sg13g2_dlhq_1)
+   0.0000    3.5488 ^ _10492_/D (sg13g2_dlhq_1)
+             3.5488   data arrival time
+
+   8.3335    8.3335   clock clk' (rise edge)
+   0.0000    8.3335   clock network delay (ideal)
+  -1.0000    7.3335   clock uncertainty
+   0.0000    7.3335   clock reconvergence pessimism
+             7.3335 ^ _10492_/GATE (sg13g2_dlhq_1)
+   0.0000    7.3335   time borrowed from endpoint
+             7.3335   data required time
+-------------------------------------------------------------
+             7.3335   data required time
+            -3.5488   data arrival time
+-------------------------------------------------------------
+             3.7847   slack (MET)
+
+Time Borrowing Information
+----------------------------------------------
+clk' pulse width                        8.3335
+library setup time                     -0.1042
+----------------------------------------------
+max time borrow                         8.2293
+actual time borrow                      0.0000
+----------------------------------------------
+
+
+Startpoint: _10492_ (positive level-sensitive latch clocked by clk')
+Endpoint: _10504_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   8.3335    8.3335   clock clk' (rise edge)
+   0.0000    8.3335   clock network delay (ideal)
+   0.0000    8.3335 ^ _10492_/GATE (sg13g2_dlhq_1)
+   0.1577    8.4912 v _10492_/Q (sg13g2_dlhq_1)
+   0.0399    8.5311 ^ _10378_/Y (sg13g2_nor2b_1)
+   0.0000    8.5311 ^ _10504_/D (sg13g2_dfrbpq_1)
+             8.5311   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _10504_/CLK (sg13g2_dfrbpq_1)
+  -0.1199   15.5471   library setup time
+            15.5471   data required time
+-------------------------------------------------------------
+            15.5471   data required time
+            -8.5311   data arrival time
+-------------------------------------------------------------
+             7.0160   slack (MET)
+
+
+Startpoint: u_soc.u_imem.g_macro.u_sram
+            (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _12223_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   4.2964    4.2964 ^ u_soc.u_imem.g_macro.u_sram/A_DOUT[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.1066    4.4030 ^ _09875_/Y (sg13g2_nand2b_1)
+   0.0686    4.4717 v _10131_/Y (sg13g2_nor4_1)
+   0.0620    4.5336 ^ _07835_/Y (sg13g2_inv_1)
+   0.0520    4.5857 v _09258_/Y (sg13g2_nor4_1)
+   0.0663    4.6520 ^ _10731_/Y (sg13g2_nand2_1)
+   0.2331    4.8851 v _10733_/Y (sg13g2_a221oi_1)
+   0.2769    5.1619 ^ _10735_/Y (sg13g2_nand2b_1)
+   0.1494    5.3113 v _10736_/Y (sg13g2_inv_1)
+   0.1732    5.4846 ^ _10921_/Y (sg13g2_nor4_1)
+   0.9819    6.4665 v _10924_/Y (sg13g2_nand4_1)
+   1.2372    7.7037 ^ _10926_/Y (sg13g2_nor2_1)
+   0.2181    7.9218 v _10931_/Y (sg13g2_a21oi_1)
+   0.0731    7.9949 ^ _10932_/Y (sg13g2_o21ai_1)
+   0.0932    8.0882 v _10936_/Y (sg13g2_nand3_1)
+   0.0625    8.1506 ^ _10937_/Y (sg13g2_a21oi_1)
+   0.0000    8.1506 ^ _12223_/D (sg13g2_dfrbpq_1)
+             8.1506   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _12223_/CLK (sg13g2_dfrbpq_1)
+  -0.1274   15.5396   library setup time
+            15.5396   data required time
+-------------------------------------------------------------
+            15.5396   data required time
+            -8.1506   data arrival time
+-------------------------------------------------------------
+             7.3889   slack (MET)
+
+
+Startpoint: u_soc.u_imem.g_macro.u_sram
+            (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _09444_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   4.2835    4.2835 ^ u_soc.u_imem.g_macro.u_sram/A_DOUT[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.0833    4.3668 v _09850_/Y (sg13g2_nand2_1)
+   0.0625    4.4293 ^ _09851_/Y (sg13g2_nor2_1)
+   0.1668    4.5961 ^ _09852_/X (sg13g2_and2_1)
+   0.0554    4.6515 v _09857_/Y (sg13g2_nor2_1)
+   1.9968    6.6484 ^ _09858_/Y (sg13g2_a21oi_1)
+   1.1038    7.7521 v _08687_/Y (sg13g2_nand4_1)
+   0.2650    8.0171 ^ _08703_/X (sg13g2_mux2_1)
+   0.0547    8.0719 v _08704_/Y (sg13g2_nand2_1)
+   0.0452    8.1171 ^ _08706_/Y (sg13g2_o21ai_1)
+   0.0000    8.1171 ^ _09444_/D (sg13g2_dfrbpq_1)
+             8.1171   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _09444_/CLK (sg13g2_dfrbpq_1)
+  -0.1468   15.5202   library setup time
+            15.5202   data required time
+-------------------------------------------------------------
+            15.5202   data required time
+            -8.1171   data arrival time
+-------------------------------------------------------------
+             7.4031   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _07462_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   1.0000    1.0000 ^ input external delay
+   0.0000    1.0000 ^ rst_n (in)
+   0.0000    1.0000 ^ _07462_/RESET_B (sg13g2_dfrbpq_1)
+             1.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _07462_/CLK (sg13g2_dfrbpq_1)
+  -0.1270    0.1230   library removal time
+             0.1230   data required time
+-------------------------------------------------------------
+             0.1230   data required time
+            -1.0000   data arrival time
+-------------------------------------------------------------
+             0.8770   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _07463_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   1.0000    1.0000 ^ input external delay
+   0.0000    1.0000 ^ rst_n (in)
+   0.0000    1.0000 ^ _07463_/RESET_B (sg13g2_dfrbpq_1)
+             1.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _07463_/CLK (sg13g2_dfrbpq_1)
+  -0.1270    0.1230   library removal time
+             0.1230   data required time
+-------------------------------------------------------------
+             0.1230   data required time
+            -1.0000   data arrival time
+-------------------------------------------------------------
+             0.8770   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _07464_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   1.0000    1.0000 ^ input external delay
+   0.0000    1.0000 ^ rst_n (in)
+   0.0000    1.0000 ^ _07464_/RESET_B (sg13g2_dfrbpq_1)
+             1.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _07464_/CLK (sg13g2_dfrbpq_1)
+  -0.1270    0.1230   library removal time
+             0.1230   data required time
+-------------------------------------------------------------
+             0.1230   data required time
+            -1.0000   data arrival time
+-------------------------------------------------------------
+             0.8770   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _07465_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   1.0000    1.0000 ^ input external delay
+   0.0000    1.0000 ^ rst_n (in)
+   0.0000    1.0000 ^ _07465_/RESET_B (sg13g2_dfrbpq_1)
+             1.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _07465_/CLK (sg13g2_dfrbpq_1)
+  -0.1270    0.1230   library removal time
+             0.1230   data required time
+-------------------------------------------------------------
+             0.1230   data required time
+            -1.0000   data arrival time
+-------------------------------------------------------------
+             0.8770   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _07466_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   1.0000    1.0000 ^ input external delay
+   0.0000    1.0000 ^ rst_n (in)
+   0.0000    1.0000 ^ _07466_/RESET_B (sg13g2_dfrbpq_1)
+             1.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _07466_/CLK (sg13g2_dfrbpq_1)
+  -0.1270    0.1230   library removal time
+             0.1230   data required time
+-------------------------------------------------------------
+             0.1230   data required time
+            -1.0000   data arrival time
+-------------------------------------------------------------
+             0.8770   slack (MET)
+
+
+Startpoint: _07692_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: u_soc.u_imem.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _07692_/CLK (sg13g2_dfrbpq_1)
+   0.1730    0.1730 ^ _07692_/Q (sg13g2_dfrbpq_1)
+   0.1081    0.2811 ^ _13112_/X (sg13g2_mux2_1)
+   0.0000    0.2811 ^ u_soc.u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.2811   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.4651    0.7151   library hold time
+             0.7151   data required time
+-------------------------------------------------------------
+             0.7151   data required time
+            -0.2811   data arrival time
+-------------------------------------------------------------
+            -0.4340   slack (VIOLATED)
+
+
+Startpoint: _09635_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: u_soc.u_eth_fbuf.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _09635_/CLK (sg13g2_dfrbpq_1)
+   0.1865    0.1865 ^ _09635_/Q (sg13g2_dfrbpq_1)
+   0.1121    0.2986 ^ _10548_/X (sg13g2_mux2_1)
+   0.0000    0.2986 ^ u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.2986   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_soc.u_eth_fbuf.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.4770    0.7270   library hold time
+             0.7270   data required time
+-------------------------------------------------------------
+             0.7270   data required time
+            -0.2986   data arrival time
+-------------------------------------------------------------
+            -0.4284   slack (VIOLATED)
+
+
+Startpoint: _07687_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: u_soc.u_imem.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _07687_/CLK (sg13g2_dfrbpq_1)
+   0.1896    0.1896 ^ _07687_/Q (sg13g2_dfrbpq_1)
+   0.1098    0.2994 ^ _13107_/X (sg13g2_mux2_1)
+   0.0000    0.2994 ^ u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.2994   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.4768    0.7268   library hold time
+             0.7268   data required time
+-------------------------------------------------------------
+             0.7268   data required time
+            -0.2994   data arrival time
+-------------------------------------------------------------
+            -0.4275   slack (VIOLATED)
+
+
+Startpoint: _07654_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: u_soc.u_imem.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _07654_/CLK (sg13g2_dfrbpq_1)
+   0.1917    0.1917 ^ _07654_/Q (sg13g2_dfrbpq_1)
+   0.0000    0.1917 ^ u_soc.u_imem.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.1917   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3631    0.6131   library hold time
+             0.6131   data required time
+-------------------------------------------------------------
+             0.6131   data required time
+            -0.1917   data arrival time
+-------------------------------------------------------------
+            -0.4214   slack (VIOLATED)
+
+
+Startpoint: _07662_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: u_soc.u_imem.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _07662_/CLK (sg13g2_dfrbpq_1)
+   0.1920    0.1920 ^ _07662_/Q (sg13g2_dfrbpq_1)
+   0.0000    0.1920 ^ u_soc.u_imem.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.1920   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3628    0.6128   library hold time
+             0.6128   data required time
+-------------------------------------------------------------
+             0.6128   data required time
+            -0.1920   data arrival time
+-------------------------------------------------------------
+            -0.4208   slack (VIOLATED)
+
+
+max slew
+
+Pin                                    Limit    Slew   Slack
+------------------------------------------------------------
+_06171_/Y                               2.51    3.95   -1.44 (VIOLATED)
+_06192_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06295_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06340_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06342_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06373_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06400_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06415_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06417_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06419_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06422_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06425_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06429_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06432_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06436_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06439_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06443_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_06461_/B                               2.51    3.95   -1.44 (VIOLATED)
+_06462_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07000_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07002_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07004_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07006_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07008_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07010_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07012_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07014_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07016_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07018_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07020_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07022_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07024_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07026_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07028_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07030_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07032_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07034_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07036_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07038_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07040_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07042_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07044_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07046_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07048_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07050_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07052_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07054_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07056_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07058_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07060_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07064_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07067_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07070_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07073_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07076_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07079_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07082_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07085_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07088_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07091_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07094_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07097_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07100_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07103_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07107_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07109_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07111_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07113_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07115_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07117_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07119_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07121_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07123_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07125_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07137_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07140_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07145_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07148_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07151_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07155_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07158_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07161_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07171_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07174_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07177_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07180_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07183_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07187_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07191_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07195_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07198_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07201_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07207_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07211_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07223_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07224_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07280_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07284_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07294_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07295_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07296_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07297_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07298_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07299_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07300_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07301_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07302_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07303_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07304_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07305_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07306_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07307_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07308_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07319_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07320_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07321_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07322_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07325_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07326_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07327_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07328_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07361_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07362_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07365_/S                               2.51    3.95   -1.44 (VIOLATED)
+_07389_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07393_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07395_/B                               2.51    3.95   -1.44 (VIOLATED)
+_07398_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07403_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07433_/B2                              2.51    3.95   -1.44 (VIOLATED)
+_07442_/A2                              2.51    3.95   -1.44 (VIOLATED)
+_07837_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07838_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07839_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07840_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07842_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07843_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07847_/B                               2.51    2.74   -0.24 (VIOLATED)
+_07849_/A1                              2.51    2.74   -0.24 (VIOLATED)
+_07851_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07852_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07853_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07854_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07856_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07857_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07861_/B                               2.51    2.74   -0.24 (VIOLATED)
+_07863_/A1                              2.51    2.74   -0.24 (VIOLATED)
+_07865_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07866_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07870_/B                               2.51    2.74   -0.24 (VIOLATED)
+_07872_/A1                              2.51    2.74   -0.24 (VIOLATED)
+_07874_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07875_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07876_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07877_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07879_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07880_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07881_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_07882_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_08643_/B                               2.51    2.74   -0.24 (VIOLATED)
+_08645_/A2                              2.51    2.74   -0.24 (VIOLATED)
+_08687_/C                               2.51    2.74   -0.24 (VIOLATED)
+_08713_/A                               2.51    2.74   -0.24 (VIOLATED)
+_08714_/A                               2.51    2.74   -0.24 (VIOLATED)
+_08739_/C                               2.51    2.74   -0.24 (VIOLATED)
+_08740_/C                               2.51    2.74   -0.24 (VIOLATED)
+_09046_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_09047_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_09048_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_09049_/S0                              2.51    2.74   -0.24 (VIOLATED)
+_09858_/Y                               2.51    2.74   -0.24 (VIOLATED)
+u_soc.u_eth_fbuf.g_macro.u_sram/A_WEN    0.48    0.58   -0.10 (VIOLATED)
+
+max fanout
+
+Pin                                   Limit Fanout  Slack
+---------------------------------------------------------
+_06171_/Y                                 8    130   -122 (VIOLATED)
+_12175_/Q                                 8     54    -46 (VIOLATED)
+_13496_/Y                                 8     46    -38 (VIOLATED)
+_10913_/Y                                 8     44    -36 (VIOLATED)
+_06273_/Y                                 8     43    -35 (VIOLATED)
+_13309_/Y                                 8     42    -34 (VIOLATED)
+_06669_/X                                 8     41    -33 (VIOLATED)
+_12251_/Y                                 8     41    -33 (VIOLATED)
+_09858_/Y                                 8     39    -31 (VIOLATED)
+_09854_/Y                                 8     38    -30 (VIOLATED)
+_10926_/Y                                 8     34    -26 (VIOLATED)
+_12035_/X                                 8     34    -26 (VIOLATED)
+_12897_/Q                                 8     34    -26 (VIOLATED)
+_13824_/Q                                 8     34    -26 (VIOLATED)
+_10924_/Y                                 8     33    -25 (VIOLATED)
+_06688_/Y                                 8     32    -24 (VIOLATED)
+_06811_/Y                                 8     32    -24 (VIOLATED)
+_06999_/Y                                 8     32    -24 (VIOLATED)
+_10200_/Y                                 8     32    -24 (VIOLATED)
+_10204_/Y                                 8     32    -24 (VIOLATED)
+_10205_/Y                                 8     32    -24 (VIOLATED)
+_12938_/Y                                 8     32    -24 (VIOLATED)
+_12942_/Y                                 8     32    -24 (VIOLATED)
+_12943_/Y                                 8     32    -24 (VIOLATED)
+_06472_/Y                                 8     31    -23 (VIOLATED)
+_07233_/Y                                 8     31    -23 (VIOLATED)
+_10136_/Q                                 8     31    -23 (VIOLATED)
+_10137_/Q                                 8     30    -22 (VIOLATED)
+_10138_/Q                                 8     30    -22 (VIOLATED)
+_10140_/Q                                 8     30    -22 (VIOLATED)
+_07463_/Q                                 8     29    -21 (VIOLATED)
+_10139_/Q                                 8     29    -21 (VIOLATED)
+_10142_/Q                                 8     28    -20 (VIOLATED)
+_10493_/Q                                 8     28    -20 (VIOLATED)
+_10733_/Y                                 8     27    -19 (VIOLATED)
+_10141_/Q                                 8     26    -18 (VIOLATED)
+_10518_/X                                 8     25    -17 (VIOLATED)
+_10914_/Y                                 8     23    -15 (VIOLATED)
+_10881_/X                                 8     22    -14 (VIOLATED)
+_06188_/X                                 8     21    -13 (VIOLATED)
+_06488_/Y                                 8     21    -13 (VIOLATED)
+_07467_/Q                                 8     21    -13 (VIOLATED)
+_10132_/Y                                 8     21    -13 (VIOLATED)
+_06168_/X                                 8     20    -12 (VIOLATED)
+_06485_/Y                                 8     20    -12 (VIOLATED)
+_06489_/Y                                 8     20    -12 (VIOLATED)
+_13731_/Q                                 8     20    -12 (VIOLATED)
+_06189_/X                                 8     19    -11 (VIOLATED)
+_06477_/Y                                 8     19    -11 (VIOLATED)
+_06980_/Y                                 8     19    -11 (VIOLATED)
+_08313_/Y                                 8     19    -11 (VIOLATED)
+_09596_/Q                                 8     19    -11 (VIOLATED)
+_10902_/Y                                 8     19    -11 (VIOLATED)
+_06187_/Y                                 8     18    -10 (VIOLATED)
+_06487_/X                                 8     18    -10 (VIOLATED)
+_07822_/Y                                 8     18    -10 (VIOLATED)
+_10903_/Y                                 8     18    -10 (VIOLATED)
+_06895_/Y                                 8     17     -9 (VIOLATED)
+_06914_/Y                                 8     17     -9 (VIOLATED)
+_07824_/Y                                 8     17     -9 (VIOLATED)
+_09882_/Y                                 8     17     -9 (VIOLATED)
+_06182_/Y                                 8     16     -8 (VIOLATED)
+_06191_/Y                                 8     16     -8 (VIOLATED)
+_06202_/X                                 8     16     -8 (VIOLATED)
+_06204_/Y                                 8     16     -8 (VIOLATED)
+_06207_/Y                                 8     16     -8 (VIOLATED)
+_06209_/X                                 8     16     -8 (VIOLATED)
+_06211_/Y                                 8     16     -8 (VIOLATED)
+_06216_/X                                 8     16     -8 (VIOLATED)
+_07984_/Y                                 8     16     -8 (VIOLATED)
+_08642_/X                                 8     16     -8 (VIOLATED)
+_08663_/X                                 8     16     -8 (VIOLATED)
+_08667_/X                                 8     16     -8 (VIOLATED)
+_08671_/X                                 8     16     -8 (VIOLATED)
+_08675_/X                                 8     16     -8 (VIOLATED)
+_08678_/X                                 8     16     -8 (VIOLATED)
+_08682_/X                                 8     16     -8 (VIOLATED)
+_09051_/X                                 8     16     -8 (VIOLATED)
+_09673_/Q                                 8     16     -8 (VIOLATED)
+_10135_/Q                                 8     16     -8 (VIOLATED)
+_10582_/Y                                 8     16     -8 (VIOLATED)
+_11520_/Y                                 8     16     -8 (VIOLATED)
+_11601_/Y                                 8     16     -8 (VIOLATED)
+_12105_/Q                                 8     16     -8 (VIOLATED)
+_12279_/X                                 8     16     -8 (VIOLATED)
+_13162_/Y                                 8     16     -8 (VIOLATED)
+_13733_/Q                                 8     16     -8 (VIOLATED)
+_06118_/Y                                 8     15     -7 (VIOLATED)
+_07061_/X                                 8     15     -7 (VIOLATED)
+_08312_/Y                                 8     15     -7 (VIOLATED)
+_09595_/Q                                 8     15     -7 (VIOLATED)
+_09766_/Q                                 8     15     -7 (VIOLATED)
+_09861_/Y                                 8     15     -7 (VIOLATED)
+_10011_/Y                                 8     15     -7 (VIOLATED)
+_11932_/Y                                 8     15     -7 (VIOLATED)
+_13294_/Y                                 8     15     -7 (VIOLATED)
+_13732_/Q                                 8     15     -7 (VIOLATED)
+_07469_/Q                                 8     14     -6 (VIOLATED)
+_08110_/X                                 8     14     -6 (VIOLATED)
+_11409_/Y                                 8     14     -6 (VIOLATED)
+_11854_/Y                                 8     14     -6 (VIOLATED)
+_12152_/Q                                 8     14     -6 (VIOLATED)
+_12356_/Y                                 8     14     -6 (VIOLATED)
+_12549_/Y                                 8     14     -6 (VIOLATED)
+_13244_/Y                                 8     14     -6 (VIOLATED)
+_13366_/Y                                 8     14     -6 (VIOLATED)
+_06226_/X                                 8     13     -5 (VIOLATED)
+_07106_/X                                 8     13     -5 (VIOLATED)
+_09592_/Q                                 8     13     -5 (VIOLATED)
+_09594_/Q                                 8     13     -5 (VIOLATED)
+_10930_/Y                                 8     13     -5 (VIOLATED)
+_06194_/Y                                 8     12     -4 (VIOLATED)
+_06606_/Y                                 8     12     -4 (VIOLATED)
+_06643_/Y                                 8     12     -4 (VIOLATED)
+_07767_/Q                                 8     12     -4 (VIOLATED)
+_07768_/Q                                 8     12     -4 (VIOLATED)
+_09264_/X                                 8     12     -4 (VIOLATED)
+_09593_/Q                                 8     12     -4 (VIOLATED)
+_10934_/X                                 8     12     -4 (VIOLATED)
+_11590_/Y                                 8     12     -4 (VIOLATED)
+_11855_/Y                                 8     12     -4 (VIOLATED)
+_12144_/Q                                 8     12     -4 (VIOLATED)
+_12431_/X                                 8     12     -4 (VIOLATED)
+_13405_/Y                                 8     12     -4 (VIOLATED)
+_06170_/Y                                 8     11     -3 (VIOLATED)
+_08101_/Y                                 8     11     -3 (VIOLATED)
+_09856_/Y                                 8     11     -3 (VIOLATED)
+_09860_/Y                                 8     11     -3 (VIOLATED)
+_10134_/Y                                 8     11     -3 (VIOLATED)
+_10650_/Y                                 8     11     -3 (VIOLATED)
+_11769_/Y                                 8     11     -3 (VIOLATED)
+_12072_/Q                                 8     11     -3 (VIOLATED)
+_12129_/Q                                 8     11     -3 (VIOLATED)
+_12143_/Q                                 8     11     -3 (VIOLATED)
+_12146_/Q                                 8     11     -3 (VIOLATED)
+_12148_/Q                                 8     11     -3 (VIOLATED)
+_12149_/Q                                 8     11     -3 (VIOLATED)
+_12150_/Q                                 8     11     -3 (VIOLATED)
+_12182_/Q                                 8     11     -3 (VIOLATED)
+_13352_/X                                 8     11     -3 (VIOLATED)
+_06169_/X                                 8     10     -2 (VIOLATED)
+_06195_/Y                                 8     10     -2 (VIOLATED)
+_06923_/Y                                 8     10     -2 (VIOLATED)
+_07685_/Q                                 8     10     -2 (VIOLATED)
+_07702_/Q                                 8     10     -2 (VIOLATED)
+_07816_/Y                                 8     10     -2 (VIOLATED)
+_08045_/Y                                 8     10     -2 (VIOLATED)
+_08057_/Y                                 8     10     -2 (VIOLATED)
+_08324_/X                                 8     10     -2 (VIOLATED)
+_08632_/X                                 8     10     -2 (VIOLATED)
+_09633_/Q                                 8     10     -2 (VIOLATED)
+_09674_/Q                                 8     10     -2 (VIOLATED)
+_09812_/Y                                 8     10     -2 (VIOLATED)
+_09813_/X                                 8     10     -2 (VIOLATED)
+_10894_/Y                                 8     10     -2 (VIOLATED)
+_10896_/Y                                 8     10     -2 (VIOLATED)
+_11952_/Y                                 8     10     -2 (VIOLATED)
+_12145_/Q                                 8     10     -2 (VIOLATED)
+_12147_/Q                                 8     10     -2 (VIOLATED)
+_12153_/Q                                 8     10     -2 (VIOLATED)
+_12178_/Q                                 8     10     -2 (VIOLATED)
+_12183_/Q                                 8     10     -2 (VIOLATED)
+_12186_/Q                                 8     10     -2 (VIOLATED)
+_12212_/Q                                 8     10     -2 (VIOLATED)
+_12267_/Y                                 8     10     -2 (VIOLATED)
+_12269_/Y                                 8     10     -2 (VIOLATED)
+_12281_/Y                                 8     10     -2 (VIOLATED)
+_12302_/Y                                 8     10     -2 (VIOLATED)
+_12492_/Y                                 8     10     -2 (VIOLATED)
+_12628_/Y                                 8     10     -2 (VIOLATED)
+_12821_/Q                                 8     10     -2 (VIOLATED)
+_12823_/Q                                 8     10     -2 (VIOLATED)
+_13729_/Q                                 8     10     -2 (VIOLATED)
+_13778_/Q                                 8     10     -2 (VIOLATED)
+_07693_/Q                                 8      9        (VIOLATED)
+_07695_/Q                                 8      9        (VIOLATED)
+_07696_/Q                                 8      9        (VIOLATED)
+_07698_/Q                                 8      9        (VIOLATED)
+_07701_/Q                                 8      9        (VIOLATED)
+_07703_/Q                                 8      9        (VIOLATED)
+_07705_/Q                                 8      9        (VIOLATED)
+_07766_/Q                                 8      9        (VIOLATED)
+_08032_/Y                                 8      9        (VIOLATED)
+_08033_/Y                                 8      9        (VIOLATED)
+_08034_/Y                                 8      9        (VIOLATED)
+_08036_/Y                                 8      9        (VIOLATED)
+_08038_/Y                                 8      9        (VIOLATED)
+_08040_/Y                                 8      9        (VIOLATED)
+_08041_/Y                                 8      9        (VIOLATED)
+_08042_/Y                                 8      9        (VIOLATED)
+_08043_/Y                                 8      9        (VIOLATED)
+_08051_/Y                                 8      9        (VIOLATED)
+_08056_/Y                                 8      9        (VIOLATED)
+_08059_/Y                                 8      9        (VIOLATED)
+_08065_/Y                                 8      9        (VIOLATED)
+_08067_/Y                                 8      9        (VIOLATED)
+_08070_/Y                                 8      9        (VIOLATED)
+_08073_/Y                                 8      9        (VIOLATED)
+_08077_/Y                                 8      9        (VIOLATED)
+_08081_/Y                                 8      9        (VIOLATED)
+_08088_/X                                 8      9        (VIOLATED)
+_08315_/Y                                 8      9        (VIOLATED)
+_08343_/Y                                 8      9        (VIOLATED)
+_08352_/Y                                 8      9        (VIOLATED)
+_08376_/Y                                 8      9        (VIOLATED)
+_08405_/Y                                 8      9        (VIOLATED)
+_08499_/Y                                 8      9        (VIOLATED)
+_08508_/Y                                 8      9        (VIOLATED)
+_08517_/Y                                 8      9        (VIOLATED)
+_08526_/Y                                 8      9        (VIOLATED)
+_08570_/X                                 8      9        (VIOLATED)
+_08579_/Y                                 8      9        (VIOLATED)
+_08588_/Y                                 8      9        (VIOLATED)
+_08597_/Y                                 8      9        (VIOLATED)
+_08606_/X                                 8      9        (VIOLATED)
+_08615_/Y                                 8      9        (VIOLATED)
+_09467_/Q                                 8      9        (VIOLATED)
+_09468_/Q                                 8      9        (VIOLATED)
+_09469_/Q                                 8      9        (VIOLATED)
+_09470_/Q                                 8      9        (VIOLATED)
+_09471_/Q                                 8      9        (VIOLATED)
+_09472_/Q                                 8      9        (VIOLATED)
+_09473_/Q                                 8      9        (VIOLATED)
+_09474_/Q                                 8      9        (VIOLATED)
+_09645_/Q                                 8      9        (VIOLATED)
+_09879_/Y                                 8      9        (VIOLATED)
+_09890_/X                                 8      9        (VIOLATED)
+_09940_/Y                                 8      9        (VIOLATED)
+_10007_/Y                                 8      9        (VIOLATED)
+_10008_/Y                                 8      9        (VIOLATED)
+_10014_/Y                                 8      9        (VIOLATED)
+_10143_/Q                                 8      9        (VIOLATED)
+_10555_/Q                                 8      9        (VIOLATED)
+_10739_/Y                                 8      9        (VIOLATED)
+_10747_/Y                                 8      9        (VIOLATED)
+_10793_/Y                                 8      9        (VIOLATED)
+_10900_/Y                                 8      9        (VIOLATED)
+_10929_/Y                                 8      9        (VIOLATED)
+_11580_/X                                 8      9        (VIOLATED)
+_12045_/Q                                 8      9        (VIOLATED)
+_12046_/Q                                 8      9        (VIOLATED)
+_12047_/Q                                 8      9        (VIOLATED)
+_12049_/Q                                 8      9        (VIOLATED)
+_12050_/Q                                 8      9        (VIOLATED)
+_12128_/Q                                 8      9        (VIOLATED)
+_12131_/Q                                 8      9        (VIOLATED)
+_12179_/Q                                 8      9        (VIOLATED)
+_12180_/Q                                 8      9        (VIOLATED)
+_12184_/Q                                 8      9        (VIOLATED)
+_12187_/Q                                 8      9        (VIOLATED)
+_12207_/Q                                 8      9        (VIOLATED)
+_12213_/Q                                 8      9        (VIOLATED)
+_12272_/Y                                 8      9        (VIOLATED)
+_12285_/X                                 8      9        (VIOLATED)
+_12443_/Y                                 8      9        (VIOLATED)
+_12637_/Y                                 8      9        (VIOLATED)
+_12638_/Y                                 8      9        (VIOLATED)
+_12640_/Y                                 8      9        (VIOLATED)
+_12641_/Y                                 8      9        (VIOLATED)
+_12643_/Y                                 8      9        (VIOLATED)
+_12645_/Y                                 8      9        (VIOLATED)
+_12646_/Y                                 8      9        (VIOLATED)
+_12867_/Q                                 8      9        (VIOLATED)
+_13126_/X                                 8      9        (VIOLATED)
+_13437_/Y                                 8      9        (VIOLATED)
+_13730_/Q                                 8      9        (VIOLATED)
+
+max capacitance
+
+Pin                                    Limit     Cap   Slack
+------------------------------------------------------------
+_06171_/Y                               0.30    0.51   -0.21 (VIOLATED)
+
+_09858_/Y                               0.30    0.34   -0.04 (VIOLATED)
+
+worst slack max 0.00
+worst slack min -0.43
+===== NEGATIVE-MIN INVENTORY (slack <= 0)
+Startpoint                           Endpoint                                 Slack
+----------------------------------------------------------------------------------
+_07692_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4340
+_09635_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4284
+_07687_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4275
+_07654_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4214
+_07662_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4208
+_07664_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4186
+_07663_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4179
+_07661_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4178
+_07665_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4178
+_07654_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4176
+_07652_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4171
+_07666_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4170
+_07659_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4170
+_07660_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4162
+_07690_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4148
+_07652_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4148
+_07662_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4147
+_09638_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4145
+_07663_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4143
+_07664_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4142
+_07666_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4141
+_07659_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4141
+_07661_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4140
+_07665_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4140
+_07660_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4138
+_07684_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4133
+_07688_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4126
+_09643_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4065
+_07655_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4021
+_07656_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4018
+_07655_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4005
+_07651_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4005
+_07656_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4000
+_07658_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3995
+_07658_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3991
+_07651_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3990
+_07683_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3958
+_12044_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3957
+_12044_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3957
+_09637_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3950
+_12180_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3885
+_12183_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3883
+_12044_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3878
+_07689_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3878
+_07691_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3861
+_12181_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3861
+_07657_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3858
+_07653_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3846
+_07686_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3812
+_09636_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3803
+_07657_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3795
+_07653_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3781
+_09640_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3759
+_09634_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3721
+_09639_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3718
+_12044_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3689
+_12179_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3675
+_09641_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3672
+_07685_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3670
+_10159_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3641
+_12188_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3638
+_12065_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3616
+_12049_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3611
+_12048_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3598
+_12047_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3591
+_12050_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3590
+_12046_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3590
+_12185_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3579
+_09642_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3573
+_12045_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3525
+_12065_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3517
+_12049_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3511
+_12065_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3507
+_12048_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3497
+_12049_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3497
+_12047_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3489
+_12050_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3489
+_12046_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3489
+_12046_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3476
+_12050_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3475
+_12048_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3470
+_12047_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3466
+_12186_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3457
+_12187_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3441
+_12045_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3419
+_12184_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3409
+_09635_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3408
+_07692_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3398
+_12045_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3392
+_07687_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3380
+_12182_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3351
+_09638_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3295
+_12065_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3273
+_07684_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3269
+_12049_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3264
+_10168_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3247
+_07690_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3245
+_12046_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3245
+_12050_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3244
+_12048_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3239
+_12047_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3236
+_07688_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3208
+_09643_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3205
+_10168_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3174
+_12045_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3168
+_07683_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3114
+_09637_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3112
+_12180_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3066
+_12183_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3046
+_12181_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3020
+_09636_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3020
+_07689_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2984
+_07691_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2971
+_07686_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2966
+_09634_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2945
+_09639_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2911
+_09640_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2910
+_09641_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2894
+_12179_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2880
+_07685_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2880
+_10165_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2869
+_10167_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2866
+_12188_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2841
+_10166_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2787
+_09642_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2786
+_10167_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2776
+_10165_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2767
+_10159_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2763
+_10159_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2763
+_10166_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2749
+_12185_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2739
+_12186_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2678
+_12187_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2645
+_12184_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2639
+_10159_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2615
+_12182_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2612
+_10162_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2116
+_10162_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2116
+_10163_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2066
+_10163_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2066
+_10159_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1852
+_10159_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1748
+_07535_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1468
+_10164_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1370
+_07807_/Q (sg13g2_dfrbpq_1)          _07808_/D (sg13g2_dfrbpq_1)            -0.0664
+_07810_/Q (sg13g2_dfrbpq_1)          _07811_/D (sg13g2_dfrbpq_1)            -0.0664
+_10505_/Q (sg13g2_dfrbpq_1)          _10506_/D (sg13g2_dfrbpq_1)            -0.0664
+_10491_/Q (sg13g2_dlhq_1)            _10492_/D (sg13g2_dlhq_1)              -0.0539
+_07807_/Q (sg13g2_dfrbpq_1)          _07808_/D (sg13g2_dfrbpq_1)            -0.0410
+_07810_/Q (sg13g2_dfrbpq_1)          _07811_/D (sg13g2_dfrbpq_1)            -0.0410
+_10505_/Q (sg13g2_dfrbpq_1)          _10506_/D (sg13g2_dfrbpq_1)            -0.0410
+_12178_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0365
+_12178_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0356
+_12178_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0355
+_12178_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0355
+_12178_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0355
+_12178_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0355
+_12178_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0355
+_12178_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0353
+_09633_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0291
+_09633_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0281
+_09633_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0281
+_09633_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0280
+_09633_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0280
+_09633_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0280
+_09633_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0280
+_09633_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0279
+_07808_/Q (sg13g2_dfrbpq_1)          _07809_/D (sg13g2_dfrbpq_1)            -0.0255
+_09777_/Q (sg13g2_dfrbpq_1)          _09777_/D (sg13g2_dfrbpq_1)            -0.0118
+_07812_/Q (sg13g2_dfrbpq_1)          _07813_/D (sg13g2_dfrbpq_1)            -0.0117
+_10504_/Q (sg13g2_dfrbpq_1)          _10501_/D (sg13g2_dfrbpq_1)            -0.0117
+_10507_/Q (sg13g2_dfrbpq_1)          _10508_/D (sg13g2_dfrbpq_1)            -0.0117
+_10491_/Q (sg13g2_dlhq_1)            _10492_/D (sg13g2_dlhq_1)              -0.0071
+_10506_/Q (sg13g2_dfrbpq_1)          _10504_/D (sg13g2_dfrbpq_1)            -0.0062
+_09501_/Q (sg13g2_dfrbpq_1)          _09501_/D (sg13g2_dfrbpq_1)            -0.0026
+_07535_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_REN (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0026
+_10508_/Q (sg13g2_dfrbpq_1)          _10502_/D (sg13g2_dfrbpq_1)            -0.0023
+_09458_/Q (sg13g2_dfrbpq_1)          _09458_/D (sg13g2_dfrbpq_1)            -0.0022
+_09459_/Q (sg13g2_dfrbpq_1)          _09459_/D (sg13g2_dfrbpq_1)            -0.0022
+_09461_/Q (sg13g2_dfrbpq_1)          _09461_/D (sg13g2_dfrbpq_1)            -0.0022
+_09462_/Q (sg13g2_dfrbpq_1)          _09462_/D (sg13g2_dfrbpq_1)            -0.0022
+_09463_/Q (sg13g2_dfrbpq_1)          _09463_/D (sg13g2_dfrbpq_1)            -0.0022
+_09464_/Q (sg13g2_dfrbpq_1)          _09464_/D (sg13g2_dfrbpq_1)            -0.0022
+_09465_/Q (sg13g2_dfrbpq_1)          _09465_/D (sg13g2_dfrbpq_1)            -0.0022
+_09475_/Q (sg13g2_dfrbpq_1)          _09475_/D (sg13g2_dfrbpq_1)            -0.0022
+_09476_/Q (sg13g2_dfrbpq_1)          _09476_/D (sg13g2_dfrbpq_1)            -0.0022
+_09478_/Q (sg13g2_dfrbpq_1)          _09478_/D (sg13g2_dfrbpq_1)            -0.0022
+_09479_/Q (sg13g2_dfrbpq_1)          _09479_/D (sg13g2_dfrbpq_1)            -0.0022
+_09480_/Q (sg13g2_dfrbpq_1)          _09480_/D (sg13g2_dfrbpq_1)            -0.0022
+_09481_/Q (sg13g2_dfrbpq_1)          _09481_/D (sg13g2_dfrbpq_1)            -0.0022
+_09482_/Q (sg13g2_dfrbpq_1)          _09482_/D (sg13g2_dfrbpq_1)            -0.0022
+_09503_/Q (sg13g2_dfrbpq_1)          _09503_/D (sg13g2_dfrbpq_1)            -0.0022
+_09504_/Q (sg13g2_dfrbpq_1)          _09504_/D (sg13g2_dfrbpq_1)            -0.0022
+_09507_/Q (sg13g2_dfrbpq_1)          _09507_/D (sg13g2_dfrbpq_1)            -0.0022
+_09508_/Q (sg13g2_dfrbpq_1)          _09508_/D (sg13g2_dfrbpq_1)            -0.0022
+_09525_/Q (sg13g2_dfrbpq_1)          _09525_/D (sg13g2_dfrbpq_1)            -0.0022
+_09530_/Q (sg13g2_dfrbpq_1)          _09530_/D (sg13g2_dfrbpq_1)            -0.0022
+_09532_/Q (sg13g2_dfrbpq_1)          _09532_/D (sg13g2_dfrbpq_1)            -0.0022
+_09542_/Q (sg13g2_dfrbpq_1)          _09542_/D (sg13g2_dfrbpq_1)            -0.0022
+_09543_/Q (sg13g2_dfrbpq_1)          _09543_/D (sg13g2_dfrbpq_1)            -0.0022
+_09544_/Q (sg13g2_dfrbpq_1)          _09544_/D (sg13g2_dfrbpq_1)            -0.0022
+_09545_/Q (sg13g2_dfrbpq_1)          _09545_/D (sg13g2_dfrbpq_1)            -0.0022
+_09546_/Q (sg13g2_dfrbpq_1)          _09546_/D (sg13g2_dfrbpq_1)            -0.0022
+_09547_/Q (sg13g2_dfrbpq_1)          _09547_/D (sg13g2_dfrbpq_1)            -0.0022
+_09548_/Q (sg13g2_dfrbpq_1)          _09548_/D (sg13g2_dfrbpq_1)            -0.0022
+_09550_/Q (sg13g2_dfrbpq_1)          _09550_/D (sg13g2_dfrbpq_1)            -0.0022
+_09551_/Q (sg13g2_dfrbpq_1)          _09551_/D (sg13g2_dfrbpq_1)            -0.0022
+_09552_/Q (sg13g2_dfrbpq_1)          _09552_/D (sg13g2_dfrbpq_1)            -0.0022
+_09553_/Q (sg13g2_dfrbpq_1)          _09553_/D (sg13g2_dfrbpq_1)            -0.0022
+_09554_/Q (sg13g2_dfrbpq_1)          _09554_/D (sg13g2_dfrbpq_1)            -0.0022
+_09555_/Q (sg13g2_dfrbpq_1)          _09555_/D (sg13g2_dfrbpq_1)            -0.0022
+_09556_/Q (sg13g2_dfrbpq_1)          _09556_/D (sg13g2_dfrbpq_1)            -0.0022
+_09557_/Q (sg13g2_dfrbpq_1)          _09557_/D (sg13g2_dfrbpq_1)            -0.0022
+_09668_/Q (sg13g2_dfrbpq_1)          _09668_/D (sg13g2_dfrbpq_1)            -0.0022
+_09669_/Q (sg13g2_dfrbpq_1)          _09669_/D (sg13g2_dfrbpq_1)            -0.0022
+_09671_/Q (sg13g2_dfrbpq_1)          _09671_/D (sg13g2_dfrbpq_1)            -0.0022
+_09672_/Q (sg13g2_dfrbpq_1)          _09672_/D (sg13g2_dfrbpq_1)            -0.0022
+_09681_/Q (sg13g2_dfrbpq_1)          _09681_/D (sg13g2_dfrbpq_1)            -0.0022
+_09682_/Q (sg13g2_dfrbpq_1)          _09682_/D (sg13g2_dfrbpq_1)            -0.0022
+_09683_/Q (sg13g2_dfrbpq_1)          _09683_/D (sg13g2_dfrbpq_1)            -0.0022
+_09684_/Q (sg13g2_dfrbpq_1)          _09684_/D (sg13g2_dfrbpq_1)            -0.0022
+_09685_/Q (sg13g2_dfrbpq_1)          _09685_/D (sg13g2_dfrbpq_1)            -0.0022
+_09686_/Q (sg13g2_dfrbpq_1)          _09686_/D (sg13g2_dfrbpq_1)            -0.0022
+_09687_/Q (sg13g2_dfrbpq_1)          _09687_/D (sg13g2_dfrbpq_1)            -0.0022
+_09688_/Q (sg13g2_dfrbpq_1)          _09688_/D (sg13g2_dfrbpq_1)            -0.0022
+_09460_/Q (sg13g2_dfrbpq_1)          _09460_/D (sg13g2_dfrbpq_1)            -0.0016
+_09477_/Q (sg13g2_dfrbpq_1)          _09477_/D (sg13g2_dfrbpq_1)            -0.0016
+_09502_/Q (sg13g2_dfrbpq_1)          _09502_/D (sg13g2_dfrbpq_1)            -0.0016
+_09505_/Q (sg13g2_dfrbpq_1)          _09505_/D (sg13g2_dfrbpq_1)            -0.0016
+_09506_/Q (sg13g2_dfrbpq_1)          _09506_/D (sg13g2_dfrbpq_1)            -0.0016
+_09526_/Q (sg13g2_dfrbpq_1)          _09526_/D (sg13g2_dfrbpq_1)            -0.0016
+_09527_/Q (sg13g2_dfrbpq_1)          _09527_/D (sg13g2_dfrbpq_1)            -0.0016
+_09528_/Q (sg13g2_dfrbpq_1)          _09528_/D (sg13g2_dfrbpq_1)            -0.0016
+_09529_/Q (sg13g2_dfrbpq_1)          _09529_/D (sg13g2_dfrbpq_1)            -0.0016
+_09531_/Q (sg13g2_dfrbpq_1)          _09531_/D (sg13g2_dfrbpq_1)            -0.0016
+_09549_/Q (sg13g2_dfrbpq_1)          _09549_/D (sg13g2_dfrbpq_1)            -0.0016
+_09665_/Q (sg13g2_dfrbpq_1)          _09665_/D (sg13g2_dfrbpq_1)            -0.0016
+_09666_/Q (sg13g2_dfrbpq_1)          _09666_/D (sg13g2_dfrbpq_1)            -0.0016
+_09667_/Q (sg13g2_dfrbpq_1)          _09667_/D (sg13g2_dfrbpq_1)            -0.0016
+_09670_/Q (sg13g2_dfrbpq_1)          _09670_/D (sg13g2_dfrbpq_1)            -0.0016
+

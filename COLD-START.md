@@ -33,13 +33,19 @@ to come back and find nobody working")
 
 - The queue is the source of work: `wiki/STATUS.md` "Next steps (ordered)",
   the current checkpoint queue in this file, and any dispatch message.
-- **CHAIN TASKS.** When you finish a task and the queue holds a
-  clearly-scoped next task inside the manager-adopted plans (no new design
-  decision or ruling needed — the user delegated ALL project decisions to
-  the manager), START IT IMMEDIATELY after writing your interrupt file. Do
-  not idle at the prompt waiting to be told. One task at a time; each task
-  ends with `/tmp/pi-worker-interrupt` rewritten as its last action (concise
-  summary + evidence + hashes).
+- **CHAIN TASKS — WITHIN THE SAME TURN.** A pi session cannot start its own
+  next turn, so chaining MUST happen before you end the turn: when a task is
+  done and the queue holds a clearly-scoped next task (inside the
+  manager-adopted plans, no new design decision needed), rewrite the
+  interrupt file for the finished task and IMMEDIATELY start the next task
+  in the same turn, logging `TASK-START` in `WORKLOG.md`. The interrupt file
+  is the manager's async review trigger — it is NOT the end of your work.
+  ENDING YOUR TURN MEANS STOPPING: only end the turn when the queue is
+  empty (`IDLE-QUEUE-EMPTY` in WORKLOG), the next step is ambiguous or
+  needs a ruling (`QUESTION:`), or it touches the host-controller boundary
+  (`BLOCKED:`). (Root cause, 2026-09-25: workers wrote the interrupt as
+  their last action and ended the turn — chaining then never triggered and
+  the user found idle TUIs. Same-turn continuation is the fix.)
 - STOP chaining and wait for the manager only when: the next step is
   ambiguous or needs a design/ruling decision, it touches the host-controller
   boundary (write `BLOCKED:`), the queue is empty, or the dispatch explicitly

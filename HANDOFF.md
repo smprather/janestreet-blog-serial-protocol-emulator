@@ -71,6 +71,34 @@ the manager verification block in `PROJECT-REVIEW.md`); a fresh mapped
 `pe_ctrl` STA screen shows no new violation class. GUI planning belongs to the
 user (separate session); no GUI/bridge implementation is dispatched here.
 
+> **10BASE-T TX frame path — COMPLETE, plan Tasks 1-7 (2026-09-25, manager
+> Task 11 close-out + the chained Task 6/7 pass).** The last unbuilt block in
+> the topology is now built and hardened. `rtl/pe_eth_tx.v` emits a full frame
+> from firmware pushes (hardware 56+8 prelude, octets LSB-first, zero pad to 64
+> folded into the FCS, TX-dedicated `pe_crc`, 8-byte staging FIFO with
+> underrun, runt/jabber refusal, 96-cell IFG, constant idle); `pe_soc` gained
+> the 32-entry `0xF` window (push/wrap 16-23, TXLEN 24/25, TXCTRL 26, TXSTAT
+> 27) and the exclusive `tx_path` owner mux; the wrapper reclaims **`uo_out[2]`
+> = `eth_tx`** behind `pin_oe_bus[7]` (G6). Wire-loopback acceptance PASS —
+> echo `len=46 field=0806 sum=07`, two-frame IFG 102 cells, wrap `REG[24]=2a`
+> `REG[26]=04`, busy `refused_start=1`; the pad decodes 576 wire bits, FCS
+> `9cc5cb34`. **Two mutation suites: 18/18 unit + 7/7 integration, 0
+> survivors** — and they found two real TB gaps (a 60-byte pad-boundary case
+> and an engine-side IFG count), both fixed in the TB. Mapped 16.667 ns STA
+> screen (`reviews/2026-09-25/eth-tx-sta/`, 2 designs x 3 corners x
+> ZERO/BOARD): **no new violation class**; the G6 pad MET at +7.6330 ns setup
+> / +0.2964 ns hold (slow). `./regress/run_all.sh --fast -j8` **exit 0 — RTL
+> 33/33, firmware 26/26, lint clean, 12 gates, 12 mutation suites**;
+> `./regress/synth_area.sh` **exit 0** — `pe_eth_tx` 892 / 16,040.0898 µm²,
+> `pe_soc` **6,219 / 108,084.8286**, `tt_um_top` **7,960 / 138,817.4004**.
+> Both diagrams refreshed (plan 3385x2706, progress 3947x2477, targets held,
+> zero components lost). **Limits:** mapped/simulation only — no physical flow,
+> DRC or LVS; the push loop's worst gap (52 clk) exceeds the 48-clk wire-byte
+> period and is absorbed by the staging FIFO; per-class STA probes are limited
+> by this OpenSTA build's hashed net names; the R2 read path is a separate
+> phase. Review + hashes + mutation tables:
+> `reviews/2026-09-25/ETH-TX-FRAME-PATH-REVIEW.md`.
+
 > **10BASE-T TX frame path — plan Tasks 4-5 LANDED and verified (2026-09-24/25,
 > Manager Task 11; supersedes the Task-10 hash block below for `pe_eth_tx.v`,
 > `pe_soc.v`, `run_all.sh` and `run_firmware_tests.sh`).** The wrapper reclaim

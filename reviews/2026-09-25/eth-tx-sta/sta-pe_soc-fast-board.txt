@@ -1,0 +1,1886 @@
+OpenSTA 3.1.0 8572175ac4 Copyright (c) 2026, Parallax Software, Inc.
+License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
+
+This is free software, and you are free to change and redistribute it
+under certain conditions; type `show_copying' for details. 
+This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _06278_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _06278_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _06278_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _06279_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _06279_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _06279_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _06280_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _06280_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _06280_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _06281_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _06281_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _06281_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _06282_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _06282_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _06282_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: pin_in[7] (input port clocked by clk)
+Endpoint: _07439_ (positive level-sensitive latch clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ pin_in[7] (in)
+   0.0000    3.3334 ^ _07439_/D (sg13g2_dlhq_1)
+             3.3334   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+  -1.0000   -1.0000   clock uncertainty
+   0.0000   -1.0000   clock reconvergence pessimism
+            -1.0000 ^ _07439_/GATE (sg13g2_dlhq_1)
+   4.3334    3.3334   time borrowed from endpoint
+             3.3334   data required time
+-------------------------------------------------------------
+             3.3334   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+             0.0000   slack (MET)
+
+Time Borrowing Information
+----------------------------------------------
+clk pulse width                         8.3335
+library setup time                     -0.0824
+----------------------------------------------
+max time borrow                         8.2511
+----------------------------------------------
+actual time borrow                      4.3334
+open edge uncertainty                  -1.0000
+----------------------------------------------
+time given to startpoint                3.3334
+----------------------------------------------
+
+
+Startpoint: _07439_ (positive level-sensitive latch clocked by clk)
+Endpoint: _07440_ (positive level-sensitive latch clocked by clk')
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334   time given to startpoint
+   0.0000    3.3334 ^ _07439_/D (sg13g2_dlhq_1)
+   0.1474    3.4808 ^ _07439_/Q (sg13g2_dlhq_1)
+   0.0000    3.4808 ^ _07440_/D (sg13g2_dlhq_1)
+             3.4808   data arrival time
+
+   8.3335    8.3335   clock clk' (rise edge)
+   0.0000    8.3335   clock network delay (ideal)
+  -1.0000    7.3335   clock uncertainty
+   0.0000    7.3335   clock reconvergence pessimism
+             7.3335 ^ _07440_/GATE (sg13g2_dlhq_1)
+   0.0000    7.3335   time borrowed from endpoint
+             7.3335   data required time
+-------------------------------------------------------------
+             7.3335   data required time
+            -3.4808   data arrival time
+-------------------------------------------------------------
+             3.8527   slack (MET)
+
+Time Borrowing Information
+----------------------------------------------
+clk' pulse width                        8.3335
+library setup time                     -0.0682
+----------------------------------------------
+max time borrow                         8.2653
+actual time borrow                      0.0000
+----------------------------------------------
+
+
+Startpoint: _07440_ (positive level-sensitive latch clocked by clk')
+Endpoint: _07452_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   8.3335    8.3335   clock clk' (rise edge)
+   0.0000    8.3335   clock network delay (ideal)
+   0.0000    8.3335 ^ _07440_/GATE (sg13g2_dlhq_1)
+   0.1082    8.4417 v _07440_/Q (sg13g2_dlhq_1)
+   0.0268    8.4686 ^ _07326_/Y (sg13g2_nor2b_1)
+   0.0000    8.4686 ^ _07452_/D (sg13g2_dfrbpq_1)
+             8.4686   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _07452_/CLK (sg13g2_dfrbpq_1)
+  -0.0788   15.5882   library setup time
+            15.5882   data required time
+-------------------------------------------------------------
+            15.5882   data required time
+            -8.4686   data arrival time
+-------------------------------------------------------------
+             7.1197   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _09146_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.0695    3.4029 ^ _06754_/Y (sg13g2_inv_1)
+   0.0611    3.4640 v _07079_/Y (sg13g2_nor4_1)
+   0.0330    3.4970 ^ _06206_/Y (sg13g2_nand2_1)
+   0.0308    3.5278 v _06207_/Y (sg13g2_nor3_1)
+   0.0269    3.5547 ^ _07670_/Y (sg13g2_nand2_1)
+   0.1755    3.7302 v _07671_/Y (sg13g2_a221oi_1)
+   0.2644    3.9946 ^ _07699_/Y (sg13g2_nand2_1)
+   0.1096    4.1042 v _07856_/Y (sg13g2_nand4_1)
+   0.0518    4.1560 ^ _07858_/Y (sg13g2_nor2_1)
+   0.7512    4.9072 v _07859_/Y (sg13g2_nand4_1)
+   0.8584    5.7656 ^ _07861_/Y (sg13g2_nor2_1)
+   0.1388    5.9044 v _08253_/Y (sg13g2_a22oi_1)
+   0.0886    5.9930 ^ _08254_/Y (sg13g2_o21ai_1)
+   0.0543    6.0473 v _08260_/Y (sg13g2_a21oi_1)
+   0.0280    6.0753 ^ _08261_/Y (sg13g2_o21ai_1)
+   0.0000    6.0753 ^ _09146_/D (sg13g2_dfrbpq_1)
+             6.0753   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _09146_/CLK (sg13g2_dfrbpq_1)
+  -0.0837   15.5833   library setup time
+            15.5833   data required time
+-------------------------------------------------------------
+            15.5833   data required time
+            -6.0753   data arrival time
+-------------------------------------------------------------
+             9.5080   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _09150_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.0695    3.4029 ^ _06754_/Y (sg13g2_inv_1)
+   0.0611    3.4640 v _07079_/Y (sg13g2_nor4_1)
+   0.0330    3.4970 ^ _06206_/Y (sg13g2_nand2_1)
+   0.0308    3.5278 v _06207_/Y (sg13g2_nor3_1)
+   0.0269    3.5547 ^ _07670_/Y (sg13g2_nand2_1)
+   0.1755    3.7302 v _07671_/Y (sg13g2_a221oi_1)
+   0.2644    3.9946 ^ _07699_/Y (sg13g2_nand2_1)
+   0.1096    4.1042 v _07856_/Y (sg13g2_nand4_1)
+   0.0518    4.1560 ^ _07858_/Y (sg13g2_nor2_1)
+   0.7512    4.9072 v _07859_/Y (sg13g2_nand4_1)
+   0.8584    5.7656 ^ _07861_/Y (sg13g2_nor2_1)
+   0.1338    5.8994 v _07873_/Y (sg13g2_a21oi_1)
+   0.0480    5.9474 ^ _07874_/Y (sg13g2_o21ai_1)
+   0.0379    5.9853 v _07876_/Y (sg13g2_o21ai_1)
+   0.0507    6.0360 ^ _07877_/Y (sg13g2_a221oi_1)
+   0.0000    6.0360 ^ _09150_/D (sg13g2_dfrbpq_1)
+             6.0360   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _09150_/CLK (sg13g2_dfrbpq_1)
+  -0.0898   15.5772   library setup time
+            15.5772   data required time
+-------------------------------------------------------------
+            15.5772   data required time
+            -6.0360   data arrival time
+-------------------------------------------------------------
+             9.5413   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _06278_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   1.0000    1.0000 ^ input external delay
+   0.0000    1.0000 ^ rst_n (in)
+   0.0000    1.0000 ^ _06278_/RESET_B (sg13g2_dfrbpq_1)
+             1.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _06278_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -1.0000   data arrival time
+-------------------------------------------------------------
+             0.8363   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _06279_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   1.0000    1.0000 ^ input external delay
+   0.0000    1.0000 ^ rst_n (in)
+   0.0000    1.0000 ^ _06279_/RESET_B (sg13g2_dfrbpq_1)
+             1.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _06279_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -1.0000   data arrival time
+-------------------------------------------------------------
+             0.8363   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _06280_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   1.0000    1.0000 ^ input external delay
+   0.0000    1.0000 ^ rst_n (in)
+   0.0000    1.0000 ^ _06280_/RESET_B (sg13g2_dfrbpq_1)
+             1.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _06280_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -1.0000   data arrival time
+-------------------------------------------------------------
+             0.8363   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _06281_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   1.0000    1.0000 ^ input external delay
+   0.0000    1.0000 ^ rst_n (in)
+   0.0000    1.0000 ^ _06281_/RESET_B (sg13g2_dfrbpq_1)
+             1.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _06281_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -1.0000   data arrival time
+-------------------------------------------------------------
+             0.8363   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _06282_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   1.0000    1.0000 ^ input external delay
+   0.0000    1.0000 ^ rst_n (in)
+   0.0000    1.0000 ^ _06282_/RESET_B (sg13g2_dfrbpq_1)
+             1.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _06282_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -1.0000   data arrival time
+-------------------------------------------------------------
+             0.8363   slack (MET)
+
+
+Startpoint: _06625_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: u_eth_fbuf.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _06625_/CLK (sg13g2_dfrbpq_1)
+   0.1273    0.1273 ^ _06625_/Q (sg13g2_dfrbpq_1)
+   0.0699    0.1972 ^ _07493_/X (sg13g2_mux2_1)
+   0.0000    0.1972 ^ u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.1972   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_eth_fbuf.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3138    0.5638   library hold time
+             0.5638   data required time
+-------------------------------------------------------------
+             0.5638   data required time
+            -0.1972   data arrival time
+-------------------------------------------------------------
+            -0.3666   slack (VIOLATED)
+
+
+Startpoint: _06630_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: u_eth_fbuf.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _06630_/CLK (sg13g2_dfrbpq_1)
+   0.1275    0.1275 ^ _06630_/Q (sg13g2_dfrbpq_1)
+   0.0745    0.2020 ^ _07502_/X (sg13g2_mux2_1)
+   0.0000    0.2020 ^ u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.2020   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_eth_fbuf.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3077    0.5577   library hold time
+             0.5577   data required time
+-------------------------------------------------------------
+             0.5577   data required time
+            -0.2020   data arrival time
+-------------------------------------------------------------
+            -0.3557   slack (VIOLATED)
+
+
+Startpoint: _06622_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: u_eth_fbuf.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _06622_/CLK (sg13g2_dfrbpq_1)
+   0.1365    0.1365 ^ _06622_/Q (sg13g2_dfrbpq_1)
+   0.0735    0.2100 ^ _07496_/X (sg13g2_mux2_1)
+   0.0000    0.2100 ^ u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.2100   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_eth_fbuf.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3143    0.5643   library hold time
+             0.5643   data required time
+-------------------------------------------------------------
+             0.5643   data required time
+            -0.2100   data arrival time
+-------------------------------------------------------------
+            -0.3543   slack (VIOLATED)
+
+
+Startpoint: _09108_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: u_eth_fbuf.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _09108_/CLK (sg13g2_dfrbpq_1)
+   0.1320    0.1320 ^ _09108_/Q (sg13g2_dfrbpq_1)
+   0.0748    0.2069 ^ _07495_/X (sg13g2_mux2_1)
+   0.0000    0.2069 ^ u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.2069   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_eth_fbuf.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3104    0.5604   library hold time
+             0.5604   data required time
+-------------------------------------------------------------
+             0.5604   data required time
+            -0.2069   data arrival time
+-------------------------------------------------------------
+            -0.3536   slack (VIOLATED)
+
+
+Startpoint: _06624_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: u_eth_fbuf.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _06624_/CLK (sg13g2_dfrbpq_1)
+   0.1307    0.1307 ^ _06624_/Q (sg13g2_dfrbpq_1)
+   0.0766    0.2072 ^ _07494_/X (sg13g2_mux2_1)
+   0.0000    0.2072 ^ u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.2072   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_eth_fbuf.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3068    0.5568   library hold time
+             0.5568   data required time
+-------------------------------------------------------------
+             0.5568   data required time
+            -0.2072   data arrival time
+-------------------------------------------------------------
+            -0.3495   slack (VIOLATED)
+
+
+max slew
+
+Pin                                    Limit    Slew   Slack
+------------------------------------------------------------
+u_eth_fbuf.g_macro.u_sram/A_WEN         0.38    0.51   -0.13 (VIOLATED)
+
+max fanout
+
+Pin                                   Limit Fanout  Slack
+---------------------------------------------------------
+_09102_/Q                                 8     48    -40 (VIOLATED)
+_10447_/Y                                 8     46    -38 (VIOLATED)
+_10261_/Y                                 8     42    -34 (VIOLATED)
+_06806_/Y                                 8     39    -31 (VIOLATED)
+_09190_/Y                                 8     39    -31 (VIOLATED)
+_06802_/Y                                 8     38    -30 (VIOLATED)
+_07859_/Y                                 8     35    -27 (VIOLATED)
+_07861_/Y                                 8     34    -26 (VIOLATED)
+_08962_/X                                 8     34    -26 (VIOLATED)
+_09847_/Q                                 8     34    -26 (VIOLATED)
+_10770_/Q                                 8     34    -26 (VIOLATED)
+_07083_/Q                                 8     32    -24 (VIOLATED)
+_07148_/Y                                 8     32    -24 (VIOLATED)
+_07152_/Y                                 8     32    -24 (VIOLATED)
+_07153_/Y                                 8     32    -24 (VIOLATED)
+_09888_/Y                                 8     32    -24 (VIOLATED)
+_09892_/Y                                 8     32    -24 (VIOLATED)
+_09893_/Y                                 8     32    -24 (VIOLATED)
+_07084_/Q                                 8     31    -23 (VIOLATED)
+_07085_/Q                                 8     30    -22 (VIOLATED)
+_07086_/Q                                 8     30    -22 (VIOLATED)
+_07088_/Q                                 8     30    -22 (VIOLATED)
+_07087_/Q                                 8     29    -21 (VIOLATED)
+_07671_/Y                                 8     29    -21 (VIOLATED)
+_07090_/Q                                 8     28    -20 (VIOLATED)
+_07854_/Y                                 8     27    -19 (VIOLATED)
+_07089_/Q                                 8     26    -18 (VIOLATED)
+_07829_/Y                                 8     26    -18 (VIOLATED)
+_07466_/X                                 8     25    -17 (VIOLATED)
+_09290_/Y                                 8     25    -17 (VIOLATED)
+_07441_/Q                                 8     24    -16 (VIOLATED)
+_07853_/Y                                 8     23    -15 (VIOLATED)
+_09032_/Q                                 8     22    -14 (VIOLATED)
+_05628_/X                                 8     21    -13 (VIOLATED)
+_05656_/Y                                 8     21    -13 (VIOLATED)
+_05707_/X                                 8     21    -13 (VIOLATED)
+_05801_/Y                                 8     21    -13 (VIOLATED)
+_07080_/Y                                 8     21    -13 (VIOLATED)
+_09279_/Y                                 8     21    -13 (VIOLATED)
+_05261_/Y                                 8     20    -12 (VIOLATED)
+_07869_/Y                                 8     20    -12 (VIOLATED)
+_10677_/Q                                 8     20    -12 (VIOLATED)
+_07817_/Y                                 8     19    -11 (VIOLATED)
+_06583_/Q                                 8     18    -10 (VIOLATED)
+_04786_/Y                                 8     17     -9 (VIOLATED)
+_06830_/Y                                 8     17     -9 (VIOLATED)
+_07828_/Y                                 8     17     -9 (VIOLATED)
+_08999_/Q                                 8     17     -9 (VIOLATED)
+_09363_/Y                                 8     17     -9 (VIOLATED)
+_04909_/Y                                 8     16     -8 (VIOLATED)
+_05600_/X                                 8     16     -8 (VIOLATED)
+_05604_/X                                 8     16     -8 (VIOLATED)
+_05608_/X                                 8     16     -8 (VIOLATED)
+_05612_/X                                 8     16     -8 (VIOLATED)
+_05613_/Y                                 8     16     -8 (VIOLATED)
+_05616_/X                                 8     16     -8 (VIOLATED)
+_05617_/Y                                 8     16     -8 (VIOLATED)
+_05620_/X                                 8     16     -8 (VIOLATED)
+_05621_/Y                                 8     16     -8 (VIOLATED)
+_05624_/X                                 8     16     -8 (VIOLATED)
+_05625_/Y                                 8     16     -8 (VIOLATED)
+_05683_/Y                                 8     16     -8 (VIOLATED)
+_05733_/Y                                 8     16     -8 (VIOLATED)
+_05756_/Y                                 8     16     -8 (VIOLATED)
+_05778_/Y                                 8     16     -8 (VIOLATED)
+_05827_/Y                                 8     16     -8 (VIOLATED)
+_05850_/Y                                 8     16     -8 (VIOLATED)
+_05872_/Y                                 8     16     -8 (VIOLATED)
+_05896_/Y                                 8     16     -8 (VIOLATED)
+_05920_/Y                                 8     16     -8 (VIOLATED)
+_05943_/Y                                 8     16     -8 (VIOLATED)
+_05966_/Y                                 8     16     -8 (VIOLATED)
+_05994_/X                                 8     16     -8 (VIOLATED)
+_05997_/Y                                 8     16     -8 (VIOLATED)
+_06660_/Q                                 8     16     -8 (VIOLATED)
+_08447_/Y                                 8     16     -8 (VIOLATED)
+_08528_/Y                                 8     16     -8 (VIOLATED)
+_10112_/Y                                 8     16     -8 (VIOLATED)
+_10678_/Q                                 8     16     -8 (VIOLATED)
+_10679_/Q                                 8     16     -8 (VIOLATED)
+_05260_/Y                                 8     15     -7 (VIOLATED)
+_05587_/Y                                 8     15     -7 (VIOLATED)
+_05629_/X                                 8     15     -7 (VIOLATED)
+_05633_/Y                                 8     15     -7 (VIOLATED)
+_05637_/Y                                 8     15     -7 (VIOLATED)
+_05641_/Y                                 8     15     -7 (VIOLATED)
+_05657_/X                                 8     15     -7 (VIOLATED)
+_05708_/X                                 8     15     -7 (VIOLATED)
+_05802_/X                                 8     15     -7 (VIOLATED)
+_06297_/Q                                 8     15     -7 (VIOLATED)
+_06809_/Y                                 8     15     -7 (VIOLATED)
+_06959_/Y                                 8     15     -7 (VIOLATED)
+_08779_/Y                                 8     15     -7 (VIOLATED)
+_08861_/Y                                 8     15     -7 (VIOLATED)
+_09205_/Y                                 8     15     -7 (VIOLATED)
+_10246_/Y                                 8     15     -7 (VIOLATED)
+_05053_/X                                 8     14     -6 (VIOLATED)
+_06582_/Q                                 8     14     -6 (VIOLATED)
+_07862_/Y                                 8     14     -6 (VIOLATED)
+_08780_/X                                 8     14     -6 (VIOLATED)
+_10194_/Y                                 8     14     -6 (VIOLATED)
+_10317_/Y                                 8     14     -6 (VIOLATED)
+_06579_/Q                                 8     13     -5 (VIOLATED)
+_06581_/Q                                 8     13     -5 (VIOLATED)
+_08992_/Q                                 8     13     -5 (VIOLATED)
+_09079_/Q                                 8     13     -5 (VIOLATED)
+_09109_/Q                                 8     13     -5 (VIOLATED)
+_09209_/X                                 8     13     -5 (VIOLATED)
+_09303_/Y                                 8     13     -5 (VIOLATED)
+_06212_/X                                 8     12     -4 (VIOLATED)
+_06580_/Q                                 8     12     -4 (VIOLATED)
+_07082_/Y                                 8     12     -4 (VIOLATED)
+_07830_/X                                 8     12     -4 (VIOLATED)
+_09071_/Q                                 8     12     -4 (VIOLATED)
+_09075_/Q                                 8     12     -4 (VIOLATED)
+_09077_/Q                                 8     12     -4 (VIOLATED)
+_09210_/Y                                 8     12     -4 (VIOLATED)
+_10356_/Y                                 8     12     -4 (VIOLATED)
+_10618_/X                                 8     12     -4 (VIOLATED)
+_04784_/Y                                 8     11     -3 (VIOLATED)
+_05041_/Y                                 8     11     -3 (VIOLATED)
+_05271_/X                                 8     11     -3 (VIOLATED)
+_06661_/Q                                 8     11     -3 (VIOLATED)
+_06808_/Y                                 8     11     -3 (VIOLATED)
+_07595_/Y                                 8     11     -3 (VIOLATED)
+_07699_/Y                                 8     11     -3 (VIOLATED)
+_07845_/Y                                 8     11     -3 (VIOLATED)
+_07872_/X                                 8     11     -3 (VIOLATED)
+_08436_/Y                                 8     11     -3 (VIOLATED)
+_08517_/Y                                 8     11     -3 (VIOLATED)
+_09056_/Q                                 8     11     -3 (VIOLATED)
+_09057_/Q                                 8     11     -3 (VIOLATED)
+_09070_/Q                                 8     11     -3 (VIOLATED)
+_09072_/Q                                 8     11     -3 (VIOLATED)
+_09073_/Q                                 8     11     -3 (VIOLATED)
+_09074_/Q                                 8     11     -3 (VIOLATED)
+_09080_/Q                                 8     11     -3 (VIOLATED)
+_09714_/Q                                 8     11     -3 (VIOLATED)
+_10303_/X                                 8     11     -3 (VIOLATED)
+_04779_/Y                                 8     10     -2 (VIOLATED)
+_04977_/Y                                 8     10     -2 (VIOLATED)
+_05001_/Y                                 8     10     -2 (VIOLATED)
+_05322_/Y                                 8     10     -2 (VIOLATED)
+_06760_/Y                                 8     10     -2 (VIOLATED)
+_06761_/X                                 8     10     -2 (VIOLATED)
+_07696_/Y                                 8     10     -2 (VIOLATED)
+_07728_/Y                                 8     10     -2 (VIOLATED)
+_07867_/X                                 8     10     -2 (VIOLATED)
+_08879_/Y                                 8     10     -2 (VIOLATED)
+_09055_/Q                                 8     10     -2 (VIOLATED)
+_09076_/Q                                 8     10     -2 (VIOLATED)
+_09105_/Q                                 8     10     -2 (VIOLATED)
+_09110_/Q                                 8     10     -2 (VIOLATED)
+_09111_/Q                                 8     10     -2 (VIOLATED)
+_09112_/Q                                 8     10     -2 (VIOLATED)
+_09113_/Q                                 8     10     -2 (VIOLATED)
+_09140_/Q                                 8     10     -2 (VIOLATED)
+_09430_/Y                                 8     10     -2 (VIOLATED)
+_09771_/Q                                 8     10     -2 (VIOLATED)
+_10675_/Q                                 8     10     -2 (VIOLATED)
+_10724_/Q                                 8     10     -2 (VIOLATED)
+_04972_/X                                 8      9        (VIOLATED)
+_04975_/Y                                 8      9        (VIOLATED)
+_04976_/Y                                 8      9        (VIOLATED)
+_04978_/Y                                 8      9        (VIOLATED)
+_04982_/Y                                 8      9        (VIOLATED)
+_04993_/Y                                 8      9        (VIOLATED)
+_04994_/Y                                 8      9        (VIOLATED)
+_04995_/Y                                 8      9        (VIOLATED)
+_04997_/Y                                 8      9        (VIOLATED)
+_05002_/Y                                 8      9        (VIOLATED)
+_05006_/Y                                 8      9        (VIOLATED)
+_05009_/Y                                 8      9        (VIOLATED)
+_05017_/Y                                 8      9        (VIOLATED)
+_05018_/Y                                 8      9        (VIOLATED)
+_05021_/Y                                 8      9        (VIOLATED)
+_05027_/Y                                 8      9        (VIOLATED)
+_05028_/Y                                 8      9        (VIOLATED)
+_05030_/Y                                 8      9        (VIOLATED)
+_05351_/Y                                 8      9        (VIOLATED)
+_05576_/X                                 8      9        (VIOLATED)
+_05631_/Y                                 8      9        (VIOLATED)
+_05660_/Y                                 8      9        (VIOLATED)
+_05710_/Y                                 8      9        (VIOLATED)
+_05804_/Y                                 8      9        (VIOLATED)
+_06454_/Q                                 8      9        (VIOLATED)
+_06455_/Q                                 8      9        (VIOLATED)
+_06456_/Q                                 8      9        (VIOLATED)
+_06457_/Q                                 8      9        (VIOLATED)
+_06458_/Q                                 8      9        (VIOLATED)
+_06459_/Q                                 8      9        (VIOLATED)
+_06460_/Q                                 8      9        (VIOLATED)
+_06461_/Q                                 8      9        (VIOLATED)
+_06620_/Q                                 8      9        (VIOLATED)
+_06662_/Q                                 8      9        (VIOLATED)
+_06804_/Y                                 8      9        (VIOLATED)
+_06827_/Y                                 8      9        (VIOLATED)
+_06838_/X                                 8      9        (VIOLATED)
+_06888_/Y                                 8      9        (VIOLATED)
+_06955_/Y                                 8      9        (VIOLATED)
+_06956_/Y                                 8      9        (VIOLATED)
+_06962_/Y                                 8      9        (VIOLATED)
+_07078_/X                                 8      9        (VIOLATED)
+_07091_/Q                                 8      9        (VIOLATED)
+_07503_/Q                                 8      9        (VIOLATED)
+_07681_/Y                                 8      9        (VIOLATED)
+_07686_/Y                                 8      9        (VIOLATED)
+_07690_/Y                                 8      9        (VIOLATED)
+_07753_/Y                                 8      9        (VIOLATED)
+_08507_/Y                                 8      9        (VIOLATED)
+_08972_/Q                                 8      9        (VIOLATED)
+_08974_/Q                                 8      9        (VIOLATED)
+_08975_/Q                                 8      9        (VIOLATED)
+_08998_/Q                                 8      9        (VIOLATED)
+_09058_/Q                                 8      9        (VIOLATED)
+_09082_/Q                                 8      9        (VIOLATED)
+_09106_/Q                                 8      9        (VIOLATED)
+_09114_/Q                                 8      9        (VIOLATED)
+_09148_/Q                                 8      9        (VIOLATED)
+_09350_/Y                                 8      9        (VIOLATED)
+_09501_/Y                                 8      9        (VIOLATED)
+_09574_/Y                                 8      9        (VIOLATED)
+_09579_/Y                                 8      9        (VIOLATED)
+_09583_/X                                 8      9        (VIOLATED)
+_09585_/Y                                 8      9        (VIOLATED)
+_09588_/Y                                 8      9        (VIOLATED)
+_09589_/Y                                 8      9        (VIOLATED)
+_09773_/Q                                 8      9        (VIOLATED)
+_09817_/Q                                 8      9        (VIOLATED)
+_10076_/X                                 8      9        (VIOLATED)
+_10283_/Y                                 8      9        (VIOLATED)
+_10312_/X                                 8      9        (VIOLATED)
+_10676_/Q                                 8      9        (VIOLATED)
+
+max capacitance
+
+Pin                                    Limit     Cap   Slack
+------------------------------------------------------------
+_06806_/Y                               0.30    0.37   -0.07 (VIOLATED)
+
+worst slack max 0.00
+worst slack min -0.37
+===== NEGATIVE-MIN INVENTORY (slack <= 0)
+Startpoint                           Endpoint                                 Slack
+----------------------------------------------------------------------------------
+_06625_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3666
+_06630_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3557
+_06622_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3543
+_09108_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3536
+_09107_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3497
+_06624_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3495
+_06629_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3469
+_06628_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3409
+_06621_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3345
+_09115_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3332
+_06627_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3329
+_06623_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3326
+_08977_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3314
+_09106_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3303
+_08977_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3301
+_09110_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3278
+_08977_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3260
+_08976_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3237
+_08973_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3234
+_08976_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3227
+_08973_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3221
+_06626_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3200
+_09114_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3197
+_08976_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3190
+_08973_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3186
+_08971_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3184
+_08977_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3182
+_08971_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3161
+_08974_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3140
+_08971_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3132
+_08975_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3126
+_09111_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3115
+_08974_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3112
+_08976_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3104
+_08973_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3098
+_08975_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3089
+_08974_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3084
+_09113_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3079
+_08972_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3078
+_08975_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3069
+_09112_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3061
+_08971_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3045
+_08972_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3024
+_08972_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3015
+_06625_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3009
+_08974_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3000
+_08975_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2979
+_07116_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2975
+_07116_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2952
+_07116_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2952
+_08972_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2920
+_06630_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2913
+_06622_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2905
+_07107_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2902
+_09108_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2898
+_09109_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2897
+_08992_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2893
+_09107_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2875
+_06624_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2855
+_06629_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2826
+_08992_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2812
+_06628_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2785
+_08992_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2783
+_07115_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2773
+_07115_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2743
+_07115_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2743
+_07116_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2737
+_09115_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2736
+_06621_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2733
+_06623_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2716
+_06627_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2709
+_08992_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2704
+_09106_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2701
+_09110_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2694
+_07115_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2620
+_09114_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2611
+_06626_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2601
+_09111_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2548
+_09113_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2523
+_09112_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2501
+_09109_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2364
+_07113_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2321
+_07107_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2309
+_07107_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2309
+_07108_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2286
+_07108_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2286
+_07110_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2269
+_07110_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2269
+_07111_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2218
+_07111_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2218
+_07114_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2210
+_07114_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2210
+_07113_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2208
+_07113_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2208
+_07110_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2202
+_07110_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2202
+_07114_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2153
+_07111_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2151
+_07111_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2151
+_07113_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2108
+_07113_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2085
+_07107_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2085
+_07109_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1882
+_07109_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1814
+_07109_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1805
+_07109_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1803
+_07112_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1770
+_07112_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1703
+_07112_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1638
+_07112_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1638
+_07453_/Q (sg13g2_dfrbpq_1)          _07454_/D (sg13g2_dfrbpq_1)            -0.1268
+_07439_/Q (sg13g2_dlhq_1)            _07440_/D (sg13g2_dlhq_1)              -0.1145
+_07453_/Q (sg13g2_dfrbpq_1)          _07454_/D (sg13g2_dfrbpq_1)            -0.1084
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1013
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1011
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1011
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1010
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1009
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1008
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1007
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1002
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0982
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0980
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0980
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0978
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0977
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0976
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0975
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0968
+_07452_/Q (sg13g2_dfrbpq_1)          _07449_/D (sg13g2_dfrbpq_1)            -0.0898
+_07455_/Q (sg13g2_dfrbpq_1)          _07456_/D (sg13g2_dfrbpq_1)            -0.0898
+_07439_/Q (sg13g2_dlhq_1)            _07440_/D (sg13g2_dlhq_1)              -0.0882
+_07454_/Q (sg13g2_dfrbpq_1)          _07452_/D (sg13g2_dfrbpq_1)            -0.0856
+_06465_/Q (sg13g2_dfrbpq_1)          _06465_/D (sg13g2_dfrbpq_1)            -0.0835
+_07456_/Q (sg13g2_dfrbpq_1)          _07450_/D (sg13g2_dfrbpq_1)            -0.0835
+_06445_/Q (sg13g2_dfrbpq_1)          _06445_/D (sg13g2_dfrbpq_1)            -0.0835
+_06446_/Q (sg13g2_dfrbpq_1)          _06446_/D (sg13g2_dfrbpq_1)            -0.0835
+_06447_/Q (sg13g2_dfrbpq_1)          _06447_/D (sg13g2_dfrbpq_1)            -0.0835
+_06448_/Q (sg13g2_dfrbpq_1)          _06448_/D (sg13g2_dfrbpq_1)            -0.0835
+_06449_/Q (sg13g2_dfrbpq_1)          _06449_/D (sg13g2_dfrbpq_1)            -0.0835
+_06451_/Q (sg13g2_dfrbpq_1)          _06451_/D (sg13g2_dfrbpq_1)            -0.0835
+_06452_/Q (sg13g2_dfrbpq_1)          _06452_/D (sg13g2_dfrbpq_1)            -0.0835
+_06462_/Q (sg13g2_dfrbpq_1)          _06462_/D (sg13g2_dfrbpq_1)            -0.0835
+_06463_/Q (sg13g2_dfrbpq_1)          _06463_/D (sg13g2_dfrbpq_1)            -0.0835
+_06466_/Q (sg13g2_dfrbpq_1)          _06466_/D (sg13g2_dfrbpq_1)            -0.0835
+_06467_/Q (sg13g2_dfrbpq_1)          _06467_/D (sg13g2_dfrbpq_1)            -0.0835
+_06468_/Q (sg13g2_dfrbpq_1)          _06468_/D (sg13g2_dfrbpq_1)            -0.0835
+_06469_/Q (sg13g2_dfrbpq_1)          _06469_/D (sg13g2_dfrbpq_1)            -0.0835
+_06490_/Q (sg13g2_dfrbpq_1)          _06490_/D (sg13g2_dfrbpq_1)            -0.0835
+_06492_/Q (sg13g2_dfrbpq_1)          _06492_/D (sg13g2_dfrbpq_1)            -0.0835
+_06512_/Q (sg13g2_dfrbpq_1)          _06512_/D (sg13g2_dfrbpq_1)            -0.0835
+_06513_/Q (sg13g2_dfrbpq_1)          _06513_/D (sg13g2_dfrbpq_1)            -0.0835
+_06514_/Q (sg13g2_dfrbpq_1)          _06514_/D (sg13g2_dfrbpq_1)            -0.0835
+_06516_/Q (sg13g2_dfrbpq_1)          _06516_/D (sg13g2_dfrbpq_1)            -0.0835
+_06517_/Q (sg13g2_dfrbpq_1)          _06517_/D (sg13g2_dfrbpq_1)            -0.0835
+_06519_/Q (sg13g2_dfrbpq_1)          _06519_/D (sg13g2_dfrbpq_1)            -0.0835
+_06529_/Q (sg13g2_dfrbpq_1)          _06529_/D (sg13g2_dfrbpq_1)            -0.0835
+_06531_/Q (sg13g2_dfrbpq_1)          _06531_/D (sg13g2_dfrbpq_1)            -0.0835
+_06532_/Q (sg13g2_dfrbpq_1)          _06532_/D (sg13g2_dfrbpq_1)            -0.0835
+_06533_/Q (sg13g2_dfrbpq_1)          _06533_/D (sg13g2_dfrbpq_1)            -0.0835
+_06534_/Q (sg13g2_dfrbpq_1)          _06534_/D (sg13g2_dfrbpq_1)            -0.0835
+_06535_/Q (sg13g2_dfrbpq_1)          _06535_/D (sg13g2_dfrbpq_1)            -0.0835
+_06536_/Q (sg13g2_dfrbpq_1)          _06536_/D (sg13g2_dfrbpq_1)            -0.0835
+_06537_/Q (sg13g2_dfrbpq_1)          _06537_/D (sg13g2_dfrbpq_1)            -0.0835
+_06538_/Q (sg13g2_dfrbpq_1)          _06538_/D (sg13g2_dfrbpq_1)            -0.0835
+_06540_/Q (sg13g2_dfrbpq_1)          _06540_/D (sg13g2_dfrbpq_1)            -0.0835
+_06541_/Q (sg13g2_dfrbpq_1)          _06541_/D (sg13g2_dfrbpq_1)            -0.0835
+_06542_/Q (sg13g2_dfrbpq_1)          _06542_/D (sg13g2_dfrbpq_1)            -0.0835
+_06543_/Q (sg13g2_dfrbpq_1)          _06543_/D (sg13g2_dfrbpq_1)            -0.0835
+_06544_/Q (sg13g2_dfrbpq_1)          _06544_/D (sg13g2_dfrbpq_1)            -0.0835
+_06673_/Q (sg13g2_dfrbpq_1)          _06673_/D (sg13g2_dfrbpq_1)            -0.0835
+_06674_/Q (sg13g2_dfrbpq_1)          _06674_/D (sg13g2_dfrbpq_1)            -0.0835
+_06653_/Q (sg13g2_dfrbpq_1)          _06653_/D (sg13g2_dfrbpq_1)            -0.0835
+_06450_/Q (sg13g2_dfrbpq_1)          _06450_/D (sg13g2_dfrbpq_1)            -0.0831
+_06464_/Q (sg13g2_dfrbpq_1)          _06464_/D (sg13g2_dfrbpq_1)            -0.0831
+_06488_/Q (sg13g2_dfrbpq_1)          _06488_/D (sg13g2_dfrbpq_1)            -0.0831
+_06489_/Q (sg13g2_dfrbpq_1)          _06489_/D (sg13g2_dfrbpq_1)            -0.0831
+_06491_/Q (sg13g2_dfrbpq_1)          _06491_/D (sg13g2_dfrbpq_1)            -0.0831
+_06493_/Q (sg13g2_dfrbpq_1)          _06493_/D (sg13g2_dfrbpq_1)            -0.0831
+_06494_/Q (sg13g2_dfrbpq_1)          _06494_/D (sg13g2_dfrbpq_1)            -0.0831
+_06495_/Q (sg13g2_dfrbpq_1)          _06495_/D (sg13g2_dfrbpq_1)            -0.0831
+_06515_/Q (sg13g2_dfrbpq_1)          _06515_/D (sg13g2_dfrbpq_1)            -0.0831
+_06518_/Q (sg13g2_dfrbpq_1)          _06518_/D (sg13g2_dfrbpq_1)            -0.0831
+_06530_/Q (sg13g2_dfrbpq_1)          _06530_/D (sg13g2_dfrbpq_1)            -0.0831
+_06539_/Q (sg13g2_dfrbpq_1)          _06539_/D (sg13g2_dfrbpq_1)            -0.0831
+_06652_/Q (sg13g2_dfrbpq_1)          _06652_/D (sg13g2_dfrbpq_1)            -0.0831
+_06654_/Q (sg13g2_dfrbpq_1)          _06654_/D (sg13g2_dfrbpq_1)            -0.0831
+_06655_/Q (sg13g2_dfrbpq_1)          _06655_/D (sg13g2_dfrbpq_1)            -0.0831
+_06656_/Q (sg13g2_dfrbpq_1)          _06656_/D (sg13g2_dfrbpq_1)            -0.0831
+_06657_/Q (sg13g2_dfrbpq_1)          _06657_/D (sg13g2_dfrbpq_1)            -0.0831
+_06658_/Q (sg13g2_dfrbpq_1)          _06658_/D (sg13g2_dfrbpq_1)            -0.0831
+_06659_/Q (sg13g2_dfrbpq_1)          _06659_/D (sg13g2_dfrbpq_1)            -0.0831
+_06668_/Q (sg13g2_dfrbpq_1)          _06668_/D (sg13g2_dfrbpq_1)            -0.0831
+_06669_/Q (sg13g2_dfrbpq_1)          _06669_/D (sg13g2_dfrbpq_1)            -0.0831
+_06670_/Q (sg13g2_dfrbpq_1)          _06670_/D (sg13g2_dfrbpq_1)            -0.0831
+_06671_/Q (sg13g2_dfrbpq_1)          _06671_/D (sg13g2_dfrbpq_1)            -0.0831
+_06672_/Q (sg13g2_dfrbpq_1)          _06672_/D (sg13g2_dfrbpq_1)            -0.0831
+_06675_/Q (sg13g2_dfrbpq_1)          _06675_/D (sg13g2_dfrbpq_1)            -0.0831
+_09103_/Q (sg13g2_dfrbpq_1)          _06486_/D (sg13g2_dfrbpq_1)            -0.0805
+_06296_/Q (sg13g2_dfrbpq_1)          _06631_/D (sg13g2_dfrbpq_1)            -0.0805
+_06295_/Q (sg13g2_dfrbpq_1)          _06640_/D (sg13g2_dfrbpq_1)            -0.0805
+_10769_/Q (sg13g2_dfrbpq_1)          _06676_/D (sg13g2_dfrbpq_1)            -0.0805
+_10771_/Q (sg13g2_dfrbpq_1)          _06693_/D (sg13g2_dfrbpq_1)            -0.0805
+_09850_/Q (sg13g2_dfrbpq_1)          _06710_/D (sg13g2_dfrbpq_1)            -0.0805
+_09849_/Q (sg13g2_dfrbpq_1)          _06719_/D (sg13g2_dfrbpq_1)            -0.0805
+_09848_/Q (sg13g2_dfrbpq_1)          _06725_/D (sg13g2_dfrbpq_1)            -0.0805
+_06302_/Q (sg13g2_dfrbpq_1)          _06302_/D (sg13g2_dfrbpq_1)            -0.0799
+_09043_/Q (sg13g2_dfrbpq_1)          _09043_/D (sg13g2_dfrbpq_1)            -0.0798
+_09040_/Q (sg13g2_dfrbpq_1)          _09040_/D (sg13g2_dfrbpq_1)            -0.0794
+_07443_/Q (sg13g2_dfrbpq_1)          _07443_/D (sg13g2_dfrbpq_1)            -0.0793
+_06308_/Q (sg13g2_dfrbpq_1)          _06308_/D (sg13g2_dfrbpq_1)            -0.0786
+_06306_/Q (sg13g2_dfrbpq_1)          _06306_/D (sg13g2_dfrbpq_1)            -0.0782
+_09042_/Q (sg13g2_dfrbpq_1)          _09042_/D (sg13g2_dfrbpq_1)            -0.0780
+_07437_/Q (sg13g2_dfrbpq_1)          _07437_/D (sg13g2_dfrbpq_1)            -0.0769
+_10242_/Q (sg13g2_dfrbpq_1)          _10242_/D (sg13g2_dfrbpq_1)            -0.0768
+_06718_/Q (sg13g2_dfrbpq_1)          _06718_/D (sg13g2_dfrbpq_1)            -0.0766
+_06442_/Q (sg13g2_dfrbpq_1)          _06442_/D (sg13g2_dfrbpq_1)            -0.0762
+_06443_/Q (sg13g2_dfrbpq_1)          _06443_/D (sg13g2_dfrbpq_1)            -0.0762
+_06311_/Q (sg13g2_dfrbpq_1)          _06311_/D (sg13g2_dfrbpq_1)            -0.0756
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0751
+_09031_/Q (sg13g2_dfrbpq_1)          _09031_/D (sg13g2_dfrbpq_1)            -0.0751
+_09031_/Q (sg13g2_dfrbpq_1)          _09031_/D (sg13g2_dfrbpq_1)            -0.0751
+_09770_/Q (sg13g2_dfrbpq_1)          _09770_/D (sg13g2_dfrbpq_1)            -0.0750
+_09770_/Q (sg13g2_dfrbpq_1)          _09770_/D (sg13g2_dfrbpq_1)            -0.0750
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0748
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0748
+_08984_/Q (sg13g2_dfrbpq_1)          _08984_/D (sg13g2_dfrbpq_1)            -0.0747
+_08984_/Q (sg13g2_dfrbpq_1)          _08984_/D (sg13g2_dfrbpq_1)            -0.0747
+_10844_/Q (sg13g2_dfrbpq_1)          _10844_/D (sg13g2_dfrbpq_1)            -0.0747
+_09785_/Q (sg13g2_dfrbpq_1)          _09785_/D (sg13g2_dfrbpq_1)            -0.0746
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0746
+_08988_/Q (sg13g2_dfrbpq_1)          _08988_/D (sg13g2_dfrbpq_1)            -0.0744
+_08988_/Q (sg13g2_dfrbpq_1)          _08988_/D (sg13g2_dfrbpq_1)            -0.0744
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0744
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0743
+_09786_/Q (sg13g2_dfrbpq_1)          _09786_/D (sg13g2_dfrbpq_1)            -0.0741
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0741
+_06718_/Q (sg13g2_dfrbpq_1)          _06718_/D (sg13g2_dfrbpq_1)            -0.0739
+_06718_/Q (sg13g2_dfrbpq_1)          _06718_/D (sg13g2_dfrbpq_1)            -0.0739
+_06717_/Q (sg13g2_dfrbpq_1)          _06717_/D (sg13g2_dfrbpq_1)            -0.0734
+_09828_/Q (sg13g2_dfrbpq_1)          _09828_/D (sg13g2_dfrbpq_1)            -0.0734
+_09828_/Q (sg13g2_dfrbpq_1)          _09828_/D (sg13g2_dfrbpq_1)            -0.0734
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0731
+_06306_/Q (sg13g2_dfrbpq_1)          _06306_/D (sg13g2_dfrbpq_1)            -0.0728
+_10750_/Q (sg13g2_dfrbpq_1)          _10750_/D (sg13g2_dfrbpq_1)            -0.0726
+_10750_/Q (sg13g2_dfrbpq_1)          _10750_/D (sg13g2_dfrbpq_1)            -0.0726
+_10754_/Q (sg13g2_dfrbpq_1)          _10754_/D (sg13g2_dfrbpq_1)            -0.0726
+_10754_/Q (sg13g2_dfrbpq_1)          _10754_/D (sg13g2_dfrbpq_1)            -0.0726
+_09042_/Q (sg13g2_dfrbpq_1)          _09042_/D (sg13g2_dfrbpq_1)            -0.0726
+_10758_/Q (sg13g2_dfrbpq_1)          _10758_/D (sg13g2_dfrbpq_1)            -0.0726
+_10758_/Q (sg13g2_dfrbpq_1)          _10758_/D (sg13g2_dfrbpq_1)            -0.0726
+_10762_/Q (sg13g2_dfrbpq_1)          _10762_/D (sg13g2_dfrbpq_1)            -0.0726
+_10762_/Q (sg13g2_dfrbpq_1)          _10762_/D (sg13g2_dfrbpq_1)            -0.0726
+_10732_/Q (sg13g2_dfrbpq_1)          _10732_/D (sg13g2_dfrbpq_1)            -0.0726
+_10732_/Q (sg13g2_dfrbpq_1)          _10732_/D (sg13g2_dfrbpq_1)            -0.0726
+_10733_/Q (sg13g2_dfrbpq_1)          _10733_/D (sg13g2_dfrbpq_1)            -0.0726
+_10733_/Q (sg13g2_dfrbpq_1)          _10733_/D (sg13g2_dfrbpq_1)            -0.0726
+_10734_/Q (sg13g2_dfrbpq_1)          _10734_/D (sg13g2_dfrbpq_1)            -0.0726
+_10734_/Q (sg13g2_dfrbpq_1)          _10734_/D (sg13g2_dfrbpq_1)            -0.0726
+_10735_/Q (sg13g2_dfrbpq_1)          _10735_/D (sg13g2_dfrbpq_1)            -0.0726
+_10735_/Q (sg13g2_dfrbpq_1)          _10735_/D (sg13g2_dfrbpq_1)            -0.0726
+_10736_/Q (sg13g2_dfrbpq_1)          _10736_/D (sg13g2_dfrbpq_1)            -0.0726
+_10736_/Q (sg13g2_dfrbpq_1)          _10736_/D (sg13g2_dfrbpq_1)            -0.0726
+_10737_/Q (sg13g2_dfrbpq_1)          _10737_/D (sg13g2_dfrbpq_1)            -0.0726
+_10737_/Q (sg13g2_dfrbpq_1)          _10737_/D (sg13g2_dfrbpq_1)            -0.0726
+_10738_/Q (sg13g2_dfrbpq_1)          _10738_/D (sg13g2_dfrbpq_1)            -0.0726
+_10738_/Q (sg13g2_dfrbpq_1)          _10738_/D (sg13g2_dfrbpq_1)            -0.0726
+_10740_/Q (sg13g2_dfrbpq_1)          _10740_/D (sg13g2_dfrbpq_1)            -0.0726
+_10740_/Q (sg13g2_dfrbpq_1)          _10740_/D (sg13g2_dfrbpq_1)            -0.0726
+_10741_/Q (sg13g2_dfrbpq_1)          _10741_/D (sg13g2_dfrbpq_1)            -0.0726
+_10741_/Q (sg13g2_dfrbpq_1)          _10741_/D (sg13g2_dfrbpq_1)            -0.0726
+_10742_/Q (sg13g2_dfrbpq_1)          _10742_/D (sg13g2_dfrbpq_1)            -0.0726
+_10742_/Q (sg13g2_dfrbpq_1)          _10742_/D (sg13g2_dfrbpq_1)            -0.0726
+_10743_/Q (sg13g2_dfrbpq_1)          _10743_/D (sg13g2_dfrbpq_1)            -0.0726
+_10743_/Q (sg13g2_dfrbpq_1)          _10743_/D (sg13g2_dfrbpq_1)            -0.0726
+_10744_/Q (sg13g2_dfrbpq_1)          _10744_/D (sg13g2_dfrbpq_1)            -0.0726
+_10744_/Q (sg13g2_dfrbpq_1)          _10744_/D (sg13g2_dfrbpq_1)            -0.0726
+_10745_/Q (sg13g2_dfrbpq_1)          _10745_/D (sg13g2_dfrbpq_1)            -0.0726
+_10745_/Q (sg13g2_dfrbpq_1)          _10745_/D (sg13g2_dfrbpq_1)            -0.0726
+_10746_/Q (sg13g2_dfrbpq_1)          _10746_/D (sg13g2_dfrbpq_1)            -0.0726
+_10746_/Q (sg13g2_dfrbpq_1)          _10746_/D (sg13g2_dfrbpq_1)            -0.0726
+_10748_/Q (sg13g2_dfrbpq_1)          _10748_/D (sg13g2_dfrbpq_1)            -0.0726
+_10748_/Q (sg13g2_dfrbpq_1)          _10748_/D (sg13g2_dfrbpq_1)            -0.0726
+_10749_/Q (sg13g2_dfrbpq_1)          _10749_/D (sg13g2_dfrbpq_1)            -0.0726
+_10749_/Q (sg13g2_dfrbpq_1)          _10749_/D (sg13g2_dfrbpq_1)            -0.0726
+_10751_/Q (sg13g2_dfrbpq_1)          _10751_/D (sg13g2_dfrbpq_1)            -0.0726
+_10751_/Q (sg13g2_dfrbpq_1)          _10751_/D (sg13g2_dfrbpq_1)            -0.0726
+_10752_/Q (sg13g2_dfrbpq_1)          _10752_/D (sg13g2_dfrbpq_1)            -0.0726
+_10752_/Q (sg13g2_dfrbpq_1)          _10752_/D (sg13g2_dfrbpq_1)            -0.0726
+_10753_/Q (sg13g2_dfrbpq_1)          _10753_/D (sg13g2_dfrbpq_1)            -0.0726
+_10753_/Q (sg13g2_dfrbpq_1)          _10753_/D (sg13g2_dfrbpq_1)            -0.0726
+_10756_/Q (sg13g2_dfrbpq_1)          _10756_/D (sg13g2_dfrbpq_1)            -0.0726
+_10756_/Q (sg13g2_dfrbpq_1)          _10756_/D (sg13g2_dfrbpq_1)            -0.0726
+_10757_/Q (sg13g2_dfrbpq_1)          _10757_/D (sg13g2_dfrbpq_1)            -0.0726
+_10757_/Q (sg13g2_dfrbpq_1)          _10757_/D (sg13g2_dfrbpq_1)            -0.0726
+_10759_/Q (sg13g2_dfrbpq_1)          _10759_/D (sg13g2_dfrbpq_1)            -0.0726
+_10759_/Q (sg13g2_dfrbpq_1)          _10759_/D (sg13g2_dfrbpq_1)            -0.0726
+_10760_/Q (sg13g2_dfrbpq_1)          _10760_/D (sg13g2_dfrbpq_1)            -0.0726
+_10760_/Q (sg13g2_dfrbpq_1)          _10760_/D (sg13g2_dfrbpq_1)            -0.0726
+_10761_/Q (sg13g2_dfrbpq_1)          _10761_/D (sg13g2_dfrbpq_1)            -0.0726
+_10761_/Q (sg13g2_dfrbpq_1)          _10761_/D (sg13g2_dfrbpq_1)            -0.0726
+_09041_/Q (sg13g2_dfrbpq_1)          _09041_/D (sg13g2_dfrbpq_1)            -0.0723
+_09736_/Q (sg13g2_dfrbpq_1)          _09736_/D (sg13g2_dfrbpq_1)            -0.0722
+_06313_/Q (sg13g2_dfrbpq_1)          _06313_/D (sg13g2_dfrbpq_1)            -0.0720
+_09103_/Q (sg13g2_dfrbpq_1)          _06486_/D (sg13g2_dfrbpq_1)            -0.0720
+_06296_/Q (sg13g2_dfrbpq_1)          _06631_/D (sg13g2_dfrbpq_1)            -0.0720
+_06295_/Q (sg13g2_dfrbpq_1)          _06640_/D (sg13g2_dfrbpq_1)            -0.0720
+_10769_/Q (sg13g2_dfrbpq_1)          _06676_/D (sg13g2_dfrbpq_1)            -0.0720
+_10771_/Q (sg13g2_dfrbpq_1)          _06693_/D (sg13g2_dfrbpq_1)            -0.0720
+_09850_/Q (sg13g2_dfrbpq_1)          _06710_/D (sg13g2_dfrbpq_1)            -0.0720
+_09849_/Q (sg13g2_dfrbpq_1)          _06719_/D (sg13g2_dfrbpq_1)            -0.0720
+_09848_/Q (sg13g2_dfrbpq_1)          _06725_/D (sg13g2_dfrbpq_1)            -0.0720
+_07452_/Q (sg13g2_dfrbpq_1)          _07449_/D (sg13g2_dfrbpq_1)            -0.0720
+_07455_/Q (sg13g2_dfrbpq_1)          _07456_/D (sg13g2_dfrbpq_1)            -0.0720
+_09043_/Q (sg13g2_dfrbpq_1)          _09043_/D (sg13g2_dfrbpq_1)            -0.0716
+_07437_/Q (sg13g2_dfrbpq_1)          _07437_/D (sg13g2_dfrbpq_1)            -0.0715
+_06311_/Q (sg13g2_dfrbpq_1)          _06311_/D (sg13g2_dfrbpq_1)            -0.0715
+_06311_/Q (sg13g2_dfrbpq_1)          _06311_/D (sg13g2_dfrbpq_1)            -0.0715
+_09103_/Q (sg13g2_dfrbpq_1)          _06486_/D (sg13g2_dfrbpq_1)            -0.0714
+_06296_/Q (sg13g2_dfrbpq_1)          _06631_/D (sg13g2_dfrbpq_1)            -0.0714
+_06295_/Q (sg13g2_dfrbpq_1)          _06640_/D (sg13g2_dfrbpq_1)            -0.0714
+_10769_/Q (sg13g2_dfrbpq_1)          _06676_/D (sg13g2_dfrbpq_1)            -0.0714
+_10771_/Q (sg13g2_dfrbpq_1)          _06693_/D (sg13g2_dfrbpq_1)            -0.0714
+_09850_/Q (sg13g2_dfrbpq_1)          _06710_/D (sg13g2_dfrbpq_1)            -0.0714
+_09849_/Q (sg13g2_dfrbpq_1)          _06719_/D (sg13g2_dfrbpq_1)            -0.0714
+_09848_/Q (sg13g2_dfrbpq_1)          _06725_/D (sg13g2_dfrbpq_1)            -0.0714
+_09043_/Q (sg13g2_dfrbpq_1)          _09043_/D (sg13g2_dfrbpq_1)            -0.0714
+_06307_/Q (sg13g2_dfrbpq_1)          _06307_/D (sg13g2_dfrbpq_1)            -0.0714
+_09783_/Q (sg13g2_dfrbpq_1)          _09783_/D (sg13g2_dfrbpq_1)            -0.0713
+_09040_/Q (sg13g2_dfrbpq_1)          _09040_/D (sg13g2_dfrbpq_1)            -0.0713
+_09103_/Q (sg13g2_dfrbpq_1)          _06486_/D (sg13g2_dfrbpq_1)            -0.0712
+_06296_/Q (sg13g2_dfrbpq_1)          _06631_/D (sg13g2_dfrbpq_1)            -0.0712
+_06295_/Q (sg13g2_dfrbpq_1)          _06640_/D (sg13g2_dfrbpq_1)            -0.0712
+_10769_/Q (sg13g2_dfrbpq_1)          _06676_/D (sg13g2_dfrbpq_1)            -0.0712
+_10771_/Q (sg13g2_dfrbpq_1)          _06693_/D (sg13g2_dfrbpq_1)            -0.0712
+_09850_/Q (sg13g2_dfrbpq_1)          _06710_/D (sg13g2_dfrbpq_1)            -0.0712
+_09849_/Q (sg13g2_dfrbpq_1)          _06719_/D (sg13g2_dfrbpq_1)            -0.0712
+_09848_/Q (sg13g2_dfrbpq_1)          _06725_/D (sg13g2_dfrbpq_1)            -0.0712
+_06314_/Q (sg13g2_dfrbpq_1)          _06314_/D (sg13g2_dfrbpq_1)            -0.0712
+_09043_/Q (sg13g2_dfrbpq_1)          _09043_/D (sg13g2_dfrbpq_1)            -0.0711
+_09040_/Q (sg13g2_dfrbpq_1)          _09040_/D (sg13g2_dfrbpq_1)            -0.0711
+_09825_/Q (sg13g2_dfrbpq_1)          _09825_/D (sg13g2_dfrbpq_1)            -0.0711
+_09825_/Q (sg13g2_dfrbpq_1)          _09825_/D (sg13g2_dfrbpq_1)            -0.0711
+_09825_/Q (sg13g2_dfrbpq_1)          _09825_/D (sg13g2_dfrbpq_1)            -0.0711
+_09825_/Q (sg13g2_dfrbpq_1)          _09825_/D (sg13g2_dfrbpq_1)            -0.0711
+_07436_/Q (sg13g2_dfrbpq_1)          _07436_/D (sg13g2_dfrbpq_1)            -0.0710
+_09040_/Q (sg13g2_dfrbpq_1)          _09040_/D (sg13g2_dfrbpq_1)            -0.0708
+_10768_/Q (sg13g2_dfrbpq_1)          _10768_/D (sg13g2_dfrbpq_1)            -0.0707
+_09087_/Q (sg13g2_dfrbpq_1)          _09087_/D (sg13g2_dfrbpq_1)            -0.0704
+_06310_/Q (sg13g2_dfrbpq_1)          _06310_/D (sg13g2_dfrbpq_1)            -0.0704
+_06566_/Q (sg13g2_dfrbpq_1)          _06566_/D (sg13g2_dfrbpq_1)            -0.0703
+_10696_/Q (sg13g2_dfrbpq_1)          _10696_/D (sg13g2_dfrbpq_1)            -0.0703
+_06278_/Q (sg13g2_dfrbpq_1)          _06278_/D (sg13g2_dfrbpq_1)            -0.0701
+_06566_/Q (sg13g2_dfrbpq_1)          _06566_/D (sg13g2_dfrbpq_1)            -0.0701
+_10696_/Q (sg13g2_dfrbpq_1)          _10696_/D (sg13g2_dfrbpq_1)            -0.0701
+_09826_/Q (sg13g2_dfrbpq_1)          _09826_/D (sg13g2_dfrbpq_1)            -0.0700
+_09826_/Q (sg13g2_dfrbpq_1)          _09826_/D (sg13g2_dfrbpq_1)            -0.0700
+_06713_/Q (sg13g2_dfrbpq_1)          _06713_/D (sg13g2_dfrbpq_1)            -0.0700
+_06716_/Q (sg13g2_dfrbpq_1)          _06716_/D (sg13g2_dfrbpq_1)            -0.0700
+_10789_/Q (sg13g2_dfrbpq_1)          _10789_/D (sg13g2_dfrbpq_1)            -0.0698
+_06566_/Q (sg13g2_dfrbpq_1)          _06566_/D (sg13g2_dfrbpq_1)            -0.0697
+_06566_/Q (sg13g2_dfrbpq_1)          _06566_/D (sg13g2_dfrbpq_1)            -0.0697
+_10696_/Q (sg13g2_dfrbpq_1)          _10696_/D (sg13g2_dfrbpq_1)            -0.0697
+_10696_/Q (sg13g2_dfrbpq_1)          _10696_/D (sg13g2_dfrbpq_1)            -0.0697
+_06303_/Q (sg13g2_dfrbpq_1)          _06303_/D (sg13g2_dfrbpq_1)            -0.0691
+_07449_/Q (sg13g2_dfrbpq_1)          _07451_/D (sg13g2_dfrbpq_1)            -0.0691
+_10169_/Q (sg13g2_dfrbpq_1)          _10169_/D (sg13g2_dfrbpq_1)            -0.0690
+_10169_/Q (sg13g2_dfrbpq_1)          _10169_/D (sg13g2_dfrbpq_1)            -0.0690
+_10170_/Q (sg13g2_dfrbpq_1)          _10170_/D (sg13g2_dfrbpq_1)            -0.0690
+_10170_/Q (sg13g2_dfrbpq_1)          _10170_/D (sg13g2_dfrbpq_1)            -0.0690
+_06312_/Q (sg13g2_dfrbpq_1)          _06312_/D (sg13g2_dfrbpq_1)            -0.0689
+_09831_/Q (sg13g2_dfrbpq_1)          _09831_/D (sg13g2_dfrbpq_1)            -0.0687
+_09831_/Q (sg13g2_dfrbpq_1)          _09831_/D (sg13g2_dfrbpq_1)            -0.0687
+_06717_/Q (sg13g2_dfrbpq_1)          _06717_/D (sg13g2_dfrbpq_1)            -0.0686
+_06717_/Q (sg13g2_dfrbpq_1)          _06717_/D (sg13g2_dfrbpq_1)            -0.0686
+_09786_/Q (sg13g2_dfrbpq_1)          _09786_/D (sg13g2_dfrbpq_1)            -0.0685
+_10168_/Q (sg13g2_dfrbpq_1)          _10168_/D (sg13g2_dfrbpq_1)            -0.0683
+_10168_/Q (sg13g2_dfrbpq_1)          _10168_/D (sg13g2_dfrbpq_1)            -0.0683
+_06309_/Q (sg13g2_dfrbpq_1)          _06309_/D (sg13g2_dfrbpq_1)            -0.0681
+_06714_/Q (sg13g2_dfrbpq_1)          _06714_/D (sg13g2_dfrbpq_1)            -0.0679
+_08993_/Q (sg13g2_dfrbpq_1)          _08993_/D (sg13g2_dfrbpq_1)            -0.0679
+_06313_/Q (sg13g2_dfrbpq_1)          _06313_/D (sg13g2_dfrbpq_1)            -0.0678
+_06313_/Q (sg13g2_dfrbpq_1)          _06313_/D (sg13g2_dfrbpq_1)            -0.0678
+_09856_/Q (sg13g2_dfrbpq_1)          _09856_/D (sg13g2_dfrbpq_1)            -0.0677
+_06711_/Q (sg13g2_dfrbpq_1)          _06711_/D (sg13g2_dfrbpq_1)            -0.0676
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0675
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0672
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0672
+_09785_/Q (sg13g2_dfrbpq_1)          _09785_/D (sg13g2_dfrbpq_1)            -0.0671
+_06314_/Q (sg13g2_dfrbpq_1)          _06314_/D (sg13g2_dfrbpq_1)            -0.0671
+_06314_/Q (sg13g2_dfrbpq_1)          _06314_/D (sg13g2_dfrbpq_1)            -0.0671
+_10844_/Q (sg13g2_dfrbpq_1)          _10844_/D (sg13g2_dfrbpq_1)            -0.0670
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0670
+_09785_/Q (sg13g2_dfrbpq_1)          _09785_/D (sg13g2_dfrbpq_1)            -0.0668
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0668
+_10844_/Q (sg13g2_dfrbpq_1)          _10844_/D (sg13g2_dfrbpq_1)            -0.0668
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0668
+_09852_/Q (sg13g2_dfrbpq_1)          _09852_/D (sg13g2_dfrbpq_1)            -0.0667
+_09821_/Q (sg13g2_dfrbpq_1)          _09821_/D (sg13g2_dfrbpq_1)            -0.0666
+_09821_/Q (sg13g2_dfrbpq_1)          _09821_/D (sg13g2_dfrbpq_1)            -0.0666
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0666
+_09785_/Q (sg13g2_dfrbpq_1)          _09785_/D (sg13g2_dfrbpq_1)            -0.0665
+_06302_/Q (sg13g2_dfrbpq_1)          _06303_/D (sg13g2_dfrbpq_1)            -0.0665
+_10844_/Q (sg13g2_dfrbpq_1)          _10844_/D (sg13g2_dfrbpq_1)            -0.0665
+_09028_/Q (sg13g2_dfrbpq_1)          _09028_/D (sg13g2_dfrbpq_1)            -0.0664
+_09030_/Q (sg13g2_dfrbpq_1)          _09030_/D (sg13g2_dfrbpq_1)            -0.0664
+_06306_/Q (sg13g2_dfrbpq_1)          _06306_/D (sg13g2_dfrbpq_1)            -0.0664
+_06306_/Q (sg13g2_dfrbpq_1)          _06306_/D (sg13g2_dfrbpq_1)            -0.0664
+_09782_/Q (sg13g2_dfrbpq_1)          _09782_/D (sg13g2_dfrbpq_1)            -0.0663
+_09042_/Q (sg13g2_dfrbpq_1)          _09042_/D (sg13g2_dfrbpq_1)            -0.0662
+_09042_/Q (sg13g2_dfrbpq_1)          _09042_/D (sg13g2_dfrbpq_1)            -0.0662
+_09028_/Q (sg13g2_dfrbpq_1)          _09028_/D (sg13g2_dfrbpq_1)            -0.0662
+_09030_/Q (sg13g2_dfrbpq_1)          _09030_/D (sg13g2_dfrbpq_1)            -0.0662
+_06302_/Q (sg13g2_dfrbpq_1)          _06302_/D (sg13g2_dfrbpq_1)            -0.0660
+_09027_/Q (sg13g2_dfrbpq_1)          _09027_/D (sg13g2_dfrbpq_1)            -0.0660
+_09027_/Q (sg13g2_dfrbpq_1)          _09027_/D (sg13g2_dfrbpq_1)            -0.0660
+_09086_/Q (sg13g2_dfrbpq_1)          _09086_/D (sg13g2_dfrbpq_1)            -0.0660
+_06713_/Q (sg13g2_dfrbpq_1)          _06713_/D (sg13g2_dfrbpq_1)            -0.0660
+_06713_/Q (sg13g2_dfrbpq_1)          _06713_/D (sg13g2_dfrbpq_1)            -0.0660
+_06716_/Q (sg13g2_dfrbpq_1)          _06716_/D (sg13g2_dfrbpq_1)            -0.0660
+_06716_/Q (sg13g2_dfrbpq_1)          _06716_/D (sg13g2_dfrbpq_1)            -0.0660
+_09783_/Q (sg13g2_dfrbpq_1)          _09783_/D (sg13g2_dfrbpq_1)            -0.0659
+_07100_/Q (sg13g2_dfrbpq_1)          _07100_/D (sg13g2_dfrbpq_1)            -0.0659
+_07101_/Q (sg13g2_dfrbpq_1)          _07101_/D (sg13g2_dfrbpq_1)            -0.0659
+_07102_/Q (sg13g2_dfrbpq_1)          _07102_/D (sg13g2_dfrbpq_1)            -0.0659
+_07103_/Q (sg13g2_dfrbpq_1)          _07103_/D (sg13g2_dfrbpq_1)            -0.0659
+_07104_/Q (sg13g2_dfrbpq_1)          _07104_/D (sg13g2_dfrbpq_1)            -0.0659
+_07105_/Q (sg13g2_dfrbpq_1)          _07105_/D (sg13g2_dfrbpq_1)            -0.0659
+_07106_/Q (sg13g2_dfrbpq_1)          _07106_/D (sg13g2_dfrbpq_1)            -0.0659
+_06619_/Q (sg13g2_dfrbpq_1)          _06619_/D (sg13g2_dfrbpq_1)            -0.0659
+_09028_/Q (sg13g2_dfrbpq_1)          _09028_/D (sg13g2_dfrbpq_1)            -0.0659
+_09028_/Q (sg13g2_dfrbpq_1)          _09028_/D (sg13g2_dfrbpq_1)            -0.0659
+_09030_/Q (sg13g2_dfrbpq_1)          _09030_/D (sg13g2_dfrbpq_1)            -0.0659
+_09030_/Q (sg13g2_dfrbpq_1)          _09030_/D (sg13g2_dfrbpq_1)            -0.0659
+_06620_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_eth_fbuf.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.0657
+_07100_/Q (sg13g2_dfrbpq_1)          _07100_/D (sg13g2_dfrbpq_1)            -0.0657
+_07101_/Q (sg13g2_dfrbpq_1)          _07101_/D (sg13g2_dfrbpq_1)            -0.0657
+_07102_/Q (sg13g2_dfrbpq_1)          _07102_/D (sg13g2_dfrbpq_1)            -0.0657
+_07103_/Q (sg13g2_dfrbpq_1)          _07103_/D (sg13g2_dfrbpq_1)            -0.0657
+_07104_/Q (sg13g2_dfrbpq_1)          _07104_/D (sg13g2_dfrbpq_1)            -0.0657
+_07105_/Q (sg13g2_dfrbpq_1)          _07105_/D (sg13g2_dfrbpq_1)            -0.0657
+_07106_/Q (sg13g2_dfrbpq_1)          _07106_/D (sg13g2_dfrbpq_1)            -0.0657
+_06724_/Q (sg13g2_dfrbpq_1)          _06724_/D (sg13g2_dfrbpq_1)            -0.0656
+_07436_/Q (sg13g2_dfrbpq_1)          _07436_/D (sg13g2_dfrbpq_1)            -0.0656
+_08996_/Q (sg13g2_dfrbpq_1)          _08996_/D (sg13g2_dfrbpq_1)            -0.0655
+_08996_/Q (sg13g2_dfrbpq_1)          _08996_/D (sg13g2_dfrbpq_1)            -0.0655
+_09045_/Q (sg13g2_dfrbpq_1)          _09045_/D (sg13g2_dfrbpq_1)            -0.0655
+_09045_/Q (sg13g2_dfrbpq_1)          _09045_/D (sg13g2_dfrbpq_1)            -0.0655
+_09094_/Q (sg13g2_dfrbpq_1)          _09094_/D (sg13g2_dfrbpq_1)            -0.0654
+_06308_/Q (sg13g2_dfrbpq_1)          _06309_/D (sg13g2_dfrbpq_1)            -0.0654
+_07100_/Q (sg13g2_dfrbpq_1)          _07100_/D (sg13g2_dfrbpq_1)            -0.0654
+_07100_/Q (sg13g2_dfrbpq_1)          _07100_/D (sg13g2_dfrbpq_1)            -0.0654
+_07101_/Q (sg13g2_dfrbpq_1)          _07101_/D (sg13g2_dfrbpq_1)            -0.0654
+_07101_/Q (sg13g2_dfrbpq_1)          _07101_/D (sg13g2_dfrbpq_1)            -0.0654
+_07102_/Q (sg13g2_dfrbpq_1)          _07102_/D (sg13g2_dfrbpq_1)            -0.0654
+_07102_/Q (sg13g2_dfrbpq_1)          _07102_/D (sg13g2_dfrbpq_1)            -0.0654
+_07103_/Q (sg13g2_dfrbpq_1)          _07103_/D (sg13g2_dfrbpq_1)            -0.0654
+_07103_/Q (sg13g2_dfrbpq_1)          _07103_/D (sg13g2_dfrbpq_1)            -0.0654
+_07104_/Q (sg13g2_dfrbpq_1)          _07104_/D (sg13g2_dfrbpq_1)            -0.0654
+_07104_/Q (sg13g2_dfrbpq_1)          _07104_/D (sg13g2_dfrbpq_1)            -0.0654
+_07105_/Q (sg13g2_dfrbpq_1)          _07105_/D (sg13g2_dfrbpq_1)            -0.0654
+_07105_/Q (sg13g2_dfrbpq_1)          _07105_/D (sg13g2_dfrbpq_1)            -0.0654
+_07106_/Q (sg13g2_dfrbpq_1)          _07106_/D (sg13g2_dfrbpq_1)            -0.0654
+_07106_/Q (sg13g2_dfrbpq_1)          _07106_/D (sg13g2_dfrbpq_1)            -0.0654
+_09736_/Q (sg13g2_dfrbpq_1)          _09736_/D (sg13g2_dfrbpq_1)            -0.0653
+_09845_/Q (sg13g2_dfrbpq_1)          _09845_/D (sg13g2_dfrbpq_1)            -0.0653
+_09845_/Q (sg13g2_dfrbpq_1)          _09845_/D (sg13g2_dfrbpq_1)            -0.0653
+_09845_/Q (sg13g2_dfrbpq_1)          _09845_/D (sg13g2_dfrbpq_1)            -0.0653
+_09845_/Q (sg13g2_dfrbpq_1)          _09845_/D (sg13g2_dfrbpq_1)            -0.0653
+_09734_/Q (sg13g2_dfrbpq_1)          _09734_/D (sg13g2_dfrbpq_1)            -0.0653
+_09094_/Q (sg13g2_dfrbpq_1)          _09094_/D (sg13g2_dfrbpq_1)            -0.0652
+_09737_/Q (sg13g2_dfrbpq_1)          _09737_/D (sg13g2_dfrbpq_1)            -0.0651
+_09737_/Q (sg13g2_dfrbpq_1)          _09737_/D (sg13g2_dfrbpq_1)            -0.0651
+_09736_/Q (sg13g2_dfrbpq_1)          _09736_/D (sg13g2_dfrbpq_1)            -0.0651
+_07437_/Q (sg13g2_dfrbpq_1)          _07437_/D (sg13g2_dfrbpq_1)            -0.0651
+_07437_/Q (sg13g2_dfrbpq_1)          _07437_/D (sg13g2_dfrbpq_1)            -0.0651
+_09087_/Q (sg13g2_dfrbpq_1)          _09087_/D (sg13g2_dfrbpq_1)            -0.0650
+_09734_/Q (sg13g2_dfrbpq_1)          _09734_/D (sg13g2_dfrbpq_1)            -0.0650
+_06307_/Q (sg13g2_dfrbpq_1)          _06307_/D (sg13g2_dfrbpq_1)            -0.0650
+_06310_/Q (sg13g2_dfrbpq_1)          _06310_/D (sg13g2_dfrbpq_1)            -0.0650
+_06308_/Q (sg13g2_dfrbpq_1)          _06308_/D (sg13g2_dfrbpq_1)            -0.0650
+_09094_/Q (sg13g2_dfrbpq_1)          _09094_/D (sg13g2_dfrbpq_1)            -0.0649
+_09094_/Q (sg13g2_dfrbpq_1)          _09094_/D (sg13g2_dfrbpq_1)            -0.0649
+_06299_/Q (sg13g2_dfrbpq_1)          _09852_/D (sg13g2_dfrbpq_1)            -0.0648
+_06307_/Q (sg13g2_dfrbpq_1)          _06307_/D (sg13g2_dfrbpq_1)            -0.0648
+_09736_/Q (sg13g2_dfrbpq_1)          _09736_/D (sg13g2_dfrbpq_1)            -0.0648
+_09769_/Q (sg13g2_dfrbpq_1)          _09769_/D (sg13g2_dfrbpq_1)            -0.0647
+_09734_/Q (sg13g2_dfrbpq_1)          _09734_/D (sg13g2_dfrbpq_1)            -0.0647
+_09734_/Q (sg13g2_dfrbpq_1)          _09734_/D (sg13g2_dfrbpq_1)            -0.0647
+_09768_/Q (sg13g2_dfrbpq_1)          _09768_/D (sg13g2_dfrbpq_1)            -0.0646
+_06465_/Q (sg13g2_dfrbpq_1)          _06465_/D (sg13g2_dfrbpq_1)            -0.0646
+_06445_/Q (sg13g2_dfrbpq_1)          _06445_/D (sg13g2_dfrbpq_1)            -0.0646
+_06446_/Q (sg13g2_dfrbpq_1)          _06446_/D (sg13g2_dfrbpq_1)            -0.0646
+_06447_/Q (sg13g2_dfrbpq_1)          _06447_/D (sg13g2_dfrbpq_1)            -0.0646
+_06448_/Q (sg13g2_dfrbpq_1)          _06448_/D (sg13g2_dfrbpq_1)            -0.0646
+_06449_/Q (sg13g2_dfrbpq_1)          _06449_/D (sg13g2_dfrbpq_1)            -0.0646
+_06451_/Q (sg13g2_dfrbpq_1)          _06451_/D (sg13g2_dfrbpq_1)            -0.0646
+_06452_/Q (sg13g2_dfrbpq_1)          _06452_/D (sg13g2_dfrbpq_1)            -0.0646
+_06462_/Q (sg13g2_dfrbpq_1)          _06462_/D (sg13g2_dfrbpq_1)            -0.0646
+_06463_/Q (sg13g2_dfrbpq_1)          _06463_/D (sg13g2_dfrbpq_1)            -0.0646
+_06466_/Q (sg13g2_dfrbpq_1)          _06466_/D (sg13g2_dfrbpq_1)            -0.0646
+_06467_/Q (sg13g2_dfrbpq_1)          _06467_/D (sg13g2_dfrbpq_1)            -0.0646
+_06468_/Q (sg13g2_dfrbpq_1)          _06468_/D (sg13g2_dfrbpq_1)            -0.0646
+_06469_/Q (sg13g2_dfrbpq_1)          _06469_/D (sg13g2_dfrbpq_1)            -0.0646
+_06490_/Q (sg13g2_dfrbpq_1)          _06490_/D (sg13g2_dfrbpq_1)            -0.0646
+_06492_/Q (sg13g2_dfrbpq_1)          _06492_/D (sg13g2_dfrbpq_1)            -0.0646
+_06512_/Q (sg13g2_dfrbpq_1)          _06512_/D (sg13g2_dfrbpq_1)            -0.0646
+_06513_/Q (sg13g2_dfrbpq_1)          _06513_/D (sg13g2_dfrbpq_1)            -0.0646
+_06514_/Q (sg13g2_dfrbpq_1)          _06514_/D (sg13g2_dfrbpq_1)            -0.0646
+_06516_/Q (sg13g2_dfrbpq_1)          _06516_/D (sg13g2_dfrbpq_1)            -0.0646
+_06517_/Q (sg13g2_dfrbpq_1)          _06517_/D (sg13g2_dfrbpq_1)            -0.0646
+_06519_/Q (sg13g2_dfrbpq_1)          _06519_/D (sg13g2_dfrbpq_1)            -0.0646
+_06529_/Q (sg13g2_dfrbpq_1)          _06529_/D (sg13g2_dfrbpq_1)            -0.0646
+_06531_/Q (sg13g2_dfrbpq_1)          _06531_/D (sg13g2_dfrbpq_1)            -0.0646
+_06532_/Q (sg13g2_dfrbpq_1)          _06532_/D (sg13g2_dfrbpq_1)            -0.0646
+_06533_/Q (sg13g2_dfrbpq_1)          _06533_/D (sg13g2_dfrbpq_1)            -0.0646
+_06534_/Q (sg13g2_dfrbpq_1)          _06534_/D (sg13g2_dfrbpq_1)            -0.0646
+_06535_/Q (sg13g2_dfrbpq_1)          _06535_/D (sg13g2_dfrbpq_1)            -0.0646
+_06536_/Q (sg13g2_dfrbpq_1)          _06536_/D (sg13g2_dfrbpq_1)            -0.0646
+_06537_/Q (sg13g2_dfrbpq_1)          _06537_/D (sg13g2_dfrbpq_1)            -0.0646
+_06538_/Q (sg13g2_dfrbpq_1)          _06538_/D (sg13g2_dfrbpq_1)            -0.0646
+_06540_/Q (sg13g2_dfrbpq_1)          _06540_/D (sg13g2_dfrbpq_1)            -0.0646
+_06541_/Q (sg13g2_dfrbpq_1)          _06541_/D (sg13g2_dfrbpq_1)            -0.0646
+_06542_/Q (sg13g2_dfrbpq_1)          _06542_/D (sg13g2_dfrbpq_1)            -0.0646
+_06543_/Q (sg13g2_dfrbpq_1)          _06543_/D (sg13g2_dfrbpq_1)            -0.0646
+_06544_/Q (sg13g2_dfrbpq_1)          _06544_/D (sg13g2_dfrbpq_1)            -0.0646
+_06673_/Q (sg13g2_dfrbpq_1)          _06673_/D (sg13g2_dfrbpq_1)            -0.0646
+_06674_/Q (sg13g2_dfrbpq_1)          _06674_/D (sg13g2_dfrbpq_1)            -0.0646
+_09766_/Q (sg13g2_dfrbpq_1)          _09766_/D (sg13g2_dfrbpq_1)            -0.0646
+_07456_/Q (sg13g2_dfrbpq_1)          _07450_/D (sg13g2_dfrbpq_1)            -0.0645
+_09824_/Q (sg13g2_dfrbpq_1)          _09824_/D (sg13g2_dfrbpq_1)            -0.0645
+_09824_/Q (sg13g2_dfrbpq_1)          _09824_/D (sg13g2_dfrbpq_1)            -0.0645
+_09824_/Q (sg13g2_dfrbpq_1)          _09824_/D (sg13g2_dfrbpq_1)            -0.0645
+_09824_/Q (sg13g2_dfrbpq_1)          _09824_/D (sg13g2_dfrbpq_1)            -0.0645
+_06307_/Q (sg13g2_dfrbpq_1)          _06307_/D (sg13g2_dfrbpq_1)            -0.0645
+_10789_/Q (sg13g2_dfrbpq_1)          _10789_/D (sg13g2_dfrbpq_1)            -0.0644
+_06653_/Q (sg13g2_dfrbpq_1)          _06653_/D (sg13g2_dfrbpq_1)            -0.0642
+_09846_/Q (sg13g2_dfrbpq_1)          _09846_/D (sg13g2_dfrbpq_1)            -0.0639
+_09846_/Q (sg13g2_dfrbpq_1)          _09846_/D (sg13g2_dfrbpq_1)            -0.0639
+_09846_/Q (sg13g2_dfrbpq_1)          _09846_/D (sg13g2_dfrbpq_1)            -0.0639
+_09846_/Q (sg13g2_dfrbpq_1)          _09846_/D (sg13g2_dfrbpq_1)            -0.0639
+_06450_/Q (sg13g2_dfrbpq_1)          _06450_/D (sg13g2_dfrbpq_1)            -0.0639
+_06464_/Q (sg13g2_dfrbpq_1)          _06464_/D (sg13g2_dfrbpq_1)            -0.0639
+_06488_/Q (sg13g2_dfrbpq_1)          _06488_/D (sg13g2_dfrbpq_1)            -0.0639
+_06489_/Q (sg13g2_dfrbpq_1)          _06489_/D (sg13g2_dfrbpq_1)            -0.0639
+_06491_/Q (sg13g2_dfrbpq_1)          _06491_/D (sg13g2_dfrbpq_1)            -0.0639
+_06493_/Q (sg13g2_dfrbpq_1)          _06493_/D (sg13g2_dfrbpq_1)            -0.0639
+_06494_/Q (sg13g2_dfrbpq_1)          _06494_/D (sg13g2_dfrbpq_1)            -0.0639
+_06495_/Q (sg13g2_dfrbpq_1)          _06495_/D (sg13g2_dfrbpq_1)            -0.0639
+_06515_/Q (sg13g2_dfrbpq_1)          _06515_/D (sg13g2_dfrbpq_1)            -0.0639
+_06518_/Q (sg13g2_dfrbpq_1)          _06518_/D (sg13g2_dfrbpq_1)            -0.0639
+_06530_/Q (sg13g2_dfrbpq_1)          _06530_/D (sg13g2_dfrbpq_1)            -0.0639
+_06539_/Q (sg13g2_dfrbpq_1)          _06539_/D (sg13g2_dfrbpq_1)            -0.0639
+_06652_/Q (sg13g2_dfrbpq_1)          _06652_/D (sg13g2_dfrbpq_1)            -0.0639
+_06654_/Q (sg13g2_dfrbpq_1)          _06654_/D (sg13g2_dfrbpq_1)            -0.0639
+_06655_/Q (sg13g2_dfrbpq_1)          _06655_/D (sg13g2_dfrbpq_1)            -0.0639
+_06656_/Q (sg13g2_dfrbpq_1)          _06656_/D (sg13g2_dfrbpq_1)            -0.0639
+_06657_/Q (sg13g2_dfrbpq_1)          _06657_/D (sg13g2_dfrbpq_1)            -0.0639
+_06658_/Q (sg13g2_dfrbpq_1)          _06658_/D (sg13g2_dfrbpq_1)            -0.0639
+_06659_/Q (sg13g2_dfrbpq_1)          _06659_/D (sg13g2_dfrbpq_1)            -0.0639
+_06668_/Q (sg13g2_dfrbpq_1)          _06668_/D (sg13g2_dfrbpq_1)            -0.0639
+_06669_/Q (sg13g2_dfrbpq_1)          _06669_/D (sg13g2_dfrbpq_1)            -0.0639
+_06670_/Q (sg13g2_dfrbpq_1)          _06670_/D (sg13g2_dfrbpq_1)            -0.0639
+_06671_/Q (sg13g2_dfrbpq_1)          _06671_/D (sg13g2_dfrbpq_1)            -0.0639
+_06672_/Q (sg13g2_dfrbpq_1)          _06672_/D (sg13g2_dfrbpq_1)            -0.0639
+_06675_/Q (sg13g2_dfrbpq_1)          _06675_/D (sg13g2_dfrbpq_1)            -0.0639
+_06303_/Q (sg13g2_dfrbpq_1)          _06303_/D (sg13g2_dfrbpq_1)            -0.0638
+_06303_/Q (sg13g2_dfrbpq_1)          _06303_/D (sg13g2_dfrbpq_1)            -0.0638
+_09767_/Q (sg13g2_dfrbpq_1)          _09767_/D (sg13g2_dfrbpq_1)            -0.0638
+_09752_/Q (sg13g2_dfrbpq_1)          _09752_/D (sg13g2_dfrbpq_1)            -0.0637
+_06721_/Q (sg13g2_dfrbpq_1)          _06721_/D (sg13g2_dfrbpq_1)            -0.0636
+_10172_/Q (sg13g2_dfrbpq_1)          _10172_/D (sg13g2_dfrbpq_1)            -0.0635
+_10175_/Q (sg13g2_dfrbpq_1)          _10175_/D (sg13g2_dfrbpq_1)            -0.0635
+_10171_/Q (sg13g2_dfrbpq_1)          _10171_/D (sg13g2_dfrbpq_1)            -0.0634
+_08993_/Q (sg13g2_dfrbpq_1)          _08993_/D (sg13g2_dfrbpq_1)            -0.0634
+_08993_/Q (sg13g2_dfrbpq_1)          _08993_/D (sg13g2_dfrbpq_1)            -0.0634
+_09765_/Q (sg13g2_dfrbpq_1)          _09765_/D (sg13g2_dfrbpq_1)            -0.0634
+_10174_/Q (sg13g2_dfrbpq_1)          _10174_/D (sg13g2_dfrbpq_1)            -0.0632
+_10747_/Q (sg13g2_dfrbpq_1)          _10747_/D (sg13g2_dfrbpq_1)            -0.0631
+_10173_/Q (sg13g2_dfrbpq_1)          _10173_/D (sg13g2_dfrbpq_1)            -0.0631
+_06312_/Q (sg13g2_dfrbpq_1)          _06312_/D (sg13g2_dfrbpq_1)            -0.0631
+_06312_/Q (sg13g2_dfrbpq_1)          _06312_/D (sg13g2_dfrbpq_1)            -0.0631
+_09126_/Q (sg13g2_dfrbpq_1)          _09126_/D (sg13g2_dfrbpq_1)            -0.0630
+_09123_/Q (sg13g2_dfrbpq_1)          _09123_/D (sg13g2_dfrbpq_1)            -0.0627
+_06309_/Q (sg13g2_dfrbpq_1)          _06309_/D (sg13g2_dfrbpq_1)            -0.0627
+_06309_/Q (sg13g2_dfrbpq_1)          _06309_/D (sg13g2_dfrbpq_1)            -0.0627
+_09843_/Q (sg13g2_dfrbpq_1)          _09843_/D (sg13g2_dfrbpq_1)            -0.0626
+_09843_/Q (sg13g2_dfrbpq_1)          _09843_/D (sg13g2_dfrbpq_1)            -0.0626
+_06714_/Q (sg13g2_dfrbpq_1)          _06714_/D (sg13g2_dfrbpq_1)            -0.0623
+_06714_/Q (sg13g2_dfrbpq_1)          _06714_/D (sg13g2_dfrbpq_1)            -0.0623
+_10731_/Q (sg13g2_dfrbpq_1)          _10731_/D (sg13g2_dfrbpq_1)            -0.0623
+_10731_/Q (sg13g2_dfrbpq_1)          _10731_/D (sg13g2_dfrbpq_1)            -0.0623
+_09786_/Q (sg13g2_dfrbpq_1)          _09786_/D (sg13g2_dfrbpq_1)            -0.0621
+_09786_/Q (sg13g2_dfrbpq_1)          _09786_/D (sg13g2_dfrbpq_1)            -0.0621
+_09856_/Q (sg13g2_dfrbpq_1)          _09856_/D (sg13g2_dfrbpq_1)            -0.0621
+_09856_/Q (sg13g2_dfrbpq_1)          _09856_/D (sg13g2_dfrbpq_1)            -0.0621
+_06711_/Q (sg13g2_dfrbpq_1)          _06711_/D (sg13g2_dfrbpq_1)            -0.0617
+_06711_/Q (sg13g2_dfrbpq_1)          _06711_/D (sg13g2_dfrbpq_1)            -0.0617
+_09854_/Q (sg13g2_dfrbpq_1)          _09854_/D (sg13g2_dfrbpq_1)            -0.0617
+_09138_/Q (sg13g2_dfrbpq_1)          _09138_/D (sg13g2_dfrbpq_1)            -0.0616
+_09138_/Q (sg13g2_dfrbpq_1)          _09138_/D (sg13g2_dfrbpq_1)            -0.0616
+_09823_/Q (sg13g2_dfrbpq_1)          _09823_/D (sg13g2_dfrbpq_1)            -0.0614
+_09823_/Q (sg13g2_dfrbpq_1)          _09823_/D (sg13g2_dfrbpq_1)            -0.0614
+_06718_/Q (sg13g2_dfrbpq_1)          _06718_/D (sg13g2_dfrbpq_1)            -0.0613
+_09852_/Q (sg13g2_dfrbpq_1)          _09852_/D (sg13g2_dfrbpq_1)            -0.0612
+_09033_/Q (sg13g2_dfrbpq_1)          _09033_/D (sg13g2_dfrbpq_1)            -0.0610
+_10239_/Q (sg13g2_dfrbpq_1)          _10239_/D (sg13g2_dfrbpq_1)            -0.0608
+_10673_/Q (sg13g2_dfrbpq_1)          _10673_/D (sg13g2_dfrbpq_1)            -0.0603
+_09086_/Q (sg13g2_dfrbpq_1)          _09086_/D (sg13g2_dfrbpq_1)            -0.0601
+_09093_/Q (sg13g2_dfrbpq_1)          _09093_/D (sg13g2_dfrbpq_1)            -0.0601
+_09093_/Q (sg13g2_dfrbpq_1)          _09093_/D (sg13g2_dfrbpq_1)            -0.0601
+_06299_/Q (sg13g2_dfrbpq_1)          _09851_/D (sg13g2_dfrbpq_1)            -0.0599
+_09086_/Q (sg13g2_dfrbpq_1)          _09086_/D (sg13g2_dfrbpq_1)            -0.0599
+_06299_/Q (sg13g2_dfrbpq_1)          _09851_/D (sg13g2_dfrbpq_1)            -0.0598
+_09802_/Q (sg13g2_dfrbpq_1)          _09802_/D (sg13g2_dfrbpq_1)            -0.0598
+_06299_/Q (sg13g2_dfrbpq_1)          _09851_/D (sg13g2_dfrbpq_1)            -0.0597
+_09088_/Q (sg13g2_dfrbpq_1)          _09088_/D (sg13g2_dfrbpq_1)            -0.0596
+_06299_/Q (sg13g2_dfrbpq_1)          _09851_/D (sg13g2_dfrbpq_1)            -0.0596
+_09086_/Q (sg13g2_dfrbpq_1)          _09086_/D (sg13g2_dfrbpq_1)            -0.0596
+_09095_/Q (sg13g2_dfrbpq_1)          _09095_/D (sg13g2_dfrbpq_1)            -0.0595
+_09783_/Q (sg13g2_dfrbpq_1)          _09783_/D (sg13g2_dfrbpq_1)            -0.0593
+_09783_/Q (sg13g2_dfrbpq_1)          _09783_/D (sg13g2_dfrbpq_1)            -0.0593
+_09009_/Q (sg13g2_dfrbpq_1)          _09009_/D (sg13g2_dfrbpq_1)            -0.0592
+_09009_/Q (sg13g2_dfrbpq_1)          _09009_/D (sg13g2_dfrbpq_1)            -0.0592
+_09011_/Q (sg13g2_dfrbpq_1)          _09011_/D (sg13g2_dfrbpq_1)            -0.0592
+_09011_/Q (sg13g2_dfrbpq_1)          _09011_/D (sg13g2_dfrbpq_1)            -0.0592
+_08995_/Q (sg13g2_dfrbpq_1)          _08995_/D (sg13g2_dfrbpq_1)            -0.0592
+_08995_/Q (sg13g2_dfrbpq_1)          _08995_/D (sg13g2_dfrbpq_1)            -0.0592
+_09787_/Q (sg13g2_dfrbpq_1)          _09788_/D (sg13g2_dfrbpq_1)            -0.0591
+_09787_/Q (sg13g2_dfrbpq_1)          _09788_/D (sg13g2_dfrbpq_1)            -0.0591
+_09095_/Q (sg13g2_dfrbpq_1)          _09095_/D (sg13g2_dfrbpq_1)            -0.0590
+_09095_/Q (sg13g2_dfrbpq_1)          _09095_/D (sg13g2_dfrbpq_1)            -0.0590
+_07436_/Q (sg13g2_dfrbpq_1)          _07436_/D (sg13g2_dfrbpq_1)            -0.0589
+_07436_/Q (sg13g2_dfrbpq_1)          _07436_/D (sg13g2_dfrbpq_1)            -0.0589
+_09855_/Q (sg13g2_dfrbpq_1)          _09855_/D (sg13g2_dfrbpq_1)            -0.0585
+_09087_/Q (sg13g2_dfrbpq_1)          _09087_/D (sg13g2_dfrbpq_1)            -0.0584
+_09087_/Q (sg13g2_dfrbpq_1)          _09087_/D (sg13g2_dfrbpq_1)            -0.0584
+_09735_/Q (sg13g2_dfrbpq_1)          _09735_/D (sg13g2_dfrbpq_1)            -0.0583
+_06310_/Q (sg13g2_dfrbpq_1)          _06310_/D (sg13g2_dfrbpq_1)            -0.0583
+_06310_/Q (sg13g2_dfrbpq_1)          _06310_/D (sg13g2_dfrbpq_1)            -0.0583
+_09844_/Q (sg13g2_dfrbpq_1)          _09844_/D (sg13g2_dfrbpq_1)            -0.0582
+_09844_/Q (sg13g2_dfrbpq_1)          _09844_/D (sg13g2_dfrbpq_1)            -0.0582
+_10765_/Q (sg13g2_dfrbpq_1)          _10765_/D (sg13g2_dfrbpq_1)            -0.0580
+_10765_/Q (sg13g2_dfrbpq_1)          _10765_/D (sg13g2_dfrbpq_1)            -0.0580
+_09803_/Q (sg13g2_dfrbpq_1)          _09803_/D (sg13g2_dfrbpq_1)            -0.0580
+_09803_/Q (sg13g2_dfrbpq_1)          _09803_/D (sg13g2_dfrbpq_1)            -0.0580
+_09029_/Q (sg13g2_dfrbpq_1)          _09029_/D (sg13g2_dfrbpq_1)            -0.0580
+_09029_/Q (sg13g2_dfrbpq_1)          _09029_/D (sg13g2_dfrbpq_1)            -0.0580
+_07098_/Q (sg13g2_dfrbpq_1)          _07098_/D (sg13g2_dfrbpq_1)            -0.0580
+_07098_/Q (sg13g2_dfrbpq_1)          _07098_/D (sg13g2_dfrbpq_1)            -0.0580
+_07098_/Q (sg13g2_dfrbpq_1)          _07098_/D (sg13g2_dfrbpq_1)            -0.0580
+_07098_/Q (sg13g2_dfrbpq_1)          _07098_/D (sg13g2_dfrbpq_1)            -0.0580
+_09001_/Q (sg13g2_dfrbpq_1)          _09001_/D (sg13g2_dfrbpq_1)            -0.0578
+_09001_/Q (sg13g2_dfrbpq_1)          _09001_/D (sg13g2_dfrbpq_1)            -0.0578
+_10789_/Q (sg13g2_dfrbpq_1)          _10789_/D (sg13g2_dfrbpq_1)            -0.0577
+_10789_/Q (sg13g2_dfrbpq_1)          _10789_/D (sg13g2_dfrbpq_1)            -0.0577
+_07447_/Q (sg13g2_dfrbpq_1)          _07438_/D (sg13g2_dfrbpq_1)            -0.0577
+_06453_/Q (sg13g2_dfrbpq_1)          _06453_/D (sg13g2_dfrbpq_1)            -0.0577
+_06453_/Q (sg13g2_dfrbpq_1)          _06453_/D (sg13g2_dfrbpq_1)            -0.0577
+_06601_/Q (sg13g2_dfrbpq_1)          _06601_/D (sg13g2_dfrbpq_1)            -0.0577
+_06601_/Q (sg13g2_dfrbpq_1)          _06601_/D (sg13g2_dfrbpq_1)            -0.0577
+_09807_/Q (sg13g2_dfrbpq_1)          _09807_/D (sg13g2_dfrbpq_1)            -0.0576
+_09121_/Q (sg13g2_dfrbpq_1)          _09121_/D (sg13g2_dfrbpq_1)            -0.0576
+_06651_/Q (sg13g2_dfrbpq_1)          _06651_/D (sg13g2_dfrbpq_1)            -0.0576
+_06651_/Q (sg13g2_dfrbpq_1)          _06651_/D (sg13g2_dfrbpq_1)            -0.0576
+_06641_/Q (sg13g2_dfrbpq_1)          _06641_/D (sg13g2_dfrbpq_1)            -0.0576
+_06641_/Q (sg13g2_dfrbpq_1)          _06641_/D (sg13g2_dfrbpq_1)            -0.0576
+_09116_/Q (sg13g2_dfrbpq_1)          _09116_/D (sg13g2_dfrbpq_1)            -0.0576
+_06304_/Q (sg13g2_dfrbpq_1)          _06304_/D (sg13g2_dfrbpq_1)            -0.0575
+_09788_/Q (sg13g2_dfrbpq_1)          _09788_/D (sg13g2_dfrbpq_1)            -0.0575
+_09742_/Q (sg13g2_dfrbpq_1)          _09742_/D (sg13g2_dfrbpq_1)            -0.0573
+_09742_/Q (sg13g2_dfrbpq_1)          _09742_/D (sg13g2_dfrbpq_1)            -0.0573
+_09118_/Q (sg13g2_dfrbpq_1)          _09118_/D (sg13g2_dfrbpq_1)            -0.0572
+_09800_/Q (sg13g2_dfrbpq_1)          _09800_/D (sg13g2_dfrbpq_1)            -0.0572
+_09033_/Q (sg13g2_dfrbpq_1)          _09033_/D (sg13g2_dfrbpq_1)            -0.0572
+_09033_/Q (sg13g2_dfrbpq_1)          _09033_/D (sg13g2_dfrbpq_1)            -0.0572
+_06301_/Q (sg13g2_dfrbpq_1)          _06301_/D (sg13g2_dfrbpq_1)            -0.0570
+_06301_/Q (sg13g2_dfrbpq_1)          _06301_/D (sg13g2_dfrbpq_1)            -0.0570
+_07435_/Q (sg13g2_dfrbpq_1)          _07435_/D (sg13g2_dfrbpq_1)            -0.0569
+_09126_/Q (sg13g2_dfrbpq_1)          _09126_/D (sg13g2_dfrbpq_1)            -0.0568
+_09126_/Q (sg13g2_dfrbpq_1)          _09126_/D (sg13g2_dfrbpq_1)            -0.0568
+_08982_/Q (sg13g2_dfrbpq_1)          _09106_/D (sg13g2_dfrbpq_1)            -0.0567
+_08985_/Q (sg13g2_dfrbpq_1)          _09109_/D (sg13g2_dfrbpq_1)            -0.0567
+_09123_/Q (sg13g2_dfrbpq_1)          _09123_/D (sg13g2_dfrbpq_1)            -0.0565
+_09123_/Q (sg13g2_dfrbpq_1)          _09123_/D (sg13g2_dfrbpq_1)            -0.0565
+_09044_/Q (sg13g2_dfrbpq_1)          _09044_/D (sg13g2_dfrbpq_1)            -0.0565
+_09125_/Q (sg13g2_dfrbpq_1)          _09125_/D (sg13g2_dfrbpq_1)            -0.0564
+_06313_/Q (sg13g2_dfrbpq_1)          _06313_/D (sg13g2_dfrbpq_1)            -0.0564
+_09026_/Q (sg13g2_dfrbpq_1)          _09026_/D (sg13g2_dfrbpq_1)            -0.0563
+_09120_/Q (sg13g2_dfrbpq_1)          _09120_/D (sg13g2_dfrbpq_1)            -0.0563
+_09122_/Q (sg13g2_dfrbpq_1)          _09122_/D (sg13g2_dfrbpq_1)            -0.0563
+_09124_/Q (sg13g2_dfrbpq_1)          _09124_/D (sg13g2_dfrbpq_1)            -0.0563
+_09119_/Q (sg13g2_dfrbpq_1)          _09119_/D (sg13g2_dfrbpq_1)            -0.0562
+_09026_/Q (sg13g2_dfrbpq_1)          _09026_/D (sg13g2_dfrbpq_1)            -0.0561
+_09733_/Q (sg13g2_dfrbpq_1)          _09733_/D (sg13g2_dfrbpq_1)            -0.0561
+_09023_/Q (sg13g2_dfrbpq_1)          _09023_/D (sg13g2_dfrbpq_1)            -0.0558
+_09041_/Q (sg13g2_dfrbpq_1)          _09041_/D (sg13g2_dfrbpq_1)            -0.0558
+_09026_/Q (sg13g2_dfrbpq_1)          _09026_/D (sg13g2_dfrbpq_1)            -0.0557
+_09026_/Q (sg13g2_dfrbpq_1)          _09026_/D (sg13g2_dfrbpq_1)            -0.0557
+_09023_/Q (sg13g2_dfrbpq_1)          _09023_/D (sg13g2_dfrbpq_1)            -0.0556
+_10845_/Q (sg13g2_dfrbpq_1)          _10845_/D (sg13g2_dfrbpq_1)            -0.0555
+_06314_/Q (sg13g2_dfrbpq_1)          _06314_/D (sg13g2_dfrbpq_1)            -0.0555
+_09019_/Q (sg13g2_dfrbpq_1)          _09019_/D (sg13g2_dfrbpq_1)            -0.0555
+_09854_/Q (sg13g2_dfrbpq_1)          _09854_/D (sg13g2_dfrbpq_1)            -0.0554
+_09854_/Q (sg13g2_dfrbpq_1)          _09854_/D (sg13g2_dfrbpq_1)            -0.0554
+_10768_/Q (sg13g2_dfrbpq_1)          _10768_/D (sg13g2_dfrbpq_1)            -0.0554
+_09023_/Q (sg13g2_dfrbpq_1)          _09023_/D (sg13g2_dfrbpq_1)            -0.0553
+_09023_/Q (sg13g2_dfrbpq_1)          _09023_/D (sg13g2_dfrbpq_1)            -0.0553
+_10239_/Q (sg13g2_dfrbpq_1)          _10239_/D (sg13g2_dfrbpq_1)            -0.0552
+_09019_/Q (sg13g2_dfrbpq_1)          _09019_/D (sg13g2_dfrbpq_1)            -0.0552
+_10242_/Q (sg13g2_dfrbpq_1)          _10242_/D (sg13g2_dfrbpq_1)            -0.0552
+_08980_/Q (sg13g2_dfrbpq_1)          _08980_/D (sg13g2_dfrbpq_1)            -0.0552
+_09853_/Q (sg13g2_dfrbpq_1)          _09853_/D (sg13g2_dfrbpq_1)            -0.0552
+_09041_/Q (sg13g2_dfrbpq_1)          _09041_/D (sg13g2_dfrbpq_1)            -0.0552
+_06316_/Q (sg13g2_dfrbpq_1)          _06316_/D (sg13g2_dfrbpq_1)            -0.0550
+_06316_/Q (sg13g2_dfrbpq_1)          _06316_/D (sg13g2_dfrbpq_1)            -0.0550
+_09041_/Q (sg13g2_dfrbpq_1)          _09041_/D (sg13g2_dfrbpq_1)            -0.0549
+_09019_/Q (sg13g2_dfrbpq_1)          _09019_/D (sg13g2_dfrbpq_1)            -0.0549
+_09019_/Q (sg13g2_dfrbpq_1)          _09019_/D (sg13g2_dfrbpq_1)            -0.0549
+_06642_/Q (sg13g2_dfrbpq_1)          _06642_/D (sg13g2_dfrbpq_1)            -0.0548
+_07454_/Q (sg13g2_dfrbpq_1)          _07452_/D (sg13g2_dfrbpq_1)            -0.0548
+_09039_/Q (sg13g2_dfrbpq_1)          _09039_/D (sg13g2_dfrbpq_1)            -0.0547
+_06442_/Q (sg13g2_dfrbpq_1)          _06442_/D (sg13g2_dfrbpq_1)            -0.0547
+_06443_/Q (sg13g2_dfrbpq_1)          _06443_/D (sg13g2_dfrbpq_1)            -0.0547
+_09787_/Q (sg13g2_dfrbpq_1)          _09787_/D (sg13g2_dfrbpq_1)            -0.0547
+_09787_/Q (sg13g2_dfrbpq_1)          _09787_/D (sg13g2_dfrbpq_1)            -0.0547
+_06288_/Q (sg13g2_dfrbpq_1)          _06288_/D (sg13g2_dfrbpq_1)            -0.0547
+_09806_/Q (sg13g2_dfrbpq_1)          _09806_/D (sg13g2_dfrbpq_1)            -0.0546
+_09806_/Q (sg13g2_dfrbpq_1)          _09806_/D (sg13g2_dfrbpq_1)            -0.0546
+_09096_/Q (sg13g2_dfrbpq_1)          _09096_/D (sg13g2_dfrbpq_1)            -0.0546
+_09096_/Q (sg13g2_dfrbpq_1)          _09096_/D (sg13g2_dfrbpq_1)            -0.0546
+_06730_/Q (sg13g2_dfrbpq_1)          _09763_/D (sg13g2_dfrbpq_1)            -0.0546
+_06730_/Q (sg13g2_dfrbpq_1)          _09763_/D (sg13g2_dfrbpq_1)            -0.0546
+_09099_/Q (sg13g2_dfrbpq_1)          _09099_/D (sg13g2_dfrbpq_1)            -0.0545
+_09099_/Q (sg13g2_dfrbpq_1)          _09099_/D (sg13g2_dfrbpq_1)            -0.0545
+_09760_/Q (sg13g2_dfrbpq_1)          _09760_/D (sg13g2_dfrbpq_1)            -0.0545
+_09822_/Q (sg13g2_dfrbpq_1)          _09822_/D (sg13g2_dfrbpq_1)            -0.0544
+_09822_/Q (sg13g2_dfrbpq_1)          _09822_/D (sg13g2_dfrbpq_1)            -0.0544
+_06726_/Q (sg13g2_dfrbpq_1)          _09759_/D (sg13g2_dfrbpq_1)            -0.0544
+_06726_/Q (sg13g2_dfrbpq_1)          _09759_/D (sg13g2_dfrbpq_1)            -0.0544
+_06291_/Q (sg13g2_dfrbpq_1)          _06291_/D (sg13g2_dfrbpq_1)            -0.0544
+_09852_/Q (sg13g2_dfrbpq_1)          _09852_/D (sg13g2_dfrbpq_1)            -0.0543
+_09779_/Q (sg13g2_dfrbpq_1)          _09779_/D (sg13g2_dfrbpq_1)            -0.0542
+_09781_/Q (sg13g2_dfrbpq_1)          _09781_/D (sg13g2_dfrbpq_1)            -0.0542
+_06713_/Q (sg13g2_dfrbpq_1)          _06713_/D (sg13g2_dfrbpq_1)            -0.0542
+_06716_/Q (sg13g2_dfrbpq_1)          _06716_/D (sg13g2_dfrbpq_1)            -0.0542
+_06280_/Q (sg13g2_dfrbpq_1)          _06280_/D (sg13g2_dfrbpq_1)            -0.0542
+_09100_/Q (sg13g2_dfrbpq_1)          _09100_/D (sg13g2_dfrbpq_1)            -0.0541
+_09100_/Q (sg13g2_dfrbpq_1)          _09100_/D (sg13g2_dfrbpq_1)            -0.0541
+_10239_/Q (sg13g2_dfrbpq_1)          _10240_/D (sg13g2_dfrbpq_1)            -0.0540
+_10239_/Q (sg13g2_dfrbpq_1)          _10240_/D (sg13g2_dfrbpq_1)            -0.0540
+_09029_/Q (sg13g2_dfrbpq_1)          _06576_/D (sg13g2_dfrbpq_1)            -0.0539
+_10649_/Q (sg13g2_dfrbpq_1)          _10649_/D (sg13g2_dfrbpq_1)            -0.0539
+_10651_/Q (sg13g2_dfrbpq_1)          _10651_/D (sg13g2_dfrbpq_1)            -0.0539
+_10653_/Q (sg13g2_dfrbpq_1)          _10653_/D (sg13g2_dfrbpq_1)            -0.0539
+_10655_/Q (sg13g2_dfrbpq_1)          _10655_/D (sg13g2_dfrbpq_1)            -0.0539
+_09764_/Q (sg13g2_dfrbpq_1)          _09764_/D (sg13g2_dfrbpq_1)            -0.0538
+_10642_/Q (sg13g2_dfrbpq_1)          _10642_/D (sg13g2_dfrbpq_1)            -0.0538
+_10644_/Q (sg13g2_dfrbpq_1)          _10644_/D (sg13g2_dfrbpq_1)            -0.0538
+_10646_/Q (sg13g2_dfrbpq_1)          _10646_/D (sg13g2_dfrbpq_1)            -0.0538
+_10648_/Q (sg13g2_dfrbpq_1)          _10648_/D (sg13g2_dfrbpq_1)            -0.0538
+_09089_/Q (sg13g2_dfrbpq_1)          _09089_/D (sg13g2_dfrbpq_1)            -0.0538
+_10641_/Q (sg13g2_dfrbpq_1)          _10641_/D (sg13g2_dfrbpq_1)            -0.0538
+_10643_/Q (sg13g2_dfrbpq_1)          _10643_/D (sg13g2_dfrbpq_1)            -0.0538
+_10645_/Q (sg13g2_dfrbpq_1)          _10645_/D (sg13g2_dfrbpq_1)            -0.0538
+_10647_/Q (sg13g2_dfrbpq_1)          _10647_/D (sg13g2_dfrbpq_1)            -0.0538
+_09763_/Q (sg13g2_dfrbpq_1)          _09763_/D (sg13g2_dfrbpq_1)            -0.0537
+_10657_/Q (sg13g2_dfrbpq_1)          _10657_/D (sg13g2_dfrbpq_1)            -0.0537
+_10659_/Q (sg13g2_dfrbpq_1)          _10659_/D (sg13g2_dfrbpq_1)            -0.0537
+_10661_/Q (sg13g2_dfrbpq_1)          _10661_/D (sg13g2_dfrbpq_1)            -0.0537
+_10663_/Q (sg13g2_dfrbpq_1)          _10663_/D (sg13g2_dfrbpq_1)            -0.0537
+_10665_/Q (sg13g2_dfrbpq_1)          _10665_/D (sg13g2_dfrbpq_1)            -0.0537
+_10667_/Q (sg13g2_dfrbpq_1)          _10667_/D (sg13g2_dfrbpq_1)            -0.0537
+_10669_/Q (sg13g2_dfrbpq_1)          _10669_/D (sg13g2_dfrbpq_1)            -0.0537
+_10671_/Q (sg13g2_dfrbpq_1)          _10671_/D (sg13g2_dfrbpq_1)            -0.0537
+_10650_/Q (sg13g2_dfrbpq_1)          _10650_/D (sg13g2_dfrbpq_1)            -0.0537
+_10652_/Q (sg13g2_dfrbpq_1)          _10652_/D (sg13g2_dfrbpq_1)            -0.0537
+_10654_/Q (sg13g2_dfrbpq_1)          _10654_/D (sg13g2_dfrbpq_1)            -0.0537
+_10656_/Q (sg13g2_dfrbpq_1)          _10656_/D (sg13g2_dfrbpq_1)            -0.0537
+_10732_/Q (sg13g2_dfrbpq_1)          _10681_/D (sg13g2_dfrbpq_1)            -0.0537
+_10733_/Q (sg13g2_dfrbpq_1)          _10682_/D (sg13g2_dfrbpq_1)            -0.0537
+_10734_/Q (sg13g2_dfrbpq_1)          _10683_/D (sg13g2_dfrbpq_1)            -0.0537
+_10735_/Q (sg13g2_dfrbpq_1)          _10684_/D (sg13g2_dfrbpq_1)            -0.0537
+_10736_/Q (sg13g2_dfrbpq_1)          _10685_/D (sg13g2_dfrbpq_1)            -0.0537
+_10737_/Q (sg13g2_dfrbpq_1)          _10686_/D (sg13g2_dfrbpq_1)            -0.0537
+_10738_/Q (sg13g2_dfrbpq_1)          _10687_/D (sg13g2_dfrbpq_1)            -0.0537
+_10740_/Q (sg13g2_dfrbpq_1)          _10689_/D (sg13g2_dfrbpq_1)            -0.0537
+_10741_/Q (sg13g2_dfrbpq_1)          _10690_/D (sg13g2_dfrbpq_1)            -0.0537
+_10742_/Q (sg13g2_dfrbpq_1)          _10691_/D (sg13g2_dfrbpq_1)            -0.0537
+_10743_/Q (sg13g2_dfrbpq_1)          _10692_/D (sg13g2_dfrbpq_1)            -0.0537
+_10744_/Q (sg13g2_dfrbpq_1)          _10693_/D (sg13g2_dfrbpq_1)            -0.0537
+_10745_/Q (sg13g2_dfrbpq_1)          _10694_/D (sg13g2_dfrbpq_1)            -0.0537
+_10746_/Q (sg13g2_dfrbpq_1)          _10695_/D (sg13g2_dfrbpq_1)            -0.0537
+_10748_/Q (sg13g2_dfrbpq_1)          _10697_/D (sg13g2_dfrbpq_1)            -0.0537
+_10749_/Q (sg13g2_dfrbpq_1)          _10698_/D (sg13g2_dfrbpq_1)            -0.0537
+_10750_/Q (sg13g2_dfrbpq_1)          _10699_/D (sg13g2_dfrbpq_1)            -0.0537
+_10751_/Q (sg13g2_dfrbpq_1)          _10700_/D (sg13g2_dfrbpq_1)            -0.0537
+_10752_/Q (sg13g2_dfrbpq_1)          _10701_/D (sg13g2_dfrbpq_1)            -0.0537
+_10753_/Q (sg13g2_dfrbpq_1)          _10702_/D (sg13g2_dfrbpq_1)            -0.0537
+_10754_/Q (sg13g2_dfrbpq_1)          _10703_/D (sg13g2_dfrbpq_1)            -0.0537
+_10756_/Q (sg13g2_dfrbpq_1)          _10705_/D (sg13g2_dfrbpq_1)            -0.0537
+_10757_/Q (sg13g2_dfrbpq_1)          _10706_/D (sg13g2_dfrbpq_1)            -0.0537
+_10758_/Q (sg13g2_dfrbpq_1)          _10707_/D (sg13g2_dfrbpq_1)            -0.0537
+_10759_/Q (sg13g2_dfrbpq_1)          _10708_/D (sg13g2_dfrbpq_1)            -0.0537
+_10760_/Q (sg13g2_dfrbpq_1)          _10709_/D (sg13g2_dfrbpq_1)            -0.0537
+_10761_/Q (sg13g2_dfrbpq_1)          _10710_/D (sg13g2_dfrbpq_1)            -0.0537
+_10762_/Q (sg13g2_dfrbpq_1)          _10711_/D (sg13g2_dfrbpq_1)            -0.0537
+_10840_/Q (sg13g2_dfrbpq_1)          _10840_/D (sg13g2_dfrbpq_1)            -0.0537
+_08982_/Q (sg13g2_dfrbpq_1)          _08982_/D (sg13g2_dfrbpq_1)            -0.0536
+_08983_/Q (sg13g2_dfrbpq_1)          _08983_/D (sg13g2_dfrbpq_1)            -0.0536
+_08985_/Q (sg13g2_dfrbpq_1)          _08985_/D (sg13g2_dfrbpq_1)            -0.0536
+_08990_/Q (sg13g2_dfrbpq_1)          _08990_/D (sg13g2_dfrbpq_1)            -0.0536
+_10694_/Q (sg13g2_dfrbpq_1)          _10694_/D (sg13g2_dfrbpq_1)            -0.0536
+_09756_/Q (sg13g2_dfrbpq_1)          _09756_/D (sg13g2_dfrbpq_1)            -0.0536
+_09758_/Q (sg13g2_dfrbpq_1)          _09758_/D (sg13g2_dfrbpq_1)            -0.0536
+_09004_/Q (sg13g2_dfrbpq_1)          _09004_/D (sg13g2_dfrbpq_1)            -0.0536
+_09004_/Q (sg13g2_dfrbpq_1)          _09004_/D (sg13g2_dfrbpq_1)            -0.0536
+_06568_/Q (sg13g2_dfrbpq_1)          _06568_/D (sg13g2_dfrbpq_1)            -0.0536
+_06577_/Q (sg13g2_dfrbpq_1)          _06577_/D (sg13g2_dfrbpq_1)            -0.0536
+_06684_/Q (sg13g2_dfrbpq_1)          _06684_/D (sg13g2_dfrbpq_1)            -0.0536
+_09031_/Q (sg13g2_dfrbpq_1)          _06578_/D (sg13g2_dfrbpq_1)            -0.0535
+_09842_/Q (sg13g2_dfrbpq_1)          _09842_/D (sg13g2_dfrbpq_1)            -0.0535
+_09842_/Q (sg13g2_dfrbpq_1)          _09842_/D (sg13g2_dfrbpq_1)            -0.0535
+_09090_/Q (sg13g2_dfrbpq_1)          _09090_/D (sg13g2_dfrbpq_1)            -0.0535
+_10658_/Q (sg13g2_dfrbpq_1)          _10658_/D (sg13g2_dfrbpq_1)            -0.0535
+_10660_/Q (sg13g2_dfrbpq_1)          _10660_/D (sg13g2_dfrbpq_1)            -0.0535
+_10662_/Q (sg13g2_dfrbpq_1)          _10662_/D (sg13g2_dfrbpq_1)            -0.0535
+_10664_/Q (sg13g2_dfrbpq_1)          _10664_/D (sg13g2_dfrbpq_1)            -0.0535
+_10666_/Q (sg13g2_dfrbpq_1)          _10666_/D (sg13g2_dfrbpq_1)            -0.0535
+_10668_/Q (sg13g2_dfrbpq_1)          _10668_/D (sg13g2_dfrbpq_1)            -0.0535
+_10670_/Q (sg13g2_dfrbpq_1)          _10670_/D (sg13g2_dfrbpq_1)            -0.0535
+_10672_/Q (sg13g2_dfrbpq_1)          _10672_/D (sg13g2_dfrbpq_1)            -0.0535
+_06479_/Q (sg13g2_dfrbpq_1)          _06479_/D (sg13g2_dfrbpq_1)            -0.0534
+_06480_/Q (sg13g2_dfrbpq_1)          _06480_/D (sg13g2_dfrbpq_1)            -0.0534
+_06483_/Q (sg13g2_dfrbpq_1)          _06483_/D (sg13g2_dfrbpq_1)            -0.0534
+_06484_/Q (sg13g2_dfrbpq_1)          _06484_/D (sg13g2_dfrbpq_1)            -0.0534
+_09091_/Q (sg13g2_dfrbpq_1)          _09091_/D (sg13g2_dfrbpq_1)            -0.0534
+_09808_/Q (sg13g2_dfrbpq_1)          _09808_/D (sg13g2_dfrbpq_1)            -0.0534
+_09812_/Q (sg13g2_dfrbpq_1)          _09812_/D (sg13g2_dfrbpq_1)            -0.0534
+_09809_/Q (sg13g2_dfrbpq_1)          _09809_/D (sg13g2_dfrbpq_1)            -0.0534
+_09810_/Q (sg13g2_dfrbpq_1)          _09810_/D (sg13g2_dfrbpq_1)            -0.0534
+_09811_/Q (sg13g2_dfrbpq_1)          _09811_/D (sg13g2_dfrbpq_1)            -0.0534
+_09813_/Q (sg13g2_dfrbpq_1)          _09813_/D (sg13g2_dfrbpq_1)            -0.0534
+_09840_/Q (sg13g2_dfrbpq_1)          _09840_/D (sg13g2_dfrbpq_1)            -0.0534
+_06505_/Q (sg13g2_dfrbpq_1)          _06505_/D (sg13g2_dfrbpq_1)            -0.0534
+_06548_/Q (sg13g2_dfrbpq_1)          _06548_/D (sg13g2_dfrbpq_1)            -0.0534
+_06549_/Q (sg13g2_dfrbpq_1)          _06549_/D (sg13g2_dfrbpq_1)            -0.0534
+_06550_/Q (sg13g2_dfrbpq_1)          _06550_/D (sg13g2_dfrbpq_1)            -0.0534
+_06551_/Q (sg13g2_dfrbpq_1)          _06551_/D (sg13g2_dfrbpq_1)            -0.0534
+_06553_/Q (sg13g2_dfrbpq_1)          _06553_/D (sg13g2_dfrbpq_1)            -0.0534
+_09835_/Q (sg13g2_dfrbpq_1)          _09835_/D (sg13g2_dfrbpq_1)            -0.0534
+_06586_/Q (sg13g2_dfrbpq_1)          _06586_/D (sg13g2_dfrbpq_1)            -0.0534
+_06587_/Q (sg13g2_dfrbpq_1)          _06587_/D (sg13g2_dfrbpq_1)            -0.0534
+_06588_/Q (sg13g2_dfrbpq_1)          _06588_/D (sg13g2_dfrbpq_1)            -0.0534
+_06589_/Q (sg13g2_dfrbpq_1)          _06589_/D (sg13g2_dfrbpq_1)            -0.0534
+_06593_/Q (sg13g2_dfrbpq_1)          _06593_/D (sg13g2_dfrbpq_1)            -0.0534
+_06595_/Q (sg13g2_dfrbpq_1)          _06595_/D (sg13g2_dfrbpq_1)            -0.0534
+_06597_/Q (sg13g2_dfrbpq_1)          _06597_/D (sg13g2_dfrbpq_1)            -0.0534
+_06598_/Q (sg13g2_dfrbpq_1)          _06598_/D (sg13g2_dfrbpq_1)            -0.0534
+_06609_/Q (sg13g2_dfrbpq_1)          _06609_/D (sg13g2_dfrbpq_1)            -0.0534
+_09837_/Q (sg13g2_dfrbpq_1)          _09837_/D (sg13g2_dfrbpq_1)            -0.0534
+_09838_/Q (sg13g2_dfrbpq_1)          _09838_/D (sg13g2_dfrbpq_1)            -0.0534
+_09839_/Q (sg13g2_dfrbpq_1)          _09839_/D (sg13g2_dfrbpq_1)            -0.0534
+_06697_/Q (sg13g2_dfrbpq_1)          _06697_/D (sg13g2_dfrbpq_1)            -0.0534
+_06699_/Q (sg13g2_dfrbpq_1)          _06699_/D (sg13g2_dfrbpq_1)            -0.0534
+_06701_/Q (sg13g2_dfrbpq_1)          _06701_/D (sg13g2_dfrbpq_1)            -0.0534
+_09750_/Q (sg13g2_dfrbpq_1)          _09750_/D (sg13g2_dfrbpq_1)            -0.0534
+_09775_/Q (sg13g2_dfrbpq_1)          _09775_/D (sg13g2_dfrbpq_1)            -0.0534
+_09778_/Q (sg13g2_dfrbpq_1)          _09778_/D (sg13g2_dfrbpq_1)            -0.0534
+_09780_/Q (sg13g2_dfrbpq_1)          _09780_/D (sg13g2_dfrbpq_1)            -0.0534
+_09836_/Q (sg13g2_dfrbpq_1)          _09836_/D (sg13g2_dfrbpq_1)            -0.0534
+_10680_/Q (sg13g2_dfrbpq_1)          _10680_/D (sg13g2_dfrbpq_1)            -0.0534
+_10682_/Q (sg13g2_dfrbpq_1)          _10682_/D (sg13g2_dfrbpq_1)            -0.0534
+_10683_/Q (sg13g2_dfrbpq_1)          _10683_/D (sg13g2_dfrbpq_1)            -0.0534
+_10684_/Q (sg13g2_dfrbpq_1)          _10684_/D (sg13g2_dfrbpq_1)            -0.0534
+_10685_/Q (sg13g2_dfrbpq_1)          _10685_/D (sg13g2_dfrbpq_1)            -0.0534
+_10687_/Q (sg13g2_dfrbpq_1)          _10687_/D (sg13g2_dfrbpq_1)            -0.0534
+_10697_/Q (sg13g2_dfrbpq_1)          _10697_/D (sg13g2_dfrbpq_1)            -0.0534
+_10698_/Q (sg13g2_dfrbpq_1)          _10698_/D (sg13g2_dfrbpq_1)            -0.0534
+_10702_/Q (sg13g2_dfrbpq_1)          _10702_/D (sg13g2_dfrbpq_1)            -0.0534
+_10703_/Q (sg13g2_dfrbpq_1)          _10703_/D (sg13g2_dfrbpq_1)            -0.0534
+_10704_/Q (sg13g2_dfrbpq_1)          _10704_/D (sg13g2_dfrbpq_1)            -0.0534
+_10705_/Q (sg13g2_dfrbpq_1)          _10705_/D (sg13g2_dfrbpq_1)            -0.0534
+_10707_/Q (sg13g2_dfrbpq_1)          _10707_/D (sg13g2_dfrbpq_1)            -0.0534
+_10709_/Q (sg13g2_dfrbpq_1)          _10709_/D (sg13g2_dfrbpq_1)            -0.0534
+_10710_/Q (sg13g2_dfrbpq_1)          _10710_/D (sg13g2_dfrbpq_1)            -0.0534
+_10711_/Q (sg13g2_dfrbpq_1)          _10711_/D (sg13g2_dfrbpq_1)            -0.0534
+_09726_/Q (sg13g2_dfrbpq_1)          _09726_/D (sg13g2_dfrbpq_1)            -0.0534
+_09727_/Q (sg13g2_dfrbpq_1)          _09727_/D (sg13g2_dfrbpq_1)            -0.0534
+_09728_/Q (sg13g2_dfrbpq_1)          _09728_/D (sg13g2_dfrbpq_1)            -0.0534
+_09729_/Q (sg13g2_dfrbpq_1)          _09729_/D (sg13g2_dfrbpq_1)            -0.0534
+_09730_/Q (sg13g2_dfrbpq_1)          _09730_/D (sg13g2_dfrbpq_1)            -0.0534
+_09731_/Q (sg13g2_dfrbpq_1)          _09731_/D (sg13g2_dfrbpq_1)            -0.0534
+_09732_/Q (sg13g2_dfrbpq_1)          _09732_/D (sg13g2_dfrbpq_1)            -0.0534
+_09814_/Q (sg13g2_dfrbpq_1)          _09814_/D (sg13g2_dfrbpq_1)            -0.0534
+_09753_/Q (sg13g2_dfrbpq_1)          _09753_/D (sg13g2_dfrbpq_1)            -0.0534
+_09754_/Q (sg13g2_dfrbpq_1)          _09754_/D (sg13g2_dfrbpq_1)            -0.0534
+_09015_/Q (sg13g2_dfrbpq_1)          _09015_/D (sg13g2_dfrbpq_1)            -0.0534
+_09744_/Q (sg13g2_dfrbpq_1)          _09744_/D (sg13g2_dfrbpq_1)            -0.0534
+_09748_/Q (sg13g2_dfrbpq_1)          _09748_/D (sg13g2_dfrbpq_1)            -0.0534
+_08986_/Q (sg13g2_dfrbpq_1)          _08986_/D (sg13g2_dfrbpq_1)            -0.0534
+_08989_/Q (sg13g2_dfrbpq_1)          _08989_/D (sg13g2_dfrbpq_1)            -0.0534
+_06686_/Q (sg13g2_dfrbpq_1)          _06686_/D (sg13g2_dfrbpq_1)            -0.0534
+_06720_/Q (sg13g2_dfrbpq_1)          _06720_/D (sg13g2_dfrbpq_1)            -0.0534
+_06563_/Q (sg13g2_dfrbpq_1)          _06563_/D (sg13g2_dfrbpq_1)            -0.0534
+_06564_/Q (sg13g2_dfrbpq_1)          _06564_/D (sg13g2_dfrbpq_1)            -0.0534
+_06565_/Q (sg13g2_dfrbpq_1)          _06565_/D (sg13g2_dfrbpq_1)            -0.0534
+_06681_/Q (sg13g2_dfrbpq_1)          _06681_/D (sg13g2_dfrbpq_1)            -0.0534
+_06683_/Q (sg13g2_dfrbpq_1)          _06683_/D (sg13g2_dfrbpq_1)            -0.0534
+_06685_/Q (sg13g2_dfrbpq_1)          _06685_/D (sg13g2_dfrbpq_1)            -0.0534
+_06689_/Q (sg13g2_dfrbpq_1)          _06689_/D (sg13g2_dfrbpq_1)            -0.0534
+_06692_/Q (sg13g2_dfrbpq_1)          _06692_/D (sg13g2_dfrbpq_1)            -0.0534
+_09834_/Q (sg13g2_dfrbpq_1)          _09834_/D (sg13g2_dfrbpq_1)            -0.0533
+_06679_/Q (sg13g2_dfrbpq_1)          _06679_/D (sg13g2_dfrbpq_1)            -0.0533
+_06682_/Q (sg13g2_dfrbpq_1)          _06682_/D (sg13g2_dfrbpq_1)            -0.0533
+_06688_/Q (sg13g2_dfrbpq_1)          _06688_/D (sg13g2_dfrbpq_1)            -0.0533
+_06691_/Q (sg13g2_dfrbpq_1)          _06691_/D (sg13g2_dfrbpq_1)            -0.0533
+_09027_/Q (sg13g2_dfrbpq_1)          _06574_/D (sg13g2_dfrbpq_1)            -0.0533
+_09028_/Q (sg13g2_dfrbpq_1)          _06575_/D (sg13g2_dfrbpq_1)            -0.0532
+_09030_/Q (sg13g2_dfrbpq_1)          _06577_/D (sg13g2_dfrbpq_1)            -0.0532
+_09063_/Q (sg13g2_dfrbpq_1)          _09063_/D (sg13g2_dfrbpq_1)            -0.0531
+_06478_/Q (sg13g2_dfrbpq_1)          _06478_/D (sg13g2_dfrbpq_1)            -0.0531
+_06481_/Q (sg13g2_dfrbpq_1)          _06481_/D (sg13g2_dfrbpq_1)            -0.0531
+_06482_/Q (sg13g2_dfrbpq_1)          _06482_/D (sg13g2_dfrbpq_1)            -0.0531
+_06485_/Q (sg13g2_dfrbpq_1)          _06485_/D (sg13g2_dfrbpq_1)            -0.0531
+_06617_/Q (sg13g2_dfrbpq_1)          _06617_/D (sg13g2_dfrbpq_1)            -0.0531
+_06618_/Q (sg13g2_dfrbpq_1)          _06618_/D (sg13g2_dfrbpq_1)            -0.0531
+_06722_/Q (sg13g2_dfrbpq_1)          _06722_/D (sg13g2_dfrbpq_1)            -0.0531
+_06723_/Q (sg13g2_dfrbpq_1)          _06723_/D (sg13g2_dfrbpq_1)            -0.0531
+_09718_/Q (sg13g2_dfrbpq_1)          _09718_/D (sg13g2_dfrbpq_1)            -0.0530
+_09719_/Q (sg13g2_dfrbpq_1)          _09719_/D (sg13g2_dfrbpq_1)            -0.0530
+_09720_/Q (sg13g2_dfrbpq_1)          _09720_/D (sg13g2_dfrbpq_1)            -0.0530
+_09721_/Q (sg13g2_dfrbpq_1)          _09721_/D (sg13g2_dfrbpq_1)            -0.0530
+_09722_/Q (sg13g2_dfrbpq_1)          _09722_/D (sg13g2_dfrbpq_1)            -0.0530
+_09723_/Q (sg13g2_dfrbpq_1)          _09723_/D (sg13g2_dfrbpq_1)            -0.0530
+_09724_/Q (sg13g2_dfrbpq_1)          _09724_/D (sg13g2_dfrbpq_1)            -0.0530
+_06504_/Q (sg13g2_dfrbpq_1)          _06504_/D (sg13g2_dfrbpq_1)            -0.0530
+_06506_/Q (sg13g2_dfrbpq_1)          _06506_/D (sg13g2_dfrbpq_1)            -0.0530
+_06507_/Q (sg13g2_dfrbpq_1)          _06507_/D (sg13g2_dfrbpq_1)            -0.0530
+_06508_/Q (sg13g2_dfrbpq_1)          _06508_/D (sg13g2_dfrbpq_1)            -0.0530
+_06509_/Q (sg13g2_dfrbpq_1)          _06509_/D (sg13g2_dfrbpq_1)            -0.0530
+_06510_/Q (sg13g2_dfrbpq_1)          _06510_/D (sg13g2_dfrbpq_1)            -0.0530
+_06511_/Q (sg13g2_dfrbpq_1)          _06511_/D (sg13g2_dfrbpq_1)            -0.0530
+_06546_/Q (sg13g2_dfrbpq_1)          _06546_/D (sg13g2_dfrbpq_1)            -0.0530
+_06547_/Q (sg13g2_dfrbpq_1)          _06547_/D (sg13g2_dfrbpq_1)            -0.0530
+_06552_/Q (sg13g2_dfrbpq_1)          _06552_/D (sg13g2_dfrbpq_1)            -0.0530
+_09790_/Q (sg13g2_dfrbpq_1)          _09790_/D (sg13g2_dfrbpq_1)            -0.0530
+_09791_/Q (sg13g2_dfrbpq_1)          _09791_/D (sg13g2_dfrbpq_1)            -0.0530
+_09792_/Q (sg13g2_dfrbpq_1)          _09792_/D (sg13g2_dfrbpq_1)            -0.0530
+_09793_/Q (sg13g2_dfrbpq_1)          _09793_/D (sg13g2_dfrbpq_1)            -0.0530
+_09794_/Q (sg13g2_dfrbpq_1)          _09794_/D (sg13g2_dfrbpq_1)            -0.0530
+_09795_/Q (sg13g2_dfrbpq_1)          _09795_/D (sg13g2_dfrbpq_1)            -0.0530
+_09796_/Q (sg13g2_dfrbpq_1)          _09796_/D (sg13g2_dfrbpq_1)            -0.0530
+_06585_/Q (sg13g2_dfrbpq_1)          _06585_/D (sg13g2_dfrbpq_1)            -0.0530
+_06590_/Q (sg13g2_dfrbpq_1)          _06590_/D (sg13g2_dfrbpq_1)            -0.0530
+_06591_/Q (sg13g2_dfrbpq_1)          _06591_/D (sg13g2_dfrbpq_1)            -0.0530
+_06592_/Q (sg13g2_dfrbpq_1)          _06592_/D (sg13g2_dfrbpq_1)            -0.0530
+_06594_/Q (sg13g2_dfrbpq_1)          _06594_/D (sg13g2_dfrbpq_1)            -0.0530
+_06596_/Q (sg13g2_dfrbpq_1)          _06596_/D (sg13g2_dfrbpq_1)            -0.0530
+_06599_/Q (sg13g2_dfrbpq_1)          _06599_/D (sg13g2_dfrbpq_1)            -0.0530
+_06600_/Q (sg13g2_dfrbpq_1)          _06600_/D (sg13g2_dfrbpq_1)            -0.0530
+_06608_/Q (sg13g2_dfrbpq_1)          _06608_/D (sg13g2_dfrbpq_1)            -0.0530
+_06698_/Q (sg13g2_dfrbpq_1)          _06698_/D (sg13g2_dfrbpq_1)            -0.0530
+_06700_/Q (sg13g2_dfrbpq_1)          _06700_/D (sg13g2_dfrbpq_1)            -0.0530
+_06705_/Q (sg13g2_dfrbpq_1)          _06705_/D (sg13g2_dfrbpq_1)            -0.0530
+_09745_/Q (sg13g2_dfrbpq_1)          _09745_/D (sg13g2_dfrbpq_1)            -0.0530
+_09746_/Q (sg13g2_dfrbpq_1)          _09746_/D (sg13g2_dfrbpq_1)            -0.0530
+_09747_/Q (sg13g2_dfrbpq_1)          _09747_/D (sg13g2_dfrbpq_1)            -0.0530
+_09749_/Q (sg13g2_dfrbpq_1)          _09749_/D (sg13g2_dfrbpq_1)            -0.0530
+_09776_/Q (sg13g2_dfrbpq_1)          _09776_/D (sg13g2_dfrbpq_1)            -0.0530
+_09777_/Q (sg13g2_dfrbpq_1)          _09777_/D (sg13g2_dfrbpq_1)            -0.0530
+_08987_/Q (sg13g2_dfrbpq_1)          _08987_/D (sg13g2_dfrbpq_1)            -0.0530
+_10681_/Q (sg13g2_dfrbpq_1)          _10681_/D (sg13g2_dfrbpq_1)            -0.0530
+_10686_/Q (sg13g2_dfrbpq_1)          _10686_/D (sg13g2_dfrbpq_1)            -0.0530
+_10688_/Q (sg13g2_dfrbpq_1)          _10688_/D (sg13g2_dfrbpq_1)            -0.0530
+_10689_/Q (sg13g2_dfrbpq_1)          _10689_/D (sg13g2_dfrbpq_1)            -0.0530
+_10690_/Q (sg13g2_dfrbpq_1)          _10690_/D (sg13g2_dfrbpq_1)            -0.0530
+_10691_/Q (sg13g2_dfrbpq_1)          _10691_/D (sg13g2_dfrbpq_1)            -0.0530
+_10692_/Q (sg13g2_dfrbpq_1)          _10692_/D (sg13g2_dfrbpq_1)            -0.0530
+_10693_/Q (sg13g2_dfrbpq_1)          _10693_/D (sg13g2_dfrbpq_1)            -0.0530
+_10695_/Q (sg13g2_dfrbpq_1)          _10695_/D (sg13g2_dfrbpq_1)            -0.0530
+_10699_/Q (sg13g2_dfrbpq_1)          _10699_/D (sg13g2_dfrbpq_1)            -0.0530
+_10700_/Q (sg13g2_dfrbpq_1)          _10700_/D (sg13g2_dfrbpq_1)            -0.0530
+_10701_/Q (sg13g2_dfrbpq_1)          _10701_/D (sg13g2_dfrbpq_1)            -0.0530
+_10706_/Q (sg13g2_dfrbpq_1)          _10706_/D (sg13g2_dfrbpq_1)            -0.0530
+_10708_/Q (sg13g2_dfrbpq_1)          _10708_/D (sg13g2_dfrbpq_1)            -0.0530
+_09755_/Q (sg13g2_dfrbpq_1)          _09755_/D (sg13g2_dfrbpq_1)            -0.0530
+_09757_/Q (sg13g2_dfrbpq_1)          _09757_/D (sg13g2_dfrbpq_1)            -0.0530
+_09085_/Q (sg13g2_dfrbpq_1)          _09085_/D (sg13g2_dfrbpq_1)            -0.0530
+_09085_/Q (sg13g2_dfrbpq_1)          _09085_/D (sg13g2_dfrbpq_1)            -0.0530
+_09008_/Q (sg13g2_dfrbpq_1)          _09008_/D (sg13g2_dfrbpq_1)            -0.0530
+_09008_/Q (sg13g2_dfrbpq_1)          _09008_/D (sg13g2_dfrbpq_1)            -0.0530
+_09012_/Q (sg13g2_dfrbpq_1)          _09012_/D (sg13g2_dfrbpq_1)            -0.0530
+_09012_/Q (sg13g2_dfrbpq_1)          _09012_/D (sg13g2_dfrbpq_1)            -0.0530
+_07099_/Q (sg13g2_dfrbpq_1)          _07099_/D (sg13g2_dfrbpq_1)            -0.0530
+_06567_/Q (sg13g2_dfrbpq_1)          _06567_/D (sg13g2_dfrbpq_1)            -0.0530
+_06569_/Q (sg13g2_dfrbpq_1)          _06569_/D (sg13g2_dfrbpq_1)            -0.0530
+_06570_/Q (sg13g2_dfrbpq_1)          _06570_/D (sg13g2_dfrbpq_1)            -0.0530
+_06571_/Q (sg13g2_dfrbpq_1)          _06571_/D (sg13g2_dfrbpq_1)            -0.0530
+_06572_/Q (sg13g2_dfrbpq_1)          _06572_/D (sg13g2_dfrbpq_1)            -0.0530
+

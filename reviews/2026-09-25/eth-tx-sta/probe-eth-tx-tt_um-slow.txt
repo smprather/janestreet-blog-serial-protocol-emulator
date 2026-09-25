@@ -1,0 +1,91 @@
+OpenSTA 3.1.0 8572175ac4 Copyright (c) 2026, Parallax Software, Inc.
+License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
+
+This is free software, and you are free to change and redistribute it
+under certain conditions; type `show_copying' for details. 
+This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
+===== PROBE frame-fsm: no net matches *u_eth_tx*state* (skipped)
+===== PROBE preamble-cnt: no net matches *u_eth_tx*pre_cnt* (skipped)
+===== PROBE ifg-cnt: no net matches *u_eth_tx*ifg_cnt* (skipped)
+===== PROBE fifo-read: no net matches *u_eth_tx*fifo_head* (skipped)
+===== PROBE fifo-mem: no net matches *u_eth_tx*fifo_mem* (skipped)
+===== PROBE crc-state: no net matches *u_tx_crc*crc_state* (skipped)
+===== PROBE crc-bit: no net matches *u_tx_crc*crc_bit* (skipped)
+===== PROBE owner-mux: no net matches *eth_tx_owner* (skipped)
+===== PROBE tx-path: no net matches *u_eth_tx*tx_path* (skipped)
+===== PROBE max to the G6 pad uo_out[2]
+Startpoint: u_soc/u_serdes/_879_
+            (rising edge-triggered flip-flop clocked by clk)
+Endpoint: uo_out[2] (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ u_soc/u_serdes/_879_/CLK (sg13g2_dfrbpq_1)
+   0.3412    0.3412 ^ u_soc/u_serdes/_879_/Q (sg13g2_dfrbpq_1)
+   0.2870    0.6282 ^ u_soc/u_serdes/_629_/X (sg13g2_xor2_1)
+   0.1942    0.8224 v u_soc/u_serdes/_632_/Y (sg13g2_xnor2_1)
+   0.1888    1.0112 v u_soc/u_serdes/_779_/X (sg13g2_xor2_1)
+   0.8002    1.8114 ^ u_soc/u_serdes/_781_/Y (sg13g2_o21ai_1)
+   0.5926    2.4040 v u_soc/u_serdes/_785_/X (sg13g2_mux4_1)
+   0.1864    2.5903 v u_soc/u_serdes/_786_/X (sg13g2_mux2_1)
+   0.1774    2.7677 v u_soc/u_serdes/_790_/X (sg13g2_mux2_1)
+   0.1189    2.8866 ^ u_soc/u_serdes/_799_/Y (sg13g2_a21oi_1)
+   0.0926    2.9791 v u_soc/u_serdes/_800_/Y (sg13g2_nand2_1)
+   0.2276    3.2067 v u_soc/_2890_/X (sg13g2_mux2_1)
+   0.1135    3.3202 ^ u_soc/u_tx_codec/u_stuff/_169_/Y (sg13g2_nor2_1)
+   0.0749    3.3951 v u_soc/u_tx_codec/u_stuff/_170_/Y (sg13g2_a21oi_1)
+   0.0747    3.4698 ^ u_soc/u_tx_codec/u_nrzi/_23_/Y (sg13g2_nand2_1)
+   0.0973    3.5671 v u_soc/u_tx_codec/u_nrzi/_24_/Y (sg13g2_o21ai_1)
+   0.2667    3.8339 v u_soc/u_tx_codec/u_manch/_09_/X (sg13g2_xor2_1)
+   0.2821    4.1160 v u_soc/u_pinmux/_156_/X (sg13g2_mux2_1)
+   0.2070    4.3230 ^ u_soc/u_pinmux/_157_/Y (sg13g2_a21oi_1)
+   0.3776    4.7006 v _0_/X (sg13g2_mux2_1)
+   0.0000    4.7006 v uo_out[2] (out)
+             4.7006   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -4.7006   data arrival time
+-------------------------------------------------------------
+             7.6330   slack (MET)
+
+
+===== PROBE min to the G6 pad uo_out[2]
+Startpoint: u_soc/u_cpu/_705_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: uo_out[2] (output port clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ u_soc/u_cpu/_705_/CLK (sg13g2_dfrbpq_1)
+   0.2911    0.2911 ^ u_soc/u_cpu/_705_/Q (sg13g2_dfrbpq_1)
+   0.2553    0.5464 ^ _0_/X (sg13g2_mux2_1)
+   0.0000    0.5464 ^ uo_out[2] (out)
+             0.5464   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+   0.0000    0.2500   output external delay
+             0.2500   data required time
+-------------------------------------------------------------
+             0.2500   data required time
+            -0.5464   data arrival time
+-------------------------------------------------------------
+             0.2964   slack (MET)
+
+

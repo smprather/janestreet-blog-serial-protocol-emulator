@@ -31,7 +31,11 @@
 //      differs, and the receiver depends on it. Missed if: only the wire
 //      bits were checked.
 //   4. Exactly-64-byte frame: NO pad is inserted at the boundary (a padding
-//      engine that pads <= 64 would emit a 65th byte here).
+//      engine that pads <= 64 would emit a 65th byte here). A 60-byte frame
+//      is ALSO run unpadded: 60 is the largest stored length that needs no
+//      pad, so it is the only case that separates `stored < 60` from
+//      `stored <= 60`. (Added when the mutation suite's `pad-extra` mutant
+//      survived; the suite is the reason this boundary is now covered.)
 //   5. 1,514-byte maximum frame: no pad, full-payload FCS, 12,208 wire bits
 //      decoded end to end. Proves the FSM/FIFO handle the whole domain.
 //   6. 1,515-byte and 13-byte requests are refused with tx_overlong and the
@@ -43,6 +47,9 @@
 //   9. Two 42-byte frames: the second preamble starts >= 96 idle cells
 //      after the first frame's last FCS bit, and both decode byte- and
 //      FCS-clean. The standard's IFG, and the receiver's hunt gate needs 8.
+//      The gap is checked TWICE: on the wire (>= 96) AND on the engine's own
+//      ifg_active window (>= 96 cells), because the wire measure also
+//      contains the start-alignment cell and can hide a 95-cell engine IFG.
 //
 // WHAT IT DOES NOT COVER (owned by later tasks): the pad-level uo_out mux
 // (Task 4), the loopback through the RX chain and the mutation suites
@@ -118,16 +125,29 @@ module tb_pe_eth_tx;
   logic       mh1, mh2;
   bit         saw_done, saw_underrun, saw_overlong;
 
+  // The engine's OWN inter-frame gap, counted at the cell boundary while
+  // ifg_active is high. The wire-gap measure below is not a substitute: it
+  // also contains the start-alignment cell, so a 95-cell engine IFG still
+  // measures >= 96 on the wire. Found by regress/mutate_eth_tx_tb.sh's
+  // `ifg-95` mutation, which SURVIVED the wire-gap check.
+  int ifg_cells;
+  int ifg_cells_at_done;
+
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       ncells <= 0; done_count <= 0; mh1 <= 1'b0; mh2 <= 1'b0;
       saw_done <= 1'b0; saw_underrun <= 1'b0; saw_overlong <= 1'b0;
+      ifg_cells <= 0; ifg_cells_at_done <= 0;
     end else begin
-      if (tx_done) begin saw_done <= 1'b1; done_count <= done_count + 1; end
+      if (tx_done) begin
+        saw_done <= 1'b1; done_count <= done_count + 1;
+        ifg_cells_at_done <= ifg_cells;
+      end
       if (tx_underrun)   saw_underrun  <= 1'b1;
       if (tx_overlong)   saw_overlong  <= 1'b1;
 
       if (cell_en && !half_phase) begin
+        if (ifg_active) ifg_cells <= ifg_cells + 1;
         // classify the cell that just ended from its ph2/ph5 samples
         if (mh1 === mh2) begin
           if (ncells < MAXCELLS) cellrec[ncells] <= 2'b00;   // idle (constant)
@@ -435,8 +455,15 @@ module tb_pe_eth_tx;
     check(gap >= 96,
           $sformatf("two-frame: only %0d idle cells between frames, want >= 96",
                     gap));
+    // The ENGINE's gap, not the wire's: a short engine IFG can hide inside
+    // the start-alignment cell (caught by the ifg-95 mutation).
+    check(ifg_cells - ifg_cells_at_done >= 96,
+          $sformatf("two-frame: engine IFG was %0d cells, want >= 96",
+                    ifg_cells - ifg_cells_at_done));
     $display("    two-frame: IFG = %0d idle cells (%0.0f ns, spec >= 96)",
              gap, gap * 100.0);
+    $display("    two-frame: engine IFG = %0d cells (spec >= 96)",
+             ifg_cells - ifg_cells_at_done);
     analyze(g2_first, 60, need, "two-frame #2");
   endtask
 
@@ -458,6 +485,13 @@ module tb_pe_eth_tx;
 
     fill_pattern(64, 8'h80);
     test_good_frame(64, "exact-64-no-pad");
+
+    // The PAD BOUNDARY: exactly 60 stored bytes is the largest frame that
+    // still needs no pad, so it is the only stored length where `stored < 60`
+    // and `stored <= 60` differ. Found by regress/mutate_eth_tx_tb.sh's
+    // `pad-extra` mutation, which SURVIVED before this case existed.
+    fill_pattern(60, 8'hC0);
+    test_good_frame(60, "exact-60-no-pad");
 
     fill_pattern(1514, 8'h20);
     test_good_frame(1514, "max-1514");

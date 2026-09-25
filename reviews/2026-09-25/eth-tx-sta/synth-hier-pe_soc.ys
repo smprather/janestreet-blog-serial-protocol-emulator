@@ -1,0 +1,25 @@
+# synth-pe_soc.ys — mapped netlist for the post-SERDES pe_soc STA screen.
+# Extended from reviews/2026-09-23/eth-soc/synth.ys: the read_verilog line
+# gains the four modules the word-engine integration added to pe_soc
+# (pe_serdes, pe_nrzi, pe_bitstuff, pe_codec_mux). Everything else is identical,
+# so the mapped netlist stays comparable with the pre-integration screen.
+read_liberty -lib /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+read_verilog -sv rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_eth_tx.v rtl/pe_serdes.v rtl/pe_nrzi.v rtl/pe_bitstuff.v rtl/pe_codec_mux.v rtl/pe_soc.v
+hierarchy -check -top pe_soc
+proc
+opt
+fsm
+opt
+memory
+opt
+techmap
+opt
+dfflibmap -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+abc -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+clean
+stat -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+clean
+check -assert
+write_verilog -noattr -noexpr reviews/2026-09-25/eth-tx-sta/mapped-hier-pe_soc.v
+write_json reviews/2026-09-25/eth-tx-sta/mapped-hier-pe_soc.json
+check

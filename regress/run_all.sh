@@ -558,5 +558,33 @@ else
   stale=1
 fi
 
+# The 10BASE-T TX frame engine, unit level (suite 11). 18 mutations over
+# pe_eth_tx.v: the three prelude/SFD traps, the CRC field-mode traps, pad as
+# data, the IFG, runt/jabber, the underrun fault, constant idle, octet order
+# and the done pulse. Two of them (pad-extra, ifg-95) SURVIVED the first
+# version of the suite and found two real gaps in tb_pe_eth_tx.v, which the
+# suite's own record carries.
+if ./regress/mutate_eth_tx_tb.sh > /tmp/mutate_eth_tx.log 2>&1; then
+  echo "eth_tx TB mutations: OK (no unexplained survivors)"
+else
+  echo "eth_tx TB mutations: FAILED"
+  tail -20 /tmp/mutate_eth_tx.log
+  stale=1
+fi
+
+# The same path, integration level (suite 12): 7 mutations across pe_soc.v,
+# pe_eth_mac.v and the wrapper -- the owner mux, the pad overlay, the G6 pad
+# mapping, the cell-boundary pacing, the RX capture, the FCS verdict
+# convention and the window's push wrap. The pad mapping is only visible at
+# the PAD, so this harness runs BOTH tb_pe_soc_eth_loop and the pad-level
+# case in tb_tt_um_protocol_emulator.
+if ./regress/mutate_eth_tx_loop_tb.sh > /tmp/mutate_eth_tx_loop.log 2>&1; then
+  echo "eth_tx loopback TB mutations: OK (no unexplained survivors)"
+else
+  echo "eth_tx loopback TB mutations: FAILED"
+  tail -20 /tmp/mutate_eth_tx_loop.log
+  stale=1
+fi
+
 [ "$stale" -eq 0 ] || exit 1
 [ "$lint_rc" -eq 0 ] || { echo "lint gate FAILED (see above)"; exit 1; }

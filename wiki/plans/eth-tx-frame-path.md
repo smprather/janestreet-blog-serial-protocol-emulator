@@ -575,6 +575,24 @@ module pe_eth_tx #( parameter int MAX_STORED = 1514 ) (
 - [ ] **Step 4: Review record** with source hashes, exact commands, RED
   transcripts, mutation tables and limits; link it from the plan's Status.
 
+## Status — COMPLETE (Tasks 1-7, 2026-09-25)
+
+All seven tasks landed and are recorded. Implementation and close-out review:
+[[reviews/2026-09-25/ETH-TX-FRAME-PATH-REVIEW]]; task-level ledger:
+`.superpowers/sdd/eth-tx-frame-path/progress.md`. Verification: `run_all.sh
+--fast -j8` exit 0 — RTL 33/33, firmware 26/26, lint clean, 12 generated gates,
+**twelve** mutation suites (the two new eth_tx suites are 18/18 and 7/7);
+`synth_area.sh` exit 0 — `pe_eth_tx` 892 / 16,040.0898 µm², `pe_soc` 6,219 /
+108,084.8286, `tt_um_top` 7,960 / 138,817.4004. Mapped 16.667 ns STA screen
+(`reviews/2026-09-25/eth-tx-sta/`, 2 designs x 3 corners x ZERO/BOARD):
+**no new violation class** vs the pre-TX control; the G6 pad `uo_out[2]`
+measures MET at +7.6330 ns setup / +0.2964 ns hold (slow). Both project maps
+refreshed and re-rendered. Limits: mapped/simulation evidence only (no
+physical flow/DRC/LVS), the push loop's worst gap (52 clk) exceeds the 48-clk
+wire-byte period and is absorbed by the staging FIFO, the STA per-class probes
+are limited by this OpenSTA build's hashed net names, and the R2 read path is
+a separate phase.
+
 ## Self-Review
 
 **1. Spec coverage.** The manager's required coverage maps to: preamble/SFD

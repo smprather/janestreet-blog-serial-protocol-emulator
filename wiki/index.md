@@ -56,7 +56,7 @@
 - [[plans/pe-ctrl-readback]] — Plan: evaluate a MISO response from the loader (echo vs status vs imem peek), with the pad mapping, budget delta, and test/mutation plan. No RTL change yet.
 - [[plans/demo-host-gui]] — Draft plan: the Linux PC demo GUI over the RP2040 on the Tiny Tapeout demo board — operator workflows, load/start contract, clock control, status/error tiers, transport/API and packaging options (all marked open), and a test/acceptance strategy. Planning only; STATUS item 8 stays TODO until accepted.
 - [[plans/serdes-integration]] — Plan: integrate `pe_serdes` + `pe_codec_mux` into `pe_soc` (additive engine, DRU RX capture, two codec instances with encoded-cell enables, split `pe_serdes` payload enables, `0xF` indexed window) with tests, hardening risks and pad implications. Amended after two review rounds; scope decisions remain open.
-- [[plans/eth-tx-frame-path]] — Plan: the 10BASE-T TX frame path (`eth_tx`) — hardware preamble/SFD, FCS append via a TX-dedicated `pe_crc`, 64-byte pad, 96-bit-time IFG, runt/jabber policy, the frame-source/pad choices (eight scope groups, each with a recommended default), and the pad-level + RX-loopback acceptance tests. Planning only; manager adoption pending.
+- [[plans/eth-tx-frame-path]] — Plan: the 10BASE-T TX frame path (`eth_tx`) — hardware preamble/SFD, FCS append via a TX-dedicated `pe_crc`, 64-byte pad, 96-bit-time IFG, runt/jabber policy, the frame-source/pad choices (eight scope groups, each with a recommended default), and the pad-level + RX-loopback acceptance tests. **COMPLETE (Tasks 1-7, 2026-09-25)** — G1-G8 adopted, everything landed and hardened; review: [[reviews/2026-09-25/ETH-TX-FRAME-PATH-REVIEW]].
 
 ## Decisions
 

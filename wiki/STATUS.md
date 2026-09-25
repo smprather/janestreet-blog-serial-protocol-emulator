@@ -1,5 +1,33 @@
 # Project Status — through 10BASE-T receive
 
+> **10BASE-T TX frame path — COMPLETE, plan Tasks 1-7 (2026-09-25, manager
+> Task 11 close-out + the chained Task 6/7 pass).** The last unbuilt block in
+> the topology is now built and hardened. `rtl/pe_eth_tx.v` emits a full frame
+> from firmware pushes (hardware 56+8 prelude, octets LSB-first, zero pad to 64
+> folded into the FCS, TX-dedicated `pe_crc`, 8-byte staging FIFO with
+> underrun, runt/jabber refusal, 96-cell IFG, constant idle); `pe_soc` gained
+> the 32-entry `0xF` window (push/wrap 16-23, TXLEN 24/25, TXCTRL 26, TXSTAT
+> 27) and the exclusive `tx_path` owner mux; the wrapper reclaims **`uo_out[2]`
+> = `eth_tx`** behind `pin_oe_bus[7]` (G6). Wire-loopback acceptance PASS —
+> echo `len=46 field=0806 sum=07`, two-frame IFG 102 cells, wrap `REG[24]=2a`
+> `REG[26]=04`, busy `refused_start=1`; the pad decodes 576 wire bits, FCS
+> `9cc5cb34`. **Two mutation suites: 18/18 unit + 7/7 integration, 0
+> survivors** — and they found two real TB gaps (a 60-byte pad-boundary case
+> and an engine-side IFG count), both fixed in the TB. Mapped 16.667 ns STA
+> screen (`reviews/2026-09-25/eth-tx-sta/`, 2 designs x 3 corners x
+> ZERO/BOARD): **no new violation class**; the G6 pad MET at +7.6330 ns setup
+> / +0.2964 ns hold (slow). `./regress/run_all.sh --fast -j8` **exit 0 — RTL
+> 33/33, firmware 26/26, lint clean, 12 gates, 12 mutation suites**;
+> `./regress/synth_area.sh` **exit 0** — `pe_eth_tx` 892 / 16,040.0898 µm²,
+> `pe_soc` **6,219 / 108,084.8286**, `tt_um_top` **7,960 / 138,817.4004**.
+> Both diagrams refreshed (plan 3385x2706, progress 3947x2477, targets held,
+> zero components lost). **Limits:** mapped/simulation only — no physical flow,
+> DRC or LVS; the push loop's worst gap (52 clk) exceeds the 48-clk wire-byte
+> period and is absorbed by the staging FIFO; per-class STA probes are limited
+> by this OpenSTA build's hashed net names; the R2 read path is a separate
+> phase. Review + hashes + mutation tables:
+> `reviews/2026-09-25/ETH-TX-FRAME-PATH-REVIEW.md`.
+
 > **10BASE-T TX frame path — plan Tasks 4-5 LANDED and verified (2026-09-24/25,
 > Manager Task 11; supersedes the Task-10 hash block below for `pe_eth_tx.v`,
 > `pe_soc.v`, `run_all.sh` and `run_firmware_tests.sh`).** The wrapper reclaim
@@ -1778,7 +1806,7 @@ control, and status/readback strategy are open; do not assume pad mappings or
 that the GUI can verify a load until those choices are made. This item is
 planning only; no GUI or bridge firmware has been started.
 
-### 9. 10BASE-T TX frame path (`eth_tx`) — TASKS 1-3 LANDED 2026-09-24
+### 9. 10BASE-T TX frame path (`eth_tx`) — COMPLETE (Tasks 1-7, 2026-09-25)
 
 The last unbuilt block in the topology: the SERDES/codec wire loopback (item
 7) proved the engine, but a full 10BASE-T transmitter (preamble/SFD, hardware
@@ -1803,10 +1831,26 @@ owner mux in `pe_soc` (pe_soc 4,961 → 6,191 cells / 82,893.77 →
 `tb_pe_soc_eth_tx` PASS, `./regress/run_all.sh --fast -j8` exit 0 (32/32 RTL,
 22/22 firmware, lint, every gate, ten mutation suites),
 `./regress/synth_area.sh` exit 0, same-list updates + regenerated
-`signal-names.md`. Still open in this plan: Task 4 (wrapper `uo_out[2]` mux +
-pad-level decode), Task 5 (loopback consumer + IFG acceptance), Task 6
-(mutation suites), Task 7 (STA screen + closeout). `uo_out[2]` is **not yet**
-an `eth_tx` pad — the wrapper is untouched until Task 4.
+`signal-names.md`.
+
+**Tasks 4-7 LANDED and verified 2026-09-25 (manager Tasks 11 + the chained
+Task 6/7 pass):** the wrapper `uo_out[2] = pin_oe_bus[7] ? pin_out_bus[7] :
+dbg_pc[0]` mux (G6 reclaim) with its pad-level decode case; the loopback
+consumer `eth_arp_echo.pe` plus the `eth_tx_two`/`eth_tx_wrap_probe`/
+`eth_tx_busy_probe` probes; the two mutation suites (**18/18** unit, **7/7**
+integration, 0 survivors) which found and fixed two real TB gaps (a 60-byte
+pad-boundary case and an engine-side IFG count); and the mapped 16.667 ns STA
+screen (`reviews/2026-09-25/eth-tx-sta/`, 12 screens) showing **no new
+violation class**, with the G6 pad `uo_out[2]` MET at +7.6330 ns setup /
++0.2964 ns hold. Final: `run_all.sh --fast -j8` exit 0 — RTL **33/33**,
+firmware **26/26**, lint, every gate, **twelve** mutation suites;
+`synth_area.sh` exit 0 — `pe_eth_tx` 892 / 16,040.09, `pe_soc` **6,219** /
+**108,084.83**, `tt_um_top` **7,960** / **138,817.40** µm². `uo_out[2]` **is**
+the `eth_tx` pad. Review: [[reviews/2026-09-25/ETH-TX-FRAME-PATH-REVIEW]].
+Limits: mapped/simulation only (no physical flow/DRC/LVS); the push loop's
+worst gap (52 clk) exceeds the 48-clk wire-byte period and is absorbed by the
+8-byte staging FIFO; per-class STA probes are limited by this OpenSTA build's
+hashed net names; the R2 read path is a separate phase.
 
 ## Reading order for a fresh session
 
