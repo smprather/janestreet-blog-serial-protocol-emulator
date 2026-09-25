@@ -1,0 +1,1340 @@
+{
+  "artifact": "R3 debug-control $readmemh export",
+  "chip_confirmed": true,
+  "chip_evidence": {
+    "confirmed_steps": [
+      "bp_set_address_2",
+      "bp_set_past_imem",
+      "bp_set_len_0",
+      "step_from_boot_stop",
+      "status_shows_pc_1",
+      "read_cpu_shows_a_55",
+      "step_one",
+      "step_two",
+      "status_shows_a_aa",
+      "step_not_ready",
+      "step_one",
+      "step_lands_on_2",
+      "status_reports_the_hit",
+      "status_after_live_hit",
+      "status_is_stable",
+      "step_off_the_breakpoint",
+      "status_shows_no_hit",
+      "bp_clr_releases",
+      "status_running_again",
+      "bp_clr_to_boot_stop",
+      "status_reads_zero",
+      "bp_set_bad_crc",
+      "status_shows_not_armed",
+      "step_on_loopback",
+      "bp_set_on_loopback"
+    ],
+    "conformance": "25 of 26 host golden steps confirmed against the chip, byte-exact including the CRC word. The remaining 1 is listed in not_confirmed_steps with its reason: a testbench model boundary that is not claimed. Two further steps were confirmed only after the host regenerated them (gui-worker b9d4eb2); they were host-side defects this run proved, and they are recorded under resolved_steps so the reason the count moved is on the face of the manifest.",
+    "date": "2026-09-25",
+    "harness": "tb_pe_ctrl_r3_conf.v replays each step's request_file and compares the response to response_file word for word, CRC included, with the vector's model image preloaded; tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt pins the measured divergences and the harness fails if the observed set ever differs from it",
+    "not_confirmed_steps": [
+      {
+        "reason": "TB MODEL BOUNDARY, not a disagreement, and NOT claimed. The package's `insn` is a mid-execution snapshot (pc=4 with a=0 has not executed the LDI at 3); the model freeze that holds such a snapshot pins pc every cycle, which collapses the fetch pipeline onto the fill word instead of the ruled landing word 0xF000. The contract now states that at a freeze `insn` reports the latched pipeline word, and no RTL changes. If the host's model adopts that, the package regenerates and this flips.",
+        "step": "status_full_readback"
+      }
+    ],
+    "resolved_steps": [
+      {
+        "resolution": "HOST-side vector defect, fixed host-side in b9d4eb2. The host's READ_CPU builder returned its debug `state` in the slot the contract gives to `run`, and carried a stale `insn` where the chip reports the fetched word at the held pc. Regenerated, this step matches the chip byte-exact and is chip_confirmed.",
+        "step": "read_cpu_shows_a_55"
+      },
+      {
+        "resolution": "HOST-side vector defect, fixed host-side in b9d4eb2. The package carried a=0x0055 where the chip reports 0x00AA: the step from address 1 to 2 really does execute the LDI A,0xAA at 1, because a step is exactly one instruction and stop-before applies to the instruction AT the breakpoint, which has not run. Regenerated, this step matches the chip byte-exact and is chip_confirmed.",
+        "step": "status_reports_the_hit"
+      }
+    ],
+    "review": "reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md",
+    "scope": "The chip's answers to the host's bytes, in simulation. Not evidence about silicon: the real-board acceptance run (Pico over USB with a physical shuttle) has not been executed and is not claimed.",
+    "testbench": "tb/tb_pe_ctrl_r3_conf.v"
+  },
+  "generated_by": "tools/host_gui/r3_vectors.py (--hex)",
+  "image_files": {
+    "dmem_file": "dmem.hex",
+    "image_id": "v01-bp-set-readback",
+    "imem_file": "imem.hex"
+  },
+  "load_procedure": "1) imem.hex: one 16-bit word per line, ascending address, for $readmemh into a 16-bit imem[0:1023]. 2) dmem.hex: one byte per line for $readmemh into an 8-bit dmem[0:15]. 3) preload the registers from model_images[].state (pc/a/x/y/insn/timer/run/faults/words_written) AND the debug context from model_images[].debug (bp_addr, bp_en, bp_hit, debug_hold). The state word is DERIVED by the chip from those, so it is not preloaded. 4) drive the step's request_file and compare the response word for word; these ops emit no wait words, so there is nothing to skip.",
+  "model_images": {
+    "v01-bp-set-readback": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v01-bp-set-readback",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v02-bp-set-out-of-range": {
+      "debug": {
+        "bp_addr": 3,
+        "bp_en": true,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v02-bp-set-out-of-range",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v03-bp-set-wrong-length": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v03-bp-set-wrong-length",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v04-step-executes-one": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v04-step-executes-one",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v05-step-sequence": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v05-step-sequence",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v06-step-while-running": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v06-step-while-running",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 7,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v07-step-lands-on-bp": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v07-step-lands-on-bp",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v08-bp-hit-stops-live-core": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": true,
+        "debug_hold": true
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v08-bp-hit-stops-live-core",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 2,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v09-step-off-bp-clears-hit": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": true,
+        "debug_hold": true
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v09-step-off-bp-clears-hit",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 2,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v10-bp-clr-resumes": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": true,
+        "debug_hold": true
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v10-bp-clr-resumes",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 2,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v11-bp-clr-boot-stop": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": true,
+        "bp_hit": false,
+        "debug_hold": true
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v11-bp-clr-boot-stop",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 3,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v12-bad-crc-no-side-effect": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v12-bad-crc-no-side-effect",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v13-status-common-prefix": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v13-status-common-prefix",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 4,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v14-unsupported-target": {
+      "debug": {
+        "bp_addr": 0,
+        "bp_en": false,
+        "bp_hit": false,
+        "debug_hold": false
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v14-unsupported-target",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 85,
+          "1": 170,
+          "2": 61440,
+          "3": 15,
+          "4": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 5,
+        "x": 0,
+        "y": 0
+      }
+    }
+  },
+  "notice": "CHIP-CONFIRMED for 25 of 26 steps by the chip's own conformance run (tb_pe_ctrl_r3_conf), byte-exact including the CRC. The remaining 1 are NOT confirmed and carry a reason each in chip_evidence.not_confirmed_steps. The real-board acceptance run has not been executed and is not claimed.",
+  "phase": "R3",
+  "readmemh_usage": "$readmemh(\"<file>\", mem); with an 8-bit mem[] filled from address 0; the stream is the frame's bytes in wire order.",
+  "schema": 1,
+  "source_of_truth": [
+    "tools/host_gui/r3_reads.py",
+    "tools/host_gui/fake_pe.py",
+    "tools/host_gui/protocol.py"
+  ],
+  "vectors": [
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v01-bp-set-readback",
+      "name": "debug_bp_set_readback",
+      "obligation": "DEBUG_BP_SET arms the address and reads it straight back in the 5-word prefix.",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v01-bp-set-readback",
+          "name": "bp_set_address_2",
+          "opcode": 34,
+          "opcode_name": "OP_DEBUG_BP_SET",
+          "request_bytes": 12,
+          "request_file": "debug_bp_set_readback.bp_set_address_2.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_bp_set_readback.bp_set_address_2.rsp.hex",
+          "response_hex": "a55a1a200001000500000000000000020001caf2",
+          "response_payload_words": [
+            0,
+            0,
+            0,
+            2,
+            1
+          ],
+          "sequence": 1,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v02-bp-set-out-of-range",
+      "name": "debug_bp_set_out_of_range",
+      "obligation": "A breakpoint address past IMEM_WORDS is RANGE, changes nothing, and latches NO fault (R3 adds no fault class).",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v02-bp-set-out-of-range",
+          "name": "bp_set_past_imem",
+          "opcode": 34,
+          "opcode_name": "OP_DEBUG_BP_SET",
+          "request_bytes": 12,
+          "request_file": "debug_bp_set_out_of_range.bp_set_past_imem.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_bp_set_out_of_range.bp_set_past_imem.rsp.hex",
+          "response_hex": "a55a1a200001000500030000000000030001d086",
+          "response_payload_words": [
+            3,
+            0,
+            0,
+            3,
+            1
+          ],
+          "sequence": 1,
+          "status": 3
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v03-bp-set-wrong-length",
+      "name": "debug_bp_set_wrong_length",
+      "obligation": "A wrong payload length is a 1-word BAD_FRAME with no side effect on any debug register (S5).",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 8,
+          "model_image_id": "v03-bp-set-wrong-length",
+          "name": "bp_set_len_0",
+          "opcode": 34,
+          "opcode_name": "OP_DEBUG_BP_SET",
+          "request_bytes": 10,
+          "request_file": "debug_bp_set_wrong_length.bp_set_len_0.req.hex",
+          "response_bytes": 12,
+          "response_file": "debug_bp_set_wrong_length.bp_set_len_0.rsp.hex",
+          "response_hex": "a55a1a2000010001000262d2",
+          "response_payload_words": [
+            2
+          ],
+          "sequence": 1,
+          "status": 2
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v04-step-executes-one",
+      "name": "debug_step_executes_one",
+      "obligation": "DEBUG_STEP executes exactly one instruction and leaves the core in DEBUG_HOLD (S1).",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v04-step-executes-one",
+          "name": "step_from_boot_stop",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_bytes": 10,
+          "request_file": "debug_step_executes_one.step_from_boot_stop.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_step_executes_one.step_from_boot_stop.rsp.hex",
+          "response_hex": "a55a1a100001000500000002000100000000ad9f",
+          "response_payload_words": [
+            0,
+            2,
+            1,
+            0,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v04-step-executes-one",
+          "name": "status_shows_pc_1",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_bytes": 10,
+          "request_file": "debug_step_executes_one.status_shows_pc_1.req.hex",
+          "response_bytes": 30,
+          "response_file": "debug_step_executes_one.status_shows_pc_1.rsp.hex",
+          "response_hex": "a55a1a400002000a00000002000100000000000000550000000000aabbb5",
+          "response_payload_words": [
+            0,
+            2,
+            1,
+            0,
+            0,
+            0,
+            85,
+            0,
+            0,
+            170
+          ],
+          "sequence": 2,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v04-step-executes-one",
+          "name": "read_cpu_shows_a_55",
+          "opcode": 18,
+          "opcode_name": "OP_READ_CPU",
+          "request_bytes": 10,
+          "request_file": "debug_step_executes_one.read_cpu_shows_a_55.req.hex",
+          "response_bytes": 24,
+          "response_file": "debug_step_executes_one.read_cpu_shows_a_55.rsp.hex",
+          "response_hex": "a55a1920000300070000000100550000000000aa000077b8",
+          "response_payload_words": [
+            0,
+            1,
+            85,
+            0,
+            0,
+            170,
+            0
+          ],
+          "sequence": 3,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v05-step-sequence",
+      "name": "debug_step_sequence",
+      "obligation": "Two steps retire two instructions: pc 0->1->2 and the LDI at 1 has run exactly once (a=0xAA).",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v05-step-sequence",
+          "name": "step_one",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_bytes": 10,
+          "request_file": "debug_step_sequence.step_one.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_step_sequence.step_one.rsp.hex",
+          "response_hex": "a55a1a100001000500000002000100000000ad9f",
+          "response_payload_words": [
+            0,
+            2,
+            1,
+            0,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v05-step-sequence",
+          "name": "step_two",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_bytes": 10,
+          "request_file": "debug_step_sequence.step_two.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_step_sequence.step_two.rsp.hex",
+          "response_hex": "a55a1a1000020005000000020002000000008ce8",
+          "response_payload_words": [
+            0,
+            2,
+            2,
+            0,
+            0
+          ],
+          "sequence": 2,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v05-step-sequence",
+          "name": "status_shows_a_aa",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_bytes": 10,
+          "request_file": "debug_step_sequence.status_shows_a_aa.req.hex",
+          "response_bytes": 30,
+          "response_file": "debug_step_sequence.status_shows_a_aa.rsp.hex",
+          "response_hex": "a55a1a400003000a00000002000200000000000000aa00000000f0009f8b",
+          "response_payload_words": [
+            0,
+            2,
+            2,
+            0,
+            0,
+            0,
+            170,
+            0,
+            0,
+            61440
+          ],
+          "sequence": 3,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v06-step-while-running",
+      "name": "debug_step_while_running",
+      "obligation": "A free-running core cannot be stepped: NOT_READY with the full 5-word prefix, the pre-step state, and no side effect.",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v06-step-while-running",
+          "name": "step_not_ready",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_bytes": 10,
+          "request_file": "debug_step_while_running.step_not_ready.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_step_while_running.step_not_ready.rsp.hex",
+          "response_hex": "a55a1a100001000500060001000700000000e210",
+          "response_payload_words": [
+            6,
+            1,
+            7,
+            0,
+            0
+          ],
+          "sequence": 1,
+          "status": 6
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v07-step-lands-on-bp",
+      "name": "debug_step_lands_on_bp",
+      "obligation": "A step whose landing address is the armed breakpoint reports state 3, the landing PC, and bp_flags 0b11 (S3).",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v07-step-lands-on-bp",
+          "name": "step_one",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_bytes": 10,
+          "request_file": "debug_step_lands_on_bp.step_one.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_step_lands_on_bp.step_one.rsp.hex",
+          "response_hex": "a55a1a100001000500000002000100020001d3de",
+          "response_payload_words": [
+            0,
+            2,
+            1,
+            2,
+            1
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v07-step-lands-on-bp",
+          "name": "step_lands_on_2",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_bytes": 10,
+          "request_file": "debug_step_lands_on_bp.step_lands_on_2.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_step_lands_on_bp.step_lands_on_2.rsp.hex",
+          "response_hex": "a55a1a1000020005000000030002000200036a8a",
+          "response_payload_words": [
+            0,
+            3,
+            2,
+            2,
+            3
+          ],
+          "sequence": 2,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v07-step-lands-on-bp",
+          "name": "status_reports_the_hit",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_bytes": 10,
+          "request_file": "debug_step_lands_on_bp.status_reports_the_hit.req.hex",
+          "response_bytes": 30,
+          "response_file": "debug_step_lands_on_bp.status_reports_the_hit.rsp.hex",
+          "response_hex": "a55a1a400003000a00000003000200020003000000aa00000000f0007d55",
+          "response_payload_words": [
+            0,
+            3,
+            2,
+            2,
+            3,
+            0,
+            170,
+            0,
+            0,
+            61440
+          ],
+          "sequence": 3,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v08-bp-hit-stops-live-core",
+      "name": "debug_bp_hit_stops_live_core",
+      "obligation": "A free-running core stops on the breakpoint with run still high, and reports state 3 (S3).",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v08-bp-hit-stops-live-core",
+          "name": "status_after_live_hit",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_bytes": 10,
+          "request_file": "debug_bp_hit_stops_live_core.status_after_live_hit.req.hex",
+          "response_bytes": 30,
+          "response_file": "debug_bp_hit_stops_live_core.status_after_live_hit.rsp.hex",
+          "response_hex": "a55a1a400001000a000000030002000200030001000000000000f0006a21",
+          "response_payload_words": [
+            0,
+            3,
+            2,
+            2,
+            3,
+            1,
+            0,
+            0,
+            0,
+            61440
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v08-bp-hit-stops-live-core",
+          "name": "status_is_stable",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_bytes": 10,
+          "request_file": "debug_bp_hit_stops_live_core.status_is_stable.req.hex",
+          "response_bytes": 30,
+          "response_file": "debug_bp_hit_stops_live_core.status_is_stable.rsp.hex",
+          "response_hex": "a55a1a400002000a000000030002000200030001000000000000f000c53c",
+          "response_payload_words": [
+            0,
+            3,
+            2,
+            2,
+            3,
+            1,
+            0,
+            0,
+            0,
+            61440
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v09-step-off-bp-clears-hit",
+      "name": "debug_step_off_bp_clears_hit",
+      "obligation": "A step off the breakpoint clears the hit and returns to DEBUG_HOLD with bp_flags 0b01 (S4).",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v09-step-off-bp-clears-hit",
+          "name": "step_off_the_breakpoint",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_bytes": 10,
+          "request_file": "debug_step_off_bp_clears_hit.step_off_the_breakpoint.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_step_off_bp_clears_hit.step_off_the_breakpoint.rsp.hex",
+          "response_hex": "a55a1a100001000500000002000300020001975d",
+          "response_payload_words": [
+            0,
+            2,
+            3,
+            2,
+            1
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v09-step-off-bp-clears-hit",
+          "name": "status_shows_no_hit",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_bytes": 10,
+          "request_file": "debug_step_off_bp_clears_hit.status_shows_no_hit.req.hex",
+          "response_bytes": 30,
+          "response_file": "debug_step_off_bp_clears_hit.status_shows_no_hit.rsp.hex",
+          "response_hex": "a55a1a400002000a000000020003000200010001000000000000000f39bf",
+          "response_payload_words": [
+            0,
+            2,
+            3,
+            2,
+            1,
+            1,
+            0,
+            0,
+            0,
+            15
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v10-bp-clr-resumes",
+      "name": "debug_bp_clr_resumes",
+      "obligation": "DEBUG_BP_CLR disarms, clears the hit and RELEASES the hold: run=1 resumes, run=0 falls to the boot stop with PC 0.",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v10-bp-clr-resumes",
+          "name": "bp_clr_releases",
+          "opcode": 35,
+          "opcode_name": "OP_DEBUG_BP_CLR",
+          "request_bytes": 10,
+          "request_file": "debug_bp_clr_resumes.bp_clr_releases.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_bp_clr_resumes.bp_clr_releases.rsp.hex",
+          "response_hex": "a55a1a30000100050000000100020002000068bb",
+          "response_payload_words": [
+            0,
+            1,
+            2,
+            2,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v10-bp-clr-resumes",
+          "name": "status_running_again",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_bytes": 10,
+          "request_file": "debug_bp_clr_resumes.status_running_again.req.hex",
+          "response_bytes": 30,
+          "response_file": "debug_bp_clr_resumes.status_running_again.rsp.hex",
+          "response_hex": "a55a1a400002000a000000010002000200000001000000000000000f7e2c",
+          "response_payload_words": [
+            0,
+            1,
+            2,
+            2,
+            0,
+            1,
+            0,
+            0,
+            0,
+            15
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v11-bp-clr-boot-stop",
+      "name": "debug_bp_clr_while_stopped_is_boot_stop",
+      "obligation": "With run=0, DEBUG_BP_CLR drops the hold to the normal boot stop and the PC re-zeroes; the response reports the PC at the request.",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v11-bp-clr-boot-stop",
+          "name": "bp_clr_to_boot_stop",
+          "opcode": 35,
+          "opcode_name": "OP_DEBUG_BP_CLR",
+          "request_bytes": 10,
+          "request_file": "debug_bp_clr_while_stopped_is_boot_stop.bp_clr_to_boot_stop.req.hex",
+          "response_bytes": 20,
+          "response_file": "debug_bp_clr_while_stopped_is_boot_stop.bp_clr_to_boot_stop.rsp.hex",
+          "response_hex": "a55a1a30000100050000000000030000000014eb",
+          "response_payload_words": [
+            0,
+            0,
+            3,
+            0,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v11-bp-clr-boot-stop",
+          "name": "status_reads_zero",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_bytes": 10,
+          "request_file": "debug_bp_clr_while_stopped_is_boot_stop.status_reads_zero.req.hex",
+          "response_bytes": 30,
+          "response_file": "debug_bp_clr_while_stopped_is_boot_stop.status_reads_zero.rsp.hex",
+          "response_hex": "a55a1a400002000a0000000000000000000000000000000000000055b94d",
+          "response_payload_words": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            85
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v12-bad-crc-no-side-effect",
+      "name": "debug_bad_crc_no_side_effect",
+      "obligation": "A bad CRC arms nothing and executes nothing (S5).",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 2,
+          "model_image_id": "v12-bad-crc-no-side-effect",
+          "name": "bp_set_bad_crc",
+          "opcode": 34,
+          "opcode_name": "OP_DEBUG_BP_SET",
+          "request_bytes": 12,
+          "request_file": "debug_bad_crc_no_side_effect.bp_set_bad_crc.req.hex",
+          "response_bytes": 12,
+          "response_file": "debug_bad_crc_no_side_effect.bp_set_bad_crc.rsp.hex",
+          "response_hex": "a55a1a2000010001000262d2",
+          "response_payload_words": [
+            2
+          ],
+          "sequence": 1,
+          "status": 2
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 2,
+          "model_image_id": "v12-bad-crc-no-side-effect",
+          "name": "status_shows_not_armed",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_bytes": 10,
+          "request_file": "debug_bad_crc_no_side_effect.status_shows_not_armed.req.hex",
+          "response_bytes": 30,
+          "response_file": "debug_bad_crc_no_side_effect.status_shows_not_armed.rsp.hex",
+          "response_hex": "a55a1a400002000a0000000000000000000000000000000000000055b94d",
+          "response_payload_words": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            85
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v13-status-common-prefix",
+      "name": "debug_status_common_prefix",
+      "obligation": "DEBUG_STATUS is the 5-word prefix plus run/a/x/y/insn, and it answers while running and while held.",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "chip_evidence": null,
+          "model_faults": 0,
+          "model_image_id": "v13-status-common-prefix",
+          "name": "status_full_readback",
+          "opcode": 36,
+          "opcode_name": "OP_DEBUG_STATUS",
+          "request_bytes": 10,
+          "request_file": "debug_status_common_prefix.status_full_readback.req.hex",
+          "response_bytes": 30,
+          "response_file": "debug_status_common_prefix.status_full_readback.rsp.hex",
+          "response_hex": "a55a1a400001000a000000010004000200010001000000000000f0003d3d",
+          "response_payload_words": [
+            0,
+            1,
+            4,
+            2,
+            1,
+            1,
+            0,
+            0,
+            0,
+            61440
+          ],
+          "sequence": 1,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v14-unsupported-target",
+      "name": "debug_unsupported_target",
+      "obligation": "Every debug op answers UNSUPPORTED on the loopback target.",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v14-unsupported-target",
+          "name": "step_on_loopback",
+          "opcode": 33,
+          "opcode_name": "OP_DEBUG_STEP",
+          "request_bytes": 10,
+          "request_file": "debug_unsupported_target.step_on_loopback.req.hex",
+          "response_bytes": 12,
+          "response_file": "debug_unsupported_target.step_on_loopback.rsp.hex",
+          "response_hex": "a55a1a11000100010005f3d9",
+          "response_payload_words": [
+            5
+          ],
+          "sequence": 1,
+          "status": 5
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
+          "model_faults": 0,
+          "model_image_id": "v14-unsupported-target",
+          "name": "bp_set_on_loopback",
+          "opcode": 34,
+          "opcode_name": "OP_DEBUG_BP_SET",
+          "request_bytes": 12,
+          "request_file": "debug_unsupported_target.bp_set_on_loopback.req.hex",
+          "response_bytes": 12,
+          "response_file": "debug_unsupported_target.bp_set_on_loopback.rsp.hex",
+          "response_hex": "a55a1a210002000100054486",
+          "response_payload_words": [
+            5
+          ],
+          "sequence": 2,
+          "status": 5
+        }
+      ]
+    }
+  ],
+  "word_order": "big-endian words on the wire; the debug payloads are the fixed shapes above, in opcode order, with no wait words"
+}

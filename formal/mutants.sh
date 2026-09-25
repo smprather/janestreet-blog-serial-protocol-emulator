@@ -200,6 +200,38 @@ fi
 # Induction shape with the inductive subset (-DFV_INDUCT), matching how those
 # claims are proved. mut_len kills the response-length bound, mut_bit14 breaks
 # the 16-bit word framing, mut_clr clears FAULT_RANGE without a CLEAR_FAULT.
+#
+# The response-buffer slot-overrun claim is now PROVED UNBOUNDED (reformulated
+# 2026-09-25, see formal_pe_ctrl.v and FORMAL-STRENGTHENING.md 7), so per the
+# mutant-kill bar it gets mutants of its OWN scope: the two ways r_slot can go
+# wrong in a walk are an accept that loads r_slot<=0, and an R_REQ reached
+# without passing an accepted R_START. A promoted claim that survived its own
+# scope would be blind, so these two are in the gate.
+cat > "$TMP/mut_slotload.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path('rtl/pe_ctrl.v'); t = p.read_text()
+if t.count("r_slot      <= 16'd1;") != 2: sys.exit("expected 2 accept r_slot loads")
+print("  accepted start loads r_slot<=0 (the walk can overrun the buffer)")
+p.write_text(t.replace("r_slot      <= 16'd1;", "r_slot      <= 16'd0;"))
+PY
+if apply_mutation "$TMP/mut_slotload.py"; then
+  FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=6 fv_case pe_ctrl_slot_load_zero 1 formal_pe_ctrl \
+    -DFV_INDUCT formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
+  restore_and_verify
+fi
+cat > "$TMP/mut_rreqjump.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path('rtl/pe_ctrl.v'); t = p.read_text()
+if "        R_IDLE: begin end" not in t: sys.exit("no R_IDLE arm")
+print("  R_IDLE reaches R_REQ without passing an accepted R_START")
+p.write_text(t.replace("        R_IDLE: begin end",
+  "        R_IDLE: begin rstate <= R_REQ; // MUTANT\n          end", 1))
+PY
+if apply_mutation "$TMP/mut_rreqjump.py"; then
+  FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=6 fv_case pe_ctrl_r_req_bypass 1 formal_pe_ctrl \
+    -DFV_INDUCT formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
+  restore_and_verify
+fi
 cat > "$TMP/mut_len.py" <<'PY'
 import pathlib, sys
 p = pathlib.Path('rtl/pe_ctrl.v'); t = p.read_text()
@@ -250,23 +282,76 @@ print("  tx_path clear guard removed (the owner can be taken from a busy engine)
 p.write_text(t.replace(needle, "end else if (1'b1) begin"))
 PY
 if apply_mutation "$TMP/mut_owner.py"; then
-  # -DFV_INDUCT: the shape C1 is PROVED in. Without it the target also carries
-  # C2, whose induction never closes on the clean design either -- so a
-  # "NOTPROVED" here would not be a differential.
+  # -DFV_INDUCT: the shape C1 is PROVED in. C2 is also in the target now (it is
+  # always-on since the 2026-09-25 strengthening), but the set guard is untouched
+  # by THIS mutation, so C2 still closes and the NOTPROVED below is C1's catch.
   FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=3 FORMAL_MEMORY_MAP=1 \
   fv_case pe_soc_owner_clear_guard_removed 1 formal_pe_soc \
     -DFV_INDUCT formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
   restore_and_verify
 fi
-# F2's SET-side guard is NOT in this harness ON PURPOSE. Its formal claim (C2)
-# is labelled gate-depth-only in formal_pe_soc.v: it is not inductive on this
-# toolchain, so the clean design does not close the full target either -- a
-# mutation run without -DFV_INDUCT reports a "catch" that is not a differential.
-# The enforcement for F2 is the directed TB case (tb_pe_soc_eth_loop's
-# run_owner_probe) and the `owner-set-guard-removed` mutation in
-# regress/mutate_eth_tx_loop_tb.sh, where the clean TB passes and the mutant
-# fails (verified: clean PASS, mutant FAIL on the rose_mid_serdes and tx_path
-# checks).
+# ------------------------------------------- 12/13. R3 debug-control claims
+# Both run against the pe_ctrl INDUCTIVE subset (the shape the clean claims are
+# proved in): H1 (a hit implies the hold) and H3 (an armed address is inside
+# instruction memory). The step/hold mutants live in regress/mutate_ctrl_r3_tb.sh,
+# where the TB is the authority: the pe_cpu formal target takes dbg_hold/dbg_step
+# as FREE inputs, so it proves the core's RESPONSE to them, not that pe_ctrl
+# asserts them.
+cat > "$TMP/mut_bp_hit_hold.py" <<'PYMUT'
+import pathlib, sys
+p = pathlib.Path('rtl/pe_ctrl.v'); t = p.read_text()
+needle = """        bp_hit     <= 1'b1;
+        dbg_hold_r <= 1'b1;
+      end"""
+if needle not in t: sys.exit("no hit/hold pair")
+print("  breakpoint hit no longer asserts the hold (H1)")
+p.write_text(t.replace(needle, """        bp_hit     <= 1'b1;
+      end""", 1))
+PYMUT
+if apply_mutation "$TMP/mut_bp_hit_hold.py"; then
+  FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=6 \
+  fv_case pe_ctrl_bp_hit_no_hold 1 formal_pe_ctrl \
+    -DFV_INDUCT formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
+  restore_and_verify
+fi
+cat > "$TMP/mut_bp_range.py" <<'PYMUT'
+# H3 (the bound) is NOT mutated here: the claim was VACUOUS and was removed (see
+# formal_pe_ctrl.v). The bound is enforced by the TB's C2 case and its
+# `bp-set-no-range` mutation in regress/mutate_ctrl_r3_tb.sh, where it IS
+# differential (clean TB passes, mutant TB fails).
+PYMUT
+
+# F2's SET-side guard, now a FIRST-CLASS formal mutant (2026-09-25). When this
+# case was written C2 was labelled gate-depth-only, so the set guard had no
+# differential formal mutant here -- only the directed TB case. That is no
+# longer true: C2 is now UNBOUNDED (it closes by k-induction at k=1 because the
+# guard tap and the busy tap clock from the same edge of the same always block),
+# so the clean design closes this target and a NOTPROVED below IS a real
+# differential. The mutant removes the set guard -- the pre-fix F2 bug, where a
+# TXCTRL write during a live SERDES transmission steals the codec mid-frame --
+# and C2 must catch it.
+cat > "$TMP/mut_owner_set.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path('rtl/pe_soc.v'); t = p.read_text()
+needle = "if (!ser_tx_busy) tx_path <= 1'b1;"
+if t.count(needle) != 1: sys.exit(f"expected 1 set guard, found {t.count(needle)}")
+print("  tx_path set guard removed (the owner can be stolen from a busy SERDES)")
+p.write_text(t.replace(needle, "tx_path <= 1'b1; // MUTANT"))
+PY
+if apply_mutation "$TMP/mut_owner_set.py"; then
+  # C2 is now proved by INDUCTION (unbounded), so run the mutant in the same
+  # shape the clean claim is proved in. The claim is always-on, so it is in the
+  # target with or without -DFV_INDUCT.
+  FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=3 FORMAL_MEMORY_MAP=1 \
+  fv_case pe_soc_owner_set_guard_removed 1 formal_pe_soc \
+    -DFV_INDUCT formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
+  restore_and_verify
+fi
+# F2's independent enforcement evidence is ALSO the directed TB case
+# (tb_pe_soc_eth_loop's run_owner_probe) and the `owner-set-guard-removed`
+# mutation in regress/mutate_eth_tx_loop_tb.sh, where the clean TB passes and
+# the mutant fails (verified: clean PASS, mutant FAIL on the rose_mid_serdes and
+# tx_path checks). The formal mutant above is the wire-level-independent twin.
 
 rm -rf "$TMP"
 echo

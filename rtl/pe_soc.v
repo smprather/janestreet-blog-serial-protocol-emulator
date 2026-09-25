@@ -215,6 +215,13 @@ module pe_soc #(
   output logic [7:0]  dbg_y,
   output logic [15:0] dbg_insn,
   output logic [7:0]  dbg_timer
+  // ---- R3 DEBUG CONTROL (manager dispatch 2026-09-25) -------------------
+  // Routing only: the host bus (pe_ctrl, outside this block) holds/steps the
+  // core and reads its landing PC. No pad is added and the core's ISA is
+  // untouched; these three wires are the whole debug interface.
+  ,input  logic        dbg_hold
+  ,input  logic        dbg_step
+  ,output logic [9:0]  dbg_next_pc
 `ifdef FORMAL
   // ---- FORMAL-ONLY OBSERVATION PORTS (manager ruling 2026-09-25) --------
   // Target 4: the codec owner mux. The subject is internal (tx_path and the two
@@ -341,7 +348,9 @@ module pe_soc #(
     .io_port(io_port), .io_we(io_we), .io_re(io_re),
     .io_wdata(io_wdata), .io_rdata(io_rdata),
     .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_x(dbg_x), .dbg_y(dbg_y),
-    .dbg_insn(dbg_insn)
+    .dbg_insn(dbg_insn),
+    // R3: the debug hold/step from the host bus, and the landing PC back to it.
+    .dbg_hold(dbg_hold), .dbg_step(dbg_step), .dbg_next_pc(dbg_next_pc)
   );
 
   // ---- R2: the bounded host read port ------------------------------------

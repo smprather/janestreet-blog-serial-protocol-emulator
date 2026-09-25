@@ -18,6 +18,7 @@
 //     ser_tx_busy, exactly as the CLEAR is refused while eth_tx_busy, and the
 //     TXSTAT readback reflects the ACTUAL owner. C2 below is the claim that
 //     enforces the new guard (it was the refutation target before the fix).
+//     C2 is now UNBOUNDED (k-induction, mutant-checked) -- see its comment.
 //
 // WHY TRANSITION-LOCAL CLAIMS AND WHY NO FIRMWARE PROGRAM. The window writes
 // that move the owner come from the CPU's IO bus (io_we/io_port/io_wdata), and
@@ -97,18 +98,30 @@ module formal_pe_soc #(
     if (p_tx_path && !fv_tx_path) assert (!fv_eth_busy_seen);
   end
 
-`ifndef FV_INDUCT
   // ---- C2: the owner is not taken away from a RUNNING SERDES (F2's fix) ---
-  // LABELLED: checked at the gate depth, but NOT closed by induction on this
-  // toolchain. The guard and the observed busy value are separate sampling
-  // chains in yosys's clk2fflogic model (the same artifact that made the
-  // pe_ctrl clocked claims non-inductive), so an arbitrary pre-state can make
-  // "the guard was refused" and "the busy value was low" disagree. The
-  // ENFORCEMENT for F2 is therefore the directed TB case in
-  // tb_pe_soc_eth_loop.v (run_owner_probe: a TXCTRL claim during a live SERDES
-  // transmission must leave the codec with the SERDES and the frame intact)
-  // plus the `owner-set-guard-removed` mutation in
-  // regress/mutate_eth_tx_loop_tb.sh, which the TB catches.
+  // UNBOUNDED (2026-09-25 strengthening). This claim was previously gate-depth
+  // only, labelled "not closed by induction": the guard decision and the
+  // observed busy value looked like separate sampling chains in yosys's
+  // clk2fflogic model, so an arbitrary pre-state could make "the guard was
+  // refused" and "the busy value was low" disagree.
+  //
+  // That diagnosis was wrong about THIS claim, and the difference from the
+  // pe_ctrl claims is the whole point. fv_set_took and fv_ser_busy_seen are
+  // clocked from the SAME edge of the SAME always block, both sampling the same
+  // `ser_tx_busy` wire (pe_soc.v: fv_ser_busy_seen <= ser_tx_busy and
+  // fv_set_took <= ... && !ser_tx_busy). There is no history in the claim and no
+  // snapshot to drift: it is a one-step property of the guard's own update
+  // equations, so it closes by k-induction at k=1 from ANY pre-state. (The
+  // pe_ctrl claims below fail precisely because they DO carry a free snapshot
+  // register whose value in an arbitrary pre-state is unconstrained relative
+  // to the live logic -- see formal_pe_ctrl.v and the toolchain-gap note.)
+  //
+  // MUTANT-CHECKED, which is what makes it evidence rather than decoration: the
+  // `owner-set-guard-removed` formal mutant (pe_soc.v's `if (!ser_tx_busy)
+  // tx_path <= 1'b1` replaced by an unconditional set -- the pre-fix F2 bug)
+  // makes this claim NOT close (measured: induction step fails, NOTPROVED), so
+  // the claim is not vacuous. See formal/mutants.sh case 14 and
+  // reviews/2026-09-25/FORMAL-STRENGTHENING.md.
   always @(*) begin
     if (!p_tx_path && fv_tx_path) assert (!fv_ser_busy_seen);
   end
@@ -117,7 +130,6 @@ module formal_pe_soc #(
   always @(*) begin
     if (fv_set_took) assert (!fv_ser_busy_seen);
   end
-`endif
 endmodule
 
 `default_nettype wire

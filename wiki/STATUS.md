@@ -2106,3 +2106,68 @@ The only open item is item 11, and it is gated on having a board.
     per-word cost of flop memory. Read before touching the SoC's memories.
 11. [[concepts/ethernet-scope]] — what the 10BASE-T stretch goal is and is not,
     and the throughput arithmetic that puts Ethernet bits in hardware.
+
+> **R3 debug control — first synthesis screen for the phase (2026-09-25).**
+> `./regress/synth_area.sh` **exit 0**, no diagnostics (no driver-driver
+> conflict, no undriven wire, no yosys ERROR). Current mapped counts, sg13g2 typ
+> 1.20V/25C, pre-route: `pe_cpu` 401 / 5,086.44 µm², `pe_ctrl` 4,054 /
+> 63,573.51, `pe_soc` 6,355 / 110,569.65, `tt_um_top` 10,221 / 172,760.93.
+>
+> **The R3 cost, measured like for like** — pre-R3 sources taken from git
+> (`5cc5152~1`), same liberty and the same script and source list: `pe_cpu`
+> 377 → 401 cells (**+24**), `pe_ctrl` 3,771 → 4,054 (**+283**), `pe_soc`
+> 6,334 → 6,355 cells / 110,421 → 110,570 µm² (**+21**, +0.3%). One breakpoint
+> register, its comparator, a hold and a step pulse, and four response shapes.
+>
+> **Earlier figures in this file are not comparable to these.** They were taken
+> with earlier source lists — the newest recorded screen above (eth_tx) has
+> `pe_soc` 6,191 / `tt_um_top` 7,980, and an earlier one has `pe_ctrl` 1,731 —
+> so the delta between those and today's is not the R3 delta. Use the pre/post
+> pair above for R3 and today's column for "now". That entry's own note still
+> stands: **no STA screen for this phase yet** (Task 7); no physical flow, DRC
+> or LVS.
+
+---
+
+## BASELINE SCOPE KEY — how to read the mapped area figures in this file
+(added 2026-09-25; the chronology above is unchanged, this only labels its scope)
+
+Mapped cell/area figures appear throughout this record, and **a whole-design
+total is only comparable with another whole-design total from the SAME
+source-list scope.** Each era added modules to `regress/synth_area.sh`'s
+source list, so an older `pe_soc` total is not a baseline for a newer one —
+comparing across eras reads as a multi-thousand-cell "regression" that is really
+just a longer list. The eras, by the module list each one elaborated (read off
+the synthesis artifacts, not reconstructed):
+
+| era | modules added to the whole-design list | recorded `pe_soc` / `tt_um_top` |
+|---|---|---|
+| early (2026-09-23, `eth-soc`) | cpu imem pinmux dru manch crc eth_mac fbuf soc | 3,571 / 3,888 |
+| +SERDES (2026-09-24, `serdes-sta`) | + serdes nrzi bitstuff codec_mux | 4,961 / 5,363 |
+| +eth_tx (2026-09-25, `eth-tx-sta`) | + eth_tx | 6,191 / 7,980 |
+| R2/R3 (2026-09-25, `r2-sta`/`r3-sta`) | (same list as eth_tx) | 6,334→6,355 (R3 delta) |
+
+**Per-block figures ARE comparable across eras**, because each is a single-module
+top whose own source did not change: `pe_ctrl`, `pe_cpu`, `pe_eth_tx`,
+`pe_eth_mac`, `pe_serdes`, `pe_imem_flop`, `pe_fbuf_flop`. Use those for
+regression; use the era table only to interpret a whole-design total.
+
+**Current per-block set** (`regress/synth_area.sh`, sg13g2 typ, mapped
+pre-route, 2026-09-25 — the same script every figure above was measured with):
+
+| block | cells | µm² |
+|---|---|---|
+| `pe_serdes` | 529 | 11,216.21 |
+| `pe_cpu` | 401 | 5,086.44 |
+| `pe_ctrl` | 4,054 | 63,573.51 |
+| `pe_eth_mac` | 1,681 | 23,749.63 |
+| `pe_eth_tx` | 904 | 16,749.44 |
+| `pe_imem_flop` | 61,057 | 1,300,811.66 |
+| `pe_fbuf_flop` | 45,557 | 1,340,730.39 |
+
+**The R3 phase's own cost, measured like for like** (pre-R3 sources from git
+`5cc5152~1`, same liberty and script — the only comparison that isolates a
+change): `pe_cpu` +24, `pe_ctrl` +283, `pe_soc` +21 cells / +148 µm². See
+`reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md` and `R3-STA.md`. Whole-design
+`pe_soc`/`tt_um_top` movement between eras is dominated by the changing list,
+not by any one phase.

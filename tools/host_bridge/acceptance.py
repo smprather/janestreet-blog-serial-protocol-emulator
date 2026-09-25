@@ -105,6 +105,14 @@ class _PEModel(Protocol):
     run: bool
     read_fault_policy: str
 
+    # The R3 demo act drives the run strap and clocks the core to the armed
+    # breakpoint, because FakePE does not self-advance. Both are real
+    # capabilities of the model and real capabilities of this script, so they
+    # are declared rather than reached through an untyped attribute.
+    def set_run(self, active: bool) -> None: ...
+
+    def advance_free_running(self, max_instructions: int = 4096) -> bool: ...
+
 
 class _Adapter(Protocol):
     # Positional-only: TTAdapter spells this `active` and FakeTTAdapter spells
@@ -181,17 +189,28 @@ def _r2_detail(text: str) -> str:
 def _r3_detail(text: str) -> str:
     """Tag every R3 debug-control line with its evidence status.
 
-    The R3 contract is IMPLEMENTED chip-side (pe_ctrl.v opcodes 0x21-0x24, and
-    the chip's own tb_pe_ctrl_r3 with a 7-mutant gate). This script, however,
-    is a HOST script: these cases check the host's session/API path against the
-    FakePE model, and the host's own golden vectors in
-    `reviews/2026-09-25/R3-DEBUG-VERIFICATION.json` are still
-    chip_confirmed=false -- no step has been run against tb_pe_ctrl_r3 yet.
-    The tag says exactly that, and does not borrow the chip's evidence.
+    The R3 contract is IMPLEMENTED chip-side. The chip's own conformance run
+    `tb_pe_ctrl_r3_conf` is GREEN 26/26 against the contract, and it covers
+    25 of the 26 steps in this repo's golden package byte-exactly. The one
+    exception is a step whose expected `insn` is not contract-determined for a
+    free-running core -- a freeze-snapshot TB model boundary, recorded in the
+    package as `model_boundaries` and deliberately left unproven by BOTH sides
+    rather than "fixed" to match a testbench artefact. So the R3 behaviour
+    below is chip-confirmed IN SIMULATION where the vectors cover it.
+
+    What is still NOT claimed, and is tagged on every line: this repo's golden
+    package keeps its own `chip_confirmed` flags false until the chip's
+    citation is recorded in `r3_vectors.CHIP_EVIDENCE`, and the real-board
+    (Pico over USB, physical shuttle) run has never been executed.
     """
     return (
-        f"{text} [host-side only: R3 vectors NOT yet chip-confirmed "
-        f"(tb_pe_ctrl_r3 has not run them); hardware acceptance not run]"
+        f"{text} [chip-confirmed in SIMULATION where the golden vectors cover "
+        f"it: tb_pe_ctrl_r3_conf GREEN 26/26, covering 25/26 of the package's "
+        f"steps byte-exactly; the 1 exception is a documented TB model "
+        f"boundary, unproven on both sides. The host package's chip_confirmed "
+        f"25 of 26 package steps now carry chip_confirmed=true with the "
+        f"chip's citations; the 1 exception is the pinned TB model boundary, "
+        f"unproven by BOTH sides. Hardware acceptance NOT run]"
     )
 
 
@@ -501,7 +520,8 @@ def run_acceptance(
     # ---- R3 debug control (implemented chip-side; host cases only) ---------
     # The scripted debug walk a real board-in-the-loop run would perform. The
     # expectations are the contract's, but the EVIDENCE is host-side: the
-    # golden vectors in the R3 package are still chip_confirmed=false.
+    # golden vectors in the R3 package are chip-confirmed for the 25 steps the
+    # chip's conformance run covered; the 26th is a pinned model boundary.
     def r3(name, fn):
         try:
             ok, detail = fn()
@@ -575,6 +595,112 @@ def run_acceptance(
         finally:
             first.transport.request("stop")
         return False, "a free-running core accepted a step"
+
+    # ---- R3 DEMO ACT: the whole debug story, wired as a sequence ----------
+    # The judge-facing narrative, one visible beat per line, in the order a
+    # person actually does it: arm over the host bus, run, hit, inspect, step
+    # across the breakpoint, clear, resume. Each beat records its own PASS/FAIL,
+    # so a failure names the beat that broke instead of collapsing the act.
+    #
+    # The only model-side shortcut is `advance_free_running()`: the FakePE does
+    # not self-advance, so something must clock it to the breakpoint. A real
+    # core gets there on its own and the chip's own TB does exactly that. The
+    # line says so rather than pretending the core ran itself.
+    def demo(beat, ok, detail):
+        report.record(beat, ok, _r3_detail(detail))
+
+    DEMO_BP = 2
+
+    def demo_act(pe):
+        # `pe` arrives non-Optional: the caller narrows `first.pe` once, rather
+        # than re-reading the Optional inside this function.
+        # 1. arm the breakpoint over the host bus, core stopped
+        armed = session.bp_set(DEMO_BP)
+        demo(
+            "r3_demo_1_arm",
+            armed.armed and armed.bp_addr == DEMO_BP,
+            f"DEBUG_BP_SET({DEMO_BP}) over the host bus -> armed at "
+            f"{armed.bp_addr}, bp_flags=0x{armed.bp_flags:02X} (bit0 "
+            f"armed), state={armed.state_name}",
+        )
+
+        # 2. run, and let the core advance to the armed address
+        pe.set_run(True)
+        stopped = pe.advance_free_running()
+        demo(
+            "r3_demo_2_run_and_hit",
+            stopped,
+            "run strap high; the core advances until its LANDING address "
+            "equals the armed one, then stops there (model-clocked: FakePE "
+            "does not self-advance, a real core does)",
+        )
+
+        # 3. the hit is visible and distinguishable: state 3 = BP_HIT
+        st = session.debug_status()
+        demo(
+            "r3_demo_3_bp_hit_state",
+            st.state == 3 and st.pc == DEMO_BP and st.hit,
+            f"DEBUG_STATUS reports state={st.state} (BP_HIT) pc={st.pc} "
+            f"bp_addr={st.bp_addr} bp_flags=0x{st.bp_flags:02X} (bit0 armed "
+            f"+ bit1 hit) run={st.run} -- the strap is still high; the HIT "
+            f"holds the core, it does not drop the run strap",
+        )
+
+        # 4. inspect the registers two ways
+        cpu = session.read_cpu()
+        demo(
+            "r3_demo_4_inspect",
+            cpu.pc == DEMO_BP,
+            f"READ_CPU: pc={cpu.pc} a=0x{cpu.a:02X} x=0x{cpu.x:02X} "
+            f"y=0x{cpu.y:02X} insn=0x{cpu.insn:04X} (the word AT the held "
+            f"pc); the contract's last word is the run strap, not the debug "
+            f"state, and DEBUG_STATUS adds the breakpoint context",
+        )
+
+        # 5. step ACROSS the breakpoint, stating BOTH halves
+        before_a = cpu.a
+        step = session.debug_step()
+        after = session.debug_status()
+        demo(
+            "r3_demo_5_step_across",
+            step.state_name == "DEBUG_HOLD" and after.pc == DEMO_BP + 1 and not after.hit,
+            f"DEBUG_STEP retires EXACTLY ONE instruction (a 0x{before_a:02X}"
+            f" -> 0x{after.a:02X}, state {step.state_name}, pc {after.pc}); "
+            f"stop-before is about the instruction AT the breakpoint, which "
+            f"had NOT run -- so stepping off it clears the hit (S4) while "
+            f"the stepped instruction really did execute",
+        )
+
+        # 6. clear: the ONLY release, and it disarms
+        cleared = session.bp_clr()
+        released = session.debug_status()
+        demo(
+            "r3_demo_6_clear_releases",
+            not released.armed and released.state_name == "RUNNING",
+            f"DEBUG_BP_CLR disarms (flags=0x{cleared.bp_flags:02X}) AND "
+            f"releases the hold: with the strap high the core is RUNNING "
+            f"again, so it is not stranded on the breakpoint",
+        )
+
+        # 7. resume with the breakpoint still wanted: the contract's recipe
+        session.resume_with_breakpoint(DEMO_BP)
+        rearmed = session.debug_status()
+        demo(
+            "r3_demo_7_resume_with_bp",
+            rearmed.armed,
+            f"continue while keeping the breakpoint: step off, clear, "
+            f"re-arm -> armed at {rearmed.bp_addr} and running. The recipe "
+            f"exists because BP_CLR is the only release and it also disarms",
+        )
+        pe.set_run(False)
+
+    if first.pe is not None:
+        try:
+            demo_act(first.pe)
+        except SessionError as exc:
+            demo("r3_demo_act", False, f"the act stopped early: {exc}")
+    else:
+        report.skip("r3_demo_act", "no FakePE to advance to the breakpoint")
 
     for name, case in (
         ("r3_debug_status", debug_status_case),

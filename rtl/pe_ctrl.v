@@ -83,6 +83,103 @@
 // write, and CLEAR_FAULT clears it; address+count past the end is RANGE and
 // is NEVER a wrapped read. A count larger than one response frame can carry
 // (15 words / 30 bytes) also answers RANGE: the host splits the transfer.
+//
+// THE R3 DEBUG CONTRACT (landed 2026-09-25; manager dispatch "R3 debug-control
+// phase"). R2 made "observe" real; R3 makes "debug" real. These are the wire
+// changes a HOST must implement:
+//
+//   0x21 DEBUG_STEP   -> (OK, state, pc_next, bp_addr, bp_flags)
+//                        ONE request payload word is NOT expected: len must be
+//                        0. Executes EXACTLY ONE instruction and returns to the
+//                        stopped-with-debug-hold state. Allowed when the core is
+//                        stopped (run=0) or already held (a breakpoint hit);
+//                        NOT_READY while the core is free-running (run=1), with
+//                        NO fault. A step from the normal boot stop (PC=0)
+//                        executes imem[0]; a step off a breakpoint CLEARS the
+//                        hit unless the step LANDS on the breakpoint again.
+//                        The response's state and bp_flags are for the state
+//                        AFTER the step; pc_next is the address the next step
+//                        will execute from.
+//   0x22 DEBUG_BP_SET -> (OK, state, pc, bp_addr, bp_flags)
+//                        ONE request payload word: the breakpoint address. The
+//                        address must be < IMEM_WORDS, else the answer is RANGE
+//                        and the breakpoint is NOT armed and NOT changed (a
+//                        rejected op has no side effect). Arming clears a stale
+//                        hit. Allowed while running: the armed breakpoint then
+//                        stops a LIVE core the cycle its PC matches.
+//   0x23 DEBUG_BP_CLR -> (OK, state, pc, bp_addr_before, bp_flags)
+//                        len must be 0. Disarms the breakpoint, clears the hit,
+//                        and RELEASES the debug hold: with run=1 the core
+//                        resumes; with run=0 it returns to the normal boot stop
+//                        (PC=0). This is also how a host resumes a core that a
+//                        breakpoint stopped. Idempotent (safe when disarmed).
+//
+//   *** BRING-UP TRAP: ONCE HELD, THE run STRAP IS IGNORED -- BOTH WAYS ***
+//   A hold is RELEASED ONLY BY DEBUG_BP_CLR OR BY RESET. The run strap does
+//   nothing while the hold is up, in EITHER direction: dropping it does not
+//   resume, and RAISING it does not either. The gate is
+//   `cpu_exec = dbg_step || (run && !dbg_hold)` (pe_cpu.v:217), so `run` is
+//   masked by the hold, and `dbg_hold_r` is cleared at exactly two places
+//   (reset, and the DEBUG_BP_CLR branch below) and set by a step or a hit.
+//   So a host that single-steps, or that stops on a breakpoint, and then
+//   "re-asserts run=1 to carry on" will find the core STILL held, with no
+//   fault and no error to explain it. The only resume is
+//   DEBUG_BP_CLR (which also disarms, hence the step-off -> clear -> re-arm
+//   recipe), or a reset. This is a property of the debug design, not a bug;
+//   it is recorded here because it is invisible from the response words and
+//   it costs a bring-up board a long time if nobody has written it down.
+//   0x24 DEBUG_STATUS -> (OK, state, pc, bp_addr, bp_flags, run, a, x, y, insn)
+//                        len must be 0. The full debug readback: the common
+//                        5-word prefix plus the architectural state, same field
+//                        meanings and widths as READ_CPU (run is the STRAP
+//                        level). Answered while running and while held.
+//
+// state (2 bits, low half of the word; the upper bits are ZERO):
+//   0 STOPPED       the normal boot stop: run=0, no debug hold, PC held at 0
+//   1 RUNNING       the strap is high and no debug hold is asserted
+//   2 DEBUG_HOLD    held by the debug controls with the PC PRESERVED (single-
+//                   stepping); the core is not executing
+//   3 BP_HIT        held by the breakpoint: the PC preserved, the hit latched
+// R2's STATUS `state` word carries THE SAME encoding: its old values 0/1 keep
+// their meaning, and 2/3 are new states that only debug control can enter. No
+// R2 field changes shape.
+//
+// bp_flags (low bits; the rest ZERO): bit0 = breakpoint ARMED, bit1 = HIT
+// latched. bp_addr is the armed address, or 0 when disarmed; a breakpoint at
+// address 0 is legal and is distinguished from "disarmed" by bit0.
+//
+// WAIT WORDS: these four ops are READY-IMMEDIATE -- they are answered from
+// registers in the request's own CRC cycle, exactly like READ_CPU, so they emit
+// ZERO 0xFFFF filler words. The wait-word rule stays what it is for the bounded
+// reads (0x13/0x14) only.
+//
+// TARGETS: the debug ops are TARGET_HOST only; the loopback target answers
+// UNSUPPORTED like any other op it does not implement.
+//
+// FAULTS: no new fault class. A malformed frame (bad CRC, bad length, bad
+// header) answers BAD_FRAME and has NO side effect -- no step, no arming. A
+// sequencing refusal answers NOT_READY with no fault, exactly like LOAD while
+// running and the bounded reads while running.
+//
+// WHERE THE LOGIC LIVES (no new pads): pe_ctrl owns the opcode decode, the
+// breakpoint register and flags, the hit comparison against the core's PC (it
+// already receives dbg_pc), and the debug-hold/step outputs. pe_cpu takes two
+// new INPUTS and exposes one new OUTPUT:
+//   dbg_hold  MASKS the run strap: while high the core does not execute and
+//             PRESERVES its PC (unlike the boot stop, which holds it at 0).
+//             The execute gate becomes
+//               cpu_exec = dbg_step || (run && !dbg_hold)
+//             and the PC updates only on `cpu_exec`, is preserved while
+//             dbg_hold, and is zeroed only on the boot stop (run=0, no hold).
+//   dbg_step  a one-cycle pulse from pe_ctrl: executes EXACTLY one instruction
+//             and advances the PC to next_pc.
+//   dbg_next_pc  the combinational next PC (the landing address of the step
+//             about to execute). pe_ctrl samples it in the dispatch cycle, so
+//             the DEBUG_STEP response reports the landing PC even though the
+//             instruction commits at the following edge -- the PC and the
+//             fetched instruction are frozen in between, by construction.
+// pe_soc routes the three wires. tt_um's pin map is unchanged: the run strap
+// remains a pad, and the debug controls are host-bus only.
 // READ_CPU is never rejected for size.
 // Unknown opcodes, a request with the response bit set, and unknown targets
 // answer UNSUPPORTED with no fault. A frame that fails its CRC or header
@@ -186,6 +283,15 @@ module pe_ctrl #(
   input  logic [7:0]  dbg_y,
   input  logic [15:0] dbg_insn,
   input  logic [7:0]  dbg_timer
+  // ---- R3 DEBUG CONTROL (manager dispatch 2026-09-25; contract frozen in
+  // reviews/2026-09-25/R3-DEBUG-CONTROL-CONTRACT.md, whose header block lands
+  // in this file's header) -------------------------------------------------
+  // The host bus can hold the core, advance it exactly one instruction at a
+  // time, and stop it on a PC breakpoint. These three wires are the whole
+  // interface to the core: no pad is added, and the run strap stays a pin.
+  ,input  logic [9:0]  dbg_next_pc   // the CPU's landing address for a step
+  ,output logic        dbg_hold      // 1: hold the core, preserving its PC
+  ,output logic        dbg_step      // 1-cycle pulse: execute one instruction
 `ifdef FORMAL
   // ---- FORMAL-ONLY OBSERVATION PORTS (manager ruling 2026-09-25) --------
   // Guarded instrumentation for formal/pe_ctrl/formal_pe_ctrl.v. These are
@@ -208,6 +314,14 @@ module pe_ctrl #(
   //   fv_r_imm                                P2a walk-vs-immediate-rejection:
   //                both sit in R_START, and only the immediate one holds stale
   //                r_addr/r_left values
+  // R3 taps: fv_dbg_state is the 2-bit state encoding the STATUS/DEBUG
+  // responses report; fv_bp_en/fv_bp_hit/fv_bp_addr are the breakpoint
+  // register, so the hit claims can be stated over ports.
+  ,output logic [1:0]  fv_dbg_state
+  ,output logic        fv_bp_en
+  ,output logic        fv_bp_hit
+  ,output logic [9:0]  fv_bp_addr
+  ,output logic        fv_dbg_hold
   ,output logic [15:0] fv_resp_len
   ,output logic [4:0]  fv_resp_idx
   ,output logic        fv_resp_active
@@ -238,6 +352,11 @@ module pe_ctrl #(
   localparam logic [7:0]  OP_DUMPCOR= 8'h15;   // R2: core header dump
   localparam logic [7:0]  OP_CLRFLT = 8'h16;
   localparam logic [7:0]  OP_TARGET = 8'h20;
+  // R3 debug control (contract: reviews/2026-09-25/R3-DEBUG-CONTROL-CONTRACT.md)
+  localparam logic [7:0]  OP_DBGSTEP  = 8'h21;   // one instruction, then hold
+  localparam logic [7:0]  OP_DBGBPSET = 8'h22;   // arm the PC breakpoint
+  localparam logic [7:0]  OP_DBGBPCLR = 8'h23;   // disarm, clear hit, release
+  localparam logic [7:0]  OP_DBGSTAT  = 8'h24;   // the debug readback
   localparam logic [7:0]  RESP_BIT  = 8'h80;
 
   localparam logic [15:0] ST_OK       = 16'd0;
@@ -415,6 +534,26 @@ module pe_ctrl #(
   logic        pay1_valid;
   logic [15:0] load_idx;        // payload words offered to this LOAD
 
+  // ---- R3 debug control: the breakpoint and the hold/step outputs ---------
+  // The registers are host-bus only; the DECODE that writes them and the HIT
+  // logic live with the response dispatch. `dbg_hold` masks the run strap in
+  // pe_cpu (the core stops and PRESERVES its PC); `dbg_step` is a one-cycle
+  // pulse that executes exactly one instruction. No pad, no ISA change.
+  logic [9:0]  bp_addr;       // the armed breakpoint address
+  logic        bp_en;         // armed
+  logic        bp_hit;        // hit latched: the core is stopped ON the bp
+  logic        dbg_hold_r;    // the debug-hold level
+  logic        dbg_step_r;    // the one-cycle step pulse
+  assign dbg_hold = dbg_hold_r;
+  assign dbg_step = dbg_step_r;
+
+  // The state/flag encoding the STATUS and DEBUG responses report. 0/1 keep
+  // their R1/R2 meaning (stopped/running); 2/3 are the debug states, which
+  // only a debug hold can enter.
+  wire [1:0] dbg_state = dbg_hold_r ? (bp_hit ? 2'd3 : 2'd2)
+                                    : (run ? 2'd1 : 2'd0);
+  wire [1:0] bp_flags  = {bp_hit, bp_en};   // bit0 = armed, bit1 = hit
+
   // ---- response ---------------------------------------------------------
   logic        resp_active, resp_hold_oe;
   logic [4:0]  resp_idx;
@@ -524,11 +663,37 @@ module pe_ctrl #(
       faults        <= '0;
       selected_target <= '0;
       spi_miso      <= 1'b0;
+      bp_addr <= 10'd0; bp_en <= 1'b0; bp_hit <= 1'b0;
+      dbg_hold_r <= 1'b0; dbg_step_r <= 1'b0;
       for (int i = 0; i < 16; i++) resp_buf[i] <= '0;
     end else begin
 `ifdef FORMAL
       fv_clr_mask_r <= 16'h0000;   // formal-only: default = no CLEAR_FAULT
 `endif
+      // R3: the step pulse is one cycle wide unless the debug decode sets it.
+      // A transaction does NOT clear the breakpoint or the hold: CS_N is a
+      // frame boundary, not a debug-state boundary.
+      dbg_step_r <= 1'b0;
+      // R3 breakpoint: stop BEFORE the instruction at the armed address runs.
+      // The comparison is on the LANDING address, so the core halts at the
+      // breakpoint with that instruction UNEXECUTED; the decode below can
+      // override the hit in the same cycle (a step's landing rule).
+      //
+      // BOTH HALVES, because stating only one of them is how a reader ends up
+      // with the wrong model. Stop-before protects the instruction AT the
+      // breakpoint: it has NOT run, and no io_we / dmem_we / a/x/y effect of it
+      // occurred. It does NOT mean the step is a no-op: the step DOES retire the
+      // instruction it executed on the way there, exactly as a step always does.
+      // Stepping from 1 to 2 with the breakpoint armed at 2 therefore executes
+      // the LDI at 1 (so `a` becomes its value) and leaves the instruction at 2
+      // untouched -- the one the debugger is about to inspect. The host vectors
+      // are reconciled to this: a step onto an armed address retires the
+      // instruction stepped FROM and protects the one AT the breakpoint.
+      if (bp_en && !dbg_hold_r && (run || dbg_step_r) &&
+          (dbg_next_pc == bp_addr)) begin
+        bp_hit     <= 1'b1;
+        dbg_hold_r <= 1'b1;
+      end
       // CS falling edge: a new transaction. Frame state resets; the sticky
       // faults, words_written, echo and selected target persist.
       if (cs_fall) begin
@@ -620,6 +785,12 @@ module pe_ctrl #(
                   if (rx_word != 16'd2) frm_len_bad <= 1'b1;
                 OP_CLRFLT, OP_TARGET:
                   if (rx_word != 16'd1) frm_len_bad <= 1'b1;
+                // R3: DEBUG_STEP / BP_CLR / DEBUG_STATUS take no payload;
+                // DEBUG_BP_SET carries exactly the address word.
+                OP_DBGSTEP, OP_DBGBPCLR, OP_DBGSTAT:
+                  if (rx_word != 16'd0) frm_len_bad <= 1'b1;
+                OP_DBGBPSET:
+                  if (rx_word != 16'd1) frm_len_bad <= 1'b1;
                 default: ;   // LOAD bound by range; unknown ops consume
               endcase
               if (rx_word == 16'd0) rx_state <= S_CRC;
@@ -645,7 +816,8 @@ module pe_ctrl #(
                     load_idx   <= load_idx + 16'd1;
                   end
                 end
-              end else if (frm_op == OP_CLRFLT || frm_op == OP_TARGET) begin
+              end else if (frm_op == OP_CLRFLT || frm_op == OP_TARGET ||
+                           frm_op == OP_DBGBPSET) begin
                 if (!pay0_valid) begin
                   pay0       <= rx_word;
                   pay0_valid <= 1'b1;
@@ -716,7 +888,7 @@ module pe_ctrl #(
                     // field lies about a register the R1 layout omitted.
                     resp_len    <= 16'd11;
                     resp_buf[0] <= ST_OK;
-                    resp_buf[1] <= {15'b0, run};             // state
+                    resp_buf[1] <= {14'b0, dbg_state};       // state (R3: 2/3 = debug)
                     resp_buf[2] <= {15'b0, run};             // run
                     resp_buf[3] <= selected_target;
                     resp_buf[4] <= {6'b0, dbg_pc};           // pc, FULL width
@@ -738,7 +910,7 @@ module pe_ctrl #(
                     end else begin
                       resp_len    <= 16'd11;
                       resp_buf[0] <= ST_OK;
-                      resp_buf[1] <= {15'b0, run};           // state
+                      resp_buf[1] <= {14'b0, dbg_state};     // state (R3: 2/3 = debug)
                       resp_buf[2] <= {15'b0, run};           // run
                       resp_buf[3] <= selected_target;
                       resp_buf[4] <= {6'b0, dbg_pc};
@@ -864,6 +1036,87 @@ module pe_ctrl #(
                         rstate      <= R_START;
                       end
                     end
+                  end
+                  // ---- R3 debug control ---------------------------------
+                  OP_DBGSTEP: begin
+                    // One instruction. The response reports the state and PC
+                    // AFTER the step: state 2 (held) or 3 when the step LANDS
+                    // on the armed breakpoint, and pc_next is where the core
+                    // will resume. A free-running core cannot be stepped:
+                    // NOT_READY with no side effect (no instruction executes).
+                    resp_len    <= 16'd5;
+                    resp_buf[0] <= ST_OK;
+                    resp_buf[1] <= {14'b0, (bp_en && (dbg_next_pc == bp_addr))
+                                          ? 2'd3 : 2'd2};
+                    resp_buf[2] <= {6'b0, dbg_next_pc[9:0]};
+                    resp_buf[3] <= {6'b0, bp_addr};
+                    // POST-step flags: bit0 armed, bit1 the hit the step leaves
+                    // (a step away from the bp clears it; a landing sets it).
+                    // `bp_flags` is the PRE-edge latch and would report the
+                    // hit the step is clearing.
+                    resp_buf[4] <= {14'b0, (bp_en && (dbg_next_pc == bp_addr))
+                                          ? 2'b11 : {1'b0, bp_en}};
+                    if (run && !dbg_hold_r) begin
+                      resp_buf[0] <= ST_NOTREADY;
+                      resp_buf[1] <= {14'b0, dbg_state};
+                      resp_buf[2] <= {6'b0, dbg_pc};
+                      resp_buf[4] <= {14'b0, bp_flags};
+                    end else begin
+                      dbg_step_r <= 1'b1;
+                      dbg_hold_r <= 1'b1;
+                      bp_hit     <= bp_en && (dbg_next_pc == bp_addr);
+                    end
+                  end
+                  OP_DBGBPSET: begin
+                    // Arm (or re-arm). Past the end of instruction memory is
+                    // RANGE and changes NOTHING -- a rejected op has no side
+                    // effect. Arming clears a stale hit.
+                    resp_len    <= 16'd5;
+                    resp_buf[0] <= ST_OK;
+                    resp_buf[1] <= {14'b0, dbg_state};
+                    resp_buf[2] <= {6'b0, dbg_pc};
+                    resp_buf[3] <= {6'b0, pay0[9:0]};
+                    resp_buf[4] <= {14'b0, 2'b01};
+                    if (32'(pay0) >= 32'(WORDS)) begin
+                      resp_buf[0] <= ST_RANGE;
+                      resp_buf[3] <= {6'b0, bp_addr};
+                      resp_buf[4] <= {14'b0, bp_flags};
+                    end else begin
+                      bp_addr <= pay0[9:0];
+                      bp_en   <= 1'b1;
+                      bp_hit  <= 1'b0;
+                    end
+                  end
+                  OP_DBGBPCLR: begin
+                    // Disarm, clear the hit, and RELEASE the hold. The state
+                    // word is the released state: RUNNING when the strap is
+                    // high, STOPPED (boot stop) otherwise. The pc field is the
+                    // PC at the request; with run=0 the core re-zeroes at this
+                    // same edge, so a following STATUS reads 0.
+                    resp_len    <= 16'd5;
+                    resp_buf[0] <= ST_OK;
+                    resp_buf[1] <= {14'b0, run ? 2'd1 : 2'd0};
+                    resp_buf[2] <= {6'b0, dbg_pc};
+                    resp_buf[3] <= {6'b0, bp_addr};
+                    resp_buf[4] <= {14'b0, 2'b00};
+                    bp_en      <= 1'b0;
+                    bp_hit     <= 1'b0;
+                    dbg_hold_r <= 1'b0;
+                  end
+                  OP_DBGSTAT: begin
+                    // The common 5-word prefix plus the architectural state,
+                    // the same fields and widths READ_CPU reports.
+                    resp_len    <= 16'd10;
+                    resp_buf[0] <= ST_OK;
+                    resp_buf[1] <= {14'b0, dbg_state};
+                    resp_buf[2] <= {6'b0, dbg_pc};
+                    resp_buf[3] <= {6'b0, bp_addr};
+                    resp_buf[4] <= {14'b0, bp_flags};
+                    resp_buf[5] <= {15'b0, run};
+                    resp_buf[6] <= {8'b0, dbg_a};
+                    resp_buf[7] <= {8'b0, dbg_x};
+                    resp_buf[8] <= {8'b0, dbg_y};
+                    resp_buf[9] <= dbg_insn;
                   end
                   default: begin
                     resp_len    <= 16'd1;
@@ -1088,6 +1341,13 @@ module pe_ctrl #(
   assign fv_clr_mask    = fv_clr_mask_r;
   assign fv_resp_bitpos = resp_bitpos;
   assign fv_r_imm       = r_imm;
+  // R3 debug taps: the state encoding and the breakpoint register, so the
+  // debug claims can be stated over ports (form/pe_ctrl/formal_pe_ctrl.v).
+  assign fv_dbg_state   = dbg_state;
+  assign fv_bp_en       = bp_en;
+  assign fv_bp_hit      = bp_hit;
+  assign fv_bp_addr     = bp_addr;
+  assign fv_dbg_hold    = dbg_hold_r;
 `endif
 
 endmodule

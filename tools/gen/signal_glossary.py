@@ -477,6 +477,51 @@ NOTES: dict[tuple[str, str], str] = {
     ("pe_bitstuff", "rx_raw"): "Bit out, with stuff bits removed.",
     ("pe_bitstuff", "rx_raw_valid"): "0 ⇒ this wire bit was a stuff bit.",
     ("pe_bitstuff", "rx_err"): "The bit after a full run was not complementary.",
+    # ---- R3 debug control (manager dispatch 2026-09-25) ------------------
+    (
+        "pe_cpu",
+        "dbg_hold",
+    ): "R3 debug hold: MASKS the run strap. While high the core does not execute and PRESERVES its PC — the dual of the boot stop, which holds it at 0 for the loader. Driven by the host bus (pe_ctrl).",
+    (
+        "pe_cpu",
+        "dbg_step",
+    ): "R3 step pulse (one cycle): executes exactly ONE instruction and advances the PC to next_pc. The only way to execute while held.",
+    (
+        "pe_cpu",
+        "dbg_next_pc",
+    ): "R3: the landing address of the step about to execute. The host bus samples it in the dispatch cycle, and it is also the breakpoint comparison, so a breakpoint stops BEFORE the instruction at its address runs.",
+    (
+        "pe_ctrl",
+        "dbg_next_pc",
+    ): "R3: the core's landing PC (from pe_soc), used by DEBUG_STEP's response and by the breakpoint stop-before comparison.",
+    (
+        "pe_ctrl",
+        "dbg_hold",
+    ): "R3: the debug-hold level sent to the core. Asserted by DEBUG_STEP and by a breakpoint hit; released by DEBUG_BP_CLR.",
+    (
+        "pe_ctrl",
+        "dbg_step",
+    ): "R3: the one-cycle step pulse sent to the core (DEBUG_STEP).",
+    ("pe_soc", "dbg_hold"): "R3: debug hold routed from the host bus to pe_cpu.",
+    ("pe_soc", "dbg_step"): "R3: step pulse routed from the host bus to pe_cpu.",
+    (
+        "pe_soc",
+        "dbg_next_pc",
+    ): "R3: the CPU's landing PC routed back to the host bus.",
+    (
+        "pe_ctrl",
+        "fv_dbg_state",
+    ): "FORMAL ONLY — the 2-bit debug state encoding (0 stopped / 1 running / 2 debug hold / 3 breakpoint) the STATUS and DEBUG responses report.",
+    ("pe_ctrl", "fv_bp_en"): "FORMAL ONLY — breakpoint armed.",
+    (
+        "pe_ctrl",
+        "fv_bp_hit",
+    ): "FORMAL ONLY — breakpoint hit latched (the core is stopped at the armed address).",
+    ("pe_ctrl", "fv_bp_addr"): "FORMAL ONLY — the armed breakpoint address.",
+    (
+        "pe_ctrl",
+        "fv_dbg_hold",
+    ): "FORMAL ONLY — the debug-hold level (the core is held with its PC preserved).",
 }
 
 # Internal (non-port) signals worth naming, because the RTL and the testbenches

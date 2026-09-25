@@ -32,6 +32,7 @@ module tb_pe_cpu;
   logic [7:0]  io_regs [0:15];
 
   pe_cpu #(.IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES)) dut (
+    .dbg_hold(1'b0), .dbg_step(1'b0),  // R3: debug control idle here
     .clk(clk), .rst_n(rst_n), .run(run),
     .imem_addr(imem_addr), .imem_rdata(imem_rdata),
     .dmem_addr(dmem_addr), .dmem_we(dmem_we),

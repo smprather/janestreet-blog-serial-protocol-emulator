@@ -259,6 +259,22 @@ CASES=(
   # $readmemh (tb/r2-vectors/), the model image is loaded per vector, and the
   # response is compared byte-exactly -- CRC included, R2 wait words skipped.
   "tb_pe_ctrl_r2|../rtl/pe_ctrl.v|tb_pe_ctrl_r2"
+  # R3 debug control: the SAME pe_ctrl with a REAL pe_cpu and a registered
+  # imem model, wired as the SoC and the top route the three debug wires
+  # (dbg_hold/dbg_step/dbg_next_pc). Single-step, the PC breakpoint's
+  # stop-before semantics, the hit readback and the state encoding; contract:
+  # reviews/2026-09-25/R3-DEBUG-CONTROL-CONTRACT.md.
+  "tb_pe_ctrl_r3|../rtl/pe_ctrl.v ../rtl/pe_cpu.v|tb_pe_ctrl_r3"
+  # R3 CONFORMANCE: the SAME pe_ctrl, driven by the HOST's own bytes. Every
+  # request and response comes from the gui-worker's golden package via
+  # $readmemh (tb/r3-vectors/), the model image is preloaded per vector, and
+  # the response is compared byte-exactly -- CRC included. Seven words across
+  # three steps are pinned as KNOWN divergences in
+  # tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt (two are host-side vector defects
+  # where the chip is right, one is a TB model boundary); the lock compares the
+  # observed SET against that list, so a known divergence that changes, or any
+  # new one, turns this red.
+  "tb_pe_ctrl_r3_conf|../rtl/pe_ctrl.v ../rtl/pe_cpu.v|tb_pe_ctrl_r3_conf"
 
   # The 10BASE-T receive path, end to end on real RTL: raw Manchester
   # levels into pe_dru, through pe_manch and pe_crc, into pe_fbuf. Every
@@ -572,7 +588,7 @@ fi
 # that attacks its claim. Runs in its own proof shape per case (BMC or
 # induction) and takes the run lock reentrantly via CHIP_RUN_LOCK_HELD.
 if bash formal/mutants.sh > /tmp/run_formal_mutants.log 2>&1; then
-  echo "formal mutant checks: OK (10 caught, 0 survived; see formal/results/mutants.txt)"
+  echo "formal mutant checks: OK (see formal/results/mutants.txt for the per-mutant table)"
 else
   echo "formal mutant checks: FAILED (a mutant survived -- a claim is a blind spot)"
   tail -20 /tmp/run_formal_mutants.log
@@ -592,6 +608,53 @@ if python3 regress/cross_check_wait_words.py > /tmp/cross_wait_words.log 2>&1; t
 else
   echo "wait-word cross-check: FAILED"
   cat /tmp/cross_wait_words.log
+  stale=1
+fi
+
+# The RUN LOCK's process-tree contract. The lock is what keeps two mutation
+# harnesses off the same RTL, and its failure mode is quiet: flock releases when
+# the holder dies, but the holder's CHILDREN do not, so a killed run used to
+# leave a mutator running AND the lock held (a refusal "for a lock nobody is
+# holding"). This gate proves the fix on real process trees with real signals --
+# SIGINT, SIGTERM, SIGKILL (no trap can run, so the watchdog covers it), a clean
+# exit, a reentrant child, and a background subshell that must NOT fire the
+# kill trap. It uses a private lock file, so it never touches the worktree lock
+# and is safe to run beside a real run.
+if bash regress/test_run_lock.sh > /tmp/test_run_lock.log 2>&1; then
+  echo "run-lock process tree: OK (every signal reaps the run; no bystander killed)"
+else
+  echo "run-lock process tree: FAILED"
+  cat /tmp/test_run_lock.log
+  stale=1
+fi
+
+# The R3 golden package the conformance harness consumes, in TWO places: the
+# review artifact and the TB's copy. A conformance gate is only worth the bytes
+# it compares, so the .hex streams must be byte-identical and the checked-in
+# include must match what the generator derives from the manifest (which also
+# re-CRCs every request frame and re-checks every length field).
+#
+# manifest.json is EXCLUDED from the byte comparison, deliberately: it is the one
+# file the chip side annotates, because chip_confirmed is a claim about the chip
+# and the evidence behind it lives with the harness. That is the R2 precedent
+# exactly (the two R2 manifests differ, and the TB-side one carries the chip's
+# citations). reviews/2026-09-25/r3-hex/manifest.json stays the host's own byte
+# for byte. What is asserted INSTEAD is stronger than a byte diff of that file:
+# annotate_r3_confirmations.py --check re-derives the claim from the pinned
+# divergences and requires the vector/step structure, the file names and the byte
+# counts to still match the host's copy, so the harness can never end up
+# comparing the chip's own edits to itself.
+if diff -r --exclude='*.vh' --exclude='R3_KNOWN_DIVERGENCES.txt' \
+        --exclude='manifest.json' \
+        reviews/2026-09-25/r3-hex tb/r3-vectors \
+     > /tmp/r3_package_diff.log 2>&1 \
+   && python3 tools/gen/gen_r3_vectors.py --check >> /tmp/r3_package_diff.log 2>&1 \
+   && python3 tools/gen/annotate_r3_confirmations.py --check \
+        >> /tmp/r3_package_diff.log 2>&1; then
+  echo "R3 golden package: OK (tb copy byte-exact; include and confirmations current)"
+else
+  echo "R3 golden package: FAILED (package drift or a stale generated include)"
+  cat /tmp/r3_package_diff.log
   stale=1
 fi
 
@@ -749,6 +812,14 @@ fi
 # and the done pulse. Two of them (pad-extra, ifg-95) SURVIVED the first
 # version of the suite and found two real gaps in tb_pe_eth_tx.v, which the
 # suite's own record carries.
+if ./regress/mutate_ctrl_r3_tb.sh > /tmp/mutate_ctrl_r3.log 2>&1; then
+  echo "ctrl R3 debug mutations: OK (no unexplained survivors)"
+else
+  echo "ctrl R3 debug mutations: FAILED"
+  tail -20 /tmp/mutate_ctrl_r3.log
+  stale=1
+fi
+
 if ./regress/mutate_eth_tx_tb.sh > /tmp/mutate_eth_tx.log 2>&1; then
   echo "eth_tx TB mutations: OK (no unexplained survivors)"
 else

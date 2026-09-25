@@ -61,6 +61,7 @@ module tb_pe_soc_eth_tx;
   pe_soc #(
     .IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES), .BAUD(BAUD)
   ) dut (
+    .dbg_hold(1'b0), .dbg_step(1'b0),  // R3: debug control idle here
     .clk(clk), .rst_n(rst_n),
     .host_we(host_we), .host_imem_sel(host_imem_sel),
     .host_addr(host_addr), .host_wdata(host_wdata), .run(run),

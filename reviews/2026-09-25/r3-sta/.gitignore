@@ -1,0 +1,8 @@
+# Byte-reproducible from synth-*.ys + rtl/ on demand, and the largest files here.
+# The 12 screen reports (sta-*.txt), the mapped netlists the screens read
+# (sta-*.v / mapped-*.v), the R3 debug inventories and the recipe
+# (run_sta.sh, synth-*.ys, sta-*.tcl, analyze_hold.py) ARE committed -- those are
+# the evidence of record. The yosys JSON intermediates and the raw yosys logs
+# are not: re-running run_sta.sh regenerates them exactly.
+mapped-*.json
+synth-*.log

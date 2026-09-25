@@ -28,6 +28,13 @@ and its evidence. Mid-task, write `QUESTION: <text>` there (and keep working)
 or `BLOCKED: <text>` (and stop at your prompt). The manager deletes the file
 before each dispatch and wakes on its appearance.
 
+**WORKLOG rotation + concision (manager ruling 2026-09-25):** the shared log
+rotates to `logs/worklog/YYYY-MM-DD[-NN].md` at ~10 MB or day boundaries (the
+manager rotates; archives are committed and greppable - the trail never dies).
+Log LINES are concise entries (≤ ~500 chars); full reports/evidence live in
+`reviews/` and interrupt files - link, do not inline. This rule exists because
+the log hit 58 MB and GitHub warned on every push.
+
 ## Continuous work protocol (user standing order 2026-09-25: "I don't want
 to come back and find nobody working")
 

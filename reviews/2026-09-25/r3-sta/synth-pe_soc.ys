@@ -1,0 +1,26 @@
+# synth-pe_soc.ys — mapped netlist for the R3-phase STA screen.
+# Identical flow to reviews/2026-09-25/r2-sta/synth-pe_soc.ys (same liberty, same
+# pass list, same flatten) so the screen is comparable with the R2 one. The
+# source list is the r2-sta list unchanged; R3 added no module and no pad, only
+# ports on pe_cpu/pe_ctrl/pe_soc, so the netlist difference is R3's own logic.
+read_liberty -lib /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+read_verilog -sv rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_eth_tx.v rtl/pe_serdes.v rtl/pe_nrzi.v rtl/pe_bitstuff.v rtl/pe_codec_mux.v rtl/pe_soc.v
+hierarchy -check -top pe_soc
+proc
+opt
+fsm
+opt
+memory
+opt
+techmap
+opt
+dfflibmap -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+abc -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+clean
+stat -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+flatten
+clean
+check -assert
+write_verilog -noattr -noexpr reviews/2026-09-25/r3-sta/mapped-pe_soc.v
+write_json reviews/2026-09-25/r3-sta/mapped-pe_soc.json
+check
