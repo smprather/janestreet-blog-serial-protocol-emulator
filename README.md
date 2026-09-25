@@ -126,6 +126,11 @@ device run is pending hardware and the RTL phases. The R2 read obligations
 themselves live in `tools/host_gui/r2_reads.py`, each marked
 **not chip-confirmed** until the RTL passes the same probes.
 
+**Docs:** `docs/host-bridge-bringup.md` is the operator runbook (flash, deploy,
+permissions, the real acceptance, failure triage). `docs/demo-walkthrough.md`
+is the judge-facing demo script (the four protocols, proven vs pending, the
+no-board fallback). Both are pinned by tests so their claims cannot go stale.
+
 <!-- END gui-worker host block (host controller section) -->
 
 ## Layout

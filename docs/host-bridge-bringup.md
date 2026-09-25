@@ -14,8 +14,10 @@ verified on a real MicroPython) and the triage table at the bottom.
 - A Linux host with Python 3.12+ and the host extra:
   `pip install .[host-gui]` (adds `pyserial`, plus the GUI's fastapi/uvicorn).
 - The chip-side RTL phases **R1 and R2 must be on the shuttle** for the read
-  and IRQ steps to pass. Before that, the run stops at the load/status steps
-  and the R2 checks report red — that is the gate working, not a bug.
+  and IRQ steps to pass. R1 (the framed host bus, `IRQ_N`, target 1) has
+  landed on `main`; R2 (register/memory readback) has not. Before R2, the run
+  stops at the load/status steps and the `r2_*` checks report red — that is
+  the gate working, not a bug.
 
 ## 1. Flash and mount the board
 
@@ -83,10 +85,11 @@ register dump → IRQ/fault/clear → disconnect → reconnect) and prints
 per-step `PASS`/`FAIL`/`SKIP` plus a manifest (clock, SCLK cap, pads, image
 digest, word count). It exits non-zero if any step is `FAIL`.
 
-What a healthy pre-R1 run looks like: the load/status/readback/stop/dump steps
-pass against today's write-only PE (via the existing loader), while the
-`r2_*` read checks and the IRQ check are expected to be red or `SKIP` until
-R1/R2 land — read the triage table before assuming a problem.
+What a healthy pre-R2 run looks like: with R1 on the shuttle, the
+load/status/readback/stop/dump steps pass against the framed bus, while the
+`r2_*` register/memory-read checks are expected to be red until R2 lands, and
+the `uart` step is a standing SKIP. Read the triage table before assuming a
+problem.
 
 ## 5. Failure triage
 
@@ -98,9 +101,9 @@ R1/R2 land — read the triage table before assuming a problem.
 | `FAIL open` with no response, then every step FAIL | bridge not running on the board | REPL: `import main; main.run()`; check for a Python traceback in the board REPL |
 | `FAIL hello` / `board error during hello: project ... not found` | shuttle name wrong for this board | pass `--project <name>` matching the fitted shuttle; confirm in the board REPL with the TT SDK |
 | `FAIL sclk` / `board error during prepare: host SPI pin map is not configured` | no `pins` map supplied | `tt_adapter.TTAdapter` needs `pins={sck,mosi,miso}` for your board revision (RP2040 vs RP2350 GPIO numbers differ) — plan Open Item 2 |
-| `spi.timeout` on load / every SPI step | CS/SCK/MOSI/MISO not wired, or R1 not on the shuttle | check the lower PMOD host-SPI row wiring; confirm the shuttle has the framed protocol (R1) |
+| `spi.timeout` on load / every SPI step | CS/SCK/MOSI/MISO not wired, or a shuttle without the framed protocol | check the lower PMOD host-SPI row wiring; confirm the fitted shuttle has R1 |
 | `r2_read_*` / `r2_dump_header` FAIL, others PASS | R2 read path not on the shuttle yet | expected pre-R2; the checks are the R2 gate (see `R2-READ-VERIFICATION.md`) |
-| `irq`/`fault` steps SKIP or FAIL | `irq_n` needs RTL phase R1; the adapter returns `None` before then | expected pre-R1; once R1 lands, wire IRQ and re-run |
+| `irq`/`fault` steps FAIL | the shuttle lacks R1's `IRQ_N`, or `irq_enabled` was not set | expected on a pre-R1 shuttle; the adapter returns `None` for IRQ until then |
 | `uart` SKIP | no bridge op reports UART bytes (dropped from this phase by ruling) | revisit at hardware bring-up; not a failure |
 | A step hangs then times out | the Pico read loop is blocked and a request never got answered | Ctrl-C the runner; check the board REPL for a traceback; the host never fabricates a success on timeout |
 
