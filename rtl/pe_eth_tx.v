@@ -50,6 +50,14 @@
 // latches it set-beats-clear). A start while busy is refused silently -- the
 // caller already sees tx_busy. Stored bytes 14..59 are legal and padded to 60.
 //
+// VALIDATE-AND-LATCH (manager ruling 2026-09-25, finding F1). The guard and the
+// latch are the SAME event: the length tested at the start pulse is latched
+// into `pend_len` and copied to `stored_bytes` at the cell boundary, so the
+// frame consumes exactly the length that was validated. A TXLEN write after the
+// start pulse affects only the NEXT frame. Before this fix the boundary re-read
+// frame_len, so a host rewrite inside the DIV-1 clock apply window transmitted
+// a length the guard never saw (see the formal campaign's finding F1).
+//
 // THE FIFO AND ITS DEADLINE. The staging FIFO is 8 bytes of flops; firmware
 // pushes the first bytes, starts the frame, and keeps pushing with push_ready
 // as backpressure. At 100 ns/bit the FIFO buys 8 bytes x 8 bits x 100 ns =
@@ -123,6 +131,8 @@ module pe_eth_tx #(
   ,output logic [2:0] fv_state
   ,output logic [5:0] fv_fcs_left
   ,output logic       fv_abort_pend
+  ,output logic [11:0] fv_pend_len
+  ,output logic [11:0] fv_stored_bytes
 `endif
 );
 
@@ -141,7 +151,8 @@ module pe_eth_tx #(
   logic [9:0]  pad_bits_left;    // (60 - frame_len) * 8
   logic [5:0]  fcs_left;         // 32 field cells
   logic [6:0]  ifg_cnt;          // 0..95 (96 idle cells)
-  logic [11:0] stored_bytes;     // frame_len snapshot at start
+  logic [11:0] stored_bytes;     // the VALIDATED length this frame consumes
+  logic [11:0] pend_len;         // validated at the start pulse, latched here
 
   logic        tx_reg;           // raw bit for the current cell (non-FCS)
   logic        start_pend;
@@ -189,6 +200,10 @@ module pe_eth_tx #(
   assign fv_state    = state;
   assign fv_fcs_left = fcs_left;
   assign fv_abort_pend = abort_pend;
+  // F1: the validate-and-latch pair. fv_pend_len is the length the guard
+  // tested at the start pulse; fv_stored_bytes is what the frame consumes.
+  assign fv_pend_len     = pend_len;
+  assign fv_stored_bytes = stored_bytes;
 `endif
 
   // Mid-frame the wire bit is the registered data bit (or the CRC field bit);
@@ -223,6 +238,7 @@ module pe_eth_tx #(
       fcs_left       <= 6'd0;
       ifg_cnt        <= 7'd0;
       stored_bytes   <= 12'd0;
+      pend_len       <= 12'd0;
       tx_reg         <= 1'b0;
       start_pend     <= 1'b0;
       abort_pend     <= 1'b0;
@@ -259,7 +275,16 @@ module pe_eth_tx #(
         end else if (!len_ok) begin
           tx_overlong <= 1'b1;           // runt (<14) or jabber (>MAX_STORED)
         end else begin
+          // VALIDATE-AND-LATCH, ATOMICALLY (manager ruling 2026-09-25, finding
+          // F1). The guard tests frame_len HERE, at the start pulse, so the
+          // frame must consume exactly the length tested here. It is latched
+          // into pend_len now and copied to stored_bytes at the cell boundary;
+          // a TXLEN write after this pulse affects only the NEXT frame. Before
+          // this, stored_bytes re-read frame_len at the boundary, so a host
+          // rewrite in that window (up to DIV-1 clocks) transmitted a length
+          // the runt/jabber guard never saw.
           start_pend <= 1'b1;
+          pend_len   <= frame_len;
         end
       end
 
@@ -287,8 +312,9 @@ module pe_eth_tx #(
                 state          <= S_PREAMBLE;
                 tx_reg         <= pre_bit(6'd0);     // 1
                 pre_cnt        <= 6'd0;
-                stored_bytes   <= frame_len;         // snapshot the length
-                data_bits_left <= {frame_len, 3'b000};
+                stored_bytes   <= pend_len;          // the length validated at
+                                                     // the start pulse (F1)
+                data_bits_left <= {pend_len, 3'b000};
                 crc_clr        <= 1'b1;              // prelude never folds
               end
             end

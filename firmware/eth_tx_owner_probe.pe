@@ -1,0 +1,103 @@
+; eth_tx_owner_probe.pe — the FINDING-F2 directed case (manager ruling
+; 2026-09-25: "a TXCTRL claim during a live SERDES transmission must leave the
+; codec with the SERDES and the frame intact").
+;
+; The inverse topology of eth_tx_busy_probe.pe: tx_path is NEVER set, so the
+; SERDES owns the codec. The program starts a SERDES word and, while
+; ser_tx_busy is HIGH, issues a TXCTRL write with bit2 (a tx_path SET). The
+; symmetric owner guard must REFUSE it:
+;   * the codec stays with the SERDES for the whole word (before the fix the
+;     claim stole the codec mid-frame and the wire went idle);
+;   * the TXCTRL readback reports the ACTUAL owner, i.e. unclaimed.
+;
+; The TB records `tx_path rose while ser_tx_busy` and checks the readback; a
+; mutation that removes the set guard fails both.
+;
+; DMEM (program): [0] TXCTRL readback after the refused set (bit2 must be 0)
+;                 [1] 0x5A serdes-done seen, [2] 0xA5 program done.
+
+        LDI   A, 128
+        OUT   PINOE, A           ; drive port bit 7 (the loopback wire)
+
+        ; --- config: CFG=0x04 (Manchester), DIV=6 ---
+        LDI   A, 1
+        OUT   ENGINE, A
+        LDI   A, 4
+        OUT   ENGINE, A
+        LDI   A, 6
+        OUT   ENGINE, A
+        LDI   A, 0
+        OUT   ENGINE, A
+
+        ; --- word-engine word: TXLEN(4)=16, TXDATA(7..10)=0x0000A5C3 ---
+        IN    A, ENGINE
+        LDI   A, 4
+        OUT   ENGINE, A
+        LDI   A, 16
+        OUT   ENGINE, A          ; REG[4]=16
+        IN    A, ENGINE          ; re-arm
+        LDI   A, 7
+        OUT   ENGINE, A
+        LDI   A, 0xC3
+        OUT   ENGINE, A          ; REG[7]
+        LDI   A, 0xA5
+        OUT   ENGINE, A          ; REG[8]
+        LDI   A, 0
+        OUT   ENGINE, A          ; REG[9]
+        OUT   ENGINE, A          ; REG[10]
+
+        ; --- engine on + tx_load: the SERDES starts; tx_path stays 0 ---
+        IN    A, ENGINE          ; re-arm
+        LDI   A, 0
+        OUT   ENGINE, A          ; INDEX=0
+        LDI   A, 3               ; eng_en | tx_load
+        OUT   ENGINE, A
+
+        ; --- wait until the SERDES is BUSY ---
+        IN    A, ENGINE          ; re-arm
+        LDI   A, 6
+        OUT   ENGINE, A          ; INDEX=6 (STATUS)
+osbusy: IN    A, ENGINE          ; bit0 = ser_tx_busy
+        AND   A, 1
+        JNZ   obusy_ok
+        LDI   A, 6
+        OUT   ENGINE, A
+        JMP   osbusy
+obusy_ok:
+
+        ; --- ATTEMPT the owner claim while the SERDES transmits ---
+        LDI   A, 26
+        OUT   ENGINE, A          ; INDEX=26
+        LDI   A, 4               ; TXCTRL bit2 = tx_path SET
+        OUT   ENGINE, A          ; the guard must REFUSE it, INDEX=27
+
+        ; --- readback: the ACTUAL owner (unclaimed => bit2 = 0) ---
+        IN    A, ENGINE          ; re-arm INDEX
+        LDI   A, 26
+        OUT   ENGINE, A          ; INDEX=26
+        IN    A, ENGINE          ; REG[26]: bit2 = the actual owner
+        STM   0, A
+
+        ; --- wait for the SERDES word to finish ---
+        LDI   A, 6
+        OUT   ENGINE, A          ; INDEX=6 (STATUS)
+odone:  IN    A, ENGINE          ; bit2 = serdes tx_done latched
+        AND   A, 4
+        JNZ   od_ok
+        LDI   A, 6
+        OUT   ENGINE, A
+        JMP   odone
+od_ok:  LDI   A, 6
+        OUT   ENGINE, A
+olow:   IN    A, ENGINE          ; bit0 = ser_tx_busy low
+        AND   A, 1
+        JZ    olow_ok
+        LDI   A, 6
+        OUT   ENGINE, A
+        JMP   olow
+olow_ok:
+        LDI   A, 0x5A
+        STM   1, A
+        LDI   A, 0xA5
+        STM   2, A
+halt:   JMP   halt

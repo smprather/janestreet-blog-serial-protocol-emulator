@@ -369,3 +369,115 @@ target-4 claim reads memory contents.
   to a board operator; the formal evidence (a 6-step model for F1, an induction
   counterexample for F2) is machine-checked but not a waveform.
 - No physical flow, DRC or LVS; this is simulation/formal only.
+
+---
+
+# F1 and F2 — the manager's rulings, implemented (2026-09-25)
+
+Both findings are now RTL fixes with mutant-checked proofs and TB-level
+enforcement. The formal records above stay as the history that found them.
+
+## F1 — the TXLEN window: VALIDATE-AND-LATCH
+
+**Ruling:** validate and latch atomically at the start pulse; the frame consumes
+exactly the validated length; a TXLEN write after the pulse affects only the
+next frame. Discharge the proof's TXLEN-hold assumption.
+
+**Implemented** (`rtl/pe_eth_tx.v`): the accepted start latches
+`pend_len <= frame_len` at the pulse edge, and the cell boundary copies
+`stored_bytes <= pend_len` (the FCS/pad logic already reads `stored_bytes`, so
+the whole frame follows the validated value). Two guarded FORMAL-only taps were
+added for the proof: `fv_pend_len` and `fv_stored_bytes`.
+
+**Proof** (`formal/pe_eth_tx/formal_pe_eth_tx.v`): the contract assumption is
+**DISCHARGED** — the wrapper has no assumption beyond the campaign's reset
+discipline — and P1 is restated as the three claims that the fix makes true:
+
+| claim | statement | shape | mutant |
+|---|---|---|---|
+| P1a | the length LATCHED at a start pulse is legal | one-step, bmc 16 | runt, jabber |
+| P1b | the frame CONSUMES exactly what it latched | one-step, bmc 16 | `eth_tx_len_unlatch` |
+| P1c | a completed frame's consumed length was legal | bmc 16 (vacuous < ~576 cells; labelled) | — |
+
+The old 6-step counterexample (start with TXLEN=14, rewrite to 13 before the
+boundary) can no longer exist. It is re-introduced as a mutant — `stored_bytes
+<= frame_len` — and that mutant FAILS P1b at depth 16
+(`formal/results/mutant_eth_tx_len_unlatch.log`). The runt and jabber mutants
+still fail P1a at depth 16.
+
+## F2 — the owner SET guard: SYMMETRY
+
+**Ruling:** a TXCTRL `tx_path` SET while `ser_tx_busy` is REFUSED, exactly as
+the CLEAR is refused while the frame engine is busy and `eth_start` is gated on
+`!ser_tx_busy`; TXSTAT reflects the actual ownership; no new fault class.
+
+**Implemented** (`rtl/pe_soc.v`): the SET arm is `if (!ser_tx_busy) tx_path <=
+1'b1;` and the TXCTRL readback reports the ACTUAL owner (a refused set reads
+back unclaimed). `ser_tx_busy`'s declaration moved above the window-write block
+(Icarus binds in declaration order; the guard reads it there).
+
+**Proof** (`formal/pe_soc/formal_pe_soc.v`): C1 (the clear-side guard) is
+**PROVED UNBOUNDED** by induction and its removal mutant is caught. C2 (the
+set-side guard) is stated and checked at the gate depth, but it is **NOT
+INDUCTIVE on this toolchain** and is labelled so in the wrapper: the guard and
+the observed busy value are separate sampling chains after `clk2fflogic`, the
+same artifact that made pe_ctrl's clocked claims non-inductive. F2's
+ENFORCEMENT is therefore the TB-level evidence the ruling asked for:
+
+* **TB case** `run_owner_probe` in `tb/tb_pe_soc_eth_loop.v` with the new
+  directed firmware `firmware/eth_tx_owner_probe.pe`: the SERDES owns the codec,
+  a TXCTRL set is attempted while `ser_tx_busy` is high, and the case asserts
+  `tx_path` never rose mid-transmission, the TXCTRL readback is unclaimed
+  (`00`), the SERDES word completed, and `tx_path` is still 0 at the end.
+  Measured on the fixed RTL: `readback=00 rose_mid=0 serdes_done=1 tx_path=0`.
+* **Mutation** `owner-set-guard-removed` in
+  `regress/mutate_eth_tx_loop_tb.sh` (guard removed). Clean TB: **PASS**;
+  mutant: **FAIL** (`rose_mid=1`, `tx_path=1`) — a true differential, unlike a
+  formal mutant run of the non-inductive C2 target (which is why that case is
+  deliberately NOT in `formal/mutants.sh`; the reasoning is recorded there).
+
+## Mutant evidence after the fixes (`formal/results/mutants.txt`)
+
+Ten differential mutants, each in the claim's own proof shape: pinmux `m1`,
+runt, jabber, **`eth_tx_len_unlatch`** (F1's re-introduction), IFG-90,
+skip-the-gap, pe_ctrl len-overflow / bit-14 / unconditional-clear, and
+`pe_soc_owner_clear_guard_removed`. Plus the TB-level
+`owner-set-guard-removed` for F2 in the loop harness. All caught, 0 survivors.
+
+## A process note worth keeping
+
+While the F2 edit was being made, the full suite was running its own mutation
+harnesses, which snapshot and restore `rtl/*.v`. One of them restored
+`rtl/pe_soc.v` from a pre-edit snapshot and silently deleted the F2 guard. It
+was caught immediately (the TB case failed on what should have been a fixed
+design), re-applied, and the affected proofs were re-run. The rule this
+re-learns is the project's own: **one run at a time, and never edit RTL while a
+suite or mutation harness is in flight** — the per-worktree lock protects the
+files, not a hand edit racing a restore.
+
+## Final memory record (the manager's ceiling + per-run peaks)
+
+Every proof runs through `formal/fv_run.sh` under `ulimit -v 6 GB` and a
+one-yosys-at-a-time flock (the manager landed both after two 6+ GB divergences).
+Peaks from the final gate run (`formal/results/summary.txt`):
+
+| target | shape | peak RSS |
+|---|---|---|
+| pinmux_od_invariant | bmc 16 | 46.6 MB |
+| eth_tx_safety (F1's P1a/P1b/P1c) | bmc 16 | 102.4 MB |
+| eth_tx_ifg_floor | induct | 52.3 MB |
+| pe_ctrl_r2 (all claims) | bmc 16 | 315.3 MB |
+| pe_ctrl_r2_induct (subset) | induct | 131.9 MB |
+| pe_soc_owner_gate_depth (C1+C2) | bmc 16 | 955.9 MB |
+| pe_soc_owner_guard (C1) | induct | 366.6 MB |
+
+Ceiling: 6 GB per run, one run at a time. The two runs that ended AT a model
+(the reach target and the pre-fix refutation) print no yosys summary line, so
+`summary.txt` labels them "MEMCAP-or-killed (no MEM line)" — that label is
+COSMETICALLY wrong for them: they are the cheapest runs, not cap victims. The
+label's intent is to flag a run that died without a summary; a future cleanup
+can distinguish "ended at a model" from "hit the cap".
+
+The two genuine cap deaths of the campaign were the 700-step BMC and a
+pe_ctrl `-tempinduct` that escalated past 65 steps (both 6+ GB, both recorded in
+WORKLOG). They are what turned "prove it deeper" into "prove it inductively".

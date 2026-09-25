@@ -52,7 +52,7 @@ PIDFILE="${PIDFILE:-/tmp/pi-worker-supervisor.pid}"
 LOG="${LOG:-/tmp/pi-worker-supervisor.log}"
 ONCE=0; [ "${1:-}" = "--once" ] && ONCE=1
 
-WORKERS="0:pi-protocol-worker:protocol-worker 0:pi-gui-worker:gui-worker"
+WORKERS="0:pi-protocol-worker:protocol-worker 0:pi-gui-worker:gui-worker 0:pw-fw-timing:fw-timing 0:pw-fw-bus:fw-bus"
 FORBIDDEN_PROC_RE='(openroad|magic|netgen|klayout|run_librelane)'
 FORBIDDEN_CMD_RE='git (reset|clean|checkout --|restore|rebase|push --force)|rm -rf (/|~)([[:space:]]|$)|rm -rf /\*|tmux kill-'
 COLDSTART_LINE="Continue as your role per COLD-START.md and WORKLOG.md: log TASK-START in WORKLOG.md immediately, then pick the NEXT scoped task from the queue and start it IN THIS SAME TURN. The law (L1 telemetry / L2 no destructive git / L3 no physical flow / L4 repo boundary / L5 no shared-state kills / L6 interrupt file last) is enforced automatically."
@@ -116,8 +116,11 @@ while :; do
     pane_live=$(tmux capture-pane -p -S -6 -t "$sess:$win" 2>/dev/null)
 
     # ---- law enforcement: forbidden commands in tool-call lines ------------
-    if printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -Eq "$FORBIDDEN_CMD_RE"; then
-      ev=$(printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | tail -1 | head -c 200)
+    # Scope: destructive git is forbidden ONLY on the shared main worktree -
+    # isolated feature worktrees (/tmp/worktrees/*) may rebase/reset their own
+    # branches freely (2026-09-25 misfire on fw-bus's legitimate rebase).
+    if printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | grep -v '/tmp/worktrees' | grep -q .; then
+      ev=$(printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | grep -v '/tmp/worktrees' | tail -1 | head -c 200)
       # Evidence dedup: the pane keeps history — never fire twice on the same
       # line (2026-09-25 double misfire on a stale pane line).
       ev_sig=$(printf '%s' "$ev" | md5sum | cut -c1-16)

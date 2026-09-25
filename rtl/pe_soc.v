@@ -222,10 +222,17 @@ module pe_soc #(
   // the CPU's IO bus, so the claims are stated as one-step transitions over
   // these aliases rather than by modelling a firmware program. FORMAL is never
   // defined in synthesis (tools/check_formal_ifdef.sh enforces it).
+  //
+  // fv_ser_busy_seen / fv_eth_busy_seen are the values THE GUARD ITSELF saw,
+  // sampled inside the window-write always_ff. A port alias of the same wires
+  // is a DIFFERENT sampled copy after clk2fflogic, and an arbitrary induction
+  // state can set the copies inconsistently -- exactly what made the
+  // owner-guard claims non-inductive until this tap existed.
   ,output logic        fv_tx_path
   ,output logic        fv_eth_tx_owner
-  ,output logic        fv_eth_tx_busy
-  ,output logic        fv_ser_tx_busy
+  ,output logic        fv_ser_busy_seen
+  ,output logic        fv_eth_busy_seen
+  ,output logic        fv_set_took
 `endif
 );
 
@@ -852,6 +859,8 @@ module pe_soc #(
   wire        eth_tx_bit, eth_tx_busy, eth_tx_done, eth_tx_underrun,
               eth_tx_overlong, eth_ifg_active, eth_fifo_ready, eth_start;
   wire        eth_tx_owner;
+  wire        ser_tx, ser_tx_busy, ser_tx_done;   // declared with the owner wires:
+                                                // the TXCTRL guard reads ser_tx_busy
 
   logic [7:0]  cfg_w;
   logic [15:0] div_w;
@@ -895,6 +904,15 @@ module pe_soc #(
       tx_frame_start_strb <= 1'b0;
       tx_frame_abort_strb <= 1'b0;
       eth_push            <= 1'b0;
+`ifdef FORMAL
+      // formal-only: the busy values this block's guard sees at this edge,
+      // and whether a TXCTRL SET write was actually TAKEN this edge (the
+      // guard's own decision, not a re-derivation).
+      fv_ser_busy_seen <= ser_tx_busy;
+      fv_eth_busy_seen <= eth_tx_busy;
+      fv_set_took      <= io_we && win_phase && (win_index == 5'd26)
+                          && io_wdata[2] && !ser_tx_busy;
+`endif
 
       if (win_we) begin
         if (!win_phase) begin
@@ -923,17 +941,20 @@ module pe_soc #(
           end else if (win_index == 5'd26) begin
             tx_frame_start_strb <= io_wdata[0];
             tx_frame_abort_strb <= io_wdata[1];
-            // Persistent owner bit. Setting wins; clearing is refused while
-            // the frame engine is busy so the codec owner cannot change under
-            // a running frame (a frame start in the same write still needs
-            // tx_path already set: `enable` reads the register).
+            // Persistent owner bit. NEITHER direction may move the owner while
+            // an engine is mid-frame (manager ruling 2026-09-25, finding F2):
+            //   * a SET is refused while the SERDES is transmitting, exactly as
+            //     a frame start is gated on !ser_tx_busy -- without this the
+            //     codec was stolen mid-frame;
+            //   * a CLEAR is refused while the frame engine is busy.
+            // A refused write reads back the ACTUAL owner, not the request.
             if (io_wdata[2]) begin
-              tx_path <= 1'b1;
+              if (!ser_tx_busy) tx_path <= 1'b1;
             end else if (!eth_tx_busy) begin
               tx_path <= 1'b0;
             end
             win_regs[26] <= {5'b0,
-                             io_wdata[2] ? 1'b1
+                             io_wdata[2] ? (ser_tx_busy ? tx_path : 1'b1)
                                          : (eth_tx_busy ? tx_path : 1'b0),
                              2'b00};
             win_index    <= 5'd27;
@@ -1034,7 +1055,6 @@ module pe_soc #(
   end
 
   // ---- instance wires (declared before the gates that consume them) ------
-  wire        ser_tx, ser_tx_busy, ser_tx_done;
   wire        ser_rx_busy, ser_rx_valid;
   wire [31:0] ser_rx_word;
   wire        tx_stuffed_w;                  // u_tx_codec
@@ -1221,11 +1241,12 @@ module pe_soc #(
   end
 
 `ifdef FORMAL
+  // ---- formal-only registers sampled by the window-write block ----------
+  logic fv_ser_busy_seen, fv_eth_busy_seen, fv_set_took;
+
   // ---- formal-only observation aliases (see the port list) --------------
   assign fv_tx_path       = tx_path;
   assign fv_eth_tx_owner  = eth_tx_owner;
-  assign fv_eth_tx_busy   = eth_tx_busy;
-  assign fv_ser_tx_busy   = ser_tx_busy;
 `endif
 
 endmodule

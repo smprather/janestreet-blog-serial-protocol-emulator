@@ -131,7 +131,7 @@ pass=$((pass+1))
 # probes (two-frame min IFG, the 16-23 wrap directed case, and the
 # start-while-busy directed case). tb_pe_soc_eth_loop.v $readmemh's each hex,
 # so a stale image would be a silent pass on the integration it exercises.
-for prog in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe; do
+for prog in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe eth_tx_owner_probe; do
   if ! $PY tools/fw/peasm.py "firmware/$prog.pe" -o "firmware/$prog.hex" >/dev/null 2>&1; then
     echo "assemble $prog FAIL"
     $PY tools/fw/peasm.py "firmware/$prog.pe" 2>&1 | head -3 | sed 's/^/    /'
