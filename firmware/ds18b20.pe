@@ -1,0 +1,427 @@
+; ds18b20.pe — a DS18B20 on 1-Wire, read by firmware.
+;
+; ---------------------------------------------------------------------------
+; WHY THIS ONE IS DIFFERENT FROM THE DHT11, AND WHY IT IS NEXT TO IT
+;
+; The DHT11 act samples BETWEEN two windows: a 0's release is over by 78 us and
+; a 1's is not over until 120, so the host waits and looks. A DS18B20 is sampled
+; INSIDE a slot, which inverts the whole problem:
+;
+;   WRITE (host -> sensor), one bit, LSB first:
+;     a 1:  host low 1-15 us, then releases for the rest of the slot
+;     a 0:  host low for the WHOLE slot (~60 us)
+;   READ (sensor -> host), one bit, LSB first:
+;     the sensor pulls low for 15-60 us (the slot's initiation), then releases.
+;     A 0 leaves it high for the rest of the slot; a 1 pulls it low again for
+;     1-15 us and then releases.
+;
+; So a read is not "wait N microseconds, read": the host must WAIT FOR THE
+; SENSOR'S EDGES and then sample in a window that starts when the sensor's
+; initiation pulse ends. And the bit order is LSB first, which is the opposite
+; of the DHT11 — the same accumulator, used the other way round, and the mutation
+; suite checks that getting it backwards is caught.
+;
+; It is also the only protocol here where the DEVICE initiates: after the host's
+; reset pulse the sensor answers with a presence pulse, so the firmware is
+; reading a line the sensor is driving.
+;
+; ---------------------------------------------------------------------------
+; THE SEQUENCE, AND WHY EACH STEP IS A DIFFERENT KIND OF WAIT
+;
+;   1. RESET      host low >= 480 us.  A COUNTED DELAY: nothing on the wire
+;                 says when 480 us is up, so this is the delay routine.
+;   2. PRESENCE   the sensor pulls low 60-240 us, then releases.  A WAIT FOR AN
+;                 EDGE: the host cannot know the sensor's timing, so it spins on
+;                 the pin. The spin loop is why the pin matrix's read-back exists.
+;   3. 0xCC       SKIP ROM — one addressed sensor, no 64-bit ROM code.  A WRITE:
+;                 8 counted slots, each "low, then release" or "low, held".
+;   4. 0xBE       READ SCRATCHPAD.  A write again.
+;   5. 2 x 8      read slots.  A WAIT FOR AN EDGE then a counted delay then a
+;                 sample — the hybrid that makes 1-Wire different from I2C.
+;
+; Steps 1, 3 and 4 are counted delays and step 5's inner delay is too; step 2 and
+; the first half of step 5 are edge waits. That split is the lesson of the DHT11
+; act, where the first design counted its way through the sensor's bit periods
+; and drifted 40 us over twenty zero bits: where the wire announces an event, WAIT
+; for the event; where it does not, COUNT.
+;
+; ---------------------------------------------------------------------------
+; WHY TWO BYTES AND NOT NINE
+;
+; The scratchpad is nine bytes and the loop is the same for each; this reads the
+; first two, which are the temperature, because the claim being made is about the
+; SLOT TIMING and sixteen slots demonstrate that as well as seventy-two, at a
+; third of the simulated time. The byte count is one number in dmem[3].
+;
+; ---------------------------------------------------------------------------
+; THE SLOTS, AND THE MARGIN IN THEM
+;
+;   write slot:  the datasheet's t0 is 1-15 us low + 60 us high (a 1) or 60 us
+;                low (a 0). This program drives 5 us of low for a 1 and 65 us of
+;                low for a 0, then a 15 us recovery.
+;   read slot:   the sensor's initiation is 15-60 us low. The host spins for that
+;                low, spins for the release, then waits 40 us and samples: at
+;                40 us after the release a 0 is still high and a 1 has already
+;                pulled the line low again for 1-15 us. So the 40 us sits inside
+;                the window with 25 us of margin on the 0 side and 25 on the 1
+;                side — the same balanced placement the DHT11 act arrived at, and
+;                for the same reason.
+;
+; ---------------------------------------------------------------------------
+; THE PIN, THE OPEN-DRAIN QUESTION, AND WHY IT IS ANSWERED THE WAY IT IS
+;
+; 1-Wire is a single-wire bus where the host and the sensor both pull it low and
+; a pull-up owns the high level. That is the OPEN-DRAIN case, and pe_pinmux has an
+; OD bit precisely for it. This program does NOT use it, and the reason is worth
+; stating because it looks like an omission:
+;
+;   the od bit makes a pin holding 1 RELEASE rather than drive high. During a READ
+;   slot that is what we want (the line must float so the sensor can pull it),
+;   and the firmware gets that by clearing PINOE instead — which is the same
+;   electrical result, made explicit per bit. During a WRITE slot the host must
+;   HOLD the line low for a 0, which od also allows. So od buys nothing here and
+;   costs the one thing the pin read-back is for: with od set, a pin holding 1
+;   reads back as RELEASED, so a write of 1 and a write of 0 look identical on the
+;   pin. Keeping od clear means the host's own level is what the pad shows, and
+;   the edge-wait loops see the sensor's pulses and nothing else. The i2c_pins.pe
+;   argument — "write out=1 or out=0 and never touch oe or od again" — is the
+;   right idiom for a bus where the level IS the data; 1-Wire is the opposite case,
+;   where the data is a TIME and the level is just a carrier for it.
+;
+; bit 6 is the 1-Wire pin: the first unclaimed pad in the documented map.
+
+        ; the pin and the slot constants are peasm CONSTS: OW_DATA, OW_RESET,
+        ; OW_SLOT, OW_TSLOT. See tools/fw/peasm.py's timing block.
+
+; ===========================================================================
+; CLAIM THE PIN and take it off the pad: 1-Wire idles high.
+; ===========================================================================
+        LDI   A, 0x00
+        OUT   PINOE, A          ; release every pin the reset had enabled
+        LDI   A, OW_DATA
+        OUT   TXPIN, A          ; the line idles HIGH
+        LDI   A, OW_DATA
+        OUT   PINOE, A          ; claimed, and released (see the header: the
+                                ; idle state of a 1-Wire bus is the pull-up)
+        LDI   A, 0
+        STM   12, A             ; the phase the delay returns to
+        LDI   A, 0
+        STM   14, A             ; the "done" flag, and the TB's observable
+
+; ===========================================================================
+; 1. THE RESET PULSE
+; ===========================================================================
+reset:  LDI   A, 0x00
+        OUT   TXPIN, A          ; the line goes LOW: the host's reset pulse
+        LDI   A, 0
+        STM   12, A             ; the delay returns to phase 0
+        LDI   A, OW_RST         ; 480 us of low. This is a COUNTED delay and it
+        STM   9, A              ; has to be counted: nothing on the wire
+        LDI   A, 4              ; announces that 480 us is up. The (4,40) pair
+        STM   10, A             ; is the COARSE one (511 clocks = 8.5 us a step)
+        LDI   A, 40
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 0: the reset is over; let the sensor answer ----
+ph0:    LDI   A, 0x00
+        OUT   PINOE, A          ; RELEASE: the sensor may now pull the line low
+        LDI   A, 1
+        STM   12, A             ; the delay returns to phase 1 (the 15 us
+        LDI   A, OW_T15         ; settle before the presence pulse is looked for)
+        STM   9, A
+        LDI   A, 2              ; the FINE pair from here on: 69 clocks
+        STM   10, A             ; (1.22 us) a step, which is what a 5 us slot needs
+        LDI   A, 13
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 1: wait for the sensor's PRESENCE pulse: low, then high ----
+;
+; The presence pulse is the sensor pulling low for 60-240 us and releasing. Two
+; spin loops, and between them a counted 15 us is NOT used: the pulse's length
+; is the sensor's to choose, so both edges are waited for. If the sensor is not
+; there the first loop simply never exits, which is the correct behaviour for a
+; bus with no timeout in this ISA — and the TB distinguishes "no sensor" from
+; "sensor present" by whether the program got past this point.
+ph1:    IN    A, PIN
+        AND   A, OW_DATA
+        JNZ   ph1               ; wait for LOW: the presence pulse's start
+ph1b:   IN    A, PIN
+        AND   A, OW_DATA
+        JZ    ph1b              ; wait for HIGH: the pulse's end. Presence found.
+        LDI   A, 2
+        STM   12, A             ; the delay returns to phase 2
+
+; ===========================================================================
+; WRITE A BYTE TO THE SENSOR (0xCC then 0xBE)
+;
+; dmem[13] holds the byte to send, dmem[2] the bit counter. The bits go LSB
+; first, and the bit to send is decided by the value's own bit 0 — which is why
+; this can be a loop with no shifting: read the byte, mask bit 0, send, then
+; rotate the byte right so the next bit 0 is the next bit of the frame.
+; ===========================================================================
+        LDI   A, 2
+        STM   10, A             ; TWO command bytes to send: 0xCC then 0xBE
+        LDI   A, 0xCC
+        STM   6, A              ; SKIP ROM: one sensor on the bus
+wbyte:  LDI   A, 8
+        STM   2, A              ; eight bits
+wbit:   LDM   A, 6             ; the byte to send lives in dmem[6],
+        AND   A, 0x01           ; NOT 13: that is the delay's inner target
+        JZ    wbit_zero
+
+        ; ---- a 1: a short low, then release for the rest of the slot ----
+        LDI   A, OW_DATA        ; 1-Wire writes DRIVE the line: release-then-
+        OUT   PINOE, A          ; set-the-level does not pull it down, and the
+        LDI   A, 0x00           ; pin is RELEASED here (ph0 released it), so
+        OUT   TXPIN, A          ; TXPIN=0 alone would leave the line HIGH and
+                                ; the sensor would see a 1 for every bit. The
+                                ; model caught this: it decoded 0 write bits
+                                ; because the line never went low.
+        LDI   A, 2
+        STM   12, A             ; the delay returns to phase 2
+        LDI   A, OW_T5           ; 5 us of low: the datasheet's 1-15 us
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 13
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 2: the low pulse is over. For a 1 that means release; for a 0 the
+;      program came here on a different path (wbit_zero below holds the line for
+;      the whole slot), so the release has to be decided by the bit, not here. --
+ph2:    LDI   A, 0x00
+        OUT   PINOE, A          ; release: a 1 is a SHORT low, then the line
+        LDI   A, 5              ; the delay returns to phase 5
+        STM   12, A
+        LDI   A, OW_T55         ; ...and the 1's high period is the rest of the
+        STM   9, A              ; slot (~55 us). A previous version stored the
+        LDI   A, 2              ; PHASE value 5 here as the counter, which made
+        STM   10, A             ; the high period 4.6 us and ran the slots
+        LDI   A, 13             ; together -- one of the three real bugs the
+        STM   13, A             ; 1-Wire TB found
+        JMP   dly1
+ph5:    JMP   wbit_tail         ; the 55 us of high are over
+
+wbit_zero:
+        ; ---- a 0: hold the line low for the WHOLE slot ----
+        LDI   A, OW_DATA        ; drive the line (see the 1-path note above)
+        OUT   PINOE, A
+        LDI   A, 0x00
+        OUT   TXPIN, A          ; and hold it low for the whole slot
+        LDI   A, 3
+        STM   12, A             ; the delay returns to phase 3
+        LDI   A, OW_T65         ; 65 us: the datasheet's ~60 us low for a 0
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 13
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 3: a 0's slot is over; release and move to the next bit ----
+ph3:    LDI   A, 0x00
+        OUT   PINOE, A          ; release: the next slot starts high
+
+wbit_tail:
+        ; ---- the inter-bit work: rotate the byte, count the bits ----
+        LDM   A, 6             ; the byte being sent
+        SHR   A                 ; the next bit of the frame is now bit 0
+        STM   6, A
+        LDM   A, 2              ; the bits left in this byte
+        SUB   A, 1
+        STM   2, A
+        JNZ   wbit              ; more bits -> the next slot
+
+        ; ---- the byte is sent. Which one is NEXT? ----
+        ;
+        ; dmem[10] counts the command bytes still to send: 2, then 1, then 0.
+        ; After the decrement, 0 means BOTH 0xCC and 0xBE are out, so start the
+        ; read. A previous version initialised this to 1 and decremented, so it
+        ; went to the read after 0xCC and the sensor's second command was
+        ; whatever the send register happened to hold. Both errors were found by
+        ; the TB decoding the pads: "command 1: cc, command 2: 00".
+        LDM   A, 10
+        SUB   A, 1
+        STM   10, A
+        JZ    wr_done           ; both commands are out: start the read
+        LDI   A, 0xBE           ; READ SCRATCHPAD, into the SEND register
+        STM   6, A
+        LDI   A, 8
+        STM   2, A              ; eight more bits
+        JMP   wbit
+wr_done:
+        LDI   A, 0
+        OUT   PINOE, A          ; released: the sensor drives the read slots now
+
+; ===========================================================================
+; READ THE TEMPERATURE: two bytes, eight slots each.
+;
+; A read slot is: release, wait for the sensor's initiation low, wait for its
+; release, wait 40 us, sample. The sample is 1 if the line has been pulled low
+; again (the sensor's 1-15 us "1" pulse) and 0 if it is still high.
+; ===========================================================================
+        LDI   A, 8              ; EIGHT bits in this byte. This was 0 first,
+        STM   3, A              ; so the first decrement underflowed to 255 and
+        LDI   A, 2              ; the byte never banked: the 1-Wire TB saw 16
+        STM   10, A             ; read slots and dmem[0..1] still unwritten.
+                                ; The same bug as the WS2812 byte counter.
+
+        LDI   A, 0
+        STM   5, A              ; the byte index
+        LDI   A, 0
+        STM   4, A              ; the shift register
+rbit:   LDI   A, OW_DATA        ; 1-Wire READS ARE HOST-INITIATED: the host
+        OUT   PINOE, A          ; pulls the line low to ask for a bit, the
+        LDI   A, 0x00           ; sensor answers with its own edge ~15 us
+        OUT   TXPIN, A          ; later. A previous version only WAITED for
+        LDI   A, 6              ; the sensor to start each slot, and a model
+        STM   12, A             ; that drives slots on a timer never spoke to
+        LDI   A, 6              ; it: 16 slots were sent and zero captured.
+        STM   9, A              ; This is the datasheet's "initiation pulse".
+                                ; Phase 6 (not 4) so it returns to ph4a -- the
+                                ; release-and-wait -- and NOT to ph4, the
+                                ; sample. The read loop and the write loop had
+                                ; both claimed phases 4 and 5, so the read's
+                                ; initiation delay jumped straight into the
+                                ; sample, sampled 6 us in with the line still
+                                ; low, and banked nothing.
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 13
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 4a: the initiation pulse is over; release and wait for the data ----
+ph4a:   LDI   A, 0x00
+        OUT   PINOE, A          ; release: the sensor drives the data bit
+ph4b:   IN    A, PIN
+        AND   A, OW_DATA
+        JNZ   ph4b              ; wait for the sensor's falling edge (its data)
+                                ; This is the ONLY edge the read loop waits
+                                ; for. A first version also waited for the
+                                ; line to go HIGH again before sampling, and
+                                ; that reads every bit as a 0: a 1's extra
+                                ; low pulse is OVER by the time the release
+                                ; arrives, so "wait for high, then sample"
+                                ; can only ever see the 0 case. The 1 and
+                                ; the 0 differ INSIDE the slot -- a 1 HOLDS
+                                ; the line low where a 0 releases -- so the
+                                ; sample has to land in that window, which
+                                ; means waiting a fixed time after the
+                                ; initiation edge, not waiting for a release
+                                ; that means opposite things per bit.
+        LDI   A, 4
+        STM   12, A             ; the delay returns to phase 4
+        LDI   A, OW_T40         ; sample this far after the sensor's edge:
+        STM   9, A              ; a 0 has released (high), a 1 still holds
+        LDI   A, 2              ; the line low
+        STM   10, A
+        LDI   A, 13
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 4: SAMPLE ONCE, and shift it in LSB first ----
+;
+; The accumulator shifts LEFT with the new bit at bit 0, so the FIRST bit read
+; ends up as the LEAST significant — which is 1-Wire's order and the opposite of
+; the DHT11's. The same two instructions, the opposite meaning: this is the one
+; place in the project where a shared accumulator is used backwards on purpose,
+; and the mutation suite checks that a firmware which shifts the other way (and
+; so decodes a byte-reversed frame) is caught rather than accepted.
+ph4:    IN    A, PIN
+        AND   A, OW_DATA
+        JZ    rb_was_zero
+        LDM   A, 4
+        MOV   X, A
+        ADD   A, X              ; a = 2*acc: the accumulator shifts LEFT
+        OR    A, 0x01           ; ...and a 1 goes in as the new bit 0
+        STM   4, A
+        JMP   rb_taken
+rb_was_zero:
+        LDM   A, 4
+        MOV   X, A
+        ADD   A, X              ; a 0: the same shift, bit 0 left clear
+        STM   4, A
+rb_taken:
+        LDM   A, 3
+        SUB   A, 1
+        STM   3, A
+        JNZ   rbit_done         ; more bits in this byte
+        ; ---- the byte is complete: bank it, next byte or done ----
+        LDM   A, 5
+        MOV   X, A
+        LDM   A, 4
+        STS   [X], A            ; dmem[0..1]: the temperature, LSB byte first
+        LDI   A, 0
+        STM   4, A
+        LDM   A, 5
+        ADD   A, 1
+        STM   5, A
+        LDM   A, 10
+        SUB   A, 1
+        STM   10, A
+        JZ    all_done
+        LDI   A, 8
+        STM   3, A
+rbit_done:
+        JMP   rbit              ; straight back into the edge waits
+
+all_done:
+        LDI   A, 1
+        STM   14, A             ; both bytes are in -- the TB's observable
+park:   LDI   A, 0x00
+        OUT   TXPIN, A
+halt:   JMP   halt              ; the ISA has no HALT
+
+; ===========================================================================
+; THE DELAY -- the same three nested counters as servo_sweep.pe and
+; dht11_read.pe, with the same reload trap in it.
+;
+;     total(n1,n2,n3) = (n1-1) * (10 + (n2-1) * (4*n3 + 7)) + 4   clocks
+;
+; (n2,n3) = (4,40) throughout: one outer step is 10 + 3*167 = 511 clocks =
+; 8.5 us, which is the right resolution for slots of 5, 15, 40 and 65 us and
+; for the 480 us reset.
+; ===========================================================================
+dly1:   LDM   A, 9              ;  1  the outer counter
+        SUB   A, 1              ;  2
+        STM   9, A              ;  3
+        JZ    dly_done          ;  4
+        LDM   A, 10             ;  5  the middle counter's target
+        STM   11, A             ;  6  into the loop's working copy
+dly2:   LDM   A, 11             ;  7  the middle counter
+        SUB   A, 1              ;  8
+        STM   11, A             ;  9
+        JZ    dly1              ; 10
+        LDM   A, 13             ; 11  the inner counter's target
+        STM   15, A             ; 12  into the loop's working copy
+dly3:   LDM   A, 15             ; 13  the inner counter
+        SUB   A, 1              ; 14
+        STM   15, A             ; 15
+        JNZ   dly3              ; 16
+        JMP   dly2              ; 17
+dly_done:
+        ; The ISA cannot return to seven addresses, so the phase in dmem[12]
+        ; chooses where. Two bugs lived here, both from patching one dispatch
+        ; for two different loops: it first handled 0-3 and sent everything >= 4
+        ; to ph4, which dropped a write-1's high period into the read path; and
+        ; when the read loop was given phases 4 and 5 it collided with the write
+        ; loop's 4 and 5. A dispatch is a FUNCTION over every phase a program
+        ; uses, so it has to be written against the full phase set at once --
+        ; adding a phase means extending the chain, not reusing a number.
+        LDM   A, 12
+        JZ    ph0               ; 0: the reset is over
+        SUB   A, 1
+        JZ    ph1               ; 1: the presence wait
+        SUB   A, 1
+        JZ    ph2               ; 2: a write-1's low pulse is over
+        SUB   A, 1
+        JZ    ph3               ; 3: a write-0's low slot is over
+        SUB   A, 1
+        JZ    ph4               ; 4: a read slot's sample instant
+        SUB   A, 1
+        JZ    ph5               ; 5: a write-1's high period is over
+        JMP   ph4a              ; 6: a read slot's initiation pulse is over
