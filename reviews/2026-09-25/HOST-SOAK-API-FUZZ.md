@@ -190,3 +190,39 @@ cycles, ~7,400 protocol-fuzz chunks and ~37,800 FastAPI route calls.
 - The fuzzer asserts host contracts only. A misdecode that both host and bridge
   share would need the chip-side wait-word cross-check (`run_all` gate) to
   surface.
+
+## 2026-09-25 — R3 debug campaign, and the unhandled 500 it found
+
+Added after the R3 host scope, because the R3 change added 4 bridge ops, 5
+routes and a new session state machine (DEBUG_HOLD / BP_HIT) that **no hostile
+campaign was attacking**. The original RED run of this campaign is why that
+justifies scheduling fuzz runs rather than trusting a green suite — it found
+two real defects, and the R3 one found a third.
+
+**The defect (pre-existing, not introduced by R3).** A caller value that cannot
+be encoded as one 16-bit frame word reached the payload encoder and raised a
+bare `ValueError`, which the API's error handler does not catch — an unhandled
+**HTTP 500** where a 409 belongs. Confirmed by execution across **seven** call
+sites, including the pre-existing R2 read ops, and through the real FastAPI app
+(`POST /api/debug/bp_set {"address": -1}` → 500). The lenient R2 encoder raised
+`OverflowError` for the same input, so the 500 predates R3; making the encoder
+strict only renamed the exception. Proven against the pre-R3 revision, not
+assumed. Fixed at the layer that owns caller input (`session._require_word`),
+which validates the *frame* (0..0xFFFF) without pre-empting the chip's own
+answer for an in-range address past the end of IMEM.
+
+**FUZZER-DESIGN RULE (manager ruling 2026-09-25: this goes in the record).**
+
+> On a fuzzer with a shared random stream, **adding a campaign is a global
+> change to every other campaign's coverage.** The R3 debug campaign drew from
+> the shared `rng`; the resulting shift stopped the hostile campaign selecting
+> `hostile/drop`, which `test_campaign_exercises_every_class` caught. The
+> consequence is worse than a coverage wobble: an old finding can stop
+> reproducing for reasons unrelated to the code, so a "no longer reproduces" can
+> be read as a fix when nothing changed. Each campaign now derives its own
+> stream from the run seed, making a new campaign a pure addition.
+
+Two supporting rules, recorded with it: count new attack surface in the *shared*
+invariants, not just its own campaign; and expect the campaign to find
+something — the 500 sat in a boundary nobody had attacked in code that had
+just been rewritten, which is when it is most likely to be wrong.

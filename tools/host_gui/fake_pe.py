@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from tools.host_gui import board
 from tools.host_gui import protocol as P
@@ -53,8 +53,88 @@ LOOPBACK_ID = 0x10C0
 STATE_STOPPED = 0
 STATE_RUNNING = 1
 
-STATUS_KEYS = ("state", "run", "target", "pc", "a", "x", "y", "timer",
-               "faults", "words_written")
+# ---- R3 debug control (chip repo R3-DEBUG-CONTROL-CONTRACT.md) -------------
+# Reconciled against the IMPLEMENTED RTL on 2026-09-25: pe_ctrl.v's R3 header
+# block, its four response builders, and the two wires that define the
+# encoding --
+#     wire [1:0] dbg_state = dbg_hold_r ? (bp_hit ? 2'd3 : 2'd2)
+#                                        : (run ? 2'd1 : 2'd0);
+#     wire [1:0] bp_flags  = {bp_hit, bp_en};   // bit0 armed, bit1 hit
+# The chip is the source of truth. Where the contract document's vector table
+# and the RTL disagree, the RTL wins and the difference is REPORTED to the
+# manager, not smoothed over here (see r3_reads.py's DISCREPANCIES).
+#
+#   state (2 bits, low half of the word; upper bits ZERO)
+#   0 STOPPED     the normal boot stop: run=0, no hold, PC held at 0
+#   1 RUNNING     the strap is high and no debug hold is asserted
+#   2 DEBUG_HOLD  held by the debug controls, PC PRESERVED (single-stepping)
+#   3 BP_HIT      held by the breakpoint, PC preserved, the hit latched
+# R2's STATUS `state` word carries the SAME encoding, so 0/1 keep their R1/R2
+# meaning and only a debug hold can ever enter 2/3.
+DEBUG_STOPPED = 0
+DEBUG_RUNNING = 1
+DEBUG_HOLD = 2
+DEBUG_BP_HIT = 3
+
+DEBUG_STATE_NAMES = {
+    DEBUG_STOPPED: "STOPPED",
+    DEBUG_RUNNING: "RUNNING",
+    DEBUG_HOLD: "DEBUG_HOLD",
+    DEBUG_BP_HIT: "BP_HIT",
+}
+
+# bp_flags bits. bp_addr is the armed address, or 0 when disarmed: a breakpoint
+# at address 0 is legal and is distinguished from "disarmed" by bit0, never by
+# the address value.
+BP_FLAG_ARMED = 0b01
+BP_FLAG_HIT = 0b10
+
+# The four debug ops are ready-immediate - answered from registers in the
+# request's own CRC cycle, like READ_CPU - so they carry ZERO wait words. Each
+# request's payload length is fixed; pe_ctrl.v raises frm_len_bad otherwise,
+# which answers a 1-word BAD_FRAME, latches FAULT_PROTOCOL, and has no side
+# effect on any debug register.
+DEBUG_REQUEST_WORDS = {
+    P.OP_DEBUG_STEP: 0,
+    P.OP_DEBUG_BP_SET: 1,
+    P.OP_DEBUG_BP_CLR: 0,
+    P.OP_DEBUG_STATUS: 0,
+}
+
+# The ISA (rtl/pe_cpu.v): [15:12] opcode, [11:0] operand. R3's contract is
+# stated over real instructions ("a step executes imem[0]", "the LDI at 1
+# executed exactly once"), so the model must execute them for the golden
+# vectors to mean anything. IN/OUT address a port space the host model does not
+# have, so they are no-ops here; the chip TB is what proves IO.
+ISA_LDI = 0x0
+ISA_OUT = 0x1
+ISA_IN = 0x2
+ISA_MOV = 0x3
+ISA_JMP = 0x4
+ISA_JZ = 0x5
+ISA_JNZ = 0x6
+ISA_ALU = 0x7
+ISA_INCX = 0x8
+ISA_DECX = 0x9
+ISA_SHR = 0xA
+ISA_LDS = 0xB
+ISA_STS = 0xC
+ISA_LDM = 0xD
+ISA_STM = 0xE
+ISA_NOP = 0xF
+
+STATUS_KEYS = (
+    "state",
+    "run",
+    "target",
+    "pc",
+    "a",
+    "x",
+    "y",
+    "timer",
+    "faults",
+    "words_written",
+)
 
 
 class PEFrameError(Exception):
@@ -92,8 +172,32 @@ ISA_REG_MASK = (1 << ISA_A_BITS) - 1
 ISA_INSN_MASK = (1 << ISA_INSN_BITS) - 1
 
 
+def _word(payload: tuple[int, ...], index: int, default: int = 0) -> int:
+    """One request payload word, or ``default`` when the frame is short.
+
+    `decode_frame` has already validated every payload word as a 16-bit int,
+    so the `int(payload[0]) if payload else 0` this replaces was coercing a
+    value that could not be anything else. Naming the defaulting rule once is
+    clearer than repeating it at each site, and it is total by construction.
+    """
+    return payload[index] if index < len(payload) else default
+
+
 def _payload_bytes(words: Iterable[int]) -> bytes:
-    return b"".join(int(w).to_bytes(2, "big") for w in words)
+    """Pack request payload words big-endian.
+
+    Strict at the boundary, like the bridge's `pe_frame.words_to_bytes`: the
+    words are already validated 16-bit ints coming out of a decoded frame, so
+    `int()` here could only ever mislead -- it silently truncates 1.5 to 1 and
+    accepts "7". A wire encoder must never coerce, so the width is checked
+    instead.
+    """
+    out = bytearray()
+    for word in words:
+        if isinstance(word, bool) or not isinstance(word, int) or not 0 <= word <= 0xFFFF:
+            raise ValueError(f"not a 16-bit payload word: {word!r}")
+        out += word.to_bytes(2, "big")
+    return bytes(out)
 
 
 class FakePE:
@@ -114,8 +218,7 @@ class FakePE:
 
     def __init__(self, *, read_fault_policy: str = "latch") -> None:
         if read_fault_policy not in ("latch", "status-only"):
-            raise ValueError("read_fault_policy must be 'latch' or "
-                             "'status-only'")
+            raise ValueError("read_fault_policy must be 'latch' or 'status-only'")
         self.read_fault_policy = read_fault_policy
         self.imem: list[int] = [0] * IMEM_WORDS
         self.dmem = bytearray(DMEM_BYTES)
@@ -125,17 +228,181 @@ class FakePE:
         self.words_written = 0
         self.committed_words: list[int] = []
         self.selected_target = 0
+        # R3 debug control: ONE breakpoint register (the contract is a single
+        # PC breakpoint, not a table), the debug hold, and the hit latch.
+        # `on_step`, when set, is called after each executed instruction with
+        # the landing PC, so a test can observe the stop-before comparison.
+        self.bp_addr = 0
+        self.bp_en = False
+        self.bp_hit = False
+        self.debug_hold = False
+        self.on_step: Callable[[int], None] | None = None
         # Test stimulus for the run-abort window: simulate `run` rising just
         # before word `abort_after_words` would be committed. One-shot.
         self.abort_after_words: int | None = None
 
     @property
     def state(self) -> int:
-        return STATE_RUNNING if self.run else STATE_STOPPED
+        """The R1/R2/R3 state word: hold ? (hit ? 3 : 2) : (run ? 1 : 0).
+
+        R2 vectors only ever produce 0/1 (nothing sets a hold), so this is
+        bit-for-bit the R2 `state`; 2/3 are reachable only through debug
+        control, exactly as the contract says.
+        """
+        if self.debug_hold:
+            return DEBUG_BP_HIT if self.bp_hit else DEBUG_HOLD
+        return DEBUG_RUNNING if self.run else DEBUG_STOPPED
+
+    @property
+    def bp_flags(self) -> int:
+        """{bp_hit, bp_en}: bit0 armed, bit1 hit latched."""
+        return (BP_FLAG_HIT if self.bp_hit else 0) | (BP_FLAG_ARMED if self.bp_en else 0)
+
+    @property
+    def fetch_address(self) -> int:
+        """Where the core fetches, per pe_cpu's three fetch modes.
+
+        next_pc while executing, pc while held (so imem_rdata == imem[pc]),
+        zero at the boot stop.
+        """
+        if not self.debug_hold and self.run:
+            return self._next_pc(self.imem[self.pc], self.pc)
+        return self.pc & ISA_PC_MASK
+
+    # ---- R3 debug control -------------------------------------------------
+    def reset_debug(self) -> None:
+        """Disarm the breakpoint and release the hold (a prepare/reset)."""
+        self.bp_addr = 0
+        self.bp_en = False
+        self.bp_hit = False
+        self.debug_hold = False
+
+    def set_run(self, active: bool) -> None:
+        """Drive the run STRAP. With no hold, dropping run is the boot stop."""
+        self.run = bool(active)
+        if not self.run and not self.debug_hold:
+            self.pc = 0  # the boot stop re-zeroes the PC
+
+    def _next_pc(self, insn: int, pc: int) -> int:
+        """The combinational next PC for ``insn`` fetched at ``pc``."""
+        opcode, arg = (insn >> 12) & 0xF, insn & 0xFFF
+        if opcode == ISA_JMP:
+            return arg & ISA_PC_MASK
+        if opcode == ISA_JZ and self.a == 0:
+            return arg & ISA_PC_MASK
+        if opcode == ISA_JNZ and self.a != 0:
+            return arg & ISA_PC_MASK
+        return (pc + 1) & ISA_PC_MASK
+
+    def _execute_one(self) -> int:
+        """Execute exactly ONE instruction at the PC; return the landing PC.
+
+        S1: one PC update and one set of side effects, at most. This is the
+        ISA from rtl/pe_cpu.v's header. IN/OUT address a port space the host
+        model has no equivalent for, so they only advance the PC.
+        """
+        pc = self.pc & ISA_PC_MASK
+        insn = self.imem[pc] & ISA_INSN_MASK
+        self.insn = insn
+        opcode, arg = (insn >> 12) & 0xF, insn & 0xFFF
+        imm8, addr8 = arg & 0xFF, arg & 0xFF
+        if opcode == ISA_LDI:
+            self.a = imm8
+        elif opcode == ISA_MOV:
+            sel = (arg >> 8) & 0x3
+            if sel == 0:
+                self.y = self.a
+            elif sel == 1:
+                self.a = self.y
+            elif sel == 2:
+                self.x = self.a
+            elif sel == 3:
+                self.a = self.x
+        elif opcode == ISA_ALU:
+            sub = (arg >> 8) & 0x3
+            if sub == 0:
+                self.a = (self.a + imm8) & ISA_REG_MASK
+            elif sub == 1:
+                self.a = (self.a - imm8) & ISA_REG_MASK
+            elif sub == 2:
+                self.a &= imm8
+            else:
+                self.a |= imm8
+        elif opcode == ISA_INCX:
+            self.x = (self.x + 1) & ISA_REG_MASK
+        elif opcode == ISA_DECX:
+            self.x = (self.x - 1) & ISA_REG_MASK
+        elif opcode == ISA_SHR:
+            self.a = (self.a >> 1) & ISA_REG_MASK
+        elif opcode == ISA_LDS:
+            self.a = self.dmem[self.x % DMEM_BYTES]
+        elif opcode == ISA_STS:
+            self.dmem[self.x % DMEM_BYTES] = self.a
+        elif opcode == ISA_LDM:
+            self.a = self.dmem[addr8 % DMEM_BYTES]
+        elif opcode == ISA_STM:
+            self.dmem[addr8 % DMEM_BYTES] = self.a
+        # ISA_OUT / ISA_IN / ISA_NOP / ISA_JMP / ISA_JZ / ISA_JNZ carry no
+        # register side effect here; a branch lands through _next_pc.
+        landing = self._next_pc(insn, pc)
+        self.pc = landing
+        if self.on_step is not None:
+            self.on_step(landing)
+        return landing
+
+    def debug_step_once(self) -> tuple[int, int, int]:
+        """Model one DEBUG_STEP commit; return (state, pc_next, bp_flags).
+
+        Stop-before (S3): the hit is compared on the LANDING address, so when
+        it matches the armed breakpoint the instruction AT that address has NOT
+        executed -- which is what lets a debugger inspect it and then step that
+        very instruction.
+        """
+        pc = self.pc & ISA_PC_MASK
+        landing = self._next_pc(self.imem[pc], pc)
+        hit = self.bp_en and landing == self.bp_addr
+        if hit:
+            # Stop-before: the PC still reports the LANDING address (the chip
+            # samples dbg_next_pc, and the contract says "the PC reads
+            # bp_addr"), but the instruction AT it has NOT executed.
+            self.pc = landing
+        else:
+            self._execute_one()  # a landing executes; a stop does not
+        self.debug_hold = True
+        self.bp_hit = hit
+        return self.state, self.pc, self.bp_flags
+
+    def advance_free_running(self, max_instructions: int = 4096) -> bool:
+        """Advance a free-running core until the breakpoint stops it.
+
+        The live-core half of S3: while the core executes and its landing
+        address equals an armed breakpoint, the chip holds it at that edge.
+        Returns True if it stopped on the breakpoint. A TB reaches the same
+        state by clocking the real core; the model needs an explicit driver
+        because nothing advances it on its own.
+        """
+        for _ in range(max_instructions):
+            if not self.run or self.debug_hold:
+                return self.bp_hit
+            pc = self.pc & ISA_PC_MASK
+            landing = self._next_pc(self.imem[pc], pc)
+            if self.bp_en and landing == self.bp_addr:
+                # Stop-before: the instruction at bp_addr has NOT run.
+                self.pc = landing
+                self.debug_hold = True
+                self.bp_hit = True
+                return True
+            self._execute_one()
+        return False
 
     # ---- framed interface -------------------------------------------------
-    def request(self, opcode: int, sequence: int = 0, target: int = 0,
-                payload_words: Iterable[int] = ()) -> P.Frame:
+    def request(
+        self,
+        opcode: int,
+        sequence: int = 0,
+        target: int = 0,
+        payload_words: Iterable[int] = (),
+    ) -> P.Frame:
         """Encode a request, exchange it, decode the response frame."""
         raw = P.encode_frame(opcode, sequence, target, _payload_bytes(payload_words))
         response = self.exchange(raw)
@@ -155,20 +422,29 @@ class FakePE:
             else:
                 self.faults |= FAULT_PROTOCOL
             opcode, sequence, target = self._salvage(raw)
-            return self._response(opcode, sequence, target,
-                                  (P.STATUS_BAD_FRAME,))
+            return self._response(opcode, sequence, target, (P.STATUS_BAD_FRAME,))
         return self._dispatch(frame)
 
     # ---- dispatch ---------------------------------------------------------
     def _dispatch(self, frame: P.Frame) -> bytes:
         opcode, sequence, target = frame.opcode, frame.sequence, frame.target
         if opcode & P.RESPONSE_BIT:
-            return self._response(opcode & ~P.RESPONSE_BIT, sequence, target,
-                                  (P.STATUS_UNSUPPORTED,))
+            return self._response(
+                opcode & ~P.RESPONSE_BIT, sequence, target, (P.STATUS_UNSUPPORTED,)
+            )
         if target == P.TARGET_LOOPBACK:
             return self._loopback(opcode, sequence, target)
         if target != P.TARGET_HOST:
             return self._response(opcode, sequence, target, (P.STATUS_UNSUPPORTED,))
+        # R3: each debug op carries a FIXED request payload length
+        # (pe_ctrl.v raises frm_len_bad otherwise). A wrong length answers a
+        # 1-word BAD_FRAME, latches the pre-existing FAULT_PROTOCOL, and
+        # reaches no handler - so it has no side effect on any debug register
+        # and executes no instruction (S5).
+        expected = DEBUG_REQUEST_WORDS.get(opcode)
+        if expected is not None and len(frame.payload) != expected:
+            self.faults |= FAULT_PROTOCOL
+            return self._response(opcode, sequence, target, (P.STATUS_BAD_FRAME,))
         handler = {
             P.OP_PING: self._ping,
             P.OP_LOAD: self._load,
@@ -179,10 +455,13 @@ class FakePE:
             P.OP_DUMP_CORE: self._dump_core,
             P.OP_CLEAR_FAULT: self._clear_fault,
             P.OP_TARGET: self._target,
+            P.OP_DEBUG_STEP: self._debug_step,
+            P.OP_DEBUG_BP_SET: self._debug_bp_set,
+            P.OP_DEBUG_BP_CLR: self._debug_bp_clr,
+            P.OP_DEBUG_STATUS: self._debug_status,
         }.get(opcode)
         if handler is None:
-            return self._response(opcode, sequence, target,
-                                  (P.STATUS_UNSUPPORTED,))
+            return self._response(opcode, sequence, target, (P.STATUS_UNSUPPORTED,))
         return self._response(opcode, sequence, target, handler(frame.payload))
 
     def _loopback(self, opcode: int, sequence: int, target: int) -> bytes:
@@ -194,10 +473,12 @@ class FakePE:
             payload = (P.STATUS_UNSUPPORTED,)
         return self._response(opcode, sequence, target, payload)
 
-    def _response(self, opcode: int, sequence: int, target: int,
-                  payload: tuple[int, ...]) -> bytes:
-        return P.encode_frame(opcode | P.RESPONSE_BIT, sequence, target,
-                              _payload_bytes(payload))
+    def _response(
+        self, opcode: int, sequence: int, target: int, payload: tuple[int, ...]
+    ) -> bytes:
+        return P.encode_frame(
+            opcode | P.RESPONSE_BIT, sequence, target, _payload_bytes(payload)
+        )
 
     @staticmethod
     def _salvage(raw: bytes) -> tuple[int, int, int]:
@@ -217,8 +498,7 @@ class FakePE:
 
     def _load(self, payload: tuple[int, ...]) -> tuple[int, ...]:
         if self.run:
-            return (P.STATUS_NOT_READY, self.words_written, self.faults,
-                    self._echo())
+            return (P.STATUS_NOT_READY, self.words_written, self.faults, self._echo())
         self.words_written = 0
         self.committed_words = []
         abort_after = self.abort_after_words
@@ -226,13 +506,11 @@ class FakePE:
         for index, word in enumerate(payload):
             if index >= IMEM_WORDS:
                 self.faults |= FAULT_RANGE
-                return (P.STATUS_RANGE, self.words_written, self.faults,
-                        self._echo())
+                return (P.STATUS_RANGE, self.words_written, self.faults, self._echo())
             if abort_after is not None and index == abort_after:
                 self.run = True
                 self.faults |= FAULT_LOAD
-                return (P.STATUS_FAULT, self.words_written, self.faults,
-                        self._echo())
+                return (P.STATUS_FAULT, self.words_written, self.faults, self._echo())
             self.imem[index] = word
             self.committed_words.append(word)
             self.words_written += 1
@@ -240,15 +518,29 @@ class FakePE:
 
     def _regs(self) -> tuple[int, int, int, int, int]:
         """The CPU registers, masked to the ISA widths the chip can hold."""
-        return (self.pc & ISA_PC_MASK, self.a & ISA_REG_MASK,
-                self.x & ISA_REG_MASK, self.y & ISA_REG_MASK,
-                self.insn & ISA_INSN_MASK)
+        return (
+            self.pc & ISA_PC_MASK,
+            self.a & ISA_REG_MASK,
+            self.x & ISA_REG_MASK,
+            self.y & ISA_REG_MASK,
+            self.insn & ISA_INSN_MASK,
+        )
 
     def _status(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
         pc, a, x, y, _insn = self._regs()
-        return (P.STATUS_OK, self.state, 1 if self.run else 0,
-                self.selected_target, pc, a, x, y,
-                self.timer, self.faults, self.words_written)
+        return (
+            P.STATUS_OK,
+            self.state,
+            1 if self.run else 0,
+            self.selected_target,
+            pc,
+            a,
+            x,
+            y,
+            self.timer,
+            self.faults,
+            self.words_written,
+        )
 
     def _read_cpu(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
         pc, a, x, y, insn = self._regs()
@@ -262,29 +554,40 @@ class FakePE:
     def _read_imem(self, payload: tuple[int, ...]) -> tuple[int, ...]:
         if self.run:
             return (P.STATUS_NOT_READY,)
-        address = int(payload[0]) if payload else 0
-        count = int(payload[1]) if len(payload) > 1 else 0
-        if (address < 0 or count < 0 or address + count > IMEM_WORDS
-                or count == 0 or count > MAX_READ_WORDS):
+        address = _word(payload, 0)
+        count = _word(payload, 1)
+        if (
+            address < 0
+            or count < 0
+            or address + count > IMEM_WORDS
+            or count == 0
+            or count > MAX_READ_WORDS
+        ):
             self._read_range_fault()
             return (P.STATUS_RANGE,)
-        return (P.STATUS_OK, *self.imem[address:address + count])
+        return (P.STATUS_OK, *self.imem[address : address + count])
 
     def _read_dmem(self, payload: tuple[int, ...]) -> tuple[int, ...]:
         if self.run:
             return (P.STATUS_NOT_READY,)
-        address = int(payload[0]) if payload else 0
-        count = int(payload[1]) if len(payload) > 1 else 0
-        if (address < 0 or count < 0 or address + count > DMEM_BYTES
-                or count == 0 or count > MAX_READ_DMEM_BYTES):
+        address = _word(payload, 0)
+        count = _word(payload, 1)
+        if (
+            address < 0
+            or count < 0
+            or address + count > DMEM_BYTES
+            or count == 0
+            or count > MAX_READ_DMEM_BYTES
+        ):
             self._read_range_fault()
             return (P.STATUS_RANGE,)
-        chunk = bytearray(self.dmem[address:address + count])
+        chunk = bytearray(self.dmem[address : address + count])
         if len(chunk) % 2:
-            chunk.append(0)                       # zero-pad the last word
-        return (P.STATUS_OK,
-                *(int.from_bytes(chunk[i:i + 2], "big")
-                  for i in range(0, len(chunk), 2)))
+            chunk.append(0)  # zero-pad the last word
+        return (
+            P.STATUS_OK,
+            *(int.from_bytes(chunk[i : i + 2], "big") for i in range(0, len(chunk), 2)),
+        )
 
     def _dump_core(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
         if self.run:
@@ -292,12 +595,12 @@ class FakePE:
         return self._status()
 
     def _clear_fault(self, payload: tuple[int, ...]) -> tuple[int, ...]:
-        mask = int(payload[0]) if payload else 0
+        mask = _word(payload, 0)
         self.faults &= ~mask & 0xFFFF
         return (P.STATUS_OK, self.faults)
 
     def _target(self, payload: tuple[int, ...]) -> tuple[int, ...]:
-        requested = int(payload[0]) if payload else 0
+        requested = _word(payload, 0)
         if requested == P.TARGET_HOST:
             self.selected_target = P.TARGET_HOST
             return (P.STATUS_OK, P.TARGET_HOST, CAP_HOST)
@@ -306,6 +609,93 @@ class FakePE:
             return (P.STATUS_OK, P.TARGET_LOOPBACK, CAP_LOOPBACK)
         return (P.STATUS_UNSUPPORTED,)
 
+    # ---- R3 debug-control handlers (per the IMPLEMENTED pe_ctrl.v) --------
+    # Every shape below is transcribed from the RTL's response builders, not
+    # from prose. The common 5-word prefix is (OK, state, pc, bp_addr,
+    # bp_flags); DEBUG_STATUS appends the architectural state.
+    def _debug_prefix(self, status: int) -> tuple[int, ...]:
+        """(status, state, pc, bp_addr, bp_flags) - the common debug prefix."""
+        return (status, self.state, self.pc, self.bp_addr, self.bp_flags)
+
+    def _debug_step(self, payload: tuple[int, ...]) -> tuple[int, ...]:
+        # pe_ctrl: a free-running core cannot be stepped -- NOT_READY with no
+        # side effect. The refusal still answers the FULL 5-word prefix, with
+        # the PRE-step state, pc and flags (the RTL overrides exactly those
+        # three words in the refusal branch), so the host can tell a refusal
+        # from a step without a second read.
+        if self.run and not self.debug_hold:
+            return self._debug_prefix(P.STATUS_NOT_READY)
+        # The response reports the state AFTER the step, and pc_next is where
+        # the next step will execute from.
+        state, pc_next, flags = self.debug_step_once()
+        return (P.STATUS_OK, state, pc_next, self.bp_addr, flags)
+
+    def _debug_bp_set(self, payload: tuple[int, ...]) -> tuple[int, ...]:
+        address = _word(payload, 0)
+        # Rejected ops have NO side effect (S5): past the end of instruction
+        # memory is RANGE, the breakpoint is NOT armed and NOT changed, and
+        # unlike the bounded READS this latches NO fault -- the R3 contract
+        # adds no fault class, and the RTL has no FAULT_RANGE write here.
+        if not 0 <= address < IMEM_WORDS:
+            return self._debug_prefix(P.STATUS_RANGE)
+        # The RTL builds the prefix in the same cycle it latches the new
+        # address: state and pc are the values at the REQUEST, while bp_addr
+        # and bp_flags report the ARMED breakpoint. Arming clears a stale hit.
+        state, pc = self.state, self.pc
+        self.bp_addr = address
+        self.bp_en = True
+        self.bp_hit = False
+        return (P.STATUS_OK, state, pc, address, BP_FLAG_ARMED)
+
+    def _debug_bp_clr(self, payload: tuple[int, ...]) -> tuple[int, ...]:
+        # Disarm, clear the hit, and RELEASE the hold. The state word is the
+        # RELEASED state (RUNNING when the strap is high, STOPPED otherwise)
+        # and the pc field is the PC at the request -- with run=0 the core
+        # re-zeroes at this same edge, so a following STATUS reads 0.
+        released = DEBUG_RUNNING if self.run else DEBUG_STOPPED
+        answer = (P.STATUS_OK, released, self.pc, self.bp_addr, 0)
+        self.bp_en = False
+        self.bp_hit = False
+        self.debug_hold = False
+        if not self.run:
+            self.pc = 0  # the boot stop re-zeroes the PC
+        return answer
+
+    def _debug_status(self, payload: tuple[int, ...] = ()) -> tuple[int, ...]:
+        # The full readback: the 5-word prefix plus run/a/x/y/insn, the same
+        # fields and widths READ_CPU reports. insn is the FETCHED word, so it
+        # follows pe_cpu's three fetch modes (next_pc while executing, pc
+        # while held, zero at the boot stop) rather than imem[pc] blindly.
+        pc, a, x, y, _insn = self._regs()
+        return (
+            P.STATUS_OK,
+            self.state,
+            pc,
+            self.bp_addr,
+            self.bp_flags,
+            1 if self.run else 0,
+            a,
+            x,
+            y,
+            self.imem[self.fetch_address] & ISA_INSN_MASK,
+        )
+
+
+def _arg_int(args: dict, key: str, default: int = 0) -> int:
+    """One integer request argument, as a typed `FakeBridgeError`.
+
+    Bridge arguments arrive as free-form JSON and the fuzzer attacks them, so
+    a non-integer must become a typed error the request loop already handles --
+    `int()` would instead raise ValueError/TypeError straight out of
+    `handle_line`, which catches only `FakeBridgeError`, turning a bad request
+    into an unhandled crash instead of an `ok=false` reply. It also stops the
+    silent coercions `int()` would otherwise perform (1.5 -> 1, "7" -> 7).
+    """
+    value = args.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise FakeBridgeError(f"{key} must be an integer, got {value!r}")
+    return value
+
 
 class FakeBridge:
     """Newline-JSON USB bridge over ``FakePE`` (the Pico's role)."""
@@ -313,7 +703,7 @@ class FakeBridge:
     def __init__(self) -> None:
         self.pe = FakePE()
         self._known_faults = 0
-        self._pending_events: deque[dict] = deque()
+        self._pending_events: deque[str] = deque()
 
     # ---- newline-JSON interface -------------------------------------------
     def handle_line(self, line: str) -> list[str]:
@@ -321,40 +711,46 @@ class FakeBridge:
         try:
             message = json.loads(line)
         except ValueError:
-            return [self._event_line("protocol.error",
-                                     {"error": "malformed JSON"})]
-        if (not isinstance(message, dict) or message.get("v") != 1
-                or not isinstance(message.get("id"), int)
-                or not isinstance(message.get("op"), str)):
-            replies = [self._event_line("protocol.error",
-                                        {"error": "malformed request"})]
+            return [self._event_line("protocol.error", {"error": "malformed JSON"})]
+        if (
+            not isinstance(message, dict)
+            or message.get("v") != 1
+            or not isinstance(message.get("id"), int)
+            or not isinstance(message.get("op"), str)
+        ):
+            replies = [self._event_line("protocol.error", {"error": "malformed request"})]
             request_id = message.get("id") if isinstance(message, dict) else None
             if isinstance(request_id, int):
-                replies.append(self._response_line(
-                    request_id, False, None, "malformed request"))
+                replies.append(
+                    self._response_line(request_id, False, None, "malformed request")
+                )
             return replies
 
         request_id = message["id"]
         op = message["op"]
         args = message.get("args") or {}
         if not isinstance(args, dict):
-            return [self._event_line("protocol.error",
-                                     {"error": "args must be an object"}),
-                    self._response_line(request_id, False, None,
-                                        "args must be an object")]
+            return [
+                self._event_line("protocol.error", {"error": "args must be an object"}),
+                self._response_line(request_id, False, None, "args must be an object"),
+            ]
         try:
             result = self._dispatch(op, args)
         except FakeBridgeError as exc:
             self._emit_fault_events()
-            return [*self._drain_events(),
-                    self._response_line(request_id, False, None, str(exc))]
+            return [
+                *self._drain_events(),
+                self._response_line(request_id, False, None, str(exc)),
+            ]
         self._emit_fault_events()
-        return [*self._drain_events(),
-                self._response_line(request_id, True, result, None)]
+        return [
+            *self._drain_events(),
+            self._response_line(request_id, True, result, None),
+        ]
 
     # ---- operations --------------------------------------------------------
     def _dispatch(self, op: str, args: dict) -> dict:
-        target = int(args.get("target", P.TARGET_HOST))
+        target = _arg_int(args, "target", P.TARGET_HOST)
         if op == "hello":
             return {
                 "protocol_version": 1,
@@ -366,82 +762,168 @@ class FakeBridge:
         if op == "prepare":
             self.pe.run = False
             self.pe.faults = 0
+            self.pe.reset_debug()
             self._event("board.reset", {})
             return {"state": "PREPARED", "run": False}
         if op == "ping":
             frame = self.pe.request(P.OP_PING, target=target)
             return {"status": frame.payload[0]}
         if op == "load":
-            self.pe.run = False          # LOAD forces run=0 (plan Task 2)
+            self.pe.run = False  # LOAD forces run=0 (plan Task 2)
             words = args.get("words", [])
             if not isinstance(words, list) or not all(
-                    isinstance(w, int) and 0 <= w <= 0xFFFF for w in words):
+                isinstance(w, int) and 0 <= w <= 0xFFFF for w in words
+            ):
                 raise FakeBridgeError("load words must be 16-bit integers")
             frame = self.pe.request(P.OP_LOAD, payload_words=words)
-            result = {"status": frame.payload[0],
-                      "words_written": frame.payload[1],
-                      "faults": frame.payload[2],
-                      "echo": frame.payload[3],
-                      "target": frame.target}
+            result = {
+                "status": frame.payload[0],
+                "words_written": frame.payload[1],
+                "faults": frame.payload[2],
+                "echo": frame.payload[3],
+                "target": frame.target,
+            }
             self._event("chip.status", dict(result))
             return result
         if op == "start":
-            self.pe.run = True
+            # The run STRAP. Debug control may still hold the core, so the
+            # state word - not the strap - is what the session must read back;
+            # this result is only the bridge's report of what it commanded.
+            self.pe.set_run(True)
             result = {"state": "RUNNING", "run": True}
             self._event("chip.status", dict(result))
             return result
         if op == "stop":
-            self.pe.run = False
+            self.pe.set_run(False)
             result = {"state": "STOPPED", "run": False}
             self._event("chip.status", dict(result))
             return result
         if op == "status":
-            return self._status_result(self.pe.request(P.OP_STATUS,
-                                                       target=target))
+            return self._status_result(self.pe.request(P.OP_STATUS, target=target))
         if op == "dump_core":
-            return self._status_result(self.pe.request(P.OP_DUMP_CORE,
-                                                       target=target))
+            return self._status_result(self.pe.request(P.OP_DUMP_CORE, target=target))
         if op == "read_cpu":
             values = self.pe.request(P.OP_READ_CPU, target=target).payload
-            return {"status": values[0], "pc": values[1], "a": values[2],
-                    "x": values[3], "y": values[4], "insn": values[5],
-                    "state": values[6]}
+            return {
+                "status": values[0],
+                "pc": values[1],
+                "a": values[2],
+                "x": values[3],
+                "y": values[4],
+                "insn": values[5],
+                "state": values[6],
+            }
         if op == "read_imem":
-            address = int(args.get("address", 0))
-            count = int(args.get("count", 0))
-            frame = self.pe.request(P.OP_READ_IMEM, target=target,
-                                    payload_words=(address, count))
+            address = _arg_int(args, "address")
+            count = _arg_int(args, "count")
+            frame = self.pe.request(
+                P.OP_READ_IMEM, target=target, payload_words=(address, count)
+            )
             ok = frame.payload[0] == P.STATUS_OK
-            return {"status": frame.payload[0], "address": address,
-                    "words": list(frame.payload[1:]) if ok else []}
+            return {
+                "status": frame.payload[0],
+                "address": address,
+                "words": list(frame.payload[1:]) if ok else [],
+            }
         if op == "read_dmem":
-            address = int(args.get("address", 0))
-            count = int(args.get("count", 0))
-            frame = self.pe.request(P.OP_READ_DMEM, target=target,
-                                    payload_words=(address, count))
+            address = _arg_int(args, "address")
+            count = _arg_int(args, "count")
+            frame = self.pe.request(
+                P.OP_READ_DMEM, target=target, payload_words=(address, count)
+            )
             ok = frame.payload[0] == P.STATUS_OK
             packed = _payload_bytes(frame.payload[1:]) if ok else b""
-            return {"status": frame.payload[0], "address": address,
-                    "bytes": list(packed[:count]) if ok else []}
+            return {
+                "status": frame.payload[0],
+                "address": address,
+                "bytes": list(packed[:count]) if ok else [],
+            }
         if op == "clear_fault":
-            mask = int(args.get("mask", 0xFFFF))
-            frame = self.pe.request(P.OP_CLEAR_FAULT, target=target,
-                                    payload_words=(mask,))
+            mask = _arg_int(args, "mask", 0xFFFF)
+            frame = self.pe.request(
+                P.OP_CLEAR_FAULT, target=target, payload_words=(mask,)
+            )
             return {"status": frame.payload[0], "faults": frame.payload[1]}
         if op == "target":
-            requested = int(args.get("target", P.TARGET_HOST))
+            requested = _arg_int(args, "target", P.TARGET_HOST)
             frame = self.pe.request(P.OP_TARGET, payload_words=(requested,))
             ok = frame.payload[0] == P.STATUS_OK
-            return {"status": frame.payload[0],
-                    "target": frame.payload[1] if ok else self.pe.selected_target,
-                    "capabilities": frame.payload[2] if ok else 0}
+            return {
+                "status": frame.payload[0],
+                "target": frame.payload[1] if ok else self.pe.selected_target,
+                "capabilities": frame.payload[2] if ok else 0,
+            }
+        # ---- R3 debug control (per the implemented pe_ctrl.v contract) -----
+        if op == "debug_step":
+            frame = self.pe.request(P.OP_DEBUG_STEP, target=target)
+            p = frame.payload
+            if p[0] != P.STATUS_OK:
+                return {
+                    "status": p[0],
+                    "state": p[1],
+                    "pc": p[2],
+                    "bp_addr": p[3],
+                    "bp_flags": p[4],
+                }
+            return {
+                "status": p[0],
+                "state": p[1],
+                "pc_next": p[2],
+                "bp_addr": p[3],
+                "bp_flags": p[4],
+                "hit": bool(p[4] & BP_FLAG_HIT),
+                "debug_state_name": DEBUG_STATE_NAMES.get(p[1], f"UNKNOWN({p[1]})"),
+            }
+        if op == "bp_set":
+            address = _arg_int(args, "address")
+            frame = self.pe.request(
+                P.OP_DEBUG_BP_SET, target=target, payload_words=(address,)
+            )
+            p = frame.payload
+            return {
+                "status": p[0],
+                "state": p[1],
+                "pc": p[2],
+                "bp_addr": p[3],
+                "bp_flags": p[4],
+                "requested": address,
+                "armed": bool(p[4] & BP_FLAG_ARMED),
+            }
+        if op == "bp_clr":
+            frame = self.pe.request(P.OP_DEBUG_BP_CLR, target=target)
+            p = frame.payload
+            return {
+                "status": p[0],
+                "state": p[1],
+                "pc": p[2],
+                "bp_addr_before": p[3],
+                "bp_flags": p[4],
+            }
+        if op == "debug_status":
+            p = self.pe.request(P.OP_DEBUG_STATUS, target=target).payload
+            return {
+                "status": p[0],
+                "state": p[1],
+                "pc": p[2],
+                "bp_addr": p[3],
+                "bp_flags": p[4],
+                "run": p[5],
+                "a": p[6],
+                "x": p[7],
+                "y": p[8],
+                "insn": p[9],
+                "armed": bool(p[4] & BP_FLAG_ARMED),
+                "hit": bool(p[4] & BP_FLAG_HIT),
+                "debug_state_name": DEBUG_STATE_NAMES.get(p[1], f"UNKNOWN({p[1]})"),
+            }
         raise FakeBridgeError(f"unknown op {op!r}")
 
     # ---- helpers -----------------------------------------------------------
     @staticmethod
     def _status_result(frame: P.Frame) -> dict:
         result: dict[str, int] = {
-            "status": frame.payload[0] if frame.payload else P.STATUS_BAD_FRAME}
+            "status": frame.payload[0] if frame.payload else P.STATUS_BAD_FRAME
+        }
         for key, value in zip(STATUS_KEYS, frame.payload[1:]):
             result[key] = value
         return result
@@ -455,8 +937,9 @@ class FakeBridge:
             # Read STATUS before emitting the event (plan Task 2 Step 6). The
             # read does not clear the sticky fault.
             status = self._status_result(self.pe.request(P.OP_STATUS))
-            self._event("chip.irq", {"faults": self.pe.faults, "new": new,
-                                     "status": status})
+            self._event(
+                "chip.irq", {"faults": self.pe.faults, "new": new, "status": status}
+            )
         self._known_faults = self.pe.faults
 
     def _drain_events(self) -> list[str]:
@@ -465,10 +948,10 @@ class FakeBridge:
         return out
 
     @staticmethod
-    def _response_line(request_id: int, ok: bool, result,
-                       error: str | None) -> str:
-        return json.dumps({"v": 1, "id": request_id, "ok": ok,
-                           "result": result, "error": error})
+    def _response_line(request_id: int, ok: bool, result, error: str | None) -> str:
+        return json.dumps(
+            {"v": 1, "id": request_id, "ok": ok, "result": result, "error": error}
+        )
 
     @staticmethod
     def _event_line(name: str, data: dict) -> str:

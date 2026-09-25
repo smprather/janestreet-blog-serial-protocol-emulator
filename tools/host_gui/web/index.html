@@ -57,6 +57,35 @@
       <dl id="manifest" class="manifest"></dl>
     </section>
 
+    <section class="panel" id="debug">
+      <h2>Debug</h2>
+      <dl class="debug">
+        <dt>Debug state</dt><dd id="debug-state">—</dd>
+        <dt>PC</dt><dd id="debug-pc">—</dd>
+        <dt>Breakpoint</dt><dd id="debug-bp">—</dd>
+        <dt>Breakpoint flags</dt><dd id="debug-bp-flags">—</dd>
+        <dt>Run strap</dt><dd id="debug-run">—</dd>
+      </dl>
+      <label for="bp-address">Breakpoint address (0–1023)</label>
+      <input id="bp-address" type="number" min="0" max="1023" value="2">
+      <div class="controls">
+        <button id="debug-step" disabled>Step</button>
+        <button id="bp-set" disabled>Set breakpoint</button>
+        <button id="bp-clr" disabled>Clear &amp; release</button>
+        <button id="debug-resume" disabled>Continue (keep bp)</button>
+      </div>
+      <p id="debug-message" class="message"></p>
+      <p class="liveness-note">One hardware breakpoint, PC-only. A hit
+      <strong>stops before</strong> the instruction at that address, so you can
+      inspect it and then step that very instruction. <strong>Clear &amp;
+      release</strong> is the only way off a held core: with the run strap high
+      the core resumes, otherwise it falls to the boot stop (PC 0) — and it
+      disarms the breakpoint, so <em>Continue (keep bp)</em> steps off, clears,
+      then re-arms. Contract: chip repo
+      <code>R3-DEBUG-CONTROL-CONTRACT.md</code>; the host's vectors are
+      <strong>not yet chip-confirmed</strong>.</p>
+    </section>
+
     <section class="panel">
       <h2>Events</h2>
       <ul id="events"></ul>

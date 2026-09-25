@@ -55,17 +55,27 @@ class ServerConfig:
     def default(cls) -> ServerConfig:
         package = Path(__file__).resolve().parent
         repo_root = package.parents[1]
-        return cls(repo_root=repo_root, sources_dir=repo_root / "firmware",
-                   web_dir=package / "web")
+        return cls(
+            repo_root=repo_root,
+            sources_dir=repo_root / "firmware",
+            web_dir=package / "web",
+        )
 
 
 def resolve_source(name: str, sources_dir: Path) -> Path:
     """Resolve a bare .pe name inside ``sources_dir``, rejecting traversal."""
-    if (not isinstance(name, str) or not name or not name.endswith(".pe")
-            or Path(name).name != name or "\x00" in name):
+    if (
+        not isinstance(name, str)
+        or not name
+        or not name.endswith(".pe")
+        or Path(name).name != name
+        or "\x00" in name
+    ):
         raise ApiError(
             f"invalid source name {name!r}; expected a .pe file name in the "
-            f"sources directory", 400)
+            f"sources directory",
+            400,
+        )
     root = Path(sources_dir).resolve()
     path = (root / name).resolve()
     if path.parent != root:
@@ -78,8 +88,7 @@ def resolve_source(name: str, sources_dir: Path) -> Path:
 class Api:
     """Framework-free request handlers shared by FastAPI and the tests."""
 
-    def __init__(self, session: S.ControllerSession,
-                 config: ServerConfig) -> None:
+    def __init__(self, session: S.ControllerSession, config: ServerConfig) -> None:
         self.session = session
         self.config = config
 
@@ -131,13 +140,69 @@ class Api:
     def dump(self) -> dict:
         return {"dump": asdict(self.session.dump_core())}
 
+    # ---- R3 debug control --------------------------------------------------
+    # Thin wrappers over the session, which owns the state machine. The
+    # responses carry the chip's own state word so the GUI can render
+    # DEBUG_HOLD and BP_HIT as what they are, and `bp_flags` so "armed" and
+    # "hit" are never inferred from the address (address 0 is a legal
+    # breakpoint, told apart by bit0 only).
+    def debug_status(self) -> dict:
+        snapshot = self.session.debug_status()
+        return {
+            "debug": asdict(snapshot),
+            "state_name": snapshot.state_name,
+            "armed": snapshot.armed,
+            "hit": snapshot.hit,
+        }
+
+    def debug_step(self) -> dict:
+        result = self.session.debug_step()
+        return {
+            "step": asdict(result),
+            "state_name": result.state_name,
+            "hit": result.hit,
+        }
+
+    def bp_set(self, address) -> dict:
+        # The value is validated by the session, which raises a typed
+        # SessionError (-> 409) for a non-integer. Coercing here with int()
+        # would raise ValueError out of the route instead, because guarded()
+        # only catches ApiError and SessionError.
+        result = self.session.bp_set(address)
+        return {
+            "breakpoint": asdict(result),
+            "state_name": result.state_name,
+            "armed": result.armed,
+        }
+
+    def bp_clr(self) -> dict:
+        result = self.session.bp_clr()
+        return {"breakpoint": asdict(result), "state_name": result.state_name}
+
+    def resume_with_breakpoint(self, address) -> dict:
+        """Step off, release, re-arm -- the contract's continue recipe.
+
+        Returns the same shape as the other debug endpoints (state_name,
+        armed, hit alongside the snapshot), so the GUI's one response handler
+        can render any of them.
+        """
+        self.session.resume_with_breakpoint(address)
+        snapshot = self.session.debug_status()
+        return {
+            "debug": asdict(snapshot),
+            "state_name": snapshot.state_name,
+            "armed": snapshot.armed,
+            "hit": snapshot.hit,
+        }
+
 
 def create_app(api: Api, config: ServerConfig):
     """Build the FastAPI app, or fail loudly when FastAPI is not installed."""
     if not HAVE_FASTAPI:
         raise ServerDependencyError(
             "FastAPI is required for the GUI server; install the host-gui "
-            "extra (pip install .[host-gui])")
+            "extra (pip install .[host-gui])"
+        )
 
     app = FastAPI(title="PE Host Controller", version="0.1.0")
 
@@ -146,10 +211,10 @@ def create_app(api: Api, config: ServerConfig):
             try:
                 return fn(*args, **kwargs)
             except ApiError as exc:
-                raise HTTPException(status_code=exc.status,
-                                    detail=str(exc)) from exc
+                raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
             except S.SessionError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
+
         return handler
 
     @app.get("/api/health")
@@ -192,6 +257,26 @@ def create_app(api: Api, config: ServerConfig):
     def dump():
         return guarded(api.dump)()
 
+    @app.get("/api/debug")
+    def debug():
+        return guarded(api.debug_status)()
+
+    @app.post("/api/debug/step")
+    def debug_step():
+        return guarded(api.debug_step)()
+
+    @app.post("/api/debug/bp_set")
+    def bp_set(body: dict):
+        return guarded(api.bp_set)(body.get("address", 0))
+
+    @app.post("/api/debug/bp_clr")
+    def bp_clr():
+        return guarded(api.bp_clr)()
+
+    @app.post("/api/debug/resume")
+    def resume(body: dict):
+        return guarded(api.resume_with_breakpoint)(body.get("address", 0))
+
     @app.websocket("/api/events")
     async def events(websocket: WebSocket):
         await websocket.accept()
@@ -203,19 +288,24 @@ def create_app(api: Api, config: ServerConfig):
         except WebSocketDisconnect:
             return
 
-    app.mount("/", StaticFiles(directory=str(config.web_dir), html=True),
-              name="web")
+    app.mount("/", StaticFiles(directory=str(config.web_dir), html=True), name="web")
     return app
 
 
-def serve(api: Api, config: ServerConfig | None = None, *, host: str = "127.0.0.1",
-          port: int = 8000) -> None:
+def serve(
+    api: Api,
+    config: ServerConfig | None = None,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+) -> None:
     """Run the GUI server on loopback (uvicorn optional)."""
     try:
         import uvicorn
     except ImportError as exc:
         raise ServerDependencyError(
             "uvicorn is required to serve the GUI; install the host-gui extra "
-            "(pip install .[host-gui])") from exc
+            "(pip install .[host-gui])"
+        ) from exc
     config = config or ServerConfig.default()
     uvicorn.run(create_app(api, config), host=host, port=port)
