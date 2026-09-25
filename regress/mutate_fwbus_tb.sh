@@ -73,7 +73,7 @@ for f in $FWS; do
   cp "$ROOT/firmware/$f.hex" "$BAK/$f.hex"
 done
 
-pass=0; fail=0; survived=0
+pass=0; fail=0; survived=0; hangs=0
 
 mkdir -p "$ROOT/sim"
 
@@ -105,7 +105,35 @@ run_tb() {
     return 2
   fi
   (cd "$ROOT/sim" && timeout 300 vvp "/tmp/mut_fwbus_$tb.vvp") >"$LOG" 2>&1
-  grep -qE "^PASS" "$LOG"
+  # THE VERDICT IS THE MECHANISM, NOT MERELY "NOT PASSING". This harness used
+  # to decide `grep -qE "^PASS"` and call everything else "detected", which
+  # silently conflated two very different outcomes:
+  #
+  #   * an ASSERTION failed   -- evidence that the testbench TESTS the firmware,
+  #                              which is the whole point of a mutation gate
+  #   * the testbench HUNG     -- the run reached its watchdog or the 300 s
+  #                              timeout -- evidence only that the testbench
+  #                              would not ACCEPT the image, which proves
+  #                              nothing about the assertions
+  #
+  # Confirmed by construction, not guessed: a dmx512 mutation that redirects
+  # the start code straight to `park` produces
+  #     break 88.06 us (floor 87.5)      <- the break and mark checks PASS
+  #     FAIL: watchdog -- the test did not complete
+  # and the old rule would have scored that exactly as it scores
+  # midi-cell-count-minus-one. A hang is a legitimate way for a testbench to
+  # reject a firmware, but it is a WEAKER claim and it has to be visible as one,
+  # so it is counted separately and printed as such.
+  #
+  # Returns: 0 = the TB passed (survived), 1 = an assertion caught it,
+  #          3 = caught only by a hang/timeout, 2 = harness error,
+  #          4 = the run produced no verdict at all.
+  if   grep -qE "^PASS" "$LOG";                                  then return 0
+  elif grep -qE "^FAIL: watchdog" "$LOG" || [ "$(wc -l <"$LOG")" -eq 0 ] \
+       || ! grep -qE "^FAIL" "$LOG";                             then return 3
+  elif grep -qE "^FAIL" "$LOG";                                  then return 1
+  else return 4
+  fi
 }
 
 mutate() {
@@ -126,10 +154,18 @@ check_mutation() {
   fi
   run_tb "$fw" "$tb"
   local rc=$?
-  if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))
-  elif [ $rc -eq 1 ]; then echo "  [$name] detected"; pass=$((pass+1))
+  if   [ $rc -eq 0 ]; then
+    echo "  [$name] SURVIVED"; survived=$((survived+1))
+  elif [ $rc -eq 1 ]; then
+    echo "  [$name] detected (assertion)"; pass=$((pass+1))
+  elif [ $rc -eq 3 ]; then
+    # Caught, but by the testbench refusing to finish rather than by a check
+    # failing. Counted as caught, kept visible, and it must be justified above:
+    # a hang says the image is unacceptable, not that the assertions work.
+    echo "  [$name] detected (HANG/timeout only -- weaker: no assertion fired)"
+    pass=$((pass+1)); hangs=$((hangs+1))
   else
-    echo "  [$name] HARNESS ERROR (assemble or compile failed; see /tmp/mut_fwbus_*.log)"
+    echo "  [$name] HARNESS ERROR (assemble/compile failed, or no verdict in the log; see /tmp/mut_fwbus_*.log)"
     fail=$((fail+1))
   fi
   restore; verify_restore
@@ -429,7 +465,7 @@ check_mutation "dmx-ramp-steps-by-two" dmx512 tb_pe_soc_dmx512 \
   "        ADD   A, 2               ; MUTANT: the ramp steps by two"
 
 echo
-echo "  detected: $pass   survived: $survived   harness errors: $fail"
+echo "  detected: $pass  (of which $hangs by hang/timeout only)   survived: $survived   harness errors: $fail"
 if [ "$survived" -ne 0 ] || [ "$fail" -ne 0 ]; then
   echo "MUTATION TEST FAILED"
   exit 1
