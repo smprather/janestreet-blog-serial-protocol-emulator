@@ -439,6 +439,22 @@ else
   stale=1
 fi
 
+# The chip<->host wait-word CROSS-CHECK. The chip's 0xFFFF filler (rtl/pe_ctrl.v)
+# and the host's leading-filler skip (tools/host_bridge/pe_frame.py) are two
+# independent implementations of one contract, and each side's own tests run
+# against its OWN filler bytes -- the actual bytes crossing the SPI wire are
+# what neither covers. This gate feeds the chip-produced stream to the host's
+# real stripper for every 0..15 wait words, so the seam that held finding B1
+# cannot silently reopen. It also asserts an all-filler stream raises rather
+# than decoding to a plausible-looking success.
+if python3 regress/cross_check_wait_words.py > /tmp/cross_wait_words.log 2>&1; then
+  echo "wait-word cross-check: OK (chip filler <-> host stripper, 0..15)"
+else
+  echo "wait-word cross-check: FAILED"
+  cat /tmp/cross_wait_words.log
+  stale=1
+fi
+
 # The I2C pin timing, measured on the wire across all 60 tick phases against the
 # standard-mode table. This is a SPEC check, so it runs every time rather than on
 # request -- a firmware edit that shortens a delay is exactly the change that
