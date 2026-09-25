@@ -88,7 +88,7 @@ class FakeAdapter:
             raise RuntimeError("host SPI pin map is not configured")
         self.spi_rates.append(sclk_hz)
 
-    def host_spi_transfer(self, data):
+    def host_spi_transfer(self, data, read_words=None):
         if self.fail == "spi":
             raise OSError("no MISO")
         self.transfers += 1

@@ -80,6 +80,13 @@ ISA_X_BITS = 8
 ISA_Y_BITS = 8
 ISA_PC_BITS = 10
 ISA_INSN_BITS = 16
+# Bounded reads carry at most MAX_READ_WORDS=15 data words per frame (the chip
+# rejects a larger count with RANGE so the host splits; see rtl/pe_ctrl.v
+# MAX_READ_WORDS). DMEM packs two bytes per word. The model enforces both so a
+# large read cannot be OK in --fake and RANGE on silicon - the divergence the
+# independent chip review found.
+MAX_READ_WORDS = 15
+MAX_READ_DMEM_BYTES = 2 * MAX_READ_WORDS
 ISA_PC_MASK = (1 << ISA_PC_BITS) - 1
 ISA_REG_MASK = (1 << ISA_A_BITS) - 1
 ISA_INSN_MASK = (1 << ISA_INSN_BITS) - 1
@@ -257,7 +264,8 @@ class FakePE:
             return (P.STATUS_NOT_READY,)
         address = int(payload[0]) if payload else 0
         count = int(payload[1]) if len(payload) > 1 else 0
-        if address < 0 or count < 0 or address + count > IMEM_WORDS:
+        if (address < 0 or count < 0 or address + count > IMEM_WORDS
+                or count == 0 or count > MAX_READ_WORDS):
             self._read_range_fault()
             return (P.STATUS_RANGE,)
         return (P.STATUS_OK, *self.imem[address:address + count])
@@ -267,7 +275,8 @@ class FakePE:
             return (P.STATUS_NOT_READY,)
         address = int(payload[0]) if payload else 0
         count = int(payload[1]) if len(payload) > 1 else 0
-        if address < 0 or count < 0 or address + count > DMEM_BYTES:
+        if (address < 0 or count < 0 or address + count > DMEM_BYTES
+                or count == 0 or count > MAX_READ_DMEM_BYTES):
             self._read_range_fault()
             return (P.STATUS_RANGE,)
         chunk = bytearray(self.dmem[address:address + count])

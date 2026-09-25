@@ -78,6 +78,31 @@ def bytes_to_words(data):
     return tuple(words)
 
 
+MAX_WAIT_WORDS = 15   # the chip's worst-case wait-word count (R2 contract)
+
+
+def strip_wait_words(raw, max_wait=MAX_WAIT_WORDS):
+    """Return the real frame from a response that may lead with 0xFFFF words.
+
+    A bounded read cannot answer inside the request's bit times, so the chip
+    drives 0xFFFF filler words on MISO and the real frame begins at the first
+    non-0xFFFF WORD (chip R2 wait-word contract; worst case 15). The skip is
+    leading-ONLY, so a 0xFFFF inside a payload is data. Raises FrameError if
+    the stream is exhausted without a real frame, so the caller reports a
+    timeout rather than decoding filler.
+    """
+    if len(raw) < 4:
+        raise FrameError("response too short to hold a frame")
+    words = bytes_to_words(raw[:len(raw) - (len(raw) % 2)])
+    index = 0
+    while index < len(words) and words[index] == 0xFFFF and index < max_wait:
+        index += 1
+    if index >= len(words) or words[index] == 0xFFFF:
+        raise FrameError(
+            f"no frame after {index} wait words (chip bound {max_wait})")
+    return words_to_bytes(words[index:])
+
+
 def encode_frame(opcode, sequence, target, payload=b""):
     """Encode one frame. ``payload`` is big-endian 16-bit words as bytes."""
     if not 0 <= opcode <= 0xFF:

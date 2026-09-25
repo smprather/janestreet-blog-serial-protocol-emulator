@@ -40,7 +40,14 @@ class TestR2VectorPackage(unittest.TestCase):
         self.assertEqual(self.package["protocol"]["sync"], P.SYNC)
         self.assertEqual(self.package["protocol"]["version"], P.VERSION)
         self.assertEqual(self.package["protocol"]["crc"], "CRC-16/CCITT-FALSE")
-        self.assertTrue(self.package["chip_confirmed"])
+        # The 15 chip-proven steps are confirmed; the newly added ceiling /
+        # zero-count vectors are NOT (the chip has not run them yet), so the
+        # package-level flag is deliberately FALSE (partial) and the notice
+        # must say what is and is not confirmed.
+        confirmed = sum(1 for v in self.package["vectors"]
+                        for s in v["steps"] if s["chip_confirmed"])
+        self.assertEqual(confirmed, 15)
+        self.assertFalse(self.package["chip_confirmed"])
         self.assertIn("chip-confirmed in simulation",
                       self.package["notice"].lower())
         # the honest boundary: simulation confirmed, hardware not
@@ -77,7 +84,9 @@ class TestR2VectorPackage(unittest.TestCase):
                         cited += 1
                     else:
                         self.assertIsNone(step.get("chip_evidence"))
-        self.assertEqual(cited, 15, "all 15 golden steps are chip-confirmed")
+        # the 15 chip-proven golden steps; the newer ceiling/zero vectors are
+        # unconfirmed until the chip re-runs them.
+        self.assertEqual(cited, 15)
 
     def test_no_step_is_confirmed_without_being_in_the_evidence_map(self):
         mapped = V.CHIP_EVIDENCE["confirmed_steps"]
@@ -174,10 +183,14 @@ class TestReadmemhExport(unittest.TestCase):
     def test_manifest_covers_every_vector_and_step(self):
         self.assertEqual(len(self.manifest["vectors"]),
                          len(self.package["vectors"]))
-        self.assertTrue(self.manifest["chip_confirmed"])
+        # package-level: partial (15 proven steps, newer ones unconfirmed)
+        self.assertFalse(self.manifest["chip_confirmed"])
         for vector in self.manifest["vectors"]:
             with self.subTest(vector=vector["name"]):
-                self.assertTrue(vector["chip_confirmed"])
+                # a vector is confirmed iff all its steps are
+                self.assertEqual(vector["chip_confirmed"],
+                                 all(s["chip_confirmed"]
+                                     for s in vector["steps"]))
                 self.assertEqual(len(vector["steps"]),
                                  len(self.package["vectors"][
                                      [v["name"] for v in

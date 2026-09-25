@@ -243,13 +243,22 @@ def run_acceptance(*, fake, device=None, project=DEFAULT_PROJECT, board=None,
                   f"{load.words_written}/{image.word_count} words, "
                   f"echo=0x{load.echo:04X}, faults=0x{load.faults:04X}")
 
+    # A bounded read carries at most MAX_READ_WORDS=15 data words per frame
+    # (the chip rejects a larger count with RANGE), so the readback is split
+    # into ceiling-sized chunks - the host's documented obligation.
+    chunk = min(image.word_count, 15) or 1
+    words = []
     try:
-        words = tuple(session.read_imem(0, image.word_count))
+        for offset in range(0, image.word_count, chunk):
+            words.extend(session.read_imem(offset,
+                                           min(chunk, image.word_count - offset)))
     except SessionError as exc:
         report.record("readback", False, str(exc))
         return report
+    words = tuple(words)
     report.record("readback", words == image.words,
-                  f"{len(words)}/{image.word_count} words match the manifest")
+                  f"{len(words)}/{image.word_count} words match the manifest "
+                  f"in {chunk}-word chunks")
 
     try:
         session.start()

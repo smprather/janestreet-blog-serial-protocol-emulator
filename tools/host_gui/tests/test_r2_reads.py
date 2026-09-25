@@ -128,6 +128,39 @@ class TestR2ProbesAgainstFakePE(unittest.TestCase):
         payload = self.pe.request(P.OP_READ_IMEM, payload_words=(1, 3)).payload
         self.assertEqual(payload, (P.STATUS_OK, 0x2222, 0x3333, 0x4444))
 
+    def test_read_imem_over_the_ceiling_is_range(self):
+        # The chip rejects a count over MAX_READ_WORDS=15 with RANGE; the
+        # model must too, or a large read diverges (found by the chip review).
+        payload = self.pe.request(P.OP_READ_IMEM,
+                                  payload_words=(0, 16)).payload
+        self.assertEqual(payload[0], P.STATUS_RANGE)
+        # at the ceiling it still succeeds
+        at_ceiling = self.pe.request(P.OP_READ_IMEM,
+                                     payload_words=(0, 15)).payload
+        self.assertEqual(at_ceiling[0], P.STATUS_OK)
+        self.assertEqual(len(at_ceiling) - 1, 15)
+
+    def test_read_dmem_over_the_ceiling_is_range(self):
+        # DMEM transport ceiling is 2 * MAX_READ_WORDS = 30 bytes, but DMEM is
+        # only 16 bytes, so the 16-byte bound is what bites in practice; both
+        # must answer RANGE.
+        over_transport = self.pe.request(P.OP_READ_DMEM,
+                                         payload_words=(0, 31)).payload
+        self.assertEqual(over_transport[0], P.STATUS_RANGE)
+        over_memory = self.pe.request(P.OP_READ_DMEM,
+                                      payload_words=(0, 17)).payload
+        self.assertEqual(over_memory[0], P.STATUS_RANGE)
+        at_limit = self.pe.request(P.OP_READ_DMEM,
+                                   payload_words=(0, 16)).payload
+        self.assertEqual(at_limit[0], P.STATUS_OK)
+
+    def test_zero_count_read_is_range(self):
+        # The chip treats count==0 as RANGE; the model must agree.
+        for opcode in (P.OP_READ_IMEM, P.OP_READ_DMEM):
+            with self.subTest(opcode=opcode):
+                payload = self.pe.request(opcode, payload_words=(0, 0)).payload
+                self.assertEqual(payload[0], P.STATUS_RANGE)
+
     def test_out_of_range_read_latches_sticky_fault_by_ruling(self):
         payload = self.pe.request(P.OP_READ_IMEM, payload_words=(2000, 1)).payload
         self.assertEqual(payload[0], P.STATUS_RANGE)

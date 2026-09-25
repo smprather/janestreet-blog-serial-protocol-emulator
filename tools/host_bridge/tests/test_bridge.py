@@ -93,6 +93,28 @@ class TestPeFrameGoldenVectors(unittest.TestCase):
             with self.subTest(case=name), self.assertRaises(PF.FrameError):
                 PF.decode_frame(bad)
 
+    def test_two_frame_codecs_stay_in_step(self):
+        # m2 (chip review): pe_frame (MicroPython) and protocol (CPython) are two
+        # hand-kept copies because the Pico cannot import the host package.
+        # The shared golden vectors tie the frames together; this ties the CRC
+        # and the wait-word skip, so a one-sided edit is caught.
+        for data in (b"", b"123456789", b"\x00\x01\x02", b"\xff" * 9):
+            with self.subTest(data=data):
+                self.assertEqual(PF.crc16_ccitt(data), P.crc16_ccitt(data))
+        # the wait-word skip agrees with the contract: leading-only, bounded
+        raw = PF.encode_frame(P.OP_STATUS, 7, P.TARGET_HOST, b"")
+        with_fillers = b"\xff\xff" * 3 + raw
+        stripped = PF.strip_wait_words(with_fillers)
+        self.assertEqual(PF.decode_frame(stripped).sequence, 7)
+        # a 0xFFFF payload word is data, not a wait word (leading-only skip):
+        # the frame starts at its A55A sync, so a 0xFFFF data word survives.
+        response = PF.encode_frame(P.OP_READ_IMEM | P.RESPONSE_BIT, 1, P.TARGET_HOST,
+                                   PF.words_to_bytes((P.STATUS_OK, 0xFFFF, 0x0041)))
+        self.assertEqual(PF.decode_frame(PF.strip_wait_words(response)).payload,
+                         (P.STATUS_OK, 0xFFFF, 0x0041))
+        # all-filler raises rather than decoding filler as a frame
+        self.assertRaises(PF.FrameError, PF.strip_wait_words, b"\xff\xff" * 20)
+
     def test_words_helpers_round_trip(self):
         self.assertEqual(PF.bytes_to_words(PF.words_to_bytes(WORDS)), WORDS)
 
@@ -327,6 +349,56 @@ class TestReads(unittest.TestCase):
                     "faults", "words_written"):
             self.assertIn(key, result)
         self.assertEqual(result["words_written"], 3)
+
+    def test_read_imem_survives_leading_wait_words(self):
+        # B1 regression (chip review): a bounded read may be answered with up
+        # to 15 leading 0xFFFF wait words before the real frame. The bridge
+        # must skip them and decode; this failed on hardware before the fix.
+        bridge, adapter, _ = make_bridge()
+        call(bridge, 1, "hello")
+        call(bridge, 2, "prepare")
+        call(bridge, 3, "load", {"words": list(WORDS)})
+        adapter.wait_words = 2
+        response, _ = call(bridge, 4, "read_imem", {"address": 1, "count": 2})
+        self.assertTrue(response["ok"], response.get("error"))
+        self.assertEqual(response["result"]["words"], [0x1001, 0x4002])
+
+    def test_read_dmem_survives_leading_wait_words(self):
+        bridge, adapter, pe = make_bridge()
+        call(bridge, 1, "hello")
+        call(bridge, 2, "prepare")
+        call(bridge, 3, "load", {"words": list(WORDS)})
+        pe.dmem[0:3] = b"\x0a\x0b\x0c"
+        adapter.wait_words = 15           # worst case
+        response, _ = call(bridge, 4, "read_dmem", {"address": 0, "count": 3})
+        self.assertTrue(response["ok"], response.get("error"))
+        self.assertEqual(response["result"]["bytes"], [0x0A, 0x0B, 0x0C])
+
+    def test_wait_words_only_a_data_payload_word_is_not_skipped(self):
+        # The skip is LEADING-ONLY: a 0xFFFF inside a response payload is data
+        # (an imem word of 0xFFFF) and must survive to the caller.
+        bridge, _adapter, _ = make_bridge()
+        call(bridge, 1, "hello")
+        call(bridge, 2, "prepare")
+        call(bridge, 3, "load", {"words": [0xFFFF, 0x0001]})
+        response, _ = call(bridge, 4, "read_imem", {"address": 0, "count": 2})
+        self.assertEqual(response["result"]["words"], [0xFFFF, 0x0001])
+
+    def test_all_wait_words_with_no_frame_is_a_timeout(self):
+        # If the chip only ever drives filler, the bounded wait must expire
+        # into a typed error, not decode filler as a frame.
+        bridge, adapter, _ = make_bridge()
+        call(bridge, 1, "hello")
+        call(bridge, 2, "prepare")
+
+        class FillerOnly(FakeTTAdapter):
+            def host_spi_transfer(self, data, read_words=None):
+                return b"\xff\xff" * 20
+
+        bridge._adapter = FillerOnly(adapter.pe)
+        response, _ = call(bridge, 3, "read_imem", {"address": 0, "count": 1})
+        self.assertFalse(response["ok"])
+        self.assertIn("no PE response", response["error"])
 
     def test_status_does_not_clear_a_fault_and_clear_fault_does(self):
         self.pe.faults = F.FAULT_LOAD

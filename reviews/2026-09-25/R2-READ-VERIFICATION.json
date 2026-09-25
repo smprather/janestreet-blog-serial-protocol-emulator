@@ -1,6 +1,6 @@
 {
   "artifact": "R2 read-path verification package",
-  "chip_confirmed": true,
+  "chip_confirmed": false,
   "chip_evidence": {
     "confirmed_steps": [
       "bad_read_answers_range",
@@ -218,6 +218,35 @@
         "sparse": {}
       },
       "id": "v07-range_never_wraps",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 0,
+        "faults": 0,
+        "insn": 0,
+        "pc": 0,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 3,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v07b-read_ceiling_and_zero": {
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v07b-read_ceiling_and_zero",
       "imem": {
         "fill": 0,
         "sparse": {
@@ -701,6 +730,90 @@
           "request_payload_words": [
             15,
             2
+          ],
+          "response_hex": "a55a19400003000100034d1f",
+          "response_payload_words": [
+            3
+          ],
+          "sequence": 3,
+          "status": 3
+        }
+      ],
+      "word_order": "n/a (rejected)"
+    },
+    {
+      "chip_confirmed": false,
+      "model_image_id": "v07b-read_ceiling_and_zero",
+      "name": "read_ceiling_and_zero_count",
+      "obligation": "A count over MAX_READ_WORDS=15 (or 0) is RANGE so the host splits; the model enforces the chip's ceiling (independent chip review).",
+      "steps": [
+        {
+          "chip_confirmed": false,
+          "model_faults": 0,
+          "model_image_id": "v07b-read_ceiling_and_zero",
+          "name": "read_imem_at_ceiling_15",
+          "note": "15 words is the ceiling and succeeds",
+          "opcode": 19,
+          "opcode_name": "OP_READ_IMEM",
+          "request_hex": "a55a1130000100020000000f5f50",
+          "request_payload_words": [
+            0,
+            15
+          ],
+          "response_hex": "a55a19300001001000000041100140020000000000000000000000000000000000000000000000001b97",
+          "response_payload_words": [
+            0,
+            65,
+            4097,
+            16386,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 4,
+          "model_image_id": "v07b-read_ceiling_and_zero",
+          "name": "read_imem_over_ceiling",
+          "note": "over the ceiling -> RANGE, host must split",
+          "opcode": 19,
+          "opcode_name": "OP_READ_IMEM",
+          "request_hex": "a55a11300002000200000010640c",
+          "request_payload_words": [
+            0,
+            16
+          ],
+          "response_hex": "a55a1930000200010003632f",
+          "response_payload_words": [
+            3
+          ],
+          "sequence": 2,
+          "status": 3
+        },
+        {
+          "chip_confirmed": false,
+          "model_faults": 4,
+          "model_image_id": "v07b-read_ceiling_and_zero",
+          "name": "read_dmem_zero_count",
+          "note": "a zero-byte read is RANGE",
+          "opcode": 20,
+          "opcode_name": "OP_READ_DMEM",
+          "request_hex": "a55a114000030002000000006587",
+          "request_payload_words": [
+            0,
+            0
           ],
           "response_hex": "a55a19400003000100034d1f",
           "response_payload_words": [
