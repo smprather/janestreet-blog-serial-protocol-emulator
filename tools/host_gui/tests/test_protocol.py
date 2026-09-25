@@ -16,9 +16,17 @@ so the implementation is measured against a second algorithm, not itself.
 
 from __future__ import annotations
 
+import json
 import unittest
+from pathlib import Path
 
 from tools.host_gui import protocol as P
+
+# Shared with tools/host_bridge/tests/test_bridge.py: the bridge's
+# MicroPython-compatible pe_frame.py must produce these exact bytes, and so
+# must this module. One file checks both implementations against each other.
+GOLDEN = (Path(__file__).resolve().parents[2] / "host_bridge" / "tests"
+          / "golden_vectors.json")
 
 
 def words_of(raw: bytes) -> list[int]:
@@ -253,6 +261,32 @@ class TestFrameSemantics(unittest.TestCase):
         self.assertEqual((header >> 12) & 0xF, 1)
         self.assertEqual((header >> 4) & 0xFF, P.OP_TARGET)
         self.assertEqual(header & 0xF, 5)
+
+
+class TestSharedGoldenVectors(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
+
+    def test_crc_vectors(self):
+        for entry in self.golden["crc"]:
+            with self.subTest(data=entry["data_hex"]):
+                self.assertEqual(
+                    P.crc16_ccitt(bytes.fromhex(entry["data_hex"])),
+                    int(entry["crc"], 16))
+
+    def test_frame_vectors(self):
+        for entry in self.golden["frames"]:
+            with self.subTest(name=entry["name"]):
+                payload = bytes.fromhex(entry["payload_hex"])
+                raw = P.encode_frame(entry["opcode"], entry["sequence"],
+                                     entry["target"], payload)
+                self.assertEqual(raw.hex(), entry["frame_hex"])
+                frame = P.decode_frame(raw)
+                self.assertEqual(frame.opcode, entry["opcode"])
+                self.assertEqual(frame.sequence, entry["sequence"])
+                self.assertEqual(frame.target, entry["target"])
+                self.assertEqual(frame.payload_bytes, payload)
 
 
 if __name__ == "__main__":

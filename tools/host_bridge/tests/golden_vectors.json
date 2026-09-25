@@ -1,0 +1,70 @@
+{
+  "crc": [
+    {
+      "data_hex": "",
+      "crc": "FFFF"
+    },
+    {
+      "data_hex": "313233343536373839",
+      "crc": "29B1"
+    },
+    {
+      "data_hex": "41",
+      "crc": "B915"
+    },
+    {
+      "data_hex": "000102030405060708090a0b0c0d0e0f",
+      "crc": "3B37"
+    }
+  ],
+  "frames": [
+    {
+      "name": "ping",
+      "opcode": 1,
+      "sequence": 7,
+      "target": 0,
+      "payload_hex": "",
+      "frame_hex": "a55a1010000700007dfe"
+    },
+    {
+      "name": "load_single",
+      "opcode": 16,
+      "sequence": 1,
+      "target": 0,
+      "payload_hex": "0041",
+      "frame_hex": "a55a1100000100010041a22c"
+    },
+    {
+      "name": "read_imem",
+      "opcode": 19,
+      "sequence": 1,
+      "target": 0,
+      "payload_hex": "00100020",
+      "frame_hex": "a55a11300001000200100020c9be"
+    },
+    {
+      "name": "target_loopback",
+      "opcode": 32,
+      "sequence": 2,
+      "target": 0,
+      "payload_hex": "0001",
+      "frame_hex": "a55a1200000200010001cc4f"
+    },
+    {
+      "name": "response_status_ok",
+      "opcode": 145,
+      "sequence": 7,
+      "target": 0,
+      "payload_hex": "0000",
+      "frame_hex": "a55a19100007000100001eed"
+    },
+    {
+      "name": "response_loopback_ping",
+      "opcode": 129,
+      "sequence": 3,
+      "target": 1,
+      "payload_hex": "10c0",
+      "frame_hex": "a55a18110003000110c0b266"
+    }
+  ]
+}
