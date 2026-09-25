@@ -582,7 +582,7 @@
       "why": "Reaching a live-core hit requires CLOCKING the core until the landing address matches, which is not a framed op. Vector 8 therefore ships the POST-HIT held state as its model image and reads it back with one DEBUG_STATUS, which is exactly what a TB sets up."
     }
   ],
-  "notice": "NOT CHIP-CONFIRMED. Reconciled against the implemented R3 contract (chip repo, 2026-09-25), but no step here has been run against the chip's tb_pe_ctrl_r3 yet, so every step is chip_confirmed=false. A passing step in this package is the gate the chip must meet, NOT evidence that it does. The real-board acceptance run has not been executed.",
+  "notice": "25 of 26 steps are CHIP-CONFIRMED IN SIMULATION: the chip's tb_pe_ctrl_r3_conf is GREEN, 26/26 steps byte-exact (CRC included), and 25 of them with no divergence. The 26th, status_full_readback, is deliberately NOT claimed by either side -- its expected insn is not contract-determined for a free-running core, and the conformance TB's freeze-snapshot pre-state is a state the chip cannot physically occupy; chip-side R3.1 hold-semantics polish is in flight and may change it. Citations are in chip_evidence; confirmation is a citation, never an assertion, and the confirmed set is an explicit list. NOT HARDWARE-CONFIRMED: the real-board acceptance run (Pico over USB, physical shuttle) has never been executed.",
   "phase": "R3",
   "protocol": {
     "breakpoint": "ONE PC breakpoint (not a table), per the contract's stated scope",
@@ -625,7 +625,7 @@
     "a hit compares the LANDING address, so the instruction at the breakpoint has NOT executed (stop-before)",
     "DEBUG_BP_CLR is the only release of the debug hold, and it disarms",
     "a rejected op has no side effect: wrong length is a 1-word BAD_FRAME, and a BP_SET past IMEM_WORDS is RANGE with no fault",
-    "every step is chip_confirmed=False: tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration"
+    "25 of 26 steps are chip-confirmed in simulation; the 1 exception is the pinned TB model boundary, unproven by both sides -- see chip_evidence.conformance for the chip's own numbers"
   ],
   "schema": 1,
   "source_of_truth": [
