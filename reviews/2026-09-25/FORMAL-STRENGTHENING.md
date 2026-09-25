@@ -241,3 +241,55 @@ fail it the same way.
 None of (2)/(3) is mechanical, and all are claim-semantics/toolchain decisions
 for the manager, not silent solver effort. This section exists so that decision
 is made on measurements, not on the hope that a reformulation would help.
+
+## 7. Reformulation under the mutant-kill bar (manager ruling)
+
+The ruling: the snapshots are real flops with their own update rules, so binding
+a claim to its load source is an RTL fact, not circular — and a reformulated
+claim is accepted only if (1) its antecedent is an independently k=1-provable
+RTL fact, (2) it still kills every mutant the old claim killed, and (3) it kills
+**new mutants of its own scope**. Weakening a claim to unbounded is the one
+outcome worse than the gap. Engine: z3 SMT induction (the two-engine validation
+of §3b stands).
+
+### C1 — response-buffer slot overrun — **ACCEPTED**
+
+| | text |
+|---|---|
+| **old** | `if (walking) assert (fv_r_slot != 0)` — compared against an arbitrary induction pre-state |
+| **new** | `if (fv_rstate == R_START && !fv_r_imm) assert (fv_r_slot != 0)` |
+| **update-rule fact (k=1, independent)** | an ACCEPTED start loads `r_slot <= 1` (`pe_ctrl.v:994`, `:1017`), and `R_REQ`/`R_WAIT` are entered only from `R_START` (`:1201`, `:1205`) — so "accepted `R_START` ⇒ `r_slot != 0`" follows from the RTL's own update equations |
+
+* **Bar (1):** the antecedent is the accept's `r_slot<=1` load, a register update
+  rule — not a restatement of the claim. **PASS.**
+* **Bar (2), old-scope mutants still killed:** `pe_ctrl_len_overflow` (MAX_READ_WORDS
+  guard removed) and `pe_ctrl_bit14` (word end 15→14) both FAIL to prove. **PASS.**
+* **Bar (3), new self-scope mutants:** `pe_ctrl_slot_load_zero` (accept loads
+  `r_slot<=0`) and `pe_ctrl_r_req_bypass` (`R_IDLE→R_REQ` skips the accepted
+  `R_START`) — the two ways `r_slot` can go wrong in a walk — both FAIL to
+  prove, and both are now permanent cases in `formal/mutants.sh` (14 total, all
+  caught). **PASS.**
+* **Two-engine:** PASSES under yosys `sat -tempinduct` (k=6) **and** z3
+  `yosys-smtbmc` (k=1). Verdict: **unbounded**.
+
+### C2, C3, C4 — **REJECTED**, kept depth-16 proven
+
+| claim | reformulation tried | k=1 z3 | verdict |
+|---|---|---|---|
+| C2 walk sum preserved | bound the live sum at accept; drop the free `p_walk_end` compare | FAILED | reject — the bound is already an always-on claim, so this reformulation only *removed* content |
+| C3 slot sum never grows | live `r_slot + words_left <= 16` (drop the snapshot) | FAILED | reject — did not close, and the snapshot form is the stronger statement |
+| C4 response index bounded | compare `fv_resp_idx` to the CURRENT `fv_resp_len` (drop `p_resp_len`) | FAILED | reject — did not close; the free `fv_resp_idx` observation port is itself an independent state bit |
+
+No non-vacuous k=1 reformulation exists for these three with the observations
+available, so under the bar they stay **depth-16 proven** (`pe_ctrl_r2` BMC,
+PROVED). Nothing was weakened to reach "unbounded": the three that failed the bar
+were rejected, and the C2 attempt that briefly closed was a `|| 1'b1` tautology —
+caught and discarded before it reached the harness (the same reasoning that got
+H3 removed).
+
+**Campaign close-out:** the formal campaign now has, from the SMT unlock and
+this reformulation, four claims moved from depth-16 to **unbounded** — `pe_soc`
+C1, `pe_soc` C2, `pe_pinmux` `od_invariant`, and `pe_ctrl` C1 (slot overrun) —
+each mutant-checked (14/14 caught). Three `pe_ctrl` claims (C2/C3/C4) remain
+depth-16 proven by decision, not by gap. Full gate: 8 proved, 0 failed; mutant
+harness 14 caught, 0 survived.

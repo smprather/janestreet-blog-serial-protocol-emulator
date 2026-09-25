@@ -5,6 +5,8 @@ eth_tx_jabber|bmc|CAUGHT-witness
 eth_tx_len_unlatch|bmc|CAUGHT-witness
 eth_tx_ifg90|induct|CAUGHT-no-closure
 eth_tx_skip_gap|induct|CAUGHT-no-closure
+pe_ctrl_slot_load_zero|induct|CAUGHT-no-closure
+pe_ctrl_r_req_bypass|induct|CAUGHT-witness
 pe_ctrl_len_overflow|induct|CAUGHT-no-closure
 pe_ctrl_bit14|induct|CAUGHT-no-closure
 pe_ctrl_clear_uncond|induct|CAUGHT-no-closure

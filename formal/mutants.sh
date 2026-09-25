@@ -200,6 +200,38 @@ fi
 # Induction shape with the inductive subset (-DFV_INDUCT), matching how those
 # claims are proved. mut_len kills the response-length bound, mut_bit14 breaks
 # the 16-bit word framing, mut_clr clears FAULT_RANGE without a CLEAR_FAULT.
+#
+# The response-buffer slot-overrun claim is now PROVED UNBOUNDED (reformulated
+# 2026-09-25, see formal_pe_ctrl.v and FORMAL-STRENGTHENING.md 7), so per the
+# mutant-kill bar it gets mutants of its OWN scope: the two ways r_slot can go
+# wrong in a walk are an accept that loads r_slot<=0, and an R_REQ reached
+# without passing an accepted R_START. A promoted claim that survived its own
+# scope would be blind, so these two are in the gate.
+cat > "$TMP/mut_slotload.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path('rtl/pe_ctrl.v'); t = p.read_text()
+if t.count("r_slot      <= 16'd1;") != 2: sys.exit("expected 2 accept r_slot loads")
+print("  accepted start loads r_slot<=0 (the walk can overrun the buffer)")
+p.write_text(t.replace("r_slot      <= 16'd1;", "r_slot      <= 16'd0;"))
+PY
+if apply_mutation "$TMP/mut_slotload.py"; then
+  FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=6 fv_case pe_ctrl_slot_load_zero 1 formal_pe_ctrl \
+    -DFV_INDUCT formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
+  restore_and_verify
+fi
+cat > "$TMP/mut_rreqjump.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path('rtl/pe_ctrl.v'); t = p.read_text()
+if "        R_IDLE: begin end" not in t: sys.exit("no R_IDLE arm")
+print("  R_IDLE reaches R_REQ without passing an accepted R_START")
+p.write_text(t.replace("        R_IDLE: begin end",
+  "        R_IDLE: begin rstate <= R_REQ; // MUTANT\n          end", 1))
+PY
+if apply_mutation "$TMP/mut_rreqjump.py"; then
+  FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=6 fv_case pe_ctrl_r_req_bypass 1 formal_pe_ctrl \
+    -DFV_INDUCT formal/pe_ctrl/formal_pe_ctrl.v rtl/pe_ctrl.v
+  restore_and_verify
+fi
 cat > "$TMP/mut_len.py" <<'PY'
 import pathlib, sys
 p = pathlib.Path('rtl/pe_ctrl.v'); t = p.read_text()

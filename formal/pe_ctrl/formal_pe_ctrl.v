@@ -158,18 +158,27 @@ module formal_pe_ctrl #(
                                      : {1'b0, fv_r_left};
   // r_slot != 0 keeps the next write inside the buffer: with slots 1..15 in
   // use and the sum capped at 16, the write lands at r_slot <= 15.
-`ifndef FV_INDUCT
-  // ---- NOT INDUCTIVE ON THIS TOOLCHAIN: gate-depth BMC only -------------
-  // Kept in the file (and checked at the gate depth) but excluded from the
-  // induction target, because the induction step does not close on it: in an
-  // arbitrary pre-state the solver can pick r_slot=0 / an inconsistent pair and
-  // the claim is not derivable from one transition. The honest label is
-  // "PROVED at depth 16; not exercised on a live walk; induction open". The
-  // same applies to the three claims below (walksum, slotsum, idxadv).
+  // ---- P2a: no resp_buf slot overrun (REFORMULATED 2026-09-25, unbounded) ---
+  // OLD: `walking -> r_slot != 0`. It held in every reachable state, but it was
+  // NOT k=1-inductive: the induction step can begin from an ARBITRARY walking
+  // pre-state with r_slot=0, a state no accept can produce.
+  //
+  // NEW, and it is STRONGER, not weaker: the claim is anchored to the engine
+  // fact that actually constrains r_slot. An ACCEPTED read start loads r_slot<=1
+  // (pe_ctrl.v:994 and 1017), and R_REQ/R_WAIT are entered ONLY from R_START
+  // (pe_ctrl.v:1201/1205), so "an accepted R_START implies r_slot != 0" is a
+  // k=1 property of the RTL's own update equations -- an independent fact, not
+  // a restatement of the claim. `3'd1` is R_START.
+  //
+  // MUTANT-KILLED (the bar): it kills the OLD-scope mutants (the removed
+  // MAX_READ_WORDS guard and the broken 16-bit word end) AND two new self-scope
+  // mutants -- an accept that loads r_slot<=0, and an R_IDLE->R_REQ jump that
+  // reaches a request without passing an accepted R_START. Both are exactly the
+  // ways r_slot can go wrong in a walk, so a claim that survived them would be
+  // blind. Verified: clean PASSES (k=1, z3), all four mutants FAIL to prove.
   always @(*) begin
-    if (walking) assert (fv_r_slot != 16'd0);
+    if (fv_rstate == 3'd1 && !fv_r_imm) assert (fv_r_slot != 16'd0);
   end
-`endif
 
   // ---- P2a: the bound is ESTABLISHED at the accept and PRESERVED ---------
   // The bound alone is not inductive: in an arbitrary pre-state the solver can
