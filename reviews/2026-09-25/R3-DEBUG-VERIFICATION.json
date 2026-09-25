@@ -2,13 +2,38 @@
   "artifact": "R3 debug-control verification package",
   "chip_confirmed": false,
   "chip_evidence": {
-    "confirmed_steps": [],
-    "conformance": "0 of 14 host golden steps confirmed against the chip. The chip has run its OWN tb_pe_ctrl_r3 with a 7-mutant gate (all caught) and formal proofs for S1-S4; that is the chip's evidence. These host vectors become chip-confirmed only when that TB passes THEM byte-exactly and the citations are recorded here.",
+    "confirmed_steps": [
+      "bp_clr_releases",
+      "bp_clr_to_boot_stop",
+      "bp_set_address_2",
+      "bp_set_bad_crc",
+      "bp_set_len_0",
+      "bp_set_on_loopback",
+      "bp_set_past_imem",
+      "read_cpu_shows_a_55",
+      "status_after_live_hit",
+      "status_is_stable",
+      "status_reads_zero",
+      "status_reports_the_hit",
+      "status_running_again",
+      "status_shows_a_aa",
+      "status_shows_no_hit",
+      "status_shows_not_armed",
+      "status_shows_pc_1",
+      "step_from_boot_stop",
+      "step_lands_on_2",
+      "step_not_ready",
+      "step_off_the_breakpoint",
+      "step_on_loopback",
+      "step_one",
+      "step_two"
+    ],
+    "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
     "date": "2026-09-25",
-    "harness": "tb_pe_ctrl_r3 (chip repo) loads imem.hex/dmem.hex, applies each vector's model_images[] state -- registers plus bp_addr/bp_en/bp_hit/debug_hold -- drives the step's request_file and compares the response word for word, CRC included, skipping wait words (these ops emit none)",
-    "review": null,
-    "scope": "The host's expectations for the implemented R3 contract. Not evidence about silicon, and the real-board acceptance run (Pico over USB with a physical shuttle) has not been executed and is not claimed.",
-    "testbench": null
+    "harness": "tb_pe_ctrl_r3_conf loads imem.hex/dmem.hex, applies each vector's model_images[] state (registers plus bp_addr/bp_en/bp_hit/debug_hold), drives the step's request_file and compares the response word for word, CRC included. It also checks tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt: a divergence that CHANGES, or any divergence not listed, turns the gate red -- so a resolved host defect cannot read as 'known'",
+    "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+    "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+    "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
   },
   "generated_by": "tools/host_gui/r3_vectors.py (build_package)",
   "memory": {
@@ -600,7 +625,7 @@
     "a hit compares the LANDING address, so the instruction at the breakpoint has NOT executed (stop-before)",
     "DEBUG_BP_CLR is the only release of the debug hold, and it disarms",
     "a rejected op has no side effect: wrong length is a 1-word BAD_FRAME, and a BP_SET past IMEM_WORDS is RANGE with no fault",
-    "every step is chip_confirmed=False: 0 of 14 host golden steps confirmed against the chip. The chip has run its OWN tb_pe_ctrl_r3 with a 7-mutant gate (all caught) and formal proofs for S1-S4; that is the chip's evidence. These host vectors become chip-confirmed only when that TB passes THEM byte-exactly and the citations are recorded here."
+    "every step is chip_confirmed=False: tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration"
   ],
   "schema": 1,
   "source_of_truth": [
@@ -629,13 +654,20 @@
   },
   "vectors": [
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v01-bp-set-readback",
       "name": "debug_bp_set_readback",
       "obligation": "DEBUG_BP_SET arms the address and reads it straight back in the 5-word prefix.",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v01-bp-set-readback",
           "name": "bp_set_address_2",
@@ -661,13 +693,20 @@
       "word_order": "n/a (5-word prefix)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v02-bp-set-out-of-range",
       "name": "debug_bp_set_out_of_range",
       "obligation": "A breakpoint address past IMEM_WORDS is RANGE, changes nothing, and latches NO fault (R3 adds no fault class).",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v02-bp-set-out-of-range",
           "name": "bp_set_past_imem",
@@ -693,13 +732,20 @@
       "word_order": "n/a (rejected)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v03-bp-set-wrong-length",
       "name": "debug_bp_set_wrong_length",
       "obligation": "A wrong payload length is a 1-word BAD_FRAME with no side effect on any debug register (S5).",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 8,
           "model_image_id": "v03-bp-set-wrong-length",
           "name": "bp_set_len_0",
@@ -719,13 +765,20 @@
       "word_order": "n/a (rejected)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v04-step-executes-one",
       "name": "debug_step_executes_one",
       "obligation": "DEBUG_STEP executes exactly one instruction and leaves the core in DEBUG_HOLD (S1).",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v04-step-executes-one",
           "name": "step_from_boot_stop",
@@ -746,7 +799,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v04-step-executes-one",
           "name": "status_shows_pc_1",
@@ -772,7 +832,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v04-step-executes-one",
           "name": "read_cpu_shows_a_55",
@@ -798,13 +865,20 @@
       "word_order": "n/a (5-word prefix)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v05-step-sequence",
       "name": "debug_step_sequence",
       "obligation": "Two steps retire two instructions: pc 0->1->2 and the LDI at 1 has run exactly once (a=0xAA).",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v05-step-sequence",
           "name": "step_one",
@@ -825,7 +899,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v05-step-sequence",
           "name": "step_two",
@@ -846,7 +927,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v05-step-sequence",
           "name": "status_shows_a_aa",
@@ -875,13 +963,20 @@
       "word_order": "n/a (5-word prefix)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v06-step-while-running",
       "name": "debug_step_while_running",
       "obligation": "A free-running core cannot be stepped: NOT_READY with the full 5-word prefix, the pre-step state, and no side effect.",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v06-step-while-running",
           "name": "step_not_ready",
@@ -905,13 +1000,20 @@
       "word_order": "n/a (5-word prefix)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v07-step-lands-on-bp",
       "name": "debug_step_lands_on_bp",
       "obligation": "A step whose landing address is the armed breakpoint reports state 3, the landing PC, and bp_flags 0b11 (S3).",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v07-step-lands-on-bp",
           "name": "step_one",
@@ -932,7 +1034,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v07-step-lands-on-bp",
           "name": "step_lands_on_2",
@@ -953,7 +1062,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v07-step-lands-on-bp",
           "name": "status_reports_the_hit",
@@ -982,13 +1098,20 @@
       "word_order": "n/a (5-word prefix)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v08-bp-hit-stops-live-core",
       "name": "debug_bp_hit_stops_live_core",
       "obligation": "A free-running core stops on the breakpoint with run still high, and reports state 3 (S3).",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v08-bp-hit-stops-live-core",
           "name": "status_after_live_hit",
@@ -1014,7 +1137,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v08-bp-hit-stops-live-core",
           "name": "status_is_stable",
@@ -1043,13 +1173,20 @@
       "word_order": "n/a (10-word status)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v09-step-off-bp-clears-hit",
       "name": "debug_step_off_bp_clears_hit",
       "obligation": "A step off the breakpoint clears the hit and returns to DEBUG_HOLD with bp_flags 0b01 (S4).",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v09-step-off-bp-clears-hit",
           "name": "step_off_the_breakpoint",
@@ -1070,7 +1207,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v09-step-off-bp-clears-hit",
           "name": "status_shows_no_hit",
@@ -1099,13 +1243,20 @@
       "word_order": "n/a (5-word prefix)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v10-bp-clr-resumes",
       "name": "debug_bp_clr_resumes",
       "obligation": "DEBUG_BP_CLR disarms, clears the hit and RELEASES the hold: run=1 resumes, run=0 falls to the boot stop with PC 0.",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v10-bp-clr-resumes",
           "name": "bp_clr_releases",
@@ -1126,7 +1277,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v10-bp-clr-resumes",
           "name": "status_running_again",
@@ -1155,13 +1313,20 @@
       "word_order": "n/a (5-word prefix)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v11-bp-clr-boot-stop",
       "name": "debug_bp_clr_while_stopped_is_boot_stop",
       "obligation": "With run=0, DEBUG_BP_CLR drops the hold to the normal boot stop and the PC re-zeroes; the response reports the PC at the request.",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v11-bp-clr-boot-stop",
           "name": "bp_clr_to_boot_stop",
@@ -1182,7 +1347,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v11-bp-clr-boot-stop",
           "name": "status_reads_zero",
@@ -1211,13 +1383,20 @@
       "word_order": "n/a (5-word prefix)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v12-bad-crc-no-side-effect",
       "name": "debug_bad_crc_no_side_effect",
       "obligation": "A bad CRC arms nothing and executes nothing (S5).",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 2,
           "model_image_id": "v12-bad-crc-no-side-effect",
           "name": "bp_set_bad_crc",
@@ -1236,7 +1415,14 @@
           "status": 2
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 2,
           "model_image_id": "v12-bad-crc-no-side-effect",
           "name": "status_shows_not_armed",
@@ -1300,13 +1486,20 @@
       "word_order": "n/a (10-word status)"
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v14-unsupported-target",
       "name": "debug_unsupported_target",
       "obligation": "Every debug op answers UNSUPPORTED on the loopback target.",
       "steps": [
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v14-unsupported-target",
           "name": "step_on_loopback",
@@ -1323,7 +1516,14 @@
           "status": 5
         },
         {
-          "chip_confirmed": false,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
+            "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"
+          },
           "model_faults": 0,
           "model_image_id": "v14-unsupported-target",
           "name": "bp_set_on_loopback",

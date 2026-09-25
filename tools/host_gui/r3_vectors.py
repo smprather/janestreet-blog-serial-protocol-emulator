@@ -13,13 +13,18 @@ package shape, so `tb_pe_ctrl_r3` can consume it the way `tb_pe_ctrl_r2`
 consumed R2: per-step request/response bytes, a preloaded `imem.hex`/`dmem.hex`,
 and the register + debug state each vector assumes in `model_images[]`.
 
-**chip_confirmed is False on every step, and that is the correct state.** The
-chip has run its own TB, a 7-mutant gate and formal proofs for S1-S4 -- that
-is the chip's evidence, recorded in the chip repo. These vectors are the HOST's
-expectations for the same contract; they become chip-confirmed only when the
-chip's `tb_pe_ctrl_r3` passes them byte-exactly (CRC included) and the
-citations are added to `CHIP_EVIDENCE`. Until then a green step here is
-evidence about a model, never about silicon.
+**25 of 26 steps are chip-confirmed; one deliberately is not.** The chip's
+`tb_pe_ctrl_r3_conf` is GREEN and its citations are recorded in
+`CHIP_EVIDENCE` (chip repo: `R3-CONFORMANCE-AND-RUN-LOCK.md`,
+`tb/tb_pe_ctrl_r3_conf.v`). Chip-confirmation is still a CITATION and never an
+assertion: the confirmed set is an explicit list, so a step added later cannot
+be confirmed without the chip having run it.
+
+The one exception is `status_full_readback`, left unproven by BOTH sides. Its
+expected `insn` is not contract-determined for a free-running core, and the
+freeze-snapshot pre-state the conformance TB uses is a state the chip cannot
+physically occupy. See `model_boundaries` below. **Nothing here is
+hardware-confirmed** -- the real-board run has never been executed.
 
 TWO PLACES THE VECTOR SPEC AND THE RTL DISAGREE
 ------------------------------------------------
@@ -68,29 +73,64 @@ PROGRAM = R.PROGRAM
 # Empty on purpose: nothing here is chip-confirmed yet. The map is the claim,
 # and a test pins that a confirmed step must cite it.
 CHIP_EVIDENCE = {
-    "confirmed_steps": set(),
-    "review": None,
-    "testbench": None,
-    "harness": (
-        "tb_pe_ctrl_r3 (chip repo) loads imem.hex/dmem.hex, applies each "
-        "vector's model_images[] state -- registers plus bp_addr/bp_en/"
-        "bp_hit/debug_hold -- drives the step's request_file and compares the "
-        "response word for word, CRC included, skipping wait words (these ops "
-        "emit none)"
-    ),
-    "conformance": (
-        "0 of 14 host golden steps confirmed against the chip. The chip has "
-        "run its OWN tb_pe_ctrl_r3 with a 7-mutant gate (all caught) and "
-        "formal proofs for S1-S4; that is the chip's evidence. These host "
-        "vectors become chip-confirmed only when that TB passes THEM "
-        "byte-exactly and the citations are recorded here."
-    ),
-    "scope": (
-        "The host's expectations for the implemented R3 contract. Not "
-        "evidence about silicon, and the real-board acceptance run (Pico over "
-        "USB with a physical shuttle) has not been executed and is not "
-        "claimed."
-    ),
+    # The chip's conformance run is GREEN and its citations are recorded, so
+    # these 25 steps are chip-confirmed IN SIMULATION. The list is EXPLICIT
+    # rather than derived as "everything except the boundary": confirmation is
+    # a citation, never an assertion, and a derived rule would silently
+    # confirm any step added later without the chip ever having run it.
+    #
+    # Note "step_one" names a step in TWO vectors (debug_step_sequence and
+    # debug_step_lands_on_bp). Both are confirmed, so the result is right
+    # today, but the framework keys evidence by step name; a test pins that
+    # the two can never drift apart unnoticed.
+    "confirmed_steps": {
+        "bp_clr_releases",
+        "bp_clr_to_boot_stop",
+        "bp_set_address_2",
+        "bp_set_bad_crc",
+        "bp_set_len_0",
+        "bp_set_on_loopback",
+        "bp_set_past_imem",
+        "read_cpu_shows_a_55",
+        "status_after_live_hit",
+        "status_is_stable",
+        "status_reads_zero",
+        "status_reports_the_hit",
+        "status_running_again",
+        "status_shows_a_aa",
+        "status_shows_no_hit",
+        "status_shows_not_armed",
+        "status_shows_pc_1",
+        "step_from_boot_stop",
+        "step_lands_on_2",
+        "step_not_ready",
+        "step_off_the_breakpoint",
+        "step_on_loopback",
+        "step_one",
+        "step_two",
+    },
+    "review": ("chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md "
+               "(the conformance record and the run lock)"),
+    "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v",
+    "harness": ("tb_pe_ctrl_r3_conf loads imem.hex/dmem.hex, applies each "
+                "vector's model_images[] state (registers plus bp_addr/bp_en/"
+                "bp_hit/debug_hold), drives the step's request_file and "
+                "compares the response word for word, CRC included. It also "
+                "checks tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt: a divergence "
+                "that CHANGES, or any divergence not listed, turns the gate "
+                "red -- so a resolved host defect cannot read as 'known'"),
+    "conformance": ("tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and "
+                    "25 of them with NO divergence after this package's "
+                    "regeneration"),
+    "scope": ("Chip-confirmed IN SIMULATION against the implemented R3 "
+              "contract. The remaining step (status_full_readback) is a "
+              "pinned TB model boundary, deliberately NOT claimed by either "
+              "side: insn is not contract-determined for a free-running core, "
+              "and the freeze-snapshot pre-state is a state the chip cannot "
+              "physically occupy. Chip-side R3.1 hold-semantics polish is in "
+              "flight and may change it. NOT hardware-confirmed: the real-"
+              "board run (Pico over USB, physical shuttle) has never been "
+              "executed."),
     "date": "2026-09-25",
 }
 

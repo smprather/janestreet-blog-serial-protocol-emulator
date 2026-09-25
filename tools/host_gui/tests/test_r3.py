@@ -382,9 +382,15 @@ class TestObligations(unittest.TestCase):
         }
         self.assertEqual(forward, backward)
 
-    def test_nothing_is_chip_confirmed_yet(self):
-        # The R2 discipline: the host model is never evidence about silicon, so
-        # no host obligation may claim confirmation on its own.
+    def test_obligations_stay_unconfirmed_even_though_the_steps_do_not(self):
+        """Two different things, deliberately not collapsed into one flag.
+
+        The VECTOR STEPS are chip-confirmed (the chip's conformance TB ran
+        them). The r3_reads OBLIGATIONS stay unconfirmed: those are host-side
+        probes of the model, and a host probe is never evidence about silicon
+        no matter how many of them pass. A flag that covered both would let a
+        green host suite imply confirmation.
+        """
         self.assertEqual(R.unconfirmed_names(), list(R.by_name()))
 
     def test_the_provisional_table_is_gone(self):
@@ -427,13 +433,50 @@ class TestPackage(unittest.TestCase):
         package = V3.build_package()
         self.assertEqual(len(package["vectors"]), 14)
 
-    def test_no_step_is_chip_confirmed(self):
-        """chip_confirmed stays False until the chip's TB passes the vectors."""
+    def test_exactly_the_confirmed_steps_are_confirmed(self):
+        """25 of 26, and the 26th is the pinned TB model boundary.
+
+        The chip's tb_pe_ctrl_r3_conf is GREEN and its citations are recorded,
+        so the steps it ran byte-exactly are confirmed. The one exception is
+        `status_full_readback`, which BOTH sides deliberately leave unproven.
+        The package-level flag therefore stays False, because not every vector
+        is confirmed -- that is the honest aggregate, not an oversight.
+        """
         package = V3.build_package()
-        steps = [s for v in package["vectors"] for s in v["steps"]]
-        self.assertTrue(steps)
-        self.assertTrue(all(not s["chip_confirmed"] for s in steps))
+        steps = [(v["name"], s) for v in package["vectors"] for s in v["steps"]]
+        boundary = package["model_boundaries"][0]["step"]
+        self.assertEqual(len(steps), 26)
+        # `steps` is (vector_name, step) pairs, so the STEP name comes from the
+        # step dict -- not from the vector.
+        confirmed = [s["name"] for _, s in steps if s["chip_confirmed"]]
+        unconfirmed = [s["name"] for _, s in steps if not s["chip_confirmed"]]
+        self.assertEqual(len(confirmed), 25)
+        self.assertEqual(unconfirmed, [boundary])
+        self.assertEqual(boundary, "status_full_readback")
         self.assertFalse(package["chip_confirmed"])
+
+    def test_duplicate_step_names_cannot_drift_apart_silently(self):
+        """Evidence is keyed by step NAME, and `step_one` names two steps.
+
+        The framework keys confirmation by step name, so a name shared by two
+        vectors confirms both. That is right today (both are confirmed), but
+        it is only safe while they agree -- so pin that they do, rather than
+        leaving it to a reader to notice.
+        """
+        package = V3.build_package()
+        seen = {}
+        for vector in package["vectors"]:
+            for step in vector["steps"]:
+                seen.setdefault(step["name"], []).append(
+                    (vector["name"], step["chip_confirmed"]))
+        shared = {n: v for n, v in seen.items() if len(v) > 1}
+        self.assertIn("step_one", shared, "the name collision this guards")
+        for name, entries in shared.items():
+            with self.subTest(step=name):
+                self.assertEqual({flag for _, flag in entries}, {True},
+                                 f"steps sharing the name {name!r} disagree "
+                                 f"on confirmation, which name-keyed evidence "
+                                 f"cannot express: {entries}")
 
     def test_a_confirmed_step_must_cite_the_evidence(self):
         """The R2 discipline: confirmation is a citation, never an assertion."""
@@ -442,7 +485,13 @@ class TestPackage(unittest.TestCase):
                 if step["chip_confirmed"]:
                     self.assertIn("chip_evidence", step)
                     self.assertTrue(step["chip_evidence"]["review"])
-        self.assertEqual(V3.CHIP_EVIDENCE["confirmed_steps"], set())
+        confirmed = V3.CHIP_EVIDENCE["confirmed_steps"]
+        self.assertEqual(len(confirmed), 24, "distinct names; step_one covers "
+                                              "two steps, so 25 steps")
+        self.assertNotIn("status_full_readback", confirmed)
+        for key in ("review", "testbench", "harness", "conformance", "scope"):
+            with self.subTest(citation=key):
+                self.assertTrue(V3.CHIP_EVIDENCE[key])
 
     def test_images_declare_the_debug_registers_not_the_state_word(self):
         for image in V3.build_package()["model_images"].values():
