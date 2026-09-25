@@ -149,16 +149,40 @@ class HostileBridge(F.FakeBridge):
         if self.mode == "drop":
             return []
         if self.mode == "wrong-id":
-            return [json.dumps({"v": 1, "id": request_id + 1000, "ok": True,
-                                "result": {}, "error": None}) + "\n"]
+            return [
+                json.dumps(
+                    {
+                        "v": 1,
+                        "id": request_id + 1000,
+                        "ok": True,
+                        "result": {},
+                        "error": None,
+                    }
+                )
+                + "\n"
+            ]
         if self.mode == "error":
-            return [json.dumps({"v": 1, "id": request_id, "ok": False,
-                                "result": None, "error": "hostile bridge"}) + "\n"]
+            return [
+                json.dumps(
+                    {
+                        "v": 1,
+                        "id": request_id,
+                        "ok": False,
+                        "result": None,
+                        "error": "hostile bridge",
+                    }
+                )
+                + "\n"
+            ]
         if self.mode == "oversize":
             return ["x" * OVERSIZE_LINE + "\n"]
         if self.mode == "bad-version":
-            return [json.dumps({"v": 99, "id": request_id, "ok": True,
-                                "result": {}, "error": None}) + "\n"]
+            return [
+                json.dumps(
+                    {"v": 99, "id": request_id, "ok": True, "result": {}, "error": None}
+                )
+                + "\n"
+            ]
         raise AssertionError(self.mode)
 
 
@@ -177,64 +201,99 @@ def _stack(*, bridge=None, clock=None, sleep=None):
 
     session = S.ControllerSession(factory)
     api = SV.Api(session, SV.ServerConfig.default())
-    return SimpleNamespace(api=api, session=session, bridge=bridge,
-                           ports=ports)
+    return SimpleNamespace(api=api, session=session, bridge=bridge, ports=ports)
 
 
-def _finding(report: Report, kind: str, detail: str, iteration: int,
-             input_hex: str = "") -> None:
-    report.findings.append(Finding(kind, detail, report.seed, iteration,
-                                   input_hex))
+def _finding(
+    report: Report, kind: str, detail: str, iteration: int, input_hex: str = ""
+) -> None:
+    report.findings.append(Finding(kind, detail, report.seed, iteration, input_hex))
 
 
-def _unexpected(report: Report, where: str, exc: BaseException,
-                iteration: int) -> None:
-    _finding(report, "unexpected-exception",
-             f"{where} raised {type(exc).__name__}: {exc}", iteration)
+def _unexpected(report: Report, where: str, exc: BaseException, iteration: int) -> None:
+    _finding(
+        report,
+        "unexpected-exception",
+        f"{where} raised {type(exc).__name__}: {exc}",
+        iteration,
+    )
 
 
 def _campaign(report: Report, fn, *args, **kwargs) -> None:
     """Run one campaign; a crash is a finding, not a traceback."""
     try:
         fn(*args, **kwargs)
-    except Exception as exc:           # noqa: BLE001 - the crash IS a finding
-        _finding(report, "campaign/crashed",
-                 f"{fn.__name__} raised {type(exc).__name__}: {exc}", -1)
+    except Exception as exc:  # noqa: BLE001 - the crash IS a finding
+        _finding(
+            report,
+            "campaign/crashed",
+            f"{fn.__name__} raised {type(exc).__name__}: {exc}",
+            -1,
+        )
 
 
 def _check_state(report: Report, stack, iteration: int, where: str) -> None:
     state = stack.session.state
     if not isinstance(state, S.SessionState):
-        _finding(report, "state/invalid",
-                 f"{where}: state {state!r} is not a SessionState", iteration)
+        _finding(
+            report,
+            "state/invalid",
+            f"{where}: state {state!r} is not a SessionState",
+            iteration,
+        )
     elif state is S.SessionState.LOADING:
-        _finding(report, "state/stuck-loading",
-                 f"{where}: the session is still LOADING after the call "
-                 f"returned/raised; it is bricked until reconnect", iteration)
+        _finding(
+            report,
+            "state/stuck-loading",
+            f"{where}: the session is still LOADING after the call "
+            f"returned/raised; it is bricked until reconnect",
+            iteration,
+        )
 
 
 def _check_ids(report: Report, stack, iteration: int) -> None:
     for index, port in enumerate(stack.ports):
         expected = list(range(1, len(port.ids) + 1))
         if port.ids != expected:
-            _finding(report, "ids/not-fresh",
-                     f"connection {index}: request ids {port.ids} are not "
-                     f"1..N consecutive (stale ids can be answered by a "
-                     f"dropped reply)", iteration)
+            _finding(
+                report,
+                "ids/not-fresh",
+                f"connection {index}: request ids {port.ids} are not "
+                f"1..N consecutive (stale ids can be answered by a "
+                f"dropped reply)",
+                iteration,
+            )
 
 
-def _expect(report: Report, kind: str, ok: bool, detail: str,
-            iteration: int) -> None:
+def _expect(report: Report, kind: str, ok: bool, detail: str, iteration: int) -> None:
     if not ok:
         _finding(report, kind, detail, iteration)
 
 
 # ---- campaign 1: hostile state sequences ------------------------------------
 STATE_OPS = (
-    "connect", "load", "load", "start", "start", "stop", "stop", "status",
-    "status", "status", "read_cpu", "read_cpu", "dump", "dump", "read_imem",
-    "read_dmem", "clear_fault", "negotiate", "process_events", "sources",
-    "health", "disconnect",
+    "connect",
+    "load",
+    "load",
+    "start",
+    "start",
+    "stop",
+    "stop",
+    "status",
+    "status",
+    "status",
+    "read_cpu",
+    "read_cpu",
+    "dump",
+    "dump",
+    "read_imem",
+    "read_dmem",
+    "clear_fault",
+    "negotiate",
+    "process_events",
+    "sources",
+    "health",
+    "disconnect",
 )
 
 POSTCONDITIONS = {
@@ -294,14 +353,21 @@ def _recovery_cycle(report: Report, iteration: int, label: str) -> None:
         try:
             fn()
         except Exception as exc:  # noqa: BLE001 - the failure IS the finding
-            _finding(report, "recovery/step-failed",
-                     f"{label}: clean {name} failed after hostility: "
-                     f"{type(exc).__name__}: {exc}", iteration)
+            _finding(
+                report,
+                "recovery/step-failed",
+                f"{label}: clean {name} failed after hostility: "
+                f"{type(exc).__name__}: {exc}",
+                iteration,
+            )
             return
-    _expect(report, "recovery/postcondition",
-            stack.session.state is S.SessionState.STOPPED,
-            f"{label}: recovery cycle ended in {stack.session.state}",
-            iteration)
+    _expect(
+        report,
+        "recovery/postcondition",
+        stack.session.state is S.SessionState.STOPPED,
+        f"{label}: recovery cycle ended in {stack.session.state}",
+        iteration,
+    )
 
 
 def campaign_state_sequences(rng, report: Report, iterations: int) -> None:
@@ -310,31 +376,38 @@ def campaign_state_sequences(rng, report: Report, iterations: int) -> None:
         stack = _stack()
         for step in range(rng.randrange(2, 12)):
             name = rng.choice(STATE_OPS)
-            report.counters[f"state/{name}"] = \
-                report.counters.get(f"state/{name}", 0) + 1
+            report.counters[f"state/{name}"] = report.counters.get(f"state/{name}", 0) + 1
             succeeded = False
             try:
                 _apply_op(name, stack)
                 succeeded = True
             except (SV.ApiError, S.SessionError):
-                pass                       # typed refusal: expected
-            except Exception as exc:       # noqa: BLE001
-                _unexpected(report, f"state/{name} (step {step})", exc,
-                            iteration)
+                pass  # typed refusal: expected
+            except Exception as exc:  # noqa: BLE001
+                _unexpected(report, f"state/{name} (step {step})", exc, iteration)
             _check_state(report, stack, iteration, f"after state/{name}")
             if not succeeded:
                 continue
             post = POSTCONDITIONS.get(name)
             if post is not None and stack.session.state is not post:
                 # a successful op must land in its stated postcondition
-                _finding(report, "postcondition/failed",
-                         f"{name} succeeded but state is "
-                         f"{stack.session.state}, expected {post}", iteration)
+                _finding(
+                    report,
+                    "postcondition/failed",
+                    f"{name} succeeded but state is "
+                    f"{stack.session.state}, expected {post}",
+                    iteration,
+                )
             if name == "load" and stack.session.state not in (
-                    S.SessionState.LOADED, S.SessionState.FAULTED):
-                _finding(report, "postcondition/failed",
-                         f"load succeeded but state is "
-                         f"{stack.session.state}", iteration)
+                S.SessionState.LOADED,
+                S.SessionState.FAULTED,
+            ):
+                _finding(
+                    report,
+                    "postcondition/failed",
+                    f"load succeeded but state is {stack.session.state}",
+                    iteration,
+                )
         _check_ids(report, stack, iteration)
         if iteration % RECOVERY_EVERY == 0:
             _recovery_cycle(report, iteration, "state-sequences")
@@ -349,28 +422,28 @@ def campaign_hostile_bridge(rng, report: Report, iterations: int) -> None:
         stack = _stack(bridge=bridge, clock=clock, sleep=clock.sleep)
         try:
             stack.session.connect()
-        except Exception as exc:           # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             _unexpected(report, "hostile/connect", exc, iteration)
             continue
         pre_state = stack.session.state
         mode = rng.choice(HostileBridge.MODES)
-        report.counters[f"hostile/{mode}"] = \
-            report.counters.get(f"hostile/{mode}", 0) + 1
+        report.counters[f"hostile/{mode}"] = report.counters.get(f"hostile/{mode}", 0) + 1
         # Half the iterations load first (so start/stop/status run loaded).
         if rng.random() < 0.5:
             try:
                 stack.session.load(_image())
-            except Exception as exc:       # noqa: BLE001 - healthy! must work
+            except Exception as exc:  # noqa: BLE001 - healthy! must work
                 _unexpected(report, "hostile/preload", exc, iteration)
                 continue
         bridge.mode = mode
-        op = rng.choice(("load", "load", "start", "stop", "status", "dump",
-                         "read_cpu", "read_imem"))
+        op = rng.choice(
+            ("load", "load", "start", "stop", "status", "dump", "read_cpu", "read_imem")
+        )
         try:
             _apply_op(op, stack)
         except (SV.ApiError, S.SessionError):
             pass
-        except Exception as exc:           # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             _unexpected(report, f"hostile/{mode}/{op}", exc, iteration)
         _check_state(report, stack, iteration, f"after hostile {mode}/{op}")
 
@@ -382,16 +455,23 @@ def campaign_hostile_bridge(rng, report: Report, iterations: int) -> None:
             stack.session.load(_image())
             stack.session.status()
             stack.session.dump_core()
-        except Exception as exc:           # noqa: BLE001
-            _finding(report, "recovery/after-hostile",
-                     f"mode {mode}, pre-state {pre_state}, op {op}: session "
-                     f"did not recover: {type(exc).__name__}: {exc}",
-                     iteration)
+        except Exception as exc:  # noqa: BLE001
+            _finding(
+                report,
+                "recovery/after-hostile",
+                f"mode {mode}, pre-state {pre_state}, op {op}: session "
+                f"did not recover: {type(exc).__name__}: {exc}",
+                iteration,
+            )
             continue
-        _expect(report, "recovery/postcondition",
-                stack.session.state is S.SessionState.LOADED,
-                f"mode {mode}: recovered load did not land LOADED "
-                f"(state {stack.session.state})", iteration)
+        _expect(
+            report,
+            "recovery/postcondition",
+            stack.session.state is S.SessionState.LOADED,
+            f"mode {mode}: recovered load did not land LOADED "
+            f"(state {stack.session.state})",
+            iteration,
+        )
         _check_ids(report, stack, iteration)
 
 
@@ -416,23 +496,33 @@ def _http_bodies() -> list[tuple[dict, str]]:
 
 
 HTTP_SEQUENCES = (
-    ("wrong-state/status-dump", (
-        ("GET", "/api/status", None), ("POST", "/api/dump", None))),
-    ("wrong-state/start-cpu", (
-        ("POST", "/api/start", None), ("GET", "/api/read_cpu", None))),
-    ("double-connect", (
-        ("POST", "/api/connect", None), ("POST", "/api/connect", None))),
-    ("load-while-running", (
-        ("POST", "/api/connect", None),
-        ("POST", "/api/load", {"source": "uart_echo.pe"}),
-        ("POST", "/api/start", None),
-        ("POST", "/api/load", {"source": "uart_echo.pe"}),
-        ("POST", "/api/stop", None))),
-    ("stop-connect", (
-        ("POST", "/api/stop", None), ("POST", "/api/connect", None))),
-    ("traversal-and-list", (
-        ("POST", "/api/assemble", {"source": "../../etc/passwd"}),
-        ("GET", "/api/sources", None))),
+    (
+        "wrong-state/status-dump",
+        (("GET", "/api/status", None), ("POST", "/api/dump", None)),
+    ),
+    (
+        "wrong-state/start-cpu",
+        (("POST", "/api/start", None), ("GET", "/api/read_cpu", None)),
+    ),
+    ("double-connect", (("POST", "/api/connect", None), ("POST", "/api/connect", None))),
+    (
+        "load-while-running",
+        (
+            ("POST", "/api/connect", None),
+            ("POST", "/api/load", {"source": "uart_echo.pe"}),
+            ("POST", "/api/start", None),
+            ("POST", "/api/load", {"source": "uart_echo.pe"}),
+            ("POST", "/api/stop", None),
+        ),
+    ),
+    ("stop-connect", (("POST", "/api/stop", None), ("POST", "/api/connect", None))),
+    (
+        "traversal-and-list",
+        (
+            ("POST", "/api/assemble", {"source": "../../etc/passwd"}),
+            ("GET", "/api/sources", None),
+        ),
+    ),
 )
 
 
@@ -444,30 +534,41 @@ def campaign_http(rng, report: Report, iterations: int) -> None:
     from fastapi.testclient import TestClient  # type: ignore[import-not-found]
 
     stack = _stack()
-    client = TestClient(SV.create_app(stack.api, stack.api.config),
-                        raise_server_exceptions=False)
+    client = TestClient(
+        SV.create_app(stack.api, stack.api.config), raise_server_exceptions=False
+    )
     bodies = _http_bodies()
     for iteration in range(iterations):
         body, label = rng.choice(bodies)
         route = rng.choice(("/api/assemble", "/api/load"))
         response = client.post(route, json=body)
-        report.counters[f"http/{label}"] = \
-            report.counters.get(f"http/{label}", 0) + 1
+        report.counters[f"http/{label}"] = report.counters.get(f"http/{label}", 0) + 1
         if response.status_code >= 500:
-            _finding(report, "http/server-error",
-                     f"{route} with {label} body -> 5xx "
-                     f"({response.text[:200]!r})", iteration, str(body)[:200])
+            _finding(
+                report,
+                "http/server-error",
+                f"{route} with {label} body -> 5xx ({response.text[:200]!r})",
+                iteration,
+                str(body)[:200],
+            )
         elif response.status_code not in HTTP_ALLOWED:
-            _finding(report, "http/status",
-                     f"{route} with {label} body -> {response.status_code} "
-                     f"({response.text[:200]!r})", iteration,
-                     str(body)[:200])
+            _finding(
+                report,
+                "http/status",
+                f"{route} with {label} body -> {response.status_code} "
+                f"({response.text[:200]!r})",
+                iteration,
+                str(body)[:200],
+            )
         health = client.get("/api/health")
         if health.status_code != 200 or not health.json().get("ok"):
-            _finding(report, "http/not-alive",
-                     f"health after {route}/{label} -> "
-                     f"{health.status_code} {health.text[:120]!r}",
-                     iteration)
+            _finding(
+                report,
+                "http/not-alive",
+                f"health after {route}/{label} -> "
+                f"{health.status_code} {health.text[:120]!r}",
+                iteration,
+            )
             return
 
     # Raw/garbage content types and non-object JSON bodies.
@@ -481,15 +582,17 @@ def campaign_http(rng, report: Report, iterations: int) -> None:
     for label, content, headers in raw_cases:
         for route in ("/api/assemble", "/api/load"):
             response = client.post(route, content=content, headers=headers)
-            report.counters[f"http/{label}"] = \
-                report.counters.get(f"http/{label}", 0) + 1
+            report.counters[f"http/{label}"] = report.counters.get(f"http/{label}", 0) + 1
             if response.status_code >= 500:
-                _finding(report, "http/server-error",
-                         f"{route} with {label} -> {response.status_code} "
-                         f"({response.text[:200]!r})", -1)
+                _finding(
+                    report,
+                    "http/server-error",
+                    f"{route} with {label} -> {response.status_code} "
+                    f"({response.text[:200]!r})",
+                    -1,
+                )
             if not client.get("/api/health").json().get("ok"):
-                _finding(report, "http/not-alive",
-                         f"health after raw {label}", -1)
+                _finding(report, "http/not-alive", f"health after raw {label}", -1)
                 return
 
     # Directed wrong-state / interleaved sequences, then a clean recovery.
@@ -499,13 +602,17 @@ def campaign_http(rng, report: Report, iterations: int) -> None:
                 response = client.get(path)
             else:
                 response = client.post(path, json=body)
-            report.counters[f"http-seq/{label}"] = \
+            report.counters[f"http-seq/{label}"] = (
                 report.counters.get(f"http-seq/{label}", 0) + 1
+            )
             if not (200 <= response.status_code < 500):
-                _finding(report, "http/server-error",
-                         f"sequence {label}: {method} {path} -> "
-                         f"{response.status_code} ({response.text[:200]!r})",
-                         -1)
+                _finding(
+                    report,
+                    "http/server-error",
+                    f"sequence {label}: {method} {path} -> "
+                    f"{response.status_code} ({response.text[:200]!r})",
+                    -1,
+                )
         stack.session.disconnect()
     recovery = (
         client.post("/api/connect"),
@@ -517,9 +624,13 @@ def campaign_http(rng, report: Report, iterations: int) -> None:
     )
     for index, response in enumerate(recovery):
         if response.status_code != 200:
-            _finding(report, "http/recovery",
-                     f"clean HTTP recovery step {index} -> "
-                     f"{response.status_code} ({response.text[:200]!r})", -1)
+            _finding(
+                report,
+                "http/recovery",
+                f"clean HTTP recovery step {index} -> "
+                f"{response.status_code} ({response.text[:200]!r})",
+                -1,
+            )
             break
     _check_state(report, stack, -1, "after HTTP recovery")
 
@@ -535,7 +646,7 @@ def _run_batch(threads: int, fn) -> list[object]:
         try:
             fn(index)
             results[index] = "ok"
-        except BaseException as exc:       # noqa: BLE001 - type is the finding
+        except BaseException as exc:  # noqa: BLE001 - type is the finding
             results[index] = exc
 
     pool = [threading.Thread(target=worker, args=(i,)) for i in range(threads)]
@@ -547,47 +658,59 @@ def _run_batch(threads: int, fn) -> list[object]:
     return results
 
 
-def _classify_concurrency(report: Report, results, where: str,
-                          iteration: int) -> None:
+def _classify_concurrency(report: Report, results, where: str, iteration: int) -> None:
     for outcome in results:
         if isinstance(outcome, str):
             continue
         if isinstance(outcome, (SV.ApiError, S.SessionError)):
-            _finding(report, "concurrency/unserialized",
-                     f"{where}: a legal request on a healthy bridge failed "
-                     f"under concurrency: {type(outcome).__name__}: {outcome}",
-                     iteration)
+            _finding(
+                report,
+                "concurrency/unserialized",
+                f"{where}: a legal request on a healthy bridge failed "
+                f"under concurrency: {type(outcome).__name__}: {outcome}",
+                iteration,
+            )
         else:
             _unexpected(report, where, outcome, iteration)
 
 
-def campaign_concurrency(rng, report: Report, rounds: int,
-                         threads: int = DEFAULT_THREADS) -> None:
+def campaign_concurrency(
+    rng, report: Report, rounds: int, threads: int = DEFAULT_THREADS
+) -> None:
     """Parallel requests + a websocket-style poller must not corrupt anything."""
     stack = _stack()
     try:
         stack.session.connect()
         stack.session.load(_image())
-    except Exception as exc:               # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _unexpected(report, "concurrency/setup", exc, -1)
         return
     previous_interval = sys.getswitchinterval()
-    sys.setswitchinterval(1e-6)            # force the race, do not hope for it
+    sys.setswitchinterval(1e-6)  # force the race, do not hope for it
     try:
         for round_no in range(rounds):
-            report.counters["concurrency/round"] = \
+            report.counters["concurrency/round"] = (
                 report.counters.get("concurrency/round", 0) + 1
+            )
             # A: non-mutating requests from many threads, all legal in every
             # state -> every failure is wire corruption.
             _classify_concurrency(
-                report, _run_batch(threads, lambda _i: stack.session.status()),
-                f"round {round_no} status", round_no)
+                report,
+                _run_batch(threads, lambda _i: stack.session.status()),
+                f"round {round_no} status",
+                round_no,
+            )
             _classify_concurrency(
                 report,
-                _run_batch(threads, lambda _i: (
-                    stack.session.dump_core()
-                    if _i % 2 else stack.session.read_cpu())),
-                f"round {round_no} read", round_no)
+                _run_batch(
+                    threads,
+                    lambda _i: (
+                        stack.session.dump_core() if _i % 2 else stack.session.read_cpu()
+                    ),
+                ),
+                f"round {round_no} read",
+                round_no,
+            )
             # B: a websocket-style event poller spinning while requests fly.
             stop = threading.Event()
 
@@ -601,14 +724,18 @@ def campaign_concurrency(rng, report: Report, rounds: int,
                 _classify_concurrency(
                     report,
                     _run_batch(threads, lambda _i: stack.session.status()),
-                    f"round {round_no} poller", round_no)
+                    f"round {round_no} poller",
+                    round_no,
+                )
             finally:
                 stop.set()
                 poller.join()
             # C: mutating ops interleaved; typed refusals are fine, anything
             # else is not, and the stack must recover afterwards.
-            ops = [rng.choice(("status", "start", "stop", "load", "dump"))
-                   for _ in range(threads)]
+            ops = [
+                rng.choice(("status", "start", "stop", "load", "dump"))
+                for _ in range(threads)
+            ]
 
             def _mixed(index: int, ops: list[str] = ops) -> None:
                 _apply_op(ops[index], stack)
@@ -620,8 +747,7 @@ def campaign_concurrency(rng, report: Report, rounds: int,
                 if isinstance(outcome, (SV.ApiError, S.SessionError)):
                     continue
                 if isinstance(outcome, BaseException):
-                    _unexpected(report, f"round {round_no} mixed", outcome,
-                                round_no)
+                    _unexpected(report, f"round {round_no} mixed", outcome, round_no)
             try:
                 stack.session.disconnect()
                 stack.session.connect()
@@ -629,10 +755,14 @@ def campaign_concurrency(rng, report: Report, rounds: int,
                 stack.session.start()
                 stack.session.stop()
                 stack.session.dump_core()
-            except Exception as exc:       # noqa: BLE001
-                _finding(report, "concurrency/recovery",
-                         f"round {round_no}: no recovery after mixed ops: "
-                         f"{type(exc).__name__}: {exc}", round_no)
+            except Exception as exc:  # noqa: BLE001
+                _finding(
+                    report,
+                    "concurrency/recovery",
+                    f"round {round_no}: no recovery after mixed ops: "
+                    f"{type(exc).__name__}: {exc}",
+                    round_no,
+                )
                 return
     finally:
         sys.setswitchinterval(previous_interval)
@@ -661,35 +791,49 @@ def campaign_reconnect_storm(rng, report: Report, iterations: int) -> None:
                 session.connect()
                 session.status()
                 session.disconnect()
-                session.disconnect()       # a double disconnect must be safe
+                session.disconnect()  # a double disconnect must be safe
             session.connect()
             session.load(_image())
             session.start()
             session.stop()
             session.dump_core()
-        except Exception as exc:           # noqa: BLE001
-            _finding(report, "storm/failed",
-                     f"storm {storm}: {type(exc).__name__}: {exc}", storm)
+        except Exception as exc:  # noqa: BLE001
+            _finding(
+                report,
+                "storm/failed",
+                f"storm {storm}: {type(exc).__name__}: {exc}",
+                storm,
+            )
             continue
-        report.counters["storm/cycles"] = \
-            report.counters.get("storm/cycles", 0) + cycles
+        report.counters["storm/cycles"] = report.counters.get("storm/cycles", 0) + cycles
         for index, port in enumerate(ports):
             expected = list(range(1, len(port.ids) + 1))
             if port.ids != expected:
-                _finding(report, "storm/ids",
-                         f"storm {storm} connection {index}: ids {port.ids} "
-                         f"are not 1..N (reconnect did not restart ids)",
-                         storm)
+                _finding(
+                    report,
+                    "storm/ids",
+                    f"storm {storm} connection {index}: ids {port.ids} "
+                    f"are not 1..N (reconnect did not restart ids)",
+                    storm,
+                )
         if session.session_id != cycles + 1:
-            _finding(report, "storm/session-id",
-                     f"storm {storm}: session_id {session.session_id} != "
-                     f"{cycles + 1} connections", storm)
+            _finding(
+                report,
+                "storm/session-id",
+                f"storm {storm}: session_id {session.session_id} != "
+                f"{cycles + 1} connections",
+                storm,
+            )
 
 
 # ---- driver -----------------------------------------------------------------
-def run(seed: int = DEFAULT_SEED, iterations: int = DEFAULT_ITERATIONS,
-        rounds: int = DEFAULT_ROUNDS, budget_s: float = DEFAULT_BUDGET_S,
-        threads: int = DEFAULT_THREADS) -> Report:
+def run(
+    seed: int = DEFAULT_SEED,
+    iterations: int = DEFAULT_ITERATIONS,
+    rounds: int = DEFAULT_ROUNDS,
+    budget_s: float = DEFAULT_BUDGET_S,
+    threads: int = DEFAULT_THREADS,
+) -> Report:
     """Run the campaign; returns a Report (never raises on a finding)."""
     started = time.monotonic()
     report = Report(seed=seed, iterations=iterations, seconds=0.0)
@@ -700,39 +844,46 @@ def run(seed: int = DEFAULT_SEED, iterations: int = DEFAULT_ITERATIONS,
     _campaign(report, campaign_concurrency, rng, report, rounds, threads)
     _campaign(report, campaign_reconnect_storm, rng, report, iterations)
     elapsed = time.monotonic() - started
-    if elapsed > budget_s:                 # bounded: report, do not extend
-        _finding(report, "budget/exceeded",
-                 f"campaign took {elapsed:.1f}s (budget {budget_s:.0f}s)",
-                 -1)
+    if elapsed > budget_s:  # bounded: report, do not extend
+        _finding(
+            report,
+            "budget/exceeded",
+            f"campaign took {elapsed:.1f}s (budget {budget_s:.0f}s)",
+            -1,
+        )
     report.seconds = elapsed
     return report
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
-        description=(__doc__ or "server fuzzer").split("\n")[0])
+        description=(__doc__ or "server fuzzer").split("\n")[0]
+    )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    parser.add_argument("-n", "--iterations", type=int,
-                        default=DEFAULT_ITERATIONS)
+    parser.add_argument("-n", "--iterations", type=int, default=DEFAULT_ITERATIONS)
     parser.add_argument("--rounds", type=int, default=DEFAULT_ROUNDS)
     parser.add_argument("--threads", type=int, default=DEFAULT_THREADS)
     parser.add_argument("--budget", type=float, default=DEFAULT_BUDGET_S)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    report = run(args.seed, args.iterations, args.rounds, args.budget,
-                 args.threads)
+    report = run(args.seed, args.iterations, args.rounds, args.budget, args.threads)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
     else:
-        print(f"fuzz_server seed={report.seed} iterations={report.iterations} "
-              f"cases={sum(report.counters.values())} "
-              f"({report.seconds:.2f}s)")
+        print(
+            f"fuzz_server seed={report.seed} iterations={report.iterations} "
+            f"cases={sum(report.counters.values())} "
+            f"({report.seconds:.2f}s)"
+        )
         for name, count in sorted(report.counters.items()):
             print(f"  {name:<28} {count}")
         for finding in report.findings:
             print(finding.render())
-        print("RESULT: PASS" if report.ok else
-              f"RESULT: FAIL ({len(report.findings)} findings)")
+        print(
+            "RESULT: PASS"
+            if report.ok
+            else f"RESULT: FAIL ({len(report.findings)} findings)"
+        )
     return 0 if report.ok else 1
 
 

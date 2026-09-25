@@ -38,15 +38,27 @@ class TransportLike(Protocol):
     (USB, socket) only has to satisfy these three calls.
     """
 
-    def request(self, op: str, args: dict | None = None, *,
-                timeout_s: float | None = None) -> dict: ...
+    def request(
+        self, op: str, args: dict | None = None, *, timeout_s: float | None = None
+    ) -> dict: ...
 
     def poll_events(self) -> list[dict]: ...
 
     def close(self) -> None: ...
 
-STATUS_KEYS = ("state", "run", "target", "pc", "a", "x", "y", "timer",
-               "faults", "words_written")
+
+STATUS_KEYS = (
+    "state",
+    "run",
+    "target",
+    "pc",
+    "a",
+    "x",
+    "y",
+    "timer",
+    "faults",
+    "words_written",
+)
 
 
 class SessionState(enum.StrEnum):
@@ -131,18 +143,21 @@ def _serialized(method):
     and the transport sees interleaved requests; ``fuzz_server`` reproduces
     both. An RLock because ``connect`` re-enters through ``process_events``.
     """
+
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         with self._lock:
             return method(self, *args, **kwargs)
+
     return wrapper
 
 
 class ControllerSession:
     """Owns one connected bridge session and the load/run/dump state machine."""
 
-    def __init__(self, transport_factory: Callable[[], TransportLike], *,
-                 clock=None) -> None:
+    def __init__(
+        self, transport_factory: Callable[[], TransportLike], *, clock=None
+    ) -> None:
         self._lock = threading.RLock()
         self._transport_factory = transport_factory
         self._transport: TransportLike | None = None
@@ -162,7 +177,8 @@ class ControllerSession:
     def connect(self) -> None:
         if self.state != SessionState.DISCONNECTED:
             raise SessionStateError(
-                f"connect requires DISCONNECTED (state is {self.state})")
+                f"connect requires DISCONNECTED (state is {self.state})"
+            )
         transport = self._transport_factory()
         try:
             hello = transport.request("hello")
@@ -173,7 +189,8 @@ class ControllerSession:
             transport.close()
             raise SessionError(
                 f"bridge protocol version {hello.get('protocol_version')!r} "
-                f"is not {T.PROTOCOL_VERSION}")
+                f"is not {T.PROTOCOL_VERSION}"
+            )
         cap = hello.get("sclk_hz_max")
         if not isinstance(cap, int) or cap <= 0:
             transport.close()
@@ -191,7 +208,7 @@ class ControllerSession:
         self._has_run = False
         self._run = False
         self._faults = 0
-        self.process_events()          # consume handshake events (board.reset)
+        self.process_events()  # consume handshake events (board.reset)
 
     @_serialized
     def disconnect(self) -> None:
@@ -210,24 +227,32 @@ class ControllerSession:
         if hz > self.negotiated_sclk_hz:
             raise SessionError(
                 f"requested SCLK {hz} Hz exceeds the negotiated cap "
-                f"{self.negotiated_sclk_hz} Hz")
+                f"{self.negotiated_sclk_hz} Hz"
+            )
         return int(hz)
 
     # ---- load / run / stop -------------------------------------------------
     def load(self, image) -> LoadResult:
         self._require_connected()
-        if self.state not in (SessionState.PREPARED, SessionState.LOADED,
-                              SessionState.STOPPED):
+        if self.state not in (
+            SessionState.PREPARED,
+            SessionState.LOADED,
+            SessionState.STOPPED,
+        ):
             raise SessionStateError(
-                f"load requires a stopped session (state is {self.state})")
+                f"load requires a stopped session (state is {self.state})"
+            )
         previous = self.state
         self.state = SessionState.LOADING
         try:
-            result = self._request("load", {
-                "words": [int(word) for word in image.words],
-                "sha256": image.sha256,
-                "target": P.TARGET_HOST,
-            })
+            result = self._request(
+                "load",
+                {
+                    "words": [int(word) for word in image.words],
+                    "sha256": image.sha256,
+                    "target": P.TARGET_HOST,
+                },
+            )
         except SessionError:
             # A transport/integrity failure mid-load must not leave the
             # session stuck in LOADING, where every later load is refused
@@ -246,22 +271,24 @@ class ControllerSession:
         self._faults = faults
         if faults:
             self.state = SessionState.FAULTED
-            return LoadResult(words_written=words_written, faults=faults,
-                              echo=echo, target=target)
+            return LoadResult(
+                words_written=words_written, faults=faults, echo=echo, target=target
+            )
         if status != P.STATUS_OK:
-            self.state = (SessionState.STOPPED if self._loaded
-                          else SessionState.PREPARED)
+            self.state = SessionState.STOPPED if self._loaded else SessionState.PREPARED
             raise SessionError(f"load failed with status {status}")
         expected_echo = int(image.words[-1]) if image.word_count else 0
         if words_written != image.word_count or echo != expected_echo:
             self._integrity_fault(
                 "load response does not match the image: "
                 f"{words_written} words (want {image.word_count}), "
-                f"echo 0x{echo:04X} (want 0x{expected_echo:04X})")
+                f"echo 0x{echo:04X} (want 0x{expected_echo:04X})"
+            )
         self._loaded = True
         self.state = SessionState.LOADED
-        return LoadResult(words_written=words_written, faults=faults,
-                          echo=echo, target=target)
+        return LoadResult(
+            words_written=words_written, faults=faults, echo=echo, target=target
+        )
 
     @_serialized
     def start(self) -> None:
@@ -270,7 +297,8 @@ class ControllerSession:
             raise SessionStateError("start requires a successful load")
         if self.state not in (SessionState.LOADED, SessionState.STOPPED):
             raise SessionStateError(
-                f"start requires a loaded, stopped session (state is {self.state})")
+                f"start requires a loaded, stopped session (state is {self.state})"
+            )
         result = self._request("start")
         if not result.get("run"):
             raise SessionError("start response did not report run=1")
@@ -283,7 +311,8 @@ class ControllerSession:
         self._require_connected()
         if self.state != SessionState.RUNNING:
             raise SessionStateError(
-                f"stop requires a running session (state is {self.state})")
+                f"stop requires a running session (state is {self.state})"
+            )
         self._request("stop")
         self._run = False
         self.state = SessionState.STOPPED
@@ -297,8 +326,10 @@ class ControllerSession:
         if snapshot.faults:
             self.state = SessionState.FAULTED
             if self.last_fault is None:
-                self.last_fault = {"event": "chip.irq",
-                                   "data": {"faults": snapshot.faults}}
+                self.last_fault = {
+                    "event": "chip.irq",
+                    "data": {"faults": snapshot.faults},
+                }
         elif snapshot.run:
             self._run = True
             self._has_run = True
@@ -306,8 +337,9 @@ class ControllerSession:
         else:
             self._run = False
             if self._loaded:
-                self.state = (SessionState.STOPPED if self._has_run
-                              else SessionState.LOADED)
+                self.state = (
+                    SessionState.STOPPED if self._has_run else SessionState.LOADED
+                )
             else:
                 self.state = SessionState.PREPARED
         return snapshot
@@ -324,12 +356,14 @@ class ControllerSession:
         status = int(result.get("status", -1))
         if status != P.STATUS_OK:
             raise SessionError(f"read_cpu failed with status {status}")
-        return CpuSnapshot(pc=int(result.get("pc", 0)),
-                           a=int(result.get("a", 0)),
-                           x=int(result.get("x", 0)),
-                           y=int(result.get("y", 0)),
-                           insn=int(result.get("insn", 0)),
-                           state=int(result.get("state", 0)))
+        return CpuSnapshot(
+            pc=int(result.get("pc", 0)),
+            a=int(result.get("a", 0)),
+            x=int(result.get("x", 0)),
+            y=int(result.get("y", 0)),
+            insn=int(result.get("insn", 0)),
+            state=int(result.get("state", 0)),
+        )
 
     @_serialized
     def dump_core(self) -> CoreDump:
@@ -339,8 +373,9 @@ class ControllerSession:
     @_serialized
     def read_imem(self, address: int, count: int) -> tuple[int, ...]:
         self._require_stopped_read("read_imem")
-        result = self._request("read_imem",
-                               {"address": int(address), "count": int(count)})
+        result = self._request(
+            "read_imem", {"address": int(address), "count": int(count)}
+        )
         status = int(result.get("status", -1))
         if status != P.STATUS_OK:
             raise SessionError(f"read_imem failed with status {status}")
@@ -349,8 +384,9 @@ class ControllerSession:
     @_serialized
     def read_dmem(self, address: int, count: int) -> bytes:
         self._require_stopped_read("read_dmem")
-        result = self._request("read_dmem",
-                               {"address": int(address), "count": int(count)})
+        result = self._request(
+            "read_dmem", {"address": int(address), "count": int(count)}
+        )
         status = int(result.get("status", -1))
         if status != P.STATUS_OK:
             raise SessionError(f"read_dmem failed with status {status}")
@@ -363,8 +399,7 @@ class ControllerSession:
         result = self._request("clear_fault", {"mask": int(mask)})
         self._faults = int(result.get("faults", 0))
         if self._faults == 0 and self.state == SessionState.FAULTED:
-            self.state = (SessionState.STOPPED if self._loaded
-                          else SessionState.PREPARED)
+            self.state = SessionState.STOPPED if self._loaded else SessionState.PREPARED
         return self._faults
 
     @_serialized
@@ -387,8 +422,7 @@ class ControllerSession:
                 self._has_run = False
                 self.state = SessionState.PREPARED
             elif name == "chip.irq":
-                self._faults = int(event.get("data", {}).get("faults",
-                                                             self._faults))
+                self._faults = int(event.get("data", {}).get("faults", self._faults))
                 self.state = SessionState.FAULTED
                 self.last_fault = event
             elif name in ("spi.timeout", "protocol.error"):
@@ -405,14 +439,17 @@ class ControllerSession:
         if self.state in (SessionState.LOADING, SessionState.RUNNING) or self._run:
             raise SessionStateError(f"{what} requires the core stopped")
 
-    def _request(self, op: str, args: dict | None = None,
-                 *, timeout_s: float | None = None) -> dict:
+    def _request(
+        self, op: str, args: dict | None = None, *, timeout_s: float | None = None
+    ) -> dict:
         assert self._transport is not None
         try:
             return self._transport.request(op, args, timeout_s=timeout_s)
         except T.TransportTimeout as exc:
-            self.last_fault = {"event": "spi.timeout",
-                               "data": {"op": op, "error": str(exc)}}
+            self.last_fault = {
+                "event": "spi.timeout",
+                "data": {"op": op, "error": str(exc)},
+            }
             self.state = SessionState.FAULTED
             raise SessionError(f"{op} timed out: {exc}") from exc
         except T.TransportError as exc:
@@ -420,7 +457,6 @@ class ControllerSession:
 
     def _integrity_fault(self, message: str) -> None:
         self._faults |= 0x8000
-        self.last_fault = {"event": "protocol.error",
-                           "data": {"error": message}}
+        self.last_fault = {"event": "protocol.error", "data": {"error": message}}
         self.state = SessionState.FAULTED
         raise SessionError(message)

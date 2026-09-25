@@ -24,8 +24,13 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 ECHO = I.assemble_program(FIXTURES / "echo.pe", REPO_ROOT)
 
-HELLO = {"protocol_version": 1, "bridge_version": "test", "clock_hz": 60_000_000,
-         "sclk_hz_max": 5_000_000, "pads": dict(board.HOST_SPI_PADS)}
+HELLO = {
+    "protocol_version": 1,
+    "bridge_version": "test",
+    "clock_hz": 60_000_000,
+    "sclk_hz_max": 5_000_000,
+    "pads": dict(board.HOST_SPI_PADS),
+}
 PREPARE = {"state": "PREPARED", "run": False}
 
 
@@ -42,22 +47,19 @@ def make_reconnect_stack():
     clock = FakeClock()
     bridge = F.FakeBridge()
     ports = [LoopbackPort(bridge), LoopbackPort(bridge)]
-    transports = [T.SerialTransport(p, clock=clock, sleep=clock.sleep)
-                  for p in ports]
+    transports = [T.SerialTransport(p, clock=clock, sleep=clock.sleep) for p in ports]
     pool = list(transports)
     session = S.ControllerSession(lambda: pool.pop(0), clock=clock)
     return session, bridge, ports, transports
 
 
 def push_event(port, name: str, data: dict | None = None) -> None:
-    port.incoming.append(json.dumps(
-        {"v": 1, "event": name, "data": data or {}}).encode())
+    port.incoming.append(json.dumps({"v": 1, "event": name, "data": data or {}}).encode())
 
 
 class TestBoardDecisions(unittest.TestCase):
     def test_plan_pad_mapping_wins(self):
-        self.assertEqual(board.HOST_SPI_PADS,
-                         {"cs_n": 4, "mosi": 5, "miso": 6, "sck": 7})
+        self.assertEqual(board.HOST_SPI_PADS, {"cs_n": 4, "mosi": 5, "miso": 6, "sck": 7})
 
     def test_host_guard_rate_is_5mhz(self):
         self.assertEqual(board.SCLK_GUARD_HZ, 5_000_000)
@@ -155,23 +157,26 @@ class TestLoadStartStop(unittest.TestCase):
         leave the session in LOADING, so every later load was refused until a
         reconnect. The failed load must restore the pre-load state and a retry
         must work on the same connection."""
-        good = {"status": P.STATUS_OK, "words_written": 3, "faults": 0,
-                "echo": ECHO.words[-1]}
-        stub = StubTransport(responses=[HELLO, PREPARE,
-                                        T.TransportProtocolError("garbage"),
-                                        good])
+        good = {
+            "status": P.STATUS_OK,
+            "words_written": 3,
+            "faults": 0,
+            "echo": ECHO.words[-1],
+        }
+        stub = StubTransport(
+            responses=[HELLO, PREPARE, T.TransportProtocolError("garbage"), good]
+        )
         session = S.ControllerSession(lambda: stub)
         session.connect()
         with self.assertRaises(S.SessionError):
             session.load(ECHO)
         self.assertEqual(session.state, S.SessionState.PREPARED)
-        result = session.load(ECHO)                 # no reconnect needed
+        result = session.load(ECHO)  # no reconnect needed
         self.assertEqual(result.words_written, 3)
         self.assertEqual(session.state, S.SessionState.LOADED)
 
     def test_echo_mismatch_is_a_fault(self):
-        bad = {"status": P.STATUS_OK, "words_written": 3, "faults": 0,
-               "echo": 0xBADD}
+        bad = {"status": P.STATUS_OK, "words_written": 3, "faults": 0, "echo": 0xBADD}
         stub = StubTransport(responses=[HELLO, PREPARE, bad])
         session = S.ControllerSession(lambda: stub)
         session.connect()
@@ -216,9 +221,8 @@ class TestReadbackAndDump(unittest.TestCase):
         bridge.pe.pc, bridge.pe.a, bridge.pe.x = 5, 6, 7
         bridge.pe.y, bridge.pe.insn = 8, 0x0041
         cpu = session.read_cpu()
-        self.assertEqual((cpu.pc, cpu.a, cpu.x, cpu.y, cpu.insn),
-                         (5, 6, 7, 8, 0x0041))
-        self.assertTrue(bridge.pe.run)          # still running: non-halting
+        self.assertEqual((cpu.pc, cpu.a, cpu.x, cpu.y, cpu.insn), (5, 6, 7, 8, 0x0041))
+        self.assertTrue(bridge.pe.run)  # still running: non-halting
         self.assertEqual(session.state, S.SessionState.RUNNING)
 
     def test_read_cpu_while_stopped(self):
@@ -246,8 +250,9 @@ class TestReadbackAndDump(unittest.TestCase):
         bridge.pe.a = bridge.pe.x = bridge.pe.y = 0xFF
         bridge.pe.insn = 0xFFFF
         cpu = session.read_cpu()
-        self.assertEqual((cpu.pc, cpu.a, cpu.x, cpu.y, cpu.insn),
-                         (0x3FF, 0xFF, 0xFF, 0xFF, 0xFFFF))
+        self.assertEqual(
+            (cpu.pc, cpu.a, cpu.x, cpu.y, cpu.insn), (0x3FF, 0xFF, 0xFF, 0xFF, 0xFFFF)
+        )
 
 
 class TestFaultsAndEvents(unittest.TestCase):
@@ -261,19 +266,19 @@ class TestFaultsAndEvents(unittest.TestCase):
         events = session.process_events()
         self.assertIn("chip.irq", [e["event"] for e in events])
         self.assertIsNotNone(session.last_fault)
-        session.status()                      # still readable while faulted
+        session.status()  # still readable while faulted
         push_event(port, "usb.disconnect")
         session.process_events()
         self.assertEqual(session.state, S.SessionState.DISCONNECTED)
-        self.assertIsNotNone(session.last_fault)   # preserved
+        self.assertIsNotNone(session.last_fault)  # preserved
         self.assertIsNotNone(session.last_status)
 
     def test_clear_fault_returns_to_stopped(self):
         session, bridge, _, _ = make_stack()
         session.connect()
-        session.load(ECHO)                  # a valid image is loaded...
-        bridge.pe.faults = F.FAULT_LOAD     # ...then a fault appears
-        session.status()                    # observed: FAULTED
+        session.load(ECHO)  # a valid image is loaded...
+        bridge.pe.faults = F.FAULT_LOAD  # ...then a fault appears
+        session.status()  # observed: FAULTED
         self.assertEqual(session.state, S.SessionState.FAULTED)
         session.clear_fault()
         self.assertEqual(session.state, S.SessionState.STOPPED)
