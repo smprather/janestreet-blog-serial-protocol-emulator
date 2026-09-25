@@ -5,13 +5,14 @@
 > chip-side file: `tools/host_gui/` (image/frame contracts, serial transport,
 > session state machine, local page, fake PE model) and `tools/host_bridge/`
 > (MicroPython frame codec, TT SDK adapter, newline-JSON USB endpoint, scripted
-> acceptance runner). Host evidence: 154/154 host-GUI tests, 63/63 bridge tests
+> acceptance runner). Host evidence: 176/176 host-GUI tests, 67/67 bridge tests
 > (including the real host stack driven over the real bridge through fakes),
-> ruff/compileall clean, and `acceptance.py --fake` at 16 PASS / 0 FAIL /
+> ruff/compileall clean, and `acceptance.py --fake` at 22 PASS / 0 FAIL /
 > 1 SKIP. **Nothing here is chip-confirmed yet**: the PE host protocol, read
 > path and IRQ are RTL phases R1/R2 (plan Tasks 3-5, under the chip-side
-> manager), and the real Pico/USB run is unexecuted. See
-> `reviews/2026-09-25/HOST-GUI-TASK8-FINAL.md` and
+> manager), and the real Pico/USB run is unexecuted. The host side is
+> R2-ready (session/API/page read_cpu, R2 read gate, idle-fault visibility);
+> see `reviews/2026-09-25/HOST-GUI-R2-PREP.md` and
 > [[plans/host-controller-gui]].
 
 > **Latest E1/E2 review follow-up (2026-09-23): original findings fixed, but
@@ -359,13 +360,17 @@ about `main`'s chip state.**
 | Host session | `tools/host_gui/{transport,session,server}.py`, `web/` | newline-JSON USB CDC transport with id correlation and a bounded event queue; the state machine; the loopback local page | 97 cases; transport/session/API |
 | Fake PE + fake bridge | `tools/host_gui/fake_pe.py` | in-memory chip model: LOAD/STATUS/READ_CPU/READ_IMEM/READ_DMEM/DUMP_CORE/CLEAR_FAULT/TARGET + loopback target 1, sticky faults, run gating | 329 cases drive it |
 | Pico bridge | `tools/host_bridge/{pe_frame,tt_adapter,main}.py` | MicroPython frame codec, TT SDK HAL (project/clock/reset/run/`uio_oe_pico`/CS_N), newline-JSON endpoint with framed SPI, LOAD-forces-run-0, start-after-load, IRQ polling, 5 MHz first-pass SCLK cap | 43 cases; 8 fake-`ttboard` cases; 4 cases with the real host stack over the real bridge |
-| Acceptance runner | `tools/host_bridge/acceptance.py` | one scripted sequence for `--fake` (no device) and `--device` (hardware); per-step PASS/FAIL/SKIP + manifest; `dialout` hint instead of a traceback | `RESULT: PASS (16 PASS, 0 FAIL, 1 SKIP)` |
+| Acceptance runner | `tools/host_bridge/acceptance.py` | one scripted sequence for `--fake` (no device) and `--device` (hardware); per-step PASS/FAIL/SKIP + manifest; `dialout` hint instead of a traceback | `RESULT: PASS (22 PASS, 0 FAIL, 1 SKIP)` |
+| R2 read contract (host side) | `tools/host_gui/r2_reads.py` | the seven R2 read obligations as named probes, each `chip_confirmed=False`; read-range latches sticky `FAULT_RANGE`, READ payload low-word-first ascending (manager rulings) | 15 cases, green |
 
 Full result records, commands and limits: `reviews/2026-09-24/HOST-GUI-PHASE1B.md`,
 `reviews/2026-09-25/HOST-GUI-PHASE2-BRIDGE.md`,
 `reviews/2026-09-25/HOST-GUI-PHASE3-ACCEPTANCE.md`,
+`reviews/2026-09-25/HOST-GUI-R2-PREP.md`,
 `reviews/2026-09-25/HOST-GUI-TASK8-FINAL.md`. Operator steps: README's
 "Host controller" section and `tools/host_gui/tests/fixtures/acceptance.md`.
+The page shows the live CPU header (`/api/read_cpu`) and keeps a status poll
+running while connected so a chip fault on an idle board surfaces.
 
 ## Area budget — where the die actually goes
 

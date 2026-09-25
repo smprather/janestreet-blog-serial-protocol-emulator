@@ -105,9 +105,13 @@ the system interpreter; the phase-1b venv run covers that path). Full log:
   target 1) and R2 (read path) are under the chip-repo manager; `FakePE` is a
   model, so every "chip-confirmed" claim here is fake-hardware evidence only.
   No `rtl/`, `tb/`, `info.yaml` or regression file was touched.
-- **IRQ latency while idle** is poll-driven as described in the rulings; the
-  hardware acceptance run (plan Task 7) should measure it and add a stdin
-  poll/select loop if instant delivery is required.
+- **IRQ latency while idle** was poll-driven as described in the rulings;
+  **CLOSED host-side 2026-09-25 (`3790fc3`)**: the Pico can only sample
+  `IRQ_N` when a host request unblocks its read loop, so the operator page now
+  keeps a 2 s status poll running whenever the session is connected (not only
+  while running), and an integration test proves a stopped-session fault
+  reaches the host as `chip.irq` and moves the session to `FAULTED`. The
+  hardware acceptance run should still measure the end-to-end latency.
 - **Deferred minor (phase-1b host, cross-layer observation):** a bridge
   `ok=false` (e.g. an SPI timeout during `load`) raises `SessionError` but
   leaves `ControllerSession` in `LOADING` until the next successful
@@ -115,7 +119,9 @@ the system interpreter; the phase-1b venv run covers that path). Full log:
   failing case for it. Not changed here to keep this phase to Task 2.
 - **SDK-level failures during `hello`/`prepare` are fail-fast.** A missing
   project or pin map raises out of the serve loop instead of answering
-  `ok=false`; only the SPI transfer path has typed errors.
+  `ok=false`; only the SPI transfer path has typed errors. (The same
+  fail-fast path is what a wrong-project-name at startup hits; a typed
+  response there is a small follow-up.)
 - **Final review:** self-review (no subagent tool in this session) of the
   phase diff at `c28234d` against plan Task 2 and the phase-1b host contract;
   no Critical/Important findings remain after the three fixes above.

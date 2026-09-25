@@ -425,3 +425,33 @@ No chip-side file was touched; `git diff --name-only main..HEAD` still shows
 none. When R2 lands, the five acceptance checks are the hardware gate (they are
 expected to fail on pre-R2 hardware) and the `chip_confirmed` flags flip only
 with that run as evidence.
+
+---
+
+## 13. Manager rulings applied + same-turn host chain (2026-09-25)
+
+Manager RULINGs settled the two R2 read questions (out-of-range READ latches
+sticky `FAULT_RANGE`, `CLEAR_FAULT` clears it; READ payload is low-word-first
+ascending like LOAD) and fixed the chaining protocol (chain within the same
+turn; the interrupt file is a review trigger, not end of work). Applied in
+`264ce27`..`3790fc3`:
+
+- **Rulings bound into the host contract** — `r2_reads` cites both, the range
+  probe asserts the sticky fault, and two tests pin ascending order and the
+  latch/clear cycle. HANDOFF's role section was rewritten for same-turn chaining.
+- **Session/API/page `read_cpu`** (`a6f46c9`, `a0b3577`, `e879290`) — a
+  non-halting, full-width `read_cpu` on the session, an `/api/read_cpu` route,
+  and a live CPU header on the page, so the host read path is exercised through
+  the state machine end to end.
+- **Lifecycle gate** (`bbae976`) — `r2_range_fault_lifecycle` proves bad read
+  -> `faults=0x0004` + `FAULTED` -> `CLEAR_FAULT` `0x0000` + `STOPPED`; the
+  dry run is `PASS (22/0/1)`.
+- **Idle-fault visibility closed** (`3790fc3`) — the phase-2 open limit is
+  closed host-side: the page keeps a 2 s status poll while connected, and an
+  integration test proves a stopped-session fault reaches the host as
+  `chip.irq` and moves the session to `FAULTED`.
+
+Suite state after the chain: host_gui 176 (system + venv), bridge 67, r2 15,
+acceptance `--fake` `PASS (22 PASS / 0 FAIL / 1 SKIP)`, ruff / `node --check` /
+compileall clean. No chip-side file touched; the R2 read path remains
+not-chip-confirmed until the RTL lands.

@@ -8,6 +8,19 @@ ops the chip side will implement, clearly marked not-chip-confirmed, so
 chip-side R2 can be validated end-to-end the moment it lands." No chip-side
 change; this branch still touches no `rtl/`/`tb/`/`info.yaml` file.
 
+## Manager RULINGs (settled 2026-09-25, applied in `264ce27`)
+
+- **An out-of-range READ latches sticky `FAULT_RANGE`** (0x4), consistent with
+  out-of-range writes; `CLEAR_FAULT` clears it. The model default is `latch`
+  (the `status-only` parameter is kept only so the rejected behavior stays
+  reachable in a test).
+- **READ payload is low-word-first, ascending** — the same ascending stream
+  LOAD uses: `READ_IMEM(a,n)` returns words `a..a+n-1` in order, `READ_DMEM(a,n)`
+  packs bytes `a..a+n-1` big-endian per word.
+- **Chaining happens within the same turn** (process fix): the interrupt file is
+  the manager's async review trigger, not the end of work; a turn ends only on
+  IDLE-QUEUE-EMPTY / QUESTION / BLOCKED. HANDOFF's role section was rewritten.
+
 **What R2 is (chip side, not done):** plan Tasks 3-5 / review rows P16-P17 —
 full-width CPU debug ports (PC/A/X/Y/insn, replacing the 8-bit `dbg_pc`/`dbg_a`
 truncation), a `pe_imem` host read port, a SoC host-read mux with explicit
@@ -43,6 +56,34 @@ on the chip; nothing below is chip-confirmed.**
    fail* — they are the gate, not decoration.
 4. **Docs** — acceptance checklist fixture and README record the new 21/0/1
    dry-run shape and point at `r2_reads.py`.
+
+## Same-turn chain after the rulings (commits `a6f46c9`..`3790fc3`)
+
+Once the rulings landed, the host side kept chaining within the turn:
+
+- **`a6f46c9` — session-level `read_cpu()`.** `ControllerSession.read_cpu()`
+  returns a typed `CpuSnapshot(pc,a,x,y,insn,state)`, full-width and
+  **non-halting** (requires only a connected session), and the acceptance
+  `r2_read_cpu` check now drives it instead of the raw transport.
+- **`a0b3577` — `/api/read_cpu` route** (`Api.read_cpu` -> `{"cpu": {...}}`),
+  with the FastAPI route exercised in the phase-1b venv.
+- **`bbae976` — lifecycle gate.** `r2_range_fault_lifecycle` proves the ruled
+  sticky-fault cycle end to end: bad read -> STATUS `faults=0x0004` + session
+  `FAULTED` -> `CLEAR_FAULT` `0x0000` + `STOPPED`. The dry run is
+  `PASS (22 PASS, 0 FAIL, 1 SKIP)`.
+- **`e879290` — the page shows the live CPU header** (PC/A/X/Y/insn from
+  `/api/read_cpu`, polled 1x/s while running).
+- **`3790fc3` — closed the phase-2 open limit "IRQ latency while idle".** The
+  Pico samples `IRQ_N` only when a host request unblocks its read loop, so an
+  idle session never saw a fault. The page now keeps a 2 s status poll
+  **whenever connected**; an integration test proves a stopped-session fault
+  reaches the host as `chip.irq` and moves the session to `FAULTED` with
+  `last_fault` retained.
+
+Suite state at the end of the chain: host_gui 176 (system **and** venv),
+bridge 67, r2 15, acceptance `--fake` `PASS (22/0/1)`, ruff clean, `node
+--check` clean, compileall clean. TDD red->green for every task. No chip-side
+file touched.
 
 ## Evidence
 
