@@ -16,6 +16,12 @@
 # file it mutates cannot report anything.
 set -u
 cd "$(dirname "$0")/.."
+# The single-run lock: this worktree is shared and a concurrent run would be
+# mutating and restoring the same RTL. Inherited from run_all.sh when this is
+# one of its children, so the harnesses do not deadlock their own parent.
+# shellcheck source=regress/run_lock.sh
+. "$(dirname "$0")/run_lock.sh"
+chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
 RTL="$ROOT/rtl/pe_eth_mac.v"
 TB="$ROOT/tb/tb_pe_eth_mac.v"

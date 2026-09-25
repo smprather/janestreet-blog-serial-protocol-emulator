@@ -38,6 +38,12 @@
 # in the stage modules the mux composes.
 set -u
 cd "$(dirname "$0")/.."
+# The single-run lock: this worktree is shared and a concurrent run would be
+# mutating and restoring the same RTL. Inherited from run_all.sh when this is
+# one of its children, so the harnesses do not deadlock their own parent.
+# shellcheck source=regress/run_lock.sh
+. "$(dirname "$0")/run_lock.sh"
+chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
 FILES=(rtl/pe_codec_mux.v rtl/pe_bitstuff.v rtl/pe_nrzi.v rtl/pe_manch.v)
 LOG=/tmp/mutate_codec.log

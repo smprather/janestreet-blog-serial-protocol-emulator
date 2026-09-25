@@ -14,6 +14,12 @@ set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
+# The single-run lock: this worktree is shared and a concurrent run would be
+# mutating and restoring the same RTL. Inherited from run_all.sh when this is
+# one of its children, so the harnesses do not deadlock their own parent.
+# shellcheck source=regress/run_lock.sh
+. "$(dirname "${BASH_SOURCE[0]}")/run_lock.sh"
+chip_take_run_lock "$(basename "$0")"
 
 # The SRAM behavioural model, via the same helper run_all.sh uses, and BEFORE
 # run_case() because the compile line inside it needs the variable. Compiling

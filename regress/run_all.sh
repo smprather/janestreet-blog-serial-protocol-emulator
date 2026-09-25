@@ -24,6 +24,15 @@
 
 set -u
 cd "$(dirname "$0")/.." || exit 1
+# The single-run lock. This worktree is shared, and two concurrent runs would
+# have their mutation harnesses mutating and restoring the SAME RTL at once —
+# the 2026-09-25 incident (manager's run_all_merge + the worker's run_all).
+# The lock is inherited by the harnesses this script invokes, so they run
+# without re-taking it. See regress/run_lock.sh for the full contract.
+# shellcheck source=regress/run_lock.sh
+. "$(dirname "$0")/run_lock.sh"
+chip_take_run_lock "run_all.sh"
+trap 'chip_release_run_lock' EXIT
 # Capture the repo root NOW, as an absolute path. This script cds into sim/ and
 # then back to the root, and `$0` may itself be relative ("./regress/run_all.sh"), so
 # any later `dirname "$0"` resolves against the wrong directory. Gates that are

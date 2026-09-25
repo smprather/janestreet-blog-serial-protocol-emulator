@@ -57,6 +57,21 @@ to come back and find nobody working")
   green at every task boundary (mutation harnesses must restore and
   `cmp`-verify before you move on); never reset/revert/clean the shared
   uncommitted worktree.
+- **ONE RUN AT A TIME (single-run lock, 2026-09-25).** This worktree is shared,
+  so only one mutation-capable run may be in it at once. `regress/run_all.sh`,
+  every `regress/mutate_*.sh` and `regress/run_firmware_tests.sh` take
+  `flock` on `/tmp/chip-run-all.lock` (via `regress/run_lock.sh`) and **fail
+  fast** with exit 75 and a message naming the current holder. The lock is
+  process-based, so a killed run releases it automatically — there is no stale
+  lock to clear by hand. It is reentrant through `CHIP_RUN_LOCK_HELD`, because
+  `run_all.sh` invokes the mutation harnesses as its own children; those skip
+  the lock rather than deadlocking their parent. The hazard it closes is real:
+  on 2026-09-25 the manager's `run_all_merge` and the worker's `run_all` ran
+  CONCURRENTLY, so two harnesses were mutating and restoring the same RTL at
+  once. The per-case `cmp` restores held and nothing was corrupted, but a run
+  can read a file another run has mutated — precisely the "nonsense result"
+  failure the harnesses exist to detect. If you see `REFUSING TO START`, wait
+  for the other run; do not retry in a loop.
 - **Shared worklog (user standing order 2026-09-25):** append EVERY state
   change to `WORKLOG.md` in the repo root — one line,
   `YYYY-MM-DD HH:MM TZ | protocol-worker | EVENT | detail`, newest at the
