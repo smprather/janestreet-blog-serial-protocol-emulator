@@ -169,6 +169,30 @@ def encode_frame(opcode: int, sequence: int, target: int,
     return body + crc16_ccitt(body).to_bytes(2, "big")
 
 
+MAX_WAIT_WORDS = 15   # the chip's worst-case wait words (R2 read contract)
+
+
+def strip_wait_words(raw: bytes, max_wait: int = MAX_WAIT_WORDS) -> bytes:
+    """Return the real frame from a response that may lead with 0xFFFF words.
+
+    Mirrors ``tools/host_bridge/pe_frame.py`` (the Pico cannot import the host
+    package, so the codec is kept in two copies that a fuzzer and a parity
+    test tie together). Leading-ONLY and bounded, so a 0xFFFF inside a payload
+    is data. Raises ``FrameError`` if no real frame follows, so an all-filler
+    stream is a timeout rather than a bogus decode.
+    """
+    if len(raw) < 4:
+        raise FrameLengthError("response too short to hold a frame")
+    words = _words_from_bytes(bytes(raw)[:len(raw) - (len(raw) % 2)])
+    index = 0
+    while index < len(words) and words[index] == 0xFFFF and index < max_wait:
+        index += 1
+    if index >= len(words) or words[index] == 0xFFFF:
+        raise FrameCRCError(
+            f"no frame after {index} wait words (chip bound {max_wait})")
+    return _bytes_from_words(words[index:])
+
+
 def decode_frame(raw: bytes) -> Frame:
     """Decode and validate one frame. Raises a typed ``FrameError``."""
     if not isinstance(raw, (bytes, bytearray)):
