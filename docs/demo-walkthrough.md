@@ -129,6 +129,104 @@ narrow set of signals instead of everything, for exactly that reason. The
 alternative — a fast regression that does not measure milliseconds — cannot make
 the claim at all.
 
+## Three more, where the chip READS the world
+
+The six acts above all *drive* something. These three are the other direction:
+the pin is an input, the thing being measured belongs to somebody else, and the
+firmware has to recover a number from a waveform it does not control. The claim
+is the same cycle-accuracy claim and the same evidence — measured on the pads,
+reconstructed by a model that was written from the datasheet rather than from
+the firmware, and mutation-tested so that a "close enough" program cannot pass.
+
+**8. DS18B20 — 1-Wire, and the only act where the DEVICE initiates.**
+`firmware/ds18b20.pe` (205 words) drives a DS18B20 on pin 6. After the host's
+reset pulse **the sensor answers** with a presence pulse, and every read slot is
+timed by the sensor rather than by the host, so the firmware's edge-wait loops
+and the pin matrix's read-back are both load-bearing here in a way they are not
+in the DHT11. Measured on the pads by `tb_pe_soc_ds18b20`: reset **485.7 µs**
+(minimum 480), presence **120.0 µs** (datasheet 60–240), a write-1's low pulse
+**5.0 µs** and a write-0's **64.8 µs** (bands 1–15 and 60–120), the two commands
+**decoded from the pads as `cc` and `be`** rather than read out of the firmware,
+**16 read slots**, the temperature bytes back as **`2b 01`** LSB first, read-slot
+initiation pulses **6.2–6.3 µs**, and the sample instant **10.8 µs after the
+sensor's latest permitted response and 19.2 µs before its hold ends**.
+
+> The single most useful thing this act shows is that **a read slot and a write
+> slot have opposite polarity**: a one is the line LOW, because the *slave* is
+> holding it down, whereas in a write slot the line being low is the *host's*
+> zero. The firmware had the write slot's polarity, and both bytes came back
+> bit-for-bit complemented — `2b` as `d4`, `01` as `fe` — with the right bit
+> count, the right number of ones, and nothing at all wrong-looking in the run.
+
+**9. NEC infrared remote — the one act with no wire at all.**
+`firmware/nec_ir.pe` (165 words) drives an IR LED on pin 6. Nothing is connected
+to anything: the only thing that leaves the pin is light, so a NEC receiver has
+to *find* a 38 kHz burst, integrate it, and time the silences between bursts to
+learn that a gap of 1.6875 ms is a zero and a gap of 0.5625 ms is a one. Nothing
+resynchronises to anything, which is what makes the carrier the claim:
+`tb_pe_soc_ir_nec` measures **38,049 Hz off the pin (+0.128 % on 38.000 kHz)**,
+the two half periods **787.95–794.95** and **788.95 clocks**, a **8988.0 µs**
+leader in 343 carrier cycles, a **4504.0 µs** leader gap, eight data bursts of
+**552.0 µs**, four long gaps and four short ones, a stop burst, and the payload
+decoded **LSB first as `a5`**.
+
+> The mutation suite found this act's own blind spot, and it is the most useful
+> result in the block: putting **both** carrier half-periods on the same delay
+> pair gives a carrier of 788 clocks one way and 782 the other. That is 38.05 kHz
+> against 37.88 — **0.4 % asymmetric on every single edge** — and it sits inside
+> every frequency window a real receiver has, so it **passed**. "Each half is
+> constant" is not "the two halves are equal": a receiver does not care that the
+> carrier is on frequency, it cares that it is a *carrier*, and one whose halves
+> differ is a square wave with the wrong duty cycle.
+
+**10. Stepper step/dir ramp — a mechanism, not a wire.**
+`firmware/stepper_ramp.pe` (96 words) drives STEP on pin 6 and DIR on pin 5. A
+stepper driver counts STEP edges and the motor's position *is* that count, so
+there is no acknowledgement, no status word, and nothing at the far end to
+resynchronise to: a step period is a single number and it is either right or the
+motor is somewhere it will never report being. Twelve steps — six one way, the
+direction changes, six back — with the period falling by **exactly 5110 clocks
+(85.2 µs) every step**. `tb_pe_soc_stepper_ramp` measures **1661.133 µs falling
+to 809.501 µs (602 Hz → 1235 Hz)**, twelve distinct periods, all eleven intervals
+strictly shortening, and the direction changed **once**, **6.00 µs** before the
+next STEP edge so the driver is given its setup time.
+
+> The ramp is a **subtraction**, not a table of twelve constants: the program
+> holds one counter and subtracts 10 from it per step, so the linearity is *in
+> the program* and the testbench can check it as an **equality against 5110
+> clocks** rather than a window. The one interval that is not on the line — the
+> direction change, the only thing in the program that is not a step — is pinned
+> by a **sum** with its neighbour rather than excused. And this act found a trap
+> worth putting in the findings list: **`PINOE` and `TXPIN` are whole
+> registers**, so a write meaning "this pin" is a write that also means "the
+> other pin". The direction was cleared by the first step, then released during
+> every pulse, then released *at exactly the STEP edge where a driver decodes
+> it* — four writes, one cause, and the direction never once changed on the wire.
+
+### What the three input acts cost, and what they add
+
+| | DS18B20 | NEC IR | Stepper |
+|---|---|---|---|
+| firmware | 205 words | 165 words | 96 words |
+| simulated time | 3.0 ms | **32.1 ms** | 14.4 ms |
+| regression time | 3.6 s | **42.7 s** | 20.7 s |
+| the number that is the claim | 10.8 / 19.2 µs of margin | **38,049 Hz, +0.128 %** | **exactly 5110 clocks per step** |
+| mutants caught | 12/12 | 11/11 | 11/11 |
+
+`regress/mutate_timing_tb.sh` now runs **48 firmware mutants** in parallel on
+private copies and verifies afterwards that the firmware tree was never written
+to. Five of them perturb a **counted delay constant** through `peasm --const`
+rather than a text edit, because the 1-Wire and infrared programs name their
+delays as symbols — the value is a *fitted instruction count* living in the
+assembler's table, and a harness that could only `sed` a source file would
+silently cover no counted delay at all.
+
+**The honest cost:** these are the two slowest testbenches in the repository
+(52.5 ms for the servo, 32.1 ms here) and they run in the same parallel
+`--fast -j8` pass, so the wall-time cost is bounded by the slowest one rather
+than the sum. What buys it is that the claims are about **milliseconds**, and a
+regression that refused to simulate milliseconds could not make them.
+
 ## How the host controller fits in the demo
 
 The GUI is not a mock: it speaks the real wire protocol to the real bridge.

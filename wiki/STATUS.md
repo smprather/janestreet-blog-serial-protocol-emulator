@@ -28,10 +28,59 @@
 > (`run` raised at a clock edge silently drops the first instruction, which cost
 > the servo firmware its first pulse-table entry). All recorded in
 > `reviews/2026-09-25/TIMING-PROTOCOLS-REVIEW.md`. **REGRESSION ON THIS BRANCH:
-> RTL 34/37 — the three failures (`tb_pe_soc_eth`, `tb_pe_soc_eth_loop`,
-> `tb_pe_eth_mac`) are PRE-EXISTING at this branch's base commit ecb2b13, proven
-> by running them from a pristine `git archive HEAD` checkout; they are not
-> caused by this work and need a rebase onto main before the merge.**
+> RTL 34/37 at the time Block 1 landed — the three failures (`tb_pe_soc_eth`,
+> `tb_pe_soc_eth_loop`, `tb_pe_eth_mac`) were PRE-EXISTING at that commit's base
+> ecb2b13 and were resolved by the merge onto `main`, so the current figure is
+> below.**
+
+> **BLOCK 2 — INPUT CAPTURE, where the chip READS the world (2026-09-25, same
+> branch).** Three acts in the direction the six above are not: the pin is an
+> input, the timing belongs to somebody else, and the firmware recovers a number
+> from a waveform it does not control. **DS18B20 1-Wire** (`ds18b20.pe`, 205
+> words) is the only act here where the **device initiates** — the sensor answers
+> the reset with a presence pulse and times every read slot — measured on the
+> pads: reset **485.7 us**, presence **120.0 us** (datasheet 60–240), write
+> 1-low **5.0 us** / 0-low **64.8 us**, both commands **decoded from the pads**
+> as `cc` and `be`, **16 read slots**, bytes **`2b 01`** LSB first, sample
+> **10.8 us** after the sensor's latest permitted response and **19.2 us** before
+> its hold ends. **NEC infrared** (`nec_ir.pe`, 165 words) is the only act with
+> **no wire at all** — light, and a receiver that must find a 38 kHz burst and
+> time the gaps between them: **38,049 Hz off the pin, +0.128 %**, half periods
+> **787.95–794.95** and **788.95 clocks**, leader **8988.0 us** in 343 carrier
+> cycles, eight data bursts of **552.0 us**, payload **`a5`** LSB first.
+> **Stepper step/dir ramp** (`stepper_ramp.pe`, 96 words) is the only act that
+> drives a **mechanism**, where the driver's edge count *is* the motor's
+> position: twelve steps falling by **exactly 5110 clocks (85.2 us) each**,
+> measured **1661.133 us → 809.501 us** (602 → 1235 Hz), direction changed once
+> with **6.00 us** of setup. The ramp is a **subtraction, not a table**, so the
+> linearity is in the program and is checked as an **equality against 5110
+> clocks**, and the one interval not on the line (the direction change) is
+> **pinned by a sum** with its neighbour rather than excused. `peasm` gained a
+> `--const NAME=VALUE` override so a mutation can perturb a **fitted counted
+> delay constant** — the 1-Wire and infrared programs name their delays as
+> symbols, so a `sed`-only harness would silently cover no counted delay at all.
+> `regress/mutate_timing_tb.sh` is now **48 firmware mutants, 48 detected, 0
+> survived**, firmware tree `cmp`-verified untouched. **REGRESSION ON THIS
+> BRANCH: RTL 43/43, firmware 36/36, lint clean, 14 mutation suites.**
+> **Cost, stated:** the NEC TB simulates 32.1 ms (42.7 s) and the stepper 14.4 ms
+> (20.7 s), the two slowest here; they run in the same `--fast -j8` pass, so the
+> wall cost is bounded by the slowest rather than the sum.
+> **Eighteen defects found and fixed, and the split is the finding: eleven in the
+> firmware and SEVEN IN THE TESTBENCHES** — a quantised `$time` (twice), a
+> rounding artefact poisoning a minimum, an accumulator reporting numbers no
+> waveform has, a check reading a value the loop had not written (twice), a
+> watch on the data register instead of the pin, and an edge *count* where the
+> claim was about edge *position*. The three best are the ones that are
+> invisible from the waveform: a **read slot's polarity is the opposite of a
+> write slot's** (both bytes came back bit-complemented, `2b`→`d4`); the
+> **eight-bit immediate truncated twice** (`LDI A, 342` → 86, a 2.3 ms "9 ms"
+> leader, and `LDI A, 529` → 17, a 136 us "4.5 ms" gap); and
+> **`PINOE`/`TXPIN` are whole registers**, so four different writes each cleared
+> the other pin, and the stepper's direction never once changed on the wire.
+> The gate also found an act's own **blind spot** twice — a carrier that
+> alternated 788/782 clocks passed every window, and a *benign* mutant survived
+> twice and was **deleted rather than caught**, because a gate claiming to catch
+> a no-op is the same error as a check that cannot fail.
 
 # Project Status — through 10BASE-T receive
 

@@ -318,9 +318,18 @@ CONSTS: dict[str, int] = {
     # which the direction has to be driven. That was the fourth write in
     # stepper_ramp.pe that cleared the other pin; see that file's header.
     "ST_BOTH": 0x60,
-    "ST_PULSE": 2,  # the low pulse, on the (2,13) pair: 1 * 69 + 4 = 73 clocks
-                    # = 1.2 us, and a driver wants at least 1 us
-    "ST_SETUP": 6,  # the direction setup, same pair: 6 * 69 + 4 = 418
+    # Both of these are on the (2,13) pair, whose outer step is
+    # 10 + (4*13+7) = 69 clocks, so the delay is (n1-1)*69 + 4 -- which is
+    # (n1-1) steps, NOT n1. A comment here said "6 * 69 + 4 = 418" for
+    # ST_SETUP, which is off by a whole step: it is 5 * 69 + 4 = 349 clocks,
+    # 5.8 us, and the TB measured the direction change costing 373 clocks
+    # against a 349-clock delay, so 24 instructions is the whole of the
+    # bookkeeping. An arithmetic error in the comment beside a fitted constant
+    # is the same defect as an error in the constant, and cheaper to make.
+    "ST_PULSE": 2,  # the low pulse, (2-1)*69+4 = 73 clocks = 1.2 us; a
+                    # driver wants at least 1 us
+    "ST_SETUP": 6,  # the direction setup, (6-1)*69+4 = 349 clocks = 5.8 us;
+                    # a driver wants at least 5 us
     "ST_GAP0": 196,  # the first step period, on (4,40): 196 * 511 + 4
 }
 
