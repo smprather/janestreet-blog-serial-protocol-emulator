@@ -10,3 +10,4 @@ pe_ctrl_bit14|induct|CAUGHT-no-closure
 pe_ctrl_clear_uncond|induct|CAUGHT-no-closure
 pe_soc_owner_clear_guard_removed|induct|CAUGHT-no-closure
 pe_ctrl_bp_hit_no_hold|induct|CAUGHT-no-closure
+pe_soc_owner_set_guard_removed|induct|CAUGHT-no-closure

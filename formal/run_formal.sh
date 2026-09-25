@@ -156,9 +156,14 @@ SOC_RTL="rtl/pe_soc.v rtl/pe_eth_tx.v rtl/pe_serdes.v rtl/pe_nrzi.v rtl/pe_bitst
          rtl/pe_codec_mux.v rtl/pe_manch.v rtl/pe_dru.v rtl/pe_crc.v rtl/pe_fbuf.v \
          rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_eth_mac.v rtl/pe_pinmux.v"
 # C1 (the clear-side guard) is UNBOUNDED. C2 (the set-side guard, finding F2's
-# fix) is stated and gate-depth checked, but not inductive on this toolchain --
-# see the label in formal_pe_soc.v. F2's enforcement evidence is the directed TB
-# case + its mutation in regress/mutate_eth_tx_loop_tb.sh.
+# fix) is NOW ALSO UNBOUNDED (2026-09-25): it closes by k-induction at k=1
+# because the guard tap and the busy tap are clocked from the same edge of the
+# same always block -- a one-step property of the guard's update equations, with
+# no free snapshot in the claim. It is mutant-checked (the owner-set-guard-removed
+# formal mutant breaks it; formal/mutants.sh case 14). The separate
+# pe_soc_owner_gate_depth BMC target is retained as the gate-depth cross-check.
+# F2's independent enforcement evidence is the directed TB case in
+# tb_pe_soc_eth_loop.v plus its mutation in regress/mutate_eth_tx_loop_tb.sh.
 FORMAL_MEMORY_MAP=1 run_target pe_soc_owner_gate_depth formal_pe_soc "$DEPTH" prove \
   formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
 FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX="${FORMAL_INDUCT_MAX:-3}" FORMAL_MEMORY_MAP=1 \

@@ -250,9 +250,9 @@ print("  tx_path clear guard removed (the owner can be taken from a busy engine)
 p.write_text(t.replace(needle, "end else if (1'b1) begin"))
 PY
 if apply_mutation "$TMP/mut_owner.py"; then
-  # -DFV_INDUCT: the shape C1 is PROVED in. Without it the target also carries
-  # C2, whose induction never closes on the clean design either -- so a
-  # "NOTPROVED" here would not be a differential.
+  # -DFV_INDUCT: the shape C1 is PROVED in. C2 is also in the target now (it is
+  # always-on since the 2026-09-25 strengthening), but the set guard is untouched
+  # by THIS mutation, so C2 still closes and the NOTPROVED below is C1's catch.
   FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=3 FORMAL_MEMORY_MAP=1 \
   fv_case pe_soc_owner_clear_guard_removed 1 formal_pe_soc \
     -DFV_INDUCT formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
@@ -289,15 +289,37 @@ cat > "$TMP/mut_bp_range.py" <<'PYMUT'
 # differential (clean TB passes, mutant TB fails).
 PYMUT
 
-# F2's SET-side guard is NOT in this harness ON PURPOSE. Its formal claim (C2)
-# is labelled gate-depth-only in formal_pe_soc.v: it is not inductive on this
-# toolchain, so the clean design does not close the full target either -- a
-# mutation run without -DFV_INDUCT reports a "catch" that is not a differential.
-# The enforcement for F2 is the directed TB case (tb_pe_soc_eth_loop's
-# run_owner_probe) and the `owner-set-guard-removed` mutation in
-# regress/mutate_eth_tx_loop_tb.sh, where the clean TB passes and the mutant
-# fails (verified: clean PASS, mutant FAIL on the rose_mid_serdes and tx_path
-# checks).
+# F2's SET-side guard, now a FIRST-CLASS formal mutant (2026-09-25). When this
+# case was written C2 was labelled gate-depth-only, so the set guard had no
+# differential formal mutant here -- only the directed TB case. That is no
+# longer true: C2 is now UNBOUNDED (it closes by k-induction at k=1 because the
+# guard tap and the busy tap clock from the same edge of the same always block),
+# so the clean design closes this target and a NOTPROVED below IS a real
+# differential. The mutant removes the set guard -- the pre-fix F2 bug, where a
+# TXCTRL write during a live SERDES transmission steals the codec mid-frame --
+# and C2 must catch it.
+cat > "$TMP/mut_owner_set.py" <<'PY'
+import pathlib, sys
+p = pathlib.Path('rtl/pe_soc.v'); t = p.read_text()
+needle = "if (!ser_tx_busy) tx_path <= 1'b1;"
+if t.count(needle) != 1: sys.exit(f"expected 1 set guard, found {t.count(needle)}")
+print("  tx_path set guard removed (the owner can be stolen from a busy SERDES)")
+p.write_text(t.replace(needle, "tx_path <= 1'b1; // MUTANT"))
+PY
+if apply_mutation "$TMP/mut_owner_set.py"; then
+  # C2 is now proved by INDUCTION (unbounded), so run the mutant in the same
+  # shape the clean claim is proved in. The claim is always-on, so it is in the
+  # target with or without -DFV_INDUCT.
+  FORMAL_SAT_MODE=induct FORMAL_INDUCT_MAX=3 FORMAL_MEMORY_MAP=1 \
+  fv_case pe_soc_owner_set_guard_removed 1 formal_pe_soc \
+    -DFV_INDUCT formal/pe_soc/formal_pe_soc.v $SRAM_STUB $SOC_RTL
+  restore_and_verify
+fi
+# F2's independent enforcement evidence is ALSO the directed TB case
+# (tb_pe_soc_eth_loop's run_owner_probe) and the `owner-set-guard-removed`
+# mutation in regress/mutate_eth_tx_loop_tb.sh, where the clean TB passes and
+# the mutant fails (verified: clean PASS, mutant FAIL on the rose_mid_serdes and
+# tx_path checks). The formal mutant above is the wire-level-independent twin.
 
 rm -rf "$TMP"
 echo
