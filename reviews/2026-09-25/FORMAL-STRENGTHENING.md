@@ -191,3 +191,22 @@ harness is untouched (12 caught / 0 survived).
   `pe_soc_owner_set_guard_removed`.
 * Full formal gate: 8 proved, 0 failed, 1 reachable-at-depth, 1 vacuous-at-depth,
   0 findings. Full mutant harness: 12 caught, 0 survived, 0 inconclusive.
+
+## 5. Using the unlock: promoting BMC-only claims to unbounded
+
+With SMT induction available, the campaign's BMC-only targets were re-attempted
+for promotion from "bounded, depth-16" to **UNBOUNDED** — the shape the campaign
+header says is the real strength. This runs EXISTING claims through a stronger
+engine; it changes no claim semantics and no RTL.
+
+| target | before | via z3 SMT induction | mutant hygiene |
+|---|---|---|---|
+| `pinmux_od_invariant` | BMC depth 16 | **UNBOUNDED** (BMC PASSED + INDUCTION PASSED k=3, re-run PASSED) | `pinmux_od_m1` (od term removed) FAILS to prove under induction → mutant CAUGHT |
+| `eth_tx_safety` | BMC depth 16 | attempted, **does not close** (k=3/6/10) — frame-engine claim with the same history/snapshot character as the pe_ctrl hard set | n/a (not promoted) |
+| `pe_ctrl_r2` full set | BMC depth 16 | attempted, does not close — the four hard claims (§2b/§3c) | n/a |
+
+So the unlock bought one genuine promotion: **`pinmux_od_invariant` is now
+proven unbounded rather than at depth 16**, and its mutant is killed under the
+same engine and shape (rule 1). `eth_tx_safety` is honestly recorded as still
+bounded; the full `pe_ctrl_r2` set is bounded by the four hard claims, which
+remain the manager's claim-authoring call.
