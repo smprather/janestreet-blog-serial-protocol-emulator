@@ -43,10 +43,35 @@ chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
 SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
 SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v $SRAM_MODEL"
-# run_all.sh captures this script's stdout in /tmp/mutate_fwbus.log; keep each
-# simulator run on a different path so it cannot truncate the outer log.
-LOG=/tmp/mutate_fwbus_case.log
-BAK=$(mktemp -d /tmp/fwbus_mut.XXXXXX)
+# EVERY /tmp PATH IN THIS HARNESS IS WORKTREE-SCOPED, and the reason is not
+# tidiness -- it is a measurement that came out wrong.
+#
+# regress/run_lock.sh takes a PER-WORKTREE lock on purpose ("concurrent runs in
+# DIFFERENT worktrees are safe (disjoint files)"), so parallel suites in
+# different worktrees are the DESIGNED case, not an accident. But the paths
+# below were all bare /tmp names, and /tmp is shared across worktrees. So two
+# parallel suites -- mine, and fw-timing's or the main repo's -- each ran this
+# harness and each wrote /tmp/mutate_fwbus_case.log, and whichever finished last
+# won. Observed directly: after a full green run of MY suite, the log I read
+# reported "detected: 12" in the pre-a39caba format, and /tmp carried
+# mutate_timing.log, mutate_eth.log and mutate_ctrl_r3.log, none of which are
+# gates in my run_all.sh. The twelve was fw-timing's harness, not mine.
+#
+# That also explains an earlier reading I had dismissed as a stale file and
+# then written a WORKLOG correction about: it was never stale, it was another
+# worktree's, and the correction was wrong about why.
+#
+# The lock's claim that different worktrees are safe is therefore false for any
+# shared /tmp path, which is a run_all.sh-wide issue raised as a QUESTION. The
+# paths THIS harness owns are fixed here, using the same worktree digest the
+# lock uses.
+_wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
+[ -n "$_wt" ] || _wt=shared
+# run_all.sh captures this script's stdout in ITS own /tmp/mutate_fwbus.log,
+# which is not worktree-scoped and is the manager's to change; keep every path
+# this harness writes on its own so a parallel run cannot truncate them.
+LOG=/tmp/mutate_fwbus_case.${_wt}.log
+BAK=$(mktemp -d /tmp/fwbus_mut.${_wt}.XXXXXX)
 
 # The five (firmware, testbench) pairs. The firmware is the DUT of each.
 #
@@ -96,15 +121,15 @@ verify_restore() {
 run_tb() {
   local fw="$1" tb="$2"
   if ! python3 "$ROOT/tools/fw/peasm.py" "$ROOT/firmware/$fw.pe" \
-        -o "$ROOT/firmware/$fw.hex" >/tmp/mut_fwbus_asm.log 2>&1; then
+        -o "$ROOT/firmware/$fw.hex" >"/tmp/mut_fwbus_asm.${_wt}.log" 2>&1; then
     return 2
   fi
   if ! (cd "$ROOT/sim" && iverilog -g2012 -s "$tb" \
-        -o "/tmp/mut_fwbus_$tb.vvp" $SRCS "$ROOT/tb/$tb.v") \
-        >/tmp/mut_fwbus_cc.log 2>&1; then
+        -o "/tmp/mut_fwbus_${_wt}_$tb.vvp" $SRCS "$ROOT/tb/$tb.v") \
+        >"/tmp/mut_fwbus_cc.${_wt}.log" 2>&1; then
     return 2
   fi
-  (cd "$ROOT/sim" && timeout 300 vvp "/tmp/mut_fwbus_$tb.vvp") >"$LOG" 2>&1
+  (cd "$ROOT/sim" && timeout 300 vvp "/tmp/mut_fwbus_${_wt}_$tb.vvp") >"$LOG" 2>&1
   # THE VERDICT IS THE MECHANISM, NOT MERELY "NOT PASSING". This harness used
   # to decide `grep -qE "^PASS"` and call everything else "detected", which
   # silently conflated two very different outcomes:
@@ -165,7 +190,7 @@ check_mutation() {
     echo "  [$name] detected (HANG/timeout only -- weaker: no assertion fired)"
     pass=$((pass+1)); hangs=$((hangs+1))
   else
-    echo "  [$name] HARNESS ERROR (assemble/compile failed, or no verdict in the log; see /tmp/mut_fwbus_*.log)"
+    echo "  [$name] HARNESS ERROR (assemble/compile failed, or no verdict in the log; see /tmp/mut_fwbus_*.${_wt}.log)"
     fail=$((fail+1))
   fi
   restore; verify_restore
