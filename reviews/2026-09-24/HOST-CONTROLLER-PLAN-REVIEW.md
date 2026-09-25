@@ -312,3 +312,29 @@ commands are in `reviews/2026-09-24/HOST-GUI-PHASE1B.md`:
    no fault; clearing a fault after an aborted load returns to `PREPARED`;
    `READ_CPU` stays non-halting while `READ_IMEM`/`READ_DMEM`/`DUMP_CORE`
    require `run=0`.
+
+---
+
+## 9. Host Task 2 bridge delivered (2026-09-25)
+
+Plan Task 2 is implemented, verified and committed on `host-controller-gui`
+at `c28234d`; evidence is in `reviews/2026-09-25/HOST-GUI-PHASE2-BRIDGE.md`.
+
+- `tools/host_bridge/{pe_frame,tt_adapter,main}.py`: MicroPython frame codec
+  shared with the host through `tests/golden_vectors.json`, the TT SDK HAL
+  adapter (uio[4:7] direction, CS_N framing, 60 MHz clock never stopped), and
+  the newline-JSON endpoint with LOAD/run gating and IRQ polling.
+- 55/55 bridge tests (fake HAL, fake `ttboard`/`machine`, real host stack over
+  the real bridge), 34/34 protocol, 154/154 host GUI, ruff and compileall
+  clean.
+- Resuming the interrupted edit fixed one crash (non-integer JSON arguments
+  killed the bridge; now a typed `BridgeError`) and closed two coverage gaps
+  (concrete adapter SDK calls, host↔bridge integration).
+- Rulings: the synchronous `hello` response is the connection signal (no
+  `board.connected` line); the IRQ event is `chip.irq` (Step 1's `chip.fault`
+  name is superseded).
+
+Remaining host work: Task 7 acceptance (`--fake` can land now; the real Pico
+run needs hardware) and Task 8 final verification. Plan Tasks 3–5 (PE RTL
+protocol, SoC/memory readback, pin remap) are chip-side and under the
+chip-repo manager's dispatch; nothing in this phase claims chip behavior.

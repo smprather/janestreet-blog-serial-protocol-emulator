@@ -1,5 +1,16 @@
 # Handoff — state of the repo (2026-09-23)
 
+> **Host GUI phase 2 — Pico bridge committed and verified (2026-09-25).**
+> `tools/host_bridge/` (MicroPython frame codec, TT SDK adapter, newline-JSON
+> endpoint + SPI sequencing) is committed at `c28234d` and recorded in
+> `reviews/2026-09-25/HOST-GUI-PHASE2-BRIDGE.md`. Host-side evidence: 55/55
+> bridge tests, 34/34 protocol tests, 154/154 host GUI tests (1 FastAPI skip),
+> ruff and compileall clean; the real host `SerialTransport`/`ControllerSession`
+> now speaks to the real `PicoBridge` over a loopback (4 integration cases).
+> The real Pico/USB transport, MicroPython deployment and the chip-side RTL
+> phases (R1 protocol engine, R2 read path) remain unverified; RTL is under the
+> chip-repo manager's dispatch. No `rtl/`, `tb/` or `info.yaml` file was touched.
+
 > **E1/E2 follow-up (2026-09-23): the original P1 fixes are in, but a new review
 > found remaining gaps.** E1's producer/consumer pointer split fixes destructive
 > mid-frame rebasing, but wrapped releases are rejected by the current distance
