@@ -14,10 +14,33 @@ verified on a real MicroPython) and the triage table at the bottom.
 - A Linux host with Python 3.12+ and the host extra:
   `pip install .[host-gui]` (adds `pyserial`, plus the GUI's fastapi/uvicorn).
 - Chip R1 (framed host bus, `IRQ_N`, target 1) and **R2 (register/memory
-  readback) are both landed** on the shuttle — R2 passes all 15 golden steps
-  byte-exact against this repo's `R2-READ-VERIFICATION.json` package. So a
+  readback) are both landed** on the shuttle — R2 passes all **18** golden
+  steps byte-exact against this repo's `R2-READ-VERIFICATION.json` package
+  (the original 15, plus `read_imem_at_ceiling_15`, `read_imem_over_ceiling`
+  and `read_dmem_zero_count`), and **all 18 are `chip_confirmed`**. So a
   healthy run should pass the `r2_*` read checks too; if they go red on real
-  hardware, that is a board-level problem to triage, not the expected state.
+  hardware, that IS a real finding — see the triage table.
+
+### RESOLVED — the bridge's missing wait-word skip (B1): history, not a warning
+
+R2 reads answer **late by design**: a bounded read cannot return inside the
+request's own bit times, so the chip drives `0xFFFF` filler words on MISO while
+it fetches and the real frame starts at the first non-`0xFFFF` word (worst
+case 15 filler words; contract in `rtl/pe_ctrl.v`'s header).
+
+The bridge originally did a single fixed-length `write_readinto` with no skip,
+which would have made every `READ_IMEM`/`READ_DMEM` fail on silicon while
+`--fake` stayed green. **That defect is FIXED** (gui-worker 059d6c3, merged
+def51ea): `pe_frame.strip_wait_words()` (leading-only, bounded at 15, raises on
+an all-filler stream), `tt_adapter.host_spi_transfer(data, read_words)` for a
+variable-length read that keeps clocking, and per-opcode read sizing in
+`main._pe_request`. The regression covers a response longer than the request,
+2- and 15-wait-word reads end to end, a `0xFFFF` **payload** surviving
+(leading-only), and an all-filler stream as a typed timeout. Full record:
+`reviews/2026-09-25/HOST-CODE-REVIEW.md` finding B1.
+
+Consequence for you: **an `r2_read_*` failure is a genuine finding again** —
+wiring, MISO, or SPI timing. Do not pre-empt it with the old explanation.
 
 ## 1. Flash and mount the board
 
@@ -101,7 +124,7 @@ assuming a problem.
 | `FAIL hello` / `board error during hello: project ... not found` | shuttle name wrong for this board | pass `--project <name>` matching the fitted shuttle; confirm in the board REPL with the TT SDK |
 | `FAIL sclk` / `board error during prepare: host SPI pin map is not configured` | no `pins` map supplied | `tt_adapter.TTAdapter` needs `pins={sck,mosi,miso}` for your board revision (RP2040 vs RP2350 GPIO numbers differ) — plan Open Item 2 |
 | `spi.timeout` on load / every SPI step | CS/SCK/MOSI/MISO not wired, or a shuttle without the framed protocol | check the lower PMOD host-SPI row wiring; confirm the fitted shuttle has R1 |
-| `r2_read_*` / `r2_dump_header` FAIL, others PASS | the read path is chip-confirmed in simulation but the board disagrees | compare against `R2-READ-VERIFICATION.json`; the 15 steps are the same ones `tb_pe_ctrl_r2` passes - a board-only failure points at the MISO read path or wiring, not the contract |
+| `r2_read_*` / `r2_dump_header` FAIL, others PASS | a REAL finding now that B1 is fixed: the MISO read path, the host-row wiring, or SPI timing | the bridge skips leading `0xFFFF` wait words (RESOLVED above), so a read failure is not the old known defect. Compare against `R2-READ-VERIFICATION.json`; the 18 steps are the same ones `tb_pe_ctrl_r2` passes byte-exact. Check the lower PMOD host row, `pins={sck,mosi,miso}`, and SCLK timing first |
 | `irq`/`fault` steps FAIL | the fitted shuttle predates R1's `IRQ_N`, or the adapter was built without `irq_enabled` | check the shuttle revision; `irq_n()` returns `None` (SKIP) when IRQ is unavailable |
 | `uart` SKIP | no bridge op reports UART bytes (dropped from this phase by ruling) | revisit at hardware bring-up; not a failure |
 | A step hangs then times out | the Pico read loop is blocked and a request never got answered | Ctrl-C the runner; check the board REPL for a traceback; the host never fabricates a success on timeout |

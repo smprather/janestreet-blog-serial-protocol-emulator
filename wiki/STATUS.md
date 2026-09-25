@@ -1967,18 +1967,33 @@ pc/a/x/y/timer and READ_CPU answers while running).
 The one acceptance step that cannot be done in simulation: run the Pico
 bridge and GUI against a real RP2040 on the Tiny Tapeout demo board over USB,
 load a program, start it, and confirm liveness. Blocked on hardware, not on
-design or software. Everything preceding it is done and green.
+design or software.
 
-### 12. P3 host-side liveness surfacing — OPEN (host branch queue)
+**Everything it depends on is DONE.** The host bridge's wait-word gap (B1) is
+**fixed** (059d6c3, merged def51ea — variable-length read + leading-`0xFFFF`
+skip), so an `r2_read_*` failure on a board is now a REAL finding (wiring,
+MISO, timing), not a known defect; see the RESOLVED note in
+`docs/host-bridge-bringup.md`. All 18 R2 golden steps are `chip_confirmed`.
 
-The chip now supplies liveness (STATUS pc/a/x/y/timer, READ_CPU while running);
-showing it in the GUI is the host-controller branch's work.
+### 12. P3 host-side liveness surfacing — DONE (host, 6928b30)
 
-### 13. Demo walkthrough + `chip_confirmed` flips — OPEN (host, in flight)
+The GUI shows a Liveness row driven by the chip's STATUS timer plus a CPU
+header that keeps ticking while `run=1`, with four states (alive / stale /
+idle / unknown) driven by whether the timer MOVES. Proven in simulation, not
+yet on hardware. The chip half is item 10 (STATUS carries pc/a/x/y/timer and
+`READ_CPU` answers while running).
 
-Refresh the demo walkthrough for the R2-landed state and have the gui-worker
-flip each golden vector's `chip_confirmed` now that 15/15 pass byte-exactly on
-the chip.
+### 13. Demo walkthrough + `chip_confirmed` flips — DONE (host, ac9d471/ef8fa28)
+
+The walkthrough's proven/simulated/pending table records R2 landed, registered
+in `run_all`, 18/18 byte-exact and STA-screened, with honesty pins that still
+require hardware acceptance to be pending. All 18 golden steps are now
+`chip_confirmed` (ef8fa28), including the three ceiling/zero-count steps this
+side verified at 18/18.
+
+### Remaining: the hardware run only
+
+The only open item is item 11, and it is gated on having a board.
 
 ## Reading order for a fresh session
 

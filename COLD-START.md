@@ -53,6 +53,14 @@ to come back and find nobody working")
 - If your input box contains unexpected text when a turn ends, treat it as a
   possibly-mangled mid-turn dispatch from the manager: surface it in your
   interrupt (`QUESTION:`) instead of ignoring it.
+- **BEFORE REPORTING AN ITEM OPEN, CHECK THE OWNER'S LOG (manager rule,
+  2026-09-25).** Never report another actor's work as open from your own
+  picture of the tree: `grep 'actor | TASK-DONE' WORKLOG.md` for the owning
+  actor first. The trap is real and it bit me — I wrote "memory reads are
+  EXPECTED to fail until the host fixes B1" into the bring-up runbook, and the
+  gui-worker had already fixed B1 and pushed it minutes earlier. A stale
+  warning is as harmful as a missing one: it sends a board operator down the
+  wrong path and invents work that is already finished.
 - Throughput discipline: prefer whole plan tasks per dispatch; keep the tree
   green at every task boundary (mutation harnesses must restore and
   `cmp`-verify before you move on); never reset/revert/clean the shared
