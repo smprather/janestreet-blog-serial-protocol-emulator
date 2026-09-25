@@ -150,6 +150,25 @@ class TestLoadStartStop(unittest.TestCase):
         self.assertNotEqual(session.state, S.SessionState.LOADED)
         self.assertEqual(session.state, S.SessionState.FAULTED)
 
+    def test_failed_load_does_not_stick_in_loading(self):
+        """fuzz_server state/stuck-loading: a mid-load protocol error used to
+        leave the session in LOADING, so every later load was refused until a
+        reconnect. The failed load must restore the pre-load state and a retry
+        must work on the same connection."""
+        good = {"status": P.STATUS_OK, "words_written": 3, "faults": 0,
+                "echo": ECHO.words[-1]}
+        stub = StubTransport(responses=[HELLO, PREPARE,
+                                        T.TransportProtocolError("garbage"),
+                                        good])
+        session = S.ControllerSession(lambda: stub)
+        session.connect()
+        with self.assertRaises(S.SessionError):
+            session.load(ECHO)
+        self.assertEqual(session.state, S.SessionState.PREPARED)
+        result = session.load(ECHO)                 # no reconnect needed
+        self.assertEqual(result.words_written, 3)
+        self.assertEqual(session.state, S.SessionState.LOADED)
+
     def test_echo_mismatch_is_a_fault(self):
         bad = {"status": P.STATUS_OK, "words_written": 3, "faults": 0,
                "echo": 0xBADD}

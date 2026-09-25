@@ -113,6 +113,19 @@ user (separate session); no GUI/bridge implementation is dispatched here.
 > revisit at hardware bring-up); the host-branch merge is deferred to the chip
 > manager (no rebase). Merge note: `reviews/2026-09-25/HOST-BRANCH-MERGE-NOTE.md`.
 > Record: `reviews/2026-09-25/HOST-GUI-R2-PREP.md`.
+>
+> **Host server/API fuzz + soak (2026-09-25).** The host gate gained two
+> campaigns the protocol fuzzer did not reach: `tools/host_gui/fuzz_server.py`
+> (seeded, wired into `run_host_tests.sh`) attacks the FastAPI routes, the
+> session state machine, a hostile bridge and concurrent/interleaved requests;
+> `tools/host_gui/soak_host.py` runs the bridge+session+API loop for a bounded
+> soak under an RSS/GC watch. The fuzzer's first RED run (seed 20260926) found
+> two real defects, both fixed: a failed `load` left the session stuck in
+> `LOADING` until reconnect, and concurrent requests/pollers crossed or stole
+> replies on the wire (the transport and session now serialize state + wire
+> access). The soak is bounded: 22 min / 1,891,812 cycles, RSS flat at
+> 57.3–57.6 MB after warmup (last-half slope 0.40 MB/h), GC objects +511,
+> PASS. Full record: `reviews/2026-09-25/HOST-SOAK-API-FUZZ.md`.
 <!-- END gui-worker host block (top notes) -->
 
 > **Host GUI plan Task 8 — final verification, host scope, DONE (2026-09-25).**

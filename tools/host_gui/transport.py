@@ -25,6 +25,7 @@ synthesizes a successful result.
 from __future__ import annotations
 
 import json
+import threading
 import time
 from collections import deque
 from collections.abc import Iterator, Mapping
@@ -69,7 +70,7 @@ class LinePort(Protocol):
     """The subset of pyserial (and the fakes) the transport needs."""
 
     def readline(self) -> bytes: ...
-    def write(self, data: bytes) -> object: ...
+    def write(self, data: bytes, /) -> object: ...
     def flush(self) -> None: ...
     def close(self) -> None: ...
 
@@ -110,6 +111,14 @@ class SerialTransport:
         self._next_id = 1
         self._abandoned: set[int] = set()
         self._closed = False
+        # The GUI polls STATUS and READ_CPU on timers while user actions
+        # (load/start/stop/dump) run, and FastAPI runs sync handlers in a
+        # threadpool - so this transport IS used from several threads. Without
+        # this lock two requests interleave on the wire and each can read the
+        # other's response (or a poller can steal a just-written reply); the
+        # fuzz_server campaign reproduced both. One request owns the wire at a
+        # time, including its event draining.
+        self._wire_lock = threading.Lock()
 
     def request(self, op: str, args: Mapping[str, object] | None = None,
                 *, timeout_s: float | None = None) -> dict:
@@ -121,6 +130,11 @@ class SerialTransport:
         """
         if self._closed:
             raise TransportClosed("transport is closed")
+        with self._wire_lock:
+            return self._request_locked(op, args, timeout_s=timeout_s)
+
+    def _request_locked(self, op: str, args: Mapping[str, object] | None,
+                        *, timeout_s: float | None) -> dict:
         request_id = self._next_id
         self._next_id += 1
         timeout = self._timeout_s if timeout_s is None else float(timeout_s)
@@ -153,27 +167,31 @@ class SerialTransport:
 
     def poll_events(self) -> list[dict]:
         """Read any immediately-available lines, drain queued events."""
-        if not self._closed:
-            self._read_available()
-        out = list(self._events)
-        self._events.clear()
+        with self._wire_lock:
+            if not self._closed:
+                self._read_available()
+            out = list(self._events)
+            self._events.clear()
         return out
 
     def events(self) -> Iterator[dict]:
         """Yield queued asynchronous events (drains the queue)."""
-        if not self._closed:
-            self._read_available()
-        while self._events:
-            yield self._events.popleft()
+        with self._wire_lock:
+            if not self._closed:
+                self._read_available()
+            out = list(self._events)
+            self._events.clear()
+        yield from out
 
     def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        try:
-            self._port.close()
-        except OSError:
-            pass
+        with self._wire_lock:
+            if self._closed:
+                return
+            self._closed = True
+            try:
+                self._port.close()
+            except OSError:
+                pass
 
     # ---- internals --------------------------------------------------------
     def _write(self, message: dict) -> None:

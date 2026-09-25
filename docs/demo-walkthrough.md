@@ -86,7 +86,7 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
 | UART / SPI / I2C / 10BASE-T personas run as firmware | **RTL-proven** | `tb_pe_soc_uart`, `tb_pe_soc_spi`, `tb_pe_soc_i2c*`, `tb_pe_soc_eth*`, `tb_pe_eth_tx` |
 | Full regression is green | **RTL-proven** | `./regress/run_all.sh --fast -j8` → exit 0 on a cold clone: **RTL 34/34, firmware 26/26, 12 mutation suites** (R2 and the wait-word gate are registered in `run_all`; see `docs/cold-clone-audit.md`) |
 | 60 MHz maps and routes | **RTL-proven (mapped, not routed)** | area + screen reports; physical flow intentionally out of scope |
-| Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, MicroPython conformance, acceptance `--fake` → 22 PASS / 0 FAIL / 1 SKIP) |
+| Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, both fuzz campaigns, soak smoke, MicroPython conformance, acceptance `--fake` → 22 PASS / 0 FAIL / 1 SKIP) |
 | Bridge on a real MicroPython | **measured** | built the MicroPython unix port and ran the deployed modules on it; found and fixed 5 deployment blockers (`reviews/2026-09-25/HOST-BRIDGE-MICROPYTHON.md`) |
 | Framed host bus (PING/LOAD/STATUS/CLEAR_FAULT/TARGET, target-1 loopback, sticky faults, `IRQ_N`) | **RTL-proven** | chip-side R1 landed and verified with mutation coverage; the host's bridge/acceptance drive the same contract |
 | Host protocol on real silicon (R1) | **LANDED + verified** | the chip team landed the framed bus, `IRQ_N` and target 1; the host stack speaks that exact contract today |
