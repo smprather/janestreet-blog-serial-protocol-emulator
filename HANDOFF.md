@@ -1,17 +1,27 @@
 # Handoff — state of the repo (2026-09-23)
 
+<!-- BEGIN gui-worker host block (top notes) - keep whole; place BESIDE the
+     chip-side top-of-file blocks when merging, do not interleave -->
 > **Host GUI R2 read-path prep (2026-09-25; host side, NOT chip-confirmed).**
 > `tools/host_gui/r2_reads.py` is the single source of truth for the R2 read
 > obligations (bounded IMEM/DMEM reads, DUMP_CORE==STATUS header, non-halting
 > READ_CPU, run-gating, no-wrap range, full-width debug regs) — each probe
 > marked `chip_confirmed=False`; `FakePE(read_fault_policy=...)` parameterizes
-> the open sticky-fault-on-range-read question instead of deciding it. The
-> acceptance runner now runs five end-to-end R2 read checks
-> (`acceptance.py --fake` → `PASS (21 PASS, 0 FAIL, 1 SKIP)`), each tagged
-> `[not chip-confirmed]`, so chip R2 (plan Tasks 3-5) is validated the moment it
-> lands. No chip-side file touched. Two contract questions (read-range fault
-> latching; READ_CPU/READ_DMEM payload order) are logged as WORKLOG QUESTIONs.
+> the sticky-fault-on-range-read behaviour (default `latch` per manager
+> ruling). `reviews/2026-09-25/R2-READ-VERIFICATION.json` + `.md` are the
+> **portable golden-vector package** for the chip-side R2 testbench, generated
+> from the model with a drift gate. The acceptance runner runs six end-to-end
+> R2 read checks, each tagged `[not chip-confirmed]`
+> (`acceptance.py --fake` → `PASS (22 PASS, 0 FAIL, 1 SKIP)`), so chip R2
+> (plan Tasks 3-5) is validated the moment it lands. Current host evidence:
+> host_gui 187, bridge 73, ruff/compileall clean, one-command gate
+> `tools/host_gui/run_host_tests.sh` (exit 0; verified to fail on a real
+> defect). No chip-side file touched (`git diff --name-only 153fbde..HEAD`).
+> RULING: the UART-bytes bridge op is DROPPED from this phase (SKIP stands;
+> revisit at hardware bring-up); the host-branch merge is deferred to the chip
+> manager (no rebase). Merge note: `reviews/2026-09-25/HOST-BRANCH-MERGE-NOTE.md`.
 > Record: `reviews/2026-09-25/HOST-GUI-R2-PREP.md`.
+<!-- END gui-worker host block (top notes) -->
 
 > **Host GUI plan Task 8 — final verification, host scope, DONE (2026-09-25).**
 > The host plan (Tasks 1, 2, 6, 7, 8-host) is implemented and verified on branch
@@ -168,6 +178,8 @@ under `rtl/vendor/`. Commands in this file use the new paths.
 
 ## Session role: `gui-worker` (host-controller GUI/bridge)
 
+<!-- BEGIN gui-worker host block (role + chaining protocol) - keep whole -->
+
 Standing orders adopted 2026-09-25. A restarted session **inherits this
 section**; read it before touching anything.
 
@@ -231,7 +243,8 @@ reset/revert/clean). Verify with, at minimum:
 `python3 -m unittest discover -s tools/host_gui/tests`,
 `python3 -m unittest discover -s tools/host_bridge/tests`,
 `ruff check tools/host_gui tools/host_bridge`,
-`python3 tools/host_bridge/acceptance.py --fake`.
+`python3 tools/host_gui/acceptance.py --fake`.
+<!-- END gui-worker host block (role + chaining protocol) -->
 
 ## Resume after refactor review
 

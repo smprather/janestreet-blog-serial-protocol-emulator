@@ -91,6 +91,8 @@ constraints (`CLOCK_PERIOD` 16.667 ns; see `wiki/concepts/pdk-toolchain.md`):
 flow/run_librelane.sh flow/pe_serdes.json   # results under ~/asic-runs/
 ```
 
+<!-- BEGIN gui-worker host block (host controller section) - keep whole;
+     place BESIDE the chip-side Quick start / Layout sections when merging -->
 ## Host controller (USB → Pico → PE)
 
 The operator tooling lives in `tools/host_gui/` (browser UI, session state
@@ -118,11 +120,13 @@ response. The local page is served by `tools.host_gui.server.serve(Api())`
 Evidence levels are kept distinct: **simulator** (fake PE model),
 **host-verified** (this tree's tests), **board-observed** (Pico `hello`/STATUS),
 and **chip-confirmed** (requires the PE host protocol in RTL, plan Tasks 3-5,
-not landed yet). `acceptance.py --fake` is the current end-to-end evidence and
+not landed yet. `acceptance.py --fake` is the current end-to-end evidence and
 its checklist is in `tools/host_gui/tests/fixtures/acceptance.md`; the real
 device run is pending hardware and the RTL phases. The R2 read obligations
 themselves live in `tools/host_gui/r2_reads.py`, each marked
 **not chip-confirmed** until the RTL passes the same probes.
+
+<!-- END gui-worker host block (host controller section) -->
 
 ## Layout
 

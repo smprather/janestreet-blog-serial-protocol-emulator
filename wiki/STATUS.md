@@ -1,5 +1,7 @@
 # Project Status — through 10BASE-T receive
 
+<!-- BEGIN gui-worker host block (top note) - keep whole; place BESIDE the
+     chip-side top-of-file blockquotes when merging, do not interleave -->
 > **Host controller GUI + Pico bridge (2026-09-25; host side only).** The
 > operator tooling lives on branch `host-controller-gui` and touches no
 > chip-side file: `tools/host_gui/` (image/frame contracts, serial transport,
@@ -14,6 +16,7 @@
 > R2-ready (session/API/page read_cpu, R2 read gate, idle-fault visibility);
 > see `reviews/2026-09-25/HOST-GUI-R2-PREP.md` and
 > [[plans/host-controller-gui]].
+<!-- END gui-worker host block (top note) -->
 
 > **Latest E1/E2 review follow-up (2026-09-23): original findings fixed, but
 > residual issues remain.** E1's producer/consumer pointer split prevents the
@@ -346,6 +349,7 @@ on ihp-sg13g2, former 66 MHz target):
 die 161.7 × 180.4 µm, 78 % utilization. Run dir: `~/asic-runs/pe-serdes`.
 The checked-in config now targets 60 MHz (16.667 ns).
 
+<!-- BEGIN gui-worker host block (host tooling section) - keep whole -->
 ## Host controller GUI and Pico bridge (host side, branch `host-controller-gui`)
 
 This entry records the host-side half of the operator tooling; the chip half of
@@ -371,6 +375,7 @@ Full result records, commands and limits: `reviews/2026-09-24/HOST-GUI-PHASE1B.m
 "Host controller" section and `tools/host_gui/tests/fixtures/acceptance.md`.
 The page shows the live CPU header (`/api/read_cpu`) and keeps a status poll
 running while connected so a chip fault on an idle board surfaces.
+<!-- END gui-worker host block (host tooling section) -->
 
 ## Area budget — where the die actually goes
 
