@@ -1,0 +1,410 @@
+; nec_ir.pe — a NEC infrared remote frame, sent by firmware.
+;
+; ---------------------------------------------------------------------------
+; WHY THIS ONE, AND WHAT IT IS ACTUALLY TESTING
+;
+; Three of the acts in this block (WS2812, DHT11, DS18B20) drive a wire where
+; a receiver RESYNCHRONISES: the WS2812 cell is a fixed 800 ns and the DHT11
+; window is a fixed 45 us, and in both the receiver decides by LEVEL, so a
+; program that is one clock out still talks to a real part. An infrared remote
+; is the opposite and is the sharpest thing in this repository to model: there
+; is no wire. The only thing that leaves this pin is LIGHT, and a NEC receiver
+; recovers the data from a 38 kHz burst it has to find, integrate and time.
+; Get the carrier wrong and the frame does not arrive; get a burst or a gap
+; wrong and the receiver decodes a different button.
+;
+; So the number that is the claim is the CARRIER PERIOD, measured on the pin,
+; clock by clock, and the frame is decoded from what the pin actually emitted.
+;
+; ---------------------------------------------------------------------------
+; THE PROTOCOL, AND EVERY PLACE A NUMBER HAD TO BE FITTED
+;
+;   leader      9 ms of carrier
+;   leader gap  4.5 ms of silence
+;   bit 0       0.5625 ms burst + 1.6875 ms of silence
+;   bit 1       0.5625 ms burst + 0.5625 ms of silence
+;   stop        one final 0.5625 ms burst
+;
+; The bits are LSB FIRST, like 1-Wire and unlike every other serial protocol
+; here. The frame is 32.06 ms for one byte: 9 + 4.5 + 8 x 2.25 + 0.5625.
+;
+; EVERY DURATION IN THIS PROGRAM IS AN INSTRUCTION COUNT, and none of them is
+; read from the 1 us tick. The tick's phase residual is up to a full
+; microsecond, which is 7.6 % of a carrier half period -- and a carrier is the
+; one thing in this repository that cannot be a little bit late. So the carrier
+; is fitted to 38.0 kHz to the CLOCK (a half period is 789 or 790 clocks) and
+; the silences are fitted to the coarse (4,40) counter pair, exactly as
+; servo_sweep.pe and dht11_read.pe fit their slots.
+;
+; The bursts are counted in CARRIER CYCLES rather than in time, which is both
+; what a real transmitter does and the only way the two numbers stay
+; consistent: 342 cycles and 21 cycles of the same carrier ARE the 9 ms and the
+; 0.5625 ms, so a period error cannot make the frame internally inconsistent.
+; The TB then checks each burst against its own datasheet window, so a program
+; that got one of the two counts wrong is still caught.
+;
+; A BURST LONGER THAN 255 CYCLES NEEDS TWO COUNTERS, and this one does. The
+; leader is 342 carrier cycles and the ISA's LDI immediate is EIGHT BITS, so
+; 342 could not be written in one instruction at all: it truncated to 86, and
+; the frame that left the pin was a well-formed 38 kHz carrier carrying a
+; 2.3 ms "9 ms" leader. Nothing about it looked wrong. So the count is
+; IR_LEADR runs of IR_LEAD cycles, and the reload costs nine instructions once
+; per run -- 0.0017 % of a leader and 0.03 % of a data burst, both far inside
+; the datasheet windows, and it lands on the FIRST cycle of a run, which is the
+; burst's initiation rather than a carrier half period.
+;
+; THAT TRUNCATION IS THE KIND OF DEFECT THIS BLOCK KEEPS FINDING: it is the
+; same shape as the WS2812 byte counter that started at 0 and the DHT11
+; accumulator that read "ADD A,X" as a load. An eight-bit field is not wide
+; enough for the number you want, and nothing downstream complains.
+;
+; ---------------------------------------------------------------------------
+; THE TWO HALF-PERIOD CONSTANTS ARE SEPARATE, AND THAT IS NOT REDUNDANCY
+;
+; The delay routine returns to its caller through a phase DISPATCH -- a ladder
+; of LDM/SUB/JZ -- so the number of instructions between the end of one delay
+; and the start of the next depends on WHICH RUNG the ladder stops at. The two
+; carrier half periods therefore cost a different number of instructions and
+; are fitted separately (IR_H1 and IR_H2) to make the two halves equal. This
+; is the same "equalised branches" defect the WS2812 act found twice: with one
+; constant the carrier came out as an alternating 37.9/38.1 kHz, which is a
+; program that is a fraction of a clock out on every other edge, and a window
+; check forgives it. The carrier's two phases are also deliberately the FIRST
+; two rungs of the ladder, so the cost is as close to free as it can be.
+;
+; bit 6 is the IR LED: the first unclaimed pad in the documented map, and the
+; same pad the other timing acts use because they are alternatives rather than
+; additions to one image.
+
+        ; the pin and the fitted constants are peasm CONSTS: IR_DATA, IR_H1,
+        ; IR_H2, IR_LEAD, IR_BIT, IR_GAP0, IR_GAP1, IR_LEADGAP. See
+        ; tools/fw/peasm.py's timing block for the values and the arithmetic.
+
+; ===========================================================================
+; CLAIM THE PIN. The LED is driven, not open-drain: the cathode is on the pin
+; and the anode is on the supply, so the LED is ON when the pin sinks. That is
+; the opposite convention from the 1-Wire act, and the reason is electrical:
+; 1-Wire's high level belongs to a pull-up, this one's belongs to the supply.
+; ===========================================================================
+        LDI   A, 0x00
+        OUT   PINOE, A          ; released: nothing is emitting
+        LDI   A, 0x00
+        STM   12, A             ; the phase the delay returns to
+        LDI   A, 0x00
+        STM   14, A             ; the "frame sent" flag, and the TB's observable
+        JMP   ir_send_leader
+
+; ===========================================================================
+; THE LEADER: IR_LEADR runs of IR_LEAD carrier cycles, which is 342 of them
+; and so 9 ms at the fitted period
+; ===========================================================================
+ir_send_leader:
+        LDI   A, 0
+        STM   6, A              ; "when the burst ends, go to phase 2"
+        LDI   A, IR_LEADR
+        STM   1, A              ; ...in this many runs of IR_LEAD cycles
+        LDI   A, IR_LEAD
+        STM   7, A              ; ...of this many carrier cycles each
+        JMP   ir_emit
+
+; ===========================================================================
+; TURN THE LED ON. Every burst -- the leader, a data burst, the stop burst --
+; comes through here, and that is the point of it having one copy.
+;
+; The pin has to be RE-DRIVEN after every gap, because a gap is made by
+; releasing the pin and a burst is made by driving it again. The first version
+; drove it once, at the leader, and let the data bursts inherit that: the
+; program then ran the whole frame -- eight bits, the right gaps, the right
+; carrier, the stop burst -- with the pad released for every burst except the
+; leader and the last one. It emitted a 9 ms leader, 13.6 ms of silence, and
+; one 0.5625 ms burst, and the TB's decode was empty. Three copies of "drive
+; the pin" would have been three places to keep in step; the duplication this
+; removes was written as a comment warning about exactly that risk.
+; ===========================================================================
+ir_emit:
+        LDI   A, IR_DATA
+        OUT   PINOE, A          ; drive: the burst is on the wire from here
+        LDI   A, 0x00
+        OUT   TXPIN, A          ; LOW: sinking, so the LED is emitting
+        JMP   ir_burst
+
+; ===========================================================================
+; THE CARRIER LOOP
+;
+; The pin is already driven and low on entry. One iteration is one carrier
+; cycle: a low half period, a high half period, and the cycle count. The count
+; reaching zero ends the burst, and dmem[6] says which end that is. No
+; register is touched that another part of the frame is using: dmem[7] is the
+; cycle count and dmem[6] is the burst's end kind, and the delay owns 9-15.
+; ===========================================================================
+ir_burst:
+ir_cyc:
+        LDI   A, IR_DATA
+        OUT   TXPIN, A          ; the low half period is over: drive HIGH
+        LDI   A, 0
+        STM   12, A             ; the delay returns to phase 0
+        LDI   A, IR_H1
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 44
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 0: the high half period is over; sink again ----
+ph0:    LDI   A, 0x00
+        OUT   TXPIN, A          ; LOW
+        LDI   A, 1
+        STM   12, A             ; the delay returns to phase 1
+        LDI   A, IR_H2
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 34
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 1: the low half period is over; that is one carrier cycle ----
+;
+; The count is TWO levels because of the eight-bit immediate: a burst longer
+; than 255 cycles is several runs of at most 255, and the reload lands on the
+; first cycle of a run.
+ph1:    LDM   A, 7              ; the cycles left in this run
+        SUB   A, 1
+        STM   7, A
+        JNZ   ir_cyc           ; more cycles in this run
+        LDM   A, 1              ; this run is done: how many are left?
+        SUB   A, 1
+        STM   1, A
+        JZ    ir_burst_end      ; the burst is over
+        LDI   A, IR_LEAD        ; another run: reload the cycle count
+        STM   7, A
+        JMP   ir_cyc
+
+; ---- the burst is over. dmem[6] says which end this is.
+;
+; The values are 0, 1, 2 because the ladder below ENUMERATES them, and a
+; ladder that does not cover its own input domain is the same defect three
+; times in this repository: dmem[6] held 2/3/4 (the phase numbers themselves,
+; which is the obvious thing to write) and the ladder treated anything past 1
+; as the stop burst, so the frame ended after the leader with a well-formed
+; carrier and nothing in it. A dispatch is a FUNCTION over the values the
+; program actually produces; using the phase numbers as the enum hides the
+; mismatch until the day someone reorders the phases.
+; ------------------------------------------------------------------------
+ir_burst_end:
+        LDM   A, 6
+        JZ    ph2               ; 0: the leader
+        SUB   A, 1
+        JZ    ph3               ; 1: a data bit
+        JMP   ph4               ; 2: the stop burst
+
+; ===========================================================================
+; PHASE 2: the leader burst is over -- 4.5 ms of silence
+; ===========================================================================
+ph2:    LDI   A, 0x00
+        OUT   PINOE, A          ; released: the gap is silence
+        LDI   A, 6
+        STM   12, A             ; the delay returns to phase 6
+        LDI   A, IR_LEADGAP
+        STM   9, A
+        LDI   A, 3              ; the (3,130) pair, not (4,40): see below
+        STM   10, A
+        LDI   A, 130
+        STM   13, A
+        JMP   dly1
+
+ph6:    JMP   ir_send_byte
+
+; ===========================================================================
+; SEND ONE BYTE: eight bits, LSB FIRST
+;
+; dmem[0] is the byte and is never modified -- it is the record the TB
+; compares against what it decoded off the wire, so it must be the ORIGINAL
+; and not something the program derived. dmem[3] is the rotating copy,
+; dmem[2] the bits left, dmem[4] the bit just sent, dmem[6] which end of a
+; burst it is, dmem[1]/[7] its two-level cycle count. The bit is the copy's own
+; bit 0 and the copy is rotated right after each slot, so there is no shifting
+; to get wrong -- the same idiom the 1-Wire write path uses, for the same
+; reason.
+;
+; This block was, for a while, unreachable: it sat after a JMP with nothing
+; pointing at it, so the bit counter was never set, the loop ran 255 times
+; instead of eight, and the frame that left the pin was a valid carrier with a
+; valid-looking burst train and the wrong number of slots in it. Falling into
+; a setup block is the cheap way to write one and the expensive way to miss
+; one.
+;
+; The payload is 0xA5: both bit values in the byte and six transitions in
+; eight, and neither its bit-reverse (0xA5 reversed is 0xA5) nor its
+; complement (0x5A) is anything a wrong bit order produces by accident.
+; ===========================================================================
+ir_send_byte:
+        LDI   A, 0xA5
+        STM   0, A              ; the byte, unmodified for the TB to read
+        STM   3, A              ; the rotating copy
+        LDI   A, 8
+        STM   2, A              ; eight bits
+
+; ---- start one bit: the byte's bit 0 is the bit to send, then the burst.
+; The bit is taken BEFORE the burst's counters are set, and the block ends in
+; a jump to the carrier -- the other order is a loop that never emits, which
+; is what it was for a while.
+ir_start_bit:
+        LDM   A, 3
+        AND   A, 0x01
+        STM   4, A              ; ...and the gap will be chosen from it
+ir_data_burst:
+        LDI   A, 1
+        STM   6, A              ; a data burst ends at phase 3
+        LDI   A, 1
+        STM   1, A              ; one run of IR_BIT cycles
+        LDI   A, IR_BIT
+        STM   7, A              ; 21 carrier cycles = 0.5625 ms
+        JMP   ir_emit
+
+; ===========================================================================
+; PHASE 3: a data burst is over. THE GAP LENGTH IS THE BIT: 1.6875 ms for a
+; zero, 0.5625 ms for a one, and a receiver reads the whole frame off that
+; alone. A transmitter that sent the same gap for both would emit a frame that
+; is well formed and carries nothing.
+; ===========================================================================
+ph3:    LDI   A, 0x00
+        OUT   PINOE, A          ; released: silence until the next burst
+        LDM   A, 4              ; the bit that was just sent
+        JNZ   ph3_one
+
+        LDI   A, 5              ; a ZERO: the long gap, then phase 5
+        STM   12, A
+        LDI   A, IR_GAP0
+        STM   9, A
+        LDI   A, 4
+        STM   10, A
+        LDI   A, 40
+        STM   13, A
+        JMP   dly1
+
+ph3_one:
+        LDI   A, 5              ; a ONE: the short gap -- about one burst --
+        STM   12, A             ; ...and STILL phase 5
+        LDI   A, IR_GAP1
+        STM   9, A
+        LDI   A, 4
+        STM   10, A
+        LDI   A, 40
+        STM   13, A
+        JMP   dly1
+
+; ===========================================================================
+; PHASE 5: a gap is over, and what happens next depends only on how many bits
+; are left. The gap does NOT have to remember which kind of gap it was -- the
+; next burst is the next burst either way -- so both kinds return to the same
+; phase. Two phases would have been wrong, not merely redundant: the phase
+; number is the delay routine's only return address, and a second one would
+; mean a second copy of the code that starts a burst, which is a second place
+; for the two copies to disagree.
+; ===========================================================================
+ph5:    LDM   A, 3              ; the byte being sent
+        SHR   A                 ; the next bit of the frame is now bit 0
+        STM   3, A
+        LDM   A, 2              ; the bits left in this byte
+        SUB   A, 1
+        STM   2, A
+        JZ    ir_stop           ; all eight sent: the stop burst next
+        JMP   ir_start_bit
+
+; ===========================================================================
+; THE STOP BURST
+;
+; The eighth bit's gap is followed by one final 0.5625 ms burst, which is what
+; tells a receiver that the frame ended rather than that the remote is
+; transmitting a very long gap. It is the part of a frame a firmware written
+; for "send the byte" usually leaves out, and the TB counts the carrier cycles
+; in it rather than checking only that something was emitted.
+; ===========================================================================
+ir_stop:
+        LDI   A, 2
+        STM   6, A              ; the stop burst ends at phase 4
+        LDI   A, 1
+        STM   1, A              ; one run
+        LDI   A, IR_BIT
+        STM   7, A
+        JMP   ir_emit
+
+; ===========================================================================
+; PHASE 4: the stop burst is over. Raise the flag and park. dmem[0] already
+; holds the byte that was sent, so there is nothing to bank.
+; ===========================================================================
+ph4:    LDI   A, 0x00
+        OUT   PINOE, A          ; released: the frame is over
+        LDI   A, 1
+        STM   14, A             ; the frame is out
+        LDI   A, IR_LEAD
+        STM   9, A              ; ...and then the program is through, and the
+        LDI   A, 4              ;     leader's own counters are dead. Not a
+        STM   10, A             ;     loop: this is a counted delay, so a
+        LDI   A, 40              ;     silent park rather than a spin.
+        STM   13, A
+        JMP   dly1
+park:   LDI   A, 0x00
+        OUT   TXPIN, A
+halt:   JMP   halt              ; the ISA has no HALT
+
+; ===========================================================================
+; THE DELAY -- the same three nested counters as every other act here, with
+; the same reload trap in it.
+;
+;     total(n1,n2,n3) = (n1-1) * (10 + (n2-1) * (4*n3 + 7)) + 4   clocks
+;
+; The carrier half periods use DIFFERENT (n2,n3) pairs, one for each half,
+; because the delay routine returns through the phase ladder and the two rungs
+; cost a different number of instructions. Both are fitted so that the two
+; halves come out EQUAL, which is the property that matters and the reason
+; there are two constants: with one constant the carrier alternated 37.9/38.1
+; kHz, a program that is out by a fraction of a clock on every other edge.
+; The (2,44) pair has a 193-clock outer step and the (2,34) pair a 153-clock
+; one; the ladder costs 7 clocks more on the way out of phase 1 than out of
+; phase 0, and the two step sizes are what absorb that.
+;
+; Everything else -- the leader's gap and both data gaps -- uses (4,40), where
+; one outer step is 511 clocks = 8.52 us, which is the right resolution for
+; windows of 562 us, 1687 us and 4500 us.
+;
+; THE DISPATCH IS A FUNCTION OVER EVERY PHASE THE PROGRAM USES, and it is
+; written against the full set 0..6 rather than patched in as phases were
+; added. The ISA cannot return to seven addresses from one place, so the phase
+; in dmem[12] chooses where, and the carrier's two phases are deliberately the
+; first two rungs of the ladder: every rung costs two instructions, and the
+; carrier's half periods have to pay for all of them.
+; ===========================================================================
+dly1:   LDM   A, 9              ;  1  the outer counter
+        SUB   A, 1              ;  2
+        STM   9, A              ;  3
+        JZ    dly_done          ;  4
+        LDM   A, 10             ;  5  the middle counter's target
+        STM   11, A             ;  6   into the loop's working copy
+dly2:   LDM   A, 11             ;  7  the middle counter
+        SUB   A, 1              ;  8
+        STM   11, A             ;  9
+        JZ    dly1              ; 10
+        LDM   A, 13             ; 11  the inner counter's target
+        STM   15, A             ; 12   into the loop's working copy
+dly3:   LDM   A, 15             ; 13  the inner counter
+        SUB   A, 1              ; 14
+        STM   15, A             ; 15
+        JNZ   dly3              ; 16
+        JMP   dly2              ; 17
+dly_done:
+        LDM   A, 12
+        JZ    ph0               ; 0: the high half period is over
+        SUB   A, 1
+        JZ    ph1               ; 1: the low half period is over
+        SUB   A, 1
+        JZ    ph2               ; 2: the leader burst is over
+        SUB   A, 1
+        JZ    ph3               ; 3: a data burst is over
+        SUB   A, 1
+        JZ    ph4               ; 4: the stop burst is over
+        SUB   A, 1
+        JZ    ph5               ; 5: a gap is over
+        JMP   ph6               ; 6: the leader's gap is over

@@ -1,0 +1,264 @@
+; stepper_ramp.pe — a step/dir stepper driver, accelerating, on firmware.
+;
+; ---------------------------------------------------------------------------
+; WHY THIS ONE, AND WHAT IS ACTUALLY BEING CLAIMED
+;
+; The other four acts in this block put a waveform on a pin and a receiver
+; somewhere else reads it back. A stepper is a MECHANISM: the driver chip
+; counts STEP edges and a 28BY48 stepper changes position by one full step
+; per edge, so a program that is one clock out on a step period has a
+; motor that is in the wrong place and no way to report it. There is no
+; acknowledgement, no status word, and nothing at the far end that resynchronises
+; -- the position IS the count.
+;
+; So the claim is the simplest and the sharpest in the block: EVERY STEP
+; PERIOD IS AN EXACT INSTRUCTION COUNT, MEASURED ON THE PIN, AND THE RAMP IS
+; EXACTLY LINEAR TO THE CLOCK. Not "within a window": a step period is a
+; single number, and 8.517 us of ramp per step either is or is not there.
+;
+; ---------------------------------------------------------------------------
+; THE RAMP, AND WHY IT IS A SUBTRACTION RATHER THAN A TABLE
+;
+; Twelve steps: six in one direction, then the direction changes, then six
+; more. The step period falls by exactly ten outer-counter steps every time,
+; and ten steps of the (4,40) pair is 5110 clocks = 85.2 us. So the period is a
+; counter that is decremented by 10 per step, not a table of twelve constants:
+;
+;   n1 = 196, 186, 176, 166, 156, 146, 136, 126, 116, 106, 96, 86
+;
+; A table would have been easier to read and would have made the ramp's
+; LINEARITY an assumption rather than a claim -- twelve independent constants
+; are twelve numbers that happen to decrease, and nothing in the program says
+; they decrease by the same amount. Here the constancy is in the program and
+; the TB can measure it.
+;
+; The ramp is also why the period is a COUNTED DELAY and not a free-running
+; timer: the whole point is that the number of clocks between two edges is
+; known, and the 1 us tick's phase residual is up to a full microsecond --
+; 1.2 % of a step period, and 0.5 % of a ramp step. A tick-driven ramp would
+; be an order of magnitude less accurate than the claim.
+;
+; ---------------------------------------------------------------------------
+; THE DIRECTION CHANGE, AND WHY IT IS THE INTERESTING PART
+;
+; A driver requires DIR to be stable for its setup time (5 us typical) before
+; the next STEP edge, and the failure mode is specific: the chip decodes the
+; direction on the edge, so a DIR that changes too close is either taken from
+; the new direction or from the old one depending on the silicon. The change
+; is made once, in the middle of a gap, with a counted setup delay after it,
+; and the TB measures the interval from the DIR edge to the next STEP edge.
+;
+; The one-off is also the one place where the period is NOT exactly on the
+; ramp, because the flip and its setup cost clocks that belong to no step. The
+; TB says so and checks the two things that are still exact: the setup time,
+; and the ramp within each direction run.
+;
+; ---------------------------------------------------------------------------
+; THE PINS
+;
+; bit 6 is STEP and bit 5 is DIR. STEP idles RELEASED, because a stepper
+; driver's input is pulled DOWN and a released pin is the inactive state --
+; the same "the high level belongs to somebody else" question the infrared
+; act turned on, and here the answer is the pull-down. DIR is held DRIVEN the
+; whole time and only its level changes, so the direction cannot be disturbed
+; by the pin-matrix read-back.
+
+        ; the pin and the fitted constants are peasm CONSTS: ST_STEP, ST_DIR,
+        ; ST_PULSE, ST_SETUP, ST_GAP0. See tools/fw/peasm.py's timing block.
+
+; ===========================================================================
+; CLAIM THE PINS
+; ===========================================================================
+        LDI   A, 0x00
+        OUT   PINOE, A          ; everything released
+        LDI   A, ST_DIR
+        OUT   PINOE, A          ; DIR is DRIVEN from here on
+        LDI   A, ST_DIR
+        STM   0, A              ; THE TXPIN VALUE, and dmem[0] is its only
+        OUT   TXPIN, A          ; home. Both outputs are one register, so a
+                                ; write that carries STEP's level has to carry
+                                ; DIR's level too -- and DIR's level CHANGES
+                                ; mid-ramp, so it cannot be a constant in the
+                                ; step. Two first attempts at this: writing
+                                ; 0x00 for the step cleared the direction, so
+                                ; the first step zeroed DIR and the change half
+                                ; a ramp later wrote a zero to a register that
+                                ; was already zero -- the direction never
+                                ; changed on the wire at all, and the TB
+                                ; decoded twelve steps in one direction. Then
+                                ; writing ST_DIR for the step fixed that and
+                                ; broke the change instead, six microseconds
+                                ; later, by putting DIR back to 1. The value
+                                ; belongs in a register, and the only place
+                                ; that can be written from is data memory.
+        LDI   A, 0x00
+        STM   12, A             ; the phase the delay returns to
+        LDI   A, 0x00
+        STM   14, A             ; the "ramp finished" flag, and the TB's observable
+        LDI   A, 2
+        STM   5, A              ; TWO runs of six steps
+        LDI   A, 6
+        STM   3, A              ; ...of six steps each
+        LDI   A, ST_GAP0
+        STM   4, A              ; the step period, in outer-counter steps --
+                                ; NOT in dmem[9], which is the delay's own
+                                ; counter and counts itself down to zero. The
+                                ; ramp lived in dmem[9] first and the program
+                                ; ran twelve steps at a constant 2.09 ms: the
+                                ; delay consumed the value, every step read
+                                ; back zero, subtracted ten, and got 246 again
+                                ; 255, the unsigned wrap, which is a
+                                ; plausible step period, so the fault was
+                                ; invisible. A delay routine and its caller
+                                ; must never share a data slot.
+        JMP   st_run
+
+; ===========================================================================
+; ONE RUN OF STEPS
+; ===========================================================================
+st_run:
+st_step:
+        LDI   A, ST_BOTH
+        OUT   PINOE, A          ; drive STEP, and keep DIR DRIVEN: a driver
+                                ; samples DIR on the STEP edge, so releasing
+                                ; DIR for the step pulse is releasing it at
+                                ; exactly the instant it is read. Writing
+                                ; ST_STEP alone released it, and the receiver
+                                ; saw the direction fall at every step.
+        LDM   A, 0
+        OUT   TXPIN, A          ; STEP LOW (bit 6 clear), DIR at whatever
+                                ; dmem[0] says it is
+        LDI   A, 1
+        STM   12, A             ; the delay returns to phase 1
+        LDI   A, ST_PULSE
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 13
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 1: the low pulse is over. Release STEP: the rest of the period
+;      is a gap, and the gap's length is the period. ----
+ph1:    LDI   A, ST_DIR
+        OUT   PINOE, A          ; release STEP and ONLY STEP: a write of 0x00
+                                ; here released the DIR pad as well, so the
+                                ; direction was floating for the whole of every
+                                ; step pulse and the receiver saw the direction
+                                ; fall at each step. That is the THIRD write in
+                                ; this program that cleared the other pin --
+                                ; the step's level write, the park's, and now
+                                ; this one -- and all three have the same cause:
+                                ; PINOE and TXPIN are whole registers, so a
+                                ; write that means "this pin" is a write that
+                                ; also means "the other pin" unless the other
+                                ; pin's level is carried in it. Two outputs, one
+                                ; register, and the pin you are not driving is
+                                ; as much a part of the instruction.
+        LDI   A, 2
+        STM   12, A             ; the delay returns to phase 2
+        LDM   A, 4
+        STM   9, A              ; the delay's own outer counter, set from ours
+        LDI   A, 4              ; the (4,40) pair: 511 clocks a step, which is
+        STM   10, A             ; what makes the ramp step a round ten of them
+        LDI   A, 40
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 2: the gap is over. Shorten the period for the NEXT step, then
+;      either another step or the end of the run. ----
+;
+; THE RAMP IS HERE AND NOT IN PH1, and that is not tidiness. Decrementing
+; before the first use spends the nominal 196 straight away, so the first step
+; runs at 186 and the gap between step 1 and step 2 is 85 us LONGER than every
+; other interval in the ramp -- a first interval that is wrong by exactly the
+; ramp step, which is the shape of a program that initialises its own counter
+; off by one. A ramp counter is decremented after the value it selects has been
+; used, and the TB's equality check finds this in one run.
+ph2:    LDM   A, 4              ; the next period is ten outer steps shorter --
+        SUB   A, 10             ; THE RAMP, in one subtraction, 5110 clocks
+        STM   4, A
+        LDM   A, 3              ; the steps left in this run
+        SUB   A, 1
+        STM   3, A
+        JNZ   st_step           ; more steps in this run
+        LDM   A, 5              ; the runs left
+        SUB   A, 1
+        STM   5, A
+        JZ    st_done           ; both runs are out
+        LDI   A, 6
+        STM   3, A              ; six more steps, the other way
+        LDI   A, 0x00
+        STM   0, A              ; the new direction, in the register
+        OUT   TXPIN, A          ; ...and OUT, so the setup delay below is a
+                                ; real interval between the change and the next
+                                ; STEP edge rather than a wait before it. This
+                                ; is the only instruction that
+                                ; ever changes the direction, and the counted
+                                ; delay after it is the driver's setup time:
+                                ; a chip that samples DIR on the STEP edge
+                                ; takes the new direction only if this is long
+                                ; enough, and a program that changed DIR one
+                                ; instruction earlier would work on one driver
+                                ; and not another.
+        LDI   A, 3
+        STM   12, A             ; the delay returns to phase 3
+        LDI   A, ST_SETUP
+        STM   9, A
+        LDI   A, 2
+        STM   10, A
+        LDI   A, 13
+        STM   13, A
+        JMP   dly1
+
+; ---- phase 3: the direction setup is over; the next step starts ----
+;
+; A PHASE OF ITS OWN, and not a second copy of "go to st_step": the setup
+; delay must not be counted as a step, so it cannot return to the phase that
+; decrements the step counter. Three phases for three different returns is the
+; whole of the phase mechanism; a program that wanted fewer would have to
+; give up one of the three behaviours.
+ph3:    JMP   st_step
+
+
+st_done:
+        LDI   A, 1
+        STM   14, A             ; the ramp is out
+park:   LDM   A, 0             ; parking keeps DIR where it was: a write of
+        OUT   TXPIN, A          ; 0x00 here would be a direction change too
+halt:   JMP   halt              ; the ISA has no HALT
+
+; ===========================================================================
+; THE DELAY -- the same three nested counters as every other act here.
+;
+;     total(n1,n2,n3) = (n1-1) * (10 + (n2-1) * (4*n3 + 7)) + 4   clocks
+;
+; The step pulse and the setup use (2,13), whose outer step is 69 clocks
+; (1.15 us): fine enough for a 2 us pulse. The step period uses (4,40), whose
+; outer step is 511 clocks (8.52 us), which is what makes the ramp step a
+; round 10 of them.
+; ===========================================================================
+dly1:   LDM   A, 9              ;  1  the outer counter
+        SUB   A, 1              ;  2
+        STM   9, A              ;  3
+        JZ    dly_done          ;  4
+        LDM   A, 10             ;  5  the middle counter's target
+        STM   11, A             ;  6   into the loop's working copy
+dly2:   LDM   A, 11             ;  7  the middle counter
+        SUB   A, 1              ;  8
+        STM   11, A             ;  9
+        JZ    dly1              ; 10
+        LDM   A, 13             ; 11  the inner counter's target
+        STM   15, A             ; 12   into the loop's working copy
+dly3:   LDM   A, 15             ; 13  the inner counter
+        SUB   A, 1              ; 14
+        STM   15, A             ; 15
+        JNZ   dly3              ; 16
+        JMP   dly2              ; 17
+dly_done:
+        LDM   A, 12
+        SUB   A, 1
+        JZ    ph1               ; 1: a step pulse is over
+        SUB   A, 1
+        JZ    ph2               ; 2: a step period is over
+        JMP   ph3               ; 3: the direction setup is over

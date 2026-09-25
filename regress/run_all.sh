@@ -138,6 +138,63 @@ CASES=(
   # I2C on the pin matrix: the runtime direction file driven by firmware, and
   # the open-drain property checked on the RTL's own pin_oe output. This is the
   # test that makes "the matrix is enough to speak I2C" a measured claim.
+  # The three TIMING acts: protocols where the waveform IS the specification.
+  # What makes them different from every case above is that the DUT is partly the
+  # FIRMWARE -- a WS2812 cell, a servo pulse width and a DHT11 sample instant are
+  # instruction counts, and nothing in rtl/ knows what any of them is. Their
+  # regression cost is milliseconds of simulation (52.5 ms and 22 ms), which is
+  # two orders of magnitude more than any other TB here; that is the honest price
+  # of a protocol whose unit of correctness is the millisecond, and it is why the
+  # frame rate is measured on two slots rather than five. regress/mutate_timing_tb.sh
+  # proves each testbench fails when the firmware is broken.
+  "tb_pe_soc_ws2812|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_ws2812"
+  "tb_pe_soc_servo|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_servo"
+  "tb_pe_soc_dht11|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_dht11"
+  # 1-WIRE (Block 2 act a). The DHT11 act above is a sensor the host READS on
+  # a schedule it chooses; this one is the shape 1-Wire actually is. The DEVICE
+  # initiates: after the host's reset pulse the sensor drives a presence pulse
+  # back, and every read slot is answered by the sensor, so the firmware's
+  # edge-wait loops and the pin matrix's read-back are both load-bearing in a
+  # way nothing else here is. The claim is the whole slot, both directions:
+  # the commands are decoded FROM THE PADS (so a wrong command, a wrong bit
+  # order or a slot of the wrong length fails rather than agreeing with a
+  # model built from the same reading of it), and the sample instant is
+  # measured to sit inside the sensor's data window with margin at both ends.
+  # ~2.2 ms of 60 MHz: the reset, sixteen write slots, sixteen read slots.
+  "tb_pe_soc_ds18b20|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_ds18b20"
+  # 1-WIRE (Block 2 act a). The DHT11 act above is a sensor the host READS on
+  # a schedule it chooses; this one is the shape 1-Wire actually is. The DEVICE
+  # initiates: after the host's reset pulse the sensor drives a presence pulse
+  # back, and every read slot is answered by the sensor, so the firmware's
+  # edge-wait loops and the pin matrix's read-back are both load-bearing in a
+  # way nothing else here is. The claim is the whole slot, both directions:
+  # the commands are decoded FROM THE PADS (so a wrong command, a wrong bit
+  # order or a slot of the wrong length fails rather than agreeing with a
+  # model built from the same reading of it), and the sample instant is
+  # measured to sit inside the sensor's data window with margin at both ends.
+  # ~2.2 ms of 60 MHz: the reset, sixteen write slots, sixteen read slots.
+  # NEC INFRARED (Block 2 act b). The sharpest timing claim in the repository
+  # and the only one with NO WIRE: the only thing that leaves the pin is light,
+  # so a receiver has to find a 38 kHz burst and time the silences between
+  # bursts to know what was sent. Nothing resynchronises to anything -- the
+  # carrier is fitted to the CLOCK (789 clocks a half period, 38.049 kHz off the
+  # pin) and the two half periods are checked separately and for constancy to
+  # within a clock, because a carrier that alternates 37.9/38.1 is a program
+  # that is out by a fraction of a clock on every other edge. 32 ms of 60 MHz.
+  "tb_pe_soc_ir_nec|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_ir_nec"
+  # STEPPER STEP/DIR RAMP (Block 2 act c). The only act in this block that
+  # drives a MECHANISM: the driver chip counts STEP edges and the motor's
+  # position IS that count, so there is no acknowledgement, no status word and
+  # nothing at the far end to resynchronise to. The claim is therefore the
+  # sharpest and the simplest here -- every step period is an exact instruction
+  # count measured on the pin, and the ramp is exactly linear TO THE CLOCK:
+  # the firmware subtracts ten outer steps of the (4,40) pair, 5110 clocks, per
+  # step, so the constancy is in the program rather than assumed about a table.
+  # Checked as an EQUALITY against 5110, not a tolerance, and the one interval
+  # that is not on the line -- the direction change, which is the only thing
+  # in the program that is not a step -- is pinned by a SUM with its
+  # neighbour rather than excused. ~14 ms of 60 MHz, the sum of the periods.
+  "tb_pe_soc_stepper_ramp|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_stepper_ramp"
   "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
   # The I2C TRANSACTION layer on real RTL: firmware/i2c_xfer.pe against a
   # Verilog slave FSM that decodes the wire, with timing and grammar asserted
@@ -626,6 +683,21 @@ fi
 # The SPI testbench's mutation suite. Same reasoning: SPI is a baseline protocol
 # and its TB makes a strong claim (the slave decodes the master's byte MSB-first
 # from the pins), so the claim is tested by making it false.
+# The three TIMING testbenches' suite. These are the only cases in the repository
+# whose DUT is partly firmware, so their mutations are firmware edits: a cell one
+# clock short, a pulse 0.75 ms wide, a bit order reversed, a start signal 70x too
+# short. It runs its 14 cases in parallel on PRIVATE COPIES of the firmware and
+# then cmp-verifies that the tree was never written to -- a stronger statement
+# than "restored correctly". It is the slowest suite here (the servo TB is 66 s
+# per case) and runs at MUTATE_TIMING_JOBS, default 6.
+if ./regress/mutate_timing_tb.sh > /tmp/mutate_timing.log 2>&1; then
+  echo "timing TB mutations: OK (no unexplained survivors)"
+else
+  echo "timing TB mutations: FAILED"
+  tail -20 /tmp/mutate_timing.log
+  stale=1
+fi
+
 if ./regress/mutate_spi_tb.sh > /tmp/mutate_spi.log 2>&1; then
   echo "spi TB mutations: OK (no unexplained survivors)"
 else
