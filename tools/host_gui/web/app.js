@@ -33,7 +33,49 @@ function setMessage(text, isError = false) {
 // what it accepts in each state and fails if the two disagree, so a policy
 // change on either side has to be made on both.
 const LOADABLE = ["PREPARED", "LOADED", "STOPPED"];
-const DUMPABLE = ["PREPARED", "LOADED", "STOPPED", "DEBUG_HOLD"];
+// FAULTED is in DUMPABLE deliberately: the sticky fault word IS a header field,
+// so a faulted core is exactly the core whose header an operator needs to read.
+// A latched fault does not close the read path - it is the session that
+// refuses run-control, not reads (see STEPPABLE below).
+const DUMPABLE = ["PREPARED", "LOADED", "STOPPED", "DEBUG_HOLD", "FAULTED"];
+
+// The debug panel's four buttons. A single step needs a program to step and a
+// core that is not mid-error; the session refuses both cases (nothing loaded is
+// nothing to step, and a latched fault means the last frame was rejected), so
+// the button offers the SAME rule rather than a hand-copied list of state
+// names. The other three need only a chip that implements R3: arming is legal
+// while running, and clear/release is the only way off a held core.
+const DEBUG_BUTTONS = ["debug-step", "bp-set", "bp-clr", "debug-resume"];
+const STEPPABLE = ["LOADED", "STOPPED", "DEBUG_HOLD", "BP_HIT"];
+
+// The event stream's scheme follows the PAGE's scheme. A hard-coded ws:// is
+// unavailable in exactly the deployment where the event stream matters most -
+// the page served over TLS - and it fails silently: the socket simply never
+// opens and the page falls back to polling without saying why.
+//
+// A lint rule asks for wss unconditionally and reads the `ws:` below as a
+// finding. Suppressed deliberately, with the reason: a page served over plain
+// HTTP (the local dev server) cannot open wss:// at all, so an unconditional
+// wss:// would break the only environment this page is developed in. The
+// property that actually matters - "the socket is secure exactly when the page
+// is" - is pinned by tests/test_gui_capabilities.py, which drives this
+// function with both page schemes.
+function eventSocketUrl() {
+  // nosemgrep: javascript.lang.security.detect-insecure-websocket
+  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${scheme}//${location.host}/api/events`;
+}
+
+function applyDebugAvailability(state, available = true) {
+  // `available` is the chip's R3 support, which the page discovers by asking:
+  // /api/debug answers UNSUPPORTED on a chip without it, and a button that
+  // invites an error the chip can only answer with UNSUPPORTED is worse than a
+  // greyed one.
+  $(DEBUG_BUTTONS[0]).disabled = !available || !STEPPABLE.includes(state);
+  for (const id of DEBUG_BUTTONS.slice(1)) {
+    $(id).disabled = !available || state === "DISCONNECTED";
+  }
+}
 
 function renderHealth(health) {
   $("connection-state").textContent = health.state;
@@ -57,6 +99,7 @@ function renderHealth(health) {
   // held but the strap never went high. It is refused under BP_HIT because a
   // live hit holds the core WITHOUT dropping the strap.
   $("dump").disabled = !DUMPABLE.includes(health.state);
+  applyDebugAvailability(health.state);
   // READ_CPU is the ONE non-halting read: the session answers it in every
   // state, including a core parked on a breakpoint, which is exactly when the
   // registers matter. Polling only while RUNNING froze the register view at
@@ -227,10 +270,9 @@ async function refresh() {
         // A chip without R3 answers UNSUPPORTED; the panel says so instead of
         // leaving stale values on screen.
         $("debug-state").textContent = "not supported by this chip";
-        debugReady("DISCONNECTED");
+        applyDebugAvailability(health.state, false);
       }
     }
-    debugReady(health.state);
   } catch (error) {
     setMessage(error.message, true);
   }
@@ -295,8 +337,6 @@ async function main() {
   }
 
   // ---- R3 debug panel ----------------------------------------------------
-  const debugButtons = ["debug-step", "bp-set", "bp-clr", "debug-resume"];
-
   function renderDebug(debug) {
     // The chip's own state word drives the label; "armed" and "hit" come from
     // bp_flags, never from the address -- a breakpoint at 0 is legal and is
@@ -309,16 +349,6 @@ async function main() {
       `0x${debug.bp_flags.toString(16).padStart(2, "0")}` +
       `${debug.hit ? " (hit latched)" : ""}`;
     $("debug-run").textContent = debug.run ? "high" : "low";
-  }
-
-  function debugReady(state) {
-    // Step is only legal when the core is held or stopped; a free-running core
-    // answers NOT_READY, so the button is disabled instead of inviting an
-    // error. Setting a breakpoint IS legal while running.
-    const held = state === "DEBUG_HOLD" || state === "BP_HIT" ||
-                 state === "STOPPED" || state === "LOADED";
-    $(debugButtons[0]).disabled = !held;
-    for (const id of debugButtons.slice(1)) $(id).disabled = state === "DISCONNECTED";
   }
 
   async function debugCall(path, body) {
@@ -348,18 +378,26 @@ async function main() {
   $("bp-clr").addEventListener("click", () => debugCall("/api/debug/bp_clr", {}));
   $("debug-resume").addEventListener("click", () => debugCall("/api/debug/resume", { address: bpAddress() }));
 
-  try {
-    // The socket scheme follows the page's scheme: a page served over TLS
-    // cannot open a plaintext WebSocket, and a hard-coded ws:// would make
-    // the event stream silently unavailable in exactly the deployment where
-    // it must not be.
-    const socketScheme = location.protocol === "https:" ? "wss:" : "ws:";
-    const socket = new WebSocket(`${socketScheme}//${location.host}/api/events`);
-    socket.addEventListener("message", (message) => pushEvent(JSON.parse(message.data)));
-  } catch (error) {
-    setInterval(async () => {
+  // The event stream, with a polling fallback for when there is no socket.
+  let eventPollFallback = null;
+  const startEventPolling = () => {
+    if (eventPollFallback) return;
+    eventPollFallback = setInterval(async () => {
       for (const event of (await api("/api/health")).events ?? []) pushEvent(event);
     }, 2000);
+  };
+  try {
+    const socket = new WebSocket(eventSocketUrl());
+    // A WebSocket to an endpoint that is not listening does NOT throw: it
+    // fires `error` and closes. A fallback hung only on `catch` therefore
+    // never engaged, and the event stream died silently - the same failure
+    // `eventSocketUrl` exists to prevent, one layer up. So the fallback hangs
+    // off the events, and `catch` is left for the synchronous throw (a bad URL).
+    socket.addEventListener("error", startEventPolling);
+    socket.addEventListener("close", startEventPolling);
+    socket.addEventListener("message", (message) => pushEvent(JSON.parse(message.data)));
+  } catch {
+    startEventPolling();
   }
 
   await refresh();

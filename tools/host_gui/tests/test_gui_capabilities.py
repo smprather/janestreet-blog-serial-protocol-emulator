@@ -50,6 +50,16 @@ ECHO = I.assemble_program(ECHO_PE, REPO_ROOT)
 # The four operations that have a button, named as the page names them.
 BUTTON_OPS = {"load": "load", "start": "start", "stop": "stop", "dump": "dump_core"}
 
+# The debug panel's four, the same way. `debugReady` gated these off a
+# hand-written list of states written before the poll path could deliver a held
+# state at all - the same shape of drift the four main buttons had.
+DEBUG_BUTTON_OPS = {
+    "debug-step": "debug_step",
+    "bp-set": "bp_set",
+    "bp-clr": "bp_clr",
+    "debug-resume": "debug_resume",
+}
+
 # The page polls this one, and it is not a button: READ_CPU is the NON-halting
 # read, so the session answers it in every state.
 POLLED_OP = "read_cpu"
@@ -91,7 +101,8 @@ const { renderHealth } = module_shim.exports;
 const health = JSON.parse(process.argv[2]);
 renderHealth(health);
 const out = { buttons: {}, cpu_poll_ms: null };
-for (const id of ['load', 'start', 'stop', 'dump']) {
+for (const id of ['load', 'start', 'stop', 'dump',
+                  'debug-step', 'bp-set', 'bp-clr', 'debug-resume']) {
   out.buttons[id] = !elements[id]?.disabled;
 }
 for (const ms of timers) if (ms === 1000) out.cpu_poll_ms = ms;
@@ -110,6 +121,25 @@ def gui_buttons(state):
     if result.returncode != 0:
         raise AssertionError(f"node driver failed: {result.stderr[:400]}")
     return json.loads(result.stdout)
+
+
+SOCKET_DRIVER = r"""
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const location = { host: process.argv[3], protocol: process.argv[2] };
+const document = { getElementById: () => ({}), createElement: () => ({}) };
+const window = {};
+const fetch = async () => ({ ok: true, json: async () => ({}) });
+const WebSocket = function () { throw new Error('no socket in the test'); };
+const body = source.replace(/\nmain\(\);\s*$/, '') +
+  '\nmodule.exports = { eventSocketUrl };';
+const module_shim = { exports: {} };
+new Function('module', 'exports', 'require', 'document', 'window', 'location',
+             'fetch', 'WebSocket', 'setInterval', 'clearInterval', body)(
+  module_shim, module_shim.exports, require, document, window, location,
+  fetch, WebSocket, setInterval, clearInterval);
+process.stdout.write(module_shim.exports.eventSocketUrl());
+"""
 
 
 def _stack():
@@ -162,6 +192,20 @@ def _bp_hit():
     return session, bridge
 
 
+def _faulted():
+    # a latched fault the host has already seen: the state bring-up lands in
+    session, bridge = _loaded()
+    bridge.pe.faults = F.FAULT_PROTOCOL
+    session.status()
+    return session, bridge
+
+
+def _disconnected():
+    session, bridge = _loaded()
+    session.disconnect()
+    return session, bridge
+
+
 STATES = {
     "PREPARED": _prepared,
     "LOADED": _loaded,
@@ -169,6 +213,8 @@ STATES = {
     "RUNNING": _running,
     "DEBUG_HOLD": _debug_hold,
     "BP_HIT": _bp_hit,
+    "FAULTED": _faulted,
+    "DISCONNECTED": _disconnected,
 }
 
 CALLS = {
@@ -177,6 +223,10 @@ CALLS = {
     "stop": lambda session: session.stop(),
     "dump_core": lambda session: session.dump_core(),
     "read_cpu": lambda session: session.read_cpu(),
+    "debug_step": lambda session: session.debug_step(),
+    "bp_set": lambda session: session.bp_set(2),
+    "bp_clr": lambda session: session.bp_clr(),
+    "debug_resume": lambda session: session.resume_with_breakpoint(2),
 }
 
 
@@ -200,26 +250,27 @@ class TestGuiButtonsMatchTheSession(unittest.TestCase):
     def test_every_button_matches_what_the_session_accepts(self):
         for state in STATES:
             gui = gui_buttons(state)
-            for button, operation in BUTTON_OPS.items():
+            for button, operation in {**BUTTON_OPS, **DEBUG_BUTTON_OPS}.items():
                 with self.subTest(state=state, button=button):
                     self.assertEqual(
                         gui["buttons"][button], session_accepts(state, operation),
                         f"{button} in {state}: the page and the session disagree")
 
     def test_the_register_poll_follows_the_non_halting_read(self):
-        """READ_CPU answers in EVERY state, so the page must poll it always.
+        """READ_CPU answers in every state the session is connected in, so the
+        page must poll it in every one of those.
 
         A poll that stops is worse than no poll: the register view freezes at
-        whatever it last read, which for BP_HIT is the core BEFORE the hit.
+        whatever it last read, which for BP_HIT is the core BEFORE the hit. The
+        expectation is read from the session rather than written here, so this
+        asks the same question of both sides - a hand-written "always" would
+        have been wrong the moment DISCONNECTED was added to the table.
         """
         for state in STATES:
             with self.subTest(state=state):
-                gui = gui_buttons(state)
-                self.assertTrue(
-                    session_accepts(state, POLLED_OP),
-                    f"{state}: READ_CPU must be available for this test to mean "
-                    f"anything")
-                self.assertEqual(gui["cpu_poll_ms"], CPU_POLL_MS)
+                accepted = session_accepts(state, POLLED_OP)
+                self.assertEqual(gui_buttons(state)["cpu_poll_ms"],
+                                 CPU_POLL_MS if accepted else None)
 
     def test_a_breakpoint_hit_keeps_both_views_of_the_pc_live(self):
         """The regression, stated as one assertion.
@@ -233,6 +284,35 @@ class TestGuiButtonsMatchTheSession(unittest.TestCase):
         # and the dump path must NOT be offered: the strap is high, so the chip
         # answers NOT_READY (golden step dump_core_refused_the_strap_is_high)
         self.assertFalse(gui["buttons"]["dump"])
+
+    def test_the_event_socket_follows_the_page_scheme(self):
+        """The page's own property, driven through the page's own function.
+
+        A hard-coded ws:// is unavailable in exactly the deployment where the
+        event stream matters most (the page served over TLS), and it fails
+        SILENTLY. A lint rule asks for wss unconditionally; the reason it is
+        not applied is that a page served over plain HTTP - the local dev
+        server - cannot open wss:// at all, so the property to hold is "secure
+        exactly when the page is", and that is what this pins.
+        """
+        for protocol, scheme in (("https:", "wss://"), ("http:", "ws://")):
+            with self.subTest(page=protocol):
+                url = self.socket_url(protocol)
+                self.assertTrue(url.startswith(scheme), url)
+                self.assertTrue(url.endswith("/api/events"), url)
+                self.assertIn("localhost", url)
+
+
+    def socket_url(self, protocol):
+        """The page's own function, given a page scheme, answering with a URL."""
+        if NODE is None:
+            raise unittest.SkipTest("node not installed")
+        result = subprocess.run(
+            [NODE, "-e", SOCKET_DRIVER, str(APP_JS), protocol, "localhost"],
+            capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise AssertionError(f"node driver failed: {result.stderr[:400]}")
+        return result.stdout.strip()
 
 
 if __name__ == "__main__":

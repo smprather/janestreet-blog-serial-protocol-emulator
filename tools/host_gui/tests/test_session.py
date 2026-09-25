@@ -249,6 +249,69 @@ class TestLoadStartStop(unittest.TestCase):
         self.assertEqual(session.state, S.SessionState.FAULTED)
 
 
+class TestAStepNeedsACoreWorthStepping(unittest.TestCase):
+    """A single step is run-control, so it carries run-control's preconditions.
+
+    `start` already refuses a session with nothing loaded ("start requires a
+    successful load") and refuses every state but LOADED/STOPPED. A step is the
+    same class of action - it executes an instruction - so it inherits both
+    rules: there is nothing to step before a load, and a latched fault means
+    the last frame the host sent was rejected, which is not a state to keep
+    driving the core from. Both refusals are the HOST's policy, stated: the chip
+    would execute the step, exactly as it accepts a LOAD under a debug hold
+    (which the session also declines).
+
+    They are here because the page's debug panel refused both cases already, off
+    a hand-written list of state names, and the two sides disagreed. The rule
+    belongs to the session; the button now mirrors it, and
+    `tests/test_gui_capabilities.py` fails if either side moves.
+    """
+
+    def _loaded_session(self):
+        session, bridge, _, _ = make_stack()
+        session.connect()
+        session.load(ECHO)
+        return session, bridge
+
+    def test_a_step_before_a_load_is_refused(self):
+        session, bridge, _, _ = make_stack()
+        session.connect()
+        with self.assertRaises(S.SessionStateError) as caught:
+            session.debug_step()
+        self.assertIn("loaded", str(caught.exception))
+        # and nothing moved: the refusal happened before any frame went out
+        self.assertFalse(bridge.pe.debug_hold)
+        self.assertEqual(bridge.pe.pc, 0)
+
+    def test_a_step_while_faulted_is_refused(self):
+        session, bridge = self._loaded_session()
+        bridge.pe.faults = F.FAULT_PROTOCOL
+        session.status()
+        self.assertEqual(session.state, S.SessionState.FAULTED)
+        with self.assertRaises(S.SessionStateError) as caught:
+            session.debug_step()
+        self.assertIn("fault", str(caught.exception).lower())
+        self.assertFalse(bridge.pe.debug_hold)
+
+    def test_a_step_still_works_once_the_program_is_there(self):
+        session, bridge = self._loaded_session()
+        session.bp_set(3)
+        result = session.debug_step()
+        self.assertEqual(result.state, F.DEBUG_HOLD)
+        self.assertTrue(bridge.pe.debug_hold)
+
+    def test_clearing_the_fault_reopens_the_step(self):
+        """A refusal that only ever refuses is not a policy, it is a wall."""
+        session, bridge = self._loaded_session()
+        bridge.pe.faults = F.FAULT_PROTOCOL
+        session.status()
+        with self.assertRaises(S.SessionStateError):
+            session.debug_step()
+        session.clear_fault(F.FAULT_PROTOCOL)
+        self.assertEqual(session.state, S.SessionState.STOPPED)
+        self.assertEqual(session.debug_step().state, F.DEBUG_HOLD)
+
+
 class TestStatusReportsTheHeldState(unittest.TestCase):
     """STATUS carries the chip's own state word; the session must use it.
 

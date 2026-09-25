@@ -626,6 +626,25 @@ class ControllerSession:
                 "a free-running core cannot be stepped; DEBUG_BP_CLR releases "
                 "the hold first (and disarms the breakpoint)"
             )
+        # A step is RUN-CONTROL, so it carries run-control's preconditions -
+        # `start` already refuses both of these cases ("start requires a
+        # successful load"; any state but LOADED/STOPPED). Nothing loaded is
+        # nothing to step: the core would retire whatever words happen to be in
+        # IMEM. A latched fault means the last frame the host sent was
+        # rejected, which is not a state to keep driving the core from.
+        #
+        # These are the HOST's rules, stated: the chip would execute the step,
+        # exactly as it accepts a LOAD under a debug hold - which the session
+        # also declines. The page's Step button mirrors them, and
+        # tests/test_gui_capabilities.py fails if the two sides disagree.
+        if not self._loaded:
+            raise SessionStateError(
+                "a step needs a loaded program; there is nothing to step"
+            )
+        if self.state == SessionState.FAULTED:
+            raise SessionStateError(
+                "a fault is latched; clear it before stepping the core"
+            )
         result = self._request("debug_step")
         prefix = _debug_prefix(result, "debug_step")
         _require_ok(prefix, "debug_step")
