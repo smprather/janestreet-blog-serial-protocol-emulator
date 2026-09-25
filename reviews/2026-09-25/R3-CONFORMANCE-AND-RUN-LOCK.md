@@ -332,9 +332,13 @@ recorded baseline predates the R2 read engine:
 Both sides measured with the same liberty and the same script, the pre-R3 sources
 taken from git, so the comparison is like for like.
 
-**A stale baseline worth correcting in the record:** the figures in the reviews
-(`pe_ctrl` 463 cells, `pe_soc` 4,961, `tt_um_top` 7,960) are R1-era and are not
-comparable to today's design — `pe_ctrl` is 4,054 today, and the gap is the R2
-read engine, not R3. Anyone comparing a fresh screen against those numbers would
-read a 3.6x regression that never happened. The numbers above supersede them for
-the R3 delta; the older ones should be re-baselined or annotated.
+**Earlier recorded figures are not comparable, and I first overstated why.**
+`wiki/STATUS.md` is an append-only chronology, so it holds several screens taken
+with DIFFERENT source lists: an early one has `pe_ctrl` 463, the newest recorded
+(eth_tx) has `pe_soc` 6,191 / `tt_um_top` 7,980, and another has `pe_ctrl` 1,731.
+None is comparable to today's 4,054 / 6,355 / 10,221, and the gap is mostly the
+R2 read engine and the growing source list - NOT R3. Only the pre/post pair in the
+table above isolates R3. I had written that the baselines were "R1-era"; the
+accurate statement is that they are *earlier-list* measurements. A current
+figures entry has been appended to `wiki/STATUS.md` with today's screen and the
+R3 delta, and the no-STA-screen note for this phase is carried forward there.
