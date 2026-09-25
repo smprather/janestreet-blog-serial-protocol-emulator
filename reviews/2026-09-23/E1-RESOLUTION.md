@@ -71,14 +71,22 @@ checks: a consume moves only `rptr`, a duplicate frees nothing, a backward
 address is ignored, and a consume pulsed while a frame is mid-payload leaves the
 frame's bytes and `wptr` intact.
 
-**Mutation gates.** `regress/mutate_eth_mac_tb.sh` is now 16 mutations
-(16 detected, 0 survived), including `consume-rebases-wptr`,
+**Mutation gates at the original resolution.** `regress/mutate_eth_mac_tb.sh`
+then had 16 mutations (16 detected, 0 survived), including `consume-rebases-wptr`,
 `consume-ignored` and `consume-no-guard`. `regress/mutate_eth_soc_tb.sh` is now
 8 (8 detected, 0 survived), including `destructive-reclaim`, which restores the
 E1 wiring and is caught by the consecutive-frame case.
 
-**Full regression** (`e1-recheck/regression-fixed.txt`): RTL 27/27, firmware
-19/19, lint clean, five mutation suites green, all generated-doc gates green.
+The 2026-09-23 independent E1 accounting-coverage audit later added permanent
+tests and three more mutations for consume collisions at type settle, bad-frame
+settle, and `S_ERR`. A second coverage pass added a full-ring bad-FCS settle
+reclaim test and mutation. At that stage, the MAC gate was 22/22. See
+`reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md`.
+
+**Full regression at the original resolution** (`e1-recheck/regression-fixed.txt`):
+RTL 27/27, firmware 19/19, lint clean, five mutation suites green, all
+generated-doc gates green. Later regression counts are recorded above and in
+the current handoff.
 
 **Hardening screen** (authorized 2026-09-23; unplaced, ideal clock, same scripts
 as the review — `e1-recheck/sta-summary.txt` and the three `sta-*-fixed.txt`):
@@ -92,6 +100,29 @@ as the review — `e1-recheck/sta-summary.txt` and the three `sta-*-fixed.txt`):
   repair; this screen does not establish that hardening is clean.
 - Cost of the ownership logic: `pe_eth_mac` mapped 17,315 → 20,200 µm²,
   `pe_soc` 50,895 → 53,731 µm².
+
+## E1 published-byte ownership follow-up (2026-09-23)
+
+A later independent audit found that `used` also includes an in-flight frame.
+An over-read consume could release those unpublished bytes, then receive a
+second credit from that frame's rollback or TYPE FCS windback. The MAC now
+tracks `published_used` and accepts a release only within both `used` and
+`published_used`. Directed tests cover a bad-FCS in-flight release and a
+same-cycle pre-windback TYPE endpoint; both failed against the old RTL and pass
+with the guard. TYPE and length publication are checked on consume-collision
+edges; TYPE FCS exclusion is asserted directly, with matching mutants for all
+three arithmetic terms. Bad settle and `S_ERR` tests also partially consume an
+older frame while reclaiming the failing frame and assert that its remaining
+published-byte count is preserved. The mid-payload rebase test now uses
+distinct producer and consumer addresses.
+
+The final MAC mutation gate is 30/30, the full regression is 29/29 RTL and
+20/20 firmware with all gates clean, and mapped synthesis reports `pe_eth_mac`
+1,681 cells / 23,749.63 µm². The fresh three-corner mapped screen reports zero
+Yosys check problems, setup 0.00 ns at all corners and unchanged hold slack
+−0.87/−0.61/−0.48 ns (slow/typ/fast); prior hold/electrical violations remain
+and no signoff is claimed. Details and evidence are in
+`E1-PUBLISHED-OWNERSHIP-REVIEW.md`. No physical flow, DRC or LVS.
 
 ## Residual limits (documented, not regressions)
 

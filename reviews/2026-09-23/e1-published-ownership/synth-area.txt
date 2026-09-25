@@ -1,0 +1,22 @@
+sg13g2 typ corner (1.20V/25C) — mapped, pre-route
+-----------------------------------------------
+pe_serdes               539 cells  11223.387000 um2
+pe_nrzi                  15 cells    212.284800 um2
+pe_manch                  7 cells    119.750400 um2
+pe_bitstuff              99 cells   1417.046400 um2
+pe_codec_mux            130 cells   1810.771200 um2
+pe_crc                  209 cells   3353.616000 um2
+pe_dru                  148 cells   2398.372200 um2
+pe_cpu                  377 cells   4843.276200 um2
+pe_pinmux               111 cells   2060.553600 um2
+pe_ctrl                 292 cells   5791.149000 um2
+pe_imem_flop          61057 cells  1300811.664600 um2
+pe_imem_macro            12 cells    186.883200 um2
+pe_fbuf_flop          45557 cells  1340730.392400 um2
+pe_fbuf_macro            48 cells    596.937600 um2
+pe_eth_mac             1681 cells  23749.626600 um2
+pe_soc                 3571 cells  56816.877600 um2
+tt_um_top              3888 cells  62745.429600 um2
+-----------------------------------------------
+routed reference: pe_serdes = 17,211 um2 cells / 29,164 um2 die @78% util
+reproduce it with: flow/run_librelane.sh flow/pe_serdes.json

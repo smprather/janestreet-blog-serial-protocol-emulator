@@ -103,3 +103,79 @@ codec -> overlay -> pin-matrix path, and the status rationale distinguishes
 one-clock from strobe-gated events. Both corrections were rechecked against
 `diagrams/project-plan.puml`, `rtl/pe_serdes.v`, `rtl/pe_manch.v`, and
 `rtl/pe_bitstuff.v`.
+
+## Readback host-contract follow-up (2026-09-23)
+
+A fresh read-only source audit checked the readback plan against `pe_ctrl`, the
+TT wrapper, the host write path, the instruction-memory ports, pin budget, and
+clock arithmetic. The `uio[4]` mapping is free at reset and the commit-latched
+echo can be added without changing the existing load path, but the host
+contract is not yet complete. No files in RTL or tests changed.
+
+1. **Full-image final word.** With `WORDS=1024`, `pe_ctrl.v` commits address
+   1023 in `W_DONE`, increments `words_written`, and sets `load_error` at
+   lines 220-224. The receive path at lines 166-168 rejects later SCLK rises
+   while that error is set. Reading the just-committed final word requires a
+   following frame; the proposed MISO serializer must keep shifting the echo
+   despite receive lockout, or the plan must limit its full-image verification
+   claim. Add a 1,024-word pad-level test that reads the final echo while
+   confirming `load_error` and no extra write.
+2. **Duty-cycle bound.** A1/A2 need low time of at least `3 clk + t_pad +
+   t_setup` (~65 ns on the plan's assumptions), plus A1's separate commit
+   bound. A frequency ceiling alone cannot guarantee that for arbitrary duty
+   cycles; e.g. 5 MHz with a 30% low phase gives 60 ns. State a minimum low
+   time or a required duty cycle. A3 has separate full-period setup and
+   post-sample hold limits.
+3. **Rate scope.** If the host is meant to verify every committed word, the
+   selected rate bound applies to every frame carrying an echo: one retained
+   echo word is replaced by each later commit, so 10 MHz loading followed by a
+   slower trailing frame cannot recover all earlier words. A faster load plus
+   slow tail only works for a weaker last-word/partial-verification contract
+   or with additional storage. The host contract must say which applies.
+4. **CS setup.** `load_active = ~cs_s1 && !run` at `pe_ctrl.v:106`; the first
+   response bit is planned to preload on detected `cs_fall`. A numeric
+   CS_N-to-first-SCLK minimum and pad-level boundary sweep are still needed.
+5. **A1/A2 tradeoff.** Computed limits are ~7.5 and ~7.7 MHz. A1 at 5 MHz
+   satisfies its `H>=4 clk` commit bound with the same ~50 ns per-bit margin
+   as A2, so A2's two-frame latency has little rate benefit at its stated 5 MHz
+   guard. Make its reason for the extra latency explicit.
+
+These are plan/contract requirements, not a decision to change the interface.
+The user still chooses A1/A2/A3, trailing-frame behavior, and the release
+condition. No physical flow, DRC, or LVS was run.
+
+## SERDES decision-readiness follow-up (2026-09-23)
+
+A second read-only audit checked the amended SERDES plan against the current
+`pe_serdes`, codec, DRU, pinmux, SoC and unit-test sources. It found no RTL or
+plan-topology contradiction and made no file or RTL changes. The audit also
+separated four bundled scope choices from engineering details that can be
+finalized after scope is accepted:
+
+1. **Milestone:** additive engine, disabled at reset, with a self-timed
+   wire-loopback as the first consumer; retain existing personas bit-identical.
+   This matches the plan's non-regression contract and avoids introducing a
+   frame layer.
+2. **Plain asynchronous RX:** exclude arbitrary-phase plain RX from v1; align
+   the loopback wire model to the engine cadence. The current DRU only recovers
+   Manchester phase, and no plain-mode start-edge acquisition exists.
+3. **Topology:** use two existing codec instances, split `pe_serdes` TX/RX
+   enables, the current DRU capture path, and the pin-level overlay before the
+   open-drain gate. These choices match the current single shared codec and
+   SERDES enables, DRU cell strobes, and `pe_pinmux` OE equation.
+4. **Access:** use the 4-bit IO space's free `0xF` indexed window for the SoC
+   milestone. A block-level loopback before adding CPU access remains a scope
+   ordering option; widening the IO field is explicitly out of scope in the
+   current plan.
+
+The recommended defaults are evidence-backed recommendations only; none is
+selected. Sticky status semantics, write-triggered strobes, trailing-stuff
+completion, register details, output staging after STA, tests/mutations and
+documentation remain engineering follow-ups. At audit time the plan's
+`pe_soc` estimate of 3,298 cells and TT-top estimate of 3,613 were stale. A
+subsequent `./regress/synth_area.sh` screen exited 0 and reports 1,354 cells /
+19,789.7364 µm² for `pe_eth_mac`, 3,306 / 53,615.5578 µm² for `pe_soc`, and
+3,579 / 59,286.8052 µm² for `tt_um_top`; no diagnostics were surfaced by the
+script. The plan now uses the current baseline. Full output:
+`/tmp/synth_area_diagram_followup.log`. This was mapped synthesis only; no
+STA, physical flow, DRC or LVS ran.

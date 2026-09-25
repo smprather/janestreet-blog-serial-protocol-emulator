@@ -1,0 +1,1848 @@
+OpenSTA 3.1.0 8572175ac4 Copyright (c) 2026, Parallax Software, Inc.
+License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
+
+This is free software, and you are free to change and redistribute it
+under certain conditions; type `show_copying' for details. 
+This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _4316_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _4316_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _4316_/CLK (sg13g2_dfrbpq_1)
+  -0.2387   15.4283   library recovery time
+            15.4283   data required time
+-------------------------------------------------------------
+            15.4283   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.0949   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _4317_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _4317_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _4317_/CLK (sg13g2_dfrbpq_1)
+  -0.2387   15.4283   library recovery time
+            15.4283   data required time
+-------------------------------------------------------------
+            15.4283   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.0949   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _4318_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _4318_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _4318_/CLK (sg13g2_dfrbpq_1)
+  -0.2387   15.4283   library recovery time
+            15.4283   data required time
+-------------------------------------------------------------
+            15.4283   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.0949   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _4319_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _4319_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _4319_/CLK (sg13g2_dfrbpq_1)
+  -0.2387   15.4283   library recovery time
+            15.4283   data required time
+-------------------------------------------------------------
+            15.4283   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.0949   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _4320_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _4320_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _4320_/CLK (sg13g2_dfrbpq_1)
+  -0.2387   15.4283   library recovery time
+            15.4283   data required time
+-------------------------------------------------------------
+            15.4283   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.0949   slack (MET)
+
+
+Startpoint: ui_in[2] (input port clocked by clk)
+Endpoint: _6679_ (positive level-sensitive latch clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ ui_in[2] (in)
+   0.0000    3.3334 ^ _6679_/D (sg13g2_dlhq_1)
+             3.3334   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+  -1.0000   -1.0000   clock uncertainty
+   0.0000   -1.0000   clock reconvergence pessimism
+            -1.0000 ^ _6679_/GATE (sg13g2_dlhq_1)
+   4.3334    3.3334   time borrowed from endpoint
+             3.3334   data required time
+-------------------------------------------------------------
+             3.3334   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+             0.0000   slack (MET)
+
+Time Borrowing Information
+----------------------------------------------
+clk pulse width                         8.3335
+library setup time                     -0.1859
+----------------------------------------------
+max time borrow                         8.1476
+----------------------------------------------
+actual time borrow                      4.3334
+open edge uncertainty                  -1.0000
+----------------------------------------------
+time given to startpoint                3.3334
+----------------------------------------------
+
+
+Startpoint: u_soc.u_imem.g_macro.u_sram
+            (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5747_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   7.1742    7.1742 ^ u_soc.u_imem.g_macro.u_sram/A_DOUT[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.2462    7.4204 ^ _6033_/Y (sg13g2_nor2b_1)
+   0.2168    7.6372 v _6034_/Y (sg13g2_nand2b_1)
+   0.2496    7.8868 ^ _6036_/Y (sg13g2_o21ai_1)
+   0.1302    8.0170 v _6041_/Y (sg13g2_nor2_1)
+   3.0130   11.0300 ^ _6042_/Y (sg13g2_a21oi_1)
+   1.9471   12.9771 v _5152_/Y (sg13g2_nand4_1)
+   0.4572   13.4343 ^ _5501_/X (sg13g2_mux2_1)
+   0.0911   13.5254 v _5502_/Y (sg13g2_nand2_1)
+   0.0741   13.5996 ^ _5503_/Y (sg13g2_o21ai_1)
+   0.0000   13.5996 ^ _5747_/D (sg13g2_dfrbpq_1)
+            13.5996   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5747_/CLK (sg13g2_dfrbpq_1)
+  -0.2594   15.4076   library setup time
+            15.4076   data required time
+-------------------------------------------------------------
+            15.4076   data required time
+           -13.5996   data arrival time
+-------------------------------------------------------------
+             1.8080   slack (MET)
+
+
+Startpoint: u_soc.u_imem.g_macro.u_sram
+            (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5763_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   7.1742    7.1742 ^ u_soc.u_imem.g_macro.u_sram/A_DOUT[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.2462    7.4204 ^ _6033_/Y (sg13g2_nor2b_1)
+   0.2168    7.6372 v _6034_/Y (sg13g2_nand2b_1)
+   0.2496    7.8868 ^ _6036_/Y (sg13g2_o21ai_1)
+   0.1302    8.0170 v _6041_/Y (sg13g2_nor2_1)
+   3.0130   11.0300 ^ _6042_/Y (sg13g2_a21oi_1)
+   1.9471   12.9771 v _5101_/Y (sg13g2_nand4_1)
+   0.4572   13.4343 ^ _5507_/X (sg13g2_mux2_1)
+   0.0911   13.5254 v _5508_/Y (sg13g2_nand2_1)
+   0.0741   13.5996 ^ _5509_/Y (sg13g2_o21ai_1)
+   0.0000   13.5996 ^ _5763_/D (sg13g2_dfrbpq_1)
+            13.5996   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5763_/CLK (sg13g2_dfrbpq_1)
+  -0.2594   15.4076   library setup time
+            15.4076   data required time
+-------------------------------------------------------------
+            15.4076   data required time
+           -13.5996   data arrival time
+-------------------------------------------------------------
+             1.8080   slack (MET)
+
+
+Startpoint: u_soc.u_imem.g_macro.u_sram
+            (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5740_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   7.1742    7.1742 ^ u_soc.u_imem.g_macro.u_sram/A_DOUT[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.2462    7.4204 ^ _6033_/Y (sg13g2_nor2b_1)
+   0.2168    7.6372 v _6034_/Y (sg13g2_nand2b_1)
+   0.2496    7.8868 ^ _6036_/Y (sg13g2_o21ai_1)
+   0.1302    8.0170 v _6041_/Y (sg13g2_nor2_1)
+   3.0130   11.0300 ^ _6042_/Y (sg13g2_a21oi_1)
+   1.9471   12.9771 v _5152_/Y (sg13g2_nand4_1)
+   0.4572   13.4343 ^ _5173_/X (sg13g2_mux2_1)
+   0.0911   13.5254 v _5174_/Y (sg13g2_nand2_1)
+   0.0741   13.5996 ^ _5175_/Y (sg13g2_o21ai_1)
+   0.0000   13.5996 ^ _5740_/D (sg13g2_dfrbpq_1)
+            13.5996   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5740_/CLK (sg13g2_dfrbpq_1)
+  -0.2516   15.4154   library setup time
+            15.4154   data required time
+-------------------------------------------------------------
+            15.4154   data required time
+           -13.5996   data arrival time
+-------------------------------------------------------------
+             1.8159   slack (MET)
+
+
+Startpoint: u_soc.u_imem.g_macro.u_sram
+            (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5741_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   7.1742    7.1742 ^ u_soc.u_imem.g_macro.u_sram/A_DOUT[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.2462    7.4204 ^ _6033_/Y (sg13g2_nor2b_1)
+   0.2168    7.6372 v _6034_/Y (sg13g2_nand2b_1)
+   0.2496    7.8868 ^ _6036_/Y (sg13g2_o21ai_1)
+   0.1302    8.0170 v _6041_/Y (sg13g2_nor2_1)
+   3.0130   11.0300 ^ _6042_/Y (sg13g2_a21oi_1)
+   1.9471   12.9771 v _5152_/Y (sg13g2_nand4_1)
+   0.4572   13.4343 ^ _5170_/X (sg13g2_mux2_1)
+   0.0911   13.5254 v _5171_/Y (sg13g2_nand2_1)
+   0.0741   13.5996 ^ _5172_/Y (sg13g2_o21ai_1)
+   0.0000   13.5996 ^ _5741_/D (sg13g2_dfrbpq_1)
+            13.5996   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5741_/CLK (sg13g2_dfrbpq_1)
+  -0.2516   15.4154   library setup time
+            15.4154   data required time
+-------------------------------------------------------------
+            15.4154   data required time
+           -13.5996   data arrival time
+-------------------------------------------------------------
+             1.8159   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _4316_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _4316_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _4316_/CLK (sg13g2_dfrbpq_1)
+  -0.2010    0.0490   library removal time
+             0.0490   data required time
+-------------------------------------------------------------
+             0.0490   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.0490   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _4317_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _4317_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _4317_/CLK (sg13g2_dfrbpq_1)
+  -0.2010    0.0490   library removal time
+             0.0490   data required time
+-------------------------------------------------------------
+             0.0490   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.0490   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _4318_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _4318_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _4318_/CLK (sg13g2_dfrbpq_1)
+  -0.2010    0.0490   library removal time
+             0.0490   data required time
+-------------------------------------------------------------
+             0.0490   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.0490   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _4319_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _4319_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _4319_/CLK (sg13g2_dfrbpq_1)
+  -0.2010    0.0490   library removal time
+             0.0490   data required time
+-------------------------------------------------------------
+             0.0490   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.0490   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _4320_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _4320_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _4320_/CLK (sg13g2_dfrbpq_1)
+  -0.2010    0.0490   library removal time
+             0.0490   data required time
+-------------------------------------------------------------
+             0.0490   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.0490   slack (VIOLATED)
+
+
+Startpoint: ui_in[1] (input port clocked by clk)
+Endpoint: u_soc.u_imem.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ ui_in[1] (in)
+   0.0836    0.0836 v _6017_/Y (sg13g2_o21ai_1)
+   0.0707    0.1543 ^ _6018_/Y (sg13g2_a21oi_1)
+   0.1620    0.3163 ^ _8409_/X (sg13g2_mux2_1)
+   0.0000    0.3163 ^ u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.3163   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.7769    1.0269   library hold time
+             1.0269   data required time
+-------------------------------------------------------------
+             1.0269   data required time
+            -0.3163   data arrival time
+-------------------------------------------------------------
+            -0.7106   slack (VIOLATED)
+
+
+Startpoint: ui_in[1] (input port clocked by clk)
+Endpoint: u_soc.u_imem.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ ui_in[1] (in)
+   0.0836    0.0836 v _6027_/Y (sg13g2_o21ai_1)
+   0.0707    0.1543 ^ _6028_/Y (sg13g2_a21oi_1)
+   0.1620    0.3163 ^ _8412_/X (sg13g2_mux2_1)
+   0.0000    0.3163 ^ u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.3163   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.7769    1.0269   library hold time
+             1.0269   data required time
+-------------------------------------------------------------
+             1.0269   data required time
+            -0.3163   data arrival time
+-------------------------------------------------------------
+            -0.7106   slack (VIOLATED)
+
+
+Startpoint: ui_in[1] (input port clocked by clk)
+Endpoint: u_soc.u_imem.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ ui_in[1] (in)
+   0.0836    0.0836 v _6024_/Y (sg13g2_o21ai_1)
+   0.0696    0.1532 ^ _6025_/Y (sg13g2_a21oi_1)
+   0.1690    0.3222 ^ _8411_/X (sg13g2_mux2_1)
+   0.0000    0.3222 ^ u_soc.u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.3222   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.7659    1.0159   library hold time
+             1.0159   data required time
+-------------------------------------------------------------
+             1.0159   data required time
+            -0.3222   data arrival time
+-------------------------------------------------------------
+            -0.6937   slack (VIOLATED)
+
+
+Startpoint: ui_in[1] (input port clocked by clk)
+Endpoint: u_soc.u_imem.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ ui_in[1] (in)
+   0.0836    0.0836 v _6029_/Y (sg13g2_o21ai_1)
+   0.0740    0.1577 ^ _6030_/Y (sg13g2_a21oi_1)
+   0.1685    0.3261 ^ _8413_/X (sg13g2_mux2_1)
+   0.0000    0.3261 ^ u_soc.u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.3261   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.7682    1.0182   library hold time
+             1.0182   data required time
+-------------------------------------------------------------
+             1.0182   data required time
+            -0.3261   data arrival time
+-------------------------------------------------------------
+            -0.6921   slack (VIOLATED)
+
+
+Startpoint: ui_in[1] (input port clocked by clk)
+Endpoint: u_soc.u_imem.g_macro.u_sram
+          (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ ui_in[1] (in)
+   0.0836    0.0836 v _6316_/Y (sg13g2_o21ai_1)
+   0.0740    0.1577 ^ _6317_/Y (sg13g2_a21oi_1)
+   0.1754    0.3331 ^ _8414_/X (sg13g2_mux2_1)
+   0.0000    0.3331 ^ u_soc.u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.3331   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_soc.u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.7575    1.0075   library hold time
+             1.0075   data required time
+-------------------------------------------------------------
+             1.0075   data required time
+            -0.3331   data arrival time
+-------------------------------------------------------------
+            -0.6744   slack (VIOLATED)
+
+
+max slew
+
+Pin                                    Limit    Slew   Slack
+------------------------------------------------------------
+_4433_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4434_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4435_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4436_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4438_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4439_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4443_/B                                2.51    4.06   -1.55 (VIOLATED)
+_4445_/A1                               2.51    4.06   -1.55 (VIOLATED)
+_4447_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4448_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4452_/B                                2.51    4.06   -1.55 (VIOLATED)
+_4454_/A1                               2.51    4.06   -1.55 (VIOLATED)
+_4456_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4457_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4458_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4459_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4461_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4462_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4463_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4464_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4466_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4467_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4468_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4469_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4471_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4472_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_4476_/B                                2.51    4.06   -1.55 (VIOLATED)
+_4478_/A1                               2.51    4.06   -1.55 (VIOLATED)
+_5055_/A                                2.51    4.06   -1.55 (VIOLATED)
+_5057_/A2                               2.51    4.06   -1.55 (VIOLATED)
+_5101_/B                                2.51    4.06   -1.55 (VIOLATED)
+_5125_/A                                2.51    4.06   -1.55 (VIOLATED)
+_5126_/A                                2.51    4.06   -1.55 (VIOLATED)
+_5151_/B                                2.51    4.06   -1.55 (VIOLATED)
+_5152_/B                                2.51    4.06   -1.55 (VIOLATED)
+_5458_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_5459_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_5460_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_5461_/S0                               2.51    4.06   -1.55 (VIOLATED)
+_6042_/Y                                2.51    4.06   -1.55 (VIOLATED)
+_8798_/Y                                2.51    3.48   -0.97 (VIOLATED)
+_8799_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8800_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8801_/B1                               2.51    3.48   -0.97 (VIOLATED)
+_8803_/B1                               2.51    3.48   -0.97 (VIOLATED)
+_8805_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8834_/C                                2.51    3.48   -0.97 (VIOLATED)
+_8839_/B1                               2.51    3.48   -0.97 (VIOLATED)
+_8841_/B                                2.51    3.48   -0.97 (VIOLATED)
+_8846_/B1                               2.51    3.48   -0.97 (VIOLATED)
+_8849_/A                                2.51    3.48   -0.97 (VIOLATED)
+_8850_/B1                               2.51    3.48   -0.97 (VIOLATED)
+_8908_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8909_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8910_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8911_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8912_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8913_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8914_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8915_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8916_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8917_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8918_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8919_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8920_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8921_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8922_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8923_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8924_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8925_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8926_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8927_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8928_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8929_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8930_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8931_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8932_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8933_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8934_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8935_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8936_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8937_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8938_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8939_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8943_/A2                               2.51    3.48   -0.97 (VIOLATED)
+_8953_/S                                2.51    3.48   -0.97 (VIOLATED)
+_8955_/S                                2.51    3.48   -0.97 (VIOLATED)
+u_soc.u_eth_fbuf.g_macro.u_sram/A_WEN    0.60    1.01   -0.41 (VIOLATED)
+u_soc.u_eth_fbuf.g_macro.u_sram/A_BM[10]    0.60    0.61   -0.02 (VIOLATED)
+u_soc.u_eth_fbuf.g_macro.u_sram/A_BM[11]    0.60    0.61   -0.02 (VIOLATED)
+u_soc.u_eth_fbuf.g_macro.u_sram/A_BM[12]    0.60    0.61   -0.02 (VIOLATED)
+u_soc.u_eth_fbuf.g_macro.u_sram/A_BM[13]    0.60    0.61   -0.02 (VIOLATED)
+u_soc.u_eth_fbuf.g_macro.u_sram/A_BM[14]    0.60    0.61   -0.02 (VIOLATED)
+u_soc.u_eth_fbuf.g_macro.u_sram/A_BM[15]    0.60    0.61   -0.02 (VIOLATED)
+u_soc.u_eth_fbuf.g_macro.u_sram/A_BM[8]    0.60    0.61   -0.02 (VIOLATED)
+u_soc.u_eth_fbuf.g_macro.u_sram/A_BM[9]    0.60    0.61   -0.02 (VIOLATED)
+
+max fanout
+
+Pin                                   Limit Fanout  Slack
+---------------------------------------------------------
+_7111_/Y                                  8     53    -45 (VIOLATED)
+_8219_/Q                                  8     51    -43 (VIOLATED)
+_8798_/Y                                  8     46    -38 (VIOLATED)
+_8611_/Y                                  8     42    -34 (VIOLATED)
+_6042_/Y                                  8     39    -31 (VIOLATED)
+_6038_/Y                                  8     38    -30 (VIOLATED)
+_8105_/X                                  8     35    -27 (VIOLATED)
+_9126_/Q                                  8     34    -26 (VIOLATED)
+_7021_/Y                                  8     33    -25 (VIOLATED)
+_6388_/Y                                  8     32    -24 (VIOLATED)
+_6392_/Y                                  8     32    -24 (VIOLATED)
+_6393_/Y                                  8     32    -24 (VIOLATED)
+_4125_/Y                                  8     31    -23 (VIOLATED)
+_7019_/Y                                  8     28    -20 (VIOLATED)
+_4087_/Y                                  8     25    -17 (VIOLATED)
+_6681_/Q                                  8     25    -17 (VIOLATED)
+_6706_/X                                  8     25    -17 (VIOLATED)
+_7015_/Y                                  8     25    -17 (VIOLATED)
+_6326_/Q                                  8     24    -16 (VIOLATED)
+_6918_/Y                                  8     24    -16 (VIOLATED)
+_6324_/Q                                  8     23    -15 (VIOLATED)
+_7014_/Y                                  8     23    -15 (VIOLATED)
+_6323_/Q                                  8     22    -14 (VIOLATED)
+_6325_/Q                                  8     22    -14 (VIOLATED)
+_6327_/Q                                  8     22    -14 (VIOLATED)
+_6328_/Q                                  8     22    -14 (VIOLATED)
+_4185_/X                                  8     21    -13 (VIOLATED)
+_4186_/Y                                  8     21    -13 (VIOLATED)
+_6320_/Y                                  8     21    -13 (VIOLATED)
+_6329_/Q                                  8     21    -13 (VIOLATED)
+_7059_/X                                  8     21    -13 (VIOLATED)
+_8329_/Q                                  8     20    -12 (VIOLATED)
+_9033_/Q                                  8     20    -12 (VIOLATED)
+_6330_/Q                                  8     19    -11 (VIOLATED)
+_8296_/Q                                  8     19    -11 (VIOLATED)
+_4085_/Y                                  8     18    -10 (VIOLATED)
+_4254_/X                                  8     18    -10 (VIOLATED)
+_4190_/X                                  8     17     -9 (VIOLATED)
+_7781_/Y                                  8     17     -9 (VIOLATED)
+_4084_/Y                                  8     16     -8 (VIOLATED)
+_4189_/Y                                  8     16     -8 (VIOLATED)
+_4584_/Y                                  8     16     -8 (VIOLATED)
+_5054_/X                                  8     16     -8 (VIOLATED)
+_5076_/X                                  8     16     -8 (VIOLATED)
+_5080_/X                                  8     16     -8 (VIOLATED)
+_5084_/X                                  8     16     -8 (VIOLATED)
+_5088_/X                                  8     16     -8 (VIOLATED)
+_5092_/X                                  8     16     -8 (VIOLATED)
+_5096_/X                                  8     16     -8 (VIOLATED)
+_5463_/X                                  8     16     -8 (VIOLATED)
+_6045_/Y                                  8     16     -8 (VIOLATED)
+_6195_/X                                  8     16     -8 (VIOLATED)
+_7699_/Y                                  8     16     -8 (VIOLATED)
+_8464_/Y                                  8     16     -8 (VIOLATED)
+_9035_/Q                                  8     16     -8 (VIOLATED)
+_8028_/X                                  8     15     -7 (VIOLATED)
+_8596_/Y                                  8     15     -7 (VIOLATED)
+_9034_/Q                                  8     15     -7 (VIOLATED)
+_4684_/X                                  8     14     -6 (VIOLATED)
+_6066_/Y                                  8     14     -6 (VIOLATED)
+_8104_/Y                                  8     14     -6 (VIOLATED)
+_8546_/Y                                  8     14     -6 (VIOLATED)
+_8668_/Y                                  8     14     -6 (VIOLATED)
+_5953_/Q                                  8     13     -5 (VIOLATED)
+_7112_/Y                                  8     13     -5 (VIOLATED)
+_8029_/Y                                  8     13     -5 (VIOLATED)
+_4811_/Y                                  8     12     -4 (VIOLATED)
+_5643_/X                                  8     12     -4 (VIOLATED)
+_5886_/Q                                  8     12     -4 (VIOLATED)
+_5995_/Y                                  8     12     -4 (VIOLATED)
+_6044_/Y                                  8     12     -4 (VIOLATED)
+_7769_/Y                                  8     12     -4 (VIOLATED)
+_8289_/Q                                  8     12     -4 (VIOLATED)
+_8374_/Q                                  8     12     -4 (VIOLATED)
+_8376_/Q                                  8     12     -4 (VIOLATED)
+_8707_/Y                                  8     12     -4 (VIOLATED)
+_4656_/Y                                  8     11     -3 (VIOLATED)
+_5814_/Q                                  8     11     -3 (VIOLATED)
+_6040_/Y                                  8     11     -3 (VIOLATED)
+_6322_/Y                                  8     11     -3 (VIOLATED)
+_6772_/Y                                  8     11     -3 (VIOLATED)
+_6852_/Y                                  8     11     -3 (VIOLATED)
+_7767_/X                                  8     11     -3 (VIOLATED)
+_8226_/Q                                  8     11     -3 (VIOLATED)
+_8295_/Q                                  8     11     -3 (VIOLATED)
+_8367_/Q                                  8     11     -3 (VIOLATED)
+_8373_/Q                                  8     11     -3 (VIOLATED)
+_8654_/X                                  8     11     -3 (VIOLATED)
+_4361_/Q                                  8     10     -2 (VIOLATED)
+_4362_/Q                                  8     10     -2 (VIOLATED)
+_4419_/Y                                  8     10     -2 (VIOLATED)
+_4627_/Y                                  8     10     -2 (VIOLATED)
+_4833_/Y                                  8     10     -2 (VIOLATED)
+_5811_/Q                                  8     10     -2 (VIOLATED)
+_5813_/Q                                  8     10     -2 (VIOLATED)
+_5849_/Q                                  8     10     -2 (VIOLATED)
+_6331_/Q                                  8     10     -2 (VIOLATED)
+_6944_/Y                                  8     10     -2 (VIOLATED)
+_7012_/Y                                  8     10     -2 (VIOLATED)
+_7113_/Y                                  8     10     -2 (VIOLATED)
+_7945_/Y                                  8     10     -2 (VIOLATED)
+_8125_/Y                                  8     10     -2 (VIOLATED)
+_8222_/Q                                  8     10     -2 (VIOLATED)
+_8227_/Q                                  8     10     -2 (VIOLATED)
+_8230_/Q                                  8     10     -2 (VIOLATED)
+_8353_/Q                                  8     10     -2 (VIOLATED)
+_8354_/Q                                  8     10     -2 (VIOLATED)
+_8355_/Q                                  8     10     -2 (VIOLATED)
+_8377_/Q                                  8     10     -2 (VIOLATED)
+_9031_/Q                                  8     10     -2 (VIOLATED)
+_9080_/Q                                  8     10     -2 (VIOLATED)
+_4086_/Y                                  8      9        (VIOLATED)
+_4363_/Q                                  8      9        (VIOLATED)
+_4633_/Y                                  8      9        (VIOLATED)
+_4639_/Y                                  8      9        (VIOLATED)
+_4651_/Y                                  8      9        (VIOLATED)
+_4654_/Y                                  8      9        (VIOLATED)
+_4661_/Y                                  8      9        (VIOLATED)
+_4674_/Y                                  8      9        (VIOLATED)
+_4858_/Y                                  8      9        (VIOLATED)
+_5812_/Q                                  8      9        (VIOLATED)
+_5887_/Q                                  8      9        (VIOLATED)
+_6060_/Y                                  8      9        (VIOLATED)
+_6076_/Y                                  8      9        (VIOLATED)
+_6128_/Y                                  8      9        (VIOLATED)
+_6192_/Y                                  8      9        (VIOLATED)
+_6193_/Y                                  8      9        (VIOLATED)
+_6198_/X                                  8      9        (VIOLATED)
+_6332_/Q                                  8      9        (VIOLATED)
+_6743_/Q                                  8      9        (VIOLATED)
+_6920_/Y                                  8      9        (VIOLATED)
+_6923_/Y                                  8      9        (VIOLATED)
+_6933_/Y                                  8      9        (VIOLATED)
+_6977_/Y                                  8      9        (VIOLATED)
+_6991_/Y                                  8      9        (VIOLATED)
+_7006_/Y                                  8      9        (VIOLATED)
+_7097_/X                                  8      9        (VIOLATED)
+_7760_/Y                                  8      9        (VIOLATED)
+_8223_/Q                                  8      9        (VIOLATED)
+_8228_/Q                                  8      9        (VIOLATED)
+_8231_/Q                                  8      9        (VIOLATED)
+_8247_/Q                                  8      9        (VIOLATED)
+_8256_/Q                                  8      9        (VIOLATED)
+_8257_/Q                                  8      9        (VIOLATED)
+_8267_/Q                                  8      9        (VIOLATED)
+_8270_/Q                                  8      9        (VIOLATED)
+_8273_/Q                                  8      9        (VIOLATED)
+_8352_/Q                                  8      9        (VIOLATED)
+_8375_/Q                                  8      9        (VIOLATED)
+_8379_/Q                                  8      9        (VIOLATED)
+_8428_/X                                  8      9        (VIOLATED)
+_8739_/Y                                  8      9        (VIOLATED)
+_9032_/Q                                  8      9        (VIOLATED)
+
+max capacitance
+
+Pin                                    Limit     Cap   Slack
+------------------------------------------------------------
+_6042_/Y                                0.30    0.32   -0.02 (VIOLATED)
+
+worst slack max 0.00
+worst slack min -0.71
+===== NEGATIVE-MIN INVENTORY (slack <= 0)
+Startpoint                           Endpoint                                 Slack
+----------------------------------------------------------------------------------
+rst_n (input)                        _4316_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4317_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4318_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4319_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4320_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4321_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4322_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4323_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4324_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4325_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4326_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4327_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4328_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4329_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4330_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4331_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4332_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4333_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4334_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4335_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4336_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4337_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4338_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4339_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4340_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4341_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4342_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4343_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4344_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4345_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4346_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4347_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4348_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4349_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4350_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4351_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4352_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4353_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4354_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4355_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4356_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4357_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4358_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4359_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4360_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4361_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4362_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4363_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4364_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4365_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4366_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4367_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4368_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4369_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4370_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4371_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4372_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4373_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4374_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4375_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4376_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4377_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4378_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4379_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4380_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4381_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4382_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4383_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4384_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4385_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4386_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4387_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4388_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4389_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4390_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4391_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4392_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4393_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4394_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4395_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4396_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4397_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4398_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4399_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4400_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4401_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4402_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4403_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4404_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4405_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4406_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4407_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4408_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4409_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4410_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _4411_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5772_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5773_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5774_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5775_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5776_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5777_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5778_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5779_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5780_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5781_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5782_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5783_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5784_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5785_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5786_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5787_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5788_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5789_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5790_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5791_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5792_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5793_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5794_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5795_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5796_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5797_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5798_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5799_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5800_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5801_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5802_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5803_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5804_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5805_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5806_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5807_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5808_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5809_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5810_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5811_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5812_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5813_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5814_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5815_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5816_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5817_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5818_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5819_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5820_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5821_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5822_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5823_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5824_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5825_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5826_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5827_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5828_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5829_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5830_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5831_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5832_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5833_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5834_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5835_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5836_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5837_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5838_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5839_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5840_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5841_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5842_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5843_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5844_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5845_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5846_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5847_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5848_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5849_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5850_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5851_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5852_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5853_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5854_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5855_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5856_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5857_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5858_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5859_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5860_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5861_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5862_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5863_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5864_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5865_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5866_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5867_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5868_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5869_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5870_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5871_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5872_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5873_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5874_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5875_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5876_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5877_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5878_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5879_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5880_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5881_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5882_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5883_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5884_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5885_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5886_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5887_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5888_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5889_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5890_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5891_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5892_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5893_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5894_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5895_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5896_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5897_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5898_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5899_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5900_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5901_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5902_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5903_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5904_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5905_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5906_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5907_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5908_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5909_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5910_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5911_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5912_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5913_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5914_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5915_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5916_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5917_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5918_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5919_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5920_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5921_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5922_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5923_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5924_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5925_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5926_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5927_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5928_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5929_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5930_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5931_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5932_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5933_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5934_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5935_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5936_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5937_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5938_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5939_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5940_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5941_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5942_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5943_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5944_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5945_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5946_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5947_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5948_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5949_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5950_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5951_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5952_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5953_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5954_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5955_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5956_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5957_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5958_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5959_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5960_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5961_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5962_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5963_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5964_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5965_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5966_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5967_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5968_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _5969_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6323_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6324_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6325_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6326_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6327_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6328_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6329_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6330_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6331_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6332_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6333_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6334_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6335_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6336_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6337_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6338_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6339_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6340_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6341_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6342_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6343_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6344_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6345_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6346_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6347_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6348_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6349_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6350_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6351_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6352_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6353_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6354_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6355_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6356_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6519_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6520_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6521_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6522_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6523_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6524_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6525_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6526_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6527_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6528_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6529_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6530_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6531_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6532_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6533_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6534_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6535_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6536_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6537_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6538_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6539_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6540_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6541_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6542_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6543_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6544_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6545_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6546_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6547_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6548_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6549_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6550_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6668_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6669_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6670_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6671_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6672_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6673_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6674_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6675_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6676_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6677_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6678_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6681_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6682_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6683_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6684_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6685_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6686_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6687_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6688_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6689_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6690_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6691_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6692_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6693_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6694_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6695_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _6696_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8219_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8220_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8221_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8222_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8223_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8224_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8225_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8226_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8227_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8228_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8229_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8230_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8231_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8232_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8233_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8234_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8235_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8236_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8237_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8238_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8239_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8240_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8241_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8242_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8243_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8244_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8245_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8246_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8247_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8248_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8249_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8250_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8251_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8252_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8253_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8254_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8255_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8256_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8257_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8258_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8259_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8260_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8261_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8262_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8263_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8264_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8265_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8266_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8267_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8268_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8269_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8270_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8271_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8272_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8273_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8274_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8275_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8276_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8277_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8278_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8279_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8280_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8281_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8282_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8283_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8284_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8285_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8286_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8287_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8288_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8289_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8290_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8291_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8292_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8293_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8294_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8295_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8296_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8297_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8298_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8299_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8300_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8301_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8302_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8303_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8304_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8305_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8306_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8307_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8308_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8309_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8310_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8311_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8312_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8313_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8314_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8315_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8316_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8317_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8318_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8319_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8320_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8321_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8322_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8323_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8324_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8325_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8326_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8327_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8328_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8329_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8330_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8331_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8332_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8333_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8334_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8335_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8336_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8337_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8338_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8339_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8340_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8341_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8342_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8343_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8344_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8345_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8346_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8347_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8348_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8349_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8350_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8351_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8352_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8353_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8354_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8355_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8356_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8357_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8358_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8359_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8360_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8361_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8362_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8363_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8364_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8365_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8366_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8367_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8368_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8369_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8370_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8371_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8372_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8373_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8374_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8375_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8376_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8377_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8378_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8379_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8380_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8381_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8382_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8383_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8384_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8385_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8386_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8387_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8388_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8389_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8390_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8391_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8392_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8393_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8394_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8395_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8396_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8397_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8398_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8403_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8504_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8505_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8506_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8507_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8508_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8509_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8510_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8511_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8512_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8513_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8514_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8515_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8516_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8517_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8518_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8519_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8520_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8521_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8522_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8523_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8524_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8525_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8526_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8527_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8541_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8547_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8589_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8590_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8591_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8592_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8593_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8594_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8996_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8997_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8998_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _8999_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9000_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9001_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9002_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9003_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9004_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9005_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9006_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9007_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9008_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9009_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9010_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9011_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9012_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9013_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9014_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9015_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9016_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9017_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9018_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9019_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9020_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9021_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9022_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9023_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9024_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9025_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9026_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9027_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9028_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9029_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9030_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9031_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9032_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9033_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9034_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9035_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9036_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9037_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9038_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9039_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9040_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9041_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9042_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9043_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9044_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9045_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9046_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9047_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9048_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9049_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9050_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9051_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9052_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9053_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9054_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9055_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9056_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9057_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9058_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9059_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9060_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9061_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9062_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9063_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9064_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9065_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9066_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9067_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9068_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9069_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9070_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9071_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9072_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9073_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9074_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9075_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9076_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9077_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9078_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9079_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9080_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9081_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9082_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9083_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9084_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9085_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9086_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9087_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9088_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9089_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9090_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9091_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9092_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9093_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9094_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9095_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9096_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9097_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9098_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9099_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9100_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9101_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9102_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9103_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9104_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9105_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9106_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9107_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9108_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9109_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9110_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9111_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9112_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9113_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9114_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9115_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9116_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9117_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9118_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9119_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9120_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9121_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9122_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9123_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9124_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9125_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9126_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9127_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9145_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9196_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9197_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9198_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9199_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9200_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+rst_n (input)                        _9201_/RESET_B (sg13g2_dfrbpq_1)       -0.0490
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.7106
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.7106
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.7106
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.7106
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6944
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6944
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6944
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6944
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6937
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6937
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6921
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6921
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6774
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6774
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6760
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6760
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6744
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6744
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6727
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6727
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6722
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6722
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6583
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6583
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6564
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6564
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6560
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6560
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6559
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6559
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6397
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6397
+_4333_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6380
+_4334_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6380
+_4335_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6380
+_4336_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6380
+_4338_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6380
+_4331_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6380
+_4332_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6380
+_4337_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6346
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6327
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6327
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6217
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6217
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6166
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6166
+_4323_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6089
+_4324_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6089
+_4325_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6089
+_4326_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6089
+_4327_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6089
+_4328_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6089
+_4329_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6089
+_4330_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6089
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6056
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.6056
+_4333_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5947
+_4334_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5947
+_4335_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5947
+_4336_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5947
+_4338_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5947
+_4331_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5947
+_4332_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5947
+_4337_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5926
+_4323_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5714
+_4324_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5714
+_4325_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5714
+_4326_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5714
+_4327_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5714
+_4328_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5714
+_4329_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5714
+_4330_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_imem.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5714
+_5854_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5698
+_5851_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5205
+_5859_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5189
+_8224_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.5100
+_5853_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4977
+_8274_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4828
+_8225_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4802
+_5852_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4790
+_5858_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4782
+_8274_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4775
+_5856_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4699
+_5850_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4684
+_8232_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4677
+_8227_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4674
+_8272_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4673
+_8271_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4673
+_8274_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[14] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4665
+_5857_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4662
+_8272_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4639
+_8271_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4638
+_8223_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4568
+_8272_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[12] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4526
+_8271_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[11] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4525
+_8269_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4519
+_8269_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4508
+_8268_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4508
+_8268_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4501
+_8229_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4478
+_5855_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4459
+_8274_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4447
+_8269_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4388
+_8270_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4388
+_8268_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4380
+_8270_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4363
+_8228_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4362
+_8273_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4360
+_8273_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4335
+_8272_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4305
+_8271_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4305
+_8270_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4260
+_8273_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[13] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4231
+_8269_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4163
+_8268_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4153
+_8231_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4148
+_8230_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4131
+_5854_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4108
+_8226_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4043
+_8270_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.4020
+_8273_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3994
+_8289_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3906
+_8289_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3797
+_8289_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[15] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3749
+_5851_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3706
+_5859_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3662
+_8224_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3628
+_8289_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_DIN[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3501
+_5853_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3488
+_5852_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3369
+_8225_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3363
+_5858_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3289
+_8227_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3278
+_5850_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3250
+_8232_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3249
+_5857_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3219
+_5856_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3193
+_8223_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3162
+_5855_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3048
+_8229_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[6] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.3019
+_8228_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[5] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2957
+_8230_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[7] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2785
+_8231_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2764
+_8226_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist) u_soc.u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.2701
+ui_in[3] (input)                     _4404_/D (sg13g2_dfrbpq_1)             -0.1630
+ui_in[4] (input)                     _4407_/D (sg13g2_dfrbpq_1)             -0.1630
+ui_in[5] (input)                     _4409_/D (sg13g2_dfrbpq_1)             -0.1324
+ui_in[2] (input)                     _6695_/D (sg13g2_dfrbpq_1)             -0.1324
+ui_in[3] (input)                     _4404_/D (sg13g2_dfrbpq_1)             -0.1197
+ui_in[4] (input)                     _4407_/D (sg13g2_dfrbpq_1)             -0.1197
+ui_in[1] (input)                     _4317_/D (sg13g2_dfrbpq_1)             -0.1153
+ui_in[1] (input)                     _4318_/D (sg13g2_dfrbpq_1)             -0.1098
+ui_in[1] (input)                     u_soc.u_imem.g_macro.u_sram/A_REN (RM_IHPSG13_1P_1024x16_c2_bm_bist)   -0.1011
+ui_in[1] (input)                     _4316_/D (sg13g2_dfrbpq_1)             -0.0960
+ui_in[1] (input)                     uio_oe[4] (output)                     -0.0892
+ui_in[5] (input)                     _4409_/D (sg13g2_dfrbpq_1)             -0.0850
+ui_in[2] (input)                     _6695_/D (sg13g2_dfrbpq_1)             -0.0850
+ui_in[1] (input)                     _6347_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6347_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6348_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6348_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6349_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6349_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6350_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6350_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6351_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6351_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6352_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6352_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6353_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6353_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6354_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6354_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6355_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6355_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6356_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6356_/D (sg13g2_dfrbpq_1)             -0.0609
+ui_in[1] (input)                     _6347_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6347_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6348_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6348_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6349_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6349_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6350_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6350_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6351_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6351_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6352_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6352_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6353_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6353_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6354_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6354_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6355_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6355_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6356_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _6356_/D (sg13g2_dfrbpq_1)             -0.0605
+ui_in[1] (input)                     _4316_/D (sg13g2_dfrbpq_1)             -0.0361
+ui_in[1] (input)                     _4317_/D (sg13g2_dfrbpq_1)             -0.0242
+

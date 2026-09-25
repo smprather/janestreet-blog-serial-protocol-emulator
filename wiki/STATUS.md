@@ -1,29 +1,326 @@
 # Project Status — through 10BASE-T receive
 
-> **Latest E1/E2 review follow-up (2026-09-23): original findings fixed, but
-> residual issues remain.** E1's producer/consumer pointer split prevents the
-> original destructive mid-frame rebase; a fresh review found that ring-wrapped
-> releases are rejected and same-edge consumer/producer room updates can leak
-> capacity. E2's current two-macro entries pass the static check, but that gate
-> does not validate supply-to-net mappings or require the Metal4-to-grid PDN
-> connection. Details and reproductions:
-> `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md`. The original fixes and
-> regression evidence remain in `ETHERNET-SOC-REVIEW.md`, `E1-RESOLUTION.md`
-> and `E2-RESOLUTION.md`. No fix for these follow-up findings has landed;
-> physical flow, DRC and LVS remain deferred.
+> **10BASE-T TX frame path — plan Tasks 4-5 LANDED and verified (2026-09-24/25,
+> Manager Task 11; supersedes the Task-10 hash block below for `pe_eth_tx.v`,
+> `pe_soc.v`, `run_all.sh` and `run_firmware_tests.sh`).** The wrapper reclaim
+> landed: `uo_out[2] = pin_oe_bus[7] ? pin_out_bus[7] : dbg_pc[0]`, with
+> `uo_out[7:3] = dbg_pc[5:1]`; RED-first (the pre-mux pad TB reports 5,525
+> FAILs, `uo_out[2] is not the eth_tx pad while port bit 7 drives`), then it
+> decodes the frame at the pad — `eth_tx pad: decoded 576 wire bits, FCS
+> 9cc5cb34`. `info.yaml` and the regenerated pin-budget page carry the new
+> function (`pin_budget.py` `pinned_out` 3 -> 4; still **19 of 24** committed).
+> The loopback consumer landed: NEW `tb/tb_pe_soc_eth_loop.v` + four firmwares
+> (`eth_arp_echo` 546 words, `eth_tx_two` 299, `eth_tx_wrap_probe` 41,
+> `eth_tx_busy_probe` 225; hex committed; firmware 26/26). Its kept transcript:
+> `echo: len=46 field=0806 sum=07`, push gaps **max 52 clk vs the 48-clk
+> wire-byte budget** (the 8-byte staging FIFO absorbs it — the echoed frame
+> decodes FCS-clean — but the plan's Task-5 Step-2 revisit trigger is recorded,
+> not silently passed); two-frame IFG **102** idle cells (>= 96 spec), RX
+> valid=2 bad=0; wrap 9 pushes, `REG[24]=2a` `REG[26]=04`, bad=0; busy
+> `refused_start=1` TXSTAT `00`, RX valid=1 bad=0. Two real defects the
+> loopback caught and fixed: the engine's advance moved from the codec's
+> committing `cell_en` to a boundary `eth_cell_start` (high on the cell's LAST
+> clock — the old point left the first clock of every first half showing the
+> previous bit, so the DRU could not frame the engine from constant idle; each
+> Manchester half is now exactly three clocks), and both loop/Task-3 TBs hold
+> 4 stopped clocks after the loader's last write before `run` rises (the SRAM's
+> registered read held a stale/X first fetch and silently dropped the
+> program's first instruction). Directed sensitivity proved the new checks
+> non-vacuous: the push-wrap mutation fails 3 checks, removing
+> `!ser_tx_busy` fails `refused_start`; both restored `cmp`-byte-identical.
+> Close-out root-caused the red tree: it was an **unrestored
+> `regress/mutate_i2c_tb.sh` mutation m1** (`pad_oe = reg_oe`, the open-drain
+> gate lost, failing tb_pe_pinmux/tb_pe_soc_i2c/tb_pe_soc_i2c_xfer), not a
+> hand edit — the kernel OOM at 2026-09-24 18:43:28 (runaway python3, 22 GB
+> anon + 5 GB swap) killed the wezterm unit mid-suite before the harness's
+> `cmp`-verified restore and its signal traps could run (SIGKILL is
+> untrappable). Restored canonically by `cp` from the harness's pristine
+> snapshot and `cmp`-verified against both surviving copies (sha256
+> `c1fa0cec...`); `firmware/i2c_pins.pe`/`.hex` were already
+> pristine-identical. The RAM watchdog `tools/manager/mem_monitor.sh` ran
+> from 01:43 with no trigger (`/tmp/pi-mem-interrupt` never appeared). `pe_soc.v` keeps the one-process
+> set-beats-clear `tick_flag` (the two-driver / yosys-constant-0 class;
+> clean elaboration, `tb_pe_soc_tick` PASS). `./regress/run_all.sh --fast -j8`
+> **exit 0 — RTL 33/33, firmware 26/26, lint clean, 12 gates, 10 mutation
+> suites**; `./regress/synth_area.sh` **exit 0**: `pe_eth_tx` 892 /
+> 16,040.0898 µm² (unchanged), `pe_pinmux` 127 / 2,191.1904, `pe_soc`
+> **6,219 / 108,084.8286**, `tt_um_top` **7,960 / 138,817.4004**. Explicit
+> re-runs kept: `tb_pe_soc_eth_loop` and `tb_tt_um_protocol_emulator` PASS
+> (`/tmp/mgr11_tb_loop.out`, `/tmp/mgr11_tb_tt_um.out`). Hashes:
+> `rtl/pe_pinmux.v`
+> `c1fa0cec1cdc2ad04c6b9e97bc8ad4e6fdb0893e3fbda8256121ce7312949aef`;
+> `rtl/pe_eth_tx.v`
+> `75a02108950546214bf23edf4cf8097efb7649ace778462666165d59592c73be`;
+> `rtl/pe_soc.v`
+> `5791b757a9051a94ef0ff07969f786e6b6c7a4b8d48dd240de17944c77d070a9`;
+> `rtl/tt_um_protocol_emulator.v`
+> `9cb4290125712fda2275559fc34063483ed04b215470259eed9fc4533a468f9a`;
+> `tb/tb_pe_eth_tx.v`
+> `3ccc1ea88dfc4e12a6f6b617fec512cfd4e401170a1412175141051d524698ba`;
+> `tb/tb_pe_soc_eth_tx.v`
+> `8cf8158b5ef6f11419bf1dd20bd0178ec7c5571b794cae9f847797e3dd8f7dcc`;
+> `tb/tb_pe_soc_eth_loop.v`
+> `f164890d3c209a033d154dda5090e37db50fcb5dd3efdfe57e1a62feac298f56`;
+> `tb/tb_tt_um_protocol_emulator.v`
+> `7a53658e62a8ee5029b8dfd211bdcf06185f7a018e0249fbc3a7a98f1de031c1`;
+> `regress/run_all.sh`
+> `87cfca6d6ca49126c0432f000810371e8a9452834679f6015093c0e71e7cc2ee`;
+> `regress/run_firmware_tests.sh`
+> `1566da4f6269ed325d30cc4b3f33ad20814777550a139beef51cc591d5b8751a`;
+> `info.yaml`
+> `e5b20cc8a886d3c67cf010e66561f766cd76755946fbb6255510b8deebbc1ab1`;
+> `tools/gen/pin_budget.py`
+> `260f41dfcc2f8dd028f0ea1a64d3857d1a5033460f992b325a43ffcfb3acd9a1`;
+> `wiki/reference/protocol-pin-budget.md`
+> `b217e225176045db151762513738173dc5ae388d05e423c9d66c8bb4a6f10874`;
+> `wiki/reference/signal-names.md`
+> `83d8cee32d31790dc9592f54fb05dcebd4e230e16ff6c2d578413a8efbd93c81`;
+> new firmwares: `firmware/eth_arp_echo.pe`
+> `9ec6d39c55d9b3fb06e914095891d7f40c7b7d82228bfcd26bcca23f5b0cec84` /
+> `.hex` `a4786fa5954ed8c3961c834390842b9af9cb180eb271cc4fa2aa841d0d246679`;
+> `firmware/eth_tx_two.pe`
+> `451cddba1b3dd239dab9ffad26c144336db436de361e7c526fcffe98562b7039` /
+> `.hex` `0bf5f4c37a341f57bdf1d6b1c855355568a8efd2ed1a562e65ee2710700f1ae7`;
+> `firmware/eth_tx_wrap_probe.pe`
+> `65704420cbec4c6c4fdf60aa3e80e58bf4b9c4fb9617647da440e01045902da7` /
+> `.hex` `ffd0c782889e97111cdc24ab1befaae563a9693ba12cf69dc1f5971f5ff392e0`;
+> `firmware/eth_tx_busy_probe.pe`
+> `8ce7c4c041f00345093167f723b4fedc6577142e2f1f02b81c398e1d64e0b10b` /
+> `.hex` `ad4bbc14ebc18a15a9a5a64ff40ddbbe27d14bb0d240eff1243490f7894eea33`.
+> Unchanged from the Task-10 block: `firmware/eth_tx_arp.pe`/`.hex`,
+> `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`,
+> `regress/synth_area.sh`, `regress/lint.sh`. **Limits:** no `eth_tx`
+> mutation suites yet (plan Task 6); no STA screen yet (plan Task 7).
+> Mapped/simulation evidence only — no physical flow, DRC or LVS.
+
+> **10BASE-T TX frame path — plan Tasks 1-3 LANDED (2026-09-24, Manager
+> Task 10).** The manager adopted G1-G8 as written; G6's `uo_out[2]` reclaim
+> stands under the R1 pad map and the free-`uio` alternative is void, but the
+> wrapper mux is plan Task 4, so `rtl/tt_um_protocol_emulator.v` is untouched
+> here. NEW `rtl/pe_eth_tx.v` (892 cells / 16,040.09 µm² mapped) emits a full
+> frame from firmware-supplied stored bytes: hardware 56+8 prelude (wire
+> pattern, not 0xAA through a byte helper), octets LSB-first, zero pad to the
+> 64-byte minimum (pad IS folded into the FCS), a TX-DEDICATED `pe_crc #32`
+> (generated constants `0xEDB88320`/`FFFFFFFF`/out-inv; the field-mode register
+> drains to zero — checked), an 8-byte staging FIFO with underrun fault, runt
+> (<14)/jabber (>1,514) refusal, and a 96-cell IFG; idle is `tx_bit =
+> half_phase` (constant wire, not a square wave). `pe_soc` gained the
+> 32-entry 0xF window (5-bit index: 16-23 push-and-wrap, 24/25 TXLEN, 26
+> TXCTRL, 27 TXSTAT set-beats-clear), the exclusive owner mux on
+> `u_tx_codec.tx_bit` (`eth_start` gated on `!ser_tx_busy`; `tx_path` clear
+> refused while `tx_busy`), and DIV=6. `firmware/eth_tx_arp.pe` (502 words) is
+> the first consumer. Directed RED evidence: the unit TB fails to compile with
+> no engine; the SoC TB on the pre-change window aliases upper-bank writes
+> (`CFG=ff`, engine never enabled, 734 FAILs). The TBs caught two integration
+> bugs (TXCTRL is a level register — frame_start must write bit2=1; claim
+> `tx_path` before `eng_en` or the idling SERDES drives a Manchester square
+> wave). Evidence: `tb_pe_eth_tx` PASS (ARP-42 → 60 stored bytes / 576 wire
+> bits / FCS `9cc5cb34`; exact-64; max-1,514 / 12,208 bits; IFG 100 cells;
+> refused 1,515/13; abort; underrun; 200-cell constant idle); `tb_pe_soc_eth_tx`
+> PASS (576 wire bits, same FCS); `./regress/run_all.sh --fast -j8` **exit 0 —
+> RTL 32/32 (the 30 existing intact), firmware 22/22 (the 21 existing + the new
+> assemble), lint clean, every gate, ten mutation suites**;
+> `./regress/synth_area.sh` exit 0: `pe_soc` 4,961 → **6,191** cells /
+> 82,893.77 → **107,939.64 µm²**, `tt_um_top` 6,633 → **7,980** / 113,254.89 →
+> **138,746.71 µm²**. Same-list updates in all eight `pe_soc`-elaborating
+> harnesses + flow/info/macro-gate/lint; `signal-names.md` regenerated
+> (16 modules / 205 ports). Limits: no STA screen yet (Task 7), no pad-level
+> `uo_out[2]`/RX loopback (Tasks 4-5), no eth_tx mutation suites (Task 6). No
+> physical flow, DRC or LVS.
+
+> **R1 framed host bus reconciled and verified (2026-09-24, Tasks 8/9).** The
+> chip-side host protocol that landed at 14:33 (unrecorded before the OOM) is
+> now attributed to the host-controller plan
+> (`/tmp/opencode/host-controller-gui/wiki/plans/host-controller-gui.md`) and
+> its review (`reviews/2026-09-24/HOST-CONTROLLER-PLAN-REVIEW.md`), audited
+> against the R0/R1 rulings, and verified. `rtl/pe_ctrl.v` speaks a framed
+> mode-0 SPI contract: `A55A` sync, `{version,opcode,target}`, sequence,
+> length, payload, CRC-16/CCITT-FALSE (`0x1021`/`FFFF`, RevEng check `0x29B1`);
+> responses set opcode bit 7 and echo sequence/target; the first response word
+> is the status (`0 OK … 6 NOT_READY`); R1 opcodes PING/LOAD/STATUS/
+> CLEAR_FAULT/TARGET plus a target-1 internal loopback; `IRQ_N` (`uo_out[1]`)
+> is `~|faults` and mask-cleared by CLEAR_FAULT. A1 is superseded per the R0
+> ruling: `uio[4]` is host `CS_N`, and the commit-latched echo/abort semantics
+> live in the framed LOAD response (no trailing frames). Pads: `uio[4:7]` =
+> CS_N/MOSI/MISO/SCK, `uo_out[1]` = IRQ_N, `ui_in[3:5]` freed
+> (**19 of 24** committed, 5 free `ui_in`, 0 free `uio`). Fixes: old-style CRC
+> functions (yosys parse), fixed-slot response mux (Verilator WIDTHTRUNC),
+> `synth_area.sh` fails loudly on yosys ERROR, P21 CS-to-first-clock sweep
+> added (40/60/150/400 ns, PASS). Evidence: `lint.sh` exit 0 (15 verilator +
+> 12 yosys); `run_all.sh --fast -j8` exit 0 (30/30 RTL, 21/21 firmware, ten
+> suites); `mutate_ctrl_tb.sh` **29 detected / 0 survived / 0 harness errors**;
+> `synth_area.sh` exit 0 — `pe_ctrl` **1,731 cells / 30,662.11 µm²**,
+> `tt_um_top` **6,633 / 113,254.89 µm²**; seven generator checks OK. Hashes
+> and the full contract: `HANDOFF.md` top block. **OPEN FINDING (a) — P3
+> liveness gap:** the heartbeat pad is gone (`uo_out[1]` is IRQ_N) and the R1
+> STATUS layout deliberately omits timer/PC/A/X/Y, so nothing shows liveness
+> until the R2 read path. **(b) P21 sweep closed** by the new directed case.
+
+> **Diagram squarer layout + hold-screen attribution (2026-09-24, Tasks 5a/5b).**
+> **5a — both maps re-laid out:** `project-plan.puml` 4180×2520 (1.6587) →
+> **3194×2476 (1.29:1)** and `project-progress.puml` 6195×1354 (4.58:1) →
+> **3681×2493 (1.48:1)** (the progress map had sprawled during the Task-3
+> refresh); plan notes compacted into one block below the architecture,
+> progress direction `left to right` → `top to bottom` (vertical status
+> lanes), plus only the sanctioned status-label edits (A1 landed, engine
+> integrated, E2-6 + R3 closed/green, mapped-STA-refresh and 13/13-codec
+> notes); zero packages/components/edges/notes lost.
+> **5b — hold attribution + both STA variants:** all **18 mapped screens**
+> (3 designs × 3 corners × 2 variants) now carry a full negative-min-slack
+> inventory; `VARIANT: ZERO-ASSUMPTION` reproduces the recorded screens and
+> `VARIANT: BOARD-ASSUMPTION` differs only in `-min` input/output delay
+> 0.0 → **1.0 ns** (a labelled screening floor, not a measured board flight
+> time). Under the board assumption every external-input/removal/output
+> negative drops to 0 paths in all nine screens; remaining negatives are
+> internal pre-CTS or inside the 0.25 ns uncertainty; **worst setup is
+> unchanged in every pair**; board worst hold `pe_soc` −0.54/−0.41/−0.36,
+> `tt_um_top` −0.64/−0.48/−0.40, `pe_ctrl` **+0.04**/−0.07/−0.13 (slow/typ/
+> fast; `pe_ctrl` hold-clean at slow). Read-only input-registration audit:
+> SPI inputs already 2FF-synchronized; `rst_n`/`run`/`host_*`/plain `pin_in`
+> are unregistered (constraint-only today; RTL register stages recorded as
+> options). No RTL changed; mapped pre-CTS screens only — no physical flow,
+> DRC or LVS. Evidence:
+> `reviews/2026-09-24/DIAGRAM-SQUARER-LAYOUT.md`,
+> `reviews/2026-09-24/HOLD-SCREEN-ATTRIBUTION.md`.
+
+> **Closeout hardening (2026-09-24, Task 4): mapped STA refresh + codec
+> mutation suite.** (a) The SERDES integration's new timing classes were
+> screened at 16.667 ns on both `pe_soc` and `tt_um_protocol_emulator`
+> (slow/typ/fast; slow is a hold corner) with the recorded scripts' source
+> lists extended by `pe_serdes/pe_nrzi/pe_bitstuff/pe_codec_mux`. `pe_soc`
+> (setup 0.00 ns, hold −0.87/−0.61/−0.48 ns) is **identical to the
+> pre-integration screen at every corner**; `tt_um_top` is setup 0.00 ns,
+> hold −0.71/−0.52/−0.43 ns. **No new violation class**: overlay→pad,
+> `half_phase`, the window read mux and the split enables all have positive
+> slack at slow (worst overlay→pad setup +7.96 ns); fast-corner negative
+> holds are shallower members of the pre-existing pre-layout family, and the
+> pad hold violation pre-existed (−0.1026 → −0.0308 ns at fast). Reports and
+> scripts: `reviews/2026-09-24/serdes-sta/`. (b) NEW
+> `regress/mutate_codec_tb.sh`: 13 mutations over
+> `pe_codec_mux`/`pe_bitstuff`/`pe_nrzi`/`pe_manch` covering the documented
+> CAN preset `0x51`, `ones_only`/run length, the registered `clr`/`rx_err`
+> contract and the frame-boundary `clr` — **13 detected / 0 survived**,
+> `cmp`-verified restore; the unit TB gained three directed checks first.
+> (c) `./regress/run_all.sh --fast -j8` exit 0 (30/30 RTL, 21/21 firmware,
+> lint clean, every gate, **ten mutation suites**); `./regress/synth_area.sh`
+> clean at the baseline (`pe_soc` 4,961 / 82,893.7746 µm², `tt_um_top` 5,363
+> / 91,268.0622 µm²). Full record:
+> `reviews/2026-09-24/CLOSEOUT-HARDENING-REVIEW.md`. Mapped screens only — no
+> physical flow, DRC or LVS.
+>
+> **Word engine integrated (2026-09-24): `pe_serdes` + TWO `pe_codec_mux`
+> instances are in `pe_soc`** (STATUS item 7, amended plan + the follow-up
+> review's recommended defaults for every scope group: additive engine,
+> self-timed wire-loopback first consumer, plain RX without phase acquisition,
+> `0xF` indexed window access). Split payload-only enables
+> (`tx_bit_en = tx_cell_en && !tx_stuffed`, `rx_bit_en = rx_cell_en &&
+> rx_bit_valid`), `half_phase` as a LEVEL (2 toggles per cell), the pad
+> overlay before `pe_pinmux`'s open-drain gate, a 16-entry latched-phase
+> window on port `0xF` with separate TXLEN/RXLEN, one-cycle
+> `tx_load`/`rx_start`/`clr` strobes and latched status events for polling;
+> the divider free-runs while enabled so a trailing stuff cell still emits
+> after `tx_done`. Reset default is engine-disabled/overlay-off, so every
+> baseline TB and firmware image is bit-identical (30/30 + 21/21 on the same
+> run). First consumer: `firmware/serdes_loop.pe` + `tb_pe_soc_serdes`, four
+> configs including the **directed stuffed Manchester loopback** (word 0x07E0,
+> trailing-stuff case by construction); `regress/mutate_soc_serdes_tb.sh`
+> detects the plan's four required mutations (TX-hold removed, RX-skip
+> removed, doubled cell enable, strobe cross-wire) plus three alignment/load
+> defects (7/7), and the new `regress/mutate_serdes_tb.sh` guards the split
+> enables (7/7). Two bring-up defects the tests caught and fixed: half_phase
+> toggled once per cell instead of twice, and Manchester `rx_start` needed the
+> first-DRU-decode anchor (a stale idle decode was captured as payload bit 0).
+> `./regress/run_all.sh --fast -j8` exit 0 with **all nine mutation suites**;
+> `./regress/synth_area.sh` clean: pe_soc 3,571 → **4,961** cells /
+> 56,816.88 → **82,893.77** µm² (+1,390), tt_um_top 4,038 → **5,363** /
+> 65,686.27 → **91,268.06** µm² (+1,325) against the post-A1 baseline. No STA
+> refresh yet (manager-scheduled); no physical flow, DRC or LVS. Evidence:
+> `reviews/2026-09-24/SERDES-INTEGRATION-REVIEW.md`.
+>
+> **Readback landed (2026-09-24): option A1 in `pe_ctrl`.** The loader is no
+> longer write-only: `uio[4]` carries a **commit-latched word echo**, strict
+> mode 0, one frame late (frame 0 = `0x0000`, frame k = the word committed at
+> frame k-1, one trailing frame in the same CS-low session). The echo updates
+> only where `words_written` increments, so an aborted word can never echo,
+> and the serializer is not gated by `load_error` — the final word of a full
+> 1,024-word image still echoes through the receive lockout (manager ruling).
+> Host contract is numeric: **every** echoed frame ≤ **2.5 MHz**, SCLK low
+> phase ≥ **100 ns (6 clk)**, `CS_N` → first rise ≥ **100 ns** (computed A1
+> limits ~7.5 MHz; the figures are guards). Budget: committed pads **18 → 19**,
+> free `uio` **4 → 3**, all-nine shortfall **9 → 10** kept / **3 → 4**
+> reclaimed. `tb_pe_ctrl` (cases 8–12) and pad-level
+> `tb_tt_um_protocol_emulator` (full 1,024-word image) pass;
+> `regress/mutate_ctrl_tb.sh` is **23/23** (was 11/11);
+> `./regress/run_all.sh --fast -j8` green; `./regress/synth_area.sh` clean
+> (`pe_ctrl` 463 cells / 8,661.30 µm², `tt_um_top` 4,038 / 65,686.27 µm²,
+> `pe_soc` unchanged). Mapped STA refresh landed 2026-09-24 (zero-assumption
+> `pe_ctrl` screen: setup +8.71/+8.80/+8.86 ns, hold −0.12/−0.16/−0.19 ns;
+> its negatives are external-input/removal/output artifacts and the Task-5b
+> BOARD variant makes `pe_ctrl` hold-clean at slow, +0.04 ns); no physical
+> flow, DRC or LVS. Review: `reviews/2026-09-24/PE-CTRL-READBACK-REVIEW.md`;
+> contract in `rtl/pe_ctrl.v`'s header and [[plans/pe-ctrl-readback]].
+> Item 4's dbg-pin revisit trigger now fires; the item-4 decision itself is
+> unchanged.
+
+> **Latest MAC ownership fix (2026-09-23):** the independent E1 accounting
+> audit found that a consume could release in-flight, unpublished bytes and
+> then receive a second credit during frame rollback or TYPE FCS windback.
+> `published_used` now limits consumer releases to committed frames. New tests
+> first failed on the old RTL; the MAC mutation gate is 30/30 (0 survivors, 0
+> harness errors), including publication collision accounting, TYPE FCS
+> exclusion, preservation of older committed bytes on bad rollback and `S_ERR`,
+> and a producer-pointer rebase mutant. Fresh
+> `./regress/run_all.sh --fast -j8` passes: 29/29 RTL,
+> 20/20 firmware, lint/elaboration, generated gates and all seven mutation
+> suites. A fresh exact-source mapped Yosys/OpenSTA screen reports 0 synthesis
+> problems, setup 0.00 ns at all corners, and worst hold slack −0.8692/−0.6065/
+> −0.4778 ns (slow/typ/fast). Slow is a hold-check corner too. The 0.00 ns slow
+> setup summary is a latch time-borrow path; worst slow register-to-register
+> setup is +2.2274 ns. Current mapped counts: `pe_eth_mac` 1,681 cells /
+> 23,749.63 µm², `pe_soc` 3,571 / 56,816.88 µm², `tt_um_top` 3,888 /
+> 62,745.43 µm². Review evidence:
+> `reviews/2026-09-23/E1-PUBLISHED-OWNERSHIP-REVIEW.md`; fresh logs are in
+> `reviews/2026-09-23/e1-published-ownership/`. These are manual mapped screens,
+> not signoff. No physical flow, DRC or LVS.
+>
+> Earlier E1 wrapped-release/collision issues, the E2-1..E2-5 macro-gate
+> issues, and the later E2-6 / R3 checker false passes all have fixes in
+> place; E2-6 and R3 are recorded as **fixed-pending-manager-verification**
+> (26-check macro harness). E1-3 (full-ring release indistinguishable from
+> duplicate) remains documented. The macro gate validates every
+> pin-to-net mapping, the macro grid's Metal4 stripe plus its ordered
+> Metal4-to-vertical and vertical-to-horizontal connects, and every macro view
+> (nonempty gds/lef/lib, every ./src path resolving in the PDK sg13g2_sram
+> tree, lib coverage of the flow's PVT corners, and each type's own LEF SIZE
+> driving its placements' bounds/gap); a 20-check negative harness (including a
+> synthetic two-type flow) is wired into the regression. A missing PDK LEF is
+> an explicit SKIP (exit 2 only when there are no findings), while findings
+> (view included) and yosys failures still fail. E2-1..E2-5 remain closed;
+> **E2-6 (type↔LEF identity false pass) and R3 (corner-key vs file identity)
+> are fixed — fixed-pending-manager-verification, not yet closed** (the
+> mutation harness is now 26 checks; see
+> `reviews/2026-09-23/PROJECT-REVIEW.md`, "E2-6 resolution").
+> Details:
+> `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md`; original fixes and regression
+> evidence in `ETHERNET-SOC-REVIEW.md`, `E1-RESOLUTION.md` and
+> `E2-RESOLUTION.md`. Physical flow, DRC and LVS remain deferred.
 >
 > **Also done 2026-09-23: the SPI loader.** `rtl/pe_ctrl.v` is a passive SPI
 > slave at the TT wrapper (ADR-007) that clocks 16-bit words into `pe_imem`
 > through the SoC's host port; its independent run-transition P1 (a queued word
 > could write while `run` was high) is fixed with abort semantics and a masked
-> `host_we`, and `regress/mutate_ctrl_tb.sh` guards it 11/11. Regression is now
-> RTL 28/28, firmware 19/19, six mutation suites. See
+> `host_we`, and `regress/mutate_ctrl_tb.sh` guards it 11/11. At that milestone,
+> regression was 28/28 RTL, 19/19 firmware, with six mutation suites. See
 > `reviews/2026-09-23/PE-CTRL-RESOLUTION.md`.
 
 > **Resume here after a context flush.** Read this first, then `wiki/index.md`.
-> Last updated: 2026-09-23, after reviewing the project-layout rework at
-> `6de2a6a` against `2cc0f03`. No new functional defect found; earlier review
-> findings (including F1/F2/F3) remain closed. The code is reorganized: `tb/` holds
+> Last updated: 2026-09-24, after the Task 5a diagram squarer layout and the
+> Task 5b hold-screen attribution (labelled ZERO/BOARD STA variants) were
+> recorded, following the closeout hardening (mapped STA refresh for the
+> SERDES integration + the codec mutation suite) and, earlier the same day,
+> the word-engine integration in `pe_soc` and the A1 readback in `pe_ctrl`;
+> the 10BASE-T TX frame-path plan (item 9) was then authored.
+> The code is reorganized: `tb/` holds
 > testbenches only, `regress/` the harnesses, `tools/{fw,gen,checks}/` the
 > Python, `rtl/pe_soc.v` is the SoC (was `pe_uart_soc`), the line codecs are one
 > module per file (`pe_nrzi`/`pe_manch`/`pe_bitstuff`), and the SRAM shell is
@@ -79,7 +376,7 @@ Both layers of the thesis now exist and have baseline simulation coverage:
   cells, and the SERDES through the full LibreLane place-and-route flow to a
   clean historical 66 MHz signoff (2026-09-18). The current signoff target is
   60 MHz (16.667 ns).
-- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (1,402
+- **Milestone 3 — 10BASE-T receive, in hardware.** `rtl/pe_eth_mac.v` (1,681
   cells after the review fixes) is the first protocol block that is deliberately
   NOT firmware, and [[concepts/ethernet-scope]] says why with arithmetic: at a 100 ns bit period
   the single-cycle core has 48 instructions per byte, and a software CRC-32
@@ -171,11 +468,14 @@ The one-line version, for the reader who wants it before clicking through:
                              └ 10BASE-T RX (pe_dru -> pe_manch -> pe_eth_mac
                                             + pe_crc + pe_fbuf)
                                  └ frame window on IO 0x8-0xE -> firmware
-    └── pe_ctrl (292) ── passive SPI load into imem
+                                 └ word engine: pe_serdes + 2 x pe_codec_mux
+                                   + timing divider + 0xF window (2026-09-24)
+    └── pe_ctrl (463) ── passive SPI load + A1 readback into imem
 
-  BUILT, TB-verified, INSTANTIATED NOWHERE (2):
-    pe_serdes (539)  pe_codec_mux (130)
-    -- integration plan written 2026-09-23: [[plans/serdes-integration]]
+  INSTANTIATED NOWHERE (0) — both landed in pe_soc on 2026-09-24
+  (split serdes enables, two codec instances, the 0xF window, the pad
+   overlay; see [[plans/serdes-integration]]):
+    pe_serdes (539)  pe_codec_mux (130)  — now instantiated in pe_soc
 ```
 
 
@@ -199,10 +499,11 @@ states the reasoning; do not "unify" them without reading it.
 | **DRU** (oversampled Manchester receive, DDR) | `rtl/pe_dru.v` | **148** | **2,398** | `tb_pe_dru` |
 | **CPU** (16-bit insn, 16 opcodes, PC width from IMEM depth) | `rtl/pe_cpu.v` | 377 | 4,843 | `tb_pe_cpu` |
 | **Pin matrix** (per-pin OUT/OE/IN/OD, open-drain, read-back) | `rtl/pe_pinmux.v` | **111** | **2,061** | `tb_pe_pinmux` |
-| **SPI loader** (passive slave; 16-bit words to imem, abort on run) | `rtl/pe_ctrl.v` | **292** | **5,791** | `tb_pe_ctrl` |
+| **SPI loader + A1 readback** (passive slave; 16-bit words to imem, abort on run; commit-latched word echo on `uio[4]`) | `rtl/pe_ctrl.v` | **463** | **8,661** | `tb_pe_ctrl` |
 | **Instruction memory** — real SRAM macro + wrapper | `rtl/pe_imem.v` | 12 glue + macro | 187 + LEF | `tb_pe_imem` |
-| **Programmable protocol SoC** (CPU + tick timer + pin matrix + 10BASE-T RX) | `rtl/pe_soc.v` | **3,298** | **53,731 total** | `tb_pe_soc_uart`, `tb_pe_soc_tick`, `tb_pe_soc_eth` |
-| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **3,613** | **59,548 total** | `tb_tt_um_protocol_emulator` |
+| **10BASE-T receive MAC** (consumer ownership, committed-byte guard) | `rtl/pe_eth_mac.v` | **1,681** | **23,750** | `tb_pe_eth_mac` |
+| **Programmable protocol SoC** (CPU + tick timer + pin matrix + 10BASE-T RX) | `rtl/pe_soc.v` | **3,571** | **56,817 total** | `tb_pe_soc_uart`, `tb_pe_soc_tick`, `tb_pe_soc_eth` |
+| **TT top level** (the deliverable) | `rtl/tt_um_protocol_emulator.v` | **4,038** | **65,686 total** | `tb_tt_um_protocol_emulator` |
 
 Firmware (no RTL cells — these are programs the CPU runs; see
 [[concepts/spi-as-firmware]]):
@@ -254,9 +555,11 @@ rejected alternatives: [[decisions/adr-004-program-counter-width]].
 
 **Regression: 29/29 testbenches + 20/20 firmware tests pass, and the lint gate is
 clean** (14 verilator tops + 11 yosys elaborations; `regress/run_all.sh` runs the firmware regression first, then every TB, then
-`regress/lint.sh`, then the generated-doc drift checks, then FIVE mutation harnesses --
-`regress/mutate_i2c_tb.sh`, `regress/mutate_spi_tb.sh`, `regress/mutate_fbuf_tb.sh`,
-`regress/mutate_eth_mac_tb.sh` and `regress/mutate_eth_soc_tb.sh`). The lint gate covers `pe_eth_mac` and `pe_fbuf` as of
+`regress/lint.sh`, then the generated-doc drift checks, then seven testbench mutation
+harnesses -- `regress/mutate_i2c_tb.sh`, `regress/mutate_spi_tb.sh`,
+`regress/mutate_fbuf_tb.sh`, `regress/mutate_eth_mac_tb.sh`,
+`regress/mutate_eth_soc_tb.sh`, `regress/mutate_ctrl_tb.sh` and
+`regress/mutate_i2c_xfer_tb.sh` -- plus the macro-flow configuration gate. The lint gate covers `pe_eth_mac` and `pe_fbuf` as of
 the 2026-09-22 review, and it now fails on ANY yosys `ERROR:` — it used to grep
 for three known diagnostics and reported "elaborate OK" beside a file yosys
 could not parse at all. Each mutation harness proves its testbench FAILS when the
@@ -406,10 +709,10 @@ the upside case with `tools/gen/sram_budget.py --tiles 8x4`.
 | Two SRAM macros: 1024-word instructions + 2 KB frame buffer, both `1P_1024x16` | `decisions/adr-003-memory-plan.md` |
 | **Instruction macro is live; PC width derives from IMEM depth (10 bits at 1024)** | `decisions/adr-004-program-counter-width.md` |
 | 10BASE-T is the LINE LAYER only; the stack is off-chip, and firmware never touches Ethernet bits | `concepts/ethernet-scope.md` |
-| **Buffer ownership: `wptr` is the producer, `rptr` the consumer**; releases do not rebase an in-flight frame, but wrap and same-edge accounting gaps remain under review | `rtl/pe_eth_mac.v`, `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md` |
+| **Buffer ownership: `wptr` is the producer, `rptr` the consumer**; releases are bounded by both allocated and committed bytes (`used` and `published_used`), never rebase an in-flight frame, wrapped releases free their bytes (distance modulo `BUF_BYTES`), and a consume coincident with a producer `room` update keeps both deltas (`consume_credit`); the address-only full-ring release remains documented (E1-3) | `rtl/pe_eth_mac.v`, `reviews/2026-09-23/E1-PUBLISHED-OWNERSHIP-REVIEW.md` |
 | **The six `uo_out[7:2]` pads stay `dbg_pc[5:0]` for now**: no readback path, 6 usable pads free (12 if debug is reclaimed); revisit when a protocol needs them or readback lands | `rtl/tt_um_protocol_emulator.v` header, STATUS item 4 |
-| **Both SRAM macros are currently placed and have supply hooks**; the gate checks instances and pin names but not supply-to-net mapping or the full PDN ladder | `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`, `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md` |
-| **`pe_ctrl` is a passive SPI slave at the wrapper** (host loads, `run` starts); no master, no flash, no bootstrap FSM | `decisions/adr-007-pe-ctrl-passive-slave.md` |
+| **Both SRAM macros are placed with all supply hooks**; the gate validates instances, every pin-to-net mapping, every macro view (nonempty gds/lef/lib, matching view class and extension, PDK-resolvable ./src paths, lib coverage of the flow's PVT corners), and the macro grid's Metal4 stripe + ordered Metal4→vertical→horizontal connects, with negative tests for each; a missing PDK LEF is a clean SKIP (exit 2 only when there are no findings), and findings and yosys failures still fail | `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`, `regress/mutate_macro_flow_config.sh`, `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md` |
+| **`pe_ctrl` is a passive SPI slave at the wrapper**; the intended board-side host is the Tiny Tapeout demo board's RP2040 (Raspberry Pi Pico), which loads before `run` starts; no master, no flash, no bootstrap FSM | `decisions/adr-007-pe-ctrl-passive-slave.md` |
 | Every codec stage takes `clr` and reports `rx_err` REGISTERED, one cycle after the strobe | the codec headers (`pe_nrzi`/`pe_manch`/`pe_bitstuff`) |
 | `ena` must never gate logic; every pad output driven in every state | `rtl/tt_um_protocol_emulator.v` header |
 
@@ -472,7 +775,7 @@ pins as driven by our routing. Setup/hold are clean; these two are not.
 ## Toolchain — exact commands
 
 ```bash
-# EVERYTHING: firmware regression (assemble + emulator) then all 24 RTL TBs.
+# EVERYTHING: firmware regression (assemble + emulator) then all 29 RTL TBs.
 # Runs the firmware first because tb_pe_soc_uart $readmemh's the .hex it builds.
 cd ~/janestreet-blog-serial-protocol-emulator && ./regress/run_all.sh
 
@@ -1012,9 +1315,9 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
       with no shared cache: 24 one-shot testbenches pay 24 builds at a median
       5.6 s. The per-run win is only realised after ~27 runs of the SAME
       testbench. So `--fast` is PARALLEL ICARUS, not a simulator swap -- the same
-      4-state simulation, run 24-wide. Verify a fast path on the FAILING case
-      too, not only the passing one: `--fast` was checked to produce identical
-      verdicts on all 24 TBs and identical diagnostics plus exit code 1 on an
+      4-state simulation. Verify a fast path on the FAILING case too, not only
+      the passing one: `--fast` was checked to produce identical verdicts on
+      all 24 then-current TBs and identical diagnostics plus exit code 1 on an
       injected fault.
 
  59. **Check whether a testbench can run under a 2-state simulator AT ALL before
@@ -1023,9 +1326,9 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
       (pull-up vs strong 0/1) to test the `od` bit's contention property, and
       2-state has no weak/strong distinction. This is gotcha 57's problem in a
       louder form: there it silently weakens a check, here it stops the run. A
-      survey of all 24 TBs under both simulators (21 agree, 1 differs, 3 use
-      X-dependent constructs) is the cheap way to find out before wiring
-      anything.
+      survey of the then-current 24 TBs under both simulators found 21 agreeing,
+      one differing, and three using X-dependent constructs; these categories
+      overlap. This is the cheap way to find out before wiring anything.
 
 60. **`expect` is a RESERVED WORD in Icarus, and the error message does not say
       so.** `integer expect;` fails with "Syntax error in variable list" and a
@@ -1206,8 +1509,9 @@ the window, records the header in dmem and sums every payload byte. A real FCS
 proves the walk: `tb/tb_pe_soc_eth.v` drives raw Manchester levels for two ARP
 frames and a bad-FCS frame and checks firmware's dmem, and
 `regress/mutate_eth_soc_tb.sh` breaks the window eight ways and requires every
-one to be caught. The frame buffer is no longer an orphan; only `pe_serdes` and
-`pe_codec_mux` remain unwired. See [[concepts/ethernet-receive-path]].
+one to be caught. The frame buffer is no longer an orphan; `pe_serdes` and
+`pe_codec_mux` landed in `pe_soc` on 2026-09-24 (item 7), so nothing built
+remains unwired. See [[concepts/ethernet-receive-path]].
 
 ### 2. `pe_ctrl` — the SPI load path — DONE 2026-09-23
 
@@ -1284,6 +1588,29 @@ Resolved 2026-09-23: SPI's MOSI and CS_N now have pads on `uio[2]`/`uio[3]`
 ([[plans/spi-pads]]); `uio[7:4]` remain free. The debug pins are still not the
 place to reclaim from first.
 
+**Update 2026-09-24:** the A1 readback landed on `uio[4]`, so the committed
+count is now **19 of 24** (not 18) and **`uio[7:5]`** are the free uio pads;
+the "a `pe_ctrl` readback path lands" revisit trigger has fired.
+[[plans/eth-tx-frame-path]] (planning only, manager adoption pending)
+recommends reclaiming `uo_out[2]` (`dbg_pc[0]`) as the 10BASE-T `eth_tx`
+output, muxed so reset stays bit-identical; RX stays on `ui_in[2]`.
+
+**R1 update (later the same day):** the framed host bus supersedes A1 -
+`uio[4]` is now host `CS_N` and the whole `uio[4:7]` row is the lower-PMOD
+host SPI (CS_N/MOSI/MISO/SCK); `uo_out[1]` is `IRQ_N` (the heartbeat pad is
+retired to a future R2 STATUS field) and `ui_in[3:5]` are freed. The
+committed count stays 19 of 24; the free pads are `ui_in[3:7]` (5) with no
+free `uio`. The Task-7 `uo_out[2]`-reclaim recommendation for `eth_tx` is
+unaffected (it was baseline-independent), but the eth-tx plan's A1-era pad
+notes need this R1 map when that plan is next revised (manager-owned).
+
+**Task-10 amendment (2026-09-24):** recorded at plan adoption — under this R1
+map the G6 default stands exactly as written (reclaim `uo_out[2]` = `dbg_pc[0]`
+as `eth_tx` behind the reset-bit-identical `pin_oe_bus[7]` mux) and the
+free-`uio` alternative is void. The wrapper mux is plan Task 4, so plan
+Tasks 1-3 landed the engine and the SoC integration only and left
+`rtl/tt_um_protocol_emulator.v` untouched.
+
 ### 5. Full-chip floorplan against the real tile allocation — FEASIBILITY DONE 2026-09-23
 
 Read-only feasibility is documented in [[reference/floorplan-feasibility]],
@@ -1291,18 +1618,19 @@ generated from the PDK LEF, `flow/pe_soc.json` and the measured synthesis cache
 (`tools/gen/floorplan_feasibility.py`, drift-gated in the regression):
 
 - The design is two `1P_1024x16` macros (236.8×336.46 µm each, 159,347 µm²
-  total) plus `tt_um_top`'s 59,548 µm² of logic (3,613 cells). With the
-  SERDES-derived ×1.69 routing inflation that is ~260,000 µm²: **60.1%
-  occupancy on the template 6×4 die**, 36.1% at the blog's larger tile, 45.1%
-  on the 8×4 upside.
+  total) plus `tt_um_top`'s current 62,745 µm² of logic (3,888 cells). With the
+  SERDES-derived ×1.69 routing inflation that is ~265,666 µm²: **61.4%
+  occupancy on the template 6×4 die**, 36.9% at the blog's larger tile, 46.0%
+  on the 8×4 upside. This arithmetic was refreshed after the MAC ownership fix.
 - **Area is not the open question; the pad ring is.** The existing signoff is a
   padless core (`DIE_AREA` only, no `CORE_AREA`), while the TT deliverable's
   pads occupy the perimeter of the same outline, so its usable core is smaller.
-  The recorded placements are proven legal against the *die* (E2's gate), not
-  against a padded floorplan; macro `y=10` may sit under the ring.
+  E2's static checker validates the configured coordinates against `DIE_AREA`,
+  not a padded floorplan; no actual placement was run, and macro `y=10` may sit
+  under the ring.
 - The blog vs template assumptions are tabulated on the page: tile 200×150 vs
   167×108 µm (+66% area), die 1200×600 vs 1002×432, and the blog's ~24,000-cell
-  logic figure against the template's own ~8,000-cell fit. This design's 3,613
+  logic figure against the template's own ~8,000-cell fit. This design's 3,579
   cells clears both, so the tile size decides the macro rectangle, not the
   budget.
 - **Evidence needed later** (deferred, and not run here): a TT-top flow config;
@@ -1322,50 +1650,163 @@ generated from the PDK LEF, `flow/pe_soc.json` and the measured synthesis cache
 - **Max-slew / max-cap / max-fanout** remain WARNINGS (8 / 10 / 7), not gated.
   Pre-existing, and not worth chasing before the RTL settles.
 
-### 6. `pe_ctrl` readback path — EVALUATION PLANNED 2026-09-23
+### 6. `pe_ctrl` readback path — DONE 2026-09-24 (option A1)
 
-The v1 loader is write-only (ADR-007). The host/pad mapping is feasible — a
-MISO output on the free `uio[4]`, released except while the loader is active —
-but the interface choice is still open, so the options and tradeoffs are in
-[[plans/pe-ctrl-readback]] **before any RTL change**: **echo** the completed
-word (recommended; verifies the write path bit-exactly, one trailing frame for
-the last word), a **status** frame (`load_error`/`words_written`), or an imem
-**peek/poke** (needs a read port shared with the CPU — much larger). Budget if
-implemented: committed 18 -> 19, free `uio` 4 -> 3, all-nine shortfall 9 -> 10
-(kept) / 3 -> 4 (reclaimed); the readback is loader overhead, not one of the
-nine protocols. Timing audit (2026-09-23): the per-bit MISO path (synchronized fall + 3 clk,
-then pad/setup) gives ~7.7 MHz; A1's commit-latched first bit is the binding
-term at ~7.5 MHz, and A2's two-frame echo is per-bit-bound at ~7.7 MHz. The
-2.5/5 MHz figures are chosen guard margins, not the limits. Neither reaches
-10 MHz; A3 (update on the synchronized rising edge, documented non-mode-0
-change edge, two frames) is the 10 MHz path. The trailing A1/A2 readback
-frames must stay in the same CS-low session (a CS toggle re-addresses to 0).
-No RTL changed yet.
+**Implemented and verified:** the loader's MISO response now exists as
+**option A1** — a one-frame, commit-latched word echo on the free **`uio[4]`**,
+strict mode 0, released whenever the loader is idle (`uio_oe[4] =
+load_active`, i.e. `CS_N` low **and** `run` low). Frame 0 presents `0x0000`
+(preloaded at `cs_fall`), frame k presents the word committed at frame k-1,
+and one trailing frame in the **same CS-low session** reads the last word
+(its `0x0000` lands in the already-undefined tail). The echo payload updates
+only at the `W_DONE` edge where `words_written` increments, so an aborted
+word can never echo; the serializer is deliberately not gated by
+`load_error`, so **the final word of a full 1,024-word image still echoes
+through the receive lockout** (manager ruling a).
 
-### 7. SERDES + codec integration — PLAN AMENDED (two reviews) 2026-09-23
+**Numeric host contract** (in `rtl/pe_ctrl.v`'s header and the plan; manager
+rulings b–d): every frame whose echo the host samples runs at **≤ 2.5 MHz**
+(ruling c: the ceiling applies to the whole readback transaction); minimum
+SCLK low phase **≥ 100 ns (6 clk)** with the computed limits assuming ~50%
+duty; `CS_N` → first rising edge **≥ 100 ns**. The computed A1 limits remain
+~65 ns per-bit low phase and `H ≥ 4 clk` for the commit latch (~7.5 MHz);
+2.5/100/100 ns are chosen guards, not limits.
 
-The last two orphan blocks (539 + 130 cells) are planned into `pe_soc`:
-`serdes.tx_ser -> u_tx_codec -> tx_wire` through a per-pin level override at
-`pe_pinmux`'s level input (before the OD gate); RX through the existing
-`pe_dru` capture into `u_rx_codec -> serdes.rx_ser`. The loopback follow-up
-found that both blocks have one enable for two directions: `pe_codec_mux`'s
-`bit_en` gates TX and RX state in every stage (and Manchester TX is purely
-combinational — the second half is the `half_phase` **level**, never a 2×
-strobe), and `pe_serdes`'s `bit_en` clocks both sides. The plan now uses
-**two codec instances** (TX/RX), a **split `pe_serdes` enable**
-(`tx_bit_en`/`rx_bit_en`) with payload-only gates
-(`tx_codec_cell_en && !tx_stuffed`, `rx_codec_cell_en && rx_bit_valid`), codec
-enables per encoded/decoded cell, a directed **stuffed Manchester loopback**
-that checks the TX hold and the RX skip, and four mutations (TX-hold removed,
-RX-skip removed, doubled cell enable, strobe cross-wire). Also: a 16-entry
-**latched-phase** indexed window on the one free IO port (`0xF`, no ISA
-change; separate `TXLEN`/`RXLEN`). A full 10BASE-T TX frame path is a separate
-block (`pe_eth_mac` is RX-only; `pe_fbuf` is the RX store); this plan's first
-consumer is a wire loopback. Review findings and source-grounded resolutions:
-`reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md`. Plan confidence is
-`medium` until the topology and the open scope decisions are accepted. Reset
-default is engine-disabled, so every existing TB/firmware stays bit-identical.
-Open scope decisions: [[plans/serdes-integration]]. No RTL yet.
+**Budget (was "if implemented" → now implemented):** committed **18 → 19** of
+24, free `uio` **4 → 3**, all-nine shortfall **9 → 10** (debug kept) /
+**3 → 4** (reclaimed); the readback is loader overhead, not one of the nine
+protocols. STATUS item 4's revisit trigger now fires (dbg pins stay for now).
+
+**Verification:** `tb_pe_ctrl` cases 8–12 (echo content/bit order, repeated-
+session leak, duty/rate variants at 200/200, 160/240 and 100/900 ns, the
+full-image trailing frame through the lockout, run-abort in the idle and
+`W_PULSE` windows, and the three bounds hit exactly at once: first rise at
++100 ns, low phase 100 ns, 400 ns period) and pad-level
+`tb_tt_um_protocol_emulator` (5-word load with per-frame echo at 2.5 MHz plus
+a full 1,024-word image reading word 1023 back while `load_error` is set);
+mode-0 stability is checked on every sampled edge.
+`regress/mutate_ctrl_tb.sh` is **23 detected / 0 survived** (was 11/11; +9
+pe_ctrl echo/OE mutations and +3 wrapper `uio[4]` wiring mutations).
+`./regress/run_all.sh --fast -j8` exits 0 (29/29, 20/20, lint, all gates and
+suites); `./regress/synth_area.sh` exits 0 clean (`pe_ctrl` 463 cells /
+8,661.30 µm², `pe_soc` unchanged at 3,571 / 56,816.88 µm², `tt_um_top`
+4,038 / 65,686.27 µm²). **Mapped STA refresh landed 2026-09-24**: the
+zero-assumption `pe_ctrl` screen shows setup +8.71/+8.80/+8.86 ns and hold
+−0.12/−0.16/−0.19 ns, attributed to external-input/removal/output artifacts
+(Task 5b); under the BOARD variant `pe_ctrl` is hold-clean at slow (+0.04 ns).
+No physical flow, DRC or LVS. Full evidence, hashes and RED logs:
+`reviews/2026-09-24/PE-CTRL-READBACK-REVIEW.md`. The plan
+[[plans/pe-ctrl-readback]] carries the status and the resolved decisions.
+
+### 7. SERDES + codec integration — DONE 2026-09-24 (amended plan + review defaults)
+
+The last two orphan blocks are **INSTANTIATED in `pe_soc`**, per the amended
+plan and the follow-up review's recommended defaults for every scope group:
+
+- **Milestone scope**: additive engine, disabled at reset, overlay off —
+  every baseline TB and firmware image stays bit-identical (proved by the
+  same run: 30/30 RTL, 21/21 firmware, with the engine present);
+- **Topology**: ONE `pe_serdes` with the SPLIT payload-only enables
+  (`tx_bit_en = tx_cell_en && !tx_stuffed` — TX holds across inserted stuff
+  cells; `rx_bit_en = rx_cell_en && rx_bit_valid` — RX skips received ones)
+  and TWO unmodified `pe_codec_mux` instances (TX/RX), one `bit_en` per
+  ENCODED cell (never per half-cell); `half_phase` is a LEVEL with two
+  toggles per cell into the TX instance's `cfg[3]`, 0 on RX;
+- **RX path**: the ONE existing DRU — Manchester takes `eth_bit_en` plus
+  `rx_first/rx_second`; plain/NRZI/stuffed take the divider's cell strobe over
+  the DRU's synchronized level. **Plain RX has no phase acquisition: self-timed
+  wire-loopback scope only** (the recommended default; documented limit);
+- **Access**: the 16-entry latched-phase indexed window on port `0xF` (no ISA
+  change), separate `TXLEN`/`RXLEN` (6-bit 1..32), `tx_load`/`rx_start`/`clr`
+  as ONE-CYCLE write-triggered strobes, and `tx_done`/`rx_valid`/`rx_err`
+  LATCHED for CPU polling (set-beats-clear on a STATUS/index-6 read). The
+  divider free-runs while enabled, keeping the timing block active through a
+  possible trailing stuff cell after `serdes.tx_busy` falls;
+- **Overlay**: `pe_pinmux` gained `ov_en`/`ov_bit` feeding BOTH pad outputs
+  BEFORE the open-drain gate (an engine 0 on an od pin pulls low, never
+  releases); firmware still owns oe/od; reset is bit-identical;
+- **First consumer**: `firmware/serdes_loop.pe` (70 words) + the new
+  `tb_pe_soc_serdes` — plain LSB, plain MSB, Manchester, and the **directed
+  stuffed Manchester loopback** (word 0x07E0 chosen so payload 16 arms the
+  final stuff bit → the trailing-stuff case is guaranteed). Monitors check:
+  cell pulses never closer than one cell period, `tx_ser` stable across stuff
+  cells, no serdes advance on a stuff cell, the RX strobe IS the DRU's in
+  Manchester, exactly `tx_len`/`rx_len` advances, `half_phase` quiet when
+  Manchester is off, and bit-exact words in all four configs.
+
+Two integration defects were found by those tests during bring-up and fixed:
+the half-cell level toggled ONCE per cell instead of twice (the wire ran at
+cell rate and the DRU could not decode it), and the Manchester `rx_start` was
+not anchored to the first DRU decode after the grid-aligned load (a stale idle
+decode became payload bit 0 and shifted the word).
+
+**Verification (2026-09-24):** `tb_pe_soc_serdes` PASS; `tb_pe_serdes`
+extended with a directed split-enables case (PASS); `tb_pe_pinmux` extended
+with overlay/od-gate cases (PASS); `./regress/run_all.sh --fast -j8` exit 0 —
+**30/30 RTL, 21/21 firmware**, lint clean, all seven generated gates, macro
+gate + 26 negatives, and **all nine mutation suites**: i2c 6 detected + 1
+documented-equivalent survivor, spi 5, fbuf 5, eth_mac 30, eth_soc 8,
+i2c_xfer 11, ctrl 23 (incl. A1 readback), **serdes 7 (new)**, **soc-serdes 7
+(new — the plan's four required mutations plus the two alignment defects and
+the unaligned load)**; all with 0 unexplained survivors.
+`./regress/synth_area.sh` exit 0 clean: **pe_soc 3,571 → 4,961 cells /
+56,816.88 → 82,893.77 µm² (+1,390)** and **tt_um_top 4,038 → 5,363 /
+65,686.27 → 91,268.06 µm² (+1,325)** against the post-A1 baseline; floorplan
+cache and page refreshed. Every source list that elaborates `pe_soc` gained
+`pe_serdes/pe_nrzi/pe_bitstuff/pe_codec_mux` (flow config, info.yaml,
+synth_area, the macro gate, and five mutation harnesses). **Mapped STA
+refresh landed 2026-09-24** (Task 4: `pe_soc` identical to pre-integration at
+every corner, `tt_um_top` hold −0.71/−0.52/−0.43 ns, no new violation class;
+Task 5b adds the labelled ZERO/BOARD variants); no physical flow, DRC or LVS.
+Evidence:
+`reviews/2026-09-24/SERDES-INTEGRATION-REVIEW.md`; plan status in
+[[plans/serdes-integration]]. **Remaining plan item:**
+`regress/mutate_codec_tb.sh` (unit suite for `pe_codec_mux`, which this task
+did not modify) is not yet written. The full 10BASE-T TX frame path
+(preamble/SFD/FCS/IFG/source) remains a separate block and plan.
+
+### 8. Linux demo-host GUI — TODO
+
+Plan a GUI application for the connected Linux PC that operates the SoC through
+the RP2040 controller on the Tiny Tapeout demo board. Define the operator
+workflow (load a program, start it, and observe available status), the PC-to-
+board transport and control API, which board-side support is needed, the
+program-image format, error handling, packaging, and an acceptance-test plan.
+Keep the current contract visible: `pe_ctrl` is a passive SPI loader, `run` is
+the `ui_in[1]` strap, and readback is still undecided. The transport, clock
+control, and status/readback strategy are open; do not assume pad mappings or
+that the GUI can verify a load until those choices are made. This item is
+planning only; no GUI or bridge firmware has been started.
+
+### 9. 10BASE-T TX frame path (`eth_tx`) — TASKS 1-3 LANDED 2026-09-24
+
+The last unbuilt block in the topology: the SERDES/codec wire loopback (item
+7) proved the engine, but a full 10BASE-T transmitter (preamble/SFD, hardware
+FCS, 64-byte pad, 96-bit-time IFG, frame source) did not exist.
+[[plans/eth-tx-frame-path]] is the implementation plan, in the
+`ethernet-soc` style with eight scope groups, each carrying an
+evidence-backed recommended default: firmware-streamed bytes through an
+8-byte staging FIFO in an extended `0xF` window; hardware-owned
+preamble/pad/FCS/IFG; a TX-dedicated `pe_crc` with the RevEng-checked
+constants (receiver verdict is the catalogue residue, never `crc_zero`); reuse
+of `u_tx_codec` + the divider at `DIV = 6` for exact 100 ns cells; `uo_out[2]`
+reclaimed as `eth_tx` behind a bit-identical reset mux; first consumer
+`firmware/eth_tx_arp.pe` (42-byte ARP request) with a pad-level Manchester
+decode and a TX→RX loopback through `firmware/eth_rx.pe`; and two mutation
+suites.
+
+**Tasks 1-3 LANDED 2026-09-24 (manager Task 10, G1-G8 adopted as written):**
+`rtl/pe_eth_tx.v` (892 cells / 16,040.09 µm²), the 32-entry `0xF` window and
+owner mux in `pe_soc` (pe_soc 4,961 → 6,191 cells / 82,893.77 →
+107,939.64 µm²; `tt_um_top` 6,633 → 7,980 / 113,254.89 → 138,746.71 µm²),
+`firmware/eth_tx_arp.pe` + first TBs RED-first, `tb_pe_eth_tx` and
+`tb_pe_soc_eth_tx` PASS, `./regress/run_all.sh --fast -j8` exit 0 (32/32 RTL,
+22/22 firmware, lint, every gate, ten mutation suites),
+`./regress/synth_area.sh` exit 0, same-list updates + regenerated
+`signal-names.md`. Still open in this plan: Task 4 (wrapper `uo_out[2]` mux +
+pad-level decode), Task 5 (loopback consumer + IFG acceptance), Task 6
+(mutation suites), Task 7 (STA screen + closeout). `uo_out[2]` is **not yet**
+an `eth_tx` pad — the wrapper is untouched until Task 4.
 
 ## Reading order for a fresh session
 

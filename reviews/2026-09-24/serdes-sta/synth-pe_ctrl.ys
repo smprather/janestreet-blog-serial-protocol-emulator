@@ -1,0 +1,24 @@
+# synth-pe_ctrl.ys — mapped netlist for the pe_ctrl hold-attribution screen.
+# Same flow as synth-pe_soc.ys / synth-tt_um.ys (typ-corner stdcell mapping,
+# flatten, check -assert, no-attr netlist). pe_ctrl is unchanged since the A1
+# readback landed, so this reproduces the recorded manager-A1 netlist modulo
+# the flow's flatten/clean step.
+read_liberty -lib /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+read_verilog -sv rtl/pe_ctrl.v
+hierarchy -check -top pe_ctrl
+proc
+opt
+fsm
+opt
+techmap
+opt
+dfflibmap -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+abc -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+clean
+stat -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+flatten
+clean
+check -assert
+write_verilog -noattr -noexpr reviews/2026-09-24/serdes-sta/mapped-pe_ctrl.v
+write_json reviews/2026-09-24/serdes-sta/mapped-pe_ctrl.json
+check

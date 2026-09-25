@@ -1,12 +1,16 @@
 # Project block diagrams
 
-These are the project's editable, text-based PlantUML sources. No rendered
-images are checked in.
+These are the project's editable, text-based PlantUML sources. Keep generated
+`.svg` and `.png` renders beside each `.puml` source so they are easy to preview
+in tools that do not render PlantUML.
 
-To preview both diagrams locally, with PlantUML installed:
+Regenerate both formats after editing either diagram, with PlantUML installed:
 
 ```sh
-plantuml -tpng -o /tmp diagrams/project-plan.puml diagrams/project-progress.puml
+JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=8192" \
+  plantuml -tpng diagrams/project-plan.puml diagrams/project-progress.puml
+JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=8192" \
+  plantuml -tsvg diagrams/project-plan.puml diagrams/project-progress.puml
 ```
 
 - `project-plan.puml` shows the full planned architecture, including the

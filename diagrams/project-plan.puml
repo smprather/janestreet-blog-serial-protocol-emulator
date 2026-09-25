@@ -5,15 +5,16 @@ skinparam componentStyle rectangle
 skinparam defaultFontName Monospaced
 skinparam packageStyle rectangle
 
-package "Host / board" {
-  component "Host computer" as host
+package "Demo host / board" {
+  component "Linux PC\nDemo host GUI (planned)" as pc
+  component "Tiny Tapeout demo board\nRP2040 controller (Raspberry Pi Pico)" as board
   component "Protocol wires" as wires
 }
 
 package "Tiny Tapeout top" {
   component "Passive SPI loader\npe_ctrl" as loader
-  package "Optional loader readback — decision pending" {
-    component "SPI MISO response\nproposed uio[4]; A1 / A2 / A3 open" as readback
+  package "Loader readback A1 — landed 2026-09-24 (R1 framed bus supersedes the raw echo)" {
+    component "Host response bus\nuio[6] MISO frame; commit-latched LOAD echo\nR1: uio[4:7] CS_N/MOSI/MISO/SCK" as readback
   }
   package "Programmable SoC — pe_soc" {
     component "CPU\nfirmware engine" as cpu
@@ -30,36 +31,40 @@ package "Tiny Tapeout top" {
       component "CRC-32 check" as crc_rx
     }
 
-    package "Planned shared word engine" {
-      component "Indexed control window\nIO port 0xF; 8-bit data" as window
-      component "Programmable timing\nencoded-cell + half-cell + payload strobes" as timing
+    package "Integrated shared word engine" {
+      component "Indexed control window\nIO port 0xF; 32 entries; 8-bit data" as window
+      component "Programmable timing\nencoded-cell strobe + half-cell level + payload enables" as timing
       component "pe_serdes\n32-bit word engine\ntx_bit_en / rx_bit_en (split)" as serdes
       component "pe_codec_mux TX\nrecommended instance\nNRZI / Manchester / stuffing" as codec_tx
       component "pe_codec_mux RX\nrecommended instance\nNRZI / Manchester / stuffing" as codec_rx
       component "Per-pin level overlay\nbefore OE / open-drain gate" as overlay
+      component "TX owner mux\ntx_path: SERDES or eth_tx" as tx_mux
     }
 
-    package "Separate planned Ethernet TX consumer" {
-      component "Frame source\nfirmware stream or TX buffer" as tx_source
-      component "Frame + preamble/SFD" as tx_frame
-      component "FCS generation" as tx_crc
-      component "IFG / transmit control" as tx_control
+    package "Integrated 10BASE-T TX frame path (landed)" {
+      component "Frame source\nfirmware pushes bytes via window" as tx_source
+      component "Frame + preamble/SFD\npe_eth_tx engine" as tx_frame
+      component "TX-dedicated CRC\nFCS field mode" as tx_crc
+      component "IFG / transmit control\n96-cell gap; runt/jabber guard; 8-byte FIFO" as tx_control
     }
+
   }
-  component "Pads\nui_in / uo_out / uio" as pads
+  component "Pads\nui_in / uo_out / uio\nuo_out[2] = eth_tx (G6)" as pads
 }
 
-host --> loader : SPI program load
+pc <--> board : host-control link; transport TBD
+board --> loader : SPI program load
 loader --> imem : host write port
-loader ..> readback : optional echo; interface choice pending
-readback ..> pads : proposed MISO on uio[4]
-wires --> host : optional SPI MISO response
+loader ..> readback : A1 word echo; one frame late
+readback ..> pads : MISO on uio[4]
+wires --> board : optional SPI MISO readback
+board --> pc : optional readback / status
 imem --> cpu : instruction fetch
 cpu <--> dmem : load / store
 cpu <--> tick : timed firmware I/O
 cpu <--> pinmux : pin-port reads / writes
 pinmux <--> pads : levels, enables, inputs
-pads <--> wires : board connections
+pads <--> wires : board connections, including optional SPI MISO
 
 wires --> dru : 10BASE-T receive
 dru --> manch_rx : recovered half-bits
@@ -69,7 +74,8 @@ eth_rx --> fbuf : store-and-forward
 fbuf --> cpu : firmware frame window
 
 cpu <--> window : indexed control / data
-cpu --> timing : divisor and mode
+window --> timing : divisor / mode
+window --> serdes : data / lengths / control
 timing --> codec_tx : encoded-cell strobe + half_phase
 timing --> codec_rx : encoded-cell strobe (plain / NRZI / stuffed)
 timing --> serdes : tx_bit_en / rx_bit_en (payload-only)
@@ -81,39 +87,59 @@ dru --> codec_rx : rx_wire or Manchester halves
 dru --> codec_rx : dru.bit_en (Manchester cell strobe)
 codec_rx --> serdes : rx_bit / rx_bit_valid (skip stuff cells)
 
-tx_source --> tx_frame
-tx_frame --> tx_crc
+tx_source --> tx_frame : push bytes
+tx_frame --> tx_crc : FCS field
 tx_crc --> tx_control
-tx_control --> serdes : payload + FCS
+tx_control --> tx_mux : 96-cell IFG / frame TX bit
+window --> tx_source : push / TXLEN / TXCTRL / TXSTAT (bank 16-27)
+serdes --> tx_mux : tx_bit (default owner)
+tx_frame --> tx_mux : eth_tx_bit
+tx_mux --> codec_tx : owned tx_bit into shared codec
+tx_mux --> pads : uo_out[2] eth_tx (G6, behind pin_oe_bus[7])
 
 note bottom of pads
   Baseline firmware personas: UART, SPI master, I2C master.
   The passive loader is a separate SPI path used to load instruction SRAM.
   Current aliases: uo_out[0] is UART TX / SPI SCLK; ui_in[0] is UART RX /
   SPI MISO; uio[0:1] are I2C SDA/SCL; uio[2:3] are SPI MOSI/CS_N.
-  ui_in[2] is 10BASE-T RX; ui_in[3:5] are loader SCLK/MOSI/CS_N.
+  ui_in[2] is 10BASE-T RX; uo_out[2] is 10BASE-T TX (G6 reclaim of dbg_pc[0]).
 end note
 
-note bottom of readback
-  Proposed pad and response shape only; no readback RTL exists. The host-path
-  timing option (A1, A2, or A3) remains for the user to choose.
-  See wiki/plans/pe-ctrl-readback.
+note bottom of pads
+  The Linux GUI and its PC-to-board transport are planned software; the
+  transport and control API are not chosen yet. The RP2040 sits on the Tiny
+  Tapeout demo board and is the chip-side SPI host.
 end note
 
-note bottom of serdes
-  One pe_serdes instance, but its single bit_en clocks both sides; the plan
-  splits it into tx_bit_en/rx_bit_en. TX advances only on payload cells
-  (serdes.tx_bit_en = tx_codec_cell_en && !tx_stuffed); RX captures only
-  payload cells (serdes.rx_bit_en = rx_codec_cell_en && rx_bit_valid). The
-  codec bit_en is per encoded cell, never per half-cell; half_phase is an
-  independent 2x half-cell level. First milestone is a wire loopback (plain
-  and stuffed Manchester) through TX codec, pads/model, DRU/codec RX, and
-  SERDES RX; it needs no Ethernet frame layer. The full 10BASE-T TX consumer
-  is a separate plan and needs a frame source, preamble/SFD, FCS, and
-  inter-frame-gap control.
-  Two codec instances and split SERDES strobes are the current recommendation;
-  the codec topology and cadence-interface choices remain open in the plan.
+note bottom of pads
+  Landed 2026-09-24 (manager decision): the R1 framed host bus supersedes the
+  A1 raw uio[4] echo — SPI mode 0, MSB-first 16-bit words, 16'hA55A sync,
+  CRC-16/CCITT-FALSE, response opcode bit 7, sequence/target echoed; the
+  commit-latched word echo lives in the framed LOAD response. Pads: uio[4:7]
+  = CS_N/MOSI/MISO/SCK, uo_out[1] = IRQ_N (sticky, active low), ui_in[3:5]
+  freed; 19 of 24 committed. See wiki/plans/host-controller-gui.md and
+  wiki/plans/pe-ctrl-readback.
+end note
+
+note bottom of pads
+  Landed 2026-09-24: ONE pe_serdes with split payload-only enables (TX
+  advances only on payload cells, serdes.tx_bit_en = tx_codec_cell_en &&
+  !tx_stuffed; RX captures only payload cells, serdes.rx_bit_en =
+  rx_codec_cell_en && rx_bit_valid). TWO unmodified pe_codec_mux instances are
+  clocked per encoded cell -- never per half-cell -- and half_phase is an
+  independent 2x half-cell LEVEL; the pad overlay sits before the matrix's
+  open-drain gate, and a latched-phase window on port 0xF has
+  separate TXLEN/RXLEN. First consumer is the wire loopback (plain and stuffed
+  Manchester, word 0x07E0) through TX codec, simulation wire model, DRU/codec
+  RX, and SERDES RX; a trailing stuff cell is covered by construction. The
+  10BASE-T TX frame consumer (pe_eth_tx) is integrated below and shares the
+  TX codec through the tx_path owner mux. Landed 2026-09-25 (plan Tasks 1-5):
+  full frame from firmware pushes, 32-entry window, owner mux, G6 uo_out[2]
+  pad, loopback acceptance PASS (FCS 9cc5cb34, IFG 102 cells). Plan Tasks 6
+  (mutation suites) and 7 (STA + closeout) remain OPEN.
   Low-speed USB and CAN are later personas; JTAG, SWD, and PS/2 are optional.
+  Evidence: reviews/2026-09-24/SERDES-INTEGRATION-REVIEW.md.
 end note
+
 
 @enduml

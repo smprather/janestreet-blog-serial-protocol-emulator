@@ -1,7 +1,7 @@
 ---
 title: pe_ctrl readback path (host response)
 created: 2026-09-23
-updated: 2026-09-23
+updated: 2026-09-24
 type: plan
 tags: [boot, loader, pads, observability, verification]
 sources: [wiki/decisions/adr-007-pe-ctrl-passive-slave.md, rtl/pe_ctrl.v, rtl/tt_um_protocol_emulator.v, wiki/reference/protocol-pin-budget.md, wiki/STATUS.md]
@@ -10,14 +10,58 @@ confidence: high
 
 # pe_ctrl readback: evaluating a MISO response
 
+## Status — IMPLEMENTED, option A1 (2026-09-24)
+
+Manager decision: **A1** — one-frame word echo on `uio[4]`, strict mode 0,
+host guard rate **2.5 MHz** (computed limit ~7.5 MHz at the A1 commit latch;
+2.5 MHz is the chosen guard). The five open decisions at the bottom of this
+plan are resolved: (1) **A1**; (2) **one trailing frame**, kept in the same
+CS-low session (it writes `0x0000` into the undefined tail; skip it when the
+program's own output is the proof); (3) release on **`load_active`** (`CS_N`
+low **and** `run` low → pad released); (4) the final committed word of a full
+1,024-word image **does** echo through the receive lockout; (5) the numeric
+timing contract below; (6) A2's extra latency was not needed — A1 at the
+2.5 MHz guard carries ~9 clk of margin over its `H ≥ 4 clk` commit bound.
+
+**The contract, numeric (rulings a–d):**
+
+- every frame whose echo the host samples runs at **SCLK ≤ 2.5 MHz** — the
+  ceiling applies to the whole readback transaction, load frames included
+  (ruling c);
+- minimum SCLK low phase **≥ 100 ns (6 clk at 60 MHz)**; the computed limits
+  assume ~50% duty, and the hard bounds are the rate ceiling plus that low
+  phase (ruling b);
+- `CS_N` → first rising edge **≥ 100 ns** (the OE follows the synchronized
+  `CS_N` by 2 clk; the frame-0 bit preloads at the detected `cs_fall`, +3 clk)
+  (ruling d);
+- frame 0 presents `0x0000` (preloaded at `cs_fall`, so the previous
+  session's last bit cannot leak); frame k presents the word committed at
+  frame k-1; the echo updates **only** at the `W_DONE` edge where
+  `words_written` increments — an aborted word can never echo, and the
+  serializer is not gated by `load_error`, so the final word of a full image
+  still shifts out (ruling a).
+
+Budget as predicted: committed pads **18 → 19** of 24, free `uio` **4 → 3**,
+all-nine shortfall **9 → 10** (debug kept) / **3 → 4** (reclaimed).
+
+Evidence: `tb_pe_ctrl` cases 8–12 with mode-0 stability checks, pad-level
+echo in `tb_tt_um_protocol_emulator` (including the full 1,024-word image),
+`regress/mutate_ctrl_tb.sh` **23 detected / 0 survived** (11 → 23),
+`./regress/run_all.sh --fast -j8` green (29/29, 20/20),
+`./regress/synth_area.sh` clean (`pe_ctrl` 463 cells / 8,661.30 µm²,
+`tt_um_top` 4,038 / 65,686.27 µm²). Full review:
+`reviews/2026-09-24/PE-CTRL-READBACK-REVIEW.md`. No STA refresh has been run
+yet (manager-scheduled); no physical flow, DRC or LVS.
+
 ## Why
 
 ADR-007 shipped the loader **write-only**: the host cannot confirm words
 landed, and the only live observability is the debug PC on `uo_out[7:2]`
 (STATUS item 4). ADR-007 calls a read path "a later additive change"; item 4's
-revisit trigger names it. The interface choice is **still open**, so this plan
-fixes the feasible pad/host mapping and the minimal contract, with options and
-tradeoffs, before any RTL changes.
+revisit trigger names it. The interface choice was **still open** when this
+plan was written (it was decided and implemented on 2026-09-24 — see
+*Status* above), so this plan fixes the feasible pad/host mapping and the
+minimal contract, with options and tradeoffs, before any RTL changes.
 
 ## What v1 has
 
@@ -197,7 +241,59 @@ frame is possible but not minimal.
    record the register -> pad path class as with the SPI alias. No physical
    flow, DRC or LVS.
 
+## Read-only contract audit (2026-09-23)
+
+A source-grounded follow-up verified the synchronizer/write-pipeline timing,
+the `uio[4]` pad budget, and the existing wrapper and memory interfaces. The
+mapping and commit-latched echo architecture are feasible; no interface choice
+or RTL implementation was selected. Before implementation, the host contract
+needs to close these points:
+
+1. **Full 1,024-word image.** `pe_ctrl` sets sticky `load_error` in `W_DONE`
+   when `addr == WORDS-1`, after committing word 1023. Receive then stops
+   because `sclk_rise` is gated by `!load_error`. A full-image per-word echo
+   still needs the following frame to serialize the last committed word. The
+   MISO serializer must be allowed to shift the retained echo while the receive
+   side is locked out, or the contract must explicitly exclude that last word
+   (and say how a full image is verified). A test should load all 1,024 words
+   and check the last echo and `load_error` independently.
+2. **Specify SCLK timing by phase.** The A1/A2 fall-update path requires a
+   minimum low phase of about `3 clk + t_pad + t_setup` (~65 ns under the
+   stated 5 ns / 10 ns assumptions); A1's commit constraint also requires the
+   low phase to meet its separate `H >= 4 clk` bound. A frequency ceiling alone
+   does not guarantee either when duty cycle can vary. State a minimum low time
+   or explicitly require the 50% duty cycle used by the calculations. A3's
+   rising-update path needs its full-period setup bound and post-sample hold
+   bound.
+3. **State what must run at the readback rate.** A one-word echo register
+   overwritten by each successful commit can verify every word only if each
+   word's response is sampled before the next commit replaces it. Thus a fast
+   load followed only by slow trailing frames cannot verify every word unless
+   the design adds storage or the host rereads data another way. Decide whether
+   the entire per-word echo transaction uses the selected ceiling or whether a
+   different partial-verification contract is intended.
+4. **Fix a numeric CS-to-first-clock setup.** The output enable follows the
+   synchronized CS level, and the initial echo bit is loaded by the detected
+   `cs_fall`; the pad-level test must define and sweep a concrete minimum
+   CS_N-to-first-SCLK interval. A symbolic requirement is not enough for the
+   host contract.
+5. **Clarify A1 versus A2's value.** The computed limits are ~7.5 MHz and
+   ~7.7 MHz. At 5 MHz, A1's `H=6 clk` clears its `H>=4 clk` commit bound and
+   leaves the same ~50 ns per-bit margin as A2. A2's additional frame buys
+   little computed rate over A1; decide whether its extra latency/trailing
+   frame is justified by an explicit robustness requirement.
+
+The rate figures also assume 50% duty cycle: at 5 MHz with a 30% low phase,
+the low interval is only 60 ns and misses the ~65 ns A1/A2 data path bound.
+This audit changes the open contract list, not the proposed topology or RTL.
+The source checks and detailed disposition are in
+`reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md`.
+
 ## Open decisions for the reviewer
+
+**RESOLVED 2026-09-24 — A1 chosen and implemented; see *Status* at the top.**
+The list below is retained as the record of the options that were on the
+table.
 
 1. **A1 (one-frame, strict mode 0, readback <= 2.5 MHz guard) vs A2
    (two-frame, strict mode 0, readback <= 5 MHz guard) vs A3 (rising-edge
@@ -209,3 +305,13 @@ frame is possible but not minimal.
    undefined tail); skip them when the program's own output is the proof.
 3. **Release condition**: `load_active` (recommended; `run` high also releases)
    vs `~cs_s1` (drives while CS is low even with `run` high).
+4. **Full-image proof**: allow the last committed echo to shift during the
+   receive lockout after a 1,024-word image, or define a different full-image
+   verification contract.
+5. **Timing contract**: choose explicit minimum SCLK low time for A1/A2 (or a
+   fixed duty-cycle requirement), a full-period and hold bound for A3, a
+   numeric CS_N-to-first-clock setup, and whether the selected readback rate
+   applies to every load frame.
+6. **A2 rationale**: decide whether two-frame latency is justified when A1 at
+   5 MHz already meets the stated commit and per-bit constraints with similar
+   margin.

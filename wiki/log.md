@@ -1706,3 +1706,338 @@
   clause; other lower-priority coverage gaps are documented. No source/config
   fix or physical flow was run. Details:
   `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md`.
+
+## [2026-09-23] fix | E1 ring-release wrap and consume-collision accounting
+
+- Fixed `rtl/pe_eth_mac.v` for the E1-1/E1-2 follow-up findings: `freed` is now
+  the forward distance modulo `BUF_BYTES` (AW-bit subtraction, zero-extended),
+  and the validated `consume_credit` is summed into every producer `room`
+  update (consume branch, `S_PAYLOAD`, `S_SETTLE`, `S_ERR`) instead of being
+  overwritten by the later state-machine assignment.
+- Tests first: `tb/tb_pe_eth_mac.v` gained a wrapped-release case (rptr 1996 to
+  144 frees exactly 196) and a simultaneous consume + payload-write case
+  (`room` moves by +freed-1). Both failed on the pre-fix RTL and pass after.
+- The mutation harness was corrected while validating: the directed waits in
+  `tb_pe_eth_mac.v` are bounded and `run_tb` counts only a printed FAIL as a
+  detection (timeout/compile/crash is a harness error). Two mutants were added
+  for this fix, so `mutate_eth_mac_tb.sh` is 18/18 with 0 survivors and 0
+  harness errors; `mutate_eth_soc_tb.sh` 8/8; `run_all.sh --fast -j8` exit 0
+  (29/29 RTL, 20/20 firmware, lint and all gates). Pure Yosys/OpenSTA SoC
+  screen: 2 x 0 problems, setup 0.00 all corners, hold -0.87/-0.61/-0.48 ns
+  (slow/typ/fast), unchanged from the post-E1 screen; canonical mapped counts:
+  `pe_eth_mac` 1,354 cells / 19,789.74 um2, `pe_soc` 3,306 / 53,615.56 um2.
+- E1-3 (full-ring release == duplicate) stays documented in the RTL. No
+  physical flow, DRC or LVS.
+
+## [2026-09-23] fix | E2 macro gate: pin-to-net mapping and ordered PDN ladder
+
+- `tools/checks/macro_flow_config.py` (E2-1/E2-2): every
+  `PDN_MACRO_CONNECTIONS` entry is validated field-by-field (power pins on the
+  flow's power net, `VSS!` on the ground net, correct slots), and the PDN
+  script must carry the macro grid's `add_pdn_stripe -layer Metal4` plus its
+  ordered `Metal4 -> vertical` and `vertical -> horizontal` `add_pdn_connect`
+  layers, matched inside the same command. `--flow` points the gate at a copy.
+- `regress/mutate_macro_flow_config.sh` mutates copies of the flow config and
+  PDN script and requires rejection of wrong-net,
+  missing-metal4-to-vertical, missing-vertical-to-horizontal,
+  missing-metal4-stripe, wrong-layer and reversed-layers (7/7, tracked files
+  byte-compared); wired into `run_all.sh` beside the macro gate.
+- `./regress/run_all.sh --fast -j8` on the final tree: exit 0, 29/29 RTL, 20/20
+  firmware, lint clean, every gate and all seven TB mutation suites green.
+  E2-3/4/5 remain documented. No physical flow, DRC or LVS.
+
+## [2026-09-23] fix | E2-3: missing-PDK policy for the macro flow gate
+
+- `tools/checks/macro_flow_config.py` exit taxonomy: 0 = complete and legal;
+  1 = findings (including a Yosys elaboration failure); 2 = INCOMPLETE, only
+  when the required macro LEF geometry is unavailable and there are no other
+  findings. A finding with the geometry missing still exits 1, and a `--lef`
+  testhook lets the policy be tested without the installed PDK.
+- `regress/run_all.sh` reports exit 2 as `macro flow config: SKIPPED ...` and
+  every other non-zero as FAILED. `regress/mutate_macro_flow_config.sh` now
+  runs 10 checks: clean pass; the six E2-1/E2-2 mutations as exit 1; clean +
+  missing LEF as exit 2 + INCOMPLETE; wrong-net + missing LEF as exit 1; and a
+  forced Yosys failure as exit 1; it prints a clean SKIPPED (exit 0) when its
+  own baseline is incomplete (verified with a PDK-less `HOME`).
+- Full `./regress/run_all.sh --fast -j8` on the final tree: exit 0, 29/29 RTL,
+  20/20 firmware, lint clean, every gate and all seven TB mutation suites
+  green. E2-4/5 remain documented. No physical flow, DRC or LVS.
+- Missing-LEF full regression: `HOME=/tmp/nopdk
+  IHP_PDK=/home/mylesp/pdk/IHP-Open-PDK ./regress/run_all.sh --fast -j8`
+  exits 0 (29/29 RTL, 20/20 firmware); macro geometry and macro-flow negatives
+  both report SKIPPED. `IHP_PDK` supplies the SRAM simulation models while the
+  temporary `HOME` hides the LEF used by the geometry check.
+
+## [2026-09-23] fix | E2-4: macro view validation
+
+- `tools/checks/macro_flow_config.py`: every configured macro type must have
+  nonempty `gds`/`lef`/`lib` views; every `./src/<name>` view must resolve to
+  exactly one file of the matching class and extension in the PDK
+  `sg13g2_sram` tree `run_librelane.sh` stages from (a `.gds` under `gds/`, a
+  `.lef` under `lef/`, a `.lib` under `lib/`; basename matching, not the repo
+  cwd); and the `lib` keys must cover the flow's required
+  `DEFAULT_CORNER`/`STA_CORNERS` list, derived from the flow config or the
+  PDK's LibreLane `config.tcl`. The class/extension check is structural and
+  runs even when the view tree is unavailable. `--pdk-root` mirrors
+  `run_librelane.sh` (`PDK_ROOT`/`~/.ciel`).
+- Test-first: the pre-fix checker accepted missing-GDS, missing-LEF,
+  missing-corner and nonexistent-path configs with exit 0; each now exits 1,
+  as does a LEF entry naming an existing `.lib` file (including with the view
+  tree and the geometry LEF unavailable). The negative harness adds those five
+  mutations plus view-finding-without-geometry and PDK-less wrong-type checks:
+  17/17 with the PDK present at that step (20/20 after E2-5's synthetic
+  checks), clean SKIPPED with a PDK-less baseline. The E2-3 exit policy is
+  preserved (exit 2 only for unavailable geometry/views with no other
+  findings).
+- Full `./regress/run_all.sh --fast -j8` on the final tree: exit 0, 29/29 RTL,
+  20/20 firmware, lint clean, every gate and all seven TB mutation suites
+  green. E2-5 is closed in the next entry. No physical flow, DRC or LVS.
+
+## [2026-09-23] fix | E2-5: per-type macro geometry
+
+- **Finding.** The placement gate measured every configured macro type with one
+  hard-coded LEF (`--lef`, default the git-clone 1P path), so a second type
+  with a different footprint would have been checked against the wrong SIZE.
+- `tools/checks/macro_flow_config.py`: each configured type's own `./src` lef
+  view is resolved under the PDK sg13g2_sram tree (the E2-4 resolution) and its
+  own SIZE drives that type's DIE_AREA fit and pairwise placement-gap checks;
+  the pairwise test now uses each instance's own width/height. A type whose LEF
+  cannot be resolved is reported unchecked on top of its E2-4 finding. `--lef`
+  stays as the every-type override so the E2-3 exit taxonomy is unchanged
+  (exit 2 only for unavailable geometry with no other findings), and `--rtl`
+  was added as an isolated-test hook for synthetic netlists.
+- Test-first: RED was an isolated two-type flow (two blackbox macros, fake PDK;
+  A's LEF says 10x10, B's says 100x100 in a 50x50 die) accepted at exit 0 with
+  `--lef A.lef`; after the fix it exits 1 with `u_b: 100.0x100.0 (type
+  RM_IHPSG_FAKE_B) at (20.0,0.0) is not inside DIE_AREA [0, 0, 50, 50]`. The
+  negative harness adds three synthetic checks (die fit, per-type overlap,
+  missing type LEF): 20/20 with the PDK present, clean SKIPPED with a PDK-less
+  baseline. Full `./regress/run_all.sh --fast -j8`: exit 0, 29/29 RTL, 20/20
+  firmware, lint clean, every gate and all seven TB mutation suites green.
+  E2-1..E2-5 are fully closed. No physical flow, DRC or LVS.
+
+## [2026-09-23] test | E1 consume-credit collision coverage
+
+- A fresh independent review traced release validation and all `room` updates;
+  it found no RTL defect. It found the regression tested a same-edge consume
+  only at `S_PAYLOAD`, leaving type-success settle, bad-frame settle and `S_ERR`
+  folds unguarded by tests.
+- Added directed consume collisions at all three room-update sites and one
+  matching mutation for each. The pristine MAC TB passes; each targeted mutant
+  produces the expected room assertion. `regress/mutate_eth_mac_tb.sh` now
+  reports 21 detected, 0 survived, 0 harness errors.
+- No RTL behavior changed. `./regress/run_all.sh --fast -j8` passes with the
+  added tests: 29/29 RTL, 20/20 firmware, lint/elaboration, generated gates and
+  all seven TB mutation suites. No physical flow, DRC or LVS.
+
+## [2026-09-23] test | E1 full-ring bad-settle reclaim
+
+- A second read-only pass found the bad-frame `S_SETTLE` reclaim width was not
+  tested at `pay_cnt == 2048`; the existing full-ring reclaim test reached
+  `S_ERR`, a distinct assignment. With a temporary truncated-width mutant, the
+  shipped TB passed; the directed full-size bad-FCS case failed room reclaim
+  and recovery checks as intended.
+- The permanent TB now rejects a 2,044-byte TYPE payload with corrupted FCS,
+  checks full ring reclaim and rollback, then accepts a 46-byte recovery frame.
+  The `S_ERR` collision test also now proves a nonzero partial allocation is
+  reclaimed with a simultaneous consumer release. MAC mutations: 22 detected,
+  0 survived, 0 harness errors.
+- Fresh `./regress/run_all.sh --fast -j8`: 29/29 RTL, 20/20 firmware, lint and
+  elaboration clean, generated gates current, all seven TB mutation suites
+  passed. No RTL change or physical flow/DRC/LVS.
+
+## [2026-09-23] review | pe_ctrl readback host contract
+
+- A source-grounded read-only audit confirmed the `uio[4]` mapping and A1/A2/A3
+  timing arithmetic. It identified missing host-contract decisions before RTL:
+  the final word of a full 1,024-word image needs an echo frame after receive
+  lockout; A1/A2 require an explicit minimum SCLK low phase or duty cycle;
+  per-word verification requires the readback rate on every echoed frame; and
+  the CS-to-first-clock setup needs a numeric limit.
+- The computed A1/A2 limits are ~7.5/~7.7 MHz, so A2's extra frame needs an
+  explicit robustness rationale. No interface was selected and no RTL changed.
+  Findings: `reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md`; choices remain open in
+  `wiki/plans/pe-ctrl-readback.md`. No physical flow, DRC or LVS.
+
+## [2026-09-23] review | SERDES decision readiness
+
+- A source-grounded read-only audit found the planned integration consistent
+  with the current SERDES, codecs, DRU, pinmux, SoC and unit tests. It grouped
+  user choices into milestone scope, plain asynchronous RX scope, topology, and
+  access, and recorded evidence-backed defaults without selecting them.
+- Sticky status semantics, write-triggered control strobes, final stuffed-cell
+  completion, and other register/timing details remain engineering follow-ups
+  after scope acceptance. The plan's 3,298-cell `pe_soc` estimate is stale
+  against the current 3,306-cell result; refresh before an implementation
+  comparison. No RTL changed. Full audit: `reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md`.
+
+## [2026-09-23] docs | PlantUML map source audit
+
+- A read-only comparison of the diagrams with the current plans and RTL found
+  six wording/edge issues: the timing label conflated a half-cell level with a
+  strobe, CPU-to-timing edges bypassed the `0xF` window, the loopback implied
+  physical pads instead of a simulation wire model, and readback omitted
+  unresolved host-contract choices. Corrected the plan and progress maps; no
+  completion-color changes were needed.
+- `diagrams/` contains only its README and two editable PlantUML sources, with
+  no rendered output. Both sources rendered headlessly to `/tmp`; no RTL or
+  physical work was run. Detailed review: `reviews/2026-09-23/PROJECT-REVIEW.md`.
+
+## [2026-09-23] verify | mapped synthesis baseline refresh
+
+- `./regress/synth_area.sh` exited 0 on the current tree. It reports
+  `pe_eth_mac` 1,354 cells / 19,789.7364 µm², `pe_soc` 3,306 /
+  53,615.5578 µm², and `tt_um_top` 3,579 / 59,286.8052 µm². The script
+  surfaced no diagnostics. Full output: `/tmp/synth_area_diagram_followup.log`.
+- Updated the SERDES plan's area baseline. This is mapped, pre-route synthesis;
+  no STA, physical flow, DRC or LVS ran.
+
+## [2026-09-23] docs | floorplan feasibility synthesis refresh
+
+- The floorplan review found `wiki/reference/.floorplan-areas` still held the
+  SPI-pad-screen synthesis numbers. Updated the cache from the fresh mapped
+  screen and regenerated `wiki/reference/floorplan-feasibility.md` with the
+  current 3,306-cell SoC and 3,579-cell TT-top counts.
+- The arithmetic updates to 259,805 µm² macro-plus-inflated-logic area and
+  60.0% / 36.1% / 45.0% occupancy for the three die scenarios. The
+  generator's shorthand “×2” wording is now the precise “stdcell-to-die
+  inflation factor.” Its prose now describes the configured placements and
+  PDN script clauses, separating static checks from physical results.
+  `python3 tools/gen/floorplan_feasibility.py --check` passes. No flow, STA,
+  DRC or LVS was run.
+
+## [2026-09-23] fix | E1 committed-byte ownership guard
+
+- Pi's independent MAC accounting audit found that `used` counts the current
+  uncommitted frame. A forward consume into those bytes could then be credited
+  again by bad-frame reclaim or TYPE FCS windback, exceeding ring capacity.
+- Added `published_used` to track committed storage. Consume validation now
+  requires `freed <= used` and `freed <= published_used`; successful length
+  and TYPE settlement publish their actual stored data bytes. Reclaim and
+  `S_ERR` do not publish the failing frame.
+- Added directed bad-FCS and successful TYPE over-read cases. Both failed on
+  pre-fix RTL (room 2,098 and 2,052) and pass after the guard. The concurrent
+  producer-pointer test now releases only part of a prior frame, making the
+  producer/consumer addresses differ and allowing the rebase mutant to be
+  detected.
+- Added publication assertions for same-edge length and TYPE completion,
+  consume-credit subtraction, and exclusion of the four TYPE FCS bytes.
+  Bad-FCS rollback and `S_ERR` collision cases now partially consume prior
+  committed frames and assert their unconsumed published-byte remainder. The
+  harness has separate mutants for each missing term and for clearing earlier
+  published-byte ownership during either reclaim path.
+- `regress/mutate_eth_mac_tb.sh`: 30/30 detected, 0 survivors, 0 harness
+  errors. `./regress/run_all.sh --fast -j8`: 29/29 RTL, 20/20 firmware, lint,
+  elaboration, generated gates and all seven mutation suites pass.
+- Fresh Yosys mapping: `pe_eth_mac` 1,681 cells / 23,749.6266 µm², `pe_soc`
+  3,571 / 56,816.8776 µm², `tt_um_top` 3,888 / 62,745.4296 µm². The refreshed
+  floorplan cache/page now estimates 265,666 µm² macro-plus-inflated logic and
+  61.4% / 36.9% / 46.0% occupancy; both generated checks pass. Three-corner
+  mapped OpenSTA setup stays at 0.00 ns, hold at −0.87/−0.61/−0.48 ns
+  (slow/typ/fast); no new Yosys
+  check problems. The prior unplaced hold/electrical violations remain.
+- Full review: `reviews/2026-09-23/E1-PUBLISHED-OWNERSHIP-REVIEW.md`. No physical
+  flow, DRC or LVS.
+
+## [2026-09-23] plan | Linux demo-host GUI and board path
+
+- Clarified the intended three-layer interface: connected Linux PC GUI
+  (planned) → RP2040/Raspberry Pi Pico on the Tiny Tapeout demo board → ASIC
+  passive SPI loader. PC-to-board transport/control API, clock control, and
+  load-status/readback strategy remain open. Added GUI planning as item 8 in
+  the ordered STATUS backlog; no GUI or bridge firmware has started.
+- Updated the plan and progress maps to show the PC, demo board controller,
+  and chip loader. Kept both PNG and SVG renders alongside the PlantUML files;
+  PNG rendering uses `PLANTUML_LIMIT_SIZE=8192` to avoid the default dimension
+  cap. Current planned/progress PNG sizes: 4180×2520 and 4189×1956.
+- Pi's read-only screenshot investigation matched the supplied 1393×269 image
+  to `/tmp/plantuml-view/project-plan.png`, a pre-`cc00c58` uncommitted draft
+  render. No committed `.puml` source matches it. The original draft source is
+  absent; render provenance and the next near-square layout proposal are in
+  `reviews/2026-09-23/PROJECT-REVIEW.md`. Pi pane `%46` is idle.
+
+## [2026-09-23] plan | demo host GUI draft (STATUS item 8)
+
+- Drafted `wiki/plans/demo-host-gui.md` from existing sources only: ADR-007's
+  loader contract (mode-0, MSB-first, 16-bit words into IMEM, `run == 0` gate,
+  <=10 MHz SCLK, no MISO/readback in v1), the wrapper pin map
+  (`ui_in[3:5]` loader pads, `ui_in[1]` `run`, `uo_out[1]` heartbeat,
+  `uo_out[7:2]` debug PC), the TT clock spec (RP2040-generated 1 Hz-66.5 MHz,
+  MicroPython Commander `set_clock_hz`), and the pin budget.
+- Records that `pe_ctrl`'s `load_active`/`load_error`/`words_written` are sunk
+  in the wrapper's `_unused` bundle, so the GUI cannot verify a load today;
+  status is tiered (pads/host-side now, board-side sampling open, pad or MISO
+  readback = future user-gated change).
+- PC-to-board transport/API, image container, clock surface, status strategy
+  and Linux packaging are all marked **[OPEN]** with evidence-backed options
+  (reuse MicroPython/Commander vs custom board firmware vs later/networked).
+- Planning/documentation only: no GUI code, bridge firmware, RTL or pinout
+  change. STATUS item 8 remains **TODO** until the user accepts the plan.
+
+## [2026-09-24] fix | macro-flow gate E2-6 + R3 (checker identity)
+- `tools/checks/macro_flow_config.py`: each type's resolved `lef` view must declare `MACRO <type>` (fail-closed: no MACRO = finding) and a `lib` view declaring cells must declare one for the type; R3 closed — no single `lib` file may serve two required corners (config-only, PDK-less paths unchanged)
+- `regress/mutate_macro_flow_config.sh`: 20 -> 26 checks, adding the required `type-b-wrong-lef` mutation on the synthetic two-type fixture (type B with A's 10x10 LEF in a 50x50 die), `type-b-wrong-lib`, `type-no-macro-lef`, `corner-file-shared`, `corner-key-wildcard`, `synth-identity-clean`; false pass demonstrated on a /tmp copy first (wrong-LEF exit 0 vs own-LEF exit 1), pre-fix harness 21/5, post-fix 26/0
+- Evidence: `reviews/2026-09-23/PROJECT-REVIEW.md` "E2-6 resolution"; status **fixed-pending-manager-verification** (E2 not yet closed); R1/R4/R5 remain observations
+## [2026-09-24] feature | pe_ctrl readback — option A1 (STATUS item 6 DONE)
+- `uio[4]` now carries a commit-latched word echo: frame 0 = 0x0000, frame k = the word committed at frame k-1, one trailing frame in the same CS-low session; the payload updates only where `words_written` increments (aborted words never echo) and the serializer is not gated by `load_error`, so the final word of a full 1,024-word image echoes through the receive lockout
+- Numeric host contract in the `pe_ctrl` header and [[plans/pe-ctrl-readback]]: every echoed frame <= 2.5 MHz, SCLK low >= 100 ns (6 clk), CS_N -> first rise >= 100 ns; mode-0 change on the detected falling edge; `uio_oe[4] = load_active`
+- Budget: committed pads 18 -> 19, free uio 4 -> 3 (pin-budget page regenerated); `pe_ctrl` 292 -> 463 cells, `tt_um_top` 3,888 -> 4,038 (floorplan cache/page refreshed)
+- Verified: `tb_pe_ctrl` (new cases 8-12) PASS, pad-level `tb_tt_um_protocol_emulator` PASS (full 1,024-word image + echo), `regress/mutate_ctrl_tb.sh` 23/23 (was 11/11, +3 wrapper pad mutations), `run_all.sh --fast -j8` green, `synth_area.sh` clean; no STA refresh yet (manager-scheduled), no physical flow/DRC/LVS
+- Review: `reviews/2026-09-24/PE-CTRL-READBACK-REVIEW.md`
+
+## [2026-09-24] feature | SERDES + codec integration into pe_soc (STATUS item 7 DONE)
+- Implemented wiki/plans/serdes-integration.md per the manager decision adopting every recommended default in reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md (additive engine disabled at reset, self-timed wire-loopback first consumer, plain RX without phase acquisition as the documented limit, 0xF indexed window access; the review's two-codec shape wins over the plan where they differ)
+- RTL: pe_serdes `bit_en` split into tx_bit_en/rx_bit_en (mechanical; nine protocol TBs alias their strobe, tb_pe_serdes gains a directed split case); pe_pinmux gained the ov_en/ov_bit level overlay feeding BOTH pad outputs before the open-drain gate (tb_pe_pinmux gains overlay/od cases); pe_soc gained the engine section — 16-entry latched-phase window on port 0xF (INDEX/DATA phases, any read re-arms), CTRL strobes tx_load/rx_start/clr as one-cycle write-triggered pulses, latched tx_done/rx_valid/rx_err (set-beats-clear on STATUS), a divider producing one cell strobe per encoded cell + half_phase with TWO toggles per cell, grid-aligned load/start with the Manchester rx_start anchored to the first DRU decode after load, payload-only gates (!tx_stuffed / rx_bit_valid), two unmodified pe_codec_mux instances, RX off the existing DRU (one capture path)
+- First consumer: firmware/serdes_loop.pe (70 words, peasm ENGINE=0xF) + tb_pe_soc_serdes — plain LSB/MSB, Manchester, and the directed stuffed Manchester loopback (0x07E0, trailing-stuff guaranteed by construction); PASS, with monitors for cell spacing, TX hold, RX skip, DRU-strobe source and exact advance counts
+- Mutation harnesses: NEW regress/mutate_soc_serdes_tb.sh 7/7 (plan's four required: TX-hold removed, RX-skip removed, doubled cell enable, strobe cross-wire, plus rx-start-no-anchor, half-rate-half-phase, no-grid-load) and NEW regress/mutate_serdes_tb.sh 7/7 (split enables, bit order, len0, idle level); all nine suites green with 0 unexplained survivors (i2c 6+1 documented-equivalent, spi 5, fbuf 5, eth_mac 30, eth_soc 8, i2c_xfer 11, ctrl 23, macro 26)
+- Two bring-up defects the directed tests caught and fixed: half_phase toggled once per cell (wire ran at cell rate), and a stale idle DRU decode captured as payload bit0 (rx_start anchor)
+- Source lists that elaborate pe_soc gained pe_serdes/pe_nrzi/pe_bitstuff/pe_codec_mux: flow/pe_soc.json, info.yaml, synth_area, the macro gate, five mutation harnesses (the first full run failed exactly there — all green after)
+- Evidence: ./regress/run_all.sh --fast -j8 exit 0 (30/30 RTL, 21/21 firmware, lint, gates, nine suites); ./regress/synth_area.sh clean — pe_soc 3,571 → 4,961 cells / 56,816.88 → 82,893.77 µm² (+1,390), tt_um_top 4,038 → 5,363 / 65,686.27 → 91,268.06 µm² (+1,325); floorplan cache/page and block-diagram/glossary regenerated (serdes+codec orphans retire). No STA refresh (manager-scheduled), no physical flow/DRC/LVS. Review: reviews/2026-09-24/SERDES-INTEGRATION-REVIEW.md; diagrams/project-progress.puml refreshed twice (gotcha 47)
+
+## [2026-09-24] hardening | Task 4 closeout — mapped STA refresh + codec mutation suite
+- (a) Mapped STA refresh for the SERDES integration's new timing classes. The recorded screen scripts were extended (source lists gain `pe_serdes`/`pe_nrzi`/`pe_bitstuff`/`pe_codec_mux`) and three corners at 16.667 ns run on BOTH `pe_soc` and `tt_um_protocol_emulator` (slow is also the hold corner; hold checked at all corners). `pe_soc`: setup 0.00/0.00/0.00 ns, hold −0.87/−0.61/−0.48 ns — **identical to the pre-integration screen at every corner**; `tt_um_top`: setup 0.00 ns, hold −0.71/−0.52/−0.43 ns. **No new violation class**: overlay→pad (max +7.96 ns slow), `half_phase` (min +0.23 ns slow), window read mux (min +0.15 ns slow) and the split enables (min +0.75 ns) are all MET at slow; fast-corner negative holds are shallower members of the pre-existing pre-layout family, and the pad hold violation pre-existed (pre-integration HEAD fast −0.1026 ns → post −0.0308 ns). Slow-corner max-slew/fanout violator counts grew (49→96 / 136→188) in the same classes, all pre-route/non-gating. Reports + scripts: `reviews/2026-09-24/serdes-sta/` (incl. the pre-integration control netlist).
+- (b) NEW `regress/mutate_codec_tb.sh`: 13 mutations across `pe_codec_mux`/`pe_bitstuff`/`pe_nrzi`/`pe_manch` covering the documented CAN preset `0x51`, `ones_only` (`cfg[7]`) and run length (`cfg[6:4]`), the registered `clr`/`rx_err` contract, and the frame-boundary `clr`, plus pipeline order, bypass subsets and `half_phase`; all **13 detected / 0 survived / 0 harness errors** with per-mutation `cmp`-verified restore (gotcha 63). The unit TB gained three directed checks first: a non-complementary CAN stuff bit sets the registered `rx_err`, NRZI `clr` restores idle J, and Manchester `clr` beats a pending error on the same edge. Wired into `run_all.sh` as the tenth mutation suite.
+- (c) `./regress/run_all.sh --fast -j8` exit 0 (30/30 RTL, 21/21 firmware, lint clean, every generated gate + macro negatives, **ten mutation suites**); `./regress/synth_area.sh` clean at the baseline (`pe_soc` 4,961 / 82,893.7746 µm², `tt_um_top` 5,363 / 91,268.0622 µm²).
+- Hashes, exact commands and the full result tables: `reviews/2026-09-24/CLOSEOUT-HARDENING-REVIEW.md`. Mapped screens only — no physical flow, DRC or LVS. `wiki/plans/demo-host-gui.md` untouched.
+
+## [2026-09-24] layout | Task 5a — squarer diagram layout (both maps)
+- Re-laid out both PlantUML maps to the approved squarer targets and checked in the winning sources plus re-rendered PNG/SVG sidecars: `project-plan.puml` 4180×2520 (1.6587) → **3194×2476 (1.2900)**; `project-progress.puml` 6195×1354 (4.5753) → **3681×2493 (1.4765)** (the progress map had sprawled during the Task-3 end refresh); both targets met (≤1.4:1 / ≤2.0:1)
+- Plan: all four notes anchored `note bottom of pads` as one compact block below the architecture (packages/edges untouched; intermediate 3304×2458). Progress: `left to right` → `top to bottom`, five packages now vertical status lanes (direction-only intermediate 3681×2440)
+- Sanctioned status-label changes only: plan readback package/component/edge labels and readback/serdes notes now record A1 landed and the integrated engine; progress macro gate `E2-6 + R3 fixed (26 checks) / manager verification pending` → `closed / manager-verified 2026-09-24` (amber → green class, note CLOSED), readback note records the mapped STA refresh and the loopback note the 13/13 codec suite
+- Independent pre/post parse: plan 7/7 packages, 26/26 components, 36/36 edges, 4/4 notes; progress 5/5, 24/24, 26/26, 4/4; only the sanctioned labels/notes differ; `plantuml --check-syntax` rc=0 and `--check-graphviz` OK (PlantUML 1.2026.8, GraphViz 16.1.0)
+- Evidence: `reviews/2026-09-24/DIAGRAM-SQUARER-LAYOUT.md`. Limit: Graphviz auto-placement — re-measure after future content changes. No RTL, tests or scripts changed.
+
+## [2026-09-24] hardening | Task 5b — hold-screen attribution + BOARD-assumption STA variants
+- All 18 recorded mapped STA screens (3 designs × 3 corners) now exist in two labelled variants: `VARIANT: ZERO-ASSUMPTION` (the recorded 0.0 ns min delays) and `VARIANT: BOARD-ASSUMPTION` (min input/output delay 1.0 ns; max delays unchanged at 3.3334 ns). A `pe_ctrl` mapping/netlist was added so the A1 loader screen is re-runnable under both variants; run both with `bash reviews/2026-09-24/serdes-sta/run_sta.sh`
+- Every screen ends with a full negative-min-slack inventory (1000 groups × 4 endpoints) so nothing hides in the top-5 display; new `reviews/2026-09-24/serdes-sta/analyze_hold.py` classifies external-input (data + `rst_n` removal), external-output, internal pre-CTS and internal-within-0.25 ns-uncertainty classes (`hold-attr-analysis.txt`)
+- Attribution: zero-variant negatives are external-input assumption artifacts (`host_*`/`run`, `rst_n` removal), external-output artifacts (`pin_out`/`dbg_*`/`spi_miso`/`uio_out[4]`) or internal/within-uncertainty; the board variant drops **every external class to 0 paths in all nine screens**. Worst setup unchanged in every pair; board worst hold `pe_soc` −0.54/−0.41/−0.36, `tt_um_top` −0.64/−0.48/−0.40, `pe_ctrl` **+0.04**/−0.07/−0.13 ns (slow/typ/fast — `pe_ctrl` hold-clean at slow). Internal reg-reg slow worst is a flop→fbuf SRAM-pin path; the routed SoC's CTS+hold repair closed the family (+0.1209 ns, 0 violating paths)
+- The 1.0 ns min-delay floor is a labelled screening assumption (launch/level-shifter + short FR-4 run + connector/protection + pad ring), **not** a measured board flight time; all BOARD MET claims are conditional on it, and the 0.25 ns hold uncertainty stays in both variants
+- Read-only input-registration audit (no RTL changed): `spi_sclk`/`spi_mosi`/`spi_cs_n` already 2FF-synchronized and false-pathed; `rst_n`, `run`, `host_*` and the plain `pin_in` lanes are unregistered — constraint-only today, RTL register stages recorded as options
+- Evidence: `reviews/2026-09-24/HOLD-SCREEN-ATTRIBUTION.md` + `reviews/2026-09-24/serdes-sta/`; the Task-4 hold interpretation is refined by the post-update block at the end of `reviews/2026-09-24/CLOSEOUT-HARDENING-REVIEW.md`. Mapped pre-CTS screens only — no physical flow, DRC or LVS; no regression rerun (no RTL changed)
+
+## [2026-09-24] plan | 10BASE-T TX frame path (`eth_tx`) — STATUS item 9
+
+- Authored `wiki/plans/eth-tx-frame-path.md` in the `ethernet-soc` plan style (goal, architecture, global constraints, Review Focus, task-by-task checkbox steps) with eight scope groups, each carrying an evidence-backed recommended default plus alternatives and costs, for manager adoption at review
+- Defaults recommended: firmware-streamed frame bytes through an 8-byte staging FIFO in the `0xF` window extended to 32 entries (16-23 push-and-wrap, 24/25 TXLEN, 26 TXCTRL, 27 TXSTAT) with no frame-sized TX buffer (G1/G2); hardware-owned 56-bit preamble + SFD `0xD5` LSB-first, CRC cleared at the prelude (G3); a TX-dedicated `pe_crc #(.W(32))` with the generated RevEng-checked constants — FCS emitted from the field-mode pure shift, receiver verdict remains the catalogue residue `0xDEBB20E3`, never `crc_zero` (G4); reuse of `u_tx_codec` + divider (`DIV = 6` = 100 ns cells, 3 clk half-cells) + the verified pad overlay via an exclusive owner mux, with the idle trap pinned (`tx_bit = half_phase` between frames) (G5); `uo_out[2]` (`dbg_pc[0]`) reclaimed as `eth_tx` behind a `pin_oe_bus[7]` mux so reset stays bit-identical, RX stays `ui_in[2]` (G6); first consumer `firmware/eth_tx_arp.pe` (42-byte ARP request, hardware pad to 64 + FCS) with a pad-level Manchester decode and a TX→RX loopback through `firmware/eth_rx.pe` (G7); mutation suites `mutate_eth_tx_tb.sh` + `mutate_eth_tx_loop_tb.sh` (G8)
+- Coverage: preamble/SFD insertion, FCS append semantics (never `crc_zero`; residue), 64-byte minimum pad and max-length refusal (>1,514 stored), runt-pad/jabber-refuse policy, IFG = 96 bit times (576 clk), and the exact 100 ns bit at the locked 60 MHz / SPB=12 grid; acceptance decodes real frames with a real FCS at the pin like `tb_pe_eth_mac`
+- Registered in `wiki/index.md`; STATUS gains item 9 and item 4 gets the post-A1 counts (19 of 24 committed, `uio[7:5]` free, revisit trigger fired) plus the plan's pad recommendation. Planning only: no RTL, tests, scripts or firmware changed; `wiki/plans/demo-host-gui.md` untouched
+- Observed at plan-writing time (noted in the plan's baseline block and flagged for the manager): the shared worktree carries an uncommitted, unrecorded "phase R1" host-bus change to `rtl/pe_ctrl.v`/`rtl/tt_um_protocol_emulator.v` (`uio[4:7]`, referencing a missing `wiki/plans/host-controller-gui.md`), which would consume the free `uio` pads; the recommended `uo_out[2]` reclaim is baseline-independent and the free-`uio` alternative is marked as depending on the reconciliation
+
+## [2026-09-24] hardening | R1 framed host bus — reconcile, fix, verify
+
+- Attribution: the chip-side host protocol landed unrecorded at 14:33 (pe_ctrl/wrapper/both TBs/mutate_ctrl_tb.sh/crc_config) before the OOM; audited against the host-controller plan and `HOST-CONTROLLER-PLAN-REVIEW` in the read-only `/tmp/opencode/host-controller-gui` session repo; the R0 pad ruling is adopted (framed protocol wins; A1 `uio[4]` echo retired, its commit-latched/abort semantics moved into the framed LOAD response)
+- Contract verified: frame = `A55A` sync, `{version,opcode,target}`, sequence, length, payload, CRC-16/CCITT-FALSE (`0x1021`/`FFFF`, RevEng check `0x29B1`); responses set opcode bit 7 and echo sequence/target, status-first (`0 OK … 6 NOT_READY`); R1 opcodes PING/LOAD/STATUS/CLEAR_FAULT/TARGET + target-1 loopback; `IRQ_N` = `~|faults` with mask clear; LOAD while `run=1` -> NOT_READY (no fault); no trailing frames
+- Pads: `uio[4:7]` = host CS_N/MOSI/MISO/SCK (lower PMOD), `uo_out[1]` = IRQ_N, `ui_in[3:5]` freed; 19/24 committed, 5 free `ui_in`, 0 free `uio`
+- Authorized behavior-preserving RTL fixes (`rtl/pe_ctrl.v` only): old-style `crc16_byte`/`crc16_word` (yosys 0.69+post cannot parse `return`); fixed 3-bit response payload slot case (removes Verilator WIDTHTRUNC). `regress/synth_area.sh` now fails loudly on a yosys ERROR (gotcha 13; failure path tested with a throwaway broken file). P21 CS-to-first-clock sweep added to `tb_tt_um_protocol_emulator` (40/60/150/400 ns, all PASS)
+- Evidence: `bash regress/lint.sh` exit 0 (15 verilator + 12 yosys elaborations); `./regress/run_all.sh --fast -j8` exit 0 (30/30 RTL, 21/21 firmware, ten mutation suites); `bash regress/mutate_ctrl_tb.sh` **29 detected / 0 survived / 0 harness errors**; `./regress/synth_area.sh` exit 0 — `pe_ctrl` **1,731 cells / 30,662.1126 µm²**, `tt_um_top` **6,633 / 113,254.8858 µm²** (`pe_soc` unchanged); seven generator `--check`s OK after regenerating `signal-names.md` and `protocol-pin-budget.md`; `info.yaml` duplicate `ui[3:5]` keys fixed and the map moved to R1
+- Hashes: `rtl/pe_ctrl.v` `aea1a765ab060ab7e806f9d7c37785f0856e81bf2ceef11b36d7501e390b0bc7`; `tb/tb_tt_um_protocol_emulator.v` `84c71a72125ba6d3a8094061191bf92db5c3781e8f531d2071c6dfa6bfd8f49f`; `regress/synth_area.sh` `84c3cf401f0e846a3acdf513979f1dbb93bea82c36cdb6fe470dd44cea3a28e2`
+- **OPEN FINDING (a):** P3 liveness gap — `uo_out[1]` is IRQ_N, the heartbeat pad is retired, and the R1 STATUS layout deliberately omits timer/pc/a/x/y, so no scope-visible liveness until the R2 read path. **(b) P21 sweep closed** by the new directed case. No physical flow, DRC or LVS
+
+## [2026-09-24] rtl | Manager Task 10 — 10BASE-T TX frame path plan Tasks 1-3 landed
+
+- Task 1: `tb/tb_pe_eth_tx.v` written RED-first; the pre-change-tree run fails to elaborate (`pe_eth_tx` missing). Directed set: 42-byte ARP request padded to 60 stored bytes, exactly-64 (no pad), the 1,514-byte maximum, refused 1,515-byte jabber and 13-byte runt, mid-frame abort, FIFO underrun (10 of 42 bytes), a 200-cell constant idle stretch, and two frames separated by ≥96 idle cells. The TB decodes the raw Manchester wire from ph2/ph5 half-cell samples and checks the FCS with an independent left-shifting model; it also checks the CRC register's drain-to-zero (the pe_crc field-mode trap), not just the emitted bits.
+- Task 2: new `rtl/pe_eth_tx.v` — hardware 56+8 prelude/SFD (wire pattern, never 0xAA through a byte helper), octets LSB-first, zero pad to 64 bytes folded into the FCS, TX-dedicated `pe_crc #(.W(32))` with the generated RevEng-checked constants, 8-byte staging FIFO, runt/jabber refusal, 96-cell IFG, `tx_bit = half_phase` idle (constant wire, not a square wave). Registered in `run_all.sh` CASES + `synth_area.sh` + `lint.sh`. `PASS: tb_pe_eth_tx`; lint clean; standalone mapped 892 cells / 16,040.0898 µm².
+- Task 3: `rtl/pe_soc.v` — 32-entry `0xF` window (5-bit index; 16-23 push+wrap, 24/25 TXLEN, 26 TXCTRL, 27 TXSTAT set-beats-clear), owner mux on `u_tx_codec.tx_bit` (`eth_start` gated on `!ser_tx_busy`, `tx_path` clear refused while `tx_busy`, `enable = eng_en && tx_path`), DIV=6; `tb/tb_pe_soc_eth_tx.v` written first (RED on the pre-change window: aliased writes, `CFG=ff`, engine never enabled, 734 FAILs) then GREEN. NEW `firmware/eth_tx_arp.pe` (502 words; the first consumer runs the window phase machine and TXSTAT `fifo_ready` backpressure) + committed `.hex`, assembled in `run_firmware_tests.sh`. Two integration defects caught and fixed: TXCTRL is a level register so `frame_start` must write bit2=1; and the firmware must claim `tx_path` before `eng_en` or the idling SERDES drives a Manchester square wave on the shared codec.
+- Same-list updates in one pass: `run_all.sh` (8 `pe_soc` CASES + the new SoC TX case), `flow/pe_soc.json`, `info.yaml`, `tools/checks/macro_flow_config.py`, `synth_area.sh` (`pe_soc`/`tt_um_top` + a standalone `pe_eth_tx` line), `lint.sh` (RTL_ALL + both top lists), and all eight `pe_soc`-elaborating mutation-harness source lists; `wiki/reference/signal-names.md` regenerated (16 modules / 205 ports).
+- Evidence: `./regress/run_all.sh --fast -j8` exit 0 — **32/32 RTL (the 30 existing intact), 22/22 firmware (the 21 existing + the new assemble), lint clean, every generated gate, all ten mutation suites**; `./regress/synth_area.sh` exit 0 — `pe_eth_tx` 892 / 16,040.0898 µm², `pe_soc` 4,961 → **6,191** / 82,893.7746 → **107,939.6388 µm²**, `tt_um_top` 6,633 → **7,980** / 113,254.8858 → **138,746.7144 µm²**. Hashes and the RED/GREEN transcripts: the 2026-09-24 top block in `HANDOFF.md` and `wiki/STATUS.md` item 9. No physical flow, DRC or LVS.
+- Limits: plan Task 4 (wrapper `uo_out[2]` mux + pad-level decode), Task 5 (loopback consumer + two-frame acceptance), Task 6 (two mutation suites) and Task 7 (mapped STA screen + closeout) remain. `wiki/plans/demo-host-gui.md`, `reviews/2026-09-23/PROJECT-REVIEW.md`, `COLD-START.md` and `MANAGER-COLD-START.md` untouched.

@@ -1,0 +1,843 @@
+OpenSTA 3.1.0 8572175ac4 Copyright (c) 2026, Parallax Software, Inc.
+License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
+
+This is free software, and you are free to change and redistribute it
+under certain conditions; type `show_copying' for details. 
+This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
+Warning: There are 3 input ports missing set_input_delay.
+  spi_cs_n
+  spi_mosi
+  spi_sclk
+Warning: There are 3 unconstrained endpoints.
+  _755_/D
+  _758_/D
+  _760_/D
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _651_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _651_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _651_/CLK (sg13g2_dfrbpq_1)
+  -0.1478   15.5192   library recovery time
+            15.5192   data required time
+-------------------------------------------------------------
+            15.5192   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.1858   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _652_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _652_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _652_/CLK (sg13g2_dfrbpq_1)
+  -0.1478   15.5192   library recovery time
+            15.5192   data required time
+-------------------------------------------------------------
+            15.5192   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.1858   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _653_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _653_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _653_/CLK (sg13g2_dfrbpq_1)
+  -0.1478   15.5192   library recovery time
+            15.5192   data required time
+-------------------------------------------------------------
+            15.5192   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.1858   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _654_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _654_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _654_/CLK (sg13g2_dfrbpq_1)
+  -0.1478   15.5192   library recovery time
+            15.5192   data required time
+-------------------------------------------------------------
+            15.5192   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.1858   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _655_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _655_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _655_/CLK (sg13g2_dfrbpq_1)
+  -0.1478   15.5192   library recovery time
+            15.5192   data required time
+-------------------------------------------------------------
+            15.5192   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.1858   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: load_active (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.2011    3.5345 ^ _383_/Y (sg13g2_nor2b_1)
+   0.0000    3.5345 ^ load_active (out)
+             3.5345   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -3.5345   data arrival time
+-------------------------------------------------------------
+             8.7991   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: host_we (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.1841    3.5175 ^ _644_/Y (sg13g2_nor2_1)
+   0.0000    3.5175 ^ host_we (out)
+             3.5175   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -3.5175   data arrival time
+-------------------------------------------------------------
+             8.8161   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _713_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.2011    3.5345 ^ _383_/Y (sg13g2_nor2b_1)
+   0.2641    3.7986 ^ _385_/X (sg13g2_and4_1)
+   0.4870    4.2857 v _388_/Y (sg13g2_o21ai_1)
+   0.1476    4.4333 ^ _415_/Y (sg13g2_nand3_1)
+   0.0594    4.4926 v _416_/Y (sg13g2_o21ai_1)
+   0.0000    4.4926 v _713_/D (sg13g2_dfrbpq_1)
+             4.4926   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _713_/CLK (sg13g2_dfrbpq_1)
+  -0.1609   15.5061   library setup time
+            15.5061   data required time
+-------------------------------------------------------------
+            15.5061   data required time
+            -4.4926   data arrival time
+-------------------------------------------------------------
+            11.0135   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _714_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.2011    3.5345 ^ _383_/Y (sg13g2_nor2b_1)
+   0.2641    3.7986 ^ _385_/X (sg13g2_and4_1)
+   0.4870    4.2857 v _388_/Y (sg13g2_o21ai_1)
+   0.1476    4.4333 ^ _413_/Y (sg13g2_nand3_1)
+   0.0594    4.4926 v _414_/Y (sg13g2_o21ai_1)
+   0.0000    4.4926 v _714_/D (sg13g2_dfrbpq_1)
+             4.4926   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _714_/CLK (sg13g2_dfrbpq_1)
+  -0.1609   15.5061   library setup time
+            15.5061   data required time
+-------------------------------------------------------------
+            15.5061   data required time
+            -4.4926   data arrival time
+-------------------------------------------------------------
+            11.0135   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _715_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.2011    3.5345 ^ _383_/Y (sg13g2_nor2b_1)
+   0.2641    3.7986 ^ _385_/X (sg13g2_and4_1)
+   0.4870    4.2857 v _388_/Y (sg13g2_o21ai_1)
+   0.1476    4.4333 ^ _411_/Y (sg13g2_nand3_1)
+   0.0594    4.4926 v _412_/Y (sg13g2_o21ai_1)
+   0.0000    4.4926 v _715_/D (sg13g2_dfrbpq_1)
+             4.4926   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _715_/CLK (sg13g2_dfrbpq_1)
+  -0.1609   15.5061   library setup time
+            15.5061   data required time
+-------------------------------------------------------------
+            15.5061   data required time
+            -4.4926   data arrival time
+-------------------------------------------------------------
+            11.0135   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _651_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _651_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _651_/CLK (sg13g2_dfrbpq_1)
+  -0.1270    0.1230   library removal time
+             0.1230   data required time
+-------------------------------------------------------------
+             0.1230   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1230   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _652_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _652_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _652_/CLK (sg13g2_dfrbpq_1)
+  -0.1270    0.1230   library removal time
+             0.1230   data required time
+-------------------------------------------------------------
+             0.1230   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1230   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _653_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _653_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _653_/CLK (sg13g2_dfrbpq_1)
+  -0.1270    0.1230   library removal time
+             0.1230   data required time
+-------------------------------------------------------------
+             0.1230   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1230   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _654_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _654_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _654_/CLK (sg13g2_dfrbpq_1)
+  -0.1270    0.1230   library removal time
+             0.1230   data required time
+-------------------------------------------------------------
+             0.1230   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1230   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _655_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _655_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _655_/CLK (sg13g2_dfrbpq_1)
+  -0.1270    0.1230   library removal time
+             0.1230   data required time
+-------------------------------------------------------------
+             0.1230   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1230   slack (VIOLATED)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _652_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ run (in)
+   0.0526    0.0526 v _508_/Y (sg13g2_nor2b_1)
+   0.0000    0.0526 v _652_/D (sg13g2_dfrbpq_1)
+             0.0526   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _652_/CLK (sg13g2_dfrbpq_1)
+  -0.0404    0.2096   library hold time
+             0.2096   data required time
+-------------------------------------------------------------
+             0.2096   data required time
+            -0.0526   data arrival time
+-------------------------------------------------------------
+            -0.1569   slack (VIOLATED)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _653_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ run (in)
+   0.0611    0.0611 v _641_/Y (sg13g2_nor3_1)
+   0.0000    0.0611 v _653_/D (sg13g2_dfrbpq_1)
+             0.0611   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _653_/CLK (sg13g2_dfrbpq_1)
+  -0.0377    0.2123   library hold time
+             0.2123   data required time
+-------------------------------------------------------------
+             0.2123   data required time
+            -0.0611   data arrival time
+-------------------------------------------------------------
+            -0.1512   slack (VIOLATED)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _651_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ run (in)
+   0.0715    0.0715 v _328_/Y (sg13g2_a21oi_1)
+   0.0000    0.0715 v _651_/D (sg13g2_dfrbpq_1)
+             0.0715   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _651_/CLK (sg13g2_dfrbpq_1)
+  -0.0368    0.2132   library hold time
+             0.2132   data required time
+-------------------------------------------------------------
+             0.2132   data required time
+            -0.0715   data arrival time
+-------------------------------------------------------------
+            -0.1417   slack (VIOLATED)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: host_we (output port clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ run (in)
+   0.1138    0.1138 v _644_/Y (sg13g2_nor2_1)
+   0.0000    0.1138 v host_we (out)
+             0.1138   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+   0.0000    0.2500   output external delay
+             0.2500   data required time
+-------------------------------------------------------------
+             0.2500   data required time
+            -0.1138   data arrival time
+-------------------------------------------------------------
+            -0.1362   slack (VIOLATED)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: load_active (output port clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ run (in)
+   0.1173    0.1173 v _383_/Y (sg13g2_nor2b_1)
+   0.0000    0.1173 v load_active (out)
+             0.1173   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+   0.0000    0.2500   output external delay
+             0.2500   data required time
+-------------------------------------------------------------
+             0.2500   data required time
+            -0.1173   data arrival time
+-------------------------------------------------------------
+            -0.1327   slack (VIOLATED)
+
+
+max fanout
+
+Pin                                   Limit Fanout  Slack
+---------------------------------------------------------
+_332_/Y                                   8     33    -25 (VIOLATED)
+_330_/Y                                   8     32    -24 (VIOLATED)
+_388_/Y                                   8     31    -23 (VIOLATED)
+_329_/Y                                   8     25    -17 (VIOLATED)
+_509_/X                                   8     21    -13 (VIOLATED)
+_510_/Y                                   8     21    -13 (VIOLATED)
+_588_/X                                   8     19    -11 (VIOLATED)
+_514_/X                                   8     17     -9 (VIOLATED)
+_333_/Y                                   8     16     -8 (VIOLATED)
+_513_/Y                                   8     16     -8 (VIOLATED)
+_334_/Y                                   8     12     -4 (VIOLATED)
+
+worst slack max 8.80
+worst slack min -0.16
+===== NEGATIVE-MIN INVENTORY (slack <= 0)
+Startpoint                           Endpoint                                 Slack
+----------------------------------------------------------------------------------
+rst_n (input)                        _651_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _652_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _653_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _654_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _655_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _656_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _657_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _658_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _659_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _660_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _661_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _662_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _663_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _664_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _665_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _666_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _667_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _668_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _669_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _670_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _671_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _672_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _673_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _674_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _675_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _676_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _677_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _678_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _679_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _680_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _681_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _682_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _683_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _684_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _685_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _686_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _687_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _688_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _689_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _690_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _691_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _692_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _693_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _694_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _695_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _696_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _697_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _698_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _699_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _700_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _701_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _702_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _703_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _704_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _705_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _706_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _707_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _708_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _709_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _710_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _711_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _712_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _713_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _714_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _715_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _716_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _717_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _718_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _719_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _720_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _721_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _722_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _723_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _724_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _725_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _726_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _727_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _728_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _729_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _730_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _731_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _732_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _733_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _734_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _735_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _736_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _737_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _738_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _739_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _740_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _741_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _742_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _743_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _744_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _745_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _746_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _747_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _748_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _749_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _750_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _751_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _752_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _753_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _754_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _755_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _756_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _757_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _758_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _759_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _760_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _761_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+rst_n (input)                        _762_/RESET_B (sg13g2_dfrbpq_1)        -0.1230
+run (input)                          _652_/D (sg13g2_dfrbpq_1)              -0.1569
+run (input)                          _653_/D (sg13g2_dfrbpq_1)              -0.1512
+run (input)                          _651_/D (sg13g2_dfrbpq_1)              -0.1417
+run (input)                          host_we (output)                       -0.1362
+run (input)                          load_active (output)                   -0.1327
+run (input)                          _651_/D (sg13g2_dfrbpq_1)              -0.1120
+run (input)                          _652_/D (sg13g2_dfrbpq_1)              -0.1051
+run (input)                          _696_/D (sg13g2_dfrbpq_1)              -0.0907
+run (input)                          _728_/D (sg13g2_dfrbpq_1)              -0.0758
+run (input)                          _696_/D (sg13g2_dfrbpq_1)              -0.0756
+run (input)                          _728_/D (sg13g2_dfrbpq_1)              -0.0755
+run (input)                          _728_/D (sg13g2_dfrbpq_1)              -0.0752
+run (input)                          _728_/D (sg13g2_dfrbpq_1)              -0.0752
+run (input)                          _653_/D (sg13g2_dfrbpq_1)              -0.0723
+_755_/Q (sg13g2_dfrbpq_1)            _756_/D (sg13g2_dfrbpq_1)              -0.0664
+_758_/Q (sg13g2_dfrbpq_1)            _759_/D (sg13g2_dfrbpq_1)              -0.0664
+run (input)                          host_we (output)                       -0.0659
+run (input)                          _679_/D (sg13g2_dfrbpq_1)              -0.0610
+run (input)                          _651_/D (sg13g2_dfrbpq_1)              -0.0558
+run (input)                          _651_/D (sg13g2_dfrbpq_1)              -0.0558
+run (input)                          load_active (output)                   -0.0529
+_654_/Q (pe_ctrl)                    spi_miso (output)                      -0.0523
+_670_/Q (pe_ctrl)                    host_wdata[15] (output)                -0.0521
+_756_/Q (sg13g2_dfrbpq_1)            _757_/D (sg13g2_dfrbpq_1)              -0.0504
+_655_/Q (pe_ctrl)                    host_wdata[0] (output)                 -0.0467
+_665_/Q (pe_ctrl)                    host_wdata[10] (output)                -0.0467
+_666_/Q (pe_ctrl)                    host_wdata[11] (output)                -0.0467
+_667_/Q (pe_ctrl)                    host_wdata[12] (output)                -0.0467
+_668_/Q (pe_ctrl)                    host_wdata[13] (output)                -0.0467
+_656_/Q (pe_ctrl)                    host_wdata[1] (output)                 -0.0467
+_657_/Q (pe_ctrl)                    host_wdata[2] (output)                 -0.0467
+_658_/Q (pe_ctrl)                    host_wdata[3] (output)                 -0.0467
+_659_/Q (pe_ctrl)                    host_wdata[4] (output)                 -0.0467
+_660_/Q (pe_ctrl)                    host_wdata[5] (output)                 -0.0467
+_661_/Q (pe_ctrl)                    host_wdata[6] (output)                 -0.0467
+_662_/Q (pe_ctrl)                    host_wdata[7] (output)                 -0.0467
+_663_/Q (pe_ctrl)                    host_wdata[8] (output)                 -0.0467
+_664_/Q (pe_ctrl)                    host_wdata[9] (output)                 -0.0467
+_704_/Q (pe_ctrl)                    words_written[7] (output)              -0.0466
+_698_/Q (pe_ctrl)                    words_written[1] (output)              -0.0465
+_669_/Q (pe_ctrl)                    host_wdata[14] (output)                -0.0462
+_709_/Q (pe_ctrl)                    words_written[12] (output)             -0.0461
+_696_/Q (pe_ctrl)                    load_error (output)                    -0.0459
+_701_/Q (pe_ctrl)                    words_written[4] (output)              -0.0455
+_711_/Q (pe_ctrl)                    words_written[14] (output)             -0.0421
+run (input)                          _679_/D (sg13g2_dfrbpq_1)              -0.0417
+_755_/Q (sg13g2_dfrbpq_1)            _756_/D (sg13g2_dfrbpq_1)              -0.0410
+_758_/Q (sg13g2_dfrbpq_1)            _759_/D (sg13g2_dfrbpq_1)              -0.0410
+_700_/Q (pe_ctrl)                    words_written[3] (output)              -0.0409
+_702_/Q (pe_ctrl)                    words_written[5] (output)              -0.0407
+_712_/Q (pe_ctrl)                    words_written[15] (output)             -0.0407
+_707_/Q (pe_ctrl)                    words_written[10] (output)             -0.0405
+_708_/Q (pe_ctrl)                    words_written[11] (output)             -0.0400
+_670_/Q (pe_ctrl)                    host_wdata[15] (output)                -0.0398
+_654_/Q (pe_ctrl)                    spi_miso (output)                      -0.0398
+_751_/Q (pe_ctrl)                    host_addr[6] (output)                  -0.0368
+_747_/Q (pe_ctrl)                    host_addr[2] (output)                  -0.0364
+_748_/Q (pe_ctrl)                    host_addr[3] (output)                  -0.0362
+_710_/Q (pe_ctrl)                    words_written[13] (output)             -0.0353
+_753_/Q (pe_ctrl)                    host_addr[8] (output)                  -0.0347
+_703_/Q (pe_ctrl)                    words_written[6] (output)              -0.0344
+_697_/Q (pe_ctrl)                    words_written[0] (output)              -0.0343
+_705_/Q (pe_ctrl)                    words_written[8] (output)              -0.0339
+run (input)                          _696_/D (sg13g2_dfrbpq_1)              -0.0338
+_754_/Q (pe_ctrl)                    host_addr[9] (output)                  -0.0338
+_655_/Q (pe_ctrl)                    host_wdata[0] (output)                 -0.0328
+_665_/Q (pe_ctrl)                    host_wdata[10] (output)                -0.0328
+_666_/Q (pe_ctrl)                    host_wdata[11] (output)                -0.0328
+_667_/Q (pe_ctrl)                    host_wdata[12] (output)                -0.0328
+_668_/Q (pe_ctrl)                    host_wdata[13] (output)                -0.0328
+_656_/Q (pe_ctrl)                    host_wdata[1] (output)                 -0.0328
+_657_/Q (pe_ctrl)                    host_wdata[2] (output)                 -0.0328
+_658_/Q (pe_ctrl)                    host_wdata[3] (output)                 -0.0328
+_659_/Q (pe_ctrl)                    host_wdata[4] (output)                 -0.0328
+_660_/Q (pe_ctrl)                    host_wdata[5] (output)                 -0.0328
+_661_/Q (pe_ctrl)                    host_wdata[6] (output)                 -0.0328
+_662_/Q (pe_ctrl)                    host_wdata[7] (output)                 -0.0328
+_663_/Q (pe_ctrl)                    host_wdata[8] (output)                 -0.0328
+_664_/Q (pe_ctrl)                    host_wdata[9] (output)                 -0.0328
+_698_/Q (pe_ctrl)                    words_written[1] (output)              -0.0325
+_704_/Q (pe_ctrl)                    words_written[7] (output)              -0.0324
+_709_/Q (pe_ctrl)                    words_written[12] (output)             -0.0323
+_669_/Q (pe_ctrl)                    host_wdata[14] (output)                -0.0320
+_696_/Q (pe_ctrl)                    load_error (output)                    -0.0316
+_746_/Q (pe_ctrl)                    host_addr[1] (output)                  -0.0315
+_701_/Q (pe_ctrl)                    words_written[4] (output)              -0.0315
+_750_/Q (pe_ctrl)                    host_addr[5] (output)                  -0.0306
+_699_/Q (pe_ctrl)                    words_written[2] (output)              -0.0290
+_706_/Q (pe_ctrl)                    words_written[9] (output)              -0.0275
+_711_/Q (pe_ctrl)                    words_written[14] (output)             -0.0271
+_749_/Q (pe_ctrl)                    host_addr[4] (output)                  -0.0260
+_745_/Q (pe_ctrl)                    host_addr[0] (output)                  -0.0256
+_702_/Q (pe_ctrl)                    words_written[5] (output)              -0.0254
+_707_/Q (pe_ctrl)                    words_written[10] (output)             -0.0253
+_700_/Q (pe_ctrl)                    words_written[3] (output)              -0.0252
+_712_/Q (pe_ctrl)                    words_written[15] (output)             -0.0251
+_708_/Q (pe_ctrl)                    words_written[11] (output)             -0.0248
+_752_/Q (pe_ctrl)                    host_addr[7] (output)                  -0.0244
+run (input)                          _696_/D (sg13g2_dfrbpq_1)              -0.0238
+_756_/Q (sg13g2_dfrbpq_1)            _757_/D (sg13g2_dfrbpq_1)              -0.0221
+_751_/Q (pe_ctrl)                    host_addr[6] (output)                  -0.0204
+_747_/Q (pe_ctrl)                    host_addr[2] (output)                  -0.0204
+_748_/Q (pe_ctrl)                    host_addr[3] (output)                  -0.0200
+_753_/Q (pe_ctrl)                    host_addr[8] (output)                  -0.0180
+_710_/Q (pe_ctrl)                    words_written[13] (output)             -0.0179
+_703_/Q (pe_ctrl)                    words_written[6] (output)              -0.0169
+_705_/Q (pe_ctrl)                    words_written[8] (output)              -0.0169
+_697_/Q (pe_ctrl)                    words_written[0] (output)              -0.0169
+_754_/Q (pe_ctrl)                    host_addr[9] (output)                  -0.0165
+_746_/Q (pe_ctrl)                    host_addr[1] (output)                  -0.0129
+_750_/Q (pe_ctrl)                    host_addr[5] (output)                  -0.0128
+_760_/Q (sg13g2_dfrbpq_1)            _761_/D (sg13g2_dfrbpq_1)              -0.0117
+_699_/Q (pe_ctrl)                    words_written[2] (output)              -0.0107
+_706_/Q (pe_ctrl)                    words_written[9] (output)              -0.0082
+_745_/Q (pe_ctrl)                    host_addr[0] (output)                  -0.0067
+_749_/Q (pe_ctrl)                    host_addr[4] (output)                  -0.0056
+_752_/Q (pe_ctrl)                    host_addr[7] (output)                  -0.0040
+

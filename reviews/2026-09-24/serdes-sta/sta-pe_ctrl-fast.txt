@@ -1,0 +1,1191 @@
+OpenSTA 3.1.0 8572175ac4 Copyright (c) 2026, Parallax Software, Inc.
+License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
+
+This is free software, and you are free to change and redistribute it
+under certain conditions; type `show_copying' for details. 
+This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
+Warning: There are 3 input ports missing set_input_delay.
+  spi_cs_n
+  spi_mosi
+  spi_sclk
+Warning: There are 3 unconstrained endpoints.
+  _755_/D
+  _758_/D
+  _760_/D
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _651_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _651_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _651_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _652_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _652_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _652_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _653_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _653_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _653_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _654_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _654_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _654_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _655_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _655_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _655_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: load_active (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.1415    3.4749 ^ _383_/Y (sg13g2_nor2b_1)
+   0.0000    3.4749 ^ load_active (out)
+             3.4749   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -3.4749   data arrival time
+-------------------------------------------------------------
+             8.8587   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: host_we (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.1244    3.4578 ^ _644_/Y (sg13g2_nor2_1)
+   0.0000    3.4578 ^ host_we (out)
+             3.4578   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -3.4578   data arrival time
+-------------------------------------------------------------
+             8.8758   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _713_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.1415    3.4749 ^ _383_/Y (sg13g2_nor2b_1)
+   0.1755    3.6504 ^ _385_/X (sg13g2_and4_1)
+   0.3544    4.0047 v _388_/Y (sg13g2_o21ai_1)
+   0.0888    4.0935 ^ _415_/Y (sg13g2_nand3_1)
+   0.0383    4.1318 v _416_/Y (sg13g2_o21ai_1)
+   0.0000    4.1318 v _713_/D (sg13g2_dfrbpq_1)
+             4.1318   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _713_/CLK (sg13g2_dfrbpq_1)
+  -0.0944   15.5726   library setup time
+            15.5726   data required time
+-------------------------------------------------------------
+            15.5726   data required time
+            -4.1318   data arrival time
+-------------------------------------------------------------
+            11.4408   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _714_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.1415    3.4749 ^ _383_/Y (sg13g2_nor2b_1)
+   0.1755    3.6504 ^ _385_/X (sg13g2_and4_1)
+   0.3544    4.0047 v _388_/Y (sg13g2_o21ai_1)
+   0.0888    4.0935 ^ _413_/Y (sg13g2_nand3_1)
+   0.0383    4.1318 v _414_/Y (sg13g2_o21ai_1)
+   0.0000    4.1318 v _714_/D (sg13g2_dfrbpq_1)
+             4.1318   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _714_/CLK (sg13g2_dfrbpq_1)
+  -0.0944   15.5726   library setup time
+            15.5726   data required time
+-------------------------------------------------------------
+            15.5726   data required time
+            -4.1318   data arrival time
+-------------------------------------------------------------
+            11.4408   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _715_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 v input external delay
+   0.0000    3.3334 v run (in)
+   0.1415    3.4749 ^ _383_/Y (sg13g2_nor2b_1)
+   0.1755    3.6504 ^ _385_/X (sg13g2_and4_1)
+   0.3544    4.0047 v _388_/Y (sg13g2_o21ai_1)
+   0.0888    4.0935 ^ _411_/Y (sg13g2_nand3_1)
+   0.0383    4.1318 v _412_/Y (sg13g2_o21ai_1)
+   0.0000    4.1318 v _715_/D (sg13g2_dfrbpq_1)
+             4.1318   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _715_/CLK (sg13g2_dfrbpq_1)
+  -0.0944   15.5726   library setup time
+            15.5726   data required time
+-------------------------------------------------------------
+            15.5726   data required time
+            -4.1318   data arrival time
+-------------------------------------------------------------
+            11.4408   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _651_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _651_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _651_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1637   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _652_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _652_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _652_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1637   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _653_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _653_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _653_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1637   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _654_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _654_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _654_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1637   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _655_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _655_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _655_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1637   slack (VIOLATED)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _652_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ run (in)
+   0.0386    0.0386 v _508_/Y (sg13g2_nor2b_1)
+   0.0000    0.0386 v _652_/D (sg13g2_dfrbpq_1)
+             0.0386   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _652_/CLK (sg13g2_dfrbpq_1)
+  -0.0249    0.2251   library hold time
+             0.2251   data required time
+-------------------------------------------------------------
+             0.2251   data required time
+            -0.0386   data arrival time
+-------------------------------------------------------------
+            -0.1864   slack (VIOLATED)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _653_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ run (in)
+   0.0456    0.0456 v _641_/Y (sg13g2_nor3_1)
+   0.0000    0.0456 v _653_/D (sg13g2_dfrbpq_1)
+             0.0456   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _653_/CLK (sg13g2_dfrbpq_1)
+  -0.0234    0.2266   library hold time
+             0.2266   data required time
+-------------------------------------------------------------
+             0.2266   data required time
+            -0.0456   data arrival time
+-------------------------------------------------------------
+            -0.1810   slack (VIOLATED)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _651_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ run (in)
+   0.0541    0.0541 v _328_/Y (sg13g2_a21oi_1)
+   0.0000    0.0541 v _651_/D (sg13g2_dfrbpq_1)
+             0.0541   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _651_/CLK (sg13g2_dfrbpq_1)
+  -0.0230    0.2270   library hold time
+             0.2270   data required time
+-------------------------------------------------------------
+             0.2270   data required time
+            -0.0541   data arrival time
+-------------------------------------------------------------
+            -0.1729   slack (VIOLATED)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: host_we (output port clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ run (in)
+   0.0864    0.0864 v _644_/Y (sg13g2_nor2_1)
+   0.0000    0.0864 v host_we (out)
+             0.0864   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+   0.0000    0.2500   output external delay
+             0.2500   data required time
+-------------------------------------------------------------
+             0.2500   data required time
+            -0.0864   data arrival time
+-------------------------------------------------------------
+            -0.1636   slack (VIOLATED)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: load_active (output port clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ run (in)
+   0.0893    0.0893 v _383_/Y (sg13g2_nor2b_1)
+   0.0000    0.0893 v load_active (out)
+             0.0893   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+   0.0000    0.2500   output external delay
+             0.2500   data required time
+-------------------------------------------------------------
+             0.2500   data required time
+            -0.0893   data arrival time
+-------------------------------------------------------------
+            -0.1607   slack (VIOLATED)
+
+
+max fanout
+
+Pin                                   Limit Fanout  Slack
+---------------------------------------------------------
+_332_/Y                                   8     33    -25 (VIOLATED)
+_330_/Y                                   8     32    -24 (VIOLATED)
+_388_/Y                                   8     31    -23 (VIOLATED)
+_329_/Y                                   8     25    -17 (VIOLATED)
+_509_/X                                   8     21    -13 (VIOLATED)
+_510_/Y                                   8     21    -13 (VIOLATED)
+_588_/X                                   8     19    -11 (VIOLATED)
+_514_/X                                   8     17     -9 (VIOLATED)
+_333_/Y                                   8     16     -8 (VIOLATED)
+_513_/Y                                   8     16     -8 (VIOLATED)
+_334_/Y                                   8     12     -4 (VIOLATED)
+
+worst slack max 8.86
+worst slack min -0.19
+===== NEGATIVE-MIN INVENTORY (slack <= 0)
+Startpoint                           Endpoint                                 Slack
+----------------------------------------------------------------------------------
+rst_n (input)                        _651_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _652_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _653_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _654_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _655_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _656_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _657_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _658_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _659_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _660_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _661_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _662_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _663_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _664_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _665_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _666_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _667_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _668_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _669_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _670_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _671_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _672_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _673_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _674_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _675_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _676_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _677_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _678_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _679_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _680_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _681_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _682_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _683_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _684_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _685_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _686_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _687_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _688_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _689_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _690_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _691_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _692_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _693_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _694_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _695_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _696_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _697_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _698_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _699_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _700_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _701_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _702_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _703_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _704_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _705_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _706_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _707_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _708_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _709_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _710_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _711_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _712_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _713_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _714_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _715_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _716_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _717_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _718_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _719_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _720_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _721_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _722_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _723_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _724_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _725_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _726_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _727_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _728_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _729_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _730_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _731_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _732_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _733_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _734_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _735_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _736_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _737_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _738_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _739_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _740_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _741_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _742_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _743_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _744_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _745_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _746_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _747_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _748_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _749_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _750_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _751_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _752_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _753_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _754_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _755_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _756_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _757_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _758_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _759_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _760_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _761_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+rst_n (input)                        _762_/RESET_B (sg13g2_dfrbpq_1)        -0.1637
+run (input)                          _652_/D (sg13g2_dfrbpq_1)              -0.1864
+run (input)                          _653_/D (sg13g2_dfrbpq_1)              -0.1810
+run (input)                          _651_/D (sg13g2_dfrbpq_1)              -0.1729
+run (input)                          host_we (output)                       -0.1636
+run (input)                          load_active (output)                   -0.1607
+run (input)                          _651_/D (sg13g2_dfrbpq_1)              -0.1566
+run (input)                          _652_/D (sg13g2_dfrbpq_1)              -0.1503
+run (input)                          _696_/D (sg13g2_dfrbpq_1)              -0.1433
+run (input)                          _653_/D (sg13g2_dfrbpq_1)              -0.1326
+run (input)                          _696_/D (sg13g2_dfrbpq_1)              -0.1288
+run (input)                          _728_/D (sg13g2_dfrbpq_1)              -0.1276
+run (input)                          _728_/D (sg13g2_dfrbpq_1)              -0.1274
+run (input)                          _728_/D (sg13g2_dfrbpq_1)              -0.1271
+run (input)                          _728_/D (sg13g2_dfrbpq_1)              -0.1271
+_755_/Q (sg13g2_dfrbpq_1)            _756_/D (sg13g2_dfrbpq_1)              -0.1268
+_758_/Q (sg13g2_dfrbpq_1)            _759_/D (sg13g2_dfrbpq_1)              -0.1268
+run (input)                          host_we (output)                       -0.1256
+run (input)                          _679_/D (sg13g2_dfrbpq_1)              -0.1245
+_756_/Q (sg13g2_dfrbpq_1)            _757_/D (sg13g2_dfrbpq_1)              -0.1160
+_654_/Q (pe_ctrl)                    spi_miso (output)                      -0.1151
+_670_/Q (pe_ctrl)                    host_wdata[15] (output)                -0.1149
+run (input)                          _651_/D (sg13g2_dfrbpq_1)              -0.1144
+run (input)                          _651_/D (sg13g2_dfrbpq_1)              -0.1144
+run (input)                          load_active (output)                   -0.1116
+_655_/Q (pe_ctrl)                    host_wdata[0] (output)                 -0.1111
+_665_/Q (pe_ctrl)                    host_wdata[10] (output)                -0.1111
+_666_/Q (pe_ctrl)                    host_wdata[11] (output)                -0.1111
+_667_/Q (pe_ctrl)                    host_wdata[12] (output)                -0.1111
+_668_/Q (pe_ctrl)                    host_wdata[13] (output)                -0.1111
+_656_/Q (pe_ctrl)                    host_wdata[1] (output)                 -0.1111
+_657_/Q (pe_ctrl)                    host_wdata[2] (output)                 -0.1111
+_658_/Q (pe_ctrl)                    host_wdata[3] (output)                 -0.1111
+_659_/Q (pe_ctrl)                    host_wdata[4] (output)                 -0.1111
+_660_/Q (pe_ctrl)                    host_wdata[5] (output)                 -0.1111
+_661_/Q (pe_ctrl)                    host_wdata[6] (output)                 -0.1111
+_662_/Q (pe_ctrl)                    host_wdata[7] (output)                 -0.1111
+_663_/Q (pe_ctrl)                    host_wdata[8] (output)                 -0.1111
+_664_/Q (pe_ctrl)                    host_wdata[9] (output)                 -0.1111
+_704_/Q (pe_ctrl)                    words_written[7] (output)              -0.1110
+_698_/Q (pe_ctrl)                    words_written[1] (output)              -0.1109
+_669_/Q (pe_ctrl)                    host_wdata[14] (output)                -0.1107
+_709_/Q (pe_ctrl)                    words_written[12] (output)             -0.1107
+_696_/Q (pe_ctrl)                    load_error (output)                    -0.1106
+_701_/Q (pe_ctrl)                    words_written[4] (output)              -0.1103
+_654_/Q (pe_ctrl)                    spi_miso (output)                      -0.1100
+_670_/Q (pe_ctrl)                    host_wdata[15] (output)                -0.1100
+_755_/Q (sg13g2_dfrbpq_1)            _756_/D (sg13g2_dfrbpq_1)              -0.1084
+_758_/Q (sg13g2_dfrbpq_1)            _759_/D (sg13g2_dfrbpq_1)              -0.1084
+run (input)                          _679_/D (sg13g2_dfrbpq_1)              -0.1080
+_711_/Q (pe_ctrl)                    words_written[14] (output)             -0.1078
+_700_/Q (pe_ctrl)                    words_written[3] (output)              -0.1071
+_702_/Q (pe_ctrl)                    words_written[5] (output)              -0.1069
+_712_/Q (pe_ctrl)                    words_written[15] (output)             -0.1069
+_707_/Q (pe_ctrl)                    words_written[10] (output)             -0.1067
+_708_/Q (pe_ctrl)                    words_written[11] (output)             -0.1063
+run (input)                          _696_/D (sg13g2_dfrbpq_1)              -0.1057
+_655_/Q (pe_ctrl)                    host_wdata[0] (output)                 -0.1053
+_665_/Q (pe_ctrl)                    host_wdata[10] (output)                -0.1053
+_666_/Q (pe_ctrl)                    host_wdata[11] (output)                -0.1053
+_667_/Q (pe_ctrl)                    host_wdata[12] (output)                -0.1053
+_668_/Q (pe_ctrl)                    host_wdata[13] (output)                -0.1053
+_656_/Q (pe_ctrl)                    host_wdata[1] (output)                 -0.1053
+_657_/Q (pe_ctrl)                    host_wdata[2] (output)                 -0.1053
+_658_/Q (pe_ctrl)                    host_wdata[3] (output)                 -0.1053
+_659_/Q (pe_ctrl)                    host_wdata[4] (output)                 -0.1053
+_660_/Q (pe_ctrl)                    host_wdata[5] (output)                 -0.1053
+_661_/Q (pe_ctrl)                    host_wdata[6] (output)                 -0.1053
+_662_/Q (pe_ctrl)                    host_wdata[7] (output)                 -0.1053
+_663_/Q (pe_ctrl)                    host_wdata[8] (output)                 -0.1053
+_664_/Q (pe_ctrl)                    host_wdata[9] (output)                 -0.1053
+_698_/Q (pe_ctrl)                    words_written[1] (output)              -0.1050
+_704_/Q (pe_ctrl)                    words_written[7] (output)              -0.1050
+_709_/Q (pe_ctrl)                    words_written[12] (output)             -0.1049
+_669_/Q (pe_ctrl)                    host_wdata[14] (output)                -0.1047
+_696_/Q (pe_ctrl)                    load_error (output)                    -0.1045
+_701_/Q (pe_ctrl)                    words_written[4] (output)              -0.1044
+_751_/Q (pe_ctrl)                    host_addr[6] (output)                  -0.1041
+_747_/Q (pe_ctrl)                    host_addr[2] (output)                  -0.1038
+_748_/Q (pe_ctrl)                    host_addr[3] (output)                  -0.1037
+_710_/Q (pe_ctrl)                    words_written[13] (output)             -0.1031
+_753_/Q (pe_ctrl)                    host_addr[8] (output)                  -0.1026
+_703_/Q (pe_ctrl)                    words_written[6] (output)              -0.1024
+_697_/Q (pe_ctrl)                    words_written[0] (output)              -0.1024
+_705_/Q (pe_ctrl)                    words_written[8] (output)              -0.1022
+_754_/Q (pe_ctrl)                    host_addr[9] (output)                  -0.1020
+_711_/Q (pe_ctrl)                    words_written[14] (output)             -0.1014
+_702_/Q (pe_ctrl)                    words_written[5] (output)              -0.1003
+_746_/Q (pe_ctrl)                    host_addr[1] (output)                  -0.1003
+_700_/Q (pe_ctrl)                    words_written[3] (output)              -0.1002
+_712_/Q (pe_ctrl)                    words_written[15] (output)             -0.1002
+_707_/Q (pe_ctrl)                    words_written[10] (output)             -0.1002
+_708_/Q (pe_ctrl)                    words_written[11] (output)             -0.0998
+_750_/Q (pe_ctrl)                    host_addr[5] (output)                  -0.0997
+_699_/Q (pe_ctrl)                    words_written[2] (output)              -0.0986
+_706_/Q (pe_ctrl)                    words_written[9] (output)              -0.0976
+_751_/Q (pe_ctrl)                    host_addr[6] (output)                  -0.0969
+_747_/Q (pe_ctrl)                    host_addr[2] (output)                  -0.0968
+_748_/Q (pe_ctrl)                    host_addr[3] (output)                  -0.0966
+_749_/Q (pe_ctrl)                    host_addr[4] (output)                  -0.0964
+_756_/Q (sg13g2_dfrbpq_1)            _757_/D (sg13g2_dfrbpq_1)              -0.0962
+_745_/Q (pe_ctrl)                    host_addr[0] (output)                  -0.0962
+_752_/Q (pe_ctrl)                    host_addr[7] (output)                  -0.0953
+_710_/Q (pe_ctrl)                    words_written[13] (output)             -0.0953
+_753_/Q (pe_ctrl)                    host_addr[8] (output)                  -0.0952
+run (input)                          _696_/D (sg13g2_dfrbpq_1)              -0.0951
+_705_/Q (pe_ctrl)                    words_written[8] (output)              -0.0946
+_703_/Q (pe_ctrl)                    words_written[6] (output)              -0.0945
+_697_/Q (pe_ctrl)                    words_written[0] (output)              -0.0945
+_754_/Q (pe_ctrl)                    host_addr[9] (output)                  -0.0943
+_750_/Q (pe_ctrl)                    host_addr[5] (output)                  -0.0918
+_746_/Q (pe_ctrl)                    host_addr[1] (output)                  -0.0918
+_699_/Q (pe_ctrl)                    words_written[2] (output)              -0.0903
+_760_/Q (sg13g2_dfrbpq_1)            _761_/D (sg13g2_dfrbpq_1)              -0.0898
+_706_/Q (pe_ctrl)                    words_written[9] (output)              -0.0887
+_745_/Q (pe_ctrl)                    host_addr[0] (output)                  -0.0876
+_749_/Q (pe_ctrl)                    host_addr[4] (output)                  -0.0868
+_752_/Q (pe_ctrl)                    host_addr[7] (output)                  -0.0857
+_651_/Q (sg13g2_dfrbpq_1)            _653_/D (sg13g2_dfrbpq_1)              -0.0824
+_680_/Q (sg13g2_dfrbpq_1)            _680_/D (sg13g2_dfrbpq_1)              -0.0797
+_679_/Q (pe_ctrl)                    host_we (output)                       -0.0776
+_727_/Q (sg13g2_dfrbpq_1)            _670_/D (sg13g2_dfrbpq_1)              -0.0751
+_727_/Q (sg13g2_dfrbpq_1)            _670_/D (sg13g2_dfrbpq_1)              -0.0751
+_681_/Q (sg13g2_dfrbpq_1)            _681_/D (sg13g2_dfrbpq_1)              -0.0741
+_681_/Q (sg13g2_dfrbpq_1)            _681_/D (sg13g2_dfrbpq_1)              -0.0741
+_682_/Q (sg13g2_dfrbpq_1)            _682_/D (sg13g2_dfrbpq_1)              -0.0741
+_682_/Q (sg13g2_dfrbpq_1)            _682_/D (sg13g2_dfrbpq_1)              -0.0741
+_683_/Q (sg13g2_dfrbpq_1)            _683_/D (sg13g2_dfrbpq_1)              -0.0741
+_683_/Q (sg13g2_dfrbpq_1)            _683_/D (sg13g2_dfrbpq_1)              -0.0741
+_684_/Q (sg13g2_dfrbpq_1)            _684_/D (sg13g2_dfrbpq_1)              -0.0741
+_684_/Q (sg13g2_dfrbpq_1)            _684_/D (sg13g2_dfrbpq_1)              -0.0741
+_685_/Q (sg13g2_dfrbpq_1)            _685_/D (sg13g2_dfrbpq_1)              -0.0741
+_685_/Q (sg13g2_dfrbpq_1)            _685_/D (sg13g2_dfrbpq_1)              -0.0741
+_686_/Q (sg13g2_dfrbpq_1)            _686_/D (sg13g2_dfrbpq_1)              -0.0741
+_686_/Q (sg13g2_dfrbpq_1)            _686_/D (sg13g2_dfrbpq_1)              -0.0741
+_687_/Q (sg13g2_dfrbpq_1)            _687_/D (sg13g2_dfrbpq_1)              -0.0741
+_687_/Q (sg13g2_dfrbpq_1)            _687_/D (sg13g2_dfrbpq_1)              -0.0741
+_688_/Q (sg13g2_dfrbpq_1)            _688_/D (sg13g2_dfrbpq_1)              -0.0741
+_688_/Q (sg13g2_dfrbpq_1)            _688_/D (sg13g2_dfrbpq_1)              -0.0741
+_689_/Q (sg13g2_dfrbpq_1)            _689_/D (sg13g2_dfrbpq_1)              -0.0741
+_689_/Q (sg13g2_dfrbpq_1)            _689_/D (sg13g2_dfrbpq_1)              -0.0741
+_690_/Q (sg13g2_dfrbpq_1)            _690_/D (sg13g2_dfrbpq_1)              -0.0741
+_690_/Q (sg13g2_dfrbpq_1)            _690_/D (sg13g2_dfrbpq_1)              -0.0741
+_691_/Q (sg13g2_dfrbpq_1)            _691_/D (sg13g2_dfrbpq_1)              -0.0741
+_691_/Q (sg13g2_dfrbpq_1)            _691_/D (sg13g2_dfrbpq_1)              -0.0741
+_692_/Q (sg13g2_dfrbpq_1)            _692_/D (sg13g2_dfrbpq_1)              -0.0741
+_692_/Q (sg13g2_dfrbpq_1)            _692_/D (sg13g2_dfrbpq_1)              -0.0741
+_693_/Q (sg13g2_dfrbpq_1)            _693_/D (sg13g2_dfrbpq_1)              -0.0741
+_693_/Q (sg13g2_dfrbpq_1)            _693_/D (sg13g2_dfrbpq_1)              -0.0741
+_694_/Q (sg13g2_dfrbpq_1)            _694_/D (sg13g2_dfrbpq_1)              -0.0741
+_694_/Q (sg13g2_dfrbpq_1)            _694_/D (sg13g2_dfrbpq_1)              -0.0741
+_695_/Q (sg13g2_dfrbpq_1)            _695_/D (sg13g2_dfrbpq_1)              -0.0741
+_695_/Q (sg13g2_dfrbpq_1)            _695_/D (sg13g2_dfrbpq_1)              -0.0741
+_727_/Q (sg13g2_dfrbpq_1)            _727_/D (sg13g2_dfrbpq_1)              -0.0726
+_727_/Q (sg13g2_dfrbpq_1)            _727_/D (sg13g2_dfrbpq_1)              -0.0726
+_726_/Q (sg13g2_dfrbpq_1)            _726_/D (sg13g2_dfrbpq_1)              -0.0724
+_726_/Q (sg13g2_dfrbpq_1)            _726_/D (sg13g2_dfrbpq_1)              -0.0724
+_760_/Q (sg13g2_dfrbpq_1)            _761_/D (sg13g2_dfrbpq_1)              -0.0720
+_653_/Q (sg13g2_dfrbpq_1)            _652_/D (sg13g2_dfrbpq_1)              -0.0686
+run (input)                          _698_/D (sg13g2_dfrbpq_1)              -0.0674
+_729_/Q (sg13g2_dfrbpq_1)            _729_/D (sg13g2_dfrbpq_1)              -0.0669
+_730_/Q (sg13g2_dfrbpq_1)            _730_/D (sg13g2_dfrbpq_1)              -0.0669
+_731_/Q (sg13g2_dfrbpq_1)            _731_/D (sg13g2_dfrbpq_1)              -0.0669
+_732_/Q (sg13g2_dfrbpq_1)            _732_/D (sg13g2_dfrbpq_1)              -0.0669
+_733_/Q (sg13g2_dfrbpq_1)            _733_/D (sg13g2_dfrbpq_1)              -0.0669
+_734_/Q (sg13g2_dfrbpq_1)            _734_/D (sg13g2_dfrbpq_1)              -0.0669
+_735_/Q (sg13g2_dfrbpq_1)            _735_/D (sg13g2_dfrbpq_1)              -0.0669
+_736_/Q (sg13g2_dfrbpq_1)            _736_/D (sg13g2_dfrbpq_1)              -0.0669
+_737_/Q (sg13g2_dfrbpq_1)            _737_/D (sg13g2_dfrbpq_1)              -0.0669
+_738_/Q (sg13g2_dfrbpq_1)            _738_/D (sg13g2_dfrbpq_1)              -0.0669
+_739_/Q (sg13g2_dfrbpq_1)            _739_/D (sg13g2_dfrbpq_1)              -0.0669
+_740_/Q (sg13g2_dfrbpq_1)            _740_/D (sg13g2_dfrbpq_1)              -0.0669
+_741_/Q (sg13g2_dfrbpq_1)            _741_/D (sg13g2_dfrbpq_1)              -0.0669
+_742_/Q (sg13g2_dfrbpq_1)            _742_/D (sg13g2_dfrbpq_1)              -0.0669
+_743_/Q (sg13g2_dfrbpq_1)            _743_/D (sg13g2_dfrbpq_1)              -0.0669
+_713_/Q (sg13g2_dfrbpq_1)            _713_/D (sg13g2_dfrbpq_1)              -0.0666
+_713_/Q (sg13g2_dfrbpq_1)            _713_/D (sg13g2_dfrbpq_1)              -0.0666
+_714_/Q (sg13g2_dfrbpq_1)            _714_/D (sg13g2_dfrbpq_1)              -0.0666
+_714_/Q (sg13g2_dfrbpq_1)            _714_/D (sg13g2_dfrbpq_1)              -0.0666
+_715_/Q (sg13g2_dfrbpq_1)            _715_/D (sg13g2_dfrbpq_1)              -0.0666
+_715_/Q (sg13g2_dfrbpq_1)            _715_/D (sg13g2_dfrbpq_1)              -0.0666
+_716_/Q (sg13g2_dfrbpq_1)            _716_/D (sg13g2_dfrbpq_1)              -0.0666
+_716_/Q (sg13g2_dfrbpq_1)            _716_/D (sg13g2_dfrbpq_1)              -0.0666
+_717_/Q (sg13g2_dfrbpq_1)            _717_/D (sg13g2_dfrbpq_1)              -0.0666
+_717_/Q (sg13g2_dfrbpq_1)            _717_/D (sg13g2_dfrbpq_1)              -0.0666
+_718_/Q (sg13g2_dfrbpq_1)            _718_/D (sg13g2_dfrbpq_1)              -0.0666
+_718_/Q (sg13g2_dfrbpq_1)            _718_/D (sg13g2_dfrbpq_1)              -0.0666
+_719_/Q (sg13g2_dfrbpq_1)            _719_/D (sg13g2_dfrbpq_1)              -0.0666
+_719_/Q (sg13g2_dfrbpq_1)            _719_/D (sg13g2_dfrbpq_1)              -0.0666
+_720_/Q (sg13g2_dfrbpq_1)            _720_/D (sg13g2_dfrbpq_1)              -0.0666
+_720_/Q (sg13g2_dfrbpq_1)            _720_/D (sg13g2_dfrbpq_1)              -0.0666
+_721_/Q (sg13g2_dfrbpq_1)            _721_/D (sg13g2_dfrbpq_1)              -0.0666
+_721_/Q (sg13g2_dfrbpq_1)            _721_/D (sg13g2_dfrbpq_1)              -0.0666
+_722_/Q (sg13g2_dfrbpq_1)            _722_/D (sg13g2_dfrbpq_1)              -0.0666
+_722_/Q (sg13g2_dfrbpq_1)            _722_/D (sg13g2_dfrbpq_1)              -0.0666
+_723_/Q (sg13g2_dfrbpq_1)            _723_/D (sg13g2_dfrbpq_1)              -0.0666
+_723_/Q (sg13g2_dfrbpq_1)            _723_/D (sg13g2_dfrbpq_1)              -0.0666
+_724_/Q (sg13g2_dfrbpq_1)            _724_/D (sg13g2_dfrbpq_1)              -0.0666
+_724_/Q (sg13g2_dfrbpq_1)            _724_/D (sg13g2_dfrbpq_1)              -0.0666
+_725_/Q (sg13g2_dfrbpq_1)            _725_/D (sg13g2_dfrbpq_1)              -0.0666
+_725_/Q (sg13g2_dfrbpq_1)            _725_/D (sg13g2_dfrbpq_1)              -0.0666
+_677_/Q (sg13g2_dfrbpq_1)            _677_/D (sg13g2_dfrbpq_1)              -0.0664
+run (input)                          _702_/D (sg13g2_dfrbpq_1)              -0.0650
+_759_/Q (sg13g2_dfrbpq_1)            _713_/D (sg13g2_dfrbpq_1)              -0.0649
+_726_/Q (sg13g2_dfrbpq_1)            _669_/D (sg13g2_dfrbpq_1)              -0.0629
+_744_/Q (sg13g2_dfrbpq_1)            _744_/D (sg13g2_dfrbpq_1)              -0.0628
+_744_/Q (sg13g2_dfrbpq_1)            _744_/D (sg13g2_dfrbpq_1)              -0.0626
+_744_/Q (sg13g2_dfrbpq_1)            _744_/D (sg13g2_dfrbpq_1)              -0.0622
+_744_/Q (sg13g2_dfrbpq_1)            _744_/D (sg13g2_dfrbpq_1)              -0.0622
+_677_/Q (sg13g2_dfrbpq_1)            _677_/D (sg13g2_dfrbpq_1)              -0.0607
+_728_/Q (sg13g2_dfrbpq_1)            _653_/D (sg13g2_dfrbpq_1)              -0.0602
+run (input)                          _702_/D (sg13g2_dfrbpq_1)              -0.0595
+_725_/Q (sg13g2_dfrbpq_1)            _726_/D (sg13g2_dfrbpq_1)              -0.0594
+_713_/Q (sg13g2_dfrbpq_1)            _714_/D (sg13g2_dfrbpq_1)              -0.0594
+_714_/Q (sg13g2_dfrbpq_1)            _715_/D (sg13g2_dfrbpq_1)              -0.0594
+_715_/Q (sg13g2_dfrbpq_1)            _716_/D (sg13g2_dfrbpq_1)              -0.0594
+_716_/Q (sg13g2_dfrbpq_1)            _717_/D (sg13g2_dfrbpq_1)              -0.0594
+_717_/Q (sg13g2_dfrbpq_1)            _718_/D (sg13g2_dfrbpq_1)              -0.0594
+_718_/Q (sg13g2_dfrbpq_1)            _719_/D (sg13g2_dfrbpq_1)              -0.0594
+_719_/Q (sg13g2_dfrbpq_1)            _720_/D (sg13g2_dfrbpq_1)              -0.0594
+_720_/Q (sg13g2_dfrbpq_1)            _721_/D (sg13g2_dfrbpq_1)              -0.0594
+_721_/Q (sg13g2_dfrbpq_1)            _722_/D (sg13g2_dfrbpq_1)              -0.0594
+_722_/Q (sg13g2_dfrbpq_1)            _723_/D (sg13g2_dfrbpq_1)              -0.0594
+_723_/Q (sg13g2_dfrbpq_1)            _724_/D (sg13g2_dfrbpq_1)              -0.0594
+_724_/Q (sg13g2_dfrbpq_1)            _725_/D (sg13g2_dfrbpq_1)              -0.0594
+_726_/Q (sg13g2_dfrbpq_1)            _727_/D (sg13g2_dfrbpq_1)              -0.0579
+_674_/Q (sg13g2_dfrbpq_1)            _674_/D (sg13g2_dfrbpq_1)              -0.0578
+_674_/Q (sg13g2_dfrbpq_1)            _674_/D (sg13g2_dfrbpq_1)              -0.0578
+run (input)                          _701_/D (sg13g2_dfrbpq_1)              -0.0575
+_678_/Q (sg13g2_dfrbpq_1)            _678_/D (sg13g2_dfrbpq_1)              -0.0573
+_678_/Q (sg13g2_dfrbpq_1)            _678_/D (sg13g2_dfrbpq_1)              -0.0573
+run (input)                          _704_/D (sg13g2_dfrbpq_1)              -0.0572
+_678_/Q (sg13g2_dfrbpq_1)            _678_/D (sg13g2_dfrbpq_1)              -0.0571
+_678_/Q (sg13g2_dfrbpq_1)            _678_/D (sg13g2_dfrbpq_1)              -0.0571
+_761_/Q (sg13g2_dfrbpq_1)            _762_/D (sg13g2_dfrbpq_1)              -0.0571
+_673_/Q (sg13g2_dfrbpq_1)            _673_/D (sg13g2_dfrbpq_1)              -0.0561
+_677_/Q (sg13g2_dfrbpq_1)            _677_/D (sg13g2_dfrbpq_1)              -0.0539
+_677_/Q (sg13g2_dfrbpq_1)            _677_/D (sg13g2_dfrbpq_1)              -0.0539
+_759_/Q (sg13g2_dfrbpq_1)            _655_/D (sg13g2_dfrbpq_1)              -0.0534
+run (input)                          _704_/D (sg13g2_dfrbpq_1)              -0.0527
+run (input)                          _702_/D (sg13g2_dfrbpq_1)              -0.0527
+run (input)                          _702_/D (sg13g2_dfrbpq_1)              -0.0527
+_680_/Q (sg13g2_dfrbpq_1)            _680_/D (sg13g2_dfrbpq_1)              -0.0506
+_673_/Q (sg13g2_dfrbpq_1)            _673_/D (sg13g2_dfrbpq_1)              -0.0502
+_727_/Q (sg13g2_dfrbpq_1)            _670_/D (sg13g2_dfrbpq_1)              -0.0498
+_727_/Q (sg13g2_dfrbpq_1)            _670_/D (sg13g2_dfrbpq_1)              -0.0498
+_673_/Q (sg13g2_dfrbpq_1)            _673_/D (sg13g2_dfrbpq_1)              -0.0494
+run (input)                          _712_/D (sg13g2_dfrbpq_1)              -0.0493
+run (input)                          _712_/D (sg13g2_dfrbpq_1)              -0.0493
+_681_/Q (sg13g2_dfrbpq_1)            _681_/D (sg13g2_dfrbpq_1)              -0.0486
+_681_/Q (sg13g2_dfrbpq_1)            _681_/D (sg13g2_dfrbpq_1)              -0.0486
+_682_/Q (sg13g2_dfrbpq_1)            _682_/D (sg13g2_dfrbpq_1)              -0.0486
+_682_/Q (sg13g2_dfrbpq_1)            _682_/D (sg13g2_dfrbpq_1)              -0.0486
+_683_/Q (sg13g2_dfrbpq_1)            _683_/D (sg13g2_dfrbpq_1)              -0.0486
+_683_/Q (sg13g2_dfrbpq_1)            _683_/D (sg13g2_dfrbpq_1)              -0.0486
+_684_/Q (sg13g2_dfrbpq_1)            _684_/D (sg13g2_dfrbpq_1)              -0.0486
+_684_/Q (sg13g2_dfrbpq_1)            _684_/D (sg13g2_dfrbpq_1)              -0.0486
+_685_/Q (sg13g2_dfrbpq_1)            _685_/D (sg13g2_dfrbpq_1)              -0.0486
+_685_/Q (sg13g2_dfrbpq_1)            _685_/D (sg13g2_dfrbpq_1)              -0.0486
+_686_/Q (sg13g2_dfrbpq_1)            _686_/D (sg13g2_dfrbpq_1)              -0.0486
+_686_/Q (sg13g2_dfrbpq_1)            _686_/D (sg13g2_dfrbpq_1)              -0.0486
+_687_/Q (sg13g2_dfrbpq_1)            _687_/D (sg13g2_dfrbpq_1)              -0.0486
+_687_/Q (sg13g2_dfrbpq_1)            _687_/D (sg13g2_dfrbpq_1)              -0.0486
+_688_/Q (sg13g2_dfrbpq_1)            _688_/D (sg13g2_dfrbpq_1)              -0.0486
+_688_/Q (sg13g2_dfrbpq_1)            _688_/D (sg13g2_dfrbpq_1)              -0.0486
+_689_/Q (sg13g2_dfrbpq_1)            _689_/D (sg13g2_dfrbpq_1)              -0.0486
+_689_/Q (sg13g2_dfrbpq_1)            _689_/D (sg13g2_dfrbpq_1)              -0.0486
+_690_/Q (sg13g2_dfrbpq_1)            _690_/D (sg13g2_dfrbpq_1)              -0.0486
+_690_/Q (sg13g2_dfrbpq_1)            _690_/D (sg13g2_dfrbpq_1)              -0.0486
+_691_/Q (sg13g2_dfrbpq_1)            _691_/D (sg13g2_dfrbpq_1)              -0.0486
+_691_/Q (sg13g2_dfrbpq_1)            _691_/D (sg13g2_dfrbpq_1)              -0.0486
+_692_/Q (sg13g2_dfrbpq_1)            _692_/D (sg13g2_dfrbpq_1)              -0.0486
+_692_/Q (sg13g2_dfrbpq_1)            _692_/D (sg13g2_dfrbpq_1)              -0.0486
+_693_/Q (sg13g2_dfrbpq_1)            _693_/D (sg13g2_dfrbpq_1)              -0.0486
+_693_/Q (sg13g2_dfrbpq_1)            _693_/D (sg13g2_dfrbpq_1)              -0.0486
+_694_/Q (sg13g2_dfrbpq_1)            _694_/D (sg13g2_dfrbpq_1)              -0.0486
+_694_/Q (sg13g2_dfrbpq_1)            _694_/D (sg13g2_dfrbpq_1)              -0.0486
+_695_/Q (sg13g2_dfrbpq_1)            _695_/D (sg13g2_dfrbpq_1)              -0.0486
+_695_/Q (sg13g2_dfrbpq_1)            _695_/D (sg13g2_dfrbpq_1)              -0.0486
+_713_/Q (sg13g2_dfrbpq_1)            _656_/D (sg13g2_dfrbpq_1)              -0.0473
+_714_/Q (sg13g2_dfrbpq_1)            _657_/D (sg13g2_dfrbpq_1)              -0.0473
+_715_/Q (sg13g2_dfrbpq_1)            _658_/D (sg13g2_dfrbpq_1)              -0.0473
+_716_/Q (sg13g2_dfrbpq_1)            _659_/D (sg13g2_dfrbpq_1)              -0.0473
+_717_/Q (sg13g2_dfrbpq_1)            _660_/D (sg13g2_dfrbpq_1)              -0.0473
+_718_/Q (sg13g2_dfrbpq_1)            _661_/D (sg13g2_dfrbpq_1)              -0.0473
+_719_/Q (sg13g2_dfrbpq_1)            _662_/D (sg13g2_dfrbpq_1)              -0.0473
+_720_/Q (sg13g2_dfrbpq_1)            _663_/D (sg13g2_dfrbpq_1)              -0.0473
+_721_/Q (sg13g2_dfrbpq_1)            _664_/D (sg13g2_dfrbpq_1)              -0.0473
+_722_/Q (sg13g2_dfrbpq_1)            _665_/D (sg13g2_dfrbpq_1)              -0.0473
+_723_/Q (sg13g2_dfrbpq_1)            _666_/D (sg13g2_dfrbpq_1)              -0.0473
+_724_/Q (sg13g2_dfrbpq_1)            _667_/D (sg13g2_dfrbpq_1)              -0.0473
+_725_/Q (sg13g2_dfrbpq_1)            _668_/D (sg13g2_dfrbpq_1)              -0.0473
+_759_/Q (sg13g2_dfrbpq_1)            _655_/D (sg13g2_dfrbpq_1)              -0.0458
+run (input)                          _699_/D (sg13g2_dfrbpq_1)              -0.0456
+run (input)                          _704_/D (sg13g2_dfrbpq_1)              -0.0454
+run (input)                          _704_/D (sg13g2_dfrbpq_1)              -0.0454
+run (input)                          _699_/D (sg13g2_dfrbpq_1)              -0.0454
+run (input)                          _699_/D (sg13g2_dfrbpq_1)              -0.0450
+run (input)                          _699_/D (sg13g2_dfrbpq_1)              -0.0450
+_744_/Q (sg13g2_dfrbpq_1)            _654_/D (sg13g2_dfrbpq_1)              -0.0431
+_673_/Q (sg13g2_dfrbpq_1)            _673_/D (sg13g2_dfrbpq_1)              -0.0430
+_726_/Q (sg13g2_dfrbpq_1)            _669_/D (sg13g2_dfrbpq_1)              -0.0418
+_761_/Q (pe_ctrl)                    load_active (output)                   -0.0418
+_676_/Q (sg13g2_dfrbpq_1)            _676_/D (sg13g2_dfrbpq_1)              -0.0414
+_676_/Q (sg13g2_dfrbpq_1)            _676_/D (sg13g2_dfrbpq_1)              -0.0414
+_654_/Q (sg13g2_dfrbpq_1)            _654_/D (sg13g2_dfrbpq_1)              -0.0383
+_654_/Q (sg13g2_dfrbpq_1)            _654_/D (sg13g2_dfrbpq_1)              -0.0383
+_713_/Q (sg13g2_dfrbpq_1)            _656_/D (sg13g2_dfrbpq_1)              -0.0383
+_714_/Q (sg13g2_dfrbpq_1)            _657_/D (sg13g2_dfrbpq_1)              -0.0383
+_715_/Q (sg13g2_dfrbpq_1)            _658_/D (sg13g2_dfrbpq_1)              -0.0383
+_716_/Q (sg13g2_dfrbpq_1)            _659_/D (sg13g2_dfrbpq_1)              -0.0383
+_717_/Q (sg13g2_dfrbpq_1)            _660_/D (sg13g2_dfrbpq_1)              -0.0383
+_718_/Q (sg13g2_dfrbpq_1)            _661_/D (sg13g2_dfrbpq_1)              -0.0383
+_719_/Q (sg13g2_dfrbpq_1)            _662_/D (sg13g2_dfrbpq_1)              -0.0383
+_720_/Q (sg13g2_dfrbpq_1)            _663_/D (sg13g2_dfrbpq_1)              -0.0383
+_721_/Q (sg13g2_dfrbpq_1)            _664_/D (sg13g2_dfrbpq_1)              -0.0383
+_722_/Q (sg13g2_dfrbpq_1)            _665_/D (sg13g2_dfrbpq_1)              -0.0383
+_723_/Q (sg13g2_dfrbpq_1)            _666_/D (sg13g2_dfrbpq_1)              -0.0383
+_724_/Q (sg13g2_dfrbpq_1)            _667_/D (sg13g2_dfrbpq_1)              -0.0383
+_725_/Q (sg13g2_dfrbpq_1)            _668_/D (sg13g2_dfrbpq_1)              -0.0383
+_729_/Q (sg13g2_dfrbpq_1)            _729_/D (sg13g2_dfrbpq_1)              -0.0352
+_730_/Q (sg13g2_dfrbpq_1)            _730_/D (sg13g2_dfrbpq_1)              -0.0352
+_731_/Q (sg13g2_dfrbpq_1)            _731_/D (sg13g2_dfrbpq_1)              -0.0352
+_732_/Q (sg13g2_dfrbpq_1)            _732_/D (sg13g2_dfrbpq_1)              -0.0352
+_733_/Q (sg13g2_dfrbpq_1)            _733_/D (sg13g2_dfrbpq_1)              -0.0352
+_734_/Q (sg13g2_dfrbpq_1)            _734_/D (sg13g2_dfrbpq_1)              -0.0352
+_735_/Q (sg13g2_dfrbpq_1)            _735_/D (sg13g2_dfrbpq_1)              -0.0352
+_736_/Q (sg13g2_dfrbpq_1)            _736_/D (sg13g2_dfrbpq_1)              -0.0352
+_737_/Q (sg13g2_dfrbpq_1)            _737_/D (sg13g2_dfrbpq_1)              -0.0352
+_738_/Q (sg13g2_dfrbpq_1)            _738_/D (sg13g2_dfrbpq_1)              -0.0352
+_739_/Q (sg13g2_dfrbpq_1)            _739_/D (sg13g2_dfrbpq_1)              -0.0352
+_740_/Q (sg13g2_dfrbpq_1)            _740_/D (sg13g2_dfrbpq_1)              -0.0352
+_741_/Q (sg13g2_dfrbpq_1)            _741_/D (sg13g2_dfrbpq_1)              -0.0352
+_742_/Q (sg13g2_dfrbpq_1)            _742_/D (sg13g2_dfrbpq_1)              -0.0352
+_743_/Q (sg13g2_dfrbpq_1)            _743_/D (sg13g2_dfrbpq_1)              -0.0352
+_727_/Q (sg13g2_dfrbpq_1)            _727_/D (sg13g2_dfrbpq_1)              -0.0342
+_726_/Q (sg13g2_dfrbpq_1)            _726_/D (sg13g2_dfrbpq_1)              -0.0342
+run (input)                          _701_/D (sg13g2_dfrbpq_1)              -0.0339
+_674_/Q (sg13g2_dfrbpq_1)            _674_/D (sg13g2_dfrbpq_1)              -0.0339
+_759_/Q (sg13g2_dfrbpq_1)            _713_/D (sg13g2_dfrbpq_1)              -0.0339
+_761_/Q (sg13g2_dfrbpq_1)            _762_/D (sg13g2_dfrbpq_1)              -0.0334
+_679_/Q (pe_ctrl)                    host_we (output)                       -0.0311
+run (input)                          _712_/D (sg13g2_dfrbpq_1)              -0.0310
+run (input)                          _712_/D (sg13g2_dfrbpq_1)              -0.0310
+_672_/Q (sg13g2_dfrbpq_1)            _672_/D (sg13g2_dfrbpq_1)              -0.0298
+_672_/Q (sg13g2_dfrbpq_1)            _672_/D (sg13g2_dfrbpq_1)              -0.0298
+_653_/Q (sg13g2_dfrbpq_1)            _652_/D (sg13g2_dfrbpq_1)              -0.0297
+run (input)                          _700_/D (sg13g2_dfrbpq_1)              -0.0291
+_695_/Q (sg13g2_dfrbpq_1)            _654_/D (sg13g2_dfrbpq_1)              -0.0287
+_674_/Q (sg13g2_dfrbpq_1)            _674_/D (sg13g2_dfrbpq_1)              -0.0284
+run (input)                          _700_/D (sg13g2_dfrbpq_1)              -0.0275
+run (input)                          _700_/D (sg13g2_dfrbpq_1)              -0.0273
+run (input)                          _705_/D (sg13g2_dfrbpq_1)              -0.0273
+_714_/Q (sg13g2_dfrbpq_1)            _714_/D (sg13g2_dfrbpq_1)              -0.0270
+_715_/Q (sg13g2_dfrbpq_1)            _715_/D (sg13g2_dfrbpq_1)              -0.0270
+_716_/Q (sg13g2_dfrbpq_1)            _716_/D (sg13g2_dfrbpq_1)              -0.0270
+_717_/Q (sg13g2_dfrbpq_1)            _717_/D (sg13g2_dfrbpq_1)              -0.0270
+_718_/Q (sg13g2_dfrbpq_1)            _718_/D (sg13g2_dfrbpq_1)              -0.0270
+_719_/Q (sg13g2_dfrbpq_1)            _719_/D (sg13g2_dfrbpq_1)              -0.0270
+_720_/Q (sg13g2_dfrbpq_1)            _720_/D (sg13g2_dfrbpq_1)              -0.0270
+_721_/Q (sg13g2_dfrbpq_1)            _721_/D (sg13g2_dfrbpq_1)              -0.0270
+_722_/Q (sg13g2_dfrbpq_1)            _722_/D (sg13g2_dfrbpq_1)              -0.0270
+_723_/Q (sg13g2_dfrbpq_1)            _723_/D (sg13g2_dfrbpq_1)              -0.0270
+_724_/Q (sg13g2_dfrbpq_1)            _724_/D (sg13g2_dfrbpq_1)              -0.0270
+_725_/Q (sg13g2_dfrbpq_1)            _725_/D (sg13g2_dfrbpq_1)              -0.0270
+run (input)                          _700_/D (sg13g2_dfrbpq_1)              -0.0269
+run (input)                          _701_/D (sg13g2_dfrbpq_1)              -0.0268
+run (input)                          _701_/D (sg13g2_dfrbpq_1)              -0.0268
+_669_/Q (sg13g2_dfrbpq_1)            _669_/D (sg13g2_dfrbpq_1)              -0.0248
+_707_/Q (sg13g2_dfrbpq_1)            _707_/D (sg13g2_dfrbpq_1)              -0.0246
+_669_/Q (sg13g2_dfrbpq_1)            _669_/D (sg13g2_dfrbpq_1)              -0.0245
+_675_/Q (sg13g2_dfrbpq_1)            _675_/D (sg13g2_dfrbpq_1)              -0.0244
+_675_/Q (sg13g2_dfrbpq_1)            _675_/D (sg13g2_dfrbpq_1)              -0.0244
+_655_/Q (sg13g2_dfrbpq_1)            _729_/D (sg13g2_dfrbpq_1)              -0.0227
+_656_/Q (sg13g2_dfrbpq_1)            _730_/D (sg13g2_dfrbpq_1)              -0.0227
+_657_/Q (sg13g2_dfrbpq_1)            _731_/D (sg13g2_dfrbpq_1)              -0.0227
+_658_/Q (sg13g2_dfrbpq_1)            _732_/D (sg13g2_dfrbpq_1)              -0.0227
+_659_/Q (sg13g2_dfrbpq_1)            _733_/D (sg13g2_dfrbpq_1)              -0.0227
+_660_/Q (sg13g2_dfrbpq_1)            _734_/D (sg13g2_dfrbpq_1)              -0.0227
+_661_/Q (sg13g2_dfrbpq_1)            _735_/D (sg13g2_dfrbpq_1)              -0.0227
+_662_/Q (sg13g2_dfrbpq_1)            _736_/D (sg13g2_dfrbpq_1)              -0.0227
+_663_/Q (sg13g2_dfrbpq_1)            _737_/D (sg13g2_dfrbpq_1)              -0.0227
+_664_/Q (sg13g2_dfrbpq_1)            _738_/D (sg13g2_dfrbpq_1)              -0.0227
+_665_/Q (sg13g2_dfrbpq_1)            _739_/D (sg13g2_dfrbpq_1)              -0.0227
+_666_/Q (sg13g2_dfrbpq_1)            _740_/D (sg13g2_dfrbpq_1)              -0.0227
+_667_/Q (sg13g2_dfrbpq_1)            _741_/D (sg13g2_dfrbpq_1)              -0.0227
+_668_/Q (sg13g2_dfrbpq_1)            _742_/D (sg13g2_dfrbpq_1)              -0.0227
+_669_/Q (sg13g2_dfrbpq_1)            _743_/D (sg13g2_dfrbpq_1)              -0.0222
+_710_/Q (sg13g2_dfrbpq_1)            _710_/D (sg13g2_dfrbpq_1)              -0.0217
+_676_/Q (sg13g2_dfrbpq_1)            _676_/D (sg13g2_dfrbpq_1)              -0.0214
+_676_/Q (sg13g2_dfrbpq_1)            _676_/D (sg13g2_dfrbpq_1)              -0.0214
+_675_/Q (sg13g2_dfrbpq_1)            _675_/D (sg13g2_dfrbpq_1)              -0.0211
+_703_/Q (sg13g2_dfrbpq_1)            _703_/D (sg13g2_dfrbpq_1)              -0.0206
+_697_/Q (sg13g2_dfrbpq_1)            _697_/D (sg13g2_dfrbpq_1)              -0.0201
+_675_/Q (sg13g2_dfrbpq_1)            _675_/D (sg13g2_dfrbpq_1)              -0.0189
+_753_/Q (sg13g2_dfrbpq_1)            _753_/D (sg13g2_dfrbpq_1)              -0.0188
+_753_/Q (sg13g2_dfrbpq_1)            _753_/D (sg13g2_dfrbpq_1)              -0.0188
+_751_/Q (sg13g2_dfrbpq_1)            _751_/D (sg13g2_dfrbpq_1)              -0.0186
+_707_/Q (sg13g2_dfrbpq_1)            _707_/D (sg13g2_dfrbpq_1)              -0.0184
+_679_/Q (sg13g2_dfrbpq_1)            _679_/D (sg13g2_dfrbpq_1)              -0.0183
+_747_/Q (sg13g2_dfrbpq_1)            _747_/D (sg13g2_dfrbpq_1)              -0.0182
+_751_/Q (sg13g2_dfrbpq_1)            _751_/D (sg13g2_dfrbpq_1)              -0.0181
+_751_/Q (sg13g2_dfrbpq_1)            _751_/D (sg13g2_dfrbpq_1)              -0.0181
+_748_/Q (sg13g2_dfrbpq_1)            _748_/D (sg13g2_dfrbpq_1)              -0.0181
+_747_/Q (sg13g2_dfrbpq_1)            _747_/D (sg13g2_dfrbpq_1)              -0.0177
+_747_/Q (sg13g2_dfrbpq_1)            _747_/D (sg13g2_dfrbpq_1)              -0.0177
+_748_/Q (sg13g2_dfrbpq_1)            _748_/D (sg13g2_dfrbpq_1)              -0.0176
+_748_/Q (sg13g2_dfrbpq_1)            _748_/D (sg13g2_dfrbpq_1)              -0.0176
+_754_/Q (sg13g2_dfrbpq_1)            _754_/D (sg13g2_dfrbpq_1)              -0.0176
+_708_/Q (sg13g2_dfrbpq_1)            _709_/D (sg13g2_dfrbpq_1)              -0.0171
+_708_/Q (sg13g2_dfrbpq_1)            _709_/D (sg13g2_dfrbpq_1)              -0.0171
+_710_/Q (sg13g2_dfrbpq_1)            _710_/D (sg13g2_dfrbpq_1)              -0.0162
+run (input)                          _698_/D (sg13g2_dfrbpq_1)              -0.0158
+_703_/Q (sg13g2_dfrbpq_1)            _703_/D (sg13g2_dfrbpq_1)              -0.0153
+_709_/Q (sg13g2_dfrbpq_1)            _709_/D (sg13g2_dfrbpq_1)              -0.0145
+_697_/Q (sg13g2_dfrbpq_1)            _697_/D (sg13g2_dfrbpq_1)              -0.0144
+_746_/Q (sg13g2_dfrbpq_1)            _746_/D (sg13g2_dfrbpq_1)              -0.0135
+_710_/Q (sg13g2_dfrbpq_1)            _710_/D (sg13g2_dfrbpq_1)              -0.0131
+_746_/Q (sg13g2_dfrbpq_1)            _746_/D (sg13g2_dfrbpq_1)              -0.0131
+_746_/Q (sg13g2_dfrbpq_1)            _746_/D (sg13g2_dfrbpq_1)              -0.0131
+_710_/Q (sg13g2_dfrbpq_1)            _710_/D (sg13g2_dfrbpq_1)              -0.0129
+_671_/Q (sg13g2_dfrbpq_1)            _671_/D (sg13g2_dfrbpq_1)              -0.0128
+_671_/Q (sg13g2_dfrbpq_1)            _671_/D (sg13g2_dfrbpq_1)              -0.0128
+_750_/Q (sg13g2_dfrbpq_1)            _750_/D (sg13g2_dfrbpq_1)              -0.0128
+_750_/Q (sg13g2_dfrbpq_1)            _750_/D (sg13g2_dfrbpq_1)              -0.0123
+_750_/Q (sg13g2_dfrbpq_1)            _750_/D (sg13g2_dfrbpq_1)              -0.0123
+_708_/Q (sg13g2_dfrbpq_1)            _708_/D (sg13g2_dfrbpq_1)              -0.0123
+_703_/Q (sg13g2_dfrbpq_1)            _703_/D (sg13g2_dfrbpq_1)              -0.0118
+_706_/Q (sg13g2_dfrbpq_1)            _706_/D (sg13g2_dfrbpq_1)              -0.0116
+_703_/Q (sg13g2_dfrbpq_1)            _703_/D (sg13g2_dfrbpq_1)              -0.0115
+run (input)                          _708_/D (sg13g2_dfrbpq_1)              -0.0098
+_707_/Q (sg13g2_dfrbpq_1)            _707_/D (sg13g2_dfrbpq_1)              -0.0097
+_707_/Q (sg13g2_dfrbpq_1)            _707_/D (sg13g2_dfrbpq_1)              -0.0097
+_697_/Q (sg13g2_dfrbpq_1)            _697_/D (sg13g2_dfrbpq_1)              -0.0095
+_671_/Q (sg13g2_dfrbpq_1)            _671_/D (sg13g2_dfrbpq_1)              -0.0094
+_697_/Q (sg13g2_dfrbpq_1)            _697_/D (sg13g2_dfrbpq_1)              -0.0093
+_706_/Q (sg13g2_dfrbpq_1)            _706_/D (sg13g2_dfrbpq_1)              -0.0088
+_749_/Q (sg13g2_dfrbpq_1)            _749_/D (sg13g2_dfrbpq_1)              -0.0083
+_749_/Q (sg13g2_dfrbpq_1)            _749_/D (sg13g2_dfrbpq_1)              -0.0079
+_749_/Q (sg13g2_dfrbpq_1)            _749_/D (sg13g2_dfrbpq_1)              -0.0079
+_672_/Q (sg13g2_dfrbpq_1)            _672_/D (sg13g2_dfrbpq_1)              -0.0076
+_672_/Q (sg13g2_dfrbpq_1)            _672_/D (sg13g2_dfrbpq_1)              -0.0076
+_655_/Q (sg13g2_dfrbpq_1)            _655_/D (sg13g2_dfrbpq_1)              -0.0075
+_656_/Q (sg13g2_dfrbpq_1)            _656_/D (sg13g2_dfrbpq_1)              -0.0075
+_657_/Q (sg13g2_dfrbpq_1)            _657_/D (sg13g2_dfrbpq_1)              -0.0075
+_658_/Q (sg13g2_dfrbpq_1)            _658_/D (sg13g2_dfrbpq_1)              -0.0075
+_659_/Q (sg13g2_dfrbpq_1)            _659_/D (sg13g2_dfrbpq_1)              -0.0075
+_660_/Q (sg13g2_dfrbpq_1)            _660_/D (sg13g2_dfrbpq_1)              -0.0075
+_661_/Q (sg13g2_dfrbpq_1)            _661_/D (sg13g2_dfrbpq_1)              -0.0075
+_662_/Q (sg13g2_dfrbpq_1)            _662_/D (sg13g2_dfrbpq_1)              -0.0075
+_663_/Q (sg13g2_dfrbpq_1)            _663_/D (sg13g2_dfrbpq_1)              -0.0075
+_664_/Q (sg13g2_dfrbpq_1)            _664_/D (sg13g2_dfrbpq_1)              -0.0075
+_665_/Q (sg13g2_dfrbpq_1)            _665_/D (sg13g2_dfrbpq_1)              -0.0075
+_666_/Q (sg13g2_dfrbpq_1)            _666_/D (sg13g2_dfrbpq_1)              -0.0075
+_667_/Q (sg13g2_dfrbpq_1)            _667_/D (sg13g2_dfrbpq_1)              -0.0075
+_668_/Q (sg13g2_dfrbpq_1)            _668_/D (sg13g2_dfrbpq_1)              -0.0075
+_752_/Q (sg13g2_dfrbpq_1)            _752_/D (sg13g2_dfrbpq_1)              -0.0069
+_653_/Q (sg13g2_dfrbpq_1)            _679_/D (sg13g2_dfrbpq_1)              -0.0067
+_752_/Q (sg13g2_dfrbpq_1)            _752_/D (sg13g2_dfrbpq_1)              -0.0065
+_752_/Q (sg13g2_dfrbpq_1)            _752_/D (sg13g2_dfrbpq_1)              -0.0065
+_671_/Q (sg13g2_dfrbpq_1)            _671_/D (sg13g2_dfrbpq_1)              -0.0060
+_754_/Q (sg13g2_dfrbpq_1)            _754_/D (sg13g2_dfrbpq_1)              -0.0024
+_754_/Q (sg13g2_dfrbpq_1)            _754_/D (sg13g2_dfrbpq_1)              -0.0024
+_754_/Q (sg13g2_dfrbpq_1)            _754_/D (sg13g2_dfrbpq_1)              -0.0022
+_745_/Q (sg13g2_dfrbpq_1)            _745_/D (sg13g2_dfrbpq_1)              -0.0002
+_745_/Q (sg13g2_dfrbpq_1)            _745_/D (sg13g2_dfrbpq_1)              -0.0002
+

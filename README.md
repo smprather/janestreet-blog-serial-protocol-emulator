@@ -9,12 +9,26 @@ submission 2027-01-18.
 
 **Status: the programmable core runs UART, SPI mode 0, and a complete I2C
 write/read transaction as firmware on real RTL. The wrapper also has a passive
-SPI program loader, and the SoC integrates 10BASE-T receive hardware. See
+SPI program loader, and the SoC integrates the 10BASE-T receive path plus the
+TX frame path (the chip exchanges a real frame with itself over the wire
+loopback). See
 [`wiki/STATUS.md`](wiki/STATUS.md) for integration details and the ordered work
 list.**
 
 > Picking this up cold (human or agent)? Read **[`HANDOFF.md`](HANDOFF.md)** first
 > — current verified state, the traps worth not rediscovering, and the next step.
+
+## Block diagrams
+
+**Project plan** — architecture and contracts
+([SVG](diagrams/project-plan.svg) · [PlantUML](diagrams/project-plan.puml)):
+
+![Project plan](diagrams/project-plan.png)
+
+**Implementation progress** — per-block status
+([SVG](diagrams/project-progress.svg) · [PlantUML](diagrams/project-progress.puml)):
+
+![Implementation progress](diagrams/project-progress.png)
 
 ## What exists today
 
@@ -65,7 +79,11 @@ STOP-qualified bus-free wait and no retry.
 
 The instruction memory is a **real SRAM macro** (`1P_1024x16`, 1,024 program
 words) behind `rtl/pe_imem.v`; `pe_ctrl` loads it through the wrapper's SPI pads
-before `run` rises. The pin matrix (`rtl/pe_pinmux.v`) supplies per-pin
+before `run` rises. The intended board-side controller is the RP2040 on the
+Tiny Tapeout demo board (Raspberry Pi Pico); it drives this passive SPI loader.
+A Linux PC demo GUI is on the TODO list; its PC-to-board transport and control
+API have not been selected.
+The pin matrix (`rtl/pe_pinmux.v`) supplies per-pin
 direction and open-drain control. The 2 KB frame buffer and 10BASE-T receive
 chain are integrated into `pe_soc`; `firmware/eth_rx.pe` consumes the verified
 frame window. See [`wiki/STATUS.md`](wiki/STATUS.md) for limits and next steps.

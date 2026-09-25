@@ -1,14 +1,73 @@
 ---
 title: Integrate pe_serdes + pe_codec_mux into pe_soc
 created: 2026-09-23
-updated: 2026-09-23
+updated: 2026-09-24
 type: plan
 tags: [architecture, integration, serdes, codec, timing, pads]
 sources: [rtl/pe_serdes.v, rtl/pe_codec_mux.v, rtl/pe_bitstuff.v, rtl/pe_nrzi.v, rtl/pe_manch.v, rtl/pe_soc.v, rtl/pe_dru.v, rtl/pe_pinmux.v, tb/tb_pe_serdes.v, tb/tb_pe_codec_mux.v, diagrams/project-plan.puml, wiki/reference/block-diagram.md, wiki/plans/ethernet-soc.md]
-confidence: medium
+confidence: high
 ---
 
 # Integrate `pe_serdes` + `pe_codec_mux` into `pe_soc`
+
+## Status — IMPLEMENTED 2026-09-24
+
+Manager decision on every open scope choice: **adopt the follow-up review's
+recorded recommended defaults** (`reviews/2026-09-23/PLAN-FOLLOWUP-REVIEW.md`,
+"SERDES decision-readiness follow-up"), and where this plan and that review
+differ, follow the review's amended two-codec shape:
+
+- **Milestone scope**: additive engine, disabled at reset (overlay off) —
+  every baseline TB/firmware stays bit-identical; the self-timed
+  **wire-loopback** is the first consumer (no frame layer);
+- **Plain asynchronous RX**: excluded from v1 — plain/NRZI/stuffed RX uses the
+  divider's free-running cell strobe over the DRU's synchronized level, i.e.
+  **self-timed loopback scope only; no phase acquisition for an arbitrarily
+  phased asynchronous sender** (documented limit);
+- **Topology**: ONE `pe_serdes` with split payload-only enables
+  (`tx_bit_en = tx_cell_en && !tx_stuffed`, `rx_bit_en = rx_cell_en &&
+  rx_bit_valid`) and **TWO** unmodified `pe_codec_mux` instances (TX/RX),
+  one `bit_en` per encoded cell, `half_phase` a LEVEL (two toggles per cell)
+  into the TX instance's `cfg[3]` and 0 on RX;
+- **Access**: the `0xF` **latched-phase 16-entry indexed window** (no ISA
+  change), separate `TXLEN`/`RXLEN`, one-cycle write-triggered
+  `tx_load`/`rx_start`/`clr`, and **latched** `tx_done`/`rx_valid`/`rx_err`
+  events (set-beats-clear on a STATUS read); the divider free-runs while
+  enabled so the timing block stays active through a possible trailing stuff
+  cell after `serdes.tx_busy` falls;
+- **Overlay**: the per-pin level override lives in `pe_pinmux`
+  (`ov_en`/`ov_bit`) feeding BOTH pad outputs before the open-drain gate.
+
+Implemented per the ordered work list (strobe/divider block, window, enable
+split + two codec instances + overlay, firmware, TB, harnesses, screens);
+the engine's section and contract live at the top of `rtl/pe_soc.v`.
+
+**Evidence (2026-09-24):** `tb_pe_soc_serdes` PASS — plain LSB/MSB,
+Manchester, and the **directed stuffed Manchester loopback** (word `0x07E0`
+chosen so payload 16 arms the final stuff bit, guaranteeing the
+trailing-stuff case) with monitors for cell spacing, TX hold, RX skip,
+DRU-strobe source and exact advance counts; `tb_pe_serdes` extended with a
+directed split-enables case; `tb_pe_pinmux` extended with overlay/od-gate
+cases; `regress/mutate_soc_serdes_tb.sh` **7/7** (the plan's four required
+mutations + two alignment defects + the unaligned load) and the new
+`regress/mutate_serdes_tb.sh` **7/7**; `./regress/run_all.sh --fast -j8`
+exit 0 with 30/30 RTL, 21/21 firmware and **all nine mutation suites**;
+`./regress/synth_area.sh` clean — **pe_soc 3,571 → 4,961 cells / 56,816.88 →
+82,893.77 µm² (+1,390)**, **tt_um_top 4,038 → 5,363 / 65,686.27 → 91,268.06
+µm² (+1,325)** (post-A1 baseline). Two defects found and fixed during
+bring-up: `half_phase` toggled once per cell instead of twice, and
+Manchester `rx_start` needed the first-DRU-decode anchor (a stale idle decode
+otherwise became payload bit 0). Full record, hashes and commands:
+`reviews/2026-09-24/SERDES-INTEGRATION-REVIEW.md`.
+
+**Remaining (not in this change):** the full 10BASE-T TX frame path is a
+separate block/plan. The two closeout items have since landed (2026-09-24,
+Task 4): `regress/mutate_codec_tb.sh` is written (13 mutations, 13 detected /
+0 survived, wired into `run_all.sh` as the tenth suite) and the mapped STA
+refresh has run at slow/typ/fast on `pe_soc` and `tt_um_protocol_emulator`
+(no new violation class; `pe_soc` setup/hold identical to the pre-integration
+screen). Evidence: `reviews/2026-09-24/CLOSEOUT-HARDENING-REVIEW.md` and
+`reviews/2026-09-24/serdes-sta/`. No physical flow, DRC or LVS.
 
 ## Why
 
@@ -23,7 +82,8 @@ CPU access goes through the indexed window and timing control, while codec
 output passes through the pin overlay into the pin matrix. These connections
 remain planned and the integration is not implemented.
 
-This plan is **review-only**: no RTL changes until it is accepted. It was
+This plan started **review-only**: no RTL changes until it is accepted — it
+was accepted and **implemented on 2026-09-24** (see *Status* at the top). It was
 amended on 2026-09-23 for the first review's five findings (window encoding,
 LENW, overlay insertion point, TX-consumer scope, strobe split) and then for
 the loopback-follow-up findings: `pe_codec_mux`'s single `bit_en` gates **both**
@@ -392,8 +452,11 @@ pad.
   enable networks already exist — so no new state expected) + **two**
   `pe_codec_mux` instances (2 × 130 mapped, less whatever synthesis dead-codes
   from each instance's unused direction) + the two payload-enable gates +
-  mux/divider/window glue (estimate +50-150 cells) on top of `pe_soc` 3,298 /
-  TT top 3,613. Confirm with `synth_area.sh` after implementation.
+  mux/divider/window glue (estimate +50-150 cells) on top of the current
+  post-E1 `pe_soc` baseline of 3,306 cells / 53,615.56 µm² and `tt_um_top`
+  baseline of 3,579 cells / 59,286.81 µm². The current `synth_area.sh` screen
+  is recorded in `/tmp/synth_area_diagram_followup.log`; rerun it after
+  implementation before comparing an area delta.
 - **Standalone signoff already exists**: `pe_serdes` was through full LibreLane
   Classic (2026-09-18, former 66 MHz target): **0 DRC, 0 LVS, setup WS
   +7.6 ns (slow), hold WS +0.116 ns (fast), 78% utilization**
@@ -452,6 +515,11 @@ pad.
 
 ## Open decisions for the reviewer
 
+**RESOLVED 2026-09-24 — manager decision: adopt the follow-up review's
+recommended defaults for every group (see *Status* at the top); the two-codec
+amended shape wins where this plan and the review differ.** The list below is
+retained as the record of the options that were on the table.
+
 1. **Scope**: additive engine (recommended) vs. migrating the baseline
    personas onto it now.
 2. **Access**: the `0xF` indexed window (recommended) vs. widening the IO space
@@ -476,4 +544,5 @@ pad.
    stuffed streams (rejected: the loopback runs both directions at once and
    the window exposes independent TX/RX lengths).
 
-No RTL was changed; no physical flow, DRC or LVS was run.
+At plan-writing time no RTL was changed. The implementation landed 2026-09-24
+(see *Status* at the top); no physical flow, DRC or LVS was run.

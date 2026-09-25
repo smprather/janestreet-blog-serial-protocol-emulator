@@ -1,0 +1,1650 @@
+OpenSTA 3.1.0 8572175ac4 Copyright (c) 2026, Parallax Software, Inc.
+License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
+
+This is free software, and you are free to change and redistribute it
+under certain conditions; type `show_copying' for details. 
+This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _5242_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _5242_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5242_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _5243_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _5243_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5243_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _5244_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _5244_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5244_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _5245_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _5245_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5245_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _5246_ (recovery check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ rst_n (in)
+   0.0000    3.3334 ^ _5246_/RESET_B (sg13g2_dfrbpq_1)
+             3.3334   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5246_/CLK (sg13g2_dfrbpq_1)
+  -0.1018   15.5652   library recovery time
+            15.5652   data required time
+-------------------------------------------------------------
+            15.5652   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+            12.2318   slack (MET)
+
+
+Startpoint: pin_in[7] (input port clocked by clk)
+Endpoint: _6145_ (positive level-sensitive latch clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ pin_in[7] (in)
+   0.0000    3.3334 ^ _6145_/D (sg13g2_dlhq_1)
+             3.3334   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+  -1.0000   -1.0000   clock uncertainty
+   0.0000   -1.0000   clock reconvergence pessimism
+            -1.0000 ^ _6145_/GATE (sg13g2_dlhq_1)
+   4.3334    3.3334   time borrowed from endpoint
+             3.3334   data required time
+-------------------------------------------------------------
+             3.3334   data required time
+            -3.3334   data arrival time
+-------------------------------------------------------------
+             0.0000   slack (MET)
+
+Time Borrowing Information
+----------------------------------------------
+clk pulse width                         8.3335
+library setup time                     -0.0824
+----------------------------------------------
+max time borrow                         8.2511
+----------------------------------------------
+actual time borrow                      4.3334
+open edge uncertainty                  -1.0000
+----------------------------------------------
+time given to startpoint                3.3334
+----------------------------------------------
+
+
+Startpoint: _6145_ (positive level-sensitive latch clocked by clk)
+Endpoint: _6146_ (positive level-sensitive latch clocked by clk')
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334   time given to startpoint
+   0.0000    3.3334 ^ _6145_/D (sg13g2_dlhq_1)
+   0.1474    3.4808 ^ _6145_/Q (sg13g2_dlhq_1)
+   0.0000    3.4808 ^ _6146_/D (sg13g2_dlhq_1)
+             3.4808   data arrival time
+
+   8.3335    8.3335   clock clk' (rise edge)
+   0.0000    8.3335   clock network delay (ideal)
+  -1.0000    7.3335   clock uncertainty
+   0.0000    7.3335   clock reconvergence pessimism
+             7.3335 ^ _6146_/GATE (sg13g2_dlhq_1)
+   0.0000    7.3335   time borrowed from endpoint
+             7.3335   data required time
+-------------------------------------------------------------
+             7.3335   data required time
+            -3.4808   data arrival time
+-------------------------------------------------------------
+             3.8527   slack (MET)
+
+Time Borrowing Information
+----------------------------------------------
+clk' pulse width                        8.3335
+library setup time                     -0.0682
+----------------------------------------------
+max time borrow                         8.2653
+actual time borrow                      0.0000
+----------------------------------------------
+
+
+Startpoint: _6146_ (positive level-sensitive latch clocked by clk')
+Endpoint: _6158_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   8.3335    8.3335   clock clk' (rise edge)
+   0.0000    8.3335   clock network delay (ideal)
+   0.0000    8.3335 ^ _6146_/GATE (sg13g2_dlhq_1)
+   0.1082    8.4417 v _6146_/Q (sg13g2_dlhq_1)
+   0.0268    8.4686 ^ _6032_/Y (sg13g2_nor2b_1)
+   0.0000    8.4686 ^ _6158_/D (sg13g2_dfrbpq_1)
+             8.4686   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _6158_/CLK (sg13g2_dfrbpq_1)
+  -0.0788   15.5882   library setup time
+            15.5882   data required time
+-------------------------------------------------------------
+            15.5882   data required time
+            -8.4686   data arrival time
+-------------------------------------------------------------
+             7.1197   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _7878_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ run (in)
+   0.0650    3.3984 v _5460_/Y (sg13g2_inv_1)
+   0.1738    3.5723 ^ _5785_/Y (sg13g2_nor4_1)
+   0.0624    3.6347 v _5109_/Y (sg13g2_nand2_1)
+   0.0624    3.6971 ^ _5110_/Y (sg13g2_nor3_1)
+   0.0529    3.7500 v _6428_/Y (sg13g2_nand2_1)
+   0.4853    4.2353 ^ _6430_/Y (sg13g2_a221oi_1)
+   0.3793    4.6146 v _6457_/Y (sg13g2_nand2b_1)
+   0.1340    4.7486 v _6459_/Y (sg13g2_xnor2_1)
+   0.1100    4.8586 ^ _6475_/Y (sg13g2_o21ai_1)
+   0.0834    4.9421 v _6477_/Y (sg13g2_a21oi_1)
+   0.1168    5.0589 ^ _6478_/Y (sg13g2_o21ai_1)
+   0.1950    5.2538 ^ _6501_/Y (sg13g2_xnor2_1)
+   0.1226    5.3764 ^ _6503_/Y (sg13g2_xnor2_1)
+   0.0857    5.4621 v _6529_/Y (sg13g2_o21ai_1)
+   0.0934    5.5555 v _6531_/X (sg13g2_a21o_1)
+   0.0897    5.6452 ^ _6532_/Y (sg13g2_o21ai_1)
+   0.1045    5.7497 ^ _6533_/X (sg13g2_a21o_1)
+   0.0508    5.8004 v _6534_/Y (sg13g2_o21ai_1)
+   0.0693    5.8698 v _6538_/Y (sg13g2_xnor2_1)
+   0.0447    5.9145 ^ _6600_/Y (sg13g2_a21oi_1)
+   0.0000    5.9145 ^ _7878_/D (sg13g2_dfrbpq_1)
+             5.9145   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _7878_/CLK (sg13g2_dfrbpq_1)
+  -0.0827   15.5843   library setup time
+            15.5843   data required time
+-------------------------------------------------------------
+            15.5843   data required time
+            -5.9145   data arrival time
+-------------------------------------------------------------
+             9.6698   slack (MET)
+
+
+Startpoint: run (input port clocked by clk)
+Endpoint: _7877_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   3.3334    3.3334 ^ input external delay
+   0.0000    3.3334 ^ run (in)
+   0.0650    3.3984 v _5460_/Y (sg13g2_inv_1)
+   0.1738    3.5723 ^ _5785_/Y (sg13g2_nor4_1)
+   0.0624    3.6347 v _5109_/Y (sg13g2_nand2_1)
+   0.0624    3.6971 ^ _5110_/Y (sg13g2_nor3_1)
+   0.0529    3.7500 v _6428_/Y (sg13g2_nand2_1)
+   0.4853    4.2353 ^ _6430_/Y (sg13g2_a221oi_1)
+   0.3793    4.6146 v _6457_/Y (sg13g2_nand2b_1)
+   0.1340    4.7486 v _6459_/Y (sg13g2_xnor2_1)
+   0.1100    4.8586 ^ _6475_/Y (sg13g2_o21ai_1)
+   0.0834    4.9421 v _6477_/Y (sg13g2_a21oi_1)
+   0.1168    5.0589 ^ _6478_/Y (sg13g2_o21ai_1)
+   0.1950    5.2538 ^ _6501_/Y (sg13g2_xnor2_1)
+   0.1226    5.3764 ^ _6503_/Y (sg13g2_xnor2_1)
+   0.0857    5.4621 v _6529_/Y (sg13g2_o21ai_1)
+   0.0934    5.5555 v _6531_/X (sg13g2_a21o_1)
+   0.0897    5.6452 ^ _6532_/Y (sg13g2_o21ai_1)
+   0.1045    5.7497 ^ _6533_/X (sg13g2_a21o_1)
+   0.0620    5.8117 ^ _6964_/Y (sg13g2_xnor2_1)
+   0.0376    5.8493 v _6970_/Y (sg13g2_o21ai_1)
+   0.0000    5.8493 v _7877_/D (sg13g2_dfrbpq_1)
+             5.8493   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _7877_/CLK (sg13g2_dfrbpq_1)
+  -0.0800   15.5870   library setup time
+            15.5870   data required time
+-------------------------------------------------------------
+            15.5870   data required time
+            -5.8493   data arrival time
+-------------------------------------------------------------
+             9.7377   slack (MET)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _5242_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _5242_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _5242_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1637   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _5243_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _5243_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _5243_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1637   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _5244_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _5244_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _5244_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1637   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _5245_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _5245_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _5245_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1637   slack (VIOLATED)
+
+
+Startpoint: rst_n (input port clocked by clk)
+Endpoint: _5246_ (removal check against rising-edge clock clk)
+Path Group: asynchronous
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ rst_n (in)
+   0.0000    0.0000 ^ _5246_/RESET_B (sg13g2_dfrbpq_1)
+             0.0000   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _5246_/CLK (sg13g2_dfrbpq_1)
+  -0.0863    0.1637   library removal time
+             0.1637   data required time
+-------------------------------------------------------------
+             0.1637   data required time
+            -0.0000   data arrival time
+-------------------------------------------------------------
+            -0.1637   slack (VIOLATED)
+
+
+Startpoint: host_addr[1] (input port clocked by clk)
+Endpoint: u_imem.g_macro.u_sram (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ host_addr[1] (in)
+   0.0867    0.0867 ^ _7892_/X (sg13g2_mux2_1)
+   0.0000    0.0867 ^ u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.0867   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3145    0.5645   library hold time
+             0.5645   data required time
+-------------------------------------------------------------
+             0.5645   data required time
+            -0.0867   data arrival time
+-------------------------------------------------------------
+            -0.4778   slack (VIOLATED)
+
+
+Startpoint: host_addr[4] (input port clocked by clk)
+Endpoint: u_imem.g_macro.u_sram (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ host_addr[4] (in)
+   0.0871    0.0871 ^ _7889_/X (sg13g2_mux2_1)
+   0.0000    0.0871 ^ u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.0871   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3140    0.5640   library hold time
+             0.5640   data required time
+-------------------------------------------------------------
+             0.5640   data required time
+            -0.0871   data arrival time
+-------------------------------------------------------------
+            -0.4768   slack (VIOLATED)
+
+
+Startpoint: host_addr[0] (input port clocked by clk)
+Endpoint: u_imem.g_macro.u_sram (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ host_addr[0] (in)
+   0.0890    0.0890 ^ _7893_/X (sg13g2_mux2_1)
+   0.0000    0.0890 ^ u_imem.g_macro.u_sram/A_ADDR[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.0890   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3115    0.5615   library hold time
+             0.5615   data required time
+-------------------------------------------------------------
+             0.5615   data required time
+            -0.0890   data arrival time
+-------------------------------------------------------------
+            -0.4726   slack (VIOLATED)
+
+
+Startpoint: host_addr[2] (input port clocked by clk)
+Endpoint: u_imem.g_macro.u_sram (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ host_addr[2] (in)
+   0.0897    0.0897 ^ _7891_/X (sg13g2_mux2_1)
+   0.0000    0.0897 ^ u_imem.g_macro.u_sram/A_ADDR[2] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.0897   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3106    0.5606   library hold time
+             0.5606   data required time
+-------------------------------------------------------------
+             0.5606   data required time
+            -0.0897   data arrival time
+-------------------------------------------------------------
+            -0.4709   slack (VIOLATED)
+
+
+Startpoint: host_addr[9] (input port clocked by clk)
+Endpoint: u_imem.g_macro.u_sram (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ input external delay
+   0.0000    0.0000 ^ host_addr[9] (in)
+   0.0919    0.0919 ^ _7894_/X (sg13g2_mux2_1)
+   0.0000    0.0919 ^ u_imem.g_macro.u_sram/A_ADDR[9] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+             0.0919   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ u_imem.g_macro.u_sram/A_CLK (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   0.3079    0.5579   library hold time
+             0.5579   data required time
+-------------------------------------------------------------
+             0.5579   data required time
+            -0.0919   data arrival time
+-------------------------------------------------------------
+            -0.4660   slack (VIOLATED)
+
+
+max slew
+
+Pin                                    Limit    Slew   Slack
+------------------------------------------------------------
+u_eth_fbuf.g_macro.u_sram/A_WEN         0.38    0.47   -0.09 (VIOLATED)
+
+max fanout
+
+Pin                                   Limit Fanout  Slack
+---------------------------------------------------------
+_7830_/Q                                  8     52    -44 (VIOLATED)
+_8279_/Y                                  8     46    -38 (VIOLATED)
+_8093_/Y                                  8     42    -34 (VIOLATED)
+_5512_/Y                                  8     39    -31 (VIOLATED)
+_6595_/Y                                  8     39    -31 (VIOLATED)
+_5508_/Y                                  8     38    -30 (VIOLATED)
+_7588_/Y                                  8     34    -26 (VIOLATED)
+_8602_/Q                                  8     34    -26 (VIOLATED)
+_6581_/Y                                  8     33    -25 (VIOLATED)
+_5854_/Y                                  8     32    -24 (VIOLATED)
+_5858_/Y                                  8     32    -24 (VIOLATED)
+_5859_/Y                                  8     32    -24 (VIOLATED)
+_6579_/X                                  8     29    -21 (VIOLATED)
+_6430_/Y                                  8     27    -19 (VIOLATED)
+_5789_/Q                                  8     25    -17 (VIOLATED)
+_6172_/X                                  8     25    -17 (VIOLATED)
+_6558_/Y                                  8     24    -16 (VIOLATED)
+_5794_/Q                                  8     23    -15 (VIOLATED)
+_7760_/Q                                  8     22    -14 (VIOLATED)
+_5786_/Y                                  8     21    -13 (VIOLATED)
+_5793_/Q                                  8     21    -13 (VIOLATED)
+_5796_/Q                                  8     21    -13 (VIOLATED)
+_4571_/X                                  8     20    -12 (VIOLATED)
+_4597_/Y                                  8     20    -12 (VIOLATED)
+_4648_/Y                                  8     20    -12 (VIOLATED)
+_4742_/Y                                  8     20    -12 (VIOLATED)
+_6147_/Q                                  8     20    -12 (VIOLATED)
+_8509_/Q                                  8     20    -12 (VIOLATED)
+_5795_/Q                                  8     19    -11 (VIOLATED)
+_6557_/Y                                  8     19    -11 (VIOLATED)
+_7727_/Q                                  8     18    -10 (VIOLATED)
+_5536_/Y                                  8     17     -9 (VIOLATED)
+_4025_/X                                  8     16     -8 (VIOLATED)
+_4543_/X                                  8     16     -8 (VIOLATED)
+_4547_/Y                                  8     16     -8 (VIOLATED)
+_4548_/X                                  8     16     -8 (VIOLATED)
+_4551_/X                                  8     16     -8 (VIOLATED)
+_4552_/Y                                  8     16     -8 (VIOLATED)
+_4555_/X                                  8     16     -8 (VIOLATED)
+_4556_/Y                                  8     16     -8 (VIOLATED)
+_4559_/X                                  8     16     -8 (VIOLATED)
+_4560_/Y                                  8     16     -8 (VIOLATED)
+_4563_/X                                  8     16     -8 (VIOLATED)
+_4564_/Y                                  8     16     -8 (VIOLATED)
+_4567_/X                                  8     16     -8 (VIOLATED)
+_4568_/Y                                  8     16     -8 (VIOLATED)
+_4572_/Y                                  8     16     -8 (VIOLATED)
+_4598_/Y                                  8     16     -8 (VIOLATED)
+_4624_/X                                  8     16     -8 (VIOLATED)
+_4674_/Y                                  8     16     -8 (VIOLATED)
+_4697_/Y                                  8     16     -8 (VIOLATED)
+_4719_/Y                                  8     16     -8 (VIOLATED)
+_4768_/Y                                  8     16     -8 (VIOLATED)
+_4791_/Y                                  8     16     -8 (VIOLATED)
+_4813_/Y                                  8     16     -8 (VIOLATED)
+_4837_/Y                                  8     16     -8 (VIOLATED)
+_4861_/Y                                  8     16     -8 (VIOLATED)
+_4884_/Y                                  8     16     -8 (VIOLATED)
+_4907_/Y                                  8     16     -8 (VIOLATED)
+_4935_/X                                  8     16     -8 (VIOLATED)
+_4938_/Y                                  8     16     -8 (VIOLATED)
+_7186_/Y                                  8     16     -8 (VIOLATED)
+_7522_/Y                                  8     16     -8 (VIOLATED)
+_7944_/Y                                  8     16     -8 (VIOLATED)
+_8510_/Q                                  8     16     -8 (VIOLATED)
+_8511_/Q                                  8     16     -8 (VIOLATED)
+_4528_/Y                                  8     15     -7 (VIOLATED)
+_4576_/Y                                  8     15     -7 (VIOLATED)
+_4649_/X                                  8     15     -7 (VIOLATED)
+_4743_/X                                  8     15     -7 (VIOLATED)
+_5515_/Y                                  8     15     -7 (VIOLATED)
+_5665_/Y                                  8     15     -7 (VIOLATED)
+_6594_/X                                  8     15     -7 (VIOLATED)
+_7587_/Y                                  8     15     -7 (VIOLATED)
+_8078_/Y                                  8     15     -7 (VIOLATED)
+_4121_/X                                  8     14     -6 (VIOLATED)
+_5356_/Q                                  8     14     -6 (VIOLATED)
+_6235_/Y                                  8     14     -6 (VIOLATED)
+_6291_/Y                                  8     14     -6 (VIOLATED)
+_7264_/X                                  8     14     -6 (VIOLATED)
+_8026_/Y                                  8     14     -6 (VIOLATED)
+_8149_/Y                                  8     14     -6 (VIOLATED)
+_5423_/Q                                  8     13     -5 (VIOLATED)
+_5790_/Q                                  8     13     -5 (VIOLATED)
+_5792_/Q                                  8     13     -5 (VIOLATED)
+_6555_/Y                                  8     13     -5 (VIOLATED)
+_7508_/Y                                  8     13     -5 (VIOLATED)
+_7720_/Q                                  8     13     -5 (VIOLATED)
+_7805_/Q                                  8     13     -5 (VIOLATED)
+_7807_/Q                                  8     13     -5 (VIOLATED)
+_4253_/Y                                  8     12     -4 (VIOLATED)
+_4307_/Y                                  8     12     -4 (VIOLATED)
+_5113_/X                                  8     12     -4 (VIOLATED)
+_5791_/Q                                  8     12     -4 (VIOLATED)
+_6352_/Y                                  8     12     -4 (VIOLATED)
+_6568_/Y                                  8     12     -4 (VIOLATED)
+_7804_/Q                                  8     12     -4 (VIOLATED)
+_7837_/Q                                  8     12     -4 (VIOLATED)
+_8188_/Y                                  8     12     -4 (VIOLATED)
+_8450_/X                                  8     12     -4 (VIOLATED)
+_3867_/Y                                  8     11     -3 (VIOLATED)
+_3869_/Y                                  8     11     -3 (VIOLATED)
+_3879_/Y                                  8     11     -3 (VIOLATED)
+_4274_/Y                                  8     11     -3 (VIOLATED)
+_4285_/Y                                  8     11     -3 (VIOLATED)
+_4296_/Y                                  8     11     -3 (VIOLATED)
+_4431_/Y                                  8     11     -3 (VIOLATED)
+_4442_/Y                                  8     11     -3 (VIOLATED)
+_4453_/Y                                  8     11     -3 (VIOLATED)
+_4464_/Y                                  8     11     -3 (VIOLATED)
+_4487_/Y                                  8     11     -3 (VIOLATED)
+_4498_/Y                                  8     11     -3 (VIOLATED)
+_5284_/Q                                  8     11     -3 (VIOLATED)
+_5514_/Y                                  8     11     -3 (VIOLATED)
+_6457_/Y                                  8     11     -3 (VIOLATED)
+_6589_/Y                                  8     11     -3 (VIOLATED)
+_7174_/Y                                  8     11     -3 (VIOLATED)
+_7253_/Y                                  8     11     -3 (VIOLATED)
+_7784_/Q                                  8     11     -3 (VIOLATED)
+_7786_/Q                                  8     11     -3 (VIOLATED)
+_7798_/Q                                  8     11     -3 (VIOLATED)
+_7808_/Q                                  8     11     -3 (VIOLATED)
+_7867_/Q                                  8     11     -3 (VIOLATED)
+_8135_/X                                  8     11     -3 (VIOLATED)
+_3862_/Y                                  8     10     -2 (VIOLATED)
+_4068_/Y                                  8     10     -2 (VIOLATED)
+_4254_/Y                                  8     10     -2 (VIOLATED)
+_4273_/Y                                  8     10     -2 (VIOLATED)
+_5281_/Q                                  8     10     -2 (VIOLATED)
+_5283_/Q                                  8     10     -2 (VIOLATED)
+_5466_/Y                                  8     10     -2 (VIOLATED)
+_5467_/X                                  8     10     -2 (VIOLATED)
+_6290_/Y                                  8     10     -2 (VIOLATED)
+_6442_/Y                                  8     10     -2 (VIOLATED)
+_6549_/Y                                  8     10     -2 (VIOLATED)
+_7702_/Q                                  8     10     -2 (VIOLATED)
+_7703_/Q                                  8     10     -2 (VIOLATED)
+_7803_/Q                                  8     10     -2 (VIOLATED)
+_7833_/Q                                  8     10     -2 (VIOLATED)
+_7838_/Q                                  8     10     -2 (VIOLATED)
+_7841_/Q                                  8     10     -2 (VIOLATED)
+_7842_/Q                                  8     10     -2 (VIOLATED)
+_8507_/Q                                  8     10     -2 (VIOLATED)
+_8556_/Q                                  8     10     -2 (VIOLATED)
+_4070_/Y                                  8      9        (VIOLATED)
+_4073_/Y                                  8      9        (VIOLATED)
+_4083_/Y                                  8      9        (VIOLATED)
+_4100_/Y                                  8      9        (VIOLATED)
+_4103_/Y                                  8      9        (VIOLATED)
+_4119_/Y                                  8      9        (VIOLATED)
+_4651_/Y                                  8      9        (VIOLATED)
+_4745_/Y                                  8      9        (VIOLATED)
+_5282_/Q                                  8      9        (VIOLATED)
+_5319_/Q                                  8      9        (VIOLATED)
+_5322_/Q                                  8      9        (VIOLATED)
+_5357_/Q                                  8      9        (VIOLATED)
+_5510_/Y                                  8      9        (VIOLATED)
+_5533_/Y                                  8      9        (VIOLATED)
+_5544_/X                                  8      9        (VIOLATED)
+_5594_/Y                                  8      9        (VIOLATED)
+_5661_/Y                                  8      9        (VIOLATED)
+_5662_/Y                                  8      9        (VIOLATED)
+_5668_/Y                                  8      9        (VIOLATED)
+_5788_/Y                                  8      9        (VIOLATED)
+_5797_/Q                                  8      9        (VIOLATED)
+_6209_/Q                                  8      9        (VIOLATED)
+_6445_/Y                                  8      9        (VIOLATED)
+_6491_/X                                  8      9        (VIOLATED)
+_6514_/Y                                  8      9        (VIOLATED)
+_7246_/Y                                  8      9        (VIOLATED)
+_7255_/Y                                  8      9        (VIOLATED)
+_7609_/Y                                  8      9        (VIOLATED)
+_7700_/Q                                  8      9        (VIOLATED)
+_7701_/Q                                  8      9        (VIOLATED)
+_7704_/Q                                  8      9        (VIOLATED)
+_7783_/Q                                  8      9        (VIOLATED)
+_7799_/Q                                  8      9        (VIOLATED)
+_7801_/Q                                  8      9        (VIOLATED)
+_7811_/Q                                  8      9        (VIOLATED)
+_7834_/Q                                  8      9        (VIOLATED)
+_7839_/Q                                  8      9        (VIOLATED)
+_7858_/Q                                  8      9        (VIOLATED)
+_7862_/Q                                  8      9        (VIOLATED)
+_7868_/Q                                  8      9        (VIOLATED)
+_7908_/X                                  8      9        (VIOLATED)
+_8115_/Y                                  8      9        (VIOLATED)
+_8144_/X                                  8      9        (VIOLATED)
+_8508_/Q                                  8      9        (VIOLATED)
+
+max capacitance
+
+Pin                                    Limit     Cap   Slack
+------------------------------------------------------------
+_5512_/Y                                0.30    0.37   -0.07 (VIOLATED)
+
+worst slack max 0.00
+worst slack min -0.48
+===== PROBE max-to-pads
+Warning 366: probe-pe_soc-fast.tcl line 1, port 'uo_out*' not found.
+Warning 366: probe-pe_soc-fast.tcl line 1, port 'uio_out*' not found.
+Startpoint: _8550_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_out[0] (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _8550_/CLK (sg13g2_dfrbpq_1)
+   0.1442    0.1442 v _8550_/Q (sg13g2_dfrbpq_1)
+   0.1257    0.2699 ^ _8287_/Y (sg13g2_nor3_1)
+   0.0573    0.3272 v _8297_/Y (sg13g2_nor2b_1)
+   0.0966    0.4238 v _8299_/Y (sg13g2_xnor2_1)
+   0.1051    0.5289 ^ _8439_/Y (sg13g2_o21ai_1)
+   0.0606    0.5895 v _8448_/Y (sg13g2_a21oi_1)
+   0.2994    0.8889 ^ _8449_/Y (sg13g2_a22oi_1)
+   0.2182    1.1071 v _8467_/X (sg13g2_mux4_1)
+   0.1217    1.2287 v _8469_/X (sg13g2_mux4_1)
+   0.0712    1.2999 v _8470_/X (sg13g2_mux2_1)
+   0.0855    1.3854 v _8471_/Y (sg13g2_nand2b_1)
+   0.0499    1.4353 ^ _8670_/Y (sg13g2_nor2_1)
+   0.0330    1.4683 v _8671_/Y (sg13g2_a21oi_1)
+   0.0293    1.4976 ^ _8619_/Y (sg13g2_nand2_1)
+   0.0428    1.5404 v _8620_/Y (sg13g2_o21ai_1)
+   0.1495    1.6899 ^ _8613_/X (sg13g2_xor2_1)
+   0.0608    1.7507 v _7941_/Y (sg13g2_nand2_1)
+   0.0942    1.8448 ^ _7942_/Y (sg13g2_o21ai_1)
+   0.0000    1.8448 ^ pin_out[0] (out)
+             1.8448   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -1.8448   data arrival time
+-------------------------------------------------------------
+            10.4888   slack (MET)
+
+
+Startpoint: _8550_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_out[7] (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _8550_/CLK (sg13g2_dfrbpq_1)
+   0.1442    0.1442 v _8550_/Q (sg13g2_dfrbpq_1)
+   0.1257    0.2699 ^ _8287_/Y (sg13g2_nor3_1)
+   0.0573    0.3272 v _8297_/Y (sg13g2_nor2b_1)
+   0.0966    0.4238 v _8299_/Y (sg13g2_xnor2_1)
+   0.1051    0.5289 ^ _8439_/Y (sg13g2_o21ai_1)
+   0.0606    0.5895 v _8448_/Y (sg13g2_a21oi_1)
+   0.2994    0.8889 ^ _8449_/Y (sg13g2_a22oi_1)
+   0.2182    1.1071 v _8467_/X (sg13g2_mux4_1)
+   0.1217    1.2287 v _8469_/X (sg13g2_mux4_1)
+   0.0712    1.2999 v _8470_/X (sg13g2_mux2_1)
+   0.0855    1.3854 v _8471_/Y (sg13g2_nand2b_1)
+   0.0499    1.4353 ^ _8670_/Y (sg13g2_nor2_1)
+   0.0330    1.4683 v _8671_/Y (sg13g2_a21oi_1)
+   0.0293    1.4976 ^ _8619_/Y (sg13g2_nand2_1)
+   0.0428    1.5404 v _8620_/Y (sg13g2_o21ai_1)
+   0.1495    1.6899 ^ _8613_/X (sg13g2_xor2_1)
+   0.1520    1.8419 ^ _7982_/X (sg13g2_mux2_1)
+   0.0000    1.8419 ^ pin_out[7] (out)
+             1.8419   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -1.8419   data arrival time
+-------------------------------------------------------------
+            10.4917   slack (MET)
+
+
+Startpoint: _7993_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_out[1] (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _7993_/CLK (sg13g2_dfrbpq_1)
+   0.1144    0.1144 v _7993_/Q (sg13g2_dfrbpq_1)
+   0.1229    0.2373 v _7939_/X (sg13g2_mux2_1)
+   0.0000    0.2373 v pin_out[1] (out)
+             0.2373   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -0.2373   data arrival time
+-------------------------------------------------------------
+            12.0963   slack (MET)
+
+
+===== PROBE min-to-pads
+Warning 366: probe-pe_soc-fast.tcl line 1, port 'uo_out*' not found.
+Warning 366: probe-pe_soc-fast.tcl line 1, port 'uio_out*' not found.
+Startpoint: _7997_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_out[5] (output port clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _7997_/CLK (sg13g2_dfrbpq_1)
+   0.1123    0.1123 ^ _7997_/Q (sg13g2_dfrbpq_1)
+   0.1070    0.2192 ^ _7931_/X (sg13g2_mux2_1)
+   0.0000    0.2192 ^ pin_out[5] (out)
+             0.2192   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+   0.0000    0.2500   output external delay
+             0.2500   data required time
+-------------------------------------------------------------
+             0.2500   data required time
+            -0.2192   data arrival time
+-------------------------------------------------------------
+            -0.0308   slack (VIOLATED)
+
+
+Startpoint: _7998_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_out[6] (output port clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _7998_/CLK (sg13g2_dfrbpq_1)
+   0.1123    0.1123 ^ _7998_/Q (sg13g2_dfrbpq_1)
+   0.1070    0.2192 ^ _7929_/X (sg13g2_mux2_1)
+   0.0000    0.2192 ^ pin_out[6] (out)
+             0.2192   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+   0.0000    0.2500   output external delay
+             0.2500   data required time
+-------------------------------------------------------------
+             0.2500   data required time
+            -0.2192   data arrival time
+-------------------------------------------------------------
+            -0.0308   slack (VIOLATED)
+
+
+Startpoint: _7993_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_out[1] (output port clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _7993_/CLK (sg13g2_dfrbpq_1)
+   0.1127    0.1127 ^ _7993_/Q (sg13g2_dfrbpq_1)
+   0.1072    0.2200 ^ _7939_/X (sg13g2_mux2_1)
+   0.0000    0.2200 ^ pin_out[1] (out)
+             0.2200   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+   0.0000    0.2500   output external delay
+             0.2500   data required time
+-------------------------------------------------------------
+             0.2500   data required time
+            -0.2200   data arrival time
+-------------------------------------------------------------
+            -0.0300   slack (VIOLATED)
+
+
+===== PROBE max-through-half_phase
+Startpoint: _5318_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_oe[0] (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5318_/CLK (sg13g2_dfrbpq_1)
+   0.1151    0.1151 v _5318_/Q (sg13g2_dfrbpq_1)
+   0.0475    0.1626 ^ _8612_/Y (sg13g2_nor2_1)
+   0.1579    0.3205 ^ _8613_/X (sg13g2_xor2_1)
+   0.0608    0.3813 v _7941_/Y (sg13g2_nand2_1)
+   0.0942    0.4754 ^ _7942_/Y (sg13g2_o21ai_1)
+   0.1687    0.6441 v _7943_/Y (sg13g2_a21oi_1)
+   0.0000    0.6441 v pin_oe[0] (out)
+             0.6441   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -0.6441   data arrival time
+-------------------------------------------------------------
+            11.6895   slack (MET)
+
+
+Startpoint: _5318_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_oe[7] (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5318_/CLK (sg13g2_dfrbpq_1)
+   0.1151    0.1151 v _5318_/Q (sg13g2_dfrbpq_1)
+   0.0475    0.1626 ^ _8612_/Y (sg13g2_nor2_1)
+   0.1579    0.3205 ^ _8613_/X (sg13g2_xor2_1)
+   0.1520    0.4725 ^ _7982_/X (sg13g2_mux2_1)
+   0.1308    0.6033 v _7983_/Y (sg13g2_a21oi_1)
+   0.0000    0.6033 v pin_oe[7] (out)
+             0.6033   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -0.6033   data arrival time
+-------------------------------------------------------------
+            11.7303   slack (MET)
+
+
+Startpoint: _5318_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_out[0] (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5318_/CLK (sg13g2_dfrbpq_1)
+   0.1151    0.1151 v _5318_/Q (sg13g2_dfrbpq_1)
+   0.0475    0.1626 ^ _8612_/Y (sg13g2_nor2_1)
+   0.1579    0.3205 ^ _8613_/X (sg13g2_xor2_1)
+   0.0608    0.3813 v _7941_/Y (sg13g2_nand2_1)
+   0.0942    0.4754 ^ _7942_/Y (sg13g2_o21ai_1)
+   0.0000    0.4754 ^ pin_out[0] (out)
+             0.4754   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+  -3.3334   12.3336   output external delay
+            12.3336   data required time
+-------------------------------------------------------------
+            12.3336   data required time
+            -0.4754   data arrival time
+-------------------------------------------------------------
+            11.8582   slack (MET)
+
+
+===== PROBE min-through-half_phase
+Startpoint: _5318_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5318_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5318_/CLK (sg13g2_dfrbpq_1)
+   0.1105    0.1105 v _5318_/Q (sg13g2_dfrbpq_1)
+   0.0476    0.1581 ^ _5064_/X (sg13g2_xor2_1)
+   0.0209    0.1790 v _5065_/Y (sg13g2_nor3_1)
+   0.0000    0.1790 v _5318_/D (sg13g2_dfrbpq_1)
+             0.1790   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _5318_/CLK (sg13g2_dfrbpq_1)
+  -0.0237    0.2263   library hold time
+             0.2263   data required time
+-------------------------------------------------------------
+             0.2263   data required time
+            -0.1790   data arrival time
+-------------------------------------------------------------
+            -0.0474   slack (VIOLATED)
+
+
+Startpoint: _5318_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_out[0] (output port clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5318_/CLK (sg13g2_dfrbpq_1)
+   0.1121    0.1121 ^ _5318_/Q (sg13g2_dfrbpq_1)
+   0.0251    0.1372 v _8612_/Y (sg13g2_nor2_1)
+   0.0893    0.2265 v _8613_/X (sg13g2_xor2_1)
+   0.0277    0.2542 ^ _7941_/Y (sg13g2_nand2_1)
+   0.0944    0.3486 v _7942_/Y (sg13g2_o21ai_1)
+   0.0000    0.3486 v pin_out[0] (out)
+             0.3486   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+   0.0000    0.2500   output external delay
+             0.2500   data required time
+-------------------------------------------------------------
+             0.2500   data required time
+            -0.3486   data arrival time
+-------------------------------------------------------------
+             0.0986   slack (MET)
+
+
+Startpoint: _5318_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: pin_out[7] (output port clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5318_/CLK (sg13g2_dfrbpq_1)
+   0.1121    0.1121 ^ _5318_/Q (sg13g2_dfrbpq_1)
+   0.0251    0.1372 v _8612_/Y (sg13g2_nor2_1)
+   0.0893    0.2265 v _8613_/X (sg13g2_xor2_1)
+   0.1304    0.3569 v _7982_/X (sg13g2_mux2_1)
+   0.0000    0.3569 v pin_out[7] (out)
+             0.3569   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+   0.0000    0.2500   output external delay
+             0.2500   data required time
+-------------------------------------------------------------
+             0.2500   data required time
+            -0.3569   data arrival time
+-------------------------------------------------------------
+             0.1069   slack (MET)
+
+
+===== PROBE max-through-win_regs
+Startpoint: _5357_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5410_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5357_/CLK (sg13g2_dfrbpq_1)
+   0.1597    0.1597 v _5357_/Q (sg13g2_dfrbpq_1)
+   0.1962    0.3559 v _3956_/X (sg13g2_or4_1)
+   0.1311    0.4870 v _3959_/X (sg13g2_or4_1)
+   0.2256    0.7127 ^ _3961_/Y (sg13g2_nor4_1)
+   0.1964    0.9091 v _3963_/Y (sg13g2_nand3b_1)
+   0.1529    1.0620 ^ _3964_/Y (sg13g2_nor3_1)
+   0.0971    1.1592 v _3975_/Y (sg13g2_nand2_1)
+   0.0386    1.1978 ^ _3983_/Y (sg13g2_nand2_1)
+   0.0518    1.2495 v _4020_/Y (sg13g2_nand3b_1)
+   0.0875    1.3371 ^ _4021_/Y (sg13g2_nor4_1)
+   0.1668    1.5038 ^ _4025_/X (sg13g2_or2_1)
+   0.0515    1.5553 v _4053_/Y (sg13g2_nor2_1)
+   0.0513    1.6066 v _4054_/X (sg13g2_and2_1)
+   0.0000    1.6066 v _5410_/D (sg13g2_dfrbpq_1)
+             1.6066   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5410_/CLK (sg13g2_dfrbpq_1)
+  -0.0707   15.5963   library setup time
+            15.5963   data required time
+-------------------------------------------------------------
+            15.5963   data required time
+            -1.6066   data arrival time
+-------------------------------------------------------------
+            13.9897   slack (MET)
+
+
+Startpoint: _5357_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5406_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5357_/CLK (sg13g2_dfrbpq_1)
+   0.1597    0.1597 v _5357_/Q (sg13g2_dfrbpq_1)
+   0.1962    0.3559 v _3956_/X (sg13g2_or4_1)
+   0.1311    0.4870 v _3959_/X (sg13g2_or4_1)
+   0.2256    0.7127 ^ _3961_/Y (sg13g2_nor4_1)
+   0.1964    0.9091 v _3963_/Y (sg13g2_nand3b_1)
+   0.1529    1.0620 ^ _3964_/Y (sg13g2_nor3_1)
+   0.0971    1.1592 v _3975_/Y (sg13g2_nand2_1)
+   0.0386    1.1978 ^ _3983_/Y (sg13g2_nand2_1)
+   0.0518    1.2495 v _4020_/Y (sg13g2_nand3b_1)
+   0.0875    1.3371 ^ _4021_/Y (sg13g2_nor4_1)
+   0.1668    1.5038 ^ _4025_/X (sg13g2_or2_1)
+   0.0559    1.5598 v _4062_/Y (sg13g2_nor3_1)
+   0.0000    1.5598 v _5406_/D (sg13g2_dfrbpq_1)
+             1.5598   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5406_/CLK (sg13g2_dfrbpq_1)
+  -0.0778   15.5892   library setup time
+            15.5892   data required time
+-------------------------------------------------------------
+            15.5892   data required time
+            -1.5598   data arrival time
+-------------------------------------------------------------
+            14.0294   slack (MET)
+
+
+Startpoint: _5357_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5407_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5357_/CLK (sg13g2_dfrbpq_1)
+   0.1597    0.1597 v _5357_/Q (sg13g2_dfrbpq_1)
+   0.1962    0.3559 v _3956_/X (sg13g2_or4_1)
+   0.1311    0.4870 v _3959_/X (sg13g2_or4_1)
+   0.2256    0.7127 ^ _3961_/Y (sg13g2_nor4_1)
+   0.1964    0.9091 v _3963_/Y (sg13g2_nand3b_1)
+   0.1529    1.0620 ^ _3964_/Y (sg13g2_nor3_1)
+   0.0971    1.1592 v _3975_/Y (sg13g2_nand2_1)
+   0.0386    1.1978 ^ _3983_/Y (sg13g2_nand2_1)
+   0.0518    1.2495 v _4020_/Y (sg13g2_nand3b_1)
+   0.0875    1.3371 ^ _4021_/Y (sg13g2_nor4_1)
+   0.1668    1.5038 ^ _4025_/X (sg13g2_or2_1)
+   0.0559    1.5598 v _4060_/Y (sg13g2_nor3_1)
+   0.0000    1.5598 v _5407_/D (sg13g2_dfrbpq_1)
+             1.5598   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _5407_/CLK (sg13g2_dfrbpq_1)
+  -0.0778   15.5892   library setup time
+            15.5892   data required time
+-------------------------------------------------------------
+            15.5892   data required time
+            -1.5598   data arrival time
+-------------------------------------------------------------
+            14.0294   slack (MET)
+
+
+===== PROBE min-through-win_regs
+Startpoint: _5403_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5403_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5403_/CLK (sg13g2_dfrbpq_1)
+   0.1054    0.1054 v _5403_/Q (sg13g2_dfrbpq_1)
+   0.0401    0.1455 v _4255_/X (sg13g2_and2_1)
+   0.0000    0.1455 v _5403_/D (sg13g2_dfrbpq_1)
+             0.1455   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _5403_/CLK (sg13g2_dfrbpq_1)
+  -0.0232    0.2268   library hold time
+             0.2268   data required time
+-------------------------------------------------------------
+             0.2268   data required time
+            -0.1455   data arrival time
+-------------------------------------------------------------
+            -0.0813   slack (VIOLATED)
+
+
+Startpoint: _5365_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5365_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5365_/CLK (sg13g2_dfrbpq_1)
+   0.1069    0.1069 v _5365_/Q (sg13g2_dfrbpq_1)
+   0.0351    0.1420 ^ _4304_/Y (sg13g2_nor2_1)
+   0.0187    0.1607 v _4305_/Y (sg13g2_a21oi_1)
+   0.0000    0.1607 v _5365_/D (sg13g2_dfrbpq_1)
+             0.1607   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _5365_/CLK (sg13g2_dfrbpq_1)
+  -0.0233    0.2267   library hold time
+             0.2267   data required time
+-------------------------------------------------------------
+             0.2267   data required time
+            -0.1607   data arrival time
+-------------------------------------------------------------
+            -0.0659   slack (VIOLATED)
+
+
+Startpoint: _5366_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _5366_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5366_/CLK (sg13g2_dfrbpq_1)
+   0.1069    0.1069 v _5366_/Q (sg13g2_dfrbpq_1)
+   0.0351    0.1420 ^ _4302_/Y (sg13g2_nor2_1)
+   0.0187    0.1607 v _4303_/Y (sg13g2_a21oi_1)
+   0.0000    0.1607 v _5366_/D (sg13g2_dfrbpq_1)
+             0.1607   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _5366_/CLK (sg13g2_dfrbpq_1)
+  -0.0233    0.2267   library hold time
+             0.2267   data required time
+-------------------------------------------------------------
+             0.2267   data required time
+            -0.1607   data arrival time
+-------------------------------------------------------------
+            -0.0659   slack (VIOLATED)
+
+
+===== PROBE max-through-serdes_tx_bit_en
+Startpoint: _8672_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _8546_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _8672_/CLK (sg13g2_dfrbpq_1)
+   0.1320    0.1320 v _8672_/Q (sg13g2_dfrbpq_1)
+   0.0664    0.1984 v _8669_/Y (sg13g2_nor2b_1)
+   0.0519    0.2502 ^ _5101_/Y (sg13g2_nor2_1)
+   0.1208    0.3710 v _8310_/Y (sg13g2_nand3_1)
+   0.0838    0.4548 ^ _8321_/Y (sg13g2_nor2_1)
+   0.0815    0.5363 ^ _8322_/X (sg13g2_and2_1)
+   0.0384    0.5747 v _8323_/Y (sg13g2_o21ai_1)
+   0.0664    0.6411 ^ _8324_/Y (sg13g2_a21oi_1)
+   0.0000    0.6411 ^ _8546_/D (sg13g2_dfrbpq_1)
+             0.6411   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _8546_/CLK (sg13g2_dfrbpq_1)
+  -0.0864   15.5806   library setup time
+            15.5806   data required time
+-------------------------------------------------------------
+            15.5806   data required time
+            -0.6411   data arrival time
+-------------------------------------------------------------
+            14.9395   slack (MET)
+
+
+Startpoint: _8672_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _8545_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _8672_/CLK (sg13g2_dfrbpq_1)
+   0.1320    0.1320 v _8672_/Q (sg13g2_dfrbpq_1)
+   0.0664    0.1984 v _8669_/Y (sg13g2_nor2b_1)
+   0.0519    0.2502 ^ _5101_/Y (sg13g2_nor2_1)
+   0.1208    0.3710 v _8310_/Y (sg13g2_nand3_1)
+   0.0838    0.4548 ^ _8321_/Y (sg13g2_nor2_1)
+   0.0773    0.5320 ^ _8325_/X (sg13g2_xor2_1)
+   0.0576    0.5896 ^ _8326_/X (sg13g2_and2_1)
+   0.0000    0.5896 ^ _8545_/D (sg13g2_dfrbpq_1)
+             0.5896   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _8545_/CLK (sg13g2_dfrbpq_1)
+  -0.0855   15.5815   library setup time
+            15.5815   data required time
+-------------------------------------------------------------
+            15.5815   data required time
+            -0.5896   data arrival time
+-------------------------------------------------------------
+            14.9919   slack (MET)
+
+
+Startpoint: _8672_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _8549_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: max
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _8672_/CLK (sg13g2_dfrbpq_1)
+   0.1320    0.1320 v _8672_/Q (sg13g2_dfrbpq_1)
+   0.0664    0.1984 v _8669_/Y (sg13g2_nor2b_1)
+   0.0519    0.2502 ^ _5101_/Y (sg13g2_nor2_1)
+   0.0717    0.3219 v _8311_/Y (sg13g2_nand3_1)
+   0.1083    0.4302 ^ _8312_/Y (sg13g2_nor2b_1)
+   0.0927    0.5229 v _8426_/Y (sg13g2_nand4_1)
+   0.0307    0.5536 ^ _8427_/Y (sg13g2_o21ai_1)
+   0.0000    0.5536 ^ _8549_/D (sg13g2_dfrbpq_1)
+             0.5536   data arrival time
+
+  16.6670   16.6670   clock clk (rise edge)
+   0.0000   16.6670   clock network delay (ideal)
+  -1.0000   15.6670   clock uncertainty
+   0.0000   15.6670   clock reconvergence pessimism
+            15.6670 ^ _8549_/CLK (sg13g2_dfrbpq_1)
+  -0.0895   15.5775   library setup time
+            15.5775   data required time
+-------------------------------------------------------------
+            15.5775   data required time
+            -0.5536   data arrival time
+-------------------------------------------------------------
+            15.0239   slack (MET)
+
+
+===== PROBE min-through-serdes_rx_bit_en
+Startpoint: _5374_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _8563_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5374_/CLK (sg13g2_dfrbpq_1)
+   0.1182    0.1182 ^ _5374_/Q (sg13g2_dfrbpq_1)
+   0.0295    0.1476 v _8012_/Y (sg13g2_inv_1)
+   0.0498    0.1975 v _8062_/Y (sg13g2_nand2b_1)
+   0.0476    0.2451 v _5100_/X (sg13g2_and2_1)
+   0.0492    0.2943 ^ _8113_/Y (sg13g2_nand2_1)
+   0.0474    0.3417 v _8269_/Y (sg13g2_o21ai_1)
+   0.0346    0.3763 ^ _8271_/Y (sg13g2_a21oi_1)
+   0.0000    0.3763 ^ _8563_/D (sg13g2_dfrbpq_1)
+             0.3763   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _8563_/CLK (sg13g2_dfrbpq_1)
+  -0.0434    0.2066   library hold time
+             0.2066   data required time
+-------------------------------------------------------------
+             0.2066   data required time
+            -0.3763   data arrival time
+-------------------------------------------------------------
+             0.1697   slack (MET)
+
+
+Startpoint: _5374_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _8597_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5374_/CLK (sg13g2_dfrbpq_1)
+   0.1182    0.1182 ^ _5374_/Q (sg13g2_dfrbpq_1)
+   0.0295    0.1476 v _8012_/Y (sg13g2_inv_1)
+   0.0498    0.1975 v _8062_/Y (sg13g2_nand2b_1)
+   0.0476    0.2451 v _5100_/X (sg13g2_and2_1)
+   0.0492    0.2943 ^ _8113_/Y (sg13g2_nand2_1)
+   0.0512    0.3456 v _8117_/Y (sg13g2_nor3_1)
+   0.0291    0.3746 ^ _8127_/Y (sg13g2_nand2_1)
+   0.0308    0.4055 v _8128_/Y (sg13g2_o21ai_1)
+   0.0000    0.4055 v _8597_/D (sg13g2_dfrbpq_1)
+             0.4055   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _8597_/CLK (sg13g2_dfrbpq_1)
+  -0.0244    0.2256   library hold time
+             0.2256   data required time
+-------------------------------------------------------------
+             0.2256   data required time
+            -0.4055   data arrival time
+-------------------------------------------------------------
+             0.1799   slack (MET)
+
+
+Startpoint: _5374_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _8579_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+    Delay      Time   Description
+-------------------------------------------------------------
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.0000    0.0000 ^ _5374_/CLK (sg13g2_dfrbpq_1)
+   0.1182    0.1182 ^ _5374_/Q (sg13g2_dfrbpq_1)
+   0.0295    0.1476 v _8012_/Y (sg13g2_inv_1)
+   0.0498    0.1975 v _8062_/Y (sg13g2_nand2b_1)
+   0.0476    0.2451 v _5100_/X (sg13g2_and2_1)
+   0.0492    0.2943 ^ _8113_/Y (sg13g2_nand2_1)
+   0.0484    0.3427 v _8216_/Y (sg13g2_o21ai_1)
+   0.0438    0.3864 ^ _8218_/Y (sg13g2_o21ai_1)
+   0.0000    0.3864 ^ _8579_/D (sg13g2_dfrbpq_1)
+             0.3864   data arrival time
+
+   0.0000    0.0000   clock clk (rise edge)
+   0.0000    0.0000   clock network delay (ideal)
+   0.2500    0.2500   clock uncertainty
+   0.0000    0.2500   clock reconvergence pessimism
+             0.2500 ^ _8579_/CLK (sg13g2_dfrbpq_1)
+  -0.0436    0.2064   library hold time
+             0.2064   data required time
+-------------------------------------------------------------
+             0.2064   data required time
+            -0.3864   data arrival time
+-------------------------------------------------------------
+             0.1800   slack (MET)
+
+

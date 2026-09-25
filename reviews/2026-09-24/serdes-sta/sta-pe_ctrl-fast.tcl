@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# VARIANT: ZERO-ASSUMPTION screening constraints.
+#
+# Direct clk-synchronous inputs carry 0 ns min input delay and every output
+# carries 0 ns min output delay. This is the recorded Task-4 screen, kept so
+# the assumption-free numbers stay visible and both variants are re-runnable.
+# Under this variant every negative min slack on an input or output path is a
+# property of the ZERO assumption, not of the design: see the BOARD variant
+# (same directory, -board suffix) and
+# reviews/2026-09-24/HOLD-SCREEN-ATTRIBUTION.md.
+# ---------------------------------------------------------------------------
+read_liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_fast_1p32V_m40C.lib
+read_liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram/lib/RM_IHPSG13_1P_1024x16_c2_bm_bist_fast_1p32V_m55C.lib
+read_verilog ./mapped-pe_ctrl.v
+link_design pe_ctrl
+create_clock -name clk -period 16.667 -waveform {0 8.3335} [get_ports clk]
+set_clock_uncertainty -setup 1.0 [get_clocks clk]
+set_clock_uncertainty -hold 0.25 [get_clocks clk]
+# Pre-layout screening assumptions, not board or routed signoff constraints.
+set_input_delay -clock clk -max 3.3334 [get_ports {run rst_n}]
+set_input_delay -clock clk -min 0.0 [get_ports {run rst_n}]
+set_input_transition 0.1 [get_ports {run rst_n}]
+set_output_delay -clock clk -max 3.3334 [all_outputs]
+set_output_delay -clock clk -min 0.0 [all_outputs]
+set_load 0.02 [all_outputs]
+# The SPI pads are an ASYNCHRONOUS host interface, synchronized inside pe_ctrl
+# (2FF + edge detectors). They are explicitly false-pathed rather than given a
+# clk-synchronous delay, which would be meaningless. Constraint-only treatment,
+# recorded in the input-registration audit of
+# reviews/2026-09-24/HOLD-SCREEN-ATTRIBUTION.md.
+set_false_path -from [get_ports {spi_sclk spi_mosi spi_cs_n}]
+check_setup -verbose
+report_checks -path_delay max -group_path_count 5 -format full_clock_expanded -digits 4
+report_checks -path_delay min -group_path_count 5 -format full_clock_expanded -digits 4
+report_check_types -max_slew -max_capacitance -max_fanout -violators
+report_worst_slack -max
+report_worst_slack -min
+# ---- negative-min-slack inventory (this variant's constraints) -------------
+# Worst min paths per endpoint (up to 4 per endpoint), all with slack <= 0,
+# in summary format. Parsed by analyze_hold.py to attribute the negatives to
+# classes; the endpoint cap is OpenSTA's, so "every endpoint whose worst min
+# path is negative" is covered, with secondary paths shown where they exist.
+puts "===== NEGATIVE-MIN INVENTORY (slack <= 0)"
+report_checks -path_delay min -slack_max 0 -group_path_count 1000 -endpoint_path_count 4 -format summary -digits 4
+exit

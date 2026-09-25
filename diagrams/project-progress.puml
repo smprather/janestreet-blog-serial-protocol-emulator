@@ -1,6 +1,6 @@
 @startuml
 title Protocol Emulator ASIC — implementation progress
-left to right direction
+top to bottom direction
 skinparam componentStyle rectangle
 skinparam defaultFontName Monospaced
 skinparam packageStyle rectangle
@@ -20,11 +20,15 @@ skinparam component {
 }
 
 package "Program load and execution" {
+  component "Linux PC demo GUI\nplanned; host link TBD" as gui <<open>>
+  component "SoC bring-up on Tiny Tapeout demo board\nRP2040 controller (Raspberry Pi Pico)" as board <<open>>
   component "Host SPI loader\npe_ctrl" as loader <<complete>>
   component "Instruction SRAM\n1024 × 16" as imem <<complete>>
   component "CPU\nfirmware execution" as cpu <<complete>>
   component "Data memory\n16-byte register array" as dmem <<complete>>
   component "Tick timer\n60 MHz timebase" as tick <<complete>>
+  gui <--> board : host-control link TBD
+  board --> loader : SPI program load
   loader --> imem
   imem --> cpu
   cpu <--> dmem
@@ -51,50 +55,109 @@ package "10BASE-T receive — integrated" {
   rx_buf --> cpu
 }
 
-package "Built and verified standalone; integration open" {
-  component "pe_serdes\n32-bit word engine" as serdes <<standalone>>
-  component "pe_codec_mux standalone\nrecommended: 2 instances (TX / RX)\ntopology choice open" as codec <<standalone>>
+' pe_serdes and pe_codec_mux moved into the integrated package below:
+' instantiated in pe_soc 2026-09-24 with split enables and two codec
+' instances — see wiki/plans/serdes-integration.
+
+package "Word engine integration — landed 2026-09-24, future consumers open" {
+  component "pe_serdes in pe_soc\nword engine; split tx_bit_en / rx_bit_en" as serdes <<complete>>
+  component "pe_codec_mux x2 (TX / RX)\none bit_en per encoded cell" as codec <<complete>>
+  component "Timing + cadence control\ncell strobe / half-cell LEVEL / payload gates" as timing <<complete>>
+  component "IO 0xF register window\n32 entries: push/wrap 16-23, TXLEN 24-25, TXCTRL 26, TXSTAT 27" as window <<complete>>
+  component "Pin-level override\nbefore open-drain gate" as overlay <<complete>>
+  component "SoC wire-loopback test\nplain + stuffed Manchester (0x07E0)" as loopback <<complete>>
+  component "10BASE-T TX frame path\npe_eth_tx + 32-entry window + owner mux + G6 uo_out[2] pad" as eth_tx <<complete>>
+  component "eth_tx loopback acceptance\ntb_pe_soc_eth_loop; FCS 9cc5cb34; IFG 102 cells" as eth_tx_loop <<complete>>
+  component "eth_tx mutation suites\nplan Task 6" as eth_tx_mut <<open>>
+  component "eth_tx STA + doc close-out\nplan Task 7" as eth_tx_sta <<open>>
+  component "Low-speed USB persona" as usb <<open>>
+  component "pe_ctrl framed host bus R1\nuio[4:7] CS_N/MOSI/MISO/SCK; IRQ_N uo_out[1]" as readback <<complete>>
+
   serdes --> codec : TX bits / RX bits
   codec --> serdes : tx_stuffed hold / rx_bit_valid skip
-}
-
-package "Planned integration and future consumers" {
-  component "Timing + strobe block\nencoded-cell / half-cell / payload cadence" as timing <<open>>
-  component "IO 0xF register window\n8-bit indexed access" as window <<open>>
-  component "Pin-level override\nbefore open-drain gate" as overlay <<open>>
-  component "SoC wire-loopback test\nplain + stuffed Manchester" as loopback <<open>>
-  component "10BASE-T TX frame path\nsource + preamble/SFD + FCS + IFG" as eth_tx <<open>>
-  component "Low-speed USB persona" as usb <<open>>
-  component "pe_ctrl readback\ninterface choice pending" as readback <<open>>
-
   cpu --> window
-  cpu --> timing
+  window --> timing : divisor / mode
+  window --> serdes : data / lengths / control
   timing --> serdes : tx_bit_en / rx_bit_en (payload-only)
   timing --> codec : encoded-cell enable + half_phase level
   codec --> overlay
   overlay --> pinmux
   serdes --> loopback
   rx_front --> loopback
-  serdes --> eth_tx
-  loader --> readback : optional extension; choice pending
+  loader --> readback : framed host bus, landed 2026-09-24
+  window --> eth_tx : push / TXLEN / TXCTRL / TXSTAT
+  serdes --> eth_tx : shared TX owner mux (tx_path)
+  eth_tx --> eth_tx_loop
+  eth_tx --> eth_tx_mut : plan Task 6 (open)
+  eth_tx --> eth_tx_sta : plan Task 7 (open)
 }
 
 note bottom of loopback
-  The amended integration plan separates this wire-loopback milestone from a
-  complete Ethernet TX frame consumer. The second review round found shared-
-  enable and stuffed-cell handshake defects; its recommended design uses two
-  codec instances (TX/RX), split pe_serdes tx_bit_en /
-  rx_bit_en, codec bit_en per encoded cell (never 2x half-cell), an independent
-  half_phase toggle, and a directed stuffed Manchester loopback checking the TX
-  hold on tx_stuffed and the RX skip of received stuff cells, with mutations
-  for each. Codec topology and SERDES cadence remain open decisions; no
-  integration RTL is implemented yet.
-  See wiki/plans/serdes-integration and reviews/2026-09-23/SERDES-INTEGRATION-REVIEW.md.
+  Landed 2026-09-24 (STATUS item 7; manager decision adopting the follow-up
+  review's recommended defaults): ONE pe_serdes with split payload-only
+  enables (TX holds on inserted stuff cells, RX skips received ones), TWO
+  unmodified pe_codec_mux instances clocked per ENCODED cell, half_phase as a
+  LEVEL with two toggles per cell, the pad overlay before the matrix's
+  open-drain gate, a 16-entry latched-phase window on port 0xF with separate
+  TXLEN/RXLEN and one-cycle tx_load/rx_start/clr strobes, and latched status
+  events for polling. First consumer: firmware/serdes_loop.pe +
+  tb_pe_soc_serdes — plain LSB/MSB, Manchester, and the directed stuffed
+  Manchester loopback (trailing-stuff case by construction); the new harness
+  regress/mutate_soc_serdes_tb.sh detects the plan's four required mutations
+  (TX hold, RX skip, doubled cell enable, strobe cross-wire) plus three
+  alignment/load defects (7/7), and regress/mutate_serdes_tb.sh guards the
+  split enables (7/7). Plain RX has NO phase acquisition — self-timed
+  wire-loopback scope only (documented limit). Reset default is
+  engine-disabled, so every baseline TB/firmware is bit-identical.
+  Closeout 2026-09-24: regress/mutate_codec_tb.sh 13/13 and the mapped STA
+  screen found no new violation class.
+  Evidence: reviews/2026-09-24/SERDES-INTEGRATION-REVIEW.md; plan:
+  wiki/plans/serdes-integration. The eth_tx frame layer landed 2026-09-25
+  (Tasks 1-5) and the USB persona remains open; eth_tx plan Tasks 6-7
+  (mutation suites, STA + close-out) are OPEN.
 end note
 
+package "Static gates" {
+  component "Macro-flow config gate\nE2-6 + R3 closed (26 checks)\nmanager-verified 2026-09-24" as macrogate <<complete>>
+}
+
 note bottom of readback
-  pe_ctrl readback evaluation is ready; implementation awaits A1/A2/A3 choice.
-  See wiki/plans/pe-ctrl-readback.
+  Landed 2026-09-24 as the R1 framed host bus (manager decision; supersedes the
+  A1 raw echo): SPI mode 0, MSB-first 16-bit words, 16'hA55A sync, CRC-16/
+  CCITT-FALSE, response opcode bit 7, sequence/target echoed. Pads: uio[4:7]
+  = CS_N/MOSI/MISO/SCK, uo_out[1] = IRQ_N (sticky, active low), ui_in[3:5]
+  freed; 19 of 24 committed. The commit-latched LOAD response supersedes the
+  A1 uio[4] word echo. tb_pe_ctrl + pad-level tb_tt_um_protocol_emulator pass;
+  mutate_ctrl_tb.sh 29/29; mapped STA refresh done 2026-09-24.
+  Evidence: reviews/2026-09-24/HOST-CONTROLLER-PLAN-REVIEW.md;
+  contract in rtl/pe_ctrl.v.
+end note
+
+note bottom of eth_tx
+  Landed 2026-09-25 (Manager Task 11, plan Tasks 1-5; run_all 33/33 RTL +
+  26/26 firmware green, synth pe_eth_tx 892 / 16,040.09 um2): pe_eth_tx emits a
+  full frame from firmware-supplied stored bytes (hardware 56+8 prelude, octets
+  LSB-first, zero pad to 64 folded into the FCS, TX-dedicated pe_crc, 8-byte
+  staging FIFO with underrun, runt/jabber refusal, 96-cell IFG, constant idle).
+  The 0xF window widened to 32 entries (push/wrap 16-23, TXLEN 24/25, TXCTRL
+  26, TXSTAT 27); an exclusive tx_path owner mux gates eth_start on
+  !ser_tx_busy and refuses tx_path clear while tx_busy; G6 reclaims uo_out[2]
+  (dbg_pc[0]) for the eth_tx pad behind pin_oe_bus[7]. Wire-loopback
+  acceptance PASS: echo len=46 field=0806 sum=07, two-frame IFG 102 idle cells
+  (>= 96), wrap 9 pushes REG[24]=2a REG[26]=04, busy refused_start=1.
+  OPEN: plan Task 6 (eth_tx mutation suites) and Task 7 (STA + close-out).
+  Evidence: .superpowers/sdd/eth-tx-frame-path/progress.md; wiki/plans/
+  eth-tx-frame-path.md.
+end note
+
+note right of macrogate
+  E2-6 (a macro type configured with another type's LEF passed) and R3
+  (corner-key vs file identity) are fixed: type <-> MACRO/cell identity checks
+  plus the no-shared-corner-file rule; the negative harness grew 20 -> 26
+  checks (type-b-wrong-lef detected as exit 1). Status: CLOSED 2026-09-24
+  after independent manager verification (macro harness 26/26, full
+  regression exit 0); R1/R4/R5 remain observations. Evidence:
+  reviews/2026-09-23/PROJECT-REVIEW.md, "E2-6 resolution".
 end note
 
 legend left

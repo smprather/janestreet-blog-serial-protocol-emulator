@@ -1,0 +1,157 @@
+### pe_soc/slow
+== sta-pe_soc-slow.txt
+   external-input (data): 120 paths, worst -0.8692
+      host_wdata[0] (input)  =>  u_imem.g_macro.u_sram/A_DIN[0] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 643 paths, worst -0.0490
+      rst_n (input)  =>  _5242_/RESET_B (sg13g2_dfrbpq_1)
+   internal-reg-reg (pre-CTS): 71 paths, worst -0.5353
+      _5324_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   internal-within-unc (screening): 1 paths, worst -0.2467
+      _7842_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+
+== comparison: sta-pe_soc-slow.txt  vs  sta-pe_soc-slow-board.txt
+   external-input (data)              zero:   120 paths worst  -0.8692 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   643 paths worst  -0.0490 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:    71 paths worst  -0.5353 | board:    80 paths worst  -0.5353
+   internal-within-unc (screening)    zero:     1 paths worst  -0.2467 | board:    30 paths worst  -0.2467
+
+### pe_soc/typ
+== sta-pe_soc-typ.txt
+   external-input (data): 126 paths, worst -0.6065
+      host_addr[1] (input)  =>  u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 643 paths, worst -0.1230
+      rst_n (input)  =>  _5242_/RESET_B (sg13g2_dfrbpq_1)
+   external-output: 32 paths, worst -0.0521
+      _5820_/Q (pe_soc)  =>  dbg_pc[7] (output)
+   internal-reg-reg (pre-CTS): 70 paths, worst -0.4133
+      _5324_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   internal-within-unc (screening): 26 paths, worst -0.2499
+      _7837_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[3] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+
+== comparison: sta-pe_soc-typ.txt  vs  sta-pe_soc-typ-board.txt
+   external-input (data)              zero:   126 paths worst  -0.6065 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   643 paths worst  -0.1230 | board:     0 paths worst        -
+   external-output                    zero:    32 paths worst  -0.0521 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:    70 paths worst  -0.4133 | board:    79 paths worst  -0.4133
+   internal-within-unc (screening)    zero:    26 paths worst  -0.2499 | board:    55 paths worst  -0.2499
+
+### pe_soc/fast
+== sta-pe_soc-fast.txt
+   external-input (data): 126 paths, worst -0.4778
+      host_addr[1] (input)  =>  u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 643 paths, worst -0.1637
+      rst_n (input)  =>  _5242_/RESET_B (sg13g2_dfrbpq_1)
+   external-output: 69 paths, worst -0.1149
+      _5820_/Q (pe_soc)  =>  dbg_pc[7] (output)
+   internal-reg-reg (pre-CTS): 70 paths, worst -0.3596
+      _5324_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   internal-within-unc (screening): 735 paths, worst -0.2467
+      _7842_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_eth_fbuf.g_macro.u_sram/A_ADDR[8] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+
+== comparison: sta-pe_soc-fast.txt  vs  sta-pe_soc-fast-board.txt
+   external-input (data)              zero:   126 paths worst  -0.4778 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   643 paths worst  -0.1637 | board:     0 paths worst        -
+   external-output                    zero:    69 paths worst  -0.1149 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:    70 paths worst  -0.3596 | board:    79 paths worst  -0.3596
+   internal-within-unc (screening)    zero:   735 paths worst  -0.2467 | board:   921 paths worst  -0.2467
+
+### tt_um/slow
+== sta-tt_um-slow.txt
+   external-input (data): 95 paths, worst -0.7106
+      ui_in[1] (input)  =>  u_soc.u_imem.g_macro.u_sram/A_ADDR[4] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 739 paths, worst -0.0490
+      rst_n (input)  =>  _4316_/RESET_B (sg13g2_dfrbpq_1)
+   internal-reg-reg (pre-CTS): 104 paths, worst -0.6380
+      _4333_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_soc.u_imem.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+
+== comparison: sta-tt_um-slow.txt  vs  sta-tt_um-slow-board.txt
+   external-input (data)              zero:    95 paths worst  -0.7106 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   739 paths worst  -0.0490 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:   104 paths worst  -0.6380 | board:   133 paths worst  -0.6380
+   internal-within-unc (screening)    zero:     0 paths worst        - | board:    11 paths worst  -0.2057
+
+### tt_um/typ
+== sta-tt_um-typ.txt
+   external-input (data): 109 paths, worst -0.5234
+      ui_in[1] (input)  =>  u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 739 paths, worst -0.1230
+      rst_n (input)  =>  _4316_/RESET_B (sg13g2_dfrbpq_1)
+   external-output: 16 paths, worst -0.0523
+      _4359_/Q (tt_um_protocol_emulator)  =>  uio_out[4] (output)
+   internal-reg-reg (pre-CTS): 104 paths, worst -0.4761
+      _4333_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_soc.u_imem.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   internal-within-unc (screening): 34 paths, worst -0.0664
+      _4404_/Q (sg13g2_dfrbpq_1)  =>  _4405_/D (sg13g2_dfrbpq_1)
+
+== comparison: sta-tt_um-typ.txt  vs  sta-tt_um-typ-board.txt
+   external-input (data)              zero:   109 paths worst  -0.5234 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   739 paths worst  -0.1230 | board:     0 paths worst        -
+   external-output                    zero:    16 paths worst  -0.0523 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:   104 paths worst  -0.4761 | board:   133 paths worst  -0.4761
+   internal-within-unc (screening)    zero:    34 paths worst  -0.0664 | board:    45 paths worst  -0.2187
+
+### tt_um/fast
+== sta-tt_um-fast.txt
+   external-input (data): 111 paths, worst -0.4282
+      ui_in[1] (input)  =>  u_soc.u_imem.g_macro.u_sram/A_ADDR[1] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   external-input (rst_n removal): 739 paths, worst -0.1637
+      rst_n (input)  =>  _4316_/RESET_B (sg13g2_dfrbpq_1)
+   external-output: 32 paths, worst -0.1151
+      _4359_/Q (tt_um_protocol_emulator)  =>  uio_out[4] (output)
+   internal-reg-reg (pre-CTS): 104 paths, worst -0.3951
+      _4333_/Q (RM_IHPSG13_1P_1024x16_c2_bm_bist)  =>  u_soc.u_imem.g_macro.u_sram/A_DIN[10] (RM_IHPSG13_1P_1024x16_c2_bm_bist)
+   internal-within-unc (screening): 753 paths, worst -0.1268
+      _4404_/Q (sg13g2_dfrbpq_1)  =>  _4405_/D (sg13g2_dfrbpq_1)
+
+== comparison: sta-tt_um-fast.txt  vs  sta-tt_um-fast-board.txt
+   external-input (data)              zero:   111 paths worst  -0.4282 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   739 paths worst  -0.1637 | board:     0 paths worst        -
+   external-output                    zero:    32 paths worst  -0.1151 | board:     0 paths worst        -
+   internal-reg-reg (pre-CTS)         zero:   104 paths worst  -0.3951 | board:   133 paths worst  -0.3951
+   internal-within-unc (screening)    zero:   753 paths worst  -0.1268 | board:   867 paths worst  -0.2309
+
+### pe_ctrl/slow
+== sta-pe_ctrl-slow.txt
+   external-input (data): 8 paths, worst -0.1153
+      run (input)  =>  _652_/D (sg13g2_dfrbpq_1)
+   external-input (rst_n removal): 112 paths, worst -0.0490
+      rst_n (input)  =>  _651_/RESET_B (sg13g2_dfrbpq_1)
+
+== comparison: sta-pe_ctrl-slow.txt  vs  sta-pe_ctrl-slow-board.txt
+   external-input (data)              zero:     8 paths worst  -0.1153 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   112 paths worst  -0.0490 | board:     0 paths worst        -
+
+### pe_ctrl/typ
+== sta-pe_ctrl-typ.txt
+   external-input (data): 22 paths, worst -0.1569
+      run (input)  =>  _652_/D (sg13g2_dfrbpq_1)
+   external-input (rst_n removal): 112 paths, worst -0.1230
+      rst_n (input)  =>  _651_/RESET_B (sg13g2_dfrbpq_1)
+   external-output: 88 paths, worst -0.0523
+      _654_/Q (pe_ctrl)  =>  spi_miso (output)
+   internal-within-unc (screening): 7 paths, worst -0.0664
+      _755_/Q (sg13g2_dfrbpq_1)  =>  _756_/D (sg13g2_dfrbpq_1)
+
+== comparison: sta-pe_ctrl-typ.txt  vs  sta-pe_ctrl-typ-board.txt
+   external-input (data)              zero:    22 paths worst  -0.1569 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   112 paths worst  -0.1230 | board:     0 paths worst        -
+   external-output                    zero:    88 paths worst  -0.0523 | board:     0 paths worst        -
+   internal-within-unc (screening)    zero:     7 paths worst  -0.0664 | board:     7 paths worst  -0.0664
+
+### pe_ctrl/fast
+== sta-pe_ctrl-fast.txt
+   external-input (data): 50 paths, worst -0.1864
+      run (input)  =>  _652_/D (sg13g2_dfrbpq_1)
+   external-input (rst_n removal): 112 paths, worst -0.1637
+      rst_n (input)  =>  _651_/RESET_B (sg13g2_dfrbpq_1)
+   external-output: 91 paths, worst -0.1151
+      _654_/Q (pe_ctrl)  =>  spi_miso (output)
+   internal-within-unc (screening): 324 paths, worst -0.1268
+      _755_/Q (sg13g2_dfrbpq_1)  =>  _756_/D (sg13g2_dfrbpq_1)
+
+== comparison: sta-pe_ctrl-fast.txt  vs  sta-pe_ctrl-fast-board.txt
+   external-input (data)              zero:    50 paths worst  -0.1864 | board:     0 paths worst        -
+   external-input (rst_n removal)     zero:   112 paths worst  -0.1637 | board:     0 paths worst        -
+   external-output                    zero:    91 paths worst  -0.1151 | board:     0 paths worst        -
+   internal-within-unc (screening)    zero:   324 paths worst  -0.1268 | board:   355 paths worst  -0.1268
+

@@ -1,0 +1,26 @@
+# synth-tt_um.ys — mapped netlist for the post-SERDES tt_um_top STA screen.
+# Same flow as synth-pe_soc.ys, with the top-level source list from
+# regress/synth_area.sh (pe_ctrl + the wrapper included). The wrapper is where
+# the overlay→pad path leaves pe_soc, so the top-level screen is the one that
+# sees the complete pin path.
+read_liberty -lib /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+read_verilog -sv rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/pe_ctrl.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_serdes.v rtl/pe_nrzi.v rtl/pe_bitstuff.v rtl/pe_codec_mux.v rtl/pe_soc.v rtl/tt_um_protocol_emulator.v
+hierarchy -check -top tt_um_protocol_emulator
+proc
+opt
+fsm
+opt
+memory
+opt
+techmap
+opt
+dfflibmap -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+abc -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+clean
+stat -liberty /home/mylesp/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib
+flatten
+clean
+check -assert
+write_verilog -noattr -noexpr reviews/2026-09-24/serdes-sta/mapped-tt_um.v
+write_json reviews/2026-09-24/serdes-sta/mapped-tt_um.json
+check
