@@ -606,8 +606,10 @@ class TestTheNoticeMatchesTheFlagArithmetic(unittest.TestCase):
     def test_the_hex_export_carries_the_same_notice(self):
         """The hex manifest is what a chip TB reads; it must not lag the JSON."""
         import json
+
         manifest = json.loads(
-            (V3.SPEC.hex_dir / "manifest.json").read_text(encoding="utf-8"))
+            (V3.SPEC.hex_dir / "manifest.json").read_text(encoding="utf-8")
+        )
         self.assertEqual(manifest["notice"], self.package["notice"])
 
     def test_confirmed_count_is_derived_not_asserted(self):

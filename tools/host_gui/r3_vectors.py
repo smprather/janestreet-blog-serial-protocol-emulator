@@ -249,9 +249,11 @@ SPEC = V.Spec(
             "a rejected op has no side effect: wrong length is a 1-word "
             "BAD_FRAME, and a BP_SET past IMEM_WORDS is RANGE with no fault"
         ),
-        ("25 of 26 steps are chip-confirmed in simulation; the 1 exception is "
-         "the pinned TB model boundary, unproven by both sides -- see "
-         "chip_evidence.conformance for the chip's own numbers"),
+        (
+            "25 of 26 steps are chip-confirmed in simulation; the 1 exception is "
+            "the pinned TB model boundary, unproven by both sides -- see "
+            "chip_evidence.conformance for the chip's own numbers"
+        ),
     ),
     evidence=CHIP_EVIDENCE,
     word_order="big-endian words on the wire; the debug payloads are the "
