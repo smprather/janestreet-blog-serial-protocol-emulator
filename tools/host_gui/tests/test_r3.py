@@ -191,6 +191,65 @@ class TestIsaExecution(unittest.TestCase):
         self.assertEqual((pe.pc, pe.a, pe.insn), snapshot)
 
 
+class TestLatchedInsnRule(unittest.TestCase):
+    """BOTH halves of the insn rule, which is a cross-phase constraint.
+
+    Fixing READ_CPU introduced an asymmetry: the FETCHED word while a debug hold
+    is asserted, the LATCHED register otherwise. The held half is what R3 needs
+    (a debugger must see the landing instruction). The un-held half is what
+    R2 needs, and it is the half nobody would think to protect: both
+    chip-confirmed R2 READ_CPU vectors PRELOAD insn=0xFFFF and expect it back,
+    while the word their fetch address would give is something else entirely.
+    """
+
+    def test_held_reports_the_fetched_word_at_pc(self):
+        pe = R.loaded(pc=0)
+        pe.request(P.OP_DEBUG_STEP)          # executes imem[0], pc -> 1, held
+        self.assertTrue(pe.debug_hold)
+        self.assertEqual(pe.latched_insn, R.PROGRAM[1])
+        self.assertNotEqual(pe.latched_insn, pe.insn)
+
+    def test_unheld_preserves_the_latched_register(self):
+        """The half a 'cleanup' would break, and the R2 vectors depend on it."""
+        for image_id in ("v04-read_cpu_non_halting", "v05-full_width_debug_regs"):
+            with self.subTest(image=image_id):
+                image = V2.build_package()["model_images"][image_id]
+                pe = V.load_model_from_image(image)
+                self.assertFalse(pe.debug_hold)
+                # The preloaded register survives...
+                self.assertEqual(pe.latched_insn, 0xFFFF)
+                # ...even though the word the fetch address would give differs,
+                # which is the whole reason the rule is two-sided.
+                self.assertNotEqual(pe.imem[pe.fetch_address], 0xFFFF)
+
+    def test_simplifying_the_rule_would_break_the_chip_confirmed_r2_package(self):
+        """The concrete consequence, so the trade-off is not folklore.
+
+        Both R2 READ_CPU vectors expect 0xFFFF because a conformance-TB snapshot
+        preloads the register. Reporting the fetched word unconditionally would
+        hand them 0x0041 and 0x0000 respectively, and the chip passes them
+        byte-exactly today (18/18).
+        """
+        package = V2.build_package()
+        fetched = {}
+        for vector in package["vectors"]:
+            for step in vector["steps"]:
+                if step["opcode_name"] == "OP_READ_CPU":
+                    pe = V.load_model_from_image(
+                        package["model_images"][step["model_image_id"]])
+                    fetched[(vector["name"], step["name"])] = (
+                        step["response_payload_words"][5],
+                        pe.imem[pe.fetch_address])
+        self.assertTrue(fetched)
+        for key, (expected, would_report) in fetched.items():
+            with self.subTest(vector=key):
+                self.assertEqual(expected, 0xFFFF)
+                self.assertNotEqual(would_report, expected)
+
+    def test_r2_still_checks_clean(self):
+        self.assertEqual(V2.check_package(), 0)
+        self.assertEqual(V2.check_hex_export(), 0)
+
 class TestChipConformanceCorrections(unittest.TestCase):
     """Semantics the chip's conformance run proved this host model had wrong.
 
