@@ -171,7 +171,16 @@ run_tb_verdict() {
 # session, not invented ones.
 # ---------------------------------------------------------------------------
 classifier_self_test() {
-  local d rc bad=0 n w
+  local d rc bad=0 n w checked=0
+  # THE NUMBER OF CASES EXERCISED IS ITSELF ASSERTED, and that is what makes
+  # this self-test non-vacuous. A self-test whose loop iterated zero times
+  # would leave bad=0, return success, and let the gate report a score from a
+  # classifier it never checked -- the exact shape of the bug that produced the
+  # false "1 of 21 by hang", one level up. Demonstrated rather than assumed:
+  # with the loop disabled the harness ran straight through to its baselines
+  # and reported nothing whatever. So `checked` counts the cases actually run,
+  # is required to equal EXPECTED_CASES, and both numbers are printed.
+  local EXPECTED_CASES=5
   d=$(mktemp -d /tmp/fwbus_clsfy.${_wt:-shared}.XXXXXX)
   # a GENUINE hang: the watchdog line plus diagnostic lines that are NOT FAILs
   printf '%s\n' "=== dmx ===" "FAIL: watchdog -- the test did not complete" \
@@ -187,6 +196,7 @@ classifier_self_test() {
 
   for c in hang:3 bounded:1 assert:1 pass:0 empty:4; do
     n=${c%%:*}; w=${c##*:}
+    checked=$((checked+1))
     # The RETURN VALUE, not stdout: run_tb_verdict RETURNS its code, and
     # capturing stdout here silently yields the empty string and fails all five
     # cases. Which is what happened the first time, and is the second instance
@@ -199,11 +209,16 @@ classifier_self_test() {
       bad=1
     fi
   done
+  if [ "$checked" -ne "$EXPECTED_CASES" ]; then
+    echo "  CLASSIFIER SELF-TEST VACUOUS: exercised $checked case(s), expected $EXPECTED_CASES"
+    bad=1
+  fi
   rm -rf "$d"
   if [ "$bad" -ne 0 ]; then
     echo "mutate_fwbus_tb.sh: refusing to report a score from a classifier that is itself broken" >&2
     return 1
   fi
+  echo "  [classifier self-test] $checked/$EXPECTED_CASES cases, verdict rule verified"
   return 0
 }
 
