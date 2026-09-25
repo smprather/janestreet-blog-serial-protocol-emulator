@@ -76,6 +76,14 @@ worker; this file is the manager's restart prompt.
   on 2026-09-25); (e) edit-tool failures are retried the same turn (one
   manager-doc edit silently failed on 2026-09-25 and the gap was only caught
   by a later grep).
+- **DISPATCH-FIRST RULE (user, 2026-09-25: "I would expect you to come out of
+  loop when a worker flags done, what's next").** On any worker wake whose
+  report ends a task (TASK-DONE / "what's next" / "holding"), the FIRST
+  output after waking is the next dispatch — or an explicit "stand by,
+  nothing is next". Commits, pushes, record-keeping and adjudication come
+  AFTER the dispatch. The supervisor's nudge is a BACKSTOP for a slow
+  manager, never the driver of next work. A worker waiting 60+ seconds for
+  "what's next" is a process defect even if the interrupt woke correctly.
 - **RAM watchdog + OOM forensics (2026-09-25).** Two kernel OOM events —
   2026-09-24 14:33:40 and 18:43:28 (`journalctl -k`) — each killed a runaway
   `python3` at 22-23 GB anon RSS (+5 GB swapped) living in the wezterm
