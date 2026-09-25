@@ -84,6 +84,10 @@ worker; this file is the manager's restart prompt.
   AFTER the dispatch. The supervisor's nudge is a BACKSTOP for a slow
   manager, never the driver of next work. A worker waiting 60+ seconds for
   "what's next" is a process defect even if the interrupt woke correctly.
+- **WORKLOG rotation + concision (2026-09-25):** rotate the shared log to
+  `logs/worklog/YYYY-MM-DD[-NN].md` at ~10 MB or day boundaries; keep log
+  lines ≤ ~500 chars (reports link to reviews/, never inline). The 58 MB
+  GitHub-warning incident is why.
 - **RAM watchdog + OOM forensics (2026-09-25).** Two kernel OOM events —
   2026-09-24 14:33:40 and 18:43:28 (`journalctl -k`) — each killed a runaway
   `python3` at 22-23 GB anon RSS (+5 GB swapped) living in the wezterm
