@@ -60,7 +60,14 @@ class FakeDemoBoard:
 
 
 def install_fake_sdk():
-    """Install fake SDK modules; return (recorded state, sys.modules map)."""
+    """Install fake SDK modules; return (recorded state, sys.modules map).
+
+    The fake SPI is a STREAM: each ``write_readinto`` returns the next bytes
+    of ``state.response`` (via a cursor), exactly as real SPI shifts MISO out
+    during the request and keeps clocking afterwards. That is what makes
+    variable-length (wait-word) responses testable — the fixed-length double
+    that echoed the whole response every call is precisely why B1 was invisible.
+    """
     state = types.SimpleNamespace(
         board=FakeDemoBoard(),
         spi_params=None,
@@ -68,6 +75,8 @@ def install_fake_sdk():
         pin_calls=[],
         response=b"",
         boom=False,
+        cursor=0,
+        max_words=None,          # optional cap the bridge must respect
     )
 
     class Pin:
@@ -84,11 +93,18 @@ def install_fake_sdk():
 
         def write_readinto(self, data, received):
             state.spi_calls.append(
-                {"cs_n": state.board.uio_out[A.PAD_CS_N], "tx": bytes(data)})
+                {"cs_n": state.board.uio_out[A.PAD_CS_N], "tx": bytes(data),
+                 "cursor": state.cursor})
             if state.boom:
                 raise OSError("spi down")
-            for index, byte in enumerate(state.response[:len(received)]):
-                received[index] = byte
+            # Stream out the next len(received) bytes of the response; past the
+            # end, MISO idles (the chip released it) as zeros.
+            for index in range(len(received)):
+                if state.cursor < len(state.response):
+                    received[index] = state.response[state.cursor]
+                    state.cursor += 1
+                else:
+                    received[index] = 0x00
 
     class DemoBoard:
         @staticmethod
@@ -158,12 +174,42 @@ class TestTTAdapter(unittest.TestCase):
         board = self.state.board
         adapter = A.TTAdapter(pins=PINS)
         adapter.configure_host_spi(5_000_000)
-        self.state.response = b"\xa5\x5a"
-        received = adapter.host_spi_transfer(b"\x01\x02\x03\x04")
-        self.assertEqual(received, b"\xa5\x5a\x00\x00")
-        self.assertEqual(self.state.spi_calls,
-                         [{"cs_n": 0, "tx": b"\x01\x02\x03\x04"}])
+        # A real framed reply (STATUS): sync, hdr, seq, len, CRC. The request
+        # is 3 words; the reply is 6 words, so the adapter MUST keep clocking
+        # past the request length to collect it (variable-length).
+        frame = bytes.fromhex("a55a1910000100010000" "1eed")
+        self.state.response = frame
+        received = adapter.host_spi_transfer(b"\x00" * 6,
+                                              read_words=6)
+        self.assertEqual(received, frame)
+        self.assertEqual(self.state.spi_calls[0]["cs_n"], 0)
+        # more than one clocking call was needed (6 words in, 6 words out)
+        self.assertGreater(len(self.state.spi_calls), 1)
         self.assertEqual(board.uio_out[A.PAD_CS_N], 1)
+
+    def test_host_spi_transfer_streams_beyond_the_request_length(self):
+        # B1 regression: a response LONGER than the request must be read in
+        # full by continuing to clock, not truncated to the request length.
+        adapter = A.TTAdapter(pins=PINS)
+        adapter.configure_host_spi(5_000_000)
+        frame = bytes.fromhex("a55a1910000100010000" "1eed")  # 6 words
+        self.state.response = frame
+        received = adapter.host_spi_transfer(b"\x00" * 2, read_words=6)
+        self.assertEqual(received, frame)
+
+    def test_host_spi_transfer_skips_leading_wait_words(self):
+        # B1 regression: the chip may drive up to 15 leading 0xFFFF filler
+        # words before the real frame. The adapter returns the frame; the
+        # bridge's pe_frame.strip_wait_words (tested there) removes fillers.
+        adapter = A.TTAdapter(pins=PINS)
+        adapter.configure_host_spi(5_000_000)
+        frame = bytes.fromhex("a55a1910000100010000" "1eed")
+        self.state.response = b"\xff\xff" * 2 + frame   # 2 wait words
+        received = adapter.host_spi_transfer(b"\x00" * 2, read_words=8)
+        # the adapter hands the raw stream; the wait words are still there ...
+        self.assertTrue(received.startswith(b"\xff\xff\xff\xff"))
+        # ... and the real frame is present after them
+        self.assertIn(frame, received)
 
     def test_host_spi_transfer_releases_cs_on_error(self):
         board = self.state.board

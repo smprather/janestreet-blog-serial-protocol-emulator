@@ -10,7 +10,7 @@ small duck-typed HAL so ``main.PicoBridge`` is testable under CPython against
     set_run(active)                   # ui_in[1] RUN strap
     configure_host_spi(sclk_hz)       # uio direction + SPI peripheral
     host_spi_transfer(data) -> bytes  # one CS-framed full-duplex transaction
-    irq_n() -> True|False|None        # None = no IRQ input (RTL phase R1)
+    irq_n() -> True|False|None        # None = no IRQ input reported
 
 The concrete ``TTAdapter`` speaks the TT MicroPython SDK v3 (``ttboard``):
 ``DemoBoard.get()``, ``tt.shuttle.<name>.enable()``, ``tt.clock_project_PWM``,
@@ -24,8 +24,10 @@ Two facts are deliberately configuration, not guesses:
   * the host SPI pin map (which RP2040 GPIOs carry uio[4..7]) is board-revision
     specific -- plan Open Item 2 -- so ``pins`` must be supplied; there is no
     invented default;
-  * ``IRQ_N`` on ``uo_out[1]`` does not exist until RTL phase R1, so ``irq_n``
-    returns ``None`` unless ``irq_enabled=True`` is explicitly set. The bridge
+  * ``IRQ_N`` on ``uo_out[1]`` is a real chip output (RTL phase R1), but whether
+    this deployment *reports* it is a local choice: ``irq_n`` returns ``None``
+    unless ``irq_enabled=True`` is passed, so a board/adapter that has not been
+    wired for the interrupt reports no IRQ input rather than guessing. The bridge
     must not require an interrupt input.
 """
 
@@ -36,7 +38,7 @@ PAD_MISO = 6
 PAD_SCK = 7
 
 RUN_UI_BIT = 1                  # ui_in[1] = RUN
-IRQ_UO_BIT = 1                  # uo_out[1] = IRQ_N after RTL phase R1
+IRQ_UO_BIT = 1                  # uo_out[1] = IRQ_N (RTL phase R1, landed)
 
 # uio_oe_pico bits for the host SPI: CS_N, MOSI and SCK are Pico outputs,
 # MISO is an input. The firmware protocol row (uio[0:3]) is untouched.
@@ -115,21 +117,39 @@ class TTAdapter:
                         sck=Pin(pins["sck"]), mosi=Pin(pins["mosi"]),
                         miso=Pin(pins["miso"]))
 
-    def host_spi_transfer(self, data: bytes) -> bytes:
+    def host_spi_transfer(self, data: bytes, read_words: int | None = None) -> bytes:
+        """Exchange one framed request and return the response byte stream.
+
+        The response is NOT the request length. A bounded read (R2) may be
+        preceded by up to 15 leading 0xFFFF wait words, and even a 1-word reply
+        is shorter than a long request, so a fixed-length read is wrong for
+        every opcode (chip review B1). ``read_words`` is the total number of
+        16-bit words to clock out after the request (None = just the request
+        length, the ready-immediate case). The caller bounds it and skips the
+        wait words with ``pe_frame.strip_wait_words``.
+        """
         if self._spi is None:
             raise RuntimeError("configure_host_spi() must run before a transfer")
         board = self._board()
         received = bytearray(len(data))
+        total_words = max(1, (len(data) + 1) // 2) if read_words is None \
+            else max(1, read_words)
         board.uio_out[PAD_CS_N] = 0          # CS_N low for the whole frame
         try:
+            # MOSI during the trailing clocking is irrelevant (the chip is a
+            # slave and ignores it), so 0xFFFF filler is sent.
             self._spi.write_readinto(data, received)
+            while len(received) < total_words * 2:
+                chunk = bytearray(2)
+                self._spi.write_readinto(b"\xff\xff", chunk)
+                received.extend(chunk)
         finally:
             board.uio_out[PAD_CS_N] = 1      # release even on error
         return bytes(received)
 
     def irq_n(self):
         if not self.irq_enabled:
-            return None                      # no IRQ input until RTL phase R1
+            return None                      # IRQ reporting not enabled here
         board = self._board()
         try:
             return not bool(board.uo_out[IRQ_UO_BIT])   # active low

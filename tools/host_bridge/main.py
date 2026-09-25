@@ -265,13 +265,31 @@ class PicoBridge:
         # Plan Global Constraints: min(5 MHz, project_clk / 6), never more.
         return min(SCLK_GUARD_HZ, self._clock_hz // 6)
 
+    # Worst-case words to clock out for an opcode, given its request payload.
+    # A bounded read's response carries the data it asked for, so this is
+    # computed from the request; every other reply is fixed-size.
+    @staticmethod
+    def _response_words(opcode, payload_words):
+        count = len(payload_words)
+        if opcode == pe_frame.OP_READ_IMEM:
+            data = payload_words[1] if count > 1 else 0
+        elif opcode == pe_frame.OP_READ_DMEM:
+            count_bytes = payload_words[1] if count > 1 else 0
+            data = (count_bytes + 1) // 2
+        else:
+            data = 0
+        # 6 overhead words (sync, hdr, seq, len, crc, and one slack) + data,
+        # plus the 15 worst-case wait words.
+        return 6 + data + pe_frame.MAX_WAIT_WORDS
+
     def _pe_request(self, opcode, payload_words=()):
         sequence = self._sequence
         self._sequence = (self._sequence + 1) & 0xFFFF
         raw = pe_frame.encode_frame(opcode, sequence, pe_frame.TARGET_HOST,
                                     pe_frame.words_to_bytes(payload_words))
+        read_words = self._response_words(opcode, payload_words)
         try:
-            response = self._adapter.host_spi_transfer(raw)
+            response = self._adapter.host_spi_transfer(raw, read_words)
         except (OSError, RuntimeError) as exc:
             self._event("spi.timeout", {"opcode": opcode, "error": str(exc)})
             raise BridgeError(f"no PE response: {exc}")
@@ -279,7 +297,14 @@ class PicoBridge:
             self._event("spi.timeout", {"opcode": opcode})
             raise BridgeError("no PE response (SPI timeout)")
         try:
-            frame = pe_frame.decode_frame(response)
+            real = pe_frame.strip_wait_words(response)
+        except pe_frame.FrameError as exc:
+            # Only wait words and no frame: the chip never answered within the
+            # bounded wait, so this is a timeout, not a corrupt frame.
+            self._event("spi.timeout", {"opcode": opcode, "error": str(exc)})
+            raise BridgeError(f"no PE response: {exc}")
+        try:
+            frame = pe_frame.decode_frame(real)
         except pe_frame.FrameError as exc:
             self._event("protocol.error", {"opcode": opcode, "error": str(exc)})
             raise BridgeError(f"bad PE response: {exc}")

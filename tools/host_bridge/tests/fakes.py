@@ -23,6 +23,7 @@ class FakeTTAdapter:
         self.fail_transfer = False    # raise OSError: simulate no MISO
         self.corrupt_responses = False
         self.run_lock = False         # ignore set_run: simulate a stuck strap
+        self.wait_words = 0           # leading 0xFFFF filler before the frame
         self._irq = False if irq_supported else None
         self._irq_supported = irq_supported
 
@@ -60,16 +61,19 @@ class FakeTTAdapter:
         self.spi_rates.append(sclk_hz)
         self.calls.append(("configure_host_spi", sclk_hz))
 
-    def host_spi_transfer(self, data: bytes) -> bytes:
-        self.transfers.append(bytes(data))
-        self.calls.append(("spi_transfer", len(data)))
+    def host_spi_transfer(self, data: bytes, read_words: int | None = None) -> bytes:
         if self.fail_transfer:
             raise OSError("no MISO")
+        self.transfers.append(bytes(data))
+        self.calls.append(("spi_transfer", len(data)))
         response = self.pe.exchange(bytes(data)) or b""
         if self.corrupt_responses and response:
             corrupted = bytearray(response)
             corrupted[-1] ^= 0xFF
             response = bytes(corrupted)
+        if self.wait_words:
+            # The chip's bounded reads may emit leading 0xFFFF filler words.
+            response = b"\xff\xff" * self.wait_words + response
         return response
 
     def irq_n(self):

@@ -377,6 +377,22 @@ def build_package() -> dict:
                  "RANGE, never a wrapped read", image["id"])],
         image))
 
+    # 6b. Ceiling and zero-count rejection (chip MAX_READ_WORDS=15; the
+    # independent chip review found the model used to accept a larger read).
+    image, pe = image_and_model("v07b-read_ceiling_and_zero")
+    vectors.append(_vector(
+        "read_ceiling_and_zero_count",
+        "A count over MAX_READ_WORDS=15 (or 0) is RANGE so the host splits; "
+        "the model enforces the chip's ceiling (independent chip review).",
+        "n/a (rejected)",
+        [_record(pe, "read_imem_at_ceiling_15", P.OP_READ_IMEM, (0, 15), 1,
+                 "15 words is the ceiling and succeeds", image["id"]),
+         _record(pe, "read_imem_over_ceiling", P.OP_READ_IMEM, (0, 16), 2,
+                 "over the ceiling -> RANGE, host must split", image["id"]),
+         _record(pe, "read_dmem_zero_count", P.OP_READ_DMEM, (0, 0), 3,
+                 "a zero-byte read is RANGE", image["id"])],
+        image))
+
     # 7. The sticky-fault lifecycle: bad read -> RANGE + FAULT_RANGE, status
     #    shows the sticky bit, CLEAR_FAULT clears it (manager ruling).
     image, pe = image_and_model("v08-read_range_fault_lifecycle")
