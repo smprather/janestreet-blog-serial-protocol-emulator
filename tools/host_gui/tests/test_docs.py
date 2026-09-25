@@ -83,8 +83,12 @@ class TestDemoWalkthrough(unittest.TestCase):
         # pending.
         self.assertRegex(self.text, r"R2[^\n]*(chip-confirmed|LANDED|landed)")
         self.assertIn("R2-READ-PATH-REVIEW", self.text)
-        # the conformance count: the package is fully confirmed at 18/18 (the
-        # ceiling/zero-count vectors were proven after the 15 original ones)
+        # the conformance count: the R2 READ-PATH steps are confirmed 18/18
+        # (the ceiling/zero-count vectors were proven after the 15 original
+        # ones). The package is no longer wholly confirmed - 4 held-core
+        # steps were added 2026-09-25 and await a chip re-run - so the count
+        # alone is not the whole claim, and the row has to carry the
+        # unconfirmed half too.
         self.assertIn("18/18", self.text)
         self.assertNotRegex(
             self.text, r"Memory/register readback \(R2\)[^\n]*\*\*pending\*\*"
@@ -97,6 +101,24 @@ class TestDemoWalkthrough(unittest.TestCase):
         # and it must carry the no-hardware fallback
         self.assertIn("Fallback demo", self.text)
         self.assertIn("no board", self.text.lower())
+
+    def test_the_r2_row_does_not_claim_a_wholly_confirmed_package(self):
+        """18/18 is about the read-path steps; the package is 18 of 22.
+
+        The walkthrough is the judge-facing claim surface, and the R3 review's
+        F1 was exactly a shipped claim contradicting the flags in the same
+        repository. Four held-core steps ship unconfirmed, so the R2 row has
+        to say which half is which rather than presenting one number.
+        """
+        row = next(line for line in self.text.splitlines()
+                   if "Memory/register readback (R2)" in line)
+        self.assertIn("18/18", row)
+        self.assertIn("18 of 22", row)
+        self.assertRegex(row, r"NOT confirmed|unconfirmed")
+        self.assertIn("R2-HELD-STATUS-BYTES.md", row)
+        # the unqualified "this row is wholly chip-confirmed" form is exactly
+        # the claim that stopped being true when the held steps landed
+        self.assertNotIn("| **chip-confirmed (simulation)** |", row)
 
     def test_liveness_is_presented_as_a_chip_confirmed_capability(self):
         # P3 closed chip-side: STATUS carries pc/a/x/y/timer and READ_CPU is

@@ -6,12 +6,18 @@ drift -- lives in `tools/host_gui/vectors.py`, shared with R3. This module is
 the R2 configuration (its evidence block, its rulings, its artifact paths) plus
 the R2 vector list.
 
-**The checked-in R2 artifacts are byte-identical across that extraction and
-must stay that way.** R2 is chip-confirmed (18/18 byte-exact in
-`tb_pe_ctrl_r2`) and the chip testbench consumes this hex export, so
-`python3 -m tools.host_gui.r2_vectors --check` is the regression proof for
-this file. Do not reword `PACKAGE_NOTICE` or the `SPEC` strings: they are
-part of the published artifact.
+**The checked-in R2 artifacts must stay byte-identical for the 18 steps the
+chip has confirmed, and they must stay TRUE.** Those two are different
+promises and both are enforced here. The chip's `tb_pe_ctrl_r2.v` consumes
+this hex export and passes those 18 steps byte-exactly, so
+`python3 -m tools.host_gui.r2_vectors --check` plus the byte fingerprint in
+`tests/test_r2_vectors.py` are the regression proof: adding a vector is
+allowed, changing a published byte is not. The prose around them is NOT
+frozen -- `PACKAGE_NOTICE`, the evidence counts and the rulings state what is
+and is not confirmed, so a step added without a chip re-run makes them say so
+(the R3 review found a shipped notice claiming the opposite of the flags in
+the same file, and the drift gate cannot catch that because both come from
+this module).
 
 Who uses it: the chip manager hands this to the protocol worker as the R2
 acceptance spec. Each step carries the exact framed request and response bytes
@@ -75,7 +81,23 @@ CHIP_EVIDENCE = {
     "sparse overrides and register state, replays the 3-word LOAD "
     "precondition as a real framed frame, and compares every "
     "response byte (skipping wait words) to the golden stream",
-    "conformance": "18/18 golden steps PASS, byte-exact including CRC",
+    "conformance": "18/18 of the R2 read-path golden steps PASS, byte-exact "
+    "including CRC. The 4 held-core steps below are NOT part of that run: "
+    "tb_pe_ctrl_r2 instantiates pe_ctrl without the R3 debug inputs, so it "
+    "cannot reach state 2/3 at all. The chip must re-run it against them.",
+    "pending_steps": (
+        "status_reports_the_hold",
+        "dump_core_answers_the_same_header",
+        "status_reports_the_hit",
+        "dump_core_refused_the_strap_is_high",
+    ),
+    "pending_reason": "These four steps were added on 2026-09-25 because R3's "
+    "debug work made the R2 readback reachable in states 2 (DEBUG_HOLD) and 3 "
+    "(BP_HIT) while no R2 vector exercised either - a chip right on states "
+    "0/1 and wrong on the held ones passed 18/18. They are contract-derived "
+    "expectations, NOT evidence: chip_confirmed=false until the chip re-runs "
+    "tb_pe_ctrl_r2 with the debug inputs driven and flips them with a "
+    "citation.",
     "scope": "This confirms the chip RTL in SIMULATION against the golden "
     "package. The real-board acceptance run (Pico over USB, physical "
     "shuttle) is still unexecuted and is not claimed here.",
@@ -84,11 +106,18 @@ CHIP_EVIDENCE = {
 
 
 PACKAGE_NOTICE = (
-    "CHIP-CONFIRMED IN SIMULATION: every golden step in this package passes "
-    "byte-exactly (CRC included) in the chip repo's tb/tb_pe_ctrl_r2.v, with "
-    "the model image loaded per vector - see the chip repo's "
+    "PARTIALLY CHIP-CONFIRMED IN SIMULATION: 18 of the 22 golden steps in "
+    "this package - every R2 read-path step - pass byte-exactly (CRC "
+    "included) in the chip repo's tb/tb_pe_ctrl_r2.v, with the model image "
+    "loaded per vector; see the chip repo's "
     "reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance', which "
-    "names every step (18/18). NOT HARDWARE-CONFIRMED: the "
+    "names every one of them (18/18). NOT CHIP-CONFIRMED: the 4 steps added "
+    "2026-09-25 for the R2 readback while the core is HELD at a breakpoint - "
+    "status_reports_the_hold, dump_core_answers_the_same_header (state 2, a "
+    "step-pause) and status_reports_the_hit, dump_core_refused_the_strap_is_"
+    "high (state 3, a live hit). Their expectations come from the frozen "
+    "contract semantics, the chip has not re-run tb_pe_ctrl_r2 against them, "
+    "and they are a gate, not evidence. NOT HARDWARE-CONFIRMED: the "
     "real-board acceptance run (Pico over USB CDC with a physical shuttle) has "
     "NOT been executed and is not claimed here. The host probes in "
     "r2_reads.py still run against the FakePE model; what the chip confirms is "
@@ -129,8 +158,17 @@ SPEC = V.Spec(
             "(manager ruling 2026-09-25)"
         ),
         (
-            f"chip R2 CONFIRMED: {CHIP_EVIDENCE['conformance']} "
+            f"chip R2 CONFIRMED: {CHIP_EVIDENCE['conformance'].split('.')[0]} "
             f"({CHIP_EVIDENCE['testbench']})"
+        ),
+        (
+            "the R2 register readback reports the DEBUG state, and the two "
+            "halves are distinguishable: the state word is "
+            "`dbg_hold ? (bp_hit ? 3 : 2) : (run ? 1 : 0)`, a breakpoint hit "
+            "holds the CORE and not the run strap (so state 3 arrives with "
+            "run=1), and DUMP_CORE is gated on the raw run strap - so it "
+            "answers the full header under a step-pause and NOT_READY under a "
+            "live hit (frozen contract semantics, 2026-09-25)"
         ),
     ),
     evidence=CHIP_EVIDENCE,
@@ -463,6 +501,114 @@ def build_package() -> dict:
             "clears it (manager ruling).",
             "n/a (status/lifecycle)",
             lifecycle,
+            image,
+        )
+    )
+
+    # 8. The R2 readback while the core is HELD. R3's debug work gave the
+    #    chip a second and third way to be stopped, and R2's STATUS carries
+    #    the same 2-bit state word - so states 2 (DEBUG_HOLD, a step-pause)
+    #    and 3 (BP_HIT, a live hit) are now reachable, and NOTHING in this
+    #    package exercised either. A chip right on states 0/1 and wrong on
+    #    the held ones passed 18/18. The expectations below are read off the
+    #    frozen contract, not wished for:
+    #      * state = dbg_hold ? (bp_hit ? 3 : 2) : (run ? 1 : 0) - only a
+    #        hold can produce 2/3, and the latched hit is what separates
+    #        them;
+    #      * the STATUS `run` word is the STRAP, not the state. A breakpoint
+    #        hit holds the core, it does not drop the strap, so a live hit
+    #        arrives as state 3 WITH run=1;
+    #      * DUMP_CORE is gated on the raw `run` strap, so it answers the
+    #        full header under a step-pause (strap low) and NOT_READY under
+    #        a live hit (strap still high) even though the core is stopped
+    #        in both. Gating it on the hold instead would be a different,
+    #        and wrong, reading - these steps are what separate the two.
+    #
+    #    Both pre-states are REACHABLE, not invented: they are the pc/a a
+    #    real core has after executing the shipped image (imem 0x0041, 0x1001,
+    #    0x4002) - one DEBUG_STEP from the boot stop for the pause, and a
+    #    free-running stop on the armed breakpoint for the hit. A
+    #    conformance TB preloading a state the core cannot occupy proves
+    #    nothing (the chip review's M2 finding).
+    #
+    #    chip_confirmed=false: the chip's tb_pe_ctrl_r2 instantiates pe_ctrl
+    #    without the R3 debug inputs, so it cannot drive these at all yet.
+    image, pe = image_and_model(
+        "v09-status_while_step_paused",
+        pc=1,
+        a=0x41,
+        run=0,
+        debug={"bp_addr": 2, "bp_en": True, "bp_hit": False, "debug_hold": True},
+    )
+    vectors.append(
+        b.vector(
+            "status_while_step_paused",
+            "STATUS while the core is HELD in state 2 (DEBUG_HOLD, a "
+            "step-pause): the state word says so and the run strap is still "
+            "low, and DUMP_CORE still answers the identical header - a hold "
+            "is not a running core, so nothing the R2 read path refuses is "
+            "refused here.",
+            "n/a (register header)",
+            [
+                b.record(
+                    pe,
+                    "status_reports_the_hold",
+                    P.OP_STATUS,
+                    (),
+                    1,
+                    "state=2 (DEBUG_HOLD), run=0, pc=1",
+                    image["id"],
+                ),
+                b.record(
+                    pe,
+                    "dump_core_answers_the_same_header",
+                    P.OP_DUMP_CORE,
+                    (),
+                    2,
+                    "must equal the status header, state=2 included",
+                    image["id"],
+                ),
+            ],
+            image,
+        )
+    )
+
+    image, pe = image_and_model(
+        "v10-status_while_bp_hit",
+        pc=2,
+        a=0x41,
+        run=1,
+        debug={"bp_addr": 2, "bp_en": True, "bp_hit": True, "debug_hold": True},
+    )
+    vectors.append(
+        b.vector(
+            "status_while_bp_hit",
+            "STATUS while the core is HELD in state 3 (BP_HIT, a live hit on "
+            "an armed breakpoint): the state word says the hit latched, the PC "
+            "rests on the breakpoint, and the run strap is STILL HIGH - the "
+            "hit holds the core, it does not drop the strap. DUMP_CORE is then "
+            "NOT_READY, because its gate is that strap and not the hold.",
+            "n/a (status) + n/a (rejected)",
+            [
+                b.record(
+                    pe,
+                    "status_reports_the_hit",
+                    P.OP_STATUS,
+                    (),
+                    1,
+                    "state=3 (BP_HIT), run=1, pc=2 - the hit did not drop run",
+                    image["id"],
+                ),
+                b.record(
+                    pe,
+                    "dump_core_refused_the_strap_is_high",
+                    P.OP_DUMP_CORE,
+                    (),
+                    2,
+                    "NOT_READY: the gate is run=1, not the debug state",
+                    image["id"],
+                ),
+            ],
             image,
         )
     )

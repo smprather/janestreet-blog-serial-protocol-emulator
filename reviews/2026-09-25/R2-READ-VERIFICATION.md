@@ -1,4 +1,4 @@
-# R2 read-path verification package (host contract; chip-confirmed in simulation)
+# R2 read-path verification package (host contract; 18 of 22 steps chip-confirmed in simulation)
 
 This is the **R2 acceptance spec** for the chip side, handed over by the
 gui-worker so the protocol worker can wire `tb_pe_host.v` (and the R2 RTL in
@@ -9,9 +9,10 @@ values instead of re-deriving the contract.
   framed request bytes (`request_hex`), the request payload words, the response
   bytes (`response_hex`), the response payload words, the status code, and the
   model's fault bits after the step.
-- **`r2-hex/`** — the **$readmemh export** for Verilog testbenches: 30 `.hex`
-  files (one request + one response per step, one byte per line so `$readmemh`
-  fills an 8-bit array from address 0 in wire order) plus `manifest.json`
+- **`r2-hex/`** — the **$readmemh export** for Verilog testbenches: 44 `.hex`
+  files (one request + one response per golden step, one byte per line so
+  `$readmemh` fills an 8-bit array from address 0 in wire order — 22 steps × 2,
+  plus `imem.hex`/`dmem.hex`) plus `manifest.json`
   (vector → step → files → expected status, response payload words, sticky
   fault register) and a short `README.md`. The chip TBs consume these directly
   — no translation step — and `--check` proves every hex file is byte-identical
@@ -22,10 +23,11 @@ values instead of re-deriving the contract.
   enforce this), so the artifacts can never silently disagree with the host
   model.
 
-## Status: CHIP-CONFIRMED in simulation (2026-09-25)
+## Status: PARTIALLY chip-confirmed in simulation (2026-09-25)
 
-**Chip R2 is complete.** All 18 golden steps now carry
-`"chip_confirmed": true` together with a `chip_evidence` citation. The evidence
+**The 18 R2 read-path steps are complete, and their bytes are unchanged.** All
+18 carry `"chip_confirmed": true` together with a `chip_evidence` citation.
+The evidence
 is the chip repo's `tb/tb_pe_ctrl_r2.v`, which reports per-vector PASS for all
 18 steps — byte-exact including CRC, with the model image loaded per vector
 and the session's opening 3-word LOAD replayed as a real framed frame. The
@@ -33,6 +35,22 @@ chip-side record is `reviews/2026-09-25/R2-READ-PATH-REVIEW.md` (section
 "Conformance"), which names every step. That run also found
 and fixed three real RTL defects (a dropped trailing dmem byte, a response
 launch that never fired, and an X on the MISO pad before the first frame).
+
+**4 further steps are NOT confirmed: the readback while the core is HELD.** R3's
+debug work gave the chip two more ways to be stopped, and R2's `STATUS` carries
+the same 2-bit state word — so states 2 (`DEBUG_HOLD`, a step-pause) and 3
+(`BP_HIT`, a live hit) are reachable, and nothing in this package exercised
+either. A chip right on the boot stop and the free-running core, and wrong on
+both held states, passed 18/18. The `status_while_step_paused` and
+`status_while_bp_hit` vectors close that gap. Their expectations are read off
+the frozen contract (the `dbg_state` encoding, `run` being the strap rather
+than the state, and `DUMP_CORE` being gated on the strap), they ship
+`chip_confirmed: false`, and their per-step bytes, the exact pre-states and the
+steps a chip has to take to confirm them are in
+**`R2-HELD-STATUS-BYTES.md`**. The package-level `chip_confirmed` is therefore
+`false` — 18 of 22 — and the notice names both halves, because a notice that
+claimed the whole package was the F1 defect the R3 review found in the R3
+package.
 
 What is **not** claimed: the real-board acceptance run — a Pico over USB CDC
 with a physical shuttle — has not been executed. The host probes in
@@ -50,6 +68,11 @@ that the RTL matches these same expectations.
    `READ_IMEM(1, 2)` returns `status, 0x1001, 0x4002` in that order;
    `READ_DMEM(0, 4)` returns `status, 0x0A0B, 0x0C0D` (bytes packed
    big-endian per word).
+3. **The R2 readback reports the debug state, and the run word is the strap.**
+   The `state` word is `dbg_hold ? (bp_hit ? 3 : 2) : (run ? 1 : 0)`, a hit
+   holds the core without dropping the strap (so state 3 arrives with
+   `run=1`), and `DUMP_CORE` is gated on the raw run strap. The two held
+   vectors encode exactly this; see `R2-HELD-STATUS-BYTES.md`.
 
 ## Wire contract the frames assume
 
@@ -131,7 +154,10 @@ chip can produce; it is corrected here.)
 | `full_width_debug_regs` | The register header, ISA-native: `pc` 10 bits, `a`/`x`/`y` 8, `insn` 16 (the anti-truncation vector). |
 | `read_while_running_rejected` | `READ_IMEM`/`READ_DMEM`/`DUMP_CORE` answer `NOT_READY` (6) while `run=1` (chip-side rejection, not just the Pico). |
 | `range_never_wraps` | Past-the-end reads are `RANGE` (3), never wrapped. |
+| `read_ceiling_and_zero_count` | A count over `MAX_READ_WORDS=15`, or a zero count, is `RANGE` (3) so the host splits; the model enforces the chip's own ceiling. |
 | `read_range_fault_lifecycle` | A bad read latches sticky `FAULT_RANGE`; `STATUS` shows it; `CLEAR_FAULT` clears it. |
+| `status_while_step_paused` | `STATUS`/`DUMP_CORE` while the core is held in state 2 (`DEBUG_HOLD`): the state word says so, the run strap is still low, and `DUMP_CORE` still answers the identical header. |
+| `status_while_bp_hit` | `STATUS`/`DUMP_CORE` while the core is held in state 3 (`BP_HIT`): the hit holds the **core**, not the strap, so `run` is still 1 — and `DUMP_CORE`, gated on that strap, is `NOT_READY`. |
 
 ## How to consume it in a Verilog testbench
 
@@ -144,5 +170,7 @@ latch/clear behaviour. `opcode_name` gives the plan opcode (e.g. `OP_READ_IMEM`
 = `0x13`).
 
 Related records: `HOST-GUI-R2-PREP.md` (the host-side prep this package is
-exported from), `wiki/plans/host-controller-gui.md` Tasks 3-5, and
+exported from), `R2-HELD-STATUS-BYTES.md` (the four held-core steps, their
+bytes, pre-states and confirmation steps for the chip), `R3-VECTOR-BYTES.md`
+(the R3 debug package), `wiki/plans/host-controller-gui.md` Tasks 3-5, and
 `reviews/2026-09-24/HOST-CONTROLLER-PLAN-REVIEW.md` rows P16/P17.

@@ -28,6 +28,7 @@ import argparse
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from tools.host_gui import fake_pe as F
 from tools.host_gui import protocol as P
@@ -81,10 +82,18 @@ class Spec:
         return frozenset(self.evidence.get("confirmed_steps", ()))
 
     def evidence_json(self) -> dict:
-        """The evidence block with the confirmed-step set as a sorted list."""
-        out = dict(self.evidence)
-        out["confirmed_steps"] = sorted(self.confirmed_steps)
-        return out
+        """The evidence block with every collection JSON-shaped.
+
+        The artifact is a JSON document and the drift gate compares the PARSED
+        document to a fresh build, so a `tuple` here makes the gate report
+        STALE immediately after `--write` -- with a message that points at the
+        wrong fix. `confirmed_steps` is a set and `pending_steps` a tuple in
+        Python (both are the right types to write down here), so the whole
+        block is normalised in one place rather than one field at a time;
+        `test_r2_vectors` pins the round trip.
+        """
+        return _json_shaped({**self.evidence,
+                             "confirmed_steps": sorted(self.confirmed_steps)})
 
     def evidence_for(self, step_name: str) -> dict | None:
         """Citation for a step, or None when the chip has not confirmed it."""
@@ -271,6 +280,20 @@ class Builder:
             package["schema"] = self.spec.schema
             package["phase"] = self.spec.phase
         return package
+
+
+def _json_shaped(value: Any) -> Any:
+    """The same structure with tuples rendered as lists (JSON has no tuple).
+
+    Applied at the one boundary where a Python-native value becomes part of a
+    published artifact, so "is this JSON-shaped?" is answered by construction
+    instead of by remembering which field is a set.
+    """
+    if isinstance(value, dict):
+        return {key: _json_shaped(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_shaped(item) for item in value]
+    return value
 
 
 def _debug_image(debug: dict) -> dict:
