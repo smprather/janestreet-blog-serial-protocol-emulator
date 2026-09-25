@@ -182,6 +182,19 @@ CASES=(
   # within a clock, because a carrier that alternates 37.9/38.1 is a program
   # that is out by a fraction of a clock on every other edge. 32 ms of 60 MHz.
   "tb_pe_soc_ir_nec|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_ir_nec"
+  # STEPPER STEP/DIR RAMP (Block 2 act c). The only act in this block that
+  # drives a MECHANISM: the driver chip counts STEP edges and the motor's
+  # position IS that count, so there is no acknowledgement, no status word and
+  # nothing at the far end to resynchronise to. The claim is therefore the
+  # sharpest and the simplest here -- every step period is an exact instruction
+  # count measured on the pin, and the ramp is exactly linear TO THE CLOCK:
+  # the firmware subtracts ten outer steps of the (4,40) pair, 5110 clocks, per
+  # step, so the constancy is in the program rather than assumed about a table.
+  # Checked as an EQUALITY against 5110, not a tolerance, and the one interval
+  # that is not on the line -- the direction change, which is the only thing
+  # in the program that is not a step -- is pinned by a SUM with its
+  # neighbour rather than excused. ~14 ms of 60 MHz, the sum of the periods.
+  "tb_pe_soc_stepper_ramp|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_stepper_ramp"
   "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
   # The I2C TRANSACTION layer on real RTL: firmware/i2c_xfer.pe against a
   # Verilog slave FSM that decodes the wire, with timing and grammar asserted

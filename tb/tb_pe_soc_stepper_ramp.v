@@ -42,6 +42,18 @@
 //      than the one before it -- the ten outer-counter steps the firmware
 //      subtracts -- checked as an equality against that constant, not against
 //      a tolerance. This is the check the act exists for.
+//
+//   2a. AND THE DIRECTION-CHANGE PAIR IS PINNED RATHER THAN EXCUSED. The
+//      direction change is the only thing in the program that is not a step,
+//      so one interval carries it: that interval is longer than the ramp line
+//      by the setup delay and the flip's instructions, and the interval after
+//      it is shorter by the same amount. The first version of this check
+//      reported the pair as two anomalies and never established what either
+//      was, which is indistinguishable from a program with two separate faults.
+//      So: every other interval is exactly on the line, the pair SUMS to
+//      exactly twice the line, the change is the long one, and the excess is at
+//      least the setup delay. A firmware that added or dropped an instruction
+//      in the flip fails the sum.
 //   3. THE PERIODS ARE DISTINCT AND MONOTONIC, and each is within the band the
 //      driver can be clocked at. Twelve equal periods would satisfy (2) with
 //      a zero ramp, which is why the monotonicity and the distinctness are
@@ -51,11 +63,14 @@
 //      5 us. A driver that samples DIR on the STEP edge takes the old
 //      direction or the new one depending on the silicon, and a program that
 //      changed DIR one instruction too late works on one chip and not another.
+//      The edges are LOCATED, not counted: an edge inside a step interval is a
+//      change a driver would decode and there must be exactly one. Counting
+//      edges instead of locating them reported "the direction changed exactly
+//      once" for a program in which it never changed after the first step --
+//      see the header on firmware/stepper_ramp.pe for why.
 //   5. THE ONE PLACE THE RAMP IS NOT ON THE LINE, stated rather than hidden:
-//      the interval across the direction change carries the flip and its setup
-//      delay, so it is not 5110 clocks shorter than its neighbour. The TB
-//      prints it, checks it is still inside the band, and checks the ramp again
-//      on either side of it.
+//      the direction-change pair of 2a. The TB prints both intervals in clocks,
+//      prints the excess, and pins the pair with a sum.
 //   6. NON-VACUITY: the twelve periods must take twelve distinct values, and
 //      the slope must be non-zero, so a receiver that had collapsed the ramp
 //      could not be described as having measured one.
@@ -94,12 +109,13 @@ module tb_pe_soc_stepper_ramp;
   // it, and an equality against a value recomputed from the clock each time
   // would be an equality against a rounding decision.
   localparam longint RAMP_U = 851667;    // 5110 clocks, to 0.1 ns
+  localparam int SETUP_CYC = 349;           // ST_SETUP on (2,13): 5*69 + 4
 
   // A driver's limits, stated rather than assumed. A step pulse narrower than
   // 1 us is one the chip can miss, and a direction that changes less than 5 us
   // before a STEP edge is one the chip may decode from the old value.
   localparam longint STEP_MIN_U = 10000;    // 1.0 us
-  localparam longint SETUP_MIN_U = 50000;   // 5.0 us
+  localparam int SETUP_MIN_US = 5;          // 5.0 us, the driver's spec
   localparam longint PERIOD_LO_U = 4000000;  // 0.40 ms = 400 us, the fastest
   localparam longint PERIOD_HI_U = 25000000; // 2.50 ms = 2500 us, the slowest
 
@@ -120,8 +136,19 @@ module tb_pe_soc_stepper_ramp;
   logic [7:0] pin_in_bus;
 
   // The driver's inputs: STEP is active low, DIR is a level.
+  //
+  // AND A RELEASED DIR PAD IS LOW, not "whatever the data register happens to
+  // say". The first version of this watched pin_out alone, which meant a
+  // program that changed direction and then DROPPED THE PAD looked identical to
+  // one that drove it: the change was still a one-clocked edge on the register
+  // and every check passed. That is the pin-matrix read-back trap this
+  // repository keeps meeting -- with the OD bit, with 1-Wire, and here: what a
+  // peripheral sees is the PIN, and a released pin is a pull-down. The mutation
+  // gate caught this one (st-dir-released SURVIVED), which is the second time
+  // in this block that the gate has found the act's own blind spot rather than
+  // a defect in the design.
   wire step_low = pin_oe_bus[STEP_BIT] & ~pin_out_bus[STEP_BIT];
-  wire dir_lvl  = ~pin_out_bus[DIR_BIT];
+  wire dir_lvl  = pin_oe_bus[DIR_BIT] ? pin_out_bus[DIR_BIT] : 1'b0;
   assign pin_in_bus = {1'b1, step_low, 5'b11111, dir_lvl, 1'b1};
 
   logic [9:0] dbg_pc;
@@ -151,6 +178,15 @@ module tb_pe_soc_stepper_ramp;
   endfunction
 
   integer i, k, t_flip, n_flip;
+  // THE DIRECTION AT EVERY STEP EDGE. A driver decodes DIR on the STEP edge, so
+  // the level there is part of the protocol and not decoration -- and it is the
+  // one thing this act's edge-counting checks could not see. Two mutants that
+  // RELEASE the DIR pad survive every other check here: the edges they make
+  // land on the interval BOUNDARIES rather than inside an interval, and a pad
+  // that floats to the pull-down still reads as a valid level. The level at the
+  // step edge does not care where the edge is.
+  bit     dir_at_edge [0:MAX_PULSES-1];
+  integer edge_pending = -1;
   longint p_start [0:MAX_PULSES-1];
   longint p_len   [0:MAX_PULSES-1];
   longint p_rise  = -1;
@@ -173,8 +209,23 @@ module tb_pe_soc_stepper_ramp;
 
   // ---- the driver: one edge-triggered recorder on each input -----------
   integer n_pulse = 0;
+  // The direction is sampled ONE CLOCK AFTER the step edge, not in the same
+  // block. dir_lvl and step_low are both combinational functions of the pad
+  // registers, and the pad is written on this same clock edge, so reading
+  // dir_lvl in the edge-triggered process is a race with the register update --
+  // the same two-process-on-one-counter race the WS2812 act found in its own
+  // testbench, and the reason that act measures with $realtime in one process.
+  // Here the fix is to mark the edge and read the level a clock later.
+  always @(posedge clk) if (run && rst_n && edge_pending >= 0) begin
+    dir_at_edge[edge_pending] = dir_lvl;
+    edge_pending = -1;
+  end
+
   always @(step_low) if (run && rst_n) begin
-    if (step_low) p_rise = $rtoi($realtime * 10.0);
+    if (step_low) begin
+      p_rise = $rtoi($realtime * 10.0);
+      if (n_pulse < MAX_PULSES) edge_pending = n_pulse;
+    end
     else if (p_rise >= 0) begin
       t_now = $rtoi($realtime * 10.0);
       if (n_pulse < MAX_PULSES) begin
@@ -194,13 +245,15 @@ module tb_pe_soc_stepper_ramp;
   longint per_u [0:MAX_PULSES-1];   // the step periods, in us
   longint ramp [0:MAX_PULSES-1];   // the difference from the previous step
   integer n_distinct, n_monotone, n_inband, n_onramp;
-  integer flip_step, setup_u;
+  integer n_dirA, n_dirB, n_dir_first, n_dirflip;
+  integer flip_step, n_in_gap, n_ramp_int;
+  longint flip_at = 0, setup_us;
 
   initial begin
     $dumpfile("tb_pe_soc_stepper_ramp.vcd");
     $dumpvars(0, step_low, dir_lvl, pin_out_bus, pin_oe_bus, dbg_pc);
 
-    n_pulse = 0; p_rise = -1; n_flip = 0;
+    n_pulse = 0; p_rise = -1; n_flip = 0; n_in_gap = 0; flip_step = -1; flip_at = 0;
 
     rst_n = 1'b0; run = 1'b0; host_we = 1'b0; host_imem_sel = 1'b0;
     host_addr = '0; host_wdata = '0;
@@ -239,8 +292,7 @@ module tb_pe_soc_stepper_ramp;
       ramp[k] = per_u[k] - per_u[k+1];   // the last period has no successor
     $display("    step periods:");
     for (k = 0; k + 1 < n_pulse; k = k + 1)
-      $display("      step %0d: %.3f us (%.1f Hz)", k, per_u[k]/1e4,
-               1.0e6/(per_u[k]/1e4));
+      $display("      interval %0d: %0d.%0d us", k, per_u[k]/10000, (per_u[k]/1000)%10);
     $display("    dmem: steps_left=%0d runs_left=%0d ramp=%0d done=%02x",
              dut.dmem[3], dut.dmem[5], dut.dmem[4], dut.dmem[14]);
     $display("    ramp per step, in clocks (want exactly %0d):",
@@ -259,18 +311,47 @@ module tb_pe_soc_stepper_ramp;
     // number, and it is checkable because 5110 is a constant and not a
     // property of the data.
     n_onramp = 0;
-    for (k = 0; k + 1 < n_pulse; k = k + 1) begin
+    for (k = 0; k + 2 < n_pulse; k = k + 1) begin
       if (iabs(ramp[k] - RAMP_U) <= CLK_U) n_onramp = n_onramp + 1;
       else
         $display("      step %0d -> %0d: the ramp is %.2f clocks, want %0d",
                  k, k+1, ramp[k]/166.67, RAMP_STEP_CYC);
     end
-    // The interval ACROSS the direction change carries the flip and its setup
-    // delay, so it is not on the line. That is one interval out of eleven and
-    // it is named rather than allowed through.
-    check(n_onramp == n_pulse - 2,
-          $sformatf("every step interval except the direction change is EXACTLY %0d clocks -- %0d of %0d are",
-                    RAMP_STEP_CYC, n_onramp, n_pulse - 2));
+    // ---- THE DIRECTION-CHANGE INTERVAL, AND WHY IT IS CHECKED AS A PAIR --
+    //
+    // The direction change is the only thing in this program that is not a
+    // step, so exactly one interval carries it: that interval is LONGER than
+    // the ramp line by the setup delay and the flip's instructions, and the
+    // interval after it is SHORTER by the same amount. The first version of
+    // this check expected that pair to be off the line and was wrong twice
+    // over -- it expected TWO exceptions and there are two, but it described
+    // them as two anomalies when they are one cost and its recovery, and it
+    // never established what the cost WAS.
+    //
+    // The check that says something is: every other interval is EXACTLY on the
+    // line, the pair SUMS to exactly twice the line, and the direction-change
+    // interval is the long one by at least the setup delay. That pins the cost
+    // to a number instead of excusing it, and a firmware that added or dropped
+    // an instruction in the flip would fail the sum.
+    // n_pulse pulses give n_pulse-2 comparable intervals, and two of them are
+    // the direction-change pair.
+    n_ramp_int = n_pulse - 2;
+    check(n_onramp == n_ramp_int - 2,
+          $sformatf("every step interval except the direction change and the one after it is EXACTLY %0d clocks -- %0d of %0d are",
+                    RAMP_STEP_CYC, n_onramp, n_ramp_int));
+    if (flip_step >= 1 && flip_step + 1 < n_pulse - 1) begin
+      check(iabs((ramp[flip_step-1] + ramp[flip_step]) - 2*RAMP_U) <= 2*CLK_U,
+            $sformatf("the direction-change interval and the one after it SUM to exactly twice the ramp step (%.2f + %.2f, want 2 x %.2f) -- the change costs the same in both directions and is not a second anomaly",
+                      ramp[flip_step-1]/166.67, ramp[flip_step]/166.67, RAMP_STEP_CYC));
+      check(ramp[flip_step] > RAMP_U,
+            $sformatf("the direction-change interval is the LONG one (%.2f clocks, want more than %0d) -- a change made later would be short, and a driver that samples DIR on the STEP edge would take the old direction",
+                      ramp[flip_step]/166.67, RAMP_STEP_CYC));
+      check(ramp[flip_step-1] < RAMP_U,
+            $sformatf("the interval before the change is on the line (%.2f clocks)", ramp[flip_step-1]/166.67));
+      check(ramp[flip_step] - RAMP_U >= SETUP_CYC - 4*CLK_U,
+            $sformatf("the direction change costs at least the setup delay (%.2f clocks over the line, want >= %0d)",
+                      (ramp[flip_step]-RAMP_U)/166.67, SETUP_CYC));
+    end
 
     // ---- 3. the periods are distinct, monotonic, and in band -----------
     n_distinct = 0;
@@ -294,30 +375,69 @@ module tb_pe_soc_stepper_ramp;
                     PERIOD_LO_U/1e4, PERIOD_HI_U/1e4, n_inband, n_pulse - 1));
 
     // where the direction changed, and how long the driver was given
-    // Search EVERY recorded edge, not just the first. The first version
-    // looked only at flip_t[0] and found no interval containing it, so the
-    // setup-time check below was never executed and the act reported a pass
-    // for a check that had not run. A check inside `if (found)` that is never
-    // reached is the quietest kind of vacuity there is, and the fix is to
-    // assert that something was found.
+    // AN EDGE INSIDE A STEP INTERVAL, not an EDGE COUNT. The first version
+    // counted edges and asked for two, and got two: one when the program set
+    // DIR at startup and one when the FIRST STEP cleared the direction bit,
+    // because the step's level write went out as 0x00. So the act reported "the
+    // direction changed exactly once" for a program in which the direction
+    // never changed after the first step, and the setup-time check below never
+    // ran at all because no edge was ever inside an interval. Two checks, both
+    // satisfied, both about something that was not happening.
+    //
+    // So the edges are LOCATED, not counted: an edge inside a step interval is
+    // a direction change a driver would decode, and there must be exactly one
+    // of them. The startup edge is before the first pulse and is not one.
     flip_step = -1;
-    for (i = 0; i < n_flip; i = i + 1)
+    n_in_gap = 0;
+    for (i = 0; i < n_flip; i = i + 1) begin
+      if (flip_t[i] < p_start[0]) continue;      // before the ramp: the init
       for (k = 0; k + 1 < n_pulse; k = k + 1)
-        if (flip_t[i] > (p_start[k] + p_len[k]) && flip_t[i] < p_start[k+1])
-          flip_step = k;
-    check(flip_step >= 0,
-          $sformatf("the direction changed inside a step interval, where a driver would decode it -- found it in interval %0d of %0d",
-                    flip_step, n_pulse - 1));
-    if (flip_step >= 0) begin
-      setup_u = (p_start[flip_step+1] - flip_t[0]) / 1e5;   // 0.1 ns -> 0.1 us
-      $display("    DIR changed %0d steps in, %.1f us before the next STEP edge",
-               flip_step + 1, setup_u/1e5);
-      check(setup_u * 10 >= SETUP_MIN_U,
-            $sformatf("the driver got its direction setup time (%.1f us, want >= 5.0 us)",
-                      setup_u/1e5));
+        if (flip_t[i] > (p_start[k] + p_len[k]) && flip_t[i] < p_start[k+1]) begin
+          flip_step  = k;
+          flip_at    = flip_t[i];
+          n_in_gap   = n_in_gap + 1;
+        end
     end
-    check(n_flip == 2,
-          $sformatf("the direction changed exactly once (%0d changes on the pin)", n_flip - 1));
+    check(n_in_gap == 1,
+          $sformatf("the direction changes EXACTLY ONCE inside the ramp, where a driver would decode it (%0d edges in an interval)",
+                    n_in_gap));
+    // The interval from the direction edge to the NEXT STEP edge: that is what
+    // a chip which samples DIR on the edge is given, and it is the whole point
+    // of changing direction in the middle of a ramp. The first version read
+    // flip_t[0] here rather than the edge it had found, and reported 0.0 us
+    // for a change that had 6.1 us in front of it.
+    if (flip_step >= 0) begin
+      setup_us = (p_start[flip_step+1] - flip_at) / 10000;   // 0.1 ns -> us
+      $display("    DIR changed in interval %0d, %.2f us before the next STEP edge",
+               flip_step, setup_us/1.0);
+      check(setup_us >= SETUP_MIN_US,
+            $sformatf("the driver got its direction setup time (%.2f us, want >= %.1f us)",
+                      setup_us/1.0, SETUP_MIN_US/1.0));
+    end
+    $display("    DIR edges on the pin: %0d (%0d inside the ramp)", n_flip, n_in_gap);
+
+    // ---- the direction AT every step edge, which is where it is decoded ----
+    n_dirA = 0; n_dirB = 0; n_dirflip = -1;
+    for (k = 0; k < n_pulse; k = k + 1) begin
+      if (k < N_STEPS/2) n_dirA = n_dirA + (dir_at_edge[k] ? 1 : 0);
+      else               n_dirB = n_dirB + (dir_at_edge[k] ? 1 : 0);
+    end
+    for (k = 1; k < n_pulse; k = k + 1)
+      if (dir_at_edge[k] != dir_at_edge[k-1]) n_dirflip = k;
+    $display("    direction at the step edges: %0d of %0d high in the first run, %0d of %0d in the second, changing at step %0d",
+             n_dirA, N_STEPS/2, n_dirB, N_STEPS - N_STEPS/2, n_dirflip);
+    // One direction for the whole of each run, and the two DIFFERENT: this is
+    // what a driver decodes, and a pad released for the step pulse reads as the
+    // pull-down, so the first run measures 0 of 6 high.
+    check(n_dirA == N_STEPS/2,
+          $sformatf("every step of the first run is decoded with DIR HIGH (%0d of %0d) -- a released DIR pad reads as the pull-down, and a driver samples it on the edge",
+                    n_dirA, N_STEPS/2));
+    check(n_dirB == 0,
+          $sformatf("every step of the second run is decoded with DIR LOW (%0d of %0d are high)",
+                    n_dirB, N_STEPS - N_STEPS/2));
+    check(n_dirflip == N_STEPS/2,
+          $sformatf("the direction decoded by the driver changes once, at step %0d (got %0d)",
+                    N_STEPS/2, n_dirflip));
 
     $display("");
     if (errors == 0) $display("PASS: all checks");

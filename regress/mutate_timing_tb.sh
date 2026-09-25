@@ -56,12 +56,13 @@ TB_SV="$ROOT/tb/tb_pe_soc_servo.v"
 TB_DH="$ROOT/tb/tb_pe_soc_dht11.v"
 TB_DS="$ROOT/tb/tb_pe_soc_ds18b20.v"
 TB_NEC="$ROOT/tb/tb_pe_soc_ir_nec.v"
+TB_STP="$ROOT/tb/tb_pe_soc_stepper_ramp.v"
 JOBS="${MUTATE_TIMING_JOBS:-6}"
 mkdir -p "$ROOT/sim"
 
 # ---- the tree must not change ---------------------------------------------
 SNAP=$(mktemp -d /tmp/mut_timing_snap.XXXXXX)
-for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir; do
+for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp; do
   cp "$ROOT/firmware/$f.pe"  "$SNAP/$f.pe"
   cp "$ROOT/firmware/$f.hex" "$SNAP/$f.hex"
 done
@@ -119,7 +120,7 @@ PYEOF
   return $rc
 }
 export -f run_case
-export ROOT SRCS SRAM_MODEL TB_WS TB_SV TB_DH TB_DS TB_NEC
+export ROOT SRCS SRAM_MODEL TB_WS TB_SV TB_DH TB_DS TB_NEC TB_STP
 
 # ---- the cases --------------------------------------------------------------
 # Each one is a defect a real firmware of this shape can have, chosen so the
@@ -165,6 +166,17 @@ ir-burst-count|nec_ir|a data burst built from 20 carrier cycles instead of 21
 ir-no-rotate|nec_ir|the byte never rotated, so the frame is eight ones instead of 0xA5
 ir-stop-burst|nec_ir|the stop burst left out, so the frame ends on the eighth gap
 ir-no-drive|nec_ir|only the leader drives the pin; the data bursts leave it released
+st-ramp-const|stepper_ramp|the first step period's counted constant 196 -> 112, so the ramp runs the driver's minimum step rate out before the twelfth step
+st-ramp-decrement|stepper_ramp|the ramp decrement 10 -> 9, so the ramp is no longer 5110 clocks
+st-setup-const|stepper_ramp|the direction setup constant 6 -> 3, under the driver's 5 us
+st-pulse-const|stepper_ramp|the STEP pulse constant 2 -> 1, so the pulse is 0.4 us and a driver cannot see it
+st-no-dir|stepper_ramp|the direction change removed: twelve steps in one direction
+st-dir-clobbered|stepper_ramp|the step's level write clears the DIR bit, so the direction never changes
+st-step-releases-dir|stepper_ramp|PINOE written with ST_STEP alone, so DIR floats at the step edge
+st-release-drops-dir|stepper_ramp|PINOE written with 0x00 to release STEP, which releases DIR too
+st-dir-never-on-pin|stepper_ramp|the direction change updates the register but never writes the pin, so the second run is stepped in the OLD direction
+st-no-ramp|stepper_ramp|the ramp never shortened, so the twelve steps are at one period
+st-shared-slot|stepper_ramp|the ramp counter back in dmem[9], which the delay routine counts to zero
 CASES_EOF
 
 # The counts come from the $results file, not from four shell variables set
@@ -185,6 +197,7 @@ run_one() {
     dh-*) stem=dht11_read;   tb="$TB_DH"; def=DHT11_HEX ;;
     ow-*) stem=ds18b20;      tb="$TB_DS"; def=DS18B20_HEX ;;
     ir-*) stem=nec_ir;       tb="$TB_NEC"; def=NEC_HEX ;;
+    st-*) stem=stepper_ramp; tb="$TB_STP"; def=STEPPER_HEX ;;
     *) echo "HARNESS ERROR: unknown case id $id" >> "$results"; return 2 ;;
   esac
   case "$id" in
@@ -402,6 +415,115 @@ run_one() {
       repl="ir_emit:
         LDI   A, 0x00
         OUT   PINOE, A          ; MUTANT: the pad is left released" ;;
+    # ---- STEPPER. The act's claim is an EQUALITY against 5110 clocks, so the
+    # cases that matter are the ones that keep every window happy and break the
+    # equality: a ramp decrement of 9 is a perfectly good ramp that is not THIS
+    # ramp, and only an equality check can tell them apart.
+    st-ramp-const)
+      # The COUNTED-DELAY-CONSTANT case, and the interesting way to use one: not
+      # a shift (shifting a whole ramp is a different valid ramp, not a defect,
+      # and a gate that claimed to catch that would be claiming to catch a
+      # choice) but a value that RUNS THE RAMP OUT. At 112 the twelfth step's
+      # counter is 2 outer steps, 17 us, an order of magnitude under the
+      # driver's minimum step rate -- and one step earlier it is 255, the
+      # unsigned wrap, which is the defect this block has now found four times.
+      extra='--const ST_GAP0=112'
+      anchor="        LDI   A, ST_GAP0
+        STM   4, A"
+      repl="        LDI   A, ST_GAP0
+        STM   4, A
+        ; MUTANT: the fitted first period is overridden (see --const)" ;;
+    st-ramp-decrement)
+      anchor='ph2:    LDM   A, 4              ; the next period is ten outer steps shorter --
+        SUB   A, 10             ; THE RAMP, in one subtraction, 5110 clocks
+        STM   4, A'
+      repl='ph2:    LDM   A, 4
+        SUB   A, 9              ; MUTANT: nine, so the ramp is 4599 clocks
+        STM   4, A' ;;
+    st-setup-const)
+      extra='--const ST_SETUP=3'    # 3*69+4 = 211 clocks = 3.5 us, under 5
+      anchor="        LDI   A, ST_SETUP
+        STM   9, A"
+      repl="        LDI   A, ST_SETUP
+        STM   9, A
+        ; MUTANT: the fitted setup time is overridden (see --const)" ;;
+    st-pulse-const)
+      extra='--const ST_PULSE=1'    # 1*69+4 = 73 clocks = 1.2 us... to 0.4:
+      anchor="        LDI   A, ST_PULSE
+        STM   9, A"
+      repl="        LDI   A, ST_PULSE
+        STM   9, A
+        ; MUTANT: the fitted pulse width is overridden (see --const)" ;;
+    st-no-dir)
+      anchor='        LDI   A, 0x00
+        STM   0, A              ; the new direction, in the register
+        OUT   TXPIN, A'
+      repl='        LDI   A, 0x20          ; MUTANT: the direction never changes
+        STM   0, A
+        OUT   TXPIN, A' ;;
+    st-dir-clobbered)
+      # THE BUG THIS ACT FOUND: the step's level write went out as 0x00 and
+      # cleared the DIR bit, so the first step zeroed the direction and the
+      # change half a ramp later wrote a zero to a register already at zero.
+      anchor='        LDM   A, 0
+        OUT   TXPIN, A          ; STEP LOW (bit 6 clear), DIR at whatever'
+      repl='        LDI   A, 0x00           ; MUTANT: clears the DIR bit too
+        OUT   TXPIN, A' ;;
+    # NOTE ON A CASE THAT WAS WRITTEN AND THEN DELETED, because the reason is
+    # the whole discipline. The first version of st-dir-released released the
+    # DIR pad at the moment of the direction change. It SURVIVED, and the
+    # second time it survived it looked like a gap in the testbench, and it was
+    # not: the pad is released for the four instructions between that write and
+    # the write that sets the direction, and the direction being set is the
+    # pull-down's own value, so the wire is identical either way. It is a
+    # benign mutant. A gate that kept it and loosened a check to catch it would
+    # be claiming to catch a no-op, which is the same error as a check that
+    # cannot fail -- one level down. The replacement is the same defect made
+    # real: the change is written AFTER the setup delay, so the driver is
+    # given the whole 5.8 us of "setup" with the OLD direction still on the pin
+    # and then steps immediately.
+    # ONE anchor, and it takes the direction write OUT of the flip. The
+    # register in dmem[0] is still updated, so the program BELIEVES the
+    # direction changed -- the defect is invisible from dmem and only exists on
+    # the wire, which is the whole of what this act measures. The driver then
+    # decodes the OLD direction for all six steps of the second run.
+    st-dir-never-on-pin)
+      anchor='        LDI   A, 0x00
+        STM   0, A              ; the new direction, in the register
+        OUT   TXPIN, A'
+      repl='        LDI   A, 0x00
+        STM   0, A              ; MUTANT: the register is updated, so dmem
+                                ; says the direction changed, but nothing is
+                                ; written to the pin -- the second run is
+                                ; stepped in the OLD direction.' ;;
+    st-step-releases-dir)
+      # The fourth clobbering write: driving STEP with ST_STEP alone clears the
+      # DIR pad for the whole step pulse, and a driver samples DIR on the STEP
+      # edge. The receiver sees the direction fall at every step.
+      anchor='        LDI   A, ST_BOTH
+        OUT   PINOE, A          ; drive STEP, and keep DIR DRIVEN: a driver'
+      repl='        LDI   A, ST_STEP         ; MUTANT: releases the DIR pad
+        OUT   PINOE, A          ; drive STEP' ;;
+    st-release-drops-dir)
+      # ...and the third: releasing STEP with 0x00 releases DIR as well, so the
+      # direction floats for the whole of the low phase.
+      anchor='ph1:    LDI   A, ST_DIR
+        OUT   PINOE, A          ; release STEP and ONLY STEP: a write of 0x00'
+      repl='ph1:    LDI   A, 0x00           ; MUTANT: releases DIR too
+        OUT   PINOE, A          ; release STEP' ;;
+    st-no-ramp)
+      anchor='ph2:    LDM   A, 4              ; the next period is ten outer steps shorter --
+        SUB   A, 10             ; THE RAMP, in one subtraction, 5110 clocks
+        STM   4, A'
+      repl='ph2:    LDM   A, 4              ; MUTANT: the ramp never shortens
+        STM   4, A' ;;
+    st-shared-slot)
+      # THE OTHER BUG THIS ACT FOUND: the ramp counter back in dmem[9], which
+      # the delay routine counts itself down to zero.
+      anchor="        LDI   A, ST_GAP0
+        STM   4, A"
+      repl="        LDI   A, ST_GAP0
+        STM   9, A              ; MUTANT: dmem[9] is the DELAY's own counter" ;;
     ow-presence-edge)
       anchor='ph1b:   IN    A, PIN
         AND   A, OW_DATA
@@ -469,11 +591,11 @@ rm -f "$CASES" "$results" "$CASELOG"
 
 # ---- the tree must not have changed ----------------------------------------
 stale=0
-for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir; do
+for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp; do
   cmp -s "$SNAP/$f.pe" "$ROOT/firmware/$f.pe"  || { echo "FATAL: firmware/$f.pe was modified"; stale=1; }
   cmp -s "$SNAP/$f.hex" "$ROOT/firmware/$f.hex" || { echo "FATAL: firmware/$f.hex was modified"; stale=1; }
 done
-[ "$stale" -eq 0 ] && echo "firmware tree byte-identical after the run (cmp-verified, all 10 files: 5 programs, .pe and .hex)"
+[ "$stale" -eq 0 ] && echo "firmware tree byte-identical after the run (cmp-verified, all 12 files: 6 programs, .pe and .hex)"
 
 echo
 echo "timing-TB mutations: $n_cases cases, $n_ok detected, $n_surv survived, $n_err harness errors"

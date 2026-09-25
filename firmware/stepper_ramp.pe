@@ -74,7 +74,23 @@
         LDI   A, ST_DIR
         OUT   PINOE, A          ; DIR is DRIVEN from here on
         LDI   A, ST_DIR
-        OUT   TXPIN, A          ; direction 1
+        STM   0, A              ; THE TXPIN VALUE, and dmem[0] is its only
+        OUT   TXPIN, A          ; home. Both outputs are one register, so a
+                                ; write that carries STEP's level has to carry
+                                ; DIR's level too -- and DIR's level CHANGES
+                                ; mid-ramp, so it cannot be a constant in the
+                                ; step. Two first attempts at this: writing
+                                ; 0x00 for the step cleared the direction, so
+                                ; the first step zeroed DIR and the change half
+                                ; a ramp later wrote a zero to a register that
+                                ; was already zero -- the direction never
+                                ; changed on the wire at all, and the TB
+                                ; decoded twelve steps in one direction. Then
+                                ; writing ST_DIR for the step fixed that and
+                                ; broke the change instead, six microseconds
+                                ; later, by putting DIR back to 1. The value
+                                ; belongs in a register, and the only place
+                                ; that can be written from is data memory.
         LDI   A, 0x00
         STM   12, A             ; the phase the delay returns to
         LDI   A, 0x00
@@ -102,11 +118,16 @@
 ; ===========================================================================
 st_run:
 st_step:
-        LDI   A, ST_STEP
-        OUT   PINOE, A          ; drive STEP
-        LDI   A, 0x00
-        OUT   TXPIN, A          ; LOW: the driver's input is pulled down, so
-                                ; this low pulse IS the step
+        LDI   A, ST_BOTH
+        OUT   PINOE, A          ; drive STEP, and keep DIR DRIVEN: a driver
+                                ; samples DIR on the STEP edge, so releasing
+                                ; DIR for the step pulse is releasing it at
+                                ; exactly the instant it is read. Writing
+                                ; ST_STEP alone released it, and the receiver
+                                ; saw the direction fall at every step.
+        LDM   A, 0
+        OUT   TXPIN, A          ; STEP LOW (bit 6 clear), DIR at whatever
+                                ; dmem[0] says it is
         LDI   A, 1
         STM   12, A             ; the delay returns to phase 1
         LDI   A, ST_PULSE
@@ -119,8 +140,21 @@ st_step:
 
 ; ---- phase 1: the low pulse is over. Release STEP: the rest of the period
 ;      is a gap, and the gap's length is the period. ----
-ph1:    LDI   A, 0x00
-        OUT   PINOE, A          ; released: the driver sees the inactive state
+ph1:    LDI   A, ST_DIR
+        OUT   PINOE, A          ; release STEP and ONLY STEP: a write of 0x00
+                                ; here released the DIR pad as well, so the
+                                ; direction was floating for the whole of every
+                                ; step pulse and the receiver saw the direction
+                                ; fall at each step. That is the THIRD write in
+                                ; this program that cleared the other pin --
+                                ; the step's level write, the park's, and now
+                                ; this one -- and all three have the same cause:
+                                ; PINOE and TXPIN are whole registers, so a
+                                ; write that means "this pin" is a write that
+                                ; also means "the other pin" unless the other
+                                ; pin's level is carried in it. Two outputs, one
+                                ; register, and the pin you are not driving is
+                                ; as much a part of the instruction.
         LDI   A, 2
         STM   12, A             ; the delay returns to phase 2
         LDM   A, 4
@@ -155,7 +189,11 @@ ph2:    LDM   A, 4              ; the next period is ten outer steps shorter --
         LDI   A, 6
         STM   3, A              ; six more steps, the other way
         LDI   A, 0x00
-        OUT   TXPIN, A          ; DIR = 0. This is the only instruction that
+        STM   0, A              ; the new direction, in the register
+        OUT   TXPIN, A          ; ...and OUT, so the setup delay below is a
+                                ; real interval between the change and the next
+                                ; STEP edge rather than a wait before it. This
+                                ; is the only instruction that
                                 ; ever changes the direction, and the counted
                                 ; delay after it is the driver's setup time:
                                 ; a chip that samples DIR on the STEP edge
@@ -182,11 +220,12 @@ ph2:    LDM   A, 4              ; the next period is ten outer steps shorter --
 ; give up one of the three behaviours.
 ph3:    JMP   st_step
 
+
 st_done:
         LDI   A, 1
         STM   14, A             ; the ramp is out
-park:   LDI   A, 0x00
-        OUT   TXPIN, A
+park:   LDM   A, 0             ; parking keeps DIR where it was: a write of
+        OUT   TXPIN, A          ; 0x00 here would be a direction change too
 halt:   JMP   halt              ; the ISA has no HALT
 
 ; ===========================================================================

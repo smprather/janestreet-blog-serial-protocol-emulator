@@ -163,15 +163,15 @@ for prog in i2c_adv spi_mode3 uart_flow; do
   pass=$((pass+1))
 done
 
-# The five TIMING programs. Each of these is $readmemh'd by an RTL testbench
+# The six TIMING programs. Each of these is $readmemh'd by an RTL testbench
 # (tb_pe_soc_ws2812 / tb_pe_soc_servo / tb_pe_soc_dht11 / tb_pe_soc_ds18b20 /
-# tb_pe_soc_ir_nec),
+# tb_pe_soc_ir_nec / tb_pe_soc_stepper_ramp),
 # so a stale image would be a silent pass on the integration -- and these are
 # the only programs in the repository where a stale image cannot be caught by
 # any other test, because the thing under test IS the program. The delay
 # constants in them are fitted instruction counts (see the headers), so a
 # re-assembly that silently changed one would change a timing claim.
-for prog in ws2812 servo_sweep dht11_read ds18b20 nec_ir; do
+for prog in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp; do
   if ! $PY tools/fw/peasm.py "firmware/$prog.pe" -o "firmware/$prog.hex" >/dev/null 2>&1; then
     echo "assemble $prog FAIL"
     $PY tools/fw/peasm.py "firmware/$prog.pe" 2>&1 | head -3 | sed 's/^/    /'

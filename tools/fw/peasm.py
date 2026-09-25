@@ -270,11 +270,11 @@ CONSTS: dict[str, int] = {
     # leader was 2.3 ms. Nothing downstream noticed. So the leader is
     # IR_LEADR runs of IR_LEAD cycles, and IR_BIT (21) is a single run.
     "IR_DATA": 0x40,  # the IR LED: cathode on the pin, so LOW emits
-    "IR_H1": 5,       # the high half period, on the (2,44) pair: 776 clocks
-    "IR_H2": 6,       # the low half period,  on the (2,34) pair: 769 clocks
-    "IR_LEADR": 2,    # the leader is this many runs (2 x 171 = 342 cycles)
-    "IR_LEAD": 171,   # ...of this many carrier cycles each
-    "IR_BIT": 21,     # a data burst: 21 cycles = 0.5625 ms
+    "IR_H1": 5,  # the high half period, on the (2,44) pair: 776 clocks
+    "IR_H2": 6,  # the low half period,  on the (2,34) pair: 769 clocks
+    "IR_LEADR": 2,  # the leader is this many runs (2 x 171 = 342 cycles)
+    "IR_LEAD": 171,  # ...of this many carrier cycles each
+    "IR_BIT": 21,  # a data burst: 21 cycles = 0.5625 ms
     "IR_GAP0": 200,
     "IR_GAP1": 67,
     "IR_LEADGAP": 255,
@@ -310,10 +310,18 @@ CONSTS: dict[str, int] = {
     #   ST_SETUP  6 ->   7.0 us   DIR setup before the next STEP edge (5 us min)
     #   ST_GAP0 196 -> 100160 clocks = 1.669 ms, the first step period
     "ST_STEP": 0x40,  # the STEP pin
-    "ST_DIR": 0x20,   # the DIR pin
-    "ST_PULSE": 2,    # the low pulse, on the (2,13) pair: 2 * 69 + 4 = 142
-    "ST_SETUP": 6,    # the direction setup, same pair: 6 * 69 + 4 = 418
-    "ST_GAP0": 196,   # the first step period, on (4,40): 196 * 511 + 4
+    "ST_DIR": 0x20,  # the DIR pin
+    # ST_BOTH is what PINOE is written with while a step is being driven,
+    # and it is a constant rather than a comment because writing ST_STEP
+    # on its own RELEASES the DIR pad for the whole of the step pulse -- and
+    # a driver samples DIR on the STEP edge, so that is the one instant at
+    # which the direction has to be driven. That was the fourth write in
+    # stepper_ramp.pe that cleared the other pin; see that file's header.
+    "ST_BOTH": 0x60,
+    "ST_PULSE": 2,  # the low pulse, on the (2,13) pair: 1 * 69 + 4 = 73 clocks
+                    # = 1.2 us, and a driver wants at least 1 us
+    "ST_SETUP": 6,  # the direction setup, same pair: 6 * 69 + 4 = 418
+    "ST_GAP0": 196,  # the first step period, on (4,40): 196 * 511 + 4
 }
 
 
