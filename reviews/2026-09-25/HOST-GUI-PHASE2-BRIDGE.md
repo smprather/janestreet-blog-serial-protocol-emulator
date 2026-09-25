@@ -117,11 +117,13 @@ the system interpreter; the phase-1b venv run covers that path). Full log:
   leaves `ControllerSession` in `LOADING` until the next successful
   `status()`; it is never reported as success, and the phase-1b suite has no
   failing case for it. Not changed here to keep this phase to Task 2.
-- **SDK-level failures during `hello`/`prepare` are fail-fast.** A missing
-  project or pin map raises out of the serve loop instead of answering
-  `ok=false`; only the SPI transfer path has typed errors. (The same
-  fail-fast path is what a wrong-project-name at startup hits; a typed
-  response there is a small follow-up.)
+- **SDK-level failures during `hello`/`prepare` were fail-fast; CLOSED
+  2026-09-25 (`d233fe0`)** — a missing project, a dead clock or an
+  unconfigured pin map now answers `ok=false` with a typed
+  `board error during <op>: ...` instead of raising out of the serve loop, and
+  a retry after the board is fixed succeeds with no poisoned state (the clock
+  starts once). The bridge survives and keeps serving; the SPI-timeout path is
+  unchanged.
 - **Final review:** self-review (no subagent tool in this session) of the
   phase diff at `c28234d` against plan Task 2 and the phase-1b host contract;
   no Critical/Important findings remain after the three fixes above.
