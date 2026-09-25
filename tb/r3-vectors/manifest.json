@@ -1,14 +1,56 @@
 {
   "artifact": "R3 debug-control $readmemh export",
-  "chip_confirmed": false,
+  "chip_confirmed": true,
   "chip_evidence": {
-    "confirmed_steps": [],
-    "conformance": "0 of 14 host golden steps confirmed against the chip. The chip has run its OWN tb_pe_ctrl_r3 with a 7-mutant gate (all caught) and formal proofs for S1-S4; that is the chip's evidence. These host vectors become chip-confirmed only when that TB passes THEM byte-exactly and the citations are recorded here.",
+    "confirmed_steps": [
+      "bp_set_address_2",
+      "bp_set_past_imem",
+      "bp_set_len_0",
+      "step_from_boot_stop",
+      "status_shows_pc_1",
+      "read_cpu_shows_a_55",
+      "step_one",
+      "step_two",
+      "status_shows_a_aa",
+      "step_not_ready",
+      "step_one",
+      "step_lands_on_2",
+      "status_reports_the_hit",
+      "status_after_live_hit",
+      "status_is_stable",
+      "step_off_the_breakpoint",
+      "status_shows_no_hit",
+      "bp_clr_releases",
+      "status_running_again",
+      "bp_clr_to_boot_stop",
+      "status_reads_zero",
+      "bp_set_bad_crc",
+      "status_shows_not_armed",
+      "step_on_loopback",
+      "bp_set_on_loopback"
+    ],
+    "conformance": "25 of 26 host golden steps confirmed against the chip, byte-exact including the CRC word. The remaining 1 is listed in not_confirmed_steps with its reason: a testbench model boundary that is not claimed. Two further steps were confirmed only after the host regenerated them (gui-worker b9d4eb2); they were host-side defects this run proved, and they are recorded under resolved_steps so the reason the count moved is on the face of the manifest.",
     "date": "2026-09-25",
-    "harness": "tb_pe_ctrl_r3 (chip repo) loads imem.hex/dmem.hex, applies each vector's model_images[] state -- registers plus bp_addr/bp_en/bp_hit/debug_hold -- drives the step's request_file and compares the response word for word, CRC included, skipping wait words (these ops emit none)",
-    "review": null,
-    "scope": "The host's expectations for the implemented R3 contract. Not evidence about silicon, and the real-board acceptance run (Pico over USB with a physical shuttle) has not been executed and is not claimed.",
-    "testbench": null
+    "harness": "tb_pe_ctrl_r3_conf.v replays each step's request_file and compares the response to response_file word for word, CRC included, with the vector's model image preloaded; tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt pins the measured divergences and the harness fails if the observed set ever differs from it",
+    "not_confirmed_steps": [
+      {
+        "reason": "TB MODEL BOUNDARY, not a disagreement, and NOT claimed. The package's `insn` is a mid-execution snapshot (pc=4 with a=0 has not executed the LDI at 3); the model freeze that holds such a snapshot pins pc every cycle, which collapses the fetch pipeline onto the fill word instead of the ruled landing word 0xF000. The contract now states that at a freeze `insn` reports the latched pipeline word, and no RTL changes. If the host's model adopts that, the package regenerates and this flips.",
+        "step": "status_full_readback"
+      }
+    ],
+    "resolved_steps": [
+      {
+        "resolution": "HOST-side vector defect, fixed host-side in b9d4eb2. The host's READ_CPU builder returned its debug `state` in the slot the contract gives to `run`, and carried a stale `insn` where the chip reports the fetched word at the held pc. Regenerated, this step matches the chip byte-exact and is chip_confirmed.",
+        "step": "read_cpu_shows_a_55"
+      },
+      {
+        "resolution": "HOST-side vector defect, fixed host-side in b9d4eb2. The package carried a=0x0055 where the chip reports 0x00AA: the step from address 1 to 2 really does execute the LDI A,0xAA at 1, because a step is exactly one instruction and stop-before applies to the instruction AT the breakpoint, which has not run. Regenerated, this step matches the chip byte-exact and is chip_confirmed.",
+        "step": "status_reports_the_hit"
+      }
+    ],
+    "review": "reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md",
+    "scope": "The chip's answers to the host's bytes, in simulation. Not evidence about silicon: the real-board acceptance run (Pico over USB with a physical shuttle) has not been executed and is not claimed.",
+    "testbench": "tb/tb_pe_ctrl_r3_conf.v"
   },
   "generated_by": "tools/host_gui/r3_vectors.py (--hex)",
   "image_files": {
@@ -537,7 +579,7 @@
       }
     }
   },
-  "notice": "NOT CHIP-CONFIRMED. Reconciled against the implemented R3 contract (chip repo, 2026-09-25), but no step here has been run against the chip's tb_pe_ctrl_r3 yet, so every step is chip_confirmed=false. A passing step in this package is the gate the chip must meet, NOT evidence that it does. The real-board acceptance run has not been executed.",
+  "notice": "CHIP-CONFIRMED for 25 of 26 steps by the chip's own conformance run (tb_pe_ctrl_r3_conf), byte-exact including the CRC. The remaining 1 are NOT confirmed and carry a reason each in chip_evidence.not_confirmed_steps. The real-board acceptance run has not been executed and is not claimed.",
   "phase": "R3",
   "readmemh_usage": "$readmemh(\"<file>\", mem); with an 8-bit mem[] filled from address 0; the stream is the frame's bytes in wire order.",
   "schema": 1,
@@ -548,14 +590,14 @@
   ],
   "vectors": [
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v01-bp-set-readback",
       "name": "debug_bp_set_readback",
       "obligation": "DEBUG_BP_SET arms the address and reads it straight back in the 5-word prefix.",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v01-bp-set-readback",
           "name": "bp_set_address_2",
@@ -579,14 +621,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v02-bp-set-out-of-range",
       "name": "debug_bp_set_out_of_range",
       "obligation": "A breakpoint address past IMEM_WORDS is RANGE, changes nothing, and latches NO fault (R3 adds no fault class).",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v02-bp-set-out-of-range",
           "name": "bp_set_past_imem",
@@ -610,14 +652,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v03-bp-set-wrong-length",
       "name": "debug_bp_set_wrong_length",
       "obligation": "A wrong payload length is a 1-word BAD_FRAME with no side effect on any debug register (S5).",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 8,
           "model_image_id": "v03-bp-set-wrong-length",
           "name": "bp_set_len_0",
@@ -637,14 +679,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v04-step-executes-one",
       "name": "debug_step_executes_one",
       "obligation": "DEBUG_STEP executes exactly one instruction and leaves the core in DEBUG_HOLD (S1).",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v04-step-executes-one",
           "name": "step_from_boot_stop",
@@ -666,8 +708,8 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v04-step-executes-one",
           "name": "status_shows_pc_1",
@@ -694,8 +736,8 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v04-step-executes-one",
           "name": "read_cpu_shows_a_55",
@@ -721,14 +763,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v05-step-sequence",
       "name": "debug_step_sequence",
       "obligation": "Two steps retire two instructions: pc 0->1->2 and the LDI at 1 has run exactly once (a=0xAA).",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v05-step-sequence",
           "name": "step_one",
@@ -750,8 +792,8 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v05-step-sequence",
           "name": "step_two",
@@ -773,8 +815,8 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v05-step-sequence",
           "name": "status_shows_a_aa",
@@ -803,14 +845,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v06-step-while-running",
       "name": "debug_step_while_running",
       "obligation": "A free-running core cannot be stepped: NOT_READY with the full 5-word prefix, the pre-step state, and no side effect.",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v06-step-while-running",
           "name": "step_not_ready",
@@ -834,14 +876,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v07-step-lands-on-bp",
       "name": "debug_step_lands_on_bp",
       "obligation": "A step whose landing address is the armed breakpoint reports state 3, the landing PC, and bp_flags 0b11 (S3).",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v07-step-lands-on-bp",
           "name": "step_one",
@@ -863,8 +905,8 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v07-step-lands-on-bp",
           "name": "step_lands_on_2",
@@ -886,8 +928,8 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v07-step-lands-on-bp",
           "name": "status_reports_the_hit",
@@ -916,14 +958,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v08-bp-hit-stops-live-core",
       "name": "debug_bp_hit_stops_live_core",
       "obligation": "A free-running core stops on the breakpoint with run still high, and reports state 3 (S3).",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v08-bp-hit-stops-live-core",
           "name": "status_after_live_hit",
@@ -950,8 +992,8 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v08-bp-hit-stops-live-core",
           "name": "status_is_stable",
@@ -980,14 +1022,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v09-step-off-bp-clears-hit",
       "name": "debug_step_off_bp_clears_hit",
       "obligation": "A step off the breakpoint clears the hit and returns to DEBUG_HOLD with bp_flags 0b01 (S4).",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v09-step-off-bp-clears-hit",
           "name": "step_off_the_breakpoint",
@@ -1009,8 +1051,8 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v09-step-off-bp-clears-hit",
           "name": "status_shows_no_hit",
@@ -1039,14 +1081,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v10-bp-clr-resumes",
       "name": "debug_bp_clr_resumes",
       "obligation": "DEBUG_BP_CLR disarms, clears the hit and RELEASES the hold: run=1 resumes, run=0 falls to the boot stop with PC 0.",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v10-bp-clr-resumes",
           "name": "bp_clr_releases",
@@ -1068,8 +1110,8 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v10-bp-clr-resumes",
           "name": "status_running_again",
@@ -1098,14 +1140,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v11-bp-clr-boot-stop",
       "name": "debug_bp_clr_while_stopped_is_boot_stop",
       "obligation": "With run=0, DEBUG_BP_CLR drops the hold to the normal boot stop and the PC re-zeroes; the response reports the PC at the request.",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v11-bp-clr-boot-stop",
           "name": "bp_clr_to_boot_stop",
@@ -1127,8 +1169,8 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v11-bp-clr-boot-stop",
           "name": "status_reads_zero",
@@ -1157,14 +1199,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v12-bad-crc-no-side-effect",
       "name": "debug_bad_crc_no_side_effect",
       "obligation": "A bad CRC arms nothing and executes nothing (S5).",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 2,
           "model_image_id": "v12-bad-crc-no-side-effect",
           "name": "bp_set_bad_crc",
@@ -1182,8 +1224,8 @@
           "status": 2
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 2,
           "model_image_id": "v12-bad-crc-no-side-effect",
           "name": "status_shows_not_armed",
@@ -1248,14 +1290,14 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v14-unsupported-target",
       "name": "debug_unsupported_target",
       "obligation": "Every debug op answers UNSUPPORTED on the loopback target.",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v14-unsupported-target",
           "name": "step_on_loopback",
@@ -1273,8 +1315,8 @@
           "status": 5
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": "chip repo tb/tb_pe_ctrl_r3_conf.v (R3 conformance against these exact bytes, byte-exact incl. CRC) + reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md; corroborated by the directed harness tb/tb_pe_ctrl_r3 (7/7 mutants) and the S1-S4 formal claims",
           "model_faults": 0,
           "model_image_id": "v14-unsupported-target",
           "name": "bp_set_on_loopback",

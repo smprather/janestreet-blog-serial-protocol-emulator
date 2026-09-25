@@ -42,28 +42,41 @@ TB_MANIFEST = REPO / "tb" / "r3-vectors" / "manifest.json"
 HOST_MANIFEST = REPO / "reviews" / "2026-09-25" / "r3-hex" / "manifest.json"
 DIVERGENCES = REPO / "tb" / "r3-vectors" / "R3_KNOWN_DIVERGENCES.txt"
 
-# The manager's ruling (2026-09-25): flip the clean-matching steps; these three
-# stay false, each for a reason that is recorded rather than assumed.
-EXPECT_CONFIRMED = 23
+# The manager's ruling (2026-09-25), twice. First: flip the clean-matching
+# steps and hold back the three that do not match, each for a recorded reason.
+# Then, after the host regenerated the two host-side defects (gui-worker
+# b9d4eb2, "correct the two host-side vector defects the chip's conformance run
+# proved") and this harness re-ran them byte-exact, those two flipped too. The
+# arithmetic below therefore MOVED when the evidence moved, in the same commit as
+# the package refresh -- which is the process rule on both sides: a divergence
+# entry resolves in the same commit that changes either side of it, so a
+# conformance fix can never read as a regression. These are expectations the tool
+# refuses to violate, not constants that quietly rot.
+EXPECT_CONFIRMED = 25
 EXPECT_TOTAL = 26
+EXPECT_NOT_CONFIRMED = 1
 
-REASON = {
+# What the two resolved steps were, kept so the record says why the number moved
+# and a reader can check the claim rather than take it on trust.
+RESOLVED = {
     "read_cpu_shows_a_55": (
-        "HOST-side vector defect; the chip is right. The host's READ_CPU builder "
-        "returns its debug `state` in the slot the contract gives to `run` (chip "
-        "answers run=0, per rtl/pe_ctrl.v's OP_RDCPU builder) and carries a stale "
-        "`insn` where the chip reports the fetched word at the held pc. The R2 "
-        "package's own READ_CPU vector carries a run value in that slot and the "
-        "chip passes it byte-exactly, which settles the shape. The host package "
-        "regenerates; this flips after that and a re-run."
+        "HOST-side vector defect, fixed host-side in b9d4eb2. The host's "
+        "READ_CPU builder returned its debug `state` in the slot the contract "
+        "gives to `run`, and carried a stale `insn` where the chip reports the "
+        "fetched word at the held pc. Regenerated, this step matches the chip "
+        "byte-exact and is chip_confirmed."
     ),
     "status_reports_the_hit": (
-        "HOST-side vector defect; the chip is right. The package carries a=0x0055 "
-        "where the chip reports 0x00AA: the step from address 1 to 2 really does "
-        "execute the LDI A,0xAA at 1, because a step is exactly one instruction "
-        "and stop-before applies to the instruction AT the breakpoint, which has "
-        "not run. The host package regenerates; this flips after that and a re-run."
+        "HOST-side vector defect, fixed host-side in b9d4eb2. The package "
+        "carried a=0x0055 where the chip reports 0x00AA: the step from address 1 "
+        "to 2 really does execute the LDI A,0xAA at 1, because a step is exactly "
+        "one instruction and stop-before applies to the instruction AT the "
+        "breakpoint, which has not run. Regenerated, this step matches the chip "
+        "byte-exact and is chip_confirmed."
     ),
+}
+
+REASON = {
     "status_full_readback": (
         "TB MODEL BOUNDARY, not a disagreement, and NOT claimed. The package's "
         "`insn` is a mid-execution snapshot (pc=4 with a=0 has not executed the "
@@ -150,10 +163,14 @@ def annotate(manifest: dict, pinned: set[str]) -> dict:
                 confirmed.append(s["name"])
         v["chip_confirmed"] = all(s["chip_confirmed"] for s in v["steps"])
 
-    if len(confirmed) != EXPECT_CONFIRMED or len(not_confirmed) != 3:
+    if (
+        len(confirmed) != EXPECT_CONFIRMED
+        or len(not_confirmed) != EXPECT_NOT_CONFIRMED
+    ):
         raise SystemExit(
             f"refusing to write: {len(confirmed)} confirmed / "
-            f"{len(not_confirmed)} not, expected {EXPECT_CONFIRMED}/3. "
+            f"{len(not_confirmed)} not, expected "
+            f"{EXPECT_CONFIRMED}/{EXPECT_NOT_CONFIRMED}. "
             f"not confirmed: {not_confirmed}"
         )
     missing = [n for n in not_confirmed if n not in REASON]
@@ -166,10 +183,12 @@ def annotate(manifest: dict, pinned: set[str]) -> dict:
         "conformance": (
             f"{len(confirmed)} of {len(confirmed) + len(not_confirmed)} host "
             "golden steps confirmed against the chip, byte-exact including the "
-            f"CRC word. The other {len(not_confirmed)} are listed in "
-            "not_confirmed_steps with a reason each: two are host-side vector "
-            "defects where the chip is right, one is a testbench model boundary "
-            "that is not claimed."
+            f"CRC word. The remaining {len(not_confirmed)} is listed in "
+            "not_confirmed_steps with its reason: a testbench model boundary that "
+            "is not claimed. Two further steps were confirmed only after the host "
+            "regenerated them (gui-worker b9d4eb2); they were host-side defects "
+            "this run proved, and they are recorded under resolved_steps so the "
+            "reason the count moved is on the face of the manifest."
         ),
         "date": "2026-09-25",
         "harness": (
@@ -181,6 +200,9 @@ def annotate(manifest: dict, pinned: set[str]) -> dict:
         ),
         "not_confirmed_steps": [
             {"step": n, "reason": REASON[n]} for n in not_confirmed
+        ],
+        "resolved_steps": [
+            {"step": n, "resolution": RESOLVED[n]} for n in RESOLVED
         ],
         "review": "reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md",
         "scope": (

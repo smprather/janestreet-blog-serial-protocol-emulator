@@ -1,0 +1,33 @@
+# R3_KNOWN_DIVERGENCES — the golden steps the chip does NOT match today, pinned.
+#
+# tb_pe_ctrl_r3_conf compares this list against what it actually observes, in
+# order. A divergence here that CHANGES, or any divergence NOT here, turns the
+# gate red. That is deliberately stricter than an XFAIL list of step names: a
+# step that starts failing for a new reason must not read as "known".
+#
+# ONE step, two words — and it is a testbench model boundary, not a
+# disagreement about the contract. Reasoning in
+# reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md section 2 and in the
+# contract's author notes.
+#
+# HISTORY: this list held seven words across three steps. The other two steps
+# were HOST-side vector defects, proved by this run and fixed on the host side in
+# the gui-worker's b9d4eb2 ("correct the two host-side vector defects the chip's
+# conformance run proved"): read_cpu_shows_a_55 carried a stale `insn` and the
+# host's debug `state` in the slot the contract gives to `run`; status_reports_the_hit
+# carried a stale `a` for an LDI the step really does execute. Both regenerated
+# responses now match the chip byte-exact, and both steps are chip_confirmed.
+# That is the point of pinning the list rather than hard-coding an expectation:
+# it shrank when the evidence changed, and nothing had to be edited to say so.
+#
+# status_full_readback word 13 (insn): 0xF000 expected — the manager-ruled
+#   LANDING word, since pc=4 holds a JMP 2 and a free-running core fetches at
+#   next_pc. The chip reports 0x0000 because this vector's pre-state is a
+#   mid-execution SNAPSHOT (pc=4 with a=0 has not executed the LDI at 3), and
+#   the model freeze that holds such a snapshot pins pc every cycle, which
+#   collapses the fetch pipeline onto the fill word. The contract now states the
+#   rule (at a freeze, `insn` is the latched pipeline word) and NO RTL changes.
+#   Holding the core instead of freezing it would make this word deterministic at
+#   imem[pc] and provable — optional future polish, deliberately not now.
+status_full_readback word 13: chip 0000, package f000
+status_full_readback word 14: chip 2efc, package 3d3d
