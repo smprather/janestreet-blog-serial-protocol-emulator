@@ -449,6 +449,80 @@ slow suite.
 
 ---
 
+## Two more, and the second one is about the gate's own scoring rule
+
+Consolidated here because they were originally recorded only in commit
+messages and source comments, and a commit message is not a place anyone goes
+looking for the reason a check is load-bearing.
+
+### 7. I overstated which DMX check is load-bearing
+
+`tb_pe_soc_dmx512.v` said, in two places:
+
+> "a transmitter that dropped a slot would still produce a valid-looking
+> pattern, and **only a count gives that away**"
+
+**Both halves are wrong**, and it was falsifiable by inspection: the ramp is
+`0, 1, 2, …`, so one wrong or missing slot makes *every later value* wrong.
+Running `dmx-ramp-steps-by-two` by hand settles it — hundreds of
+
+```text
+FAIL: slot N is fe, expected ff
+```
+
+per-slot failures, and **not one** count check. A payload error is emphatically
+not a valid-looking pattern.
+
+This mattered beyond tidiness, because the sentence told a maintainer which
+check to trust. Believing the count is the defence invites treating the per-slot
+comparison as decorative, which is the inverse of the truth.
+
+What the count *is* for, now stated correctly: it reads the **CPU's own memory**
+while the per-slot comparison reads the **wire**. Two independent witnesses from
+different places, so a fault that corrupts one and not the other appears as a
+disagreement between them. The transmission is the claim; `dmem` is the
+firmware's account of it.
+
+### 8. The mutation gate scored a hang the same as an assertion
+
+`regress/mutate_fwbus_tb.sh` decided every mutation with `grep -qE "^PASS"`:
+anything that did not print PASS was "detected". That conflated
+
+- **an assertion failing** — evidence the TB *tests the firmware*, the entire
+  point of a mutation gate;
+- **the TB hanging** on its watchdog or the 300 s timeout — evidence only that
+  the TB would *refuse to accept* the image, which says nothing about the
+  checks.
+
+Confirmed by construction: a `dmx512` mutation redirecting the start code to
+`park` yields
+
+```text
+break 88.06 us (floor 87.5)        <- the break and mark checks PASS
+FAIL: watchdog -- the test did not complete
+```
+
+and the old rule scored that exactly as it scored `midi-cell-count-minus-one`.
+
+The harness now returns the **mechanism** (1 assertion / 3 hang / 4 no-verdict)
+and prints which caught each. The breakdown is the interesting part:
+
+```text
+detected: 21  (of which 1 by hang/timeout only)   survived: 0   harness errors: 0
+```
+
+**The one hang-caught mutation is `i2c-no-stop`, from BLOCK 2, not from this
+block.** So the "21 detected" reported for most of this session was twenty
+assertions plus one hang, and did not say so. Coverage is unchanged — the same
+21 mutations die either way — but the number now means what it says.
+
+`i2c-no-stop` is worth a follow-up that is **not** mine to make: removing the
+I2C STOP means the grammar monitor never sees a STOP and the run blocks. A
+testbench asserting *"a STOP must be seen within N transactions"* would catch
+it by assertion. That is a previous block's testbench, so it is raised as a
+QUESTION rather than fixed here — but it is the first concrete, named, counted
+instance of the gap this block kept hitting.
+
 ## The one durable lesson
 
 > **A delay built by counting instructions is arithmetic, and arithmetic that is
