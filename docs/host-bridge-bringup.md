@@ -14,12 +14,14 @@ verified on a real MicroPython) and the triage table at the bottom.
 - A Linux host with Python 3.12+ and the host extra:
   `pip install .[host-gui]` (adds `pyserial`, plus the GUI's fastapi/uvicorn).
 - Chip R1 (framed host bus, `IRQ_N`, target 1) and **R2 (register/memory
-  readback) are both landed** on the shuttle — R2 passes all **18** golden
-  steps byte-exact against this repo's `R2-READ-VERIFICATION.json` package
-  (the original 15, plus `read_imem_at_ceiling_15`, `read_imem_over_ceiling`
-  and `read_dmem_zero_count`), and **all 18 are `chip_confirmed`**. So a
-  healthy run should pass the `r2_*` read checks too; if they go red on real
-  hardware, that IS a real finding — see the triage table.
+  readback) are both landed** on the shuttle. R2's golden package has **22
+  steps, all 22 chip-confirmed byte-exact** against this repo's
+  `R2-READ-VERIFICATION.json` — including the four that read back while the
+  core is HELD at a breakpoint (`R2-HELD-STATUS-BYTES.md`; the chip's re-run
+  that confirmed them is `R2-HELD-CORE-CHIP-SIDE.md` §7 in the chip repo). So a
+  healthy run should pass the `r2_*` read
+  checks; if they go red on real hardware, that is a board-level problem to
+  triage, not the expected state.
 
 ### RESOLVED — the bridge's missing wait-word skip (B1): history, not a warning
 
@@ -41,14 +43,6 @@ variable-length read that keeps clocking, and per-opcode read sizing in
 
 Consequence for you: **an `r2_read_*` failure is a genuine finding again** —
 wiring, MISO, or SPI timing. Do not pre-empt it with the old explanation.
-  readback) are both landed** on the shuttle. R2's golden package has **22
-  steps, all 22 chip-confirmed byte-exact** against this repo's
-  `R2-READ-VERIFICATION.json` — including the four that read back while the
-  core is HELD at a breakpoint (`R2-HELD-STATUS-BYTES.md`; the chip's re-run
-  that confirmed them is `R2-HELD-CORE-CHIP-SIDE.md` §7 in the chip repo). So a
-  healthy run should pass the `r2_*` read
-  checks; if they go red on real hardware, that is a board-level problem to
-  triage, not the expected state.
 
 ## 1. Flash and mount the board
 
@@ -141,7 +135,6 @@ assuming a problem.
 | `FAIL hello` / `board error during hello: project ... not found` | shuttle name wrong for this board | pass `--project <name>` matching the fitted shuttle; confirm in the board REPL with the TT SDK |
 | `FAIL sclk` / `board error during prepare: host SPI pin map is not configured` | no `pins` map supplied | `tt_adapter.TTAdapter` needs `pins={sck,mosi,miso}` for your board revision (RP2040 vs RP2350 GPIO numbers differ) — plan Open Item 2 |
 | `spi.timeout` on load / every SPI step | CS/SCK/MOSI/MISO not wired, or a shuttle without the framed protocol | check the lower PMOD host-SPI row wiring; confirm the fitted shuttle has R1 |
-| `r2_read_*` / `r2_dump_header` FAIL, others PASS | a REAL finding now that B1 is fixed: the MISO read path, the host-row wiring, or SPI timing | the bridge skips leading `0xFFFF` wait words (RESOLVED above), so a read failure is not the old known defect. Compare against `R2-READ-VERIFICATION.json`; the 18 steps are the same ones `tb_pe_ctrl_r2` passes byte-exact. Check the lower PMOD host row, `pins={sck,mosi,miso}`, and SCLK timing first |
 | `r2_read_*` / `r2_dump_header` FAIL, others PASS | the read path is chip-confirmed in simulation but the board disagrees | compare against `R2-READ-VERIFICATION.json`; all 22 steps in the package are the same ones `tb_pe_ctrl_r2` passes byte-exact (18 read-path + 4 held-core, all confirmed) - a board-only failure points at the MISO read path or wiring, not the contract |
 | EVERY op FAILs with `bad PE response: length field does not match the frame` or `CRC mismatch` - including `hello` and `ping`, which use no payload | the host clocks a fixed budget of wait words past the end of every reply (the chip may emit up to 15 filler words before a bounded read), so the words after the frame come off a **released** MISO pad: `pe_ctrl` drives MISO only while a response shifts | the reader trims the buffer to the frame's own length field, so idle words are discarded. If you see this, you are on an older host build without that trim, OR the pad is being driven by something else while idle (a wiring or shuttle problem) - check the MISO row first, then confirm your host has `pe_frame.strip_wait_words` trimming to the length field |
 | `irq`/`fault` steps FAIL | the fitted shuttle predates R1's `IRQ_N`, or the adapter was built without `irq_enabled` | check the shuttle revision; `irq_n()` returns `None` (SKIP) when IRQ is unavailable |
