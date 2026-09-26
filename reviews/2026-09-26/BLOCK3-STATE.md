@@ -15,7 +15,7 @@ more than the acts they came from.
 |---|---|---|
 | (b) input frequency + duty meter | **GREEN, in the regression**, 58/58 mutations | `d88e316` |
 | (a) HC-SR04 ultrasonic ranging | **BLOCKED** on one 26-instruction block; everything else measured | `b0351b3` |
-| (c) FM0/FM1 bi-phase | **started**: RED testbench (7 checks) + first-draft firmware; the WIRE RULES were wrong and are now corrected | `3dace8`, `0513b7e`, `cb191ef` |
+| (c) FM0/FM1 bi-phase | **started, still RED**: 7-check testbench + first-draft firmware; the WIRE RULES were wrong and are now corrected | `tb/tb_pe_soc_bmc.v`, `firmware/bmc_frame.pe`, `0513b7e`, `cb191ef` |
 
 Also delivered this session: the **merge-repair** of the six acts in main
 (`3657847`, proven on three throwaway exports of main: unpatched 6/6 FAIL,
@@ -163,7 +163,7 @@ prove the flag is **measured** rather than **assumed**.
 * `tb/tb_pe_soc_bmc.v` -- 7 named checks, both directions, the encoding flag,
   and the constant-line case (a line held constant has no transitions and
   carries no clock, which is what a dead sensor looks like). RED, and the
-  checks are RIGHT as of `3dace8`.
+  checks are RIGHT as of `tb/tb_pe_soc_bmc.v`.
 * `firmware/bmc_frame.pe` -- 139 words, assembles, first draft. Two fixes
   landed: the testbench's encoder is now bi-phase, and the firmware no longer
   **claims its input pad** (`0513b7e` -- a pad the firmware drives reads back
@@ -235,7 +235,7 @@ else.
 \`\`\`text
 cb191ef docs(WORKLOG): the bi-phase WIRE RULES were wrong in a second way
 0513b7e fix: the FM0/FM1 firmware claimed its INPUT pad
-3dace8 fix: the FM0/FM1 testbench's encoder was not bi-phase
+3dace8 fix: the FM0/FM1 testbench's encoder was not bi-phase  [NOT IN THIS REPOSITORY -- no object, no branch contains it; the file it produced, tb/tb_pe_soc_bmc.v, is present. The hash is kept in this excerpt because the excerpt is a record, but it does not resolve and must not be cited as a pointer.]
 3b10217 wip: FM0/FM1 - the RED testbench now has both directions
 b2cb76c wip: FM0/FM1 - the first draft of the firmware
 b0351b3 docs(WORKLOG): BLOCKED on the HC-SR04 act's last block

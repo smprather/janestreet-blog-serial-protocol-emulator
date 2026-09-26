@@ -71,7 +71,19 @@ module tb_pe_soc_bmc;
 
   localparam int IN_BIT  = 5;        // the testbench drives this one
   localparam int OUT_BIT = 6;        // the firmware drives this one
-  localparam int HALF_US = 2;        // a half-interval, in whole microseconds
+  // THE HALF-INTERVAL IS COUNTED IN CLOCKS, AND THE MICROSECOND FIGURE IS
+  // DERIVED FROM IT. This was declared as 2 and commented "in whole
+  // microseconds", and then compared against a counter that increments once
+  // per CLOCK -- so the stimulus drove a half-interval every two or three
+  // clocks, about 40 ns, while the firmware under test emits 120 clocks = 2 us.
+  // A constant asserted in one domain and consumed in another is this block's
+  // recurring defect, and the point of deriving the figure is being unable to
+  // write the mistake rather than having written it once.
+  localparam int HALF_CLOCKS = 120;  // 2 us at 60 MHz, and the firmware's own
+                                     // figure: it counts half-intervals on
+                                     // I2CTICK, the free-running 1 us counter,
+                                     // so a 2 us half-interval is 120 clocks
+  localparam real HALF_US = HALF_CLOCKS * CLK_NS / 1000.0;   // derived, not asserted
   localparam int NBITS   = 24;       // three bytes
   localparam int TOL_US  = 1;        // the counter's own quantisation
 
@@ -193,8 +205,15 @@ module tb_pe_soc_bmc;
   // between transitions, which for this encoding is one or two half-intervals
   // depending on the data, and that ambiguity is exactly what the encoding
   // flag has to resolve.
-  integer  rx_us = 0;                  // microseconds since the frame started
-  integer  dec_gap = 0;                // the interval just measured, in us
+  integer  rx_us = 0;                  // CLOCKS since the frame started. The
+  integer  dec_gap = 0;                // name says us and the value is not:
+                                       // this block fires on posedge clk, so it
+                                       // counts clocks, while the firmware
+                                       // timestamps on a 1 us tick. Renaming
+                                       // it rx_clk is on the list for the same
+                                       // reason HALF_CLOCKS exists -- a wrong
+                                       // name is how the stimulus came to run
+                                       // sixty times too fast.
   integer  dec_prev_gap = 0;
   logic   dec_started = 0;
 
@@ -203,7 +222,7 @@ module tb_pe_soc_bmc;
     // A CHANGE of level is a transition, and the interval since the last one
     // is the length of the run that just ended. Every interval is an even
     // number of half-intervals, so the interval in half-intervals is
-    // gap / HALF_US -- and the ODD case cannot happen in a valid frame, which
+    // gap / HALF_CLOCKS -- and the ODD case cannot happen in a valid frame,
     // is what makes "an interval that is not a whole number of half-intervals"
     // a decodable-frame failure rather than a bit value.
     if (out_line !== dec_lev) begin
@@ -251,12 +270,29 @@ module tb_pe_soc_bmc;
   integer stim_bit = 0, stim_half = 0, stim_waited = 0;
   logic   stim_done = 0;
 
+  // THE STIMULUS IS ARMED BY THE FIRMWARE'S RELEASE, and that is the whole
+  // reason this act was red. It used to begin at time 0, which meant it
+  // delivered all 24 bits and then FROZE -- holding the line high inside its
+  // own `forever #(CLK_NS);` -- roughly 15 us BEFORE the core was released at
+  // all, because load_firmware() writes 1024 words first. The firmware was
+  // therefore started into a line that had been idle high since before it
+  // began, saw a CONSTANT level, and reported 0xFF = "no transitions", which
+  // is the correct answer to what it was shown.
+  //
+  // ALL SEVEN CHECKS WERE THAT ONE FAULT, and not one of them was the
+  // decoder. The check that looks like the stimulus's own -- stim_done -- was
+  // PASSING the whole time, because the stimulus really had presented a frame.
+  // It had presented it to nobody. I read that check as failing for two hours
+  // because the handoff said so and I did not count the failures: the seven
+  // FAIL lines are dec_have, dec_flag, three receive bytes and the two flag
+  // checks, which is exactly seven without stim_done in it.
   initial begin
+    wait (run === 1'b1);
     stim_done = 0; stim_bit = 0; stim_half = 0; stim_waited = 0;
     in_line = 1'b1;
     forever begin
       #(CLK_NS);
-      if (stim_waited >= HALF_US) begin
+      if (stim_waited >= HALF_CLOCKS) begin
         stim_waited = 0;
         if (stim_half == 0) begin
           in_line = enc_level(stim_bit, 0, enc_fm0);
@@ -295,12 +331,15 @@ module tb_pe_soc_bmc;
     repeat (4) @(posedge clk);
     #1;
 
-    $display("\n=== FM0/FM1 bi-phase: %0d bits each way, %0d us half-intervals ===\n",
-             NBITS, HALF_US);
+    $display("\n=== FM0/FM1 bi-phase: %0d bits each way, %0.1f us half-intervals (%0d clocks) ===\n",
+             NBITS, HALF_US, HALF_CLOCKS);
     run = 1'b1;
     // Enough time for the frame plus the firmware's own margins. The frame is
-    // NBITS * 2 * HALF_US = 96 us, and the firmware needs to see the stream,
-    // recover the clock from it and bank three bytes.
+    // NBITS * 2 * HALF_US = 96 us and the firmware needs to see the stream,
+    // recover the clock from it and bank three bytes. The WAIT is counted in
+    // CLOCKS and the frame in MICROSECONDS, because the firmware timestamps
+    // on a 1 us tick and this process is a clock loop -- the same two domains
+    // this act keeps confusing, so the wait says aloud which one it is in.
     #(CLK_NS * 60 * 4000);
     run = 1'b0;
 

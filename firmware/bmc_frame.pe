@@ -81,6 +81,35 @@ init:
         STM   7, A
         STM   8, A
         STM   9, A
+        STM   5, A             ; THE TIMESTAMP OF THE LAST CHANGE, and the
+                               ; init omitted this one too. the_pin READS
+                               ; dmem[5] (LDM A,14 / SUB A,5) before it ever
+                               ; WRITES it, so with the byte uninitialised the
+                               ; first real transition computes X - X, the
+                               ; branch on that is not a decision, and dmem[5]
+                               ; stayed x for the whole run while the pin
+                               ; toggled 47 times underneath it. Same class as
+                               ; dmem[11] above and the same cause: dmem is not
+                               ; cleared by a reset, so every byte the program
+                               ; reads before writing has to be seeded here or
+                               ; it is a first-draft assumption. The map below
+                               ; says dmem[5] holds a timestamp; it did not say
+                               ; who was meant to put a zero there.
+        STM   11, A            ; THE MODE BYTE, and the init omitted it, which
+                               ; is why this act was red. main does
+                               ; `LDM A, 11 / JNZ encoding`, so dmem[11]
+                               ; chooses decode or encode -- and dmem is NOT
+                               ; cleared by a reset (rtl/pe_soc.v writes it
+                               ; only under dmem_we), so an uninitialised
+                               ; mode byte is whatever power-up left. The
+                               ; program therefore jumped STRAIGHT TO THE
+                               ; ENCODER, never looked at the input pad, and
+                               ; left dmem[3] at the 0xFF its own init wrote
+                               ; there -- which reads as "I have not locked on
+                               ; to anything" and is the correct answer to a
+                               ; line it had never sampled. Zero is DECODE,
+                               ; so this is the instruction that makes the
+                               ; program look at the wire at all.
         STM   12, A
         LDI   A, 0xFF
         STM   3, A             ; ... so it starts at 0xFF: "I have not locked
