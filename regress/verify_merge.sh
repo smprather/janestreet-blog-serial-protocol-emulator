@@ -750,9 +750,27 @@ FAILS=$(grep -E '^(failed:|firmware regression: FAILED|lint gate FAILED|.*mutati
 # this same gate disagreeing about the case table, which is a gate defect, and
 # it is a defect rather than a test result — so it gets its own code.
 REJECTED=$(grep -c 'matched NO case' "$LOG")
+# THE HARNESS-EDIT PRE-FLIGHT, as the gate sees it. A dependency guard that fired
+# means the run's own scripts moved underneath it, so it verified nothing — and
+# an exit 0 is precisely what a FALSE PASS looks like from out here. So this is
+# checked BEFORE the exit code, and it wins over a green: the marker in the log
+# forces INCONCLUSIVE whatever the run said about itself.
+DEP_CHANGED=$(grep -c 'CHIP-DEP-CHANGED' "$LOG")
 
 echo
 echo "========================================"
+if [ "${DEP_CHANGED:-0}" -gt 0 ]; then
+  {
+    echo "MERGE GATE: INCONCLUSIVE — a script this run depends on CHANGED while it was running."
+    echo "  Do not read this as a test failure, and do not read it as a pass either."
+    echo "  Bash executes a script incrementally, so a harness edited mid-run can report"
+    echo "  a FALSE PASS as easily as a false failure, and this run's verdict cannot be"
+    echo "  trusted in either direction. The run that reported it:"
+    grep -E 'CHIP-DEP-CHANGED|INCONCLUSIVE — ' "$LOG" | head -6 | sed 's/^/    /'
+    echo "  Re-run the gate with nothing editing regress/ concurrently."
+  } >&2
+  exit 4
+fi
 if [ "${REJECTED:-0}" -gt 0 ]; then
   echo "MERGE GATE: GATE ERROR — run_all.sh rejected the filter this gate built." >&2
   echo "  The gate selected $EXPECTED case(s) and the suite found none of them." >&2

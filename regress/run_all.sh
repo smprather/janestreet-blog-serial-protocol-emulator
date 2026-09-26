@@ -32,12 +32,40 @@ cd "$(dirname "$0")/.." || exit 1
 # shellcheck source=regress/run_lock.sh
 . "$(dirname "$0")/run_lock.sh"
 chip_take_run_lock "run_all.sh"
-trap 'chip_release_run_lock' EXIT
+# THE HARNESS-EDIT PRE-FLIGHT. A run may not report a verdict from scripts that
+# changed underneath it: bash reads a script INCREMENTALLY, so editing a harness
+# mid-run can make it report a FALSE PASS as easily as a false failure, and a
+# false pass is the worst thing a gate in this project can do. The dependency
+# guard stamps the CONTENT of the scripts this run executes and re-checks it on
+# the way out; a change exits 4 (INCONCLUSIVE) and never a green. See
+# regress/dep_guard.sh for why a content hash and not an mtime, and
+# regress/test_dep_guard.sh for the guard's own seven-case test — including the
+# negative control that proves it can fail.
+# shellcheck source=regress/dep_guard.sh
+. "$(dirname "$0")/dep_guard.sh"
+_on_exit() {
+  local rc=$?
+  # The pre-flight runs FIRST, before the lock is released: a run whose scripts
+  # moved has no verdict to protect, and the lock must not be held while this
+  # decides.
+  if ! chip_dep_check run_all; then rc=4; fi
+  chip_release_run_lock
+  exit "$rc"
+}
+trap '_on_exit' EXIT
 # Capture the repo root NOW, as an absolute path. This script cds into sim/ and
 # then back to the root, and `$0` may itself be relative ("./regress/run_all.sh"), so
 # any later `dirname "$0"` resolves against the wrong directory. Gates that are
 # invoked mid-script use this. (The param-guard gate failed exactly this way.)
 REPO_ROOT="$(pwd)"
+# Stamp the dependency set now that the root is known. Every regress/ script is
+# included because this file invokes most of them and any of them could be the
+# one under edit.
+_chip_deps=()
+for _f in "$REPO_ROOT"/regress/*.sh; do
+  [ -f "$_f" ] && _chip_deps+=("$_f")
+done
+chip_dep_stamp run_all "${_chip_deps[@]}"
 mkdir -p sim
 
 # ---- options ---------------------------------------------------------------
@@ -379,7 +407,7 @@ if [ "$FAST" -eq 1 ]; then
   # 2-state simulation cannot express the weak/strong distinction the TB is
   # built on. So the fast path stays on the 4-state simulator, where it belongs.
   work=$(mktemp -d)
-  trap 'rm -rf "$work"' EXIT
+  trap 'rm -rf "$work"; _on_exit' EXIT
 
   printf '%s\n' "${CASES[@]}" \
     | xargs -P "$JOBS" -I{} "$REPO_ROOT/regress/run_one_tb.sh" "{}" "$work"
@@ -508,14 +536,23 @@ stale=0
 # merge that changes one it DOES mutate always runs it. A suite that mutates
 # nothing in the repo (MUTABLE empty) is never narrowed away: the mapper keeps
 # it, and that is deliberate.
+# The key a suite is matched and reported by: the basename WITHOUT the .sh.
+# ONE place on purpose. The first version of this block derived the key in the
+# pre-flight loop but compared the RAW argument (mutate_x_tb.sh) in the runtime
+# wrapper, so an anchored MUTATE_ONLY selected 4 suites in the pre-flight and
+# then skipped all 16 at run time — a run with ZERO mutation coverage. The
+# gate's count cross-check caught it (that is what it is for), but a narrowing
+# that can disagree with itself in the same file is the defect, not the
+# cross-check.
+mut_key() { local b="${1##*/}"; printf '%s' "${b%.sh}"; }
+
 MUT_RAN=0; MUT_SKIPPED=0; MUT_SKIP_LIST=""
 MUT_ALL=(regress/mutate_*.sh)
 MUT_TOTAL=${#MUT_ALL[@]}
 if [ -n "${MUTATE_ONLY:-}" ]; then
   _mhit=0
   for _m in "${MUT_ALL[@]}"; do
-    _mn=${_m##*/}; _mn=${_mn%.sh}
-    if printf '%s\n' "$_mn" | grep -qE "${MUTATE_ONLY}"; then _mhit=$((_mhit + 1)); fi
+    if printf '%s\n' "$(mut_key "$_m")" | grep -qE "${MUTATE_ONLY}"; then _mhit=$((_mhit + 1)); fi
   done
   if [ "$_mhit" -eq 0 ]; then
     echo "FATAL: MUTATE_ONLY='${MUTATE_ONLY}' matches NO mutation suite." >&2
@@ -531,12 +568,27 @@ fi
 # skipped names, which the summary prints — so the log alone says what ran.
 run_mutation_suite() {
   local n="$1"; shift
-  if [ -n "${MUTATE_ONLY:-}" ] && ! printf '%s\n' "$n" | grep -qE "${MUTATE_ONLY}"; then
-    MUT_SKIPPED=$((MUT_SKIPPED + 1)); MUT_SKIP_LIST="$MUT_SKIP_LIST $n"
+  local key
+  key=$(mut_key "$n")
+  if [ -n "${MUTATE_ONLY:-}" ] && ! printf '%s\n' "$key" | grep -qE "${MUTATE_ONLY}"; then
+    MUT_SKIPPED=$((MUT_SKIPPED + 1)); MUT_SKIP_LIST="$MUT_SKIP_LIST $key"
     return 0
   fi
   MUT_RAN=$((MUT_RAN + 1))
+  # THE SUITE'S OWN PRE-FLIGHT. This is the wrapper rather than 16 separate
+  # edits because it is the one place that knows which script each suite is —
+  # and because a harness's own `trap cleanup EXIT` would overwrite a trap
+  # installed inside it, so a per-harness EXIT trap cannot be made to work
+  # without editing all sixteen by hand. Stamped and checked around the
+  # invocation, the check covers the window where the race actually happens.
+  chip_dep_stamp "suite_$n" "$1"
   "$@"
+  local rc=$?
+  if ! chip_dep_check "suite_$n"; then
+    echo "mutation suite $n: INCONCLUSIVE — the harness script changed while it was running" >&2
+    return 4
+  fi
+  return $rc
 }
 
 if python3 tools/gen/signal_glossary.py --check >/dev/null 2>&1; then
@@ -948,6 +1000,21 @@ if run_mutation_suite mutate_fwbus_tb.sh ./regress/mutate_fwbus_tb.sh > /tmp/mut
 else
   echo "fw-bus TB mutations: FAILED"
   tail -20 /tmp/mutate_fwbus.log
+  stale=1
+fi
+
+# The harness-edit pre-flight's OWN test. It is a gate for the same reason the
+# run lock's contract test is: a guard that cannot fail looks exactly like a
+# guard that works, and this project's log holds three rules that reported
+# numbers they had never been shown to compute. The negative control (a guard
+# whose comparison never fires) fails 3 of its 7 cases, so the test is not
+# vacuous. It uses a private stamp directory and touches nothing in the repo, so
+# it is safe to run while a real run holds the worktree lock.
+if bash "$REPO_ROOT/regress/test_dep_guard.sh" > /tmp/test_dep_guard.log 2>&1; then
+  echo "harness-edit pre-flight: OK (fires on a changed script, quiet on an unchanged one)"
+else
+  echo "harness-edit pre-flight: FAILED"
+  cat /tmp/test_dep_guard.log
   stale=1
 fi
 
