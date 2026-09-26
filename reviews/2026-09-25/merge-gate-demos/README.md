@@ -6,7 +6,7 @@ EXCERPTS, not a summary: the point of keeping them is that a reader can
 check my account against the gate's own words.
 
 ## RED — the real merge 5b4731f (worktree checked out AT the merge, gate copied in)
-```
+```text
 MERGE GATE — HEAD (merge: fw-timing-protocols (Blocks 1-2: six timing + input-c)
   base:     HEAD^1 (first parent);  merge base dcdf63d6
   changed:  27 path(s) merged in | behind: 226 path(s) main gained while it was away
@@ -18,10 +18,10 @@ TOTAL: 45   PASS: 39   FAIL: 6
 failed: tb_pe_soc_ws2812 tb_pe_soc_servo tb_pe_soc_dht11 tb_pe_soc_ds18b20 tb_pe_soc_ir_nec tb_pe_soc_stepper_ramp
 MERGE GATE: RED — DO NOT PUSH HEAD
     failed: tb_pe_soc_ws2812 tb_pe_soc_servo tb_pe_soc_dht11 tb_pe_soc_ds18b20 tb_pe_soc_ir_nec tb_pe_soc_stepper_ramp
-```
+```text
 
 ## GREEN — a benign merge on the last green main (6da4100)
-```
+```text
 MERGE GATE — HEAD (merge: benign2 (GREEN demo of the gate's narrow path))
   base:     HEAD^1 (first parent);  merge base 6da4100e
   changed:  2 path(s) merged in | behind: 0 path(s) main gained while it was away
@@ -50,4 +50,4 @@ eth_tx TB mutations: OK (no unexplained survivors)
 eth_tx loopback TB mutations: OK (no unexplained survivors)
 fw-bus TB mutations: OK (no unexplained survivors)
 MERGE GATE: GREEN — HEAD (14 case(s) run, the affected set among them)
-```
+```text
