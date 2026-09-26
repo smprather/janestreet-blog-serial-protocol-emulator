@@ -2233,3 +2233,76 @@ So the next step is the levels, and the way to get them is not another
 hand-built probe: the model already has the return leg's eighty levels, so print
 the pad's level at each half-interval index as a **string** and set the two side
 by side. One comparison, and the level sequence either matches or does not.
+
+## 2026-09-27 act (c): TASK-START -- THE LEVELS, AS A STRING BESIDE THE MODEL'S
+
+The queue is the one thing left unmeasured: the LEVELS the encoder drives. The
+interval histogram says the levels *change* the right number of times, and it
+cannot say what they are -- the two polarities have identical interval
+sequences, which is this act's own finding, so a histogram is blind to a
+complement.
+
+**AND THE WAY TO GET THEM IS NOT ANOTHER HAND-BUILT PROBE, it is the trick that
+already worked once:** the model has the return leg's eighty levels as a list, and
+"which end" became readable at a glance when the bits were printed as a string.
+So: the pad's eighty levels as a string, and the model's eighty beside it. One
+comparison, and the sequence either matches or it does not -- which is the only
+question left, and it has been open for three entries because every instrument
+built to answer it dropped events instead.
+
+### EIGHTY LEVELS, AND SEVENTY-EIGHT OF THEM MATCH THE MODEL
+
+    model FM0  01010101010101011010101010101010100110010110011001011010101001...
+    pad   FM0  01010101010101101010101010101010100110010110011001011010101001...
+                                       ^^
+    model FM1  10101010101010010101010101010101011001101001100110100101010110...
+    pad   FM1  10101010101010010101010101010101011001101001100110100101010110...
+
+**The pad drove all eighty levels in both polarities — the string's length is
+the completeness proof that the last probe never printed — and seventy-eight of
+them are the model's, exactly. The two that are not are POSITIONS 14 AND 15, and
+they are SWAPPED.**
+
+**AND THAT IS THE WHOLE OF THE REMAINING RED, and it explains every symptom the
+last four entries measured.** Half-intervals 14 and 15 are the two halves of the
+preamble's eighth and last zero. The model says 0 then 1; the pad said 1 then 0.
+**So the transition that belongs at 14 arrived at 15** — the change moved one
+half-interval later, which turns one one-half gap into a TWO-half gap and its
+neighbour into a one-half gap. And that is precisely what the receiver's trace
+reported and what I could not explain: **a four-microsecond gap inside the
+preamble's run of eight zeros, where the wire rules say no two-half gap can
+exist.**
+
+* the extra two-half gap is a PHASE LOCK, and the receiver takes it — so the
+  lock lands one half-interval EARLY, which is the "two four-microsecond gaps in
+  a row" in the trace and the "one extra bit at the front" in the bit string;
+* the preamble's assembled byte was `0x7f` then `0xFF` because the lock came
+  early, and the flag still came out right by luck, because `0xFF` is a
+  palindrome;
+* and the interval histogram was still the model's, because **moving a
+  transition one place does not change how many gaps there are of each size** —
+  it changes WHERE they are, and a histogram is blind to where.
+
+**So the last three entries were all chasing one bit in one place, and the
+instrument that found it in one line is the one that prints the whole sequence as
+a string.** Every probe that printed a table, a histogram or a byte could not see
+it; the one that printed all eighty levels in order showed it immediately, with
+the two wrong characters under a ruler.
+
+### AND THE FAULT IS ONE INSTRUCTION, and it is in the parity test
+
+The firmware applies the complement to the second half of every bit, gated on
+"is this half-interval number odd". **A swapped pair is what a parity test does
+when it is right for one of the pair and wrong for the other**, and the mask is
+provably constant across all eight bits of that byte (`0x80` throughout, read off
+the listing), so the bit itself cannot be the difference. The gate reads
+`dmem[6]`, and the level block runs BEFORE the tail increments it, so at
+half-interval 14 the gate should see 14 — even, no complement — and it behaved
+as though it saw 15.
+
+**NEXT, AND IT IS A COMPARISON AGAINST THE MODEL, not a probe:** the model's
+eighty levels beside the pad's, for both polarities, is now a one-line check
+that belongs in `bmc_model.py` beside the round trip, and it would have caught
+this at the moment it was written. That is the eighth check, and it is the first
+one that needs no firmware, no testbench and no probe at all: it is the wire
+rules, compared against the wire.
