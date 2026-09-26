@@ -9,9 +9,11 @@ absent, and the HTTP integration tests are skipped unless it is installed.
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,6 +27,8 @@ from tools.host_gui.tests.fakes import FakeClock, LoopbackPort
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 WEB = Path(SV.__file__).resolve().parent / "web"
+APP_JS = REPO_ROOT / "tools" / "host_gui" / "web" / "app.js"
+NODE = shutil.which("node")
 
 
 def make_api(sources_dir: Path):
@@ -109,6 +113,139 @@ class TestThePageAndTheApiAgreeOnResponseKeys(unittest.TestCase):
         self.assertEqual(
             missing, [], f"the page reads {missing}, which no API response carries"
         )
+
+
+class TestARefusalReachesTheOperatorAsText(unittest.TestCase):
+    """The leg that makes a refusal legible: exception -> status -> page text.
+
+    A `SessionStateError` carries the reason — "a fault is latched; clear it
+    before stepping the core" — and the page shows the server's `detail` field,
+    falling back to a bare status line when it is missing. So the mapping from
+    exception to `(status, detail)` is load-bearing: map it wrong and the
+    operator reads "Internal Server Error" instead of the sentence that tells
+    them what to do.
+
+    It lived inside `create_app` as a closure over fastapi's `HTTPException`, so
+    it could only be tested with the optional extra installed — and this
+    environment does not have it, which means the refusals added earlier today
+    (step before a load, step while faulted, dump refused under a live hit)
+    were never checked on the one path that shows them to a user.
+    """
+
+    def test_an_api_error_keeps_its_own_status(self):
+        status, detail = SV.error_response(SV.ApiError("no such source", 404))
+        self.assertEqual((status, detail), (404, "no such source"))
+
+    def test_a_session_refusal_is_a_conflict_with_its_reason_intact(self):
+        status, detail = SV.error_response(
+            S.SessionStateError("a fault is latched; clear it first"))
+        self.assertEqual(status, 409)
+        self.assertIn("clear it first", detail)
+
+    def test_a_genuine_bug_is_not_disguised_as_a_user_error(self):
+        """Anything else must PROPAGATE.
+
+        A blanket `except Exception` here would turn a real defect into a tidy
+        409 with a confusing message, and the operator would go looking for
+        their own mistake. This is the assertion that keeps the mapper narrow.
+        """
+        for boom in (ValueError("a real bug"), KeyError("missing"), TypeError()):
+            with self.subTest(exc=type(boom).__name__), \
+                    self.assertRaises(type(boom)):
+                SV.error_response(boom)
+
+    def test_each_refusal_the_session_can_raise_stays_readable(self):
+        """The three rules added today, end to end through the mapper."""
+        api, session, _bridge = make_api(FIXTURES)
+        api.connect()
+        messages = []
+        # 1. a step before a load
+        messages.append(self._refusal(session.debug_step))
+        api.load("echo.pe")
+        # 2. a step while faulted
+        _api2, _s2, bridge = make_api(FIXTURES)
+        _api2.connect()
+        _api2.load("echo.pe")
+        bridge.pe.faults = F.FAULT_PROTOCOL
+        _s2.status()
+        messages.append(self._refusal(_s2.debug_step))
+        # 3. a dump under a live hit: the strap is high, so it is refused
+        _api3, s3, bridge3 = make_api(FIXTURES)
+        _api3.connect()
+        _api3.load("echo.pe")
+        _api3.start()
+        bridge3.pe.bp_addr, bridge3.pe.bp_en = 1, True
+        bridge3.pe.advance_free_running()
+        s3.status()
+        messages.append(self._refusal(s3.dump_core))
+        self.assertEqual(len([m for m in messages if m]), 3, messages)
+        for message in messages:
+            with self.subTest(refusal=message[:30]):
+                status, detail = SV.error_response(
+                    S.SessionStateError(message))
+                self.assertEqual(status, 409)
+                self.assertEqual(detail, message,
+                                 "the reason must survive the mapping intact")
+
+    @staticmethod
+    def _refusal(call):
+        try:
+            call()
+        except S.SessionError as exc:
+            return str(exc)
+        raise AssertionError("expected a refusal and got none")
+
+    def test_the_page_shows_the_servers_detail_and_not_a_bare_status(self):
+        """The last leg: what the page puts in front of the operator.
+
+        `api()` throws `body.detail || "<status> <statusText>"`, so a response
+        that carries no `detail` degrades to a bare status line. Driven with a
+        stubbed fetch, because a string-presence check on app.js would pass
+        against a page that had stopped using the detail at all.
+        """
+        if NODE is None:
+            self.skipTest("node not installed")
+        driver = r"""
+        const fs = require('fs');
+        let source = fs.readFileSync(process.argv[1], 'utf8');
+        const body = JSON.parse(process.argv[2]);
+        // `status`/`statusText` live on the RESPONSE, not in the body - the
+        // page's fallback reads response.status, so the stub has to model an
+        // HTTP response rather than a decoded payload.
+        const fetch = async () => ({ ok: false, status: body.status,
+                                     statusText: body.statusText || 'Conflict',
+                                     json: async () => ({ detail: body.detail }) });
+        const document = { getElementById: () => ({ textContent: '',
+                                                   classList: { toggle() {} } }),
+                           createElement: () => ({}) };
+        const location = { host: 'localhost', protocol: 'http:' };
+        const WebSocket = function () { throw new Error('no socket'); };
+        source = source.replace(/\nmain\(\);\s*$/, '') +
+          '\nmodule.exports = { api };';
+        const m = { exports: {} };
+        new Function('module','exports','require','document','window','location',
+                     'fetch','WebSocket','setInterval','clearInterval', source)(
+          m, m.exports, require, document, {}, location, fetch, WebSocket,
+          setInterval, clearInterval);
+        m.exports.api('/api/debug/step', { method: 'POST' })
+          .then(() => process.stdout.write('NO ERROR'))
+          .catch((e) => process.stdout.write(e.message));
+        """
+        with_detail = subprocess.run(
+            [NODE, "-e", driver, str(APP_JS),
+             json.dumps({"status": 409,
+                         "detail": "a fault is latched; clear it first"})],
+            capture_output=True, text=True, check=False)
+        self.assertEqual(with_detail.returncode, 0, with_detail.stderr[:300])
+        self.assertEqual(with_detail.stdout.strip(),
+                         "a fault is latched; clear it first")
+        without = subprocess.run(
+            [NODE, "-e", driver, str(APP_JS),
+             json.dumps({"status": 409, "statusText": "Conflict"})],
+            capture_output=True, text=True, check=False)
+        self.assertEqual(without.returncode, 0, without.stderr[:300])
+        self.assertIn("409", without.stdout,
+                      "with no detail the page must still say something")
 
 
 class TestSourceResolution(unittest.TestCase):
