@@ -1,4 +1,7 @@
 @startuml proto-ds18b20-frame
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-ds18b20-frame.puml - (b) the DS18B20 command and scratchpad layout,
 ' and the two slot grammars that carry it.
@@ -16,7 +19,7 @@ hide empty description
 hide stereotype
 skinparam shadowing false
 skinparam rectangle {
-  BorderColor #33555
+  BorderColor #335550
   FontName monospaced
   FontSize 12
 }

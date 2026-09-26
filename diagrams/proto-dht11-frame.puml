@@ -1,4 +1,7 @@
 @startuml proto-dht11-frame
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-dht11-frame.puml - (b) the DHT11 40-bit frame.
 '
@@ -16,12 +19,11 @@
 
 title DHT11 - the 40-bit frame\n<font size=12>five bytes, MSB first; each bit is a WIDTH, not a level</font>
 
-
 hide empty description
 hide stereotype
 skinparam shadowing false
 skinparam rectangle {
-  BorderColor #33555
+  BorderColor #335550
   FontName monospaced
   FontSize 12
 }

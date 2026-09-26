@@ -1,4 +1,68 @@
 @startuml
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
+skinparam sequence {
+  ArrowColor #335550
+  ArrowFontColor #1F2933
+  LifeLineBorderColor #8A94A6
+  LifeLineBackgroundColor #EDF1F7
+  ParticipantBorderColor #4A6FA5
+  ParticipantBackgroundColor #DCE9F8
+  ParticipantFontColor #16324F
+  GroupBorderColor #6B7686
+  GroupBackgroundColor #E3E9F2
+  SequenceBoxBackgroundColor #FFF3C4
+  SequenceBoxBorderColor #9A7B0A
+  SequenceGroupBorderColor #6B7686
+  SequenceGroupBackgroundColor #E3E9F2
+  SequenceLifeLineBackgroundColor #EDF1F7
+  SequenceLifeLineBorderColor #8A94A6
+  SequenceDividerColor #1F2933
+}
+skinparam state {
+  BackgroundColor #EEF3FB
+  BorderColor #4A6FA5
+  FontColor #16324F
+  ArrowColor #1F2933
+  ArrowFontColor #1F2933
+  BackgroundColor<<tx>>   #DCE9F8
+  BorderColor<<tx>>       #4A6FA5
+  FontColor<<tx>>         #16324F
+  BackgroundColor<<rx>>   #DCEEE0
+  BorderColor<<rx>>       #4A8A5C
+  FontColor<<rx>>         #17452A
+  BackgroundColor<<ack>>  #FFF3C4
+  BorderColor<<ack>>      #9A7B0A
+  FontColor<<ack>>        #3A2E00
+  BackgroundColor<<abort>> #F6D9D9
+  BorderColor<<abort>>    #B05050
+  FontColor<<abort>>      #6A2020
+  BackgroundColor<<box>>  #F0F3F7
+  BorderColor<<box>>      #6B7686
+  FontColor<<box>>        #1F2933
+  BackgroundColor<<brk>>   #FADBD8
+  BorderColor<<brk>>       #A93226
+  FontColor<<brk>>         #5B1610
+  BackgroundColor<<slot>>  #D6EAF8
+  BorderColor<<slot>>      #2E6DA4
+  FontColor<<slot>>        #16324F
+  BackgroundColor<<crc>>   #EDE0F5
+  BorderColor<<crc>>       #6B4E9B
+  FontColor<<crc>>         #3B2560
+  BackgroundColor<<data>>  #D5F0E0
+  BorderColor<<data>>      #2E7D4F
+  FontColor<<data>>        #12402A
+  BackgroundColor<<stat>>  #FDECC8
+  BorderColor<<stat>>      #A9741A
+  FontColor<<stat>>        #5A3D12
+  BackgroundColor<<hs>>    #FDF2E9
+  BorderColor<<hs>>        #A04000
+  FontColor<<hs>>          #5A2400
+  BackgroundColor<<wait>>  #D2E3F0
+  BorderColor<<wait>>      #24506E
+  FontColor<<wait>>        #12303F
+}
 title UART RTS/CTS — the handshake as firmware, and the invariant it guarantees
 ' Sources: firmware/uart_flow.pe (the poll, the dispatch, the bit loop),
 '          tb/tb_pe_soc_uart_flow.v (the invariant monitor, the 8N1 receiver,
@@ -7,22 +71,6 @@ title UART RTS/CTS — the handshake as firmware, and the invariant it guarantee
 '                                 bit 4 RTS (out) bit 5 CTS (in)
 ' Program: payload 0x00 0xFF 0xA5, one RTS frame around each byte
 skinparam defaultFontName Monospaced
-skinparam state {
-  FontSize 11
-  BackgroundColor<<tx>>   #dce9f8
-  BorderColor<<tx>>       #4a6fa5
-  FontColor<<tx>>         #16324f
-  BackgroundColor<<hs>>   #fbe9cf
-  BorderColor<<hs>>       #b8813a
-  FontColor<<hs>>         #5a3d12
-  BackgroundColor<<wait>> #dceee0
-  BorderColor<<wait>>     #4a8a5c
-  FontColor<<wait>>       #17452a
-  BackgroundColor<<box>>  #f2f2f2
-  BorderColor<<box>>      #808080
-  FontColor<<box>>        #303030
-}
-
 [*] --> init
 state "init\nLDI A, UTX / OUT TXPIN\nTX idles HIGH, RTS RELEASED\n(bits 4 and 8..: 8 payloads live\nin dmem[8], dmem[9], dmem[10])" as init
 state "main\nLDM A,2 (bytes sent)\nSUB A,3 / JZ done" as main <<box>>
