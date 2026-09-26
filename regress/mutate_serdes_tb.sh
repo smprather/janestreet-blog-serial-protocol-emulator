@@ -29,6 +29,14 @@ cd "$(dirname "$0")/.."
 chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
 RTL="$ROOT/rtl/pe_serdes.v"
+# MUTABLE — what this harness EDITS inside the repo. Read by
+# regress/verify_merge.sh (the merge gate) to decide whether a narrowed gate
+# has to run this suite, and by regress/check_mutation_lists.sh to prove the
+# list still covers every file the harness writes. Evidence: RTL=.
+# An EMPTY value means this suite mutates nothing in the repo and is therefore
+# NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
+# escalates to running every suite rather than guessing.
+MUTABLE="rtl/pe_serdes.v"
 LOG=/tmp/mutate_serdes.log
 BAK=$(mktemp /tmp/pe_serdes.XXXXXX.v)
 

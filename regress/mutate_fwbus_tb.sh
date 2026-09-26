@@ -49,6 +49,14 @@ BAK=$(mktemp -d /tmp/fwbus_mut.XXXXXX)
 
 # The three (firmware, testbench) pairs. The firmware is the DUT of each.
 FWS="i2c_adv spi_mode3 uart_flow"
+# MUTABLE — what this harness EDITS inside the repo. Read by
+# regress/verify_merge.sh (the merge gate) to decide whether a narrowed gate
+# has to run this suite, and by regress/check_mutation_lists.sh to prove the
+# list still covers every file the harness writes. Evidence: the FWS= list of firmware it copies, mutates and cmp-restores.
+# An EMPTY value means this suite mutates nothing in the repo and is therefore
+# NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
+# escalates to running every suite rather than guessing.
+MUTABLE="firmware/i2c_adv.pe firmware/i2c_adv.hex firmware/spi_mode3.pe firmware/spi_mode3.hex firmware/uart_flow.pe firmware/uart_flow.hex"
 
 cleanup() {
   for f in $FWS; do

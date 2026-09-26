@@ -43,10 +43,22 @@ every gate the project owns had been green a minute earlier: R3's new
 ports floated to Z, the execute gate went X and six unrelated programs sat at
 reset. No gate could catch it — until the merge, the two states did not coexist.
 `./regress/verify_merge.sh --list` prints the affected set and runs nothing;
-`--self-test` runs the mapper's own 18 checks; exit 1 is red WITH a named case,
+`--self-test` runs the mapper's own 27 checks; exit 1 is red WITH a named case,
 3 is a gate error, and **4 is inconclusive (the run died) — which is not a pass
 and must not be reported as one**. Full evidence:
 `reviews/2026-09-25/MERGE-FORENSICS-5B4731F.md` §5-§6.
+
+**The mutation suites are MAPPED, not skipped** (manager ruling 2026-09-25). A
+narrowed gate runs a suite only if one of its `MUTABLE` targets intersects the
+merge's changed set, and it PRINTS every suite as RUN or SKIP with the reason —
+so a green gate says what it covered and what it did not. Anything unmappable
+(no `MUTABLE` line) or an empty selection runs ALL suites; a suite with an EMPTY
+`MUTABLE` mutates nothing in the repo and is never narrowed away. The
+`MUTATE_ONLY` selector travels as an environment variable, so an ordinary
+`./regress/run_all.sh` — the master/nightly gate — is untouched and always runs
+everything. `regress/check_mutation_lists.sh` proves each `MUTABLE` list still
+covers every file its harness writes, and runs inside the full gate too: a
+stale list would make the mapper skip the suite guarding a changed file.
 
 ## Continuous work protocol (user standing order 2026-09-25: "I don't want
 to come back and find nobody working")

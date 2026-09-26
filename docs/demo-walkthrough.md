@@ -345,10 +345,44 @@ list, and a gate that reports "RED, the affected set failed" for a run that neve
 finished is claiming something its log does not support. Read 4 as "make the run
 finish", never as "the RTL is fine".
 
-**The 18-check self-test is not optional reading.** `--self-test` asserts the
-mapper's rules *and* the hand-off contract between the gate and `run_all.sh`'s
-`--cases` filter — the pair that disagreed during this gate's own development
-and made a filter select nothing while the gate still had a selection to show.
+**The 27-check self-test is not optional reading.** `--self-test` asserts the
+mapper's rules, the mutation mapping, the skip-print, the empty-selection
+refusal, *and* the hand-off contract between the gate and `run_all.sh`'s
+`--cases` / `MUTATE_ONLY` filters — the pairs that disagreed during this gate's
+own development and made a filter select nothing while the gate still had a
+selection to show. The count of checks it ran is itself asserted, so a
+self-test that silently stops exercising rules fails instead of reporting
+success.
+
+**The mutation suites are narrowed too, and the narrowing is printed.** By the
+manager's 2026-09-25 ruling a narrowed gate runs a mutation suite only when one
+of that suite's `MUTABLE` targets intersects the merge's changed set:
+
+```text
+--- mutation suites (2 run, 14 skipped by mapping, 16 total) ---
+  RUN   mutate_timing_tb         MUTABLE intersects the changed set (firmware/freqmeter.pe)
+  SKIP  mutate_ctrl_tb           no MUTABLE target among the changed files
+  RUN   mutate_macro_flow_config MUTABLE is empty: mutates nothing in the repo, never narrowed away
+```
+
+Measured cost of the 16 suites, sequential (2026-09-25): **1468 s**, and the
+distribution is lopsided — `mutate_eth_mac_tb` 378 s, `mutate_eth_tx_loop_tb`
+343 s, `mutate_timing_tb` 335 s against four suites under 5 s. One number in
+that table is **invalid and marked as such**: `mutate_timing_tb` reported FAILED
+because a file edit landed while bash was executing it (see
+`reviews/2026-09-25/MERGE-GATE-MUTATION-NARROWING.md` §5) — the harness is
+intact and its number needs re-measuring.
+
+Three properties keep the narrowing honest, and all three escalate to running
+*more*, never less: a harness with no `MUTABLE` line is unmappable and runs
+everything; an empty selection is refused exactly as an empty case selection
+is; and the suite count `run_all.sh` reports is compared against the count the
+mapper chose, so a `MUTATE_ONLY` that matched nothing is a **gate error**, not a
+green with zero mutation coverage. `MUTATE_ONLY` travels as an environment
+variable, so `./regress/run_all.sh` — the master gate — is unchanged and always
+runs all 16. `regress/check_mutation_lists.sh` proves each list still covers
+every file its harness writes; it found two live gaps in already-published lists
+on its first run.
 
 Full evidence: `reviews/2026-09-25/MERGE-FORENSICS-5B4731F.md` §5-§6.
 

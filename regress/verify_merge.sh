@@ -153,6 +153,105 @@ cases_reading_dir() {  # $1 = repo-relative dir, e.g. tb/r2-vectors
   printf '%s' "$DATA_DIRS" | awk -F'\t' -v d="$1" '$1 == d { print $2 }'
 }
 
+# ---------------------------------------------------------------------------
+# THE MUTATION SUITES (manager ruling 2026-09-25: MAPPED, NOT SKIPPED).
+#
+# A suite runs in a narrowed gate IFF one of its MUTABLE targets intersects the
+# merge-mapped changed set. The lists are the harnesses' own `MUTABLE="..."`
+# declarations, read exactly the way run_all.sh's CASES array is read — the gate
+# never restates them — and regress/check_mutation_lists.sh is what proves each
+# list still covers every file its harness writes. Without that checker a stale
+# list would make this gate SKIP the suite guarding a changed file, which is the
+# one failure mode a gate in this project may not have.
+#
+# THE THREE ESCALATIONS, all to running MORE, never less:
+#   * a harness with no MUTABLE line   -> unmappable, run everything
+#   * an empty RUN set                 -> run everything (an empty selection is
+#                                        indistinguishable from a broken mapper,
+#                                        and it is refused the same way an
+#                                        empty CASE selection is)
+#   * a suite with an EMPTY MUTABLE    -> never narrowed away: it mutates
+#                                        nothing in the repo, so no merge can
+#                                        affect it and it always runs
+# A full unfiltered run_all.sh (the master/nightly gate) is untouched by all of
+# this: the narrowing exists only here, and only when a mapping applies.
+# ---------------------------------------------------------------------------
+MUT_TABLE=""      # newline-separated "suite<TAB>m1 m2 ..."
+MUT_UNMAPPABLE=""  # suites with no MUTABLE line
+
+load_mut_table() {
+  local f n m
+  MUT_TABLE=""; MUT_UNMAPPABLE=""
+  for f in regress/mutate_*.sh; do
+    n=${f##*/}; n=${n%.sh}
+    if ! m=$(grep -m1 '^MUTABLE=' "$f" | cut -d'"' -f2); then m=""; fi
+    if grep -q '^MUTABLE=' "$f"; then
+      MUT_TABLE="$MUT_TABLE$n	$m
+"
+    else
+      MUT_UNMAPPABLE="$MUT_UNMAPPABLE $n"
+    fi
+  done
+}
+
+# Sets MUT_RUN / MUT_SKIP / MUT_WHY / MUT_FULL_REASON for the given changed set.
+map_mutations() {  # stdin = the same changed-path list the cases were mapped from
+  local changed suite targets t
+  changed=$(cat)
+  MUT_RUN=""; MUT_SKIP=""; MUT_WHY=""; MUT_FULL_REASON=""
+  if [ -n "$MUT_UNMAPPABLE" ]; then
+    MUT_FULL_REASON="these harnesses declare no MUTABLE list, so their scope is unknown:$MUT_UNMAPPABLE"
+    return 0
+  fi
+  while IFS=$'\t' read -r suite targets; do
+    [ -n "$suite" ] || continue
+    if [ -z "${targets// /}" ]; then
+      MUT_RUN="$MUT_RUN $suite"
+      MUT_WHY="$MUT_WHY$suite	MUTABLE is empty: mutates nothing in the repo, never narrowed away
+"
+      continue
+    fi
+    local hit=""
+    for t in $targets; do
+      if printf '%s\n' "$changed" | grep -Fxq "$t"; then hit="$t"; break; fi
+    done
+    if [ -n "$hit" ]; then
+      MUT_RUN="$MUT_RUN $suite"
+      MUT_WHY="$MUT_WHY$suite	MUTABLE intersects the changed set ($hit)
+"
+    else
+      MUT_SKIP="$MUT_SKIP $suite"
+      MUT_WHY="$MUT_WHY$suite	no MUTABLE target among the changed files
+"
+    fi
+  done <<< "$MUT_TABLE"
+  # The empty-selection refusal, symmetric with the case mapping's.
+  if [ -z "$(printf '%s' "$MUT_RUN" | tr -d ' ')" ]; then
+    MUT_FULL_REASON="no suite's MUTABLE list intersects the changed set (empty selection — refused, running every suite rather than claiming a green from zero mutation coverage)"
+  fi
+  return 0
+}
+
+# Does this regex select exactly the suites map_mutations chose to run? The
+# hand-off between the two halves is a contract, and the --cases hand-off already
+# taught this project what an unasserted hand-off costs.
+mut_regex_test() {  # $1 = expected count, $2 = label
+  local want="$1" label="$2" re sel n
+  re="^($(printf '%s' "$MUT_RUN" | tr ' ' '\n' | grep -v '^$' | sort -u | paste -sd'|' -))$"
+  sel=0
+  while IFS=$'\t' read -r suite _t; do
+    [ -n "$suite" ] || continue
+    if printf '%s\n' "$suite" | grep -qE "$re"; then sel=$((sel + 1)); fi
+  done <<< "$MUT_TABLE"
+  n=$sel
+  if [ "$n" -ne "$want" ]; then
+    printf '  FAIL  %-46s regex %s selects %s, mapping chose %s\n' "$label" "$re" "$n" "$want"
+    return 1
+  fi
+  printf '  ok    %-46s regex selects the %s suite(s) the mapping chose\n' "$label" "$n"
+  return 0
+}
+
 SELECTED=""      # newline-separated "name|top" entries
 SEL_WHY=""       # the same entries + TAB + why
 FULL_REASON=""   # non-empty => run everything
@@ -324,7 +423,7 @@ selftest() {
   # SUBSHELL, so its counters would be lost and this self-test could report
   # success having counted nothing. The guard below is the anti-vacuity check;
   # it must not be the thing that is vacuous.
-  local real_table="$CASE_TABLE" real_dirs="$DATA_DIRS" bad=0 ran=0 contract_ran=0 want_rules=17 want_contract=3
+  local real_table="$CASE_TABLE" real_dirs="$DATA_DIRS" real_mut="$MUT_TABLE" bad=0 ran=0 contract_ran=0 want_rules=23 want_contract=4
   CASE_TABLE="tb_a|../rtl/pe_cpu.v|tb_a
 tb_b|../rtl/pe_ctrl.v|tb_b
 tb_c|../rtl/pe_cpu.v ../rtl/pe_soc.v|tb_c
@@ -378,7 +477,82 @@ tb/r3-vectors	tb_b
   filter_contract_test 2 "two selected cases, regex vs run_all's matcher" || bad=$((bad + 1))
   map_changed "contract" <<< "firmware/x.pe"
   filter_contract_test 2 "a firmware-wide selection, same contract" || bad=$((bad + 1))
-  CASE_TABLE="$real_table"; DATA_DIRS="$real_dirs"
+  # ---- the mutation-suite mapping (manager ruling: MAPPED, NOT SKIPPED) ------
+  # A synthetic MUTABLE table, so the rules are checked against known inputs:
+  # suite A mutates a file the merge changes, suite B one it does not, suite C
+  # mutates nothing in the repo.
+  MUT_TABLE="mut_a	rtl/pe_soc.v
+mut_b	rtl/pe_eth_mac.v
+mut_c	
+"
+  MUT_UNMAPPABLE=""
+  mut_st() {  # $1 = label, $2 = expected "runs/skips" e.g. "a,c/b", stdin = changed set
+    local label="$1" want="$2" got runs skips
+    ran=$((ran + 1))
+    map_mutations
+    runs=$(printf '%s' "$MUT_RUN" | tr -s ' ' '\n' | grep -v '^$' | sort | paste -sd, -)
+    skips=$(printf '%s' "$MUT_SKIP" | tr -s ' ' '\n' | grep -v '^$' | sort | paste -sd, -)
+    got="$runs/$skips"
+    if [ "$got" = "$want" ]; then
+      printf '  ok    %-46s run=[%s] skip=[%s]\n' "$label" "$runs" "$skips"
+    else
+      printf '  FAIL  %-46s got %s, expected %s\n' "$label" "$got" "$want"
+      bad=$((bad + 1))
+    fi
+  }
+  mut_st "a MUTABLE hit runs, a miss skips" "mut_a,mut_c/mut_b" <<< "rtl/pe_soc.v"
+  mut_st "an unrelated change skips the hit too" "mut_c/mut_a,mut_b" <<< "rtl/pe_dru.v"
+  mut_st "every suite runs when all three match" "mut_a,mut_b,mut_c/" <<< "$(printf 'rtl/pe_soc.v\nrtl/pe_eth_mac.v')"
+  # The hand-off between the mapper and the MUTATE_ONLY it hands to run_all.sh.
+  # Self-contained on purpose: the first version of this check read whatever
+  # MUT_RUN the previous rule happened to leave behind, so it was asserting an
+  # order rather than a mapping. A test that passes for the wrong reason is
+  # worse than no test, because it looks like coverage.
+  map_mutations <<< "rtl/pe_soc.v"
+  mut_regex_test 2 "MUTATE_ONLY selects exactly the RUN set" || bad=$((bad + 1))
+  contract_ran=$((contract_ran + 1))
+  # THE REFUSAL, which is the ruling's explicit requirement: an empty mutation
+  # selection must be refused exactly as an empty CASE selection is, because both
+  # are indistinguishable from a mapper that has stopped working.
+  MUT_TABLE="mut_d	rtl/pe_fbuf.v
+"
+  map_mutations <<< "rtl/pe_soc.v"
+  if [ -n "$MUT_FULL_REASON" ] && [ -z "$(printf '%s' "$MUT_RUN" | tr -d ' ')" ]; then
+    printf '  ok    %-46s refused: %s\n' "an empty mutation selection escalates" \
+           "$(printf '%s' "$MUT_FULL_REASON" | cut -c1-60)..."
+    ran=$((ran + 1))
+  else
+    printf '  FAIL  %-46s an empty selection was NOT refused\n' "an empty mutation selection escalates"
+    bad=$((bad + 1))
+  fi
+  # ... and the skip must never be silent: every suite needs a printed reason.
+  MUT_TABLE="mut_a	rtl/pe_soc.v
+mut_b	rtl/pe_eth_mac.v
+mut_c	
+"
+  map_mutations <<< "rtl/pe_soc.v"
+  if printf '%s' "$MUT_WHY" | grep -q "mut_b.*no MUTABLE target" \
+     && printf '%s' "$MUT_WHY" | grep -q "mut_a.*intersects the changed set (rtl/pe_soc.v)" \
+     && printf '%s' "$MUT_WHY" | grep -q "mut_c.*never narrowed away"; then
+    printf '  ok    %-46s every suite carries a printed reason\n' "the skip print is never silent"
+    ran=$((ran + 1))
+  else
+    printf '  FAIL  %-46s a suite has no reason line\n' "the skip print is never silent"
+    bad=$((bad + 1))
+  fi
+  # An unmappable harness (no MUTABLE line) must escalate, never be assumed.
+  MUT_TABLE=""; MUT_UNMAPPABLE="mut_new_tb"
+  map_mutations <<< "rtl/pe_soc.v"
+  if [ -n "$MUT_FULL_REASON" ]; then
+    printf '  ok    %-46s unmappable harness escalates to all suites\n' "a missing MUTABLE line"
+    ran=$((ran + 1))
+  else
+    printf '  FAIL  %-46s an unmappable harness did NOT escalate\n' "a missing MUTABLE line"
+    bad=$((bad + 1))
+  fi
+  MUT_TABLE=""; MUT_UNMAPPABLE=""
+
+  CASE_TABLE="$real_table"; DATA_DIRS="$real_dirs"; MUT_TABLE="$real_mut"
   if [ "$ran" -ne "$want_rules" ] || [ "$contract_ran" -ne "$want_contract" ]; then
     echo "  FAIL  exercised $ran rule(s) and $contract_ran contract check(s), expected $want_rules and $want_contract — the self-test would pass while checking less than it claims"
     exit 1
@@ -491,19 +665,49 @@ fi
 [ -n "$MERGE_WARN" ] && printf '%s' "$MERGE_WARN" | sed 's/^  /  ! /'
 [ -n "$BEHIND_WARN" ] && printf '%s' "$BEHIND_WARN" | sed 's/^  /  ! /'
 
+# ---- the mutation suites, mapped (manager ruling 2026-09-25: MAPPED, NOT SKIPPED)
+CHANGED_ALL=$(printf '%s\n%s' "$MERGE_CHANGED" "$BEHIND_CHANGED" | grep -v '^$')
+load_mut_table
+map_mutations <<< "$CHANGED_ALL"
+MUT_RUN_N=$(printf '%s' "$MUT_RUN" | tr -s ' ' '\n' | grep -c . || true)
+MUT_SKIP_N=$(printf '%s' "$MUT_SKIP" | tr -s ' ' '\n' | grep -c . || true)
+MUT_TOTAL_N=$(printf '%s\n' "$MUT_TABLE" | grep -c . || true)
+MUT_REGEX=""; MUT_ALL_REASON=""
+if [ -n "$MUT_FULL_REASON" ]; then
+  MUT_ALL_REASON="ALL $MUT_TOTAL_N suites: $MUT_FULL_REASON"
+else
+  MUT_REGEX="^($(printf '%s' "$MUT_RUN" | tr ' ' '\n' | grep -v '^$' | sort -u | paste -sd'|' -))$"
+fi
+echo "--- mutation suites ($MUT_RUN_N run, $MUT_SKIP_N skipped by mapping, $MUT_TOTAL_N total) ---"
+printf '%s' "$MUT_WHY" | while IFS=$'\t' read -r suite why; do
+  [ -n "$suite" ] || continue
+  case " $MUT_RUN " in *" $suite "*) v="RUN  " ;; *) v="SKIP " ;; esac
+  printf '  %s %-26s %s\n' "$v" "$suite" "$why"
+done
+[ -n "$MUT_ALL_REASON" ] && echo "  -> $MUT_ALL_REASON"
+
 REGEX=""
 if [ "$FORCE_FULL" -eq 1 ] || [ -n "$FULL_REASON" ]; then
   [ "$FORCE_FULL" -eq 1 ] && [ -z "$FULL_REASON" ] && FULL_REASON="--full requested"
   echo "  -> FULL SUITE: $FULL_REASON"
+  # A full run is the MASTER gate, not merge triage: it runs EVERY mutation
+  # suite. The narrowing lives only here, and only when a mapping applies.
+  MUT_REGEX=""
 else
   REGEX="^($(printf '%s' "$NAMES" | paste -sd'|' -))$"
   echo "  -> $EXPECTED of $ALLCASES cases selected; run_all.sh runs the rest of the gate unfiltered"
+  if [ -n "$MUT_REGEX" ]; then
+    echo "  -> mutation suites narrowed to $MUT_RUN_N of $MUT_TOTAL_N by mapping (MUTATE_ONLY)"
+  else
+    echo "  -> mutation suites: all $MUT_TOTAL_N ($MUT_ALL_REASON)"
+  fi
 fi
 echo
 
 if [ "$MODE" = "list" ]; then
   echo "(--list: nothing was run)"
   [ -n "$REGEX" ] && echo "--cases $REGEX"
+  [ -n "$MUT_REGEX" ] && echo "MUTATE_ONLY=$MUT_REGEX"
   exit 0
 fi
 
@@ -515,6 +719,10 @@ fi
 CMD=(./regress/run_all.sh)
 [ -n "$REGEX" ] && CMD+=(--cases "$REGEX")
 [ "${#EXTRA[@]}" -gt 0 ] && CMD+=("${EXTRA[@]}")
+# The mutation narrowing travels as an environment variable, not an argument, so
+# that an ordinary `./regress/run_all.sh` — the master gate, and every human
+# habit in this repository — is untouched by any of this.
+[ -n "$MUT_REGEX" ] && export MUTATE_ONLY="$MUT_REGEX"
 LOG=$(mktemp /tmp/verify_merge.XXXXXX.log)
 echo "+ ${CMD[*]}"
 echo "(full log: $LOG)"
@@ -523,6 +731,14 @@ RC=${PIPESTATUS[0]}
 
 TOTAL=$(grep -E '^TOTAL: [0-9]+' "$LOG" | tail -1 | awk '{print $2}')
 SELECTED_BY_RUN=$(grep -oE '[-][-]cases [^:]*: [0-9]+ selected' "$LOG" | tail -1 | grep -oE '[0-9]+ selected' | grep -oE '[0-9]+')
+# The same discipline for the mutation narrowing. The ruling's own words: GREEN
+# must never claim more than it ran. So the number of suites run_all.sh reports
+# is compared against the number the mapping chose, and a mismatch is a GATE
+# ERROR, not a pass — otherwise a MUTATE_ONLY that silently matched nothing
+# would report a green with zero mutation coverage, which is the most expensive
+# possible way to be wrong.
+MUT_RAN_BY_RUN=$(grep -E '^mutation suites: [0-9]+ ran' "$LOG" | tail -1 | grep -oE '[0-9]+' | head -1)
+MUT_SKIPPED_BY_RUN=$(grep -E '^mutation suites: [0-9]+ ran' "$LOG" | tail -1 | grep -oE '[0-9]+ SKIPPED' | grep -oE '[0-9]+')
 # The evidence for a red: a NAMED failing case or gate. A non-zero exit with
 # nothing named is a run that produced NO verdict (OOM-killed mid-loop, out of
 # disk, the lock refusing), and reporting that as "RED, the affected set
@@ -585,6 +801,24 @@ if [ "$TOTAL" != "$WANT" ]; then
   echo "  The mapping and the suite disagree; treating that as a failure, not a pass." >&2
   rm -f "$LOG"; exit 3
 fi
+# ... and the same for the mutation suites. MUT_WANT is the number the mapping
+# chose when it narrowed, or the full table when it escalated to running all.
+MUT_WANT=$MUT_RUN_N
+[ -z "$MUT_REGEX" ] && MUT_WANT=$MUT_TOTAL_N
+if [ -z "$MUT_RAN_BY_RUN" ]; then
+  echo "MERGE GATE: GATE ERROR — run_all.sh reported no mutation-suite count." >&2
+  echo "  It must always say how many suites ran, narrowed or not." >&2
+  rm -f "$LOG"; exit 3
+fi
+if [ "$MUT_RAN_BY_RUN" != "$MUT_WANT" ]; then
+  echo "MERGE GATE: GATE ERROR — the mapping chose $MUT_WANT mutation suite(s), run_all.sh ran $MUT_RAN_BY_RUN." >&2
+  echo "  GREEN would be claiming mutation coverage this run does not have." >&2
+  rm -f "$LOG"; exit 3
+fi
+if [ -n "$MUT_SKIPPED_BY_RUN" ] && [ "$((MUT_RAN_BY_RUN + MUT_SKIPPED_BY_RUN))" != "$MUT_TOTAL_N" ]; then
+  echo "MERGE GATE: GATE ERROR — $MUT_RAN_BY_RUN ran + $MUT_SKIPPED_BY_RUN skipped != $MUT_TOTAL_N suites." >&2
+  rm -f "$LOG"; exit 3
+fi
 rm -f "$LOG"
-echo "MERGE GATE: GREEN — $REV ($TOTAL case(s) run, the affected set among them)"
+echo "MERGE GATE: GREEN — $REV ($TOTAL case(s) run, $MUT_RAN_BY_RUN/$MUT_TOTAL_N mutation suites run$([ -n "$MUT_SKIPPED_BY_RUN" ] && echo ", $MUT_SKIPPED_BY_RUN skipped by mapping"))"
 exit 0

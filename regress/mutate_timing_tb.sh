@@ -50,6 +50,14 @@ cd "$(dirname "$0")/.."
 chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
 SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
+# MUTABLE — what this harness EDITS inside the repo. Read by
+# regress/verify_merge.sh (the merge gate) to decide whether a narrowed gate
+# has to run this suite, and by regress/check_mutation_lists.sh to prove the
+# list still covers every file the harness writes. Evidence: the `for f in ...` firmware list it snapshots into $SNAP and restores.
+# An EMPTY value means this suite mutates nothing in the repo and is therefore
+# NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
+# escalates to running every suite rather than guessing.
+MUTABLE="firmware/ws2812.pe firmware/ws2812.hex firmware/servo_sweep.pe firmware/servo_sweep.hex firmware/dht11_read.pe firmware/dht11_read.hex firmware/ds18b20.pe firmware/ds18b20.hex firmware/nec_ir.pe firmware/nec_ir.hex firmware/stepper_ramp.pe firmware/stepper_ramp.hex firmware/freqmeter.pe firmware/freqmeter.hex"
 SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v"
 TB_WS="$ROOT/tb/tb_pe_soc_ws2812.v"
 TB_SV="$ROOT/tb/tb_pe_soc_servo.v"

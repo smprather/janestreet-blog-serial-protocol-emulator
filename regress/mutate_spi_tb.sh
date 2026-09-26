@@ -44,7 +44,7 @@ inconclusive=0
 survived=0
 
 # Files any mutation may touch, for the snapshot/restore.
-MUTABLE="rtl/pe_soc.v rtl/pe_pinmux.v firmware/spi_xfer.pe"
+MUTABLE="rtl/pe_soc.v rtl/pe_pinmux.v firmware/spi_xfer.pe firmware/spi_xfer.hex"
 
 # The pristine snapshot every restore is verified against. NOT git: a harness
 # must work in a `git archive` clone (which has no .git at all) and must not

@@ -53,6 +53,14 @@
 # The unmutated copy must pass first, and the tracked files are compared at the
 # end to prove this script never touched them.
 set -u
+# MUTABLE — what this harness EDITS inside the repo. Read by
+# regress/verify_merge.sh (the merge gate) to decide whether a narrowed gate
+# has to run this suite, and by regress/check_mutation_lists.sh to prove the
+# list still covers every file the harness writes. Evidence: it writes only under $TMP (synthetic fixtures) and reads the PDK; it mutates nothing in the repo, so empty means NEVER SKIPPED.
+# An EMPTY value means this suite mutates nothing in the repo and is therefore
+# NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
+# escalates to running every suite rather than guessing.
+MUTABLE=""
 cd "$(dirname "$0")/.."
 # The single-run lock: this worktree is shared and a concurrent run would be
 # mutating and restoring the same RTL. Inherited from run_all.sh when this is

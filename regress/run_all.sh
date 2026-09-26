@@ -455,6 +455,21 @@ else
   failed_names+=("param_guards")
 fi
 
+# The mutation suites' MUTABLE lists decide which suites a NARROWED merge gate
+# has to run (regress/verify_merge.sh), so a list that stopped covering the
+# files its harness writes would make that gate skip a suite guarding a changed
+# file. The check belongs in the FULL gate too, not only in the mapper: a list is
+# only trustworthy while something keeps proving it, and this is the master gate
+# that everything else trusts.
+if "$REPO_ROOT/regress/check_mutation_lists.sh" > /tmp/check_mutation_lists.log 2>&1; then
+  echo "mutation MUTABLE lists: OK"
+else
+  echo "mutation MUTABLE lists: FAILED"
+  cat /tmp/check_mutation_lists.log
+  fail=$((fail+1))
+  failed_names+=("check_mutation_lists")
+fi
+
 [ "$fail" -eq 0 ] || { echo "failed: ${failed_names[*]}"; exit 1; }
 echo "all testbenches pass"
 
@@ -477,6 +492,53 @@ echo
 # exists, and a deleted TB must not leave the pin budget claiming coverage.
 # Regenerate with: python3 tools/gen/signal_glossary.py / tools/gen/pin_budget.py
 stale=0
+
+# ---- THE MUTATION SUITES, and the narrowing regress/verify_merge.sh asks for --
+#
+# MUTATE_ONLY is a REGEX over the suite basenames. Unset (the ordinary full gate,
+# the master/nightly run), EVERY suite runs and this file behaves exactly as
+# before. Set, only the matching suites run — and the run says so, loudly, with
+# the counts, because a gate that silently runs less than it claims is worse
+# than no gate. The manager's ruling (2026-09-25) is MAPPED, NOT SKIPPED: the
+# mapping lives in verify_merge.sh, which prints WHICH suites it selected and
+# WHY, and this file only carries out the selection.
+#
+# The narrowing is by the suite's own published MUTABLE list, so a merge that
+# changes a file a suite does not mutate never pays for that suite, while a
+# merge that changes one it DOES mutate always runs it. A suite that mutates
+# nothing in the repo (MUTABLE empty) is never narrowed away: the mapper keeps
+# it, and that is deliberate.
+MUT_RAN=0; MUT_SKIPPED=0; MUT_SKIP_LIST=""
+MUT_ALL=(regress/mutate_*.sh)
+MUT_TOTAL=${#MUT_ALL[@]}
+if [ -n "${MUTATE_ONLY:-}" ]; then
+  _mhit=0
+  for _m in "${MUT_ALL[@]}"; do
+    _mn=${_m##*/}; _mn=${_mn%.sh}
+    if printf '%s\n' "$_mn" | grep -qE "${MUTATE_ONLY}"; then _mhit=$((_mhit + 1)); fi
+  done
+  if [ "$_mhit" -eq 0 ]; then
+    echo "FATAL: MUTATE_ONLY='${MUTATE_ONLY}' matches NO mutation suite." >&2
+    echo "  A narrowed gate that runs zero mutation suites would report a green it did not earn." >&2
+    echo "  Matching suites are named mutate_<topic>_tb.sh; list them with:" >&2
+    echo "    grep -m1 '^# mutate' regress/mutate_*.sh" >&2
+    exit 2
+  fi
+  echo "(MUTATE_ONLY=${MUTATE_ONLY}: $((MUT_TOTAL - _mhit)) of $MUT_TOTAL mutation suites will be SKIPPED by mapping)"
+fi
+
+# One suite, or skipped-by-mapping. Sets MUT_RAN / MUT_SKIPPED and the list of
+# skipped names, which the summary prints — so the log alone says what ran.
+run_mutation_suite() {
+  local n="$1"; shift
+  if [ -n "${MUTATE_ONLY:-}" ] && ! printf '%s\n' "$n" | grep -qE "${MUTATE_ONLY}"; then
+    MUT_SKIPPED=$((MUT_SKIPPED + 1)); MUT_SKIP_LIST="$MUT_SKIP_LIST $n"
+    return 0
+  fi
+  MUT_RAN=$((MUT_RAN + 1))
+  "$@"
+}
+
 if python3 tools/gen/signal_glossary.py --check >/dev/null 2>&1; then
   echo "signal glossary up to date"
 else
@@ -536,7 +598,7 @@ fi
 # skip and a yosys-elaboration failure must all behave as designed. The
 # mutations run on a COPY of the flow config/PDN script, never the tracked
 # files, and the harness reports SKIPPED when its baseline is incomplete.
-if ./regress/mutate_macro_flow_config.sh > /tmp/mutate_macro_flow.log 2>&1; then
+if run_mutation_suite mutate_macro_flow_config.sh ./regress/mutate_macro_flow_config.sh > /tmp/mutate_macro_flow.log 2>&1; then
   if grep -q "^SKIPPED" /tmp/mutate_macro_flow.log; then
     echo "macro flow config negatives: SKIPPED (required PDK geometry unavailable)"
   else
@@ -719,7 +781,7 @@ fi
 # testbench nobody mutation-tests is a testbench that quietly stops testing --
 # and this one has already been caught being vacuous twice (a wrong edge index
 # that made both interval checks unfailable, and a missing interval check).
-if ./regress/mutate_i2c_tb.sh > /tmp/mutate_i2c.log 2>&1; then
+if run_mutation_suite mutate_i2c_tb.sh ./regress/mutate_i2c_tb.sh > /tmp/mutate_i2c.log 2>&1; then
   echo "i2c TB mutations: OK (no unexplained survivors)"
 else
   echo "i2c TB mutations: FAILED"
@@ -737,7 +799,7 @@ fi
 # then cmp-verifies that the tree was never written to -- a stronger statement
 # than "restored correctly". It is the slowest suite here (the servo TB is 66 s
 # per case) and runs at MUTATE_TIMING_JOBS, default 6.
-if ./regress/mutate_timing_tb.sh > /tmp/mutate_timing.log 2>&1; then
+if run_mutation_suite mutate_timing_tb.sh ./regress/mutate_timing_tb.sh > /tmp/mutate_timing.log 2>&1; then
   echo "timing TB mutations: OK (no unexplained survivors)"
 else
   echo "timing TB mutations: FAILED"
@@ -745,7 +807,7 @@ else
   stale=1
 fi
 
-if ./regress/mutate_spi_tb.sh > /tmp/mutate_spi.log 2>&1; then
+if run_mutation_suite mutate_spi_tb.sh ./regress/mutate_spi_tb.sh > /tmp/mutate_spi.log 2>&1; then
   echo "spi TB mutations: OK (no unexplained survivors)"
 else
   echo "spi TB mutations: FAILED"
@@ -756,7 +818,7 @@ fi
 # The frame buffer's TB, mutation-tested on BOTH implementations (the macro and
 # the FLOP=1 fallback), because the fallback exists to stand in for the macro --
 # so a test that only covered one would leave that claim unchecked.
-if ./regress/mutate_fbuf_tb.sh > /tmp/mutate_fbuf.log 2>&1; then
+if run_mutation_suite mutate_fbuf_tb.sh ./regress/mutate_fbuf_tb.sh > /tmp/mutate_fbuf.log 2>&1; then
   echo "fbuf TB mutations: OK (no unexplained survivors)"
 else
   echo "fbuf TB mutations: FAILED"
@@ -764,7 +826,7 @@ else
   stale=1
 fi
 
-if ./regress/mutate_eth_mac_tb.sh > /tmp/mutate_eth_mac.log 2>&1; then
+if run_mutation_suite mutate_eth_mac_tb.sh ./regress/mutate_eth_mac_tb.sh > /tmp/mutate_eth_mac.log 2>&1; then
   echo "eth_mac TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_mac TB mutations: FAILED"
@@ -774,7 +836,7 @@ fi
 
 # The SoC-level Ethernet TB is the only proof a PROGRAM can consume a frame,
 # so it gets the same treatment the block TBs get.
-if ./regress/mutate_eth_soc_tb.sh > /tmp/mutate_eth_soc.log 2>&1; then
+if run_mutation_suite mutate_eth_soc_tb.sh ./regress/mutate_eth_soc_tb.sh > /tmp/mutate_eth_soc.log 2>&1; then
   echo "eth_soc TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_soc TB mutations: FAILED"
@@ -785,7 +847,7 @@ fi
 # The loader is how a program reaches silicon; its TB gets the same gate. The
 # run-transition cases (run rising in W_IDLE, W_PULSE or W_DONE) are the ones
 # the independent review found missing.
-if ./regress/mutate_ctrl_tb.sh > /tmp/mutate_ctrl.log 2>&1; then
+if run_mutation_suite mutate_ctrl_tb.sh ./regress/mutate_ctrl_tb.sh > /tmp/mutate_ctrl.log 2>&1; then
   echo "ctrl TB mutations: OK (no unexplained survivors)"
 else
   echo "ctrl TB mutations: FAILED"
@@ -796,7 +858,7 @@ fi
 # The I2C transaction TB's DUT is the firmware, so its mutations are firmware
 # edits (bit order, repeated START, tLOW, STOP, arbitration, the tHD;DAT hold,
 # the read accumulator). Both the .pe and the .hex are restored and verified.
-if ./regress/mutate_i2c_xfer_tb.sh > /tmp/mutate_i2c_xfer.log 2>&1; then
+if run_mutation_suite mutate_i2c_xfer_tb.sh ./regress/mutate_i2c_xfer_tb.sh > /tmp/mutate_i2c_xfer.log 2>&1; then
   echo "i2c_xfer TB mutations: OK (no unexplained survivors)"
 else
   echo "i2c_xfer TB mutations: FAILED"
@@ -807,7 +869,7 @@ fi
 # The word engine's unit suite: the integration split bit_en into tx/rx
 # enables, and the TB's directed split case is what proves the sides are
 # independent.
-if ./regress/mutate_serdes_tb.sh > /tmp/mutate_serdes.log 2>&1; then
+if run_mutation_suite mutate_serdes_tb.sh ./regress/mutate_serdes_tb.sh > /tmp/mutate_serdes.log 2>&1; then
   echo "serdes TB mutations: OK (no unexplained survivors)"
 else
   echo "serdes TB mutations: FAILED"
@@ -818,7 +880,7 @@ fi
 # The word-engine integration: the plan's four required mutations (TX hold,
 # RX skip, doubled cell enable, strobe cross-wire) plus the two alignment
 # defects and the grid-aligned load. Each must fail tb_pe_soc_serdes.
-if ./regress/mutate_soc_serdes_tb.sh > /tmp/mutate_soc_serdes.log 2>&1; then
+if run_mutation_suite mutate_soc_serdes_tb.sh ./regress/mutate_soc_serdes_tb.sh > /tmp/mutate_soc_serdes.log 2>&1; then
   echo "soc serdes TB mutations: OK (no unexplained survivors)"
 else
   echo "soc serdes TB mutations: FAILED"
@@ -831,7 +893,7 @@ fi
 # preset 0x51, the ones-only cfg[7] rule and the cfg[6:4] run length, the
 # registered clr/rx_err contract (clr reaches every stage), and the pipeline
 # order / bypass subsets / half_phase. All 13 mutations must fail the TB.
-if ./regress/mutate_codec_tb.sh > /tmp/mutate_codec.log 2>&1; then
+if run_mutation_suite mutate_codec_tb.sh ./regress/mutate_codec_tb.sh > /tmp/mutate_codec.log 2>&1; then
   echo "codec TB mutations: OK (no unexplained survivors)"
 else
   echo "codec TB mutations: FAILED"
@@ -845,7 +907,7 @@ fi
 # and the done pulse. Two of them (pad-extra, ifg-95) SURVIVED the first
 # version of the suite and found two real gaps in tb_pe_eth_tx.v, which the
 # suite's own record carries.
-if ./regress/mutate_ctrl_r3_tb.sh > /tmp/mutate_ctrl_r3.log 2>&1; then
+if run_mutation_suite mutate_ctrl_r3_tb.sh ./regress/mutate_ctrl_r3_tb.sh > /tmp/mutate_ctrl_r3.log 2>&1; then
   echo "ctrl R3 debug mutations: OK (no unexplained survivors)"
 else
   echo "ctrl R3 debug mutations: FAILED"
@@ -853,7 +915,7 @@ else
   stale=1
 fi
 
-if ./regress/mutate_eth_tx_tb.sh > /tmp/mutate_eth_tx.log 2>&1; then
+if run_mutation_suite mutate_eth_tx_tb.sh ./regress/mutate_eth_tx_tb.sh > /tmp/mutate_eth_tx.log 2>&1; then
   echo "eth_tx TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_tx TB mutations: FAILED"
@@ -867,7 +929,7 @@ fi
 # convention and the window's push wrap. The pad mapping is only visible at
 # the PAD, so this harness runs BOTH tb_pe_soc_eth_loop and the pad-level
 # case in tb_tt_um_protocol_emulator.
-if ./regress/mutate_eth_tx_loop_tb.sh > /tmp/mutate_eth_tx_loop.log 2>&1; then
+if run_mutation_suite mutate_eth_tx_loop_tb.sh ./regress/mutate_eth_tx_loop_tb.sh > /tmp/mutate_eth_tx_loop.log 2>&1; then
   echo "eth_tx loopback TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_tx loopback TB mutations: FAILED"
@@ -881,12 +943,20 @@ fi
 # CRC's comparison, the CTS wait, the RTS assertion -- and each TB must catch
 # every one that applies to it. A survivor means the TB does not test what it
 # claims, which is the failure mode this project treats as worse than a red.
-if ./regress/mutate_fwbus_tb.sh > /tmp/mutate_fwbus.log 2>&1; then
+if run_mutation_suite mutate_fwbus_tb.sh ./regress/mutate_fwbus_tb.sh > /tmp/mutate_fwbus.log 2>&1; then
   echo "fw-bus TB mutations: OK (no unexplained survivors)"
 else
   echo "fw-bus TB mutations: FAILED"
   tail -20 /tmp/mutate_fwbus.log
   stale=1
+fi
+
+if [ -n "${MUTATE_ONLY:-}" ]; then
+  echo "mutation suites: $MUT_RAN ran, $MUT_SKIPPED SKIPPED by mapping (MUTATE_ONLY=${MUTATE_ONLY})"
+  [ -n "$MUT_SKIP_LIST" ] && echo "  skipped:$MUT_SKIP_LIST"
+  [ "$MUT_RAN" -eq 0 ] && { echo "  FATAL: zero mutation suites ran"; exit 2; }
+else
+  echo "mutation suites: $MUT_RAN ran (full gate — no narrowing)"
 fi
 
 [ "$stale" -eq 0 ] || exit 1
