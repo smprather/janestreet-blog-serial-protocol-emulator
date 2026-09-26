@@ -3388,3 +3388,39 @@ Now 5 of 5, including the length-mismatch refusal, and the disagree path is
 demonstrated end to end: *"THE TWO MODELS DISAGREE at 1 of 80 half-intervals,
 first at 0"*, with both strings printed. **So the branch is no longer a claim
 that it would work.**
+
+## 2026-09-27 act (c): IDLE-QUEUE-EMPTY (UNBLOCKED SET) / BLOCKED: THE REST
+
+**The unblocked half -- `firmware/` and `firmware/bmc_model.py` -- is
+exhausted, and "exhausted" here means measured, not assumed.** Re-verified after
+a formatter pass over the new self-test:
+
+    bmc_models_agree.py --self-test   5 of 5, exit 0
+    bmc_model.py                      MODEL SELF-CHECK: all properties hold
+    bmc_checks.py bmc_frame.pe        PASS: 7 checks, 0 failures
+                                      (323 words, 36 loop + 12 entry routes,
+                                       all 120 clocks)
+
+The firmware is the act's deliverable and it is green in both directions, the
+model has 18 properties and all of them hold, the disagreement branch of the
+model-agreement check has a self-test that fires, and the wiki audit found
+nothing because the documentation is correct.
+
+**BLOCKED: on the window, and the remainder is exactly this:**
+
+| held item | needs |
+| :--- | --- |
+| TB-side decoder work | `tb_pe_soc_bmc.v` + probes — held by the manager's scoping |
+| wire the `--self-test` into the regression | one `run_case` in `regress/run_firmware_tests.sh` — frozen. **So the self-test is currently a flag a human must know to pass, which is a real gap in it and a one-line fix once the window lifts** |
+| the 17 safe `/tmp` log repoints | `regress/run_all.sh` — frozen |
+| the timing-suite exit-code experiment | a suite run — forbidden, and it needs a quiet machine |
+| the 9 unsafe log paths | `regress/`, and their reader is not yet known |
+
+**NOT held, and not mine:** the `run-lock process tree` and `R3 golden package`
+gate failures, and the shared-`/tmp`-path collision between concurrent gate runs
+in different worktrees. Those are reported, not touched.
+
+**The single highest-value thing waiting is the smallest:** one line in
+`regress/run_firmware_tests.sh` to make the self-test run on every regression,
+because a check that only runs when someone remembers it is the exact failure
+this act spent a session repairing in `bmc_checks.py`.
