@@ -295,11 +295,13 @@ note bottom of p_sr04
   Run standalone from tb/ on 2026-09-25:
 
     tb_pe_soc_freqmeter   PASS: all checks -- every banked point inside spec
-                          (the sweep and its endpoints are the owning figure's
-                          to state: proto-freqmeter)
+                          (the sweep and its endpoints belong to
+                          wiki/concepts/protocol-freqmeter.md, which links
+                          proto-freqmeter)
     tb_pe_soc_sr04        FAIL: 5 checks -- the firmware banks only one of two
                           measurements and the trigger pulse is one clock long
-                          (the readings are the owning figure's to state:
+                          (the readings belong to
+                          wiki/concepts/protocol-sr04.md, which links
                           proto-sr04)
 
   The freqmeter is GREEN. The act that is genuinely WIP is HC-SR04, and it is
@@ -341,7 +343,8 @@ note bottom of p_midi
   built from COUNTED INSTRUCTIONS, not a tick: against the 260-CLOCK UART
   half-bit tick a 32 us bit is 7.38 ticks and 4.3333 us cannot express a
   fraction, so midi_xfer.pe uses the timer zero times. What the act MEASURES
-  on the pin is the owning figure's to state -- see proto-midi. Its receiver is
+  on the pin belongs to wiki/concepts/protocol-midi.md, which carries the
+  measurement table and links proto-midi. Its receiver is
   a free-running oversampling search that VERIFIES each frame's stop bit,
   because in a back-to-back 8N1 stream a falling edge is not a start bit.
   Evidence: reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md.
@@ -351,8 +354,9 @@ note bottom of p_dmx
   Landed 2026-09-25, the mirror image: a 4 us bit is 0.923 of a tick, so
   DMX is the rate the 260-CLOCK TICK cannot express. Every slot carries BOTH
   stop bits verified, and the receiver samples only inside a slot rather than
-  free-running a strobe across one. What the act MEASURES on the pin is the
-  owning figure's to state -- see proto-dmx512. Evidence:
+  free-running a strobe across one. What the act MEASURES on the pin belongs
+  to wiki/concepts/protocol-dmx512.md, which carries the measurement table and
+  links proto-dmx512. Evidence:
   reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md.
 
   CORRECTION, and the correction is to the WORD 'tick', which was doing too
