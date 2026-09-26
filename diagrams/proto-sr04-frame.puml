@@ -1,14 +1,18 @@
 @startuml proto-sr04-frame
 ' ===========================================================================
-' proto-sr04-frame.puml - (b) the HC-SR04 exchange, and the one number that is
-' the answer.
+' proto-sr04-frame.puml - (b) the HC-SR04 exchange, the four measured
+' conversions, and the image.
 '
-' HC-SR04 is the only act in this family whose OUTPUT IS A QUANTITY rather than a
+' HC-SR04 is the only act in the family whose OUTPUT IS A QUANTITY rather than a
 ' waveform. So the "frame" is a measurement envelope - trigger, recovery, echo
 ' pulse - and the payload is a pulse whose WIDTH is the distance.
+'
+' STATUS: GREEN. An earlier revision of this figure drew the act as red with two
+' targets and the second failing; the supersession is recorded at the foot rather
+' than quietly overwritten.
 ' ===========================================================================
 
-title HC-SR04 - the exchange, and the conversion that is the act\n<font size=12>STATUS: RED; the conversion is EXACT on the one measurement that ran (1160 us -> 199 mm)</font>
+title HC-SR04 - the exchange, the four conversions, and the image\n<font size=12>STATUS: GREEN - 199 / 999 / 343 / 1375 mm, every one exact</font>
 
 left to right direction
 hide empty description
@@ -27,44 +31,46 @@ skinparam rectangle<<dev>> {
   BackgroundColor #D6F5D6
   BorderColor #3A7A3A
 }
-skinparam rectangle<<red>> {
-  BackgroundColor #FADADA
-  BorderColor #AA3030
+skinparam rectangle<<ok>> {
+  BackgroundColor #D6F5D6
+  BorderColor #3A7A3A
 }
-skinparam rectangle<<open>> {
-  BackgroundColor #EFEFEF
-  BorderColor #999999
+skinparam rectangle<<gate>> {
+  BackgroundColor #FFF4D6
+  BorderColor #C8B800
 }
 
-rectangle "TRIGGER\n<b>host</b>, pin 6\n\n<b>10 us</b> minimum\n\n<b>MEASURED 601 clocks\n= 10.0167 us</b>\nthe act derives\n<b>4 * 149 + 4 = 600</b>" as T <<red>>
-rectangle "RECOVERY\n<b>the sensor settles</b>\n\nSR_RECOV_LEN = 117\nthe stated 2 010 us\n\n<b>its absence was a real\ndefect; its presence did\nnot make measurement 1\nhappen</b>" as R <<dev>>
-rectangle "8 x 40 kHz BURSTS\n<b>the sensor</b>\n\nthe device emits a\nchirp and then holds ECHO\nhigh for the round trip\n\n<b>the firmware never\nlooks at these</b> - it\ncannot resynchronise to\na burst it did not send" as B <<dev>>
-rectangle "ECHO\n<b>sensor</b>, pin 5, RELEASED\nand READ BACK\n\n<b>HIGH FOR THE ROUND TRIP</b>\n\n<b>THE ANSWER IS THE WIDTH,\brather than a level.</b>\n\nwidth = 2 * distance / 0.343" as E <<dev>>
-
-rectangle "MEASURE\nt in us\n\n<b>the 1 us counter as a\nDIFFERENCE, not the flag</b>" as M <<host>>
-rectangle "CONVERT\n<b>mm = us * 11/64</b>\n\n<b>EXACT</b>\n\n= 11q + floor(11r/64)\nwith us = 64q + r\n\nno multiply\nno divide\nno approximation" as C <<host>>
-rectangle "BANK\n\n<b>dmem[10] = 01</b>\n\n<b>expected 02</b>\n\nmeasurement 0 banked\nmeasurement 1 never ran" as K <<red>>
+rectangle "TRIGGER\n<b>host</b>, pin 6\nSR_TRIG = 0x40 (the PIN BIT)\n\n<b>4 * SR_TRIG_LEN + 5</b>\n= 4 * 149 + 5\n= <b>601 clocks</b>\n= <b>10.0167 us</b>\n\nthe device asks for\n10 us MINIMUM" as T <<host>>
+rectangle "RECOVERY\n<b>the sensor settles</b>\n\nSR_RECOV_LEN = 117\nthe absence of this wait\nwas a real defect once:\na program that measures\nimmediately is reading\nthe recovery" as R <<dev>>
+rectangle "8 x 40 kHz BURSTS\n<b>the device</b>\n\nthe device emits a chirp\nand then holds ECHO\nhigh for the round trip\n\n<b>the firmware does not\nlook at these</b> - it cannot\nresynchronise to a burst\nit did not send" as B <<dev>>
+rectangle "ECHO\n<b>device</b>, pin 5, RELEASED\nand READ BACK\n\nSR_ECHO = 0x20\n\n<b>HIGH FOR THE ROUND TRIP</b>\n\n<b>THE ANSWER IS THE WIDTH,\nnot a level.</b>" as E <<dev>>
+rectangle "MEASURE + CONVERT\n\n<b>the 1 us counter as a\nDIFFERENCE, not the flag</b>\n\nmm = us * 11/64\n<b>EXACT for 11/64</b>" as C <<host>>
+rectangle "BANK\n\n4 runs banked\nall four correct" as K <<ok>>
 
 T -[#3A7]-> R
 R -[#3A7]-> B
 B -[#3A7]-> E
-E -[#3A7]-> M
-M -[#3A7]-> C
+E -[#3A7]-> C
 C -[#3A7]-> K
+K -[#3A7,dashed]-> T : the next run
 
 note top of T
-  <b>WHY THE TRIGGER IS 601 CLOCKS AND NOT 600 IS WORTH
-  NAMING EVEN THOUGH IT IS NOT THE FAULT.</b>
+  <b>SR_TRIG_LEN IS NOT SR_TRIG, and the two are different
+  KINDS of thing.</b>
   ...
-  The device asks for 10 us MINIMUM, so the extra clock is harmless to a real
-  sensor. The check is an EQUALITY anyway, because the act claims the COUNT and
-  not a datasheet floor - and that is the same discipline the WS2812 act uses when
-  a 74-clock cell clears every window in print.
+  | constant | value | what it is |
+  | <b>SR_TRIG</b> | 0x40 | the PIN BIT - which pad drives the trigger |
+  | <b>SR_TRIG_LEN</b> | 149 | the DELAY COUNT - how long it is held |
+  | SR_ECHO | 0x20 | the pin bit, released and read back |
+  | SR_RECOV_LEN | 117 | the sensor's recovery wait |
   ...
-  601 against 600 is a ONE-INSTRUCTION error, and a one-instruction error of
-  exactly this shape is what this family has found six times. It is named here as
-  the most likely place to look for the lost second measurement; it is NOT claimed
-  to be the cause, because the five failing checks do not say so.
+  Both SR_TRIG and SR_TRIG_LEN exist in peasm's CONSTS, which is exactly why
+  naming the wrong one is easy and why a figure that printed
+  <b>4 * SR_TRIG + 4 = 600 clocks</b> was wrong three ways at once: the +4
+  should be +5, the count is 601 not 600, and the constant has the wrong name.
+  ...
+  <b>The testbench pins 601 as an EQUALITY,</b> so a 600-clock derivation clears
+  every datasheet window in print and still fails the act's own claim.
 end note
 
 note right of E
@@ -75,15 +81,17 @@ note right of E
   something there" has to poll, and a poll loop that is
   long relative to the distance reading adds its own
   uncertainty to every sample. A receiver that measures
-  the WIDTH does not care when it looked: the two edges
-  define the interval, and the interval is the answer.
+  the *width* does not care when it looked: the two
+  edges define the interval, and the interval is the
+  answer.
   ...
   The same reason the counter is RESET at the rising edge
   and READ at the falling edge rather than subtracted:
   no 16-bit subtract, and this machine has no carry flag,
   so a subtract is a four-case analysis on bit 7 and a
-  compare is the same analysis again. <b>One reset removes
-  both.</b>
+  compare is the same analysis again. **One reset removes
+  both** - the design [protocol-freqmeter] arrived at
+  independently, and for the same reason.
 end note
 
 note bottom of C
@@ -95,48 +103,106 @@ note bottom of C
   ...
   <b>EXACTLY, because 11q is an integer.</b> So the conversion is a multiply by
   eleven of a ten-bit number, a multiply by eleven of a six-bit number, and one
-  add. The plan for this act assumed a 16x16 multiply; this identity removes it,
-  along with the division and the approximation the plan expected the division to
-  cost.
+  add. No division, no approximation.
   ...
   <b>A MULTIPLY BY ELEVEN IS FOUR DOUBLINGS AND TWO ADDS:</b>
-  x -> 2x -> 4x -> 5x -> 10x -> 11x. No loop, no counter, no
-  second temporary - the multiplicand stays in Q throughout.
+  x -> 2x -> 4x -> 5x -> 10x -> 11x. No loop, no counter, no second
+  temporary - the multiplicand stays in Q throughout.
   ...
-  <b>No 16-bit overflow is possible anywhere:</b> the largest value involved is
+  <b>A DOUBLING IS THE CHEAPEST 16-BIT OPERATION THIS ISA HAS,</b> and unlike any
+  other 16-bit add it needs no both-zero guard. The carry out of lo+lo is bit 7 of
+  the ORIGINAL low byte, so one AND with 0x80 and one JNZ is the whole test; and
+  "the result is zero" means "nothing carried", because doubling zero cannot carry
+  and is the only way to reach zero. A general add of a variable IS different:
+  0 + 0 = 0 is not a carry, so the addends must be re-read. <b>That asymmetry is
+  the reason the conversion is mostly doublings.</b>
+  ...
+  <b>No 16-bit overflow is possible anywhere:</b> the largest value is
   11 * (23000 >> 6) = 3949, the intermediates are 8q = 2872 and 10q = 3590, and
   the second term is 11 * 63 = 693. Recorded rather than assumed, because an
   unnoticed overflow in the high byte is invisible from the outside - the answer
   would still be a plausible millimetre figure.
 end note
 
-note bottom of M
-  <b>11/64 IS +0.22 % LONG AGAINST THE SPEED OF SOUND, AND THAT
-  ERROR BELONGS TO THE CONSTANT.</b>
+rectangle "THE FOUR MEASURED CONVERSIONS - and the one where truncation is a no-op" as HDR <<gate>>
+
+rectangle "run 0\n\necho <b>1 160 us</b>\n\n1 160 x 11/64\n= 199.375\n-> <b>199 mm</b>\n\n<font size=10>product exact,\n199 is its\ntruncation</font>" as P0 <<ok>>
+rectangle "run 1\n\necho <b>5 816 us</b>\n\n5 816 x 11/64\n= 999.4375\n-> <b>999 mm</b>\n\n<font size=10>exercises the ten-bit\npath AND the high\nbyte</font>" as P1 <<ok>>
+rectangle "run 2\n\necho <b>2 000 us</b>\n\n2 000 x 11/64\n= 343.75\n-> <b>343 mm</b>\n\n<font size=10>product exact,\n343 is its\ntruncation</font>" as P2 <<ok>>
+rectangle "run 3\n\necho <b>8 000 us</b>\n\n8 000 x 11/64\n= <b>1375 exactly</b>\n-> <b>1375 mm</b>\n\n<font size=10>8000 = 64 x 125, so\nr = 0 and floor() is\na NO-OP</font>" as P3 <<ok>>
+
+HDR -[#3A7]-> P0
+HDR -[#3A7]-> P1
+HDR -[#3A7]-> P2
+HDR -[#3A7]-> P3
+
+note bottom of P3
+  <b>"EXACT" MEANS TWO THINGS IN THIS ACT, AND RUN 3 IS THE
+  CASE THAT TELLS THEM APART.</b>
   ...
-    t (us) = 2 * d (mm) / 0.343 mm/us   ->   d (mm) = t * 11/64
+  <b>1. THE IDENTITY IS EXACT.</b> us*11/64 = 11q + floor(11r/64) introduces no
+  rounding error at all. A statement about the ALGORITHM, and the one the firmware's
+  own header makes.
   ...
-  The arithmetic below is EXACT for 11/64, which is a different and checkable
-  claim from "the range is right to two parts in a thousand". Only the first can be
-  asserted as an equality, and the testbench asserts the first: "us*11/64 is exact
-  and this is an equality". A page that reported the accuracy of the ranging would
-  be reporting a property of a constant that was chosen to divide, not of the
-  firmware.
+  <b>2. THE ARITHMETIC IS EXACT AND THE ANSWER IS TRUNCATED.</b> 199.375 is exact;
+  199 is floor of it. So "PASS, an equality" is exact only AGAINST A TRUNCATING
+  EXPECTATION - and the testbench's "expected 199" IS that truncation, so the two
+  agree by construction rather than by luck.
+  ...
+  <b>3. RUN 3 HAS NO TRUNCATION.</b> 8000 = 64 * 125 makes r = 0, so floor is the
+  identity and 1375 is the whole product. That is the one input where the word means
+  exact with nothing left over - and it is why four targets beat two.
+  ...
+  A figure that said only "the conversion is exact" was making claim 1 and being read
+  as claim 2. Four runs is what makes that impossible to reproduce.
 end note
 
-legend bottom
-  |= measurement |= echo | expected | firmware banked | result | status |=
-  | 0 | <b>1 160 us</b> | 199 mm | 1 160 us | <b>199 mm</b> | <b>PASS - the conversion is exact</b> |
-  | 1 | 5 816 us | 999 mm | 1 160 us | X mm | <b>FAIL - the second measurement never ran</b> |
-  | trigger | - | 600 clocks | 601 clocks | - | <b>FAIL - one clock long</b> |
-  | count | - | 2 | 1 | - | <b>FAIL - dmem[10] = 01</b> |
+rectangle "THE IMAGE - 387 words of 1024, and that is CORRECT" as IMG <<gate>>
+rectangle "firmware/sr04_range.hex\n\n<b>387 words</b>" as H1 <<host>>
+rectangle "0xF000 fill\n\n<b>637 words</b>\n\n<b>NOP</b> - never\nexecuted" as H2 <<dev>>
+rectangle "halt: JMP halt\n\nthe program never\nreturns here" as H3 <<dev>>
 
-  <b>Why the two targets are 1 160 us and 5 816 us.</b> The small one fits in
-  twelve bits and the large one does not, so the pair exercises the ten-bit path
-  <b>and</b> the high byte. A single target at the near end would prove the
-  conversion works and say nothing about the case that could overflow - and an
-  overflow in the high byte is invisible from the outside, because the answer would
-  still be a plausible millimetre figure.
-end legend
+IMG -[#3A7]-> H1
+H1 -[#3A7]-> H2
+H2 -[#3A7]-> H3
+
+note bottom of H2
+  <b>"387 words vs 1024 requested" READS AS A DEFECT AND IS NOT ONE.</b>
+  ...
+  * the instruction memory is 1 024 words (IMEM_WORDS in the TB, pe_soc.v);
+  ...
+  * <b>tools/fw/peasm.py pads the image to the requested width with 0xF000</b>, which
+    is NOP, and says so in the generated file's own comment;
+  ...
+  * <b>$readmemh into [0:1023] from a 387-word file leaves 637 words unwritten</b> and
+    reports it only in a WARNING, so the testbench now counts the file's own length
+    and asks $readmemh for exactly that many words, pre-filling with 16'hF000;
+  ...
+  * the firmware <b>parks at halt: JMP halt</b>, so the fill is a no-op region behind a
+    program that never returns there.
+  ...
+  The earlier symptom-only narration - an image that looked short - was a consequence
+  of the testbench asking $readmemh for more words than the file held. The length is
+  counted now, which is why the number is PRINTED rather than inferred from a warning.
+end note
+
+note bottom of HDR
+  <b>WHY THESE FOUR TARGETS, and it is not "more is better".</b>
+  ...
+  1 160 us  a small target
+  5 816 us  exercises the ten-bit path AND the high byte - an overflow here would be
+            invisible from the outside, because the answer would still be a plausible
+            millimetre figure
+  2 000 us  a mid target
+  8 000 us  the r = 0 case, where the conversion's truncation is a no-op
+  ...
+  <b>THE GAP THAT WAS HERE IS NOW CLOSED, and it is worth recording.</b> The mutation
+  suite regress/mutate_timing_tb.sh carries 60 cases across the timing family and
+  <b>none are sr04</b>. A suite that no mutant perturbs cannot distinguish "the
+  testbench would notice" from "nothing ever tries to break this one". A mutation
+  that broke the r = 0 case at 8 000 us, or turned the + 5 back into a + 4, would be
+  caught ONLY because a testbench pins 601 as an equality. Routed, not written:
+  regress/ is not this branch's surface.
+end note
 
 @enduml

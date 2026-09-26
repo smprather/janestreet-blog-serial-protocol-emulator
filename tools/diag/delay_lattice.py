@@ -170,10 +170,22 @@ def audit_conversions(path: Path) -> list[str]:
     A line marked [sic] is EXEMPT, and the exemption is deliberately narrow and
     deliberately visible in the source. It exists for exactly one case: a
     verbatim quotation of a message that is ITSELF wrong.
-    tb_pe_soc_sr04.v's failing check prints "600 clocks = 10000.000 us", which
-    is 1000x out -- 600 clocks at 60 MHz is 10.000 us -- and a page that quotes
-    that message has to show it verbatim or it is misquoting the thing it is
-    reporting on.
+
+    THE CASE THAT TAUGHT ME THIS IS NOW CLOSED, and keeping it here is the point
+    rather than the clutter. tb_pe_soc_sr04.v's failing check used to print
+    "600 clocks = 10000.000 us" -- 1000x out, because 600 clocks at 60 MHz is
+    10.000 us -- and protocol-sr04.md quoted it verbatim with a [sic], because a
+    page that silently "corrects" the message it is reporting on is misreporting
+    it. The unit error was fixed upstream (f7ac41b added CLK_US = CLK_NS /
+    1000.0), the act went GREEN, and the quotation went with it.
+
+    That is exactly the hazard the self-limiting rule below exists for, and it is
+    why this text is kept after the fact: the marker would have outlived the defect
+    it marked, and a marker outliving its defect is worse than no marker because
+    it switches off a REAL CHECK on a line that has become correct. An exemption
+    whose justifying example has been fixed upstream is a stale exemption, and
+    the only defence is that the rule is enforced in both directions rather than
+    left to whoever remembers.
 
     An exemption is where a gate stops being believed, so it is not left on
     trust: the self-test plants a wrong conversion, shows the gate failing,
@@ -396,6 +408,7 @@ OWNED_PROTOCOLS = (
 # above has one page, so this is derived rather than hand-maintained -- a second
 # hand-maintained list in the same file is a second thing that can drift.
 OWNED_PAGES = tuple(f"wiki/concepts/protocol-{p}.md" for p in OWNED_PROTOCOLS)
+
 
 # Links a page may use as a BARE name with no directory, because they sit at the
 # wiki root. The corpus already uses this form - [[STATUS]] appears 21 times -
@@ -947,7 +960,6 @@ def main() -> int:
     print()
     print("== the coverage list, asserted against the filesystem ==")
     fail += check_coverage()
-
 
     print()
     print("== repo paths named in my pages must exist in this tree ==")
