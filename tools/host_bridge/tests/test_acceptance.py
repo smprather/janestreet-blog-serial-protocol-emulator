@@ -291,6 +291,44 @@ class TestTheDemoActReachesTheBreakpointWithoutTheModel(unittest.TestCase):
             "that the model clocked it",
         )
 
+    def test_each_path_says_what_actually_happened(self):
+        """The beat must describe the RUN it is reporting on.
+
+        bce4ee0 made this act run on a board, but left the beat text telling
+        the fake story on both paths: "model-clocked: FakePE does not
+        self-advance". On a board there is no model and nothing is clocked, so
+        the single line an operator reads after a real run described a
+        simulator that was not involved - the same class of claim that does not
+        match reality which this session has been removing everywhere else.
+
+        The fake wording is PINNED byte-for-byte, because the walkthrough pins
+        it; the board wording has to say what actually happened.
+        """
+        fake = ACC.run_acceptance(fake=True)
+        beat = next(c for c in fake.checks if c.name == "r3_demo_2_run_and_hit")
+        self.assertIn(
+            "model-clocked: FakePE does not self-advance, a real core does",
+            beat.detail)
+
+        board = ACC.run_acceptance(fake=True, model_backed=False)
+        beat = next(c for c in board.checks if c.name == "r3_demo_2_run_and_hit")
+        self.assertNotIn("FakePE", beat.detail,
+                         "a board run must not talk about the model")
+        self.assertNotIn("model-clocked", beat.detail)
+        self.assertIn("on its own", beat.detail)
+
+    def test_a_give_up_says_what_state_the_core_was_in(self):
+        """A board that never arrives must say WHERE it was, not just fail.
+
+        The wait reports the last state observed; the beat has to carry it, or
+        an operator is left with a bare FAIL and a board to guess about.
+        """
+        hit = ACC.await_breakpoint_hit(debug_state=lambda: 1, advance=None,
+                                       tries=2, sleep=lambda _s: None)
+        self.assertFalse(hit["stopped"])
+        self.assertIn("state=1", hit["detail"])
+        self.assertIn("expected 3", hit["detail"])
+
     def test_the_fake_beat_output_is_unchanged(self):
         """The fake path must not move: its beats are pinned by the walkthrough.
 
