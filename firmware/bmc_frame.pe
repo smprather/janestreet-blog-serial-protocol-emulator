@@ -179,46 +179,50 @@ the_pin:
         JZ    main             ; unchanged: not a transition
         MOV   A, X
         STM   4, A             ; the level at the last change
-        LDM   A, 5
-        ADD   A, 1
-        STM   5, A             ; ... one more change. THE DEGLITCH THAT USED
-                               ; TO BE HERE IS GONE, and it was this act's
-                               ; blocker: it read dmem[14] - dmem[5] and
-                               ; abandoned the edge when that was zero. But
-                               ; dmem[14] is main's ELAPSED-SINCE-LAST-POLL
-                               ; delta, almost always 1, and dmem[5] is a
-                               ; COUNT of changes -- so the guard fired
-                               ; exactly when an edge arrived, after the
-                               ; first one, and the firmware banked two
-                               ; level changes out of 47. The memory map
-                               ; called dmem[5] a timestamp and the code
-                               ; incremented it, and the guard compared one
-                               ; against the other; the map is corrected
-                               ; below to say what the code does. A deglitch
-                               ; is not needed here anyway: the half-interval
-                               ; is 2 us and the poll is about 0.2 us, so two
-                               ; changes cannot land inside one interval.
-        LDM   A, 8
-        ADD   A, 1
-        STM   8, A             ; one more half-interval
+        ; ---- MEASURE THE INTERVAL, DO NOT COUNT THE TRANSITIONS -------
+        ; This is the (b) change and it is the whole of it: dmem[8] used to be
+        ; a COUNT of transitions, two of which was called a bit. Under the wire
+        ; rules in this header that is wrong in a way the old rules concealed --
+        ; a '0' gives one MID-bit transition, an FM1 '1' gives one at the
+        ; BOUNDARY, and an FM0 '1' gives NONE AT ALL -- so the count per bit is
+        ; 1, 1 or 0 depending on the data and the encoding, and a run of ones
+        ; under FM0 produces no transitions whatsoever. THE CLOCK THIS ACT
+        ; CLAIMS TO RECOVER WAS BEING RECOVERED BY COUNTING THE DATA. The
+        ; INTERVAL BETWEEN TRANSITIONS is the quantity that does not depend on
+        ; the data, so that is what is measured now.
+        ;
+        ; dmem[5] is finally the TICK AT THE LAST CHANGE, which is what the
+        ; memory map below has always claimed it was and what the code never
+        ; did: it incremented it, and a guard then compared a poll delta
+        ; against that count. Documented meaning, code.
+        IN    A, I2CTICK       ; the current tick, whole microseconds
+        LDM   X, 5             ; X = the tick at the previous change
+        SUB   A, X             ; A = the interval SINCE THAT CHANGE
+        STM   8, A             ; dmem[8] = the INTERVAL, in microseconds. It
+                               ; is no longer a count and nothing may treat it
+                               ; as one.
+        IN    A, I2CTICK
+        STM   5, A             ; dmem[5] = the tick AT this change, so the
+                               ; NEXT interval is measured from here
+        ; ---- and the bit boundary is ONE HALF-INTERVAL, tested as such ----
+        ; The half-interval is a FIXED 2 us, so the interval is 2, 4 or 6 for
+        ; one, two or three half-intervals. NO DIVISION IS NEEDED AND NONE IS
+        ; POSSIBLE: this ISA has no divide and no shift-right, and the recipe
+        ; I wrote for this step first asked for a halving, which the machine
+        ; cannot do. Comparing against the constant is the whole test, and it
+        ; is the form that has caused no trouble all act -- load into X,
+        ; subtract a constant, use the zero flag as the comparison.
+        LDM   X, 8
         LDI   A, 2
-        LDM   X, 8             ; THE OPERAND HAS TO COME THROUGH X, and this
-                               ; is the instruction that finally makes the act
-                               ; work. SUB is an ALU op whose field is an
-                               ; IMMEDIATE -- there is no `SUB A, <dmem>` form
-                               ; at all -- so both of the earlier versions of
-                               ; this test were subtracting a CONSTANT: the
-                               ; original `SUB A, 1` computed 2-1 = 1 and the
-                               ; JNZ below always fired, and when I "fixed"
-                               ; it to `SUB A, 8` it computed 2-8 = 250 and
-                               ; the JNZ still always fired. The probe is what
-                               ; said so: dmem[8] reached 46, a counter that
-                               ; should never pass 2. `LDM X,8` then
-                               ; `SUB A,X` is the only way to put dmem[8] on
-                               ; the right-hand side, and it costs the two
-                               ; extra instructions the ISA charges for it.
-        SUB   A, X             ; 2 - dmem[8], zero exactly at two half-intervals
-        JNZ   half_done
+        SUB   A, X             ; zero EXACTLY when the interval was one
+                               ; half-interval
+        JZ    first_half       ; one half-interval: we are on the FIRST half
+                               ; of a bit. The fall-through is a bit boundary,
+                               ; and this is the first time in this program's
+                               ; history that either of those two branches has
+                               ; been reachable by a MEASUREMENT rather than by
+                               ; a constant.
+        JMP   bit_edge
         LDI   A, 0
         STM   8, A             ; two half-intervals is a bit boundary
         JMP   bit_edge
