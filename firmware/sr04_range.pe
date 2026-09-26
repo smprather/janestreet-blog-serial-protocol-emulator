@@ -108,6 +108,16 @@ init:
         LDI   A, 0
         STM   0, A
         STM   2, A             ; T = 0, US = 0
+        STM   4, A             ; PREV = 0, the level ECHO IDLES AT. It was
+                               ; left at its reset value, which is X -- and an X
+                               ; in the edge detector is not a level that does
+                               ; not match: `A - X` is X, `JZ` on X is FALSE,
+                               ; so the very first poll reported an EDGE. The
+                               ; run then went one event out of step from the
+                               ; first instruction and the state machine reached
+                               ; its "the echo has ended" branch before any
+                               ; echo existed. PREV's initial value is part of
+                               ; the program's contract with the device.
         STM   5, A             ; state 0: trigger first
         STM   10, A
         IN    A, I2CTICK
@@ -270,132 +280,132 @@ convert:
         LDI   A, 0
         STM   13, A            ; Q = r
         LDM   A, 12
-        STM   14, A            ; ACC = Q, and THAT is where the chain starts:
+        STM   0, A            ; ACC = Q, and THAT is where the chain starts:
         LDM   A, 13            ; x -> 2x -> 4x -> 5x -> 10x -> 11x is a chain
-        STM   15, A            ; out of x, so an accumulator initialised to
+        STM   1, A            ; out of x, so an accumulator initialised to
         JMP   acc_x2           ; ZERO computes 3x instead of 11x and returns a
                                ; number, which is the worst kind of wrong.
 acc_x2:                         ; ACC *= 2
-        LDM   X, 14
+        LDM   X, 0
         LDI   A, 0x80
         AND   A, X             ; bit 7 of the ORIGINAL low byte IS the carry
         JNZ   acc_x2_c
-        LDM   X, 15
-        LDM   A, 15
+        LDM   X, 1
+        LDM   A, 1
         ADD   A, X
-        STM   15, A
+        STM   1, A
         JMP   acc_x2_e
 acc_x2_c:
-        LDM   X, 15
-        LDM   A, 15
+        LDM   X, 1
+        LDM   A, 1
         ADD   A, X
         ADD   A, 1
-        STM   15, A
+        STM   1, A
 acc_x2_e:
-        LDM   X, 14
-        LDM   A, 14
+        LDM   X, 0
+        LDM   A, 0
         ADD   A, X
-        STM   14, A
+        STM   0, A
         JMP   acc_x4
 acc_x4:                         ; ACC *= 2  ->  4r
-        LDM   X, 14
+        LDM   X, 0
         LDI   A, 0x80
         AND   A, X
         JNZ   acc_x4_c
-        LDM   X, 15
-        LDM   A, 15
+        LDM   X, 1
+        LDM   A, 1
         ADD   A, X
-        STM   15, A
+        STM   1, A
         JMP   acc_x4_e
 acc_x4_c:
-        LDM   X, 15
-        LDM   A, 15
+        LDM   X, 1
+        LDM   A, 1
         ADD   A, X
         ADD   A, 1
-        STM   15, A
+        STM   1, A
 acc_x4_e:
-        LDM   X, 14
-        LDM   A, 14
+        LDM   X, 0
+        LDM   A, 0
         ADD   A, X
-        STM   14, A
+        STM   0, A
         JMP   acc_x5
 acc_x5:                         ; ACC += Q    ->  5r, a GENERAL add
         LDM   X, 12
-        LDM   A, 14
+        LDM   A, 0
         ADD   A, X
-        STM   14, A
+        STM   0, A
         JNZ   acc_x5_h
         LDM   A, 12            ; zero: carried, unless the addend was zero
         JZ    acc_x5_h
-        LDM   A, 15
+        LDM   A, 1
         ADD   A, 1
-        STM   15, A
+        STM   1, A
 acc_x5_h:
         LDM   X, 13
-        LDM   A, 15
+        LDM   A, 1
         ADD   A, X
-        STM   15, A
+        STM   1, A
         JMP   acc_x10
 acc_x10:                        ; ACC *= 2  ->  10r
-        LDM   X, 14
+        LDM   X, 0
         LDI   A, 0x80
         AND   A, X
         JNZ   acc_x10_c
-        LDM   X, 15
-        LDM   A, 15
+        LDM   X, 1
+        LDM   A, 1
         ADD   A, X
-        STM   15, A
+        STM   1, A
         JMP   acc_x10_e
 acc_x10_c:
-        LDM   X, 15
-        LDM   A, 15
+        LDM   X, 1
+        LDM   A, 1
         ADD   A, X
         ADD   A, 1
-        STM   15, A
+        STM   1, A
 acc_x10_e:
-        LDM   X, 14
-        LDM   A, 14
+        LDM   X, 0
+        LDM   A, 0
         ADD   A, X
-        STM   14, A
+        STM   0, A
         JMP   acc_x11
 acc_x11:                        ; ACC += Q    ->  11r
         LDM   X, 12
-        LDM   A, 14
+        LDM   A, 0
         ADD   A, X
-        STM   14, A
+        STM   0, A
         JNZ   acc_x11_h
         LDM   A, 12
         JZ    acc_x11_h
-        LDM   A, 15
+        LDM   A, 1
         ADD   A, 1
-        STM   15, A
+        STM   1, A
 acc_x11_h:
         LDM   X, 13
-        LDM   A, 15
+        LDM   A, 1
         ADD   A, X
-        STM   15, A
+        STM   1, A
 
         ; ---- ACC >>= 6, the term: 11r is at most 693, so the result is
         ; ---- at most 10 and fits in ONE byte with a zero high byte.
-        LDM   A, 14
+        LDM   A, 0
         SHR   A
         SHR   A
         SHR   A
         SHR   A
         SHR   A
         SHR   A
-        STM   14, A            ; (acc_lo >> 6) | ((acc_hi & 0x0f) << 2)
-        LDM   A, 15
+        STM   0, A            ; (acc_lo >> 6) | ((acc_hi & 0x0f) << 2)
+        LDM   A, 1
         AND   A, 0x0F          ; the bits that survive, then a LEFT shift by
         MOV   X, A             ; two -- which is two DOUBLINGS, because this
         ADD   A, X             ; ISA has SHR and no SHL. The first version of
         MOV   X, A             ; these two lines emulated the left shift with
         ADD   A, X             ; a right shift and two adds, which is not the
-        LDM   X, 14            ; same operation: it gave (acc_hi>>2)+2 where
+        LDM   X, 0            ; same operation: it gave (acc_hi>>2)+2 where
         OR    A, X             ; (acc_hi&0x0f)<<2 was meant, and a 1160 us echo
-        STM   14, A            ; came out as 779 mm instead of 199.
+        STM   0, A            ; came out as 779 mm instead of 199.
         LDI   A, 0
-        STM   15, A
+        STM   1, A
 
         ; ---- Q = us >> 6, across the byte boundary -------------------
         ; A 16-bit shift right by six, in bytes. SHR is one bit at a time and
@@ -436,130 +446,130 @@ acc_x11_h:
         OR    A, X
         STM   12, A
 
-        ; ---- T = 11 * (us >> 6): the same five steps, one accumulator
+        ; ---- ACC = 11 * (us >> 6): the same five steps, one accumulator
         ; away. T is dead from the falling edge onward, which is the only
         ; reason there is a second accumulator at all.
         LDM   A, 12
-        STM   0, A             ; T = Q, for the same reason ACC = Q above
+        STM   14, A             ; T = Q, for the same reason ACC = Q above
         LDM   A, 13
-        STM   1, A
+        STM   15, A
         JMP   t_x2
 t_x2:
-        LDM   X, 0
+        LDM   X, 14
         LDI   A, 0x80
         AND   A, X
         JNZ   t_x2_c
-        LDM   X, 1
-        LDM   A, 1
+        LDM   X, 15
+        LDM   A, 15
         ADD   A, X
-        STM   1, A
+        STM   15, A
         JMP   t_x2_e
 t_x2_c:
-        LDM   X, 1
-        LDM   A, 1
+        LDM   X, 15
+        LDM   A, 15
         ADD   A, X
         ADD   A, 1
-        STM   1, A
+        STM   15, A
 t_x2_e:
-        LDM   X, 0
-        LDM   A, 0
+        LDM   X, 14
+        LDM   A, 14
         ADD   A, X
-        STM   0, A
+        STM   14, A
         JMP   t_x4
 t_x4:
-        LDM   X, 0
+        LDM   X, 14
         LDI   A, 0x80
         AND   A, X
         JNZ   t_x4_c
-        LDM   X, 1
-        LDM   A, 1
+        LDM   X, 15
+        LDM   A, 15
         ADD   A, X
-        STM   1, A
+        STM   15, A
         JMP   t_x4_e
 t_x4_c:
-        LDM   X, 1
-        LDM   A, 1
+        LDM   X, 15
+        LDM   A, 15
         ADD   A, X
         ADD   A, 1
-        STM   1, A
+        STM   15, A
 t_x4_e:
-        LDM   X, 0
-        LDM   A, 0
+        LDM   X, 14
+        LDM   A, 14
         ADD   A, X
-        STM   0, A
+        STM   14, A
         JMP   t_x5
 t_x5:                            ; T += Q, a general add with the guard
         LDM   X, 12
-        LDM   A, 0
+        LDM   A, 14
         ADD   A, X
-        STM   0, A
+        STM   14, A
         JNZ   t_x5_h
         LDM   A, 12
         JZ    t_x5_h
-        LDM   A, 1
+        LDM   A, 15
         ADD   A, 1
-        STM   1, A
+        STM   15, A
 t_x5_h:
         LDM   X, 13
-        LDM   A, 1
+        LDM   A, 15
         ADD   A, X
-        STM   1, A
+        STM   15, A
         JMP   t_x10
 t_x10:
-        LDM   X, 0
+        LDM   X, 14
         LDI   A, 0x80
         AND   A, X
         JNZ   t_x10_c
-        LDM   X, 1
-        LDM   A, 1
+        LDM   X, 15
+        LDM   A, 15
         ADD   A, X
-        STM   1, A
+        STM   15, A
         JMP   t_x10_e
 t_x10_c:
-        LDM   X, 1
-        LDM   A, 1
+        LDM   X, 15
+        LDM   A, 15
         ADD   A, X
         ADD   A, 1
-        STM   1, A
+        STM   15, A
 t_x10_e:
-        LDM   X, 0
-        LDM   A, 0
+        LDM   X, 14
+        LDM   A, 14
         ADD   A, X
-        STM   0, A
+        STM   14, A
         JMP   t_x11
 t_x11:
         LDM   X, 12
-        LDM   A, 0
+        LDM   A, 14
         ADD   A, X
-        STM   0, A
+        STM   14, A
         JNZ   t_x11_h
         LDM   A, 12
         JZ    t_x11_h
-        LDM   A, 1
+        LDM   A, 15
         ADD   A, 1
-        STM   1, A
+        STM   15, A
 t_x11_h:
         LDM   X, 13
-        LDM   A, 1
+        LDM   A, 15
         ADD   A, X
-        STM   1, A
+        STM   15, A
 
-        ; ---- T += the term, and T is the answer in millimetres --------
-        LDM   X, 14
-        LDM   A, 0
-        ADD   A, X
-        STM   0, A
-        JNZ   fin_hi
+        ; ---- ACC += T, and ACC is the answer in millimetres --------
+        LDM   X, 0
         LDM   A, 14
-        JZ    fin_hi
-        LDM   A, 1
-        ADD   A, 1
-        STM   1, A
-fin_hi:
-        LDM   X, 15
-        LDM   A, 1
         ADD   A, X
-        STM   1, A
+        STM   14, A
+        JNZ   fin_hi
+        LDM   A, 0
+        JZ    fin_hi
+        LDM   A, 15
+        ADD   A, 1
+        STM   15, A
+fin_hi:
+        LDM   X, 1
+        LDM   A, 15
+        ADD   A, X
+        STM   15, A
 
         ; ---- bank, then either trigger again or finish -----------------
         LDM   A, 10
@@ -573,10 +583,10 @@ fin_hi:
         ADD   A, 1
         ADD   A, 1             ; 2*N + 6: slot N's low address (6, then 8)
         MOV   X, A
-        LDM   A, 0
+        LDM   A, 14
         STS   [X], A
         INCX
-        LDM   A, 1
+        LDM   A, 15
         STS   [X], A
         LDM   A, 10
         ADD   A, 1
