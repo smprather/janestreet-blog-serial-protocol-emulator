@@ -57,15 +57,37 @@ from pathlib import Path
 CLK_HZ = 60_000_000
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[2]
 
-# "1 250 clocks = 20.8 us", "60 004 clocks = 1 000.07 us", "69 clocks = 1.15 µs".
+# "1 250 clocks = 20.8 us", "60 004 clocks = 1 000.07 us", "69 clocks = 1.15 µs",
+# "a 69-clock (1.15 µs) step", "511 clocks, i.e. 8.52 us", "625 clocks - 10.42 us".
+#
 # The unit may be the ASCII "us" or U+00B5 MICRO SIGN: the wiki pages use the
 # sign and the diagrams use the ASCII, and the first version of this file
 # searched only the ASCII -- so a "10.3 µs" in a page would have passed it. A
 # gate that is blind to half the documents it claims to cover is worse than no
 # gate, because the blind half is the half a reader is most likely to trust.
-# Thousands separators inside the count are spaces ("60 004") or commas.
+#
+# The CONNECTIVE is the part that bit twice. v1 required "=" / "is" / "of", which
+# covers the diagrams and misses the pages, because a page writes the same fact as
+# an appositive: "a 69-clock (1.15 µs) step". So D3 sat live in
+# protocol-ds18b20.md with the gate green, on the same class of error the gate
+# exists for. The connective is now optional and a parenthetical is allowed, and
+# the negative control below uses the APPOSITIVE form specifically -- the shape
+# that got through.
+#
+# Thousands separators inside the count are spaces ("60 004"), commas, or NBSP.
+#
+# The leading lookbehinds are not decoration. Without the first the pattern
+# matched "95 clocks" inside "788.95 clocks", recomputed 95/60 = 1.58 us and
+# reported the NEC figure's own correct "788.95 clocks = 13.149 us" as an 11.6 us
+# error; without the second it read "75 clocks" out of "24 x 75 clocks = 30.000
+# us", which is 1800 clocks and not 75. A gate that reports false findings gets
+# its tolerance loosened by the next reader, and then it reports nothing.
 CONV = re.compile(
-    r"([\d][\d ,\u00a0]*)\s*clocks?\s*(?:=|is|of)\s*([\d]+(?:\.[\d]+)?)\s*(?:us|\u00b5s)\b"
+    r"(?<![\d.,])(?<!x )(?<!× )"      # never mid-number, never out of "24 x 75"
+    r"([\d][\d , ]*)\s*(?:clocks?|-clock)"
+    r"\s*(?:=|is|of|:|,?\s*i\.e\.,?|-|–)?\s*\(?"
+    # the VALUE may carry a space thousands separator too ("1 000.07 us")
+    r"\s*([\d][\d ]*(?:\.[\d]+)?)\s*(?:us|µs)\b"
 )
 
 
@@ -110,7 +132,11 @@ def audit_conversions(path: Path) -> list[str]:
             printed = m.group(2)
             try:
                 clocks = int(raw.replace(" ", "").replace(",", "").replace("\u00a0", ""))
-                claimed = float(printed)
+                # float() rejects an internal space but accepts PEP 515
+                # underscores, so "1 000.07" normalises to "1_000.07". The
+                # value group has to allow a space for a thousands separator,
+                # which is the whole reason this branch exists at all.
+                claimed = float(printed.strip().replace("\u00a0", "_").replace(" ", "_"))
             except ValueError:
                 failures.append(
                     f"{path.name}:{lineno}: unparseable conversion "
@@ -332,16 +358,20 @@ def main() -> int:
         print(f"ok    negative control: a planted {planted!r} is caught in {caught[0]}, "
               "so the FORBIDDEN scan really reads the files")
 
-        # (c) plant a wrong CONVERSION, in the MICRO SIGN form, and confirm the
-        # audit reports it. The micro sign is the half the first version of this
-        # file could not see, so the control uses that half.
-        target.write_text(target.read_text() + "\n69 clocks = 1.22 \u00b5s\n")
+        # (c) plant a wrong CONVERSION in the APPOSITIVE form the first version
+        #     of this file could not see, with the MICRO SIGN unit, and require
+        #     the audit to report it. This is the control that matters: it is
+        #     the exact shape D3 took when it sat live in a wiki page with this
+        #     gate green - "a 69-clock (1.22 µs) step" - so a control using the
+        #     "=" form would pass while the hole was still open.
+        target.write_text(target.read_text() + "\na 69-clock (1.22 \u00b5s) step\n")
         conv_caught = audit_conversions(target)
         if not conv_caught:
             print("FAIL  the conversion audit did not trip; it is inert")
             return 1
-        print(f"ok    negative control: a planted '69 clocks = 1.22 \u00b5s' is caught "
-              f"({conv_caught[0].split(': ', 1)[1]}), so the audit reads both unit spellings")
+        print(f"ok    negative control: a planted '69-clock (1.22 \u00b5s) step' is caught "
+              f"({conv_caught[0].split(': ', 1)[1]}), so the audit reads the appositive "
+              "form and both unit spellings")
 
     print(f"{len(present)} files scanned, {len(ENTRIES)} lattice entries derived, "
           f"{conversions} conversions recomputed")
