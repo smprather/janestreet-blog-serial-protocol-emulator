@@ -371,7 +371,12 @@ CONSTS: dict[str, int] = {
     #   it is 149 for a reason worth stating exactly: the loop is four clocks
     #   per iteration (LDM, SUB, STM, JNZ) and the pulse spans the counter
     #   load, the loop and the release, so the width is 4*149 + 4 = 600 clocks
-    #   = exactly 10.000 us at 60 MHz. The device asks for 10 us minimum.
+    #   = 601 clocks = 10.017 us at 60 MHz, which clears the device's 10 us
+    # minimum by one clock. The +5 is the OUT PINOE that claims the pad, the
+    # two-instruction counter load, the loop, the LDI that sets the ending
+    # level, and the OUT TXPIN that drops it -- counted from the listing, and
+    # it was a +4 in an earlier draft of this comment, which the testbench's
+    # equality caught as a 600-clock pulse the hardware never produced.
     "SR_TRIG": 0x40,
     "SR_ECHO": 0x20,
     "SR_TRIG_LEN": 149,

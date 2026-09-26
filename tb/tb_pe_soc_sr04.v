@@ -66,7 +66,7 @@ module tb_pe_soc_sr04;
   localparam int F_STRIDE = 2;
 
   localparam int N_MEAS = 2;
-  localparam int TRIG_CLOCKS = 600;    // 10.000 us at 60 MHz: the equality below
+  localparam int TRIG_CLOCKS = 601;   // 4*SR_TRIG + 5, counted in peasm's CONSTS
   localparam int RESP_US = 300;        // the model's sensor response delay
   localparam int RECOV_US = 1500;      // the model's own recovery, in us. The
   // firmware waits SR_RECOV_LEN = 2019 us, so the model's window is SHORTER
