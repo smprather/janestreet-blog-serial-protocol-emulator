@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import unittest
+import warnings
 from pathlib import Path
 from typing import cast
 
@@ -371,13 +372,11 @@ class TestAnArmOnAHeldCoreWarns(unittest.TestCase):
                 session.load(ECHO)
                 if start:
                     session.start()
-                import warnings as _warnings
-
-                with _warnings.catch_warnings(record=True) as caught:
-                    _warnings.simplefilter("always")
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
                     armed = session.bp_set(5)
                 self.assertEqual(
-                    [str(w.message) for w in caught if w.category is UserWarning],
+                    [w for w in caught if w.category is UserWarning],
                     [],
                 )
                 self.assertTrue(armed.armed)
@@ -392,6 +391,71 @@ class TestAnArmOnAHeldCoreWarns(unittest.TestCase):
         step = session.debug_step()
         self.assertTrue(step.hit, "stepping onto the armed address must latch")
         self.assertEqual(session.state, S.SessionState.BP_HIT)
+
+    def test_the_warning_follows_the_session_state_with_no_model_in_the_loop(self):
+        """The load-bearing test, and it needs no `FakePE` at all.
+
+        The chip record's own words for this pitfall are that the host's model
+        cannot show it, because a model reaches a held state by fiat. The
+        warning does not depend on any model register either: it reads the
+        SESSION's state machine, which is built from the chip's state word. So
+        this drives that machine with canned bridge answers — connect, a
+        DEBUG_STATUS reporting state 2, then the arm — with no chip model in
+        the picture, and asserts both directions. A test that needed the model
+        would be pinning the model's idea of a hold; this one pins the host's
+        reaction to the chip's own word.
+        """
+
+        def held_session(state: int):
+            status_word = {
+                "status": P.STATUS_OK,
+                "state": state,
+                "pc": 2,
+                "bp_addr": 0,
+                "bp_flags": 0,
+                "run": 0,
+                "a": 0,
+                "x": 0,
+                "y": 0,
+                "insn": 0,
+            }
+            arm_word = {
+                "status": P.STATUS_OK,
+                "state": state,
+                "pc": 2,
+                "bp_addr": 5,
+                "bp_flags": 0b01,
+            }
+            stub = StubTransport(responses=[HELLO, PREPARE, status_word, arm_word])
+            session = S.ControllerSession(lambda: stub)
+            session.connect()
+            return session, stub, status_word
+
+        for state, expect_warning in ((F.DEBUG_HOLD, True), (F.DEBUG_BP_HIT, True)):
+            with self.subTest(state=state):
+                session, _stub, _word = held_session(state)
+                session.debug_status()  # the chip's own word drives the state
+                self.assertIn(str(session.state), ("DEBUG_HOLD", "BP_HIT"))
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    armed = session.bp_set(5)
+                warned = [w for w in caught if w.category is UserWarning]
+                self.assertEqual(bool(warned), expect_warning)
+                # and the arm happened either way - it is legal
+                self.assertTrue(armed.armed)
+                self.assertEqual(armed.bp_addr, 5)
+
+        # the same machine, a core that is NOT held: no warning, same arm. The
+        # settled state is PREPARED rather than STOPPED because nothing was
+        # loaded in this stub - what matters is that it is not a held state.
+        session, _stub, _word = held_session(F.DEBUG_STOPPED)
+        session.debug_status()
+        self.assertNotIn(str(session.state), ("DEBUG_HOLD", "BP_HIT"))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            armed = session.bp_set(5)
+        self.assertEqual([w for w in caught if w.category is UserWarning], [])
+        self.assertTrue(armed.armed)
 
     def test_resume_with_breakpoint_ends_armed_and_released(self):
         """The recovery path, from each held state, on the real stack."""
