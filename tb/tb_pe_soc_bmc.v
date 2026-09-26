@@ -632,6 +632,82 @@ module tb_pe_soc_bmc;
     end
   end
 
+  // ---- THE RETURN LEG'S LEVELS, CHECKED AGAINST THE MODEL ---------------
+  //
+  // Nine instruments in this act have disagreed with the listing, and this is
+  // the form of the measurement that cannot: a CHECK, inside the testbench,
+  // comparing the pad against the model's own eighty levels, in both
+  // polarities, on every pass. It cannot go stale, it cannot sample the wrong
+  // address, it cannot reference a variable declared below it, and it cannot
+  // disagree with itself.
+  //
+  // IT IS ADDRESS-FREE, and that is the design. The monitor starts when
+  // out_oe RISES -- the pad being claimed, a signal this file already has -- and
+  // samples out_line in the MIDDLE of each half-interval, sixty clocks in. A
+  // mid-interval sample is immune to a few clocks of phase error, so the
+  // monitor needs to know nothing about where the firmware's instructions are,
+  // and nothing about which of the encoder's three routes it took.
+  //
+  // THE EXPECTED LEVELS COME FROM enc_wire_lev, THE SAME FUNCTION THE STIMULUS
+  // USES, with the frame the stimulus sent and the polarity the firmware
+  // MEASURED. So the check is "the firmware re-encoded the frame it received,
+  // under the flag it read, and the wire says so" -- which is the act's claim,
+  // written as a comparison rather than as a decoder's opinion.
+  integer lvc_k = 0, lvc_t = 0, lvc_lv = 0, lvc_n = 0, lvc_armed = 0;
+  reg     lvc_oe = 1'b0;
+  reg [8*90:1] lvc_str;
+  always @(posedge clk) if (rst_n) begin
+    if (out_oe && !lvc_oe) begin
+      // THE PAD HAS BEEN CLAIMED, ON THE RISING EDGE AND ONLY THE RISING
+      // EDGE. The first version armed on ANY change of out_oe, and the firmware
+      // RELEASES the pad when the transmission ends -- so the monitor cleared
+      // the eighty levels it had just recorded, one instruction group after the
+      // last one, and then reported "0 half-intervals sampled" while comparing
+      // against a string of zeroes. A monitor that resets when the thing it is
+      // measuring ENDS is a monitor that measures nothing, and it reported a
+      // difference count rather than an absence, which is the worst of both.
+      lvc_oe    <= out_oe;
+      lvc_armed <= 1'b1;
+      lvc_k     <= 0;
+      lvc_t     <= 0;
+      lvc_n     <= 0;
+      lvc_str   <= 0;
+    end else begin
+      lvc_oe <= out_oe;
+      if (lvc_armed) begin
+      lvc_t <= lvc_t + 1;
+      if (lvc_t == 60 && lvc_k < 80) begin
+        lvc_str = {lvc_str[8*89:1], (out_line) ? "1" : "0"};
+        lvc_n <= lvc_n + 1;
+        lvc_k <= lvc_k + 1;
+      end
+      if (lvc_t >= 120) lvc_t <= 0;   // and lvc_k advanced at the sample
+      end
+    end
+  end
+
+  task automatic lvc_expect(input integer flag);
+    // compare the recorded levels with the model's, and say where they differ
+    integer i, bad, d;
+    begin
+      bad = 0;
+      for (i = 0; i < 80; i = i + 1) begin
+        d = (lvc_str[8*(80-i)-1] != enc_wire_lev(i, flag, enc_byte[0],
+                                                enc_byte[1], enc_byte[2]));
+        if (d) begin
+          bad = bad + 1;
+          if (bad <= 6)
+            $display("    half-interval %0d: the pad held %0s and the model's rule says %0s",
+                     i, (lvc_str[8*(80-i)-1] ? "1" : "0"),
+                     (enc_wire_lev(i, flag, enc_byte[0], enc_byte[1], enc_byte[2]) ? "1" : "0"));
+        end
+      end
+      check((lvc_n == 80) && (bad == 0),
+            $sformatf("the pad carries the model's own %0d levels, level for level, under the flag the firmware read (%0d differ)",
+                      80, bad));
+    end
+  endtask
+
   // ---- the testbench's stimulus and receiver, one process each ---------
   integer stim_bit = 0, stim_half = 0, stim_waited = 0;
   logic   stim_done = 0;
@@ -748,6 +824,17 @@ module tb_pe_soc_bmc;
       #(CLK_NS * 60 * 1200);
       run = 1'b0;
       repeat (8) @(posedge clk);
+      // THE RETURN LEG, CHECKED AGAINST THE MODEL, IN THIS PASS'S POLARITY.
+      // The flag is the one the firmware READ, not the one the stimulus sent:
+      // that is the point of the act, and a check that compared against the
+      // stimulus's own flag would pass on a firmware that re-encoded under a
+      // guessed polarity whenever the guess happened to be right.
+      $display("    the return leg: %0d half-intervals sampled, against the model's rule for %0s",
+               lvc_n, (dut.dmem[3] == 0) ? "FM0" : (dut.dmem[3] == 1) ? "FM1" : "NEITHER");
+      // dmem[3] is the FLAG (0 = FM0); enc_wire_lev wants fm0 NON-ZERO for FM0.
+      // A flag read as a polarity is a units error with a shape, and this one
+      // inverted the whole return leg and still reported a plausible count.
+      lvc_expect((dut.dmem[3] == 0) ? 1 : 0);
       pass_fm0[pass] = enc_fm0;
       for (i = 0; i < 3; i = i + 1) pass_rx[pass][i] = dut.dmem[F_RX + i];
       pass_flag[pass] = dut.dmem[F_FLAG];

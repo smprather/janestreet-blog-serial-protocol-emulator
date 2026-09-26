@@ -2510,3 +2510,69 @@ probe that has now been shown wrong about a register it read correctly-shaped.**
    it is worth a paragraph rather than a fix, because the one that reads `dbg_a`
    at the `OUT` is the one the levels string is built from, and the string is the
    best evidence this act has produced.
+
+## 2026-09-27 act (c): TASK-START -- THE LEVELS AS A CHECK, NOT AS A PROBE
+
+Nine instruments have disagreed with the listing in this act, and the eighth
+check's real form is the answer: **a check inside the testbench, comparing the
+pad against the model's own eighty levels, in both polarities, every pass.** It
+cannot go stale, it cannot sample the wrong address, it cannot reference a
+variable declared below it, and it cannot disagree with itself — which is the
+only property none of the nine probes had.
+
+**AND IT IS ADDRESS-FREE, which is the whole design.** The monitor starts when
+`out_oe` rises — the pad being claimed, a signal the testbench already has — and
+samples `out_line` in the MIDDLE of each half-interval, sixty clocks in. A
+mid-interval sample is immune to a few clocks of phase error, so the monitor
+needs to know nothing about where the firmware's instructions are.
+
+## 2026-09-27 act (c): THE LEVEL CHECK IS IN THE TESTBENCH, AND IT REFUTES ITS OWN PREMISE
+
+**The eighth check is written, it is address-free, and it samples all eighty
+half-intervals on every pass in both polarities.** Its design is the one the nine
+probes could not manage: it starts when `out_oe` rises, samples `out_line`
+sixty clocks into each half-interval, and compares against `enc_wire_lev` — the
+STIMULUS'S OWN FUNCTION, with the frame that was sent and the flag the firmware
+READ. So the claim being checked is the act's claim: *the firmware re-encoded
+the frame it received, under the flag it read, and the wire says so.*
+
+**Three faults in the check itself, found by running it, which is what a check is
+for:**
+
+1. **IT ARMED ON ANY CHANGE OF `out_oe`, and the firmware RELEASES the pad when
+   the transmission ends** — so the monitor cleared the eighty levels it had just
+   recorded, one instruction group after the last one, and then reported "0
+   half-intervals sampled" while comparing against a string of zeroes. **A
+   monitor that resets when the thing it measures ENDS measures nothing**, and it
+   reported a difference count rather than an absence, which is the worst of
+   both.
+2. **THE FLAG WAS PASSED AS A POLARITY.** `dmem[3]` is the *flag* (0 = FM0) and
+   `enc_wire_lev` wants `fm0` NON-ZERO for FM0. Read one as the other, the whole
+   return leg is inverted — and it still reported a plausible count, which is the
+   property that made it worth finding. **This is the block's own recurring
+   defect in its own instrument**: a constant asserted in one place and consumed
+   in another, and this act has now written one itself.
+3. **AND THEN THE MEASUREMENT REFUTED THE CHECK'S PREMISE, which is the
+   finding.** With the units right, the check says **the pad reads LOW at all
+   eighty samples** — 40 differ, every one of them a place the model says HIGH.
+   A pad that reads low eighty times has no transitions at all, and the interval
+   histogram says it has 63 per pass. **So the check's sampling is wrong, and its
+   comment's claim — "a mid-interval sample is immune to a few clocks of phase
+   error" — is exactly the claim the measurement refutes.**
+
+**AND THE REASON IS WORTH HAVING, because it is a property of the WIRE and not of
+the check.** The firmware's half-interval is **120 clocks of instructions** —
+that is what the sixth check proves, and it is exact. **The pad's level register
+is written one clock later than the instruction that writes it**, so the
+half-interval is 121 clocks of *wall time* on the wire. A monitor ticking at a
+fixed 120 clocks therefore drifts against the pad by one clock per half-interval
+and is 80 clocks out of phase by the eightieth — and every sample it takes
+between a drift of one and the drift of 120 is either on a transition or a clock
+past it. **"Immune to a few clocks of phase error" is true and useless: a few
+clocks of drift per half-interval is eighty clocks over a frame.**
+
+**SO THE NEXT VERSION SAMPLES WHERE THE LEVEL IS UNAMBIGUOUS, and the only place
+that is true is the interval's own middle, measured from the pad's own changes
+rather than from a fixed tick** — which means the check has to count the pad's
+transitions and compare the SEQUENCE, not sample on a grid. That is what the
+levels string was, and the string is what found this.
