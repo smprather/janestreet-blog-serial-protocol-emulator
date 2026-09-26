@@ -704,3 +704,64 @@ gate is X and it never commits an instruction.
 duplicate of one that nobody recomputed when an input moved -- and the three I
 could NOT check are the three that were wrong, all of them a number asserted in a
 second place.
+
+## FINDINGS ADDED 2026-09-27 -- from the FM0/FM1 act, and they outlive the act
+
+These came out of act (c) and none of them is about bi-phase. They are
+recorded here because the general form of each is worth more than the fix that
+provoked it.
+
+### 1. A TEST AND ITS STIMULUS THAT SHARE A FLAW CANNOT FIND IT
+
+The sharpest catch of the block. The FM0/FM1 firmware recovered its clock by
+counting TRANSITIONS and calling two of them a bit -- which is unsound,
+because in bi-phase the number of transitions in a bit depends on the data.
+The testbench's own decoder folded two transitions per bit: **the same flaw**.
+So the two agreed with each other, all session, producing plausible numbers
+instead of noise, and the mutual agreement read as corroboration.
+
+A pair that is wrong together cancels its own error. What this act needed was
+a stimulus varied in the dimension the claim is about -- the same frame sent as
+FM0 and as FM1 -- and it is the one variation the harness never made.
+
+**The two defences that would have applied, and that this act should adopt:**
+
+* **Vary the stimulus in the dimension the claim is about.** A claim that the
+  receiver reports WHICH encoding it locked onto is only tested by sending both
+  encodings. Sending one encoding twice tests nothing about the flag.
+* **Check each side against a DERIVATION, not against the other side.** Two
+  implementations of one idea will agree when they share a mistake, and
+  disagree when they differ innocently. Agreement between a design and its
+  model is evidence only if the two were derived independently.
+
+### 2. THREE DEAD BRANCHES IN ONE PROGRAM, ALL VISIBLE IN THE LISTING, NONE IN THE SOURCE
+
+`LDI A,2 / SUB A,1 / JNZ`, `LDI A,8 / SUB A,1 / JZ`, and a byte cleared on the
+way into the block that then tests it for zero. The first two share one cause:
+**`SUB`'s operand field is an IMMEDIATE and this ISA has no `SUB A, <dmem>`
+form**, so both were subtracting a literal and neither could ever be zero. In
+the listing a constant subtraction is visible as a constant; in the source
+`SUB A, 1` reads like "subtract one". Two copies of one mistake, eight
+instructions apart, in a program nobody had finished.
+
+### 3. SIX FAULTS, NONE FOUND BY REASONING; ALL FOUND BY MAKING SOMETHING PRINT
+
+Act (c) alone: two uninitialised bytes in a machine whose RAM survives reset,
+a stimulus wired to the wrong pad, two constant subtractions, a dead branch, a
+60x units mismatch between a microsecond constant and a clock counter, and a
+mode byte never seeded. Not one was found by reading the code, and one was
+invisible to reading it twice. Every one was found by a probe printing a value
+or by reading the assembler's listing.
+
+The number that named the addressing mode was `dmem[8] = 46` -- a counter that
+should never have passed 2. Nobody would have predicted that number, and it is
+the entire diagnosis.
+
+### 4. A COMMENT OR A CONSTANT CAN BE RIGHT AND STILL MISLEAD
+
+`enc_level(b, half, fm0)` declares an `fm0` parameter and never reads it, so
+FM0 and FM1 encode to the identical stream. The wire rules are written down
+correctly in three places -- the act's header, the commit that corrected them,
+and peasm's CONSTS -- and implemented in none of them. A documented
+parameter is not a working one, and the cheapest check for it is to vary it and
+see whether anything changes.
