@@ -721,6 +721,23 @@ else
   echo "STALE: wiki/reference/block-diagram.md — run python3 tools/gen/block_diagram.py"
   stale=1
 fi
+# The HAND-WRITTEN wiki pages, against the five rules wiki/SCHEMA.md states and
+# that nothing had ever checked. Every other documentation gate above is a
+# GENERATED-page drift check — it compares wiki/reference/* against tools/gen/* —
+# so a hand-written page could break every rule in the schema and no gate would
+# notice. The known violations are PINNED in wiki/.known-rule-violations.txt, one
+# line each with a reason, and the checker enforces the pin in BOTH directions: a
+# NEW violation is red, and a pinned violation that has been FIXED is also red,
+# because a baseline that silently outlives its defect is a checklist rather than
+# a pin. Its negative control (13 cases, including the stale direction and the
+# fail-closed paths) is regress/test_check_wiki_pages.sh.
+if bash regress/check_wiki_pages.sh > /tmp/check_wiki_pages.log 2>&1; then
+  echo "wiki page rules: OK ($(grep -c . /tmp/check_wiki_pages.log) line(s); see regress/check_wiki_pages.sh)"
+else
+  echo "wiki page rules: FAILED (see /tmp/check_wiki_pages.log)"
+  tail -20 /tmp/check_wiki_pages.log
+  stale=1
+fi
 # The local presentation viewer's fit arithmetic has its own focused check.
 # This uses an embedded SVG fixture and does not consume the project diagrams,
 # which are maintained as PlantUML source in diagrams/.

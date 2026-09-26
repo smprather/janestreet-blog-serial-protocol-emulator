@@ -93,6 +93,26 @@ repo root, not a wiki page: it is the judge-facing act script.)
   previously-orphaned blocks become one signal path, and the
   preamble-is-not-an-octet trap.
 
+### The host bus and the debug contract
+
+The two halves of the chip's conversation with a host, written as the contracts
+a host must code against rather than as a walkthrough of the RTL. Both take
+`rtl/pe_ctrl.v`'s header comment as their primary source and close with a
+section on **how each claim is proved** — the golden packages and the
+conformance runs, not an assertion.
+
+- [[concepts/host-chip-protocol]] — the framed bus: the frame layout, the
+  wait-word rule and why it is safe, the opcode table, the 11-word core header
+  that R2 stopped stubbing, and the read-count ceiling. It is careful to say
+  that this SPI shares nothing with the *other* SPI in the project, the firmware
+  master, but the name.
+- [[concepts/debug-control]] — the four debug states and **six numbered traps a
+  debugger must code around**, including the one that costs boards the most
+  time: the run strap is masked *both* ways under a hold, so "re-assert `run` to
+  carry on" leaves the core stopped with no fault to explain it. It also says
+  why a host's own model cannot show most of this — the same reasoning that
+  keeps the model free to be wrong about what is legal.
+
 ### Protocol deep-dives
 
 One page per protocol persona, written from the *measured* behaviour of the
@@ -147,14 +167,21 @@ numbers; do not edit them by hand.
 
 ### Diagrams (in the repo, not in the wiki)
 
-Editable PlantUML sources with colocated renders, in `diagrams/`:
+Editable PlantUML sources with colocated `.png`/`.svg` renders, in `diagrams/`:
 
-- `project-plan.puml` — planned system topology, baseline and stretch
-  protocol goals.
+- `project-plan.puml` — planned system topology, baseline and stretch protocol
+  goals.
 - `project-progress.puml` — implementation status by block; colour separates
   integrated, standalone and open work.
 - `proto-*.puml` — the per-protocol figure families (state machine, field
-  layout, timing), each with its `.png`/`.svg` render.
+  layout, timing).
+- `proto-spi-framing.puml` — **the framed SPI link**: the word and bit layout of
+  a request/response frame and where the `0xFFFF` wait words sit in it.
+- `proto-r2-read-path.puml` — **the R2 bounded-read path**: the four read
+  opcodes, the 11-word core header, and the count ceiling a host must respect.
+- `proto-r3-debug-control.puml` — **the R3 debug-control state machine**:
+  STOPPED/RUNNING/DEBUG_HOLD/BP_HIT, STOP-BEFORE, the opcode flows, and the
+  `BP_SET` subtlety. Read with [[concepts/debug-control]].
 - `diagrams/README.md` — what each map is for and how to re-render it.
 
 ---
@@ -432,16 +459,21 @@ decision not to write them:
 
 - **protocol deep-dives** — one `wiki/concepts/protocol-*.md` per persona,
   each with a `diagrams/proto-*.puml` figure set (state machine, field layout,
-  timing). **Landed so far:** `protocol-ws2812` and `protocol-servo`, both from
+  timing). **Landed:** `protocol-ws2812` and `protocol-servo`, both from
   `docs/diag-timing`, both linked above. The rest of the family is in progress
   and follows the same `protocol-<name>` naming convention.
-- **host-bus figures** — the framed SPI link (word/bit layout and the
-  wait-word contract), the R2 bounded-read path, the R3 debug-control state
-  machine with STOP-BEFORE and the `BP_SET` subtlety, and an I2C-advanced set.
-  These are figures rather than prose pages, so they belong in the diagrams
-  note above rather than in a page list.
-- **project maps** — the plan and progress maps in `diagrams/`, with the
-  topology and the per-block verification state.
+- **host bus and debug control** — **LANDED** on `docs/diag-proto`:
+  `concepts/host-chip-protocol` and `concepts/debug-control` are linked above,
+  and the three host-bus figure sets (`proto-spi-framing`, `proto-r2-read-path`,
+  `proto-r3-debug-control`) are named in the diagrams note. `debug-control.md`
+  had further uncommitted edits in flight at the time of reading, so the copy
+  linked here is the committed one.
+- **bus figures** — an I2C-advanced figure set from `docs/diag-bus`, following
+  the same `proto-*.puml` convention and belonging in the diagrams note rather
+  than in a page list.
+- **project maps** — **LANDED and refreshed** on `docs/diag-proto`: the plan and
+  progress maps in `diagrams/`, with the topology and the per-block
+  verification state, named in the diagrams note above.
 
 Once a page lands on its branch it gets a line here; this section is deleted
 when the family is complete.
