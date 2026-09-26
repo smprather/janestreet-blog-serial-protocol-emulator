@@ -70,12 +70,17 @@
 ;     5      the microsecond timestamp of the last change
 ;     6      the byte this program encodes onto the output pad
 ;     7      the bit counter
-;     8      the half-intervals accumulated inside the current bit
+;     8      the INTERVAL between the last two transitions, in microseconds.
+;            It is 2 or 4 and nothing else -- measured, not assumed: the
+;            write-hook counts 18 twos and 13 fours over one frame and no six.
 ;     9      the byte index being assembled
 ;    10      the previous 1 us reading, for the elapsed difference
 ;    11      what the program is doing: 0 = decode, 1 = encode
 ;    12,13   the bit under construction, and then the byte being shifted out
-;    14,15   scratch for the elapsed time, and the shift
+;    14      scratch for the elapsed time
+;    15      ONE BIT: was the last transition a bit boundary? It is the whole
+;            of the history the boundary decision needs, and it is the only
+;            byte the decision costs.
 
         ; ---- init ------------------------------------------------------
 init:
@@ -115,6 +120,13 @@ init:
         STM   7, A
         STM   8, A
         STM   9, A
+        STM   15, A            ; dmem[15] is ONE BIT of history -- "was the last
+                               ; transition a bit boundary" -- and it is READ
+                               ; before the first transition is classified, so
+                               ; like dmem[5] it has to be seeded here. It is not
+                               ; cleared by a reset, so an unseeded byte is
+                               ; whatever power-up left, and the first decision
+                               ; the receiver makes is made from it.
         STM   5, A             ; THE TIMESTAMP OF THE LAST CHANGE, and the
                                ; init omitted this one too. the_pin READS
                                ; dmem[5] (LDM A,14 / SUB A,5) before it ever
@@ -204,78 +216,128 @@ the_pin:
         IN    A, I2CTICK
         STM   5, A             ; dmem[5] = the tick AT this change, so the
                                ; NEXT interval is measured from here
-        ; ---- and the bit boundary is ONE HALF-INTERVAL, tested as such ----
-        ; The half-interval is a FIXED 2 us, so the interval is 2, 4 or 6 for
-        ; one, two or three half-intervals. NO DIVISION IS NEEDED AND NONE IS
-        ; POSSIBLE: this ISA has no divide and no shift-right, and the recipe
-        ; I wrote for this step first asked for a halving, which the machine
-        ; cannot do. Comparing against the constant is the whole test, and it
-        ; is the form that has caused no trouble all act -- load into X,
-        ; subtract a constant, use the zero flag as the comparison.
+        ; ---- THE BOUNDARY DECISION, ON THE MEASURED INTERVAL ------------
+        ; THIS IS WRITTEN FROM A MODEL, NOT FROM THE CODE. The three wire rules
+        ; in the header give the decoder in three lines, and the model was run
+        ; on the derived level sequence before one instruction of it was
+        ; written here. A decision built on an unverified measurement is the
+        ; mistake this act has made in three different files, and the
+        ; measurement is verified now: the write-hook counts 32 writes to
+        ; dmem[8] with 18 of value 2 us and 13 of value 4 us and no 6 anywhere,
+        ; against a derivation of 18 one-half and 14 two-half intervals.
+        ;
+        ; THE THREE RULES, RESTATED AS WHAT THE RECEIVER SEES:
+        ;   a bit is TWO half-intervals;
+        ;   the DATA is the LEVEL OF THE FIRST half-interval;
+        ;   a boundary transition exists iff two ADJACENT BITS ARE EQUAL
+        ;     (NOT "differ" -- BLOCK3-STATE.md has that line INVERTED, and the
+        ;     whole receiver is read off it).
+        ; From which: a boundary is always exactly ONE half after the previous
+        ; mid, and a mid is either one half after a boundary or TWO halves after
+        ; the previous mid. So:
+        ;     interval == 4 us                        -> this is a MID
+        ;     interval == 2 us, previous was a BOUNDARY -> this is a MID
+        ;     interval == 2 us, otherwise             -> this is a BOUNDARY
+        ;     anything else                           -> the clock is lost
+        ;
+        ; WHY THAT IS ENOUGH, and it is the part that is not obvious: a run of
+        ; two-microsecond intervals is AMBIGUOUS on its own, because [mid,
+        ; boundary, mid] and [boundary, mid, boundary] both measure 2, 2. One
+        ; bit of history is what resolves it, and dmem[15] is that one bit. It
+        ; is the ONLY new byte the whole decision costs, which matters on a
+        ; machine with sixteen bytes and every one of them spoken for.
+        ;
+        ; WHY ONE BIT PER MID IS ONE BIT PER BIT: every bit carries exactly one
+        ; mid transition, and a boundary carries the SAME data as the mid that
+        ; follows it, so emitting at the mid and not at the boundary emits each
+        ; bit exactly once.
+        ;
+        ; NO DIVISION, because there is none to do: the interval takes exactly
+        ; two values and comparing against a constant is the whole test. This
+        ; ISA has no divide and no shift-right, and the recipe this step started
+        ; from asked for a halving, which is a DOUBLING wearing the wrong name.
         LDM   X, 8
+        LDI   A, 4
+        SUB   A, X             ; zero EXACTLY when the interval was two
+                               ; half-intervals, and that can only be a mid
+        JZ    this_mid
         LDI   A, 2
-        SUB   A, X             ; zero EXACTLY when the interval was one
-                               ; half-interval
-        JZ    first_half       ; one half-interval: we are on the FIRST half
-                               ; of a bit. The fall-through is a bit boundary,
-                               ; and this is the first time in this program's
-                               ; history that either of those two branches has
-                               ; been reachable by a MEASUREMENT rather than by
-                               ; a constant.
-        ; ---- AND THERE IS NOTHING BETWEEN HERE AND bit_edge --------------
-        ; There used to be, and finding that is the whole of this repair. The
-        ; (b) replacement ended at a `JMP bit_edge` and the tail of the block
-        ; it replaced -- LDI A,0 / STM 8,A / JMP bit_edge -- was left
-        ; UNDERNEATH it, so the listing read
-        ;     50 JZ first_half / 51 JMP bit_edge
-        ;     52 LDI A,0 / 53 STM 8,A / 54 JMP bit_edge / 55 JMP main
-        ; and 52..55 were DEAD, because 51 leaves the block first. That is a
-        ; FOURTH dead branch in this program; the check that finds dead
-        ; branches works, so shipping one means the check was run on the part
-        ; that changed rather than on the whole block. `half_done` was the
-        ; label on 55 and NOTHING EVER JUMPED TO IT -- the entire tail is
-        ; unreachable, which is why the run produced TWO writes to dmem[8]
-        ; rather than one per edge.
-        ;
-        ; THE `JMP bit_edge` AT 51 WENT WITH IT, and the note that came with
-        ; this repair was WRONG about why. It said the jump was mis-targeted,
-        ; because `JMP bit_edge` encodes 0x38 = 56 and 56 was read as the_pin.
-        ; 56 IS bit_edge. Counted from the assembler's listing: the_pin = 33,
-        ; half_done = 55, bit_edge = 56. A jump naming a label goes to that
-        ; label. The real reason the handler looked re-entered was the dead
-        ; tail holding four words open, and "fix the mis-targeted jump" would
-        ; have been a repair of a fault that was not there, made on the
-        ; strength of a decimal number read without the label map beside it.
-        ; The same number, read against the wrong table, is the whole failure.
-        ;
-        ; So the fall-through from the JZ now lands on bit_edge itself, which
-        ; is what the comment above has always claimed.
-
-        ; ---- a bit boundary ---------------------------------------------
-        ; A transition ON the second half-interval is a '0': a '1' has none
-        ; at the end of its interval. A transition on the FIRST half is a
-        ; data transition at the START of a one, and that is what says FM0.
-bit_edge:
-        IN    A, PIN
-        AND   A, BMC_IN
-        MOV   X, A
-        LDM   A, 8
-        JZ    first_half
-        ; second half: a zero
+        SUB   A, X             ; zero EXACTLY when it was one half-interval
+        JNZ   resync           ; neither 2 nor 4: the clock is lost, and SAYING
+                               ; SO is better than emitting a bit from a
+                               ; measurement that means nothing
+        LDM   A, 15
+        JNZ   this_mid         ; the previous transition was a boundary, and a
+                               ; boundary is followed by its own mid
+is_boundary:
+        LDI   A, 1
+        STM   15, A            ; a boundary. IT HAS A NAME, and it has one
+                               ; because a probe that has to count this class
+                               ; of transition can then COUNT IT BY NAME: the
+                               ; first version of that probe reached for
+                               ; `bit_store - 2`, and bit_store had moved, so
+                               ; the probe reported one boundary where the
+                               ; derivation says nine. That is the seventh
+                               ; placement error in this act, and the cheapest
+                               ; cure by far is for the thing being counted to
+                               ; carry a label.
+        JMP   main             ; AND EMIT NOTHING. A boundary carries the same
+                               ; data as the mid that follows it, so the two
+                               ; paths through this decision must not BOTH
+                               ; count: the first version jumped to bit_store
+                               ; here as well as at the mid, and the receiver
+                               ; banked three bytes out of 31 bits -- 22 mids
+                               ; plus 9 boundaries -- and reported 1c 1c for
+                               ; 3c 96. The probe named it in one run, by
+                               ; counting the classifications rather than the
+                               ; bytes. A comment that says "emit nothing" and
+                               ; an instruction that emits is the same defect as
+                               ; a comment that names a byte the code does not
+                               ; touch: the sentence is what gets believed.
+this_mid:
         LDI   A, 0
-        STM   12, A
+        STM   15, A
+        ; THE DATA IS THE LEVEL OF THE FIRST HALF, and a mid is the edge that
+        ; ENDS that first half, so the data is the level on the OTHER SIDE of
+        ; it: the complement of what dmem[4] now holds, because dmem[4] was
+        ; written with the NEW level on the way in. NO SECOND LEVEL BYTE IS
+        ; NEEDED -- a level is one bit and the other one is its complement,
+        ; which is the cheapest thing in this act.
+        LDM   X, 4
+        LDI   A, BMC_IN
+        SUB   A, X             ; zero when the level just changed TO is HIGH
+        JZ    data_zero        ; so the first half was LOW, and the data is 0
         LDI   A, 1
-        STM   3, A             ; a data edge, so the stream is FM0
         JMP   bit_store
-first_half:
-        ; the boundary was a data transition at a bit start, which only FM0
-        ; makes; the bit's value is decided by whether the SECOND half also
-        ; moved, and that is a transition we have already counted
-        LDI   A, 1
-        STM   3, A
-        LDI   A, 1
-        STM   12, A
+data_zero:
+        LDI   A, 0
         JMP   bit_store
+        ; AND THAT JUMP IS NOT COSMETIC. The first version of this block put
+        ; `resync` immediately below `data_zero`, so the two LABELs were
+        ; ADJACENT and a data bit of zero fell straight through into the resync
+        ; path and out to `main` -- every zero bit skipped the byte assembly
+        ; entirely, and the block read
+        ;     68  0000  LDI A, 0        <- data_zero
+        ;     69  0000  LDI A, 0        <- resync
+        ; with no jump between them. Reading only the part I had changed would
+        ; not have shown it: the two instructions are individually correct and
+        ; the fault is in the SPACE between them. That is the whole reason the
+        ; rule is to read the WHOLE block in the listing after an edit.
+        ; ---- AND AT bit_store, A IS DEAD -------------------------------
+        ; Both paths arrive here and only one of them sets A. The bit under
+        ; construction is in dmem[12] and the count in dmem[7], so nothing
+        ; here reads A -- but a block that reads a register it did not set is
+        ; the shape of the `LDI A,2 / SUB A,1` dead branch, so it is said here
+        ; rather than left to be discovered.
+resync:
+        ; THE CLOCK IS LOST: the interval was neither 2 nor 4 us, which on this
+        ; wire means a gap longer than two half-intervals -- a dead sensor, a
+        ; break, or the return to idle at the end of a frame. Clear the one bit
+        ; of history so the next real transition is classified from scratch, and
+        ; emit NOTHING. A decoder that cannot lose the clock is not decoding.
+        LDI   A, 0
+        STM   15, A
+        JMP   main
 bit_store:
         LDM   A, 7
         MOV   Y, A
@@ -305,19 +367,23 @@ bit_store:
         JMP   main
 byte_done:
         LDI   A, 0
-        STM   7, A
-        ; the byte is complete: store it at 9 (the index)
-        LDM   A, 9
-        MOV   X, A
+        STM   7, A             ; the bit counter starts again for the next byte
+        ; THE DISPATCH IS ON dmem[9] ALONE, and it was not. The first version
+        ; computed `LDM A,12 / ADD A,X` and then tested the SUM for zero, then
+        ; one, else two -- so it dispatched on `byte + index`, which is zero
+        ; only when the byte happens to be zero. Measured: for the frame a5 3c
+        ; 96 the stores went 0/1/2 = ZERO times to slot 0, once to slot 1 and
+        ; once to slot 2, and dmem[0..2] came out 00 1c 1c. A byte that is not
+        ; zero can never reach store0. The index was in X the whole time and
+        ; nothing had clobbered it; the ADD was the only thing wrong, and it
+        ; was the kind of line that reads as "compute the address" and is
+        ; really "compute a value and then ask whether it is zero".
         LDI   A, 0
-        MOV   Y, A
-        LDM   A, 12
-        ADD   A, X
-        ; park it for now -- the store needs a computed address and the index
-        ; is 0,1,2, so the three cases are written out rather than indexed
+        LDM   X, 9
+        SUB   A, X             ; zero iff dmem[9] is 0
         JZ    store0
         LDI   A, 1
-        SUB   A, X
+        SUB   A, X             ; zero iff dmem[9] is 1
         JZ    store1
         JMP   store2
 store0:
@@ -334,13 +400,34 @@ store2:
 stored:
         LDI   A, 0
         STM   12, A
-        LDM   A, 9
-        ADD   A, 1
+        LDI   A, 0
+        STM   7, A             ; the bit counter starts again for the next byte
+        LDM   X, 9
+        LDI   A, 1
+        ADD   A, X
         STM   9, A
         LDI   A, 3
-        SUB   A, 1
-        JZ    enc_start
+        SUB   A, X             ; zero when THREE bytes have been banked
+        JZ    frame_done
         JMP   main
+        ; *** A FIFTH CONSTANT SUBTRACTION, AND THE THIRD OF THIS SHAPE ***
+        ; This used to read `LDI A,3 / SUB A,1 / JZ enc_start`, which computes
+        ; 3 - 1 = 2 -- a CONSTANT, because SUB's operand field is an IMMEDIATE
+        ; and this ISA has no `SUB A, <dmem>` form at all. So the branch could
+        ; never fire and enc_start was unreachable. In the source `SUB A, 1`
+        ; reads like "subtract one"; in the listing a constant subtraction is
+        ; visible as a constant. The other two of this shape are the bit
+        ; counter's `LDI A,8 / SUB A,1` and the first_half test's
+        ; `LDI A,2 / SUB A,1`, and all three were found by reading the listing
+        ; rather than the source. The fix is the same in all three: the thing
+        ; being compared has to come through X.
+frame_done:
+        ; THREE BYTES BANKED. The encoder is NOT entered from here: enc_start's
+        ; half_wait sets dmem[13] to 0xFF and spins until it reads zero, which
+        ; it never does, so handing over to it is a hang rather than an encode.
+        ; Parking is the honest end state until the encoder is written, and the
+        ; encode direction of the act stays red because it should.
+        JMP   park
 
         ; ---- and then it encodes one byte on the other pad ---------------
 enc_start:

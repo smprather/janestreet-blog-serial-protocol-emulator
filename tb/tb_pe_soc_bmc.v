@@ -497,7 +497,7 @@ module tb_pe_soc_bmc;
   // across a bit boundary" has no definition. It was the visible symptom of
   // the superseded rules, and the property it existed to produce ("a run of
   // ones under FM0 is a constant line") is false of the protocol as ruled.
-  logic   stim_idle = 1'b1;   // the idle level between frames
+  integer stim_idle_wait = 0;   // half-intervals left before going idle
 
   // THE STIMULUS IS ARMED BY THE FIRMWARE'S RELEASE, and that is the whole
   // reason this act was red. It used to begin at time 0, which meant it
@@ -517,7 +517,7 @@ module tb_pe_soc_bmc;
   // checks, which is exactly seven without stim_done in it.
   initial begin
     wait (run === 1'b1);
-    stim_done = 0; stim_bit = 0; stim_half = 0; stim_waited = 0;
+    stim_done = 0; stim_bit = 0; stim_half = 0; stim_waited = 0; stim_idle_wait = 0;
     in_line = 1'b1;
     // NO `carry` ANY MORE, and its deletion is not tidying. The old stimulus
     // threaded the level at the end of the previous bit through every
@@ -546,6 +546,14 @@ module tb_pe_soc_bmc;
       // derivation when the code was the thing that moved. The counter goes
       // up first, so the counter is the honest half of the expression.
       stim_waited = stim_waited + 1;
+      // AND ONE HALF-INTERVAL LATER THE LINE GOES IDLE, so the frame's last
+      // half-interval is a half-interval long and the transition that ends it
+      // is a real edge rather than an assignment that cancels it.
+      if (stim_idle_wait > 0 && stim_waited >= HALF_CLOCKS) begin
+        stim_idle_wait = 0;
+        in_line = 1'b1;
+        forever #(CLK_NS) ;
+      end
       if (stim_waited >= HALF_CLOCKS) begin
         stim_waited = 0;
         // stim_bit is a BIT NUMBER; enc_frame_lev pulls the bit VALUE out of
@@ -566,10 +574,23 @@ module tb_pe_soc_bmc;
         end else begin
           in_line = enc_frame_lev(stim_bit*2 + 1, enc_fm0, enc_byte[0], enc_byte[1], enc_byte[2]);
           stim_half = 0;
+          // THE LAST BIT'S SECOND HALF IS HELD FOR ITS FULL HALF-INTERVAL,
+          // and the idle level is applied one half-interval later, by the
+          // branch below. Applying it here made the final half-interval a
+          // zero-width pulse.
           if (stim_bit >= NBITS - 1) begin
             stim_done = 1;
-            in_line = 1'b1;                    // idle high between frames
-            forever #(CLK_NS) ;
+            // THE IDLE LEVEL IS NOT APPLIED IN THE SAME INSTANT. It used to
+            // be, and the last half-interval of the frame was therefore a
+            // ZERO-WIDTH PULSE: the line was driven low for the final half and
+            // driven high again at the same time step, so the transition at
+            // half 47 never existed on the wire. The encoder's own derivation
+            // says 33 transitions over 48 half-intervals and the wire carried
+            // 32, and the two did not agree for one minute before the diff of
+            // change TIMES showed the last one absent rather than missed. A
+            // level that exists for no time is not a level, and a check that
+            // counts transitions cannot tell "not driven" from "not seen".
+            stim_idle_wait = HALF_CLOCKS;      // hold this half, then go idle
           end
           stim_bit = stim_bit + 1;
         end
