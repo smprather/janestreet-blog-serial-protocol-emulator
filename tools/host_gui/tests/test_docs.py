@@ -339,15 +339,19 @@ class TestBringupRunbook(unittest.TestCase):
         """
         text = read(BRINGUP)
         start = text.index("| Symptom")
-        table = text[start:text.index("\n\n", start)]
-        rows = [line for line in table.splitlines()
-                if line.startswith("| ") and "---" not in line]
+        table = text[start : text.index("\n\n", start)]
+        rows = [
+            line
+            for line in table.splitlines()
+            if line.startswith("| ") and "---" not in line
+        ]
         for beat in ("heartbeat", "readback", "clear_fault"):
             with self.subTest(beat=beat):
                 self.assertTrue(
                     any(beat in row.lower() for row in rows),
                     f"the {beat} beat can fail for its own reason and the triage "
-                    f"table says nothing about it")
+                    f"table says nothing about it",
+                )
 
     def test_the_heartbeat_row_names_the_hardware_window(self):
         """An operator reading a `timer stuck` failure needs the window.
@@ -360,19 +364,23 @@ class TestBringupRunbook(unittest.TestCase):
         """
         text = read(BRINGUP)
         start = text.index("| Symptom")
-        table = text[start:text.index("\n\n", start)]
+        table = text[start : text.index("\n\n", start)]
         # a list, then index: `next(..., None)` leaves the type Optional and
         # every assertion below would be reasoning about a value that may not
         # be there. Requiring exactly one also stops two rows drifting apart.
-        matches = [line for line in table.splitlines()
-                   if "heartbeat" in line.lower()]
-        self.assertEqual(len(matches), 1,
-                         "the triage table needs exactly one heartbeat row")
+        matches = [line for line in table.splitlines() if "heartbeat" in line.lower()]
+        self.assertEqual(
+            len(matches), 1, "the triage table needs exactly one heartbeat row"
+        )
         row = matches[0]
-        self.assertRegex(row, r"0\.75|three quarters|0\.25",
-                         "the row should state the window the beat gives up in")
-        self.assertRegex(row, r"dbg_timer|tick|strap",
-                         "the row should name a candidate cause")
+        self.assertRegex(
+            row,
+            r"0\.75|three quarters|0\.25",
+            "the row should state the window the beat gives up in",
+        )
+        self.assertRegex(
+            row, r"dbg_timer|tick|strap", "the row should name a candidate cause"
+        )
 
     def test_the_read_length_failure(self):
         """A defect I found on this host, reachable only on hardware.
