@@ -9747,7 +9747,7 @@ task automatic r2_run_all;
       $readmemh("../tb/r2-vectors/status_while_bp_hit.status_reports_the_hit.rsp.hex", r2_rsp_mem);
       r2_run = 1'b1;
       r2_prep_hold_bp_hit();
-      r2_step(10, 32, "status_reports_the_hit", 16'h0000);
+      r2_step(10, 30, "status_reports_the_hit", 16'h0000);
     end
     begin : r2_s11_1
       $readmemh("../tb/r2-vectors/status_while_bp_hit.dump_core_refused_the_strap_is_high.req.hex", r2_req_mem);

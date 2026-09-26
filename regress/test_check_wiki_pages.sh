@@ -198,6 +198,109 @@ if mutate "renamed taxonomy heading" "$d/wiki/SCHEMA.md" \
   expect "renamed taxonomy heading is a HARNESS ERROR" 1 "HARNESS ERROR" "$d"
 fi
 
+# ---- 14-19: THE WIRING, which is a separate thing from the gate -------------
+# Everything above proves the GATE can fail. That is not the same as proving the
+# gate is CALLED, and the gap between the two is where a gate quietly stops
+# existing. Nothing in this repo asserts that my call is still in run_all.sh:
+# regress/check_harness_preflight.sh globs regress/mutate_*.sh, so it does not
+# cover this gate, and its own header records that the pre-flight's wiring "was
+# correct on the day it was written and nothing asserted it" - the exact reason
+# that file exists. So the wiring needs its own coverage, and the only file I am
+# allowed to put it in is this one.
+#
+# Delete the block from run_all.sh and the suite goes green with the gate simply
+# not running. That is the same drift class as a stale MUTABLE list making the
+# mapper SKIP a suite, and it is silent in the worst direction: fewer checks, no
+# red, no output.
+
+# the wiring block, extracted from run_all.sh exactly as it stands
+extract_wiring() {
+  awk '/^if bash regress\/check_wiki_pages\.sh/ {on=1} on {print} on && /^fi$/ {exit}' regress/run_all.sh
+}
+
+# 14. the call is present at all
+if extract_wiring | grep -q 'regress/check_wiki_pages.sh'; then
+  ok "run_all.sh still calls the gate"
+else
+  bad "run_all.sh still calls the gate" "no invocation of regress/check_wiki_pages.sh in regress/run_all.sh - the gate is no longer wired and the suite would be green without it"
+fi
+
+# 15. the call is GUARDED, and its failure path is not swallowed.
+# Each condition is computed into its own variable first: a pipeline cannot be a
+# `[ ]` operand, so writing `cmd | grep -q x && cmd | grep -q y` inside the test
+# does not parse. (Shellcheck caught it; the fix is the shape, not a disable.)
+blk=$(extract_wiring)
+guard_head=$(printf '%s\n' "$blk" | head -1 | cut -c1-3)
+guard_fi=$(printf '%s\n' "$blk" | grep -c '^fi$')
+guard_stale=$(printf '%s\n' "$blk" | grep -c 'stale=1')
+if [ "$guard_head" = "if " ] && [ "$guard_fi" -ge 1 ] && [ "$guard_stale" -ge 1 ]; then
+  ok "the wiring is an if/else that sets stale=1 on failure"
+else
+  bad "the wiring is an if/else that sets stale=1 on failure" "the block is unguarded, or its failure path does not set stale=1, so a failing gate would print FAILED and the suite would continue green:
+$(printf '%s\n' "$blk" | sed 's/^/        | /')"
+fi
+
+# 16. the `stale` accumulator is actually CONSUMED, and consumed AFTER this block.
+# Three separate mistakes each make every documentation gate decorative: never
+# initialising stale, or consuming it before the gates that set it.
+init_line=$(grep -n '^stale=0$' regress/run_all.sh | head -1 | cut -d: -f1)
+wire_line=$(grep -n '^if bash regress\/check_wiki_pages\.sh' regress/run_all.sh | head -1 | cut -d: -f1)
+consume_line=$(grep -n '\[ "\$stale" -eq 0 \] || exit 1' regress/run_all.sh | head -1 | cut -d: -f1)
+if [ -n "$init_line" ] && [ -n "$wire_line" ] && [ -n "$consume_line" ] \
+   && [ "$init_line" -lt "$wire_line" ] && [ "$wire_line" -lt "$consume_line" ]; then
+  ok "stale is initialised before the gate and consumed after it ($init_line < $wire_line < $consume_line)"
+else
+  bad "stale is initialised before the gate and consumed after it" "init=$init_line wiring=$wire_line consume=$consume_line - the accumulator must be set, then used by the gate, then turned into an exit code after it"
+fi
+
+# 17-18. EXECUTE the wiring, in both directions. Asserting the wiring's TEXT is
+# not the same as running it, and "the wiring has never been executed" is the
+# complaint that started this section - so it gets executed, from the block
+# extracted out of run_all.sh rather than a copy of it.
+#   pass direction: pristine wiki  -> stale stays 0
+#   fail direction: a broken page  -> stale becomes 1
+d=$(fresh wire-pass)
+{ echo 'stale=0'; extract_wiring; echo 'echo "STALE=$stale"'; } > "$TMP/wiring.sh"
+cp "$TMP/wiring.sh" "$d/"
+got=$(cd "$d" && bash wiring.sh 2>/dev/null | tail -1)
+if [ "$got" = "STALE=0" ]; then
+  ok "wiring executed: a passing gate leaves stale=0"
+else
+  bad "wiring executed: a passing gate leaves stale=0" "got '$got'"
+fi
+
+d=$(fresh wire-fail)
+if mutate "wiring fail-direction breakage" "$d/wiki/concepts/spi-as-firmware.md" \
+        's/^tags: \[/tags: [not-a-real-tag, /'; then
+  { echo 'stale=0'; extract_wiring; echo 'echo "STALE=$stale"'; } > "$TMP/wiring.sh"
+  cp "$TMP/wiring.sh" "$d/"
+  got=$(cd "$d" && bash wiring.sh 2>/dev/null | tail -1)
+  if [ "$got" = "STALE=1" ]; then
+    ok "wiring executed: a FAILING gate sets stale=1"
+  else
+    bad "wiring executed: a FAILING gate sets stale=1" "got '$got' - a broken page must turn the accumulator red, or the suite prints FAILED and carries on"
+  fi
+fi
+
+# 19. the negative control for this whole section: remove the wiring from a COPY
+# and confirm the extraction comes back empty. Without this, cases 14-18 would be
+# satisfied by a checker that greps for anything at all.
+cp regress/run_all.sh "$TMP/run_all_nowiring.sh"
+# The removed lines, matched with grep -v rather than an awk regex: the awk form
+# needed `s|...|...|` with escaped slashes inside, which prints "stray \ before /"
+# to stderr, and noise in a gate's own output is how people learn to ignore it.
+sed -e '/^  tail -20 \/tmp\/check_wiki_pages\.log$/d' -e '/^  stale=1$/d' \
+  "$TMP/run_all_nowiring.sh" \
+  | grep -v -e '^if bash regress/check_wiki_pages\.sh' \
+            -e '^  echo "wiki page rules: OK' \
+            -e '^  echo "wiki page rules: FAILED' \
+  > "$TMP/run_all_rewired.sh"
+if awk '/^if bash regress\/check_wiki_pages\.sh/ {on=1} on {print} on && /^fi$/ {exit}' "$TMP/run_all_rewired.sh" | grep -q .; then
+  bad "removing the wiring is DETECTED" "the block survived the removal, so cases 14-18 would pass on a copy with no gate wired at all"
+else
+  ok "removing the wiring is DETECTED (negative control for 14-18)"
+fi
+
 echo "test_check_wiki_pages: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
 exit 0

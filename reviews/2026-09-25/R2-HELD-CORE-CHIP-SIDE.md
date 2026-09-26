@@ -68,27 +68,54 @@ R2 testbench can send. So the pre-state is built with real traffic and real RTL:
   configuration.)
 
 ## 3. FINDING 1 (chip-side, medium): `BP_SET` does not clear the hold, so a
-## fresh hit cannot latch on a DUT that is already held
+## fresh FREE-RUNNING hit cannot latch on a DUT that is already held
 
 `DEBUG_BP_CLR` clears `bp_en`, `bp_hit` **and** `dbg_hold_r` (`pe_ctrl.v:1102-1104`).
 `DEBUG_BP_SET` clears `bp_en` and `bp_hit` but **not** `dbg_hold_r`
-(`pe_ctrl.v:1086-1087`). Since the hit condition requires `!dbg_hold_r`, arming
-a core that is *already held* cannot produce a hit — the core sits at state 2
-with `bp_hit` clear, forever, and nothing reports an error.
+(`pe_ctrl.v:1086-1087`). So on a DUT that is already held, arming again cannot
+produce a hit **through the free-running path**, because that path is gated on the
+hold: `pe_ctrl.v:692` reads
 
-The first version of the v10 prep did exactly that (the v09 prep had just left
-the core held), and the failure arrived as a **word mismatch inside a golden
-response** — `word 5 = 0002, want 0003` — rather than as "the pre-state was not
-reached". That is a bad failure shape: it points at the STATUS builder when the
-cause was two opcodes earlier. Both preps now open with `DEBUG_BP_CLR` and
-assert the release, and the pre-state assertions name the state rather than
-letting it surface as a byte.
+```verilog
+if (bp_en && !dbg_hold_r && (run || dbg_step_r) && (dbg_next_pc == bp_addr))
+```
+
+and the second term is false. The core sits at state 2 with `bp_hit` clear, and
+nothing reports an error.
+
+**The precise scope, because the first version of this finding over-claimed.** The
+`DEBUG_STEP` path is **not** gated that way: `pe_ctrl.v:1067` reads
+
+```verilog
+bp_hit <= bp_en && (dbg_next_pc == bp_addr);
+```
+
+with no `!dbg_hold_r` term. So **stepping onto an armed address does latch
+2 → 3** even while held, and that is the stop-before flow the held-core steps
+21/22 exercise. There are therefore **two legal routes to state 3** with
+different preconditions, and the choice matters:
+
+* via `DEBUG_STEP` onto the armed address (`:1067`) — legal while already held,
+  because the step path ignores the hold;
+* via the free-running hit (`:692`) — requires `!dbg_hold_r`, so it needs a
+  `DEBUG_BP_CLR` first if the core is already held.
+
+This testbench's `r2_prep_hold_bp_hit` takes the **second** route (`BP_SET`, then
+`dbg_next_pc = 2` with the strap high, letting `:692` latch), which is why it
+opens with a `DEBUG_BP_CLR`. A debugger using the step route would not need one.
+
+The first version of the v10 prep did arm without clearing, took the free-running
+route, and the failure arrived as a **word mismatch inside a golden response** —
+`word 5 = 0002, want 0003` — rather than as "the pre-state was not reached". That
+is a bad failure shape: it points at the STATUS builder when the cause was two
+opcodes earlier. Both preps now open with `DEBUG_BP_CLR` and assert the release,
+and the pre-state assertions name the state rather than letting it surface as a
+byte.
 
 **This is a fact about the debug interface that the host's model cannot show**,
-because `model_image[].debug` simply declares `debug_hold: true`. A host-driven
-model reaches the state by fiat; the chip reaches it by traffic, and the traffic
-needs a release first. Worth a line in the frozen contract, because a real host
-that re-arms without clearing will see the same silent non-hit.
+because `model_image[].debug` simply declares `debug_hold: true`. Worth a line in
+the frozen contract: a host that re-arms and waits for a free-running hit, rather
+than stepping onto the address, will see a silent non-hit.
 
 ## 4. FINDING 2 (chip-side, low): the pre-state is established once per VECTOR,
 ## not once per step
