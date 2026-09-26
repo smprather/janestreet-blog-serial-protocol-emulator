@@ -221,6 +221,7 @@ fm-finishes-early|freqmeter|the run declared finished after ONE point, leaving t
 fm-high-byte-order|freqmeter|the high time banked high byte first, which reads as a real measurement times 256
 fm-per-base|freqmeter|the period slot's base address shifted, so the periods land on the high times
 sr-q-mask|sr04_range|the high byte's six-bit mask missing bit 3, so the 8000 us echo -- the one with r = 0 -- reads 1023 mm
+sr-term-shift|sr04_range|the small term shifted by five instead of six, so floor(11r/64) doubles -- and reads zero at r = 0
 sr-trig-count|sr04_range|the +5 after 4*SR_TRIG_LEN turned back into a +4: a 600-clock, 10.000 us trigger
 CASES_EOF
 
@@ -763,6 +764,42 @@ run_one() {
         MOV   X, A"
       repl="        AND   A, 0x37          ; MUTANT: bit 3 is gone from the mask
         MOV   X, A" ;;
+    sr-term-shift)
+      # THE OTHER HALF OF THE CONVERSION, and the only mutant in this file
+      # that is caught by the r != 0 runs. floor(11r/64) is assembled as
+      # (acc_lo >> 6) | ((acc_hi & 0x0f) << 2), and dropping the sixth shift
+      # leaves a term that is a plausible millimetre figure rather than a
+      # number that looks broken -- 200, 1001 and 346 against 199, 999 and
+      # 343 -- which is the whole hazard this act names about itself.
+      #
+      # MEASURED, and the signature is the point: 1160 -> 200, 5816 -> 1001,
+      # 2000 -> 346 all FAIL, and 8000 -> 1375 PASSES. That last one is not a
+      # gap in the mutant, it is the property. 11 * 0 is 0 before the shift or
+      # after it, so the r = 0 run cannot see this term at all -- which is
+      # exactly why the set carries three widths with r != 0. The corroborating
+      # measurement, taken while choosing between candidates: zeroing the
+      # remainder mask instead (so the term is 0 in EVERY run) fails the same
+      # three runs and again leaves 8000 correct.
+      #
+      # So the four targets are not redundant with each other. sr-q-mask
+      # reaches only the r = 0 run, this reaches only the other three, and a
+      # suite carrying just one of the two would have a hole exactly where the
+      # other one is blind.
+      anchor="        LDM   A, 0
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        STM   0, A            ; (acc_lo >> 6) | ((acc_hi & 0x0f) << 2)"
+      repl="        LDM   A, 0
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        STM   0, A            ; MUTANT: 11r >> 5, not >> 6" ;;
     sr-trig-count)
       # 4 * 149 + 5 = 601 CLOCKS, and the +5 is five instructions the pulse
       # cannot do without. This deletes ONE of them -- the LDI that sets the
