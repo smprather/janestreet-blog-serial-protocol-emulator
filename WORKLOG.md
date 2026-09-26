@@ -2387,3 +2387,62 @@ group after the level it affects.
 **NEXT: read the two halves of half-interval 14 in the LISTING**, one group
 after the other, with the whole block rather than the part that changed — which
 is the rule this act has now broken and repaired three times.
+
+## 2026-09-27 act (c): TASK-START -- HALF-INTERVAL 14, IN THE LISTING AND ON THE PAD
+
+The queue is the one bit whose two halves are swapped. The listing says what it
+should be and the pad says what it is, and the two disagree, so the next step is
+not a hypothesis: **read the level block for half-interval 14 with the whole
+block in view, and measure `A` across that bit on the pad**, which is the first
+time this act has had both sides of the same instruction in one place.
+
+### THE GATE RAN THE COMPLEMENT AT c=14, AND THE LISTING SAYS IT CANNOT HAVE
+
+Both sides of the same instruction, as the TASK-START asked for:
+
+    the pad, every half-interval of the preamble's first byte
+      c :  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16
+      A : 00 40 00 40 00 40 00 40 00 40 00 40 00 40 40 00 40
+      m : 80 80 40 40 20 20 10 10 08 08 04 04 02 02 01 01 80
+
+**The mask is right** — `0x80 0x40 0x20 0x10 0x08 0x04 0x02 0x01` and back to
+`0x80` at the next byte — **and the levels are right for fourteen half-intervals
+and inverted for exactly two.** So the mask is exonerated and the anomaly is
+inside bit 7, and `A` at the pad is the complement of what it should be at both
+halves of that one bit.
+
+**AND THE LISTING SAYS THE GATE CANNOT HAVE DONE IT.** At c = 14, with
+`dmem[3] = 0` (the levels prove the polarity: c = 0 is `0x00`, which is FM0):
+
+    223  LDM X, 6      X = 14
+    225  AND A, X      A = 1 AND 14 = 0
+    227  ADD A, X      A = 0 + dmem[3] = 0
+    228  AND A, 1      A = s = 0
+    231  SUB A, X      A = 0 - 0 = 0
+    232  JZ enc_keep_level   -> TAKEN, and the keep route is `MOV A, Y`
+
+so `A` should be `Y` = the bit = `dmem[11] AND 0x80` = `0x01 AND 0x80` =
+`0x00`, and the pad should read `0x00`. **The complement route is the only way
+to get `0x40`, and it runs when s is NOT zero.**
+
+**SO EITHER `dmem[6]` WAS ODD AT THE GATE, OR `dmem[3]` WAS NOT ZERO AT THE
+GATE — and the pad's levels say the flag was zero for the fourteen
+half-intervals either side of it.** The probe read `dmem[6]` and `dmem[11]` at
+the `OUT`, which is twenty instructions AFTER the gate, and the two are the same
+value in every path... **which is the assumption this entry is refusing to make.**
+
+**NEXT, AND IT IS ONE MEASUREMENT AT THE RIGHT PLACE: read `dmem[3]` and
+`dmem[6]` at pc 223** — the gate's own `LDM X, 6` — rather than at the `OUT`.
+If `dmem[6]` is 15 there and 14 at the OUT, then something increments the
+counter between the gate and the OUT, which is a fact about the tail that no
+amount of reading the level block will show. If `dmem[3]` is 1 there, the flag
+is being written mid-transmission, which is worse and is a different fault
+entirely.
+
+**AND THE GENERAL LESSON, which is the eighth time this act has paid it:** every
+measurement in this entry was taken at the `OUT`, twenty instructions downstream
+of the thing being measured, and a probe that samples downstream of the thing it
+is measuring has been wrong four times in two entries — a stale address, a
+non-blocking label lag, a summary that never printed, and now a disagreement
+with the listing. **The next probe samples AT the instruction, and says which
+address it sampled.**
