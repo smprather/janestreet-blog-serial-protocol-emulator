@@ -163,6 +163,26 @@ MODEL_ONLY_OBLIGATIONS = (
     ),
 )
 
+# The ONE step the chip has not confirmed, and why. The same explanation is
+# spelled out in full as a `model_boundaries` entry below (which carries the
+# expected value, what the chip reported, and the note about a TB that holds the
+# core); this table is the copy the EVIDENCE BLOCK carries, so a reader of
+# `chip_evidence` alone learns that this step is unconfirmed and why, instead of
+# finding a list of 25 confirmations and no mention of the 26th. The framework
+# refuses to build if a step is unconfirmed without an entry here.
+UNCONFIRMED_REASONS = {
+    "status_full_readback": (
+        "Not confirmed on either side, and not a contract disagreement: for a "
+        "free-running core `insn` is whatever the fetch pipeline happens to "
+        "hold, which a static pre-state cannot pin. The expectation stays the "
+        "manager-ruled landing word (0xF000) while tb_pe_ctrl_r3_conf's "
+        "freeze-snapshot model reports 0x0000, because that model pins pc every "
+        "cycle and collapses the fetch onto the fill word. A TB holding the core "
+        "(state 2) would make insn deterministic at imem[pc] and could prove the "
+        "word. See model_boundaries below."
+    ),
+}
+
 # The numbers below are CHECKED against the flag arithmetic by
 # test_the_notice_matches_the_flag_arithmetic, because a notice written by
 # hand drifts the moment the arithmetic moves -- and the drift gate cannot
@@ -221,6 +241,7 @@ SPEC = V.Spec(
     notice=PACKAGE_NOTICE,
     artifact=ARTIFACT,
     hex_dir=HEX_DIR,
+    unconfirmed_reasons=UNCONFIRMED_REASONS,
     source_of_truth=(
         "tools/host_gui/r3_reads.py",
         "tools/host_gui/fake_pe.py",

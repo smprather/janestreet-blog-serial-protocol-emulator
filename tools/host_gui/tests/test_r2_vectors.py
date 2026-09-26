@@ -24,6 +24,7 @@ from pathlib import Path
 from tools.host_gui import fake_pe as F
 from tools.host_gui import protocol as P
 from tools.host_gui import r2_vectors as V
+from tools.host_gui import vectors as FRAMEWORK
 
 PACKAGE_JSON = (
     Path(__file__).resolve().parents[3]
@@ -782,6 +783,113 @@ class TestTheNoticeMatchesTheFlagArithmetic(unittest.TestCase):
         manifest = json.loads((V.HEX_DIR / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["notice"], self.notice)
         self.assertEqual(manifest["chip_confirmed"], not pending_now())
+
+
+class TestEveryUnconfirmedStepIsEnumeratedWithAReason(unittest.TestCase):
+    """The F1 class, closed in the SHAPE rather than in one artifact.
+
+    Prose staleness has now bitten three times, and every instance had the same
+    shape: a package whose evidence block names the steps the chip HAS run, and
+    says nothing about the steps it has not - so a notice generated from the
+    confirmed set can present a subset as the whole. The live instance is
+    `tb/r2-vectors/manifest.json` in the chip repo (18 steps, 15 confirmed, the
+    three ceiling/zero-count steps named nowhere, notice saying "every golden
+    step in this package passes"). That file is chip-side, but the SHAPE that
+    let it exist is mine, so the shape is fixed here: the generator now refuses
+    to emit a package in which a step is silently unconfirmed.
+
+    A false flag with no enumerated reason is a build error, not a doc nit: it
+    is the exact condition in which a notice can be generated from the
+    confirmed set and read as a claim about the package.
+    """
+
+    @staticmethod
+    def enumeration_for(package, evidence):
+        """The `not_confirmed_steps` block the generator is expected to emit."""
+        return evidence.get("not_confirmed_steps")
+
+    def test_this_package_enumerates_its_unconfirmed_steps_with_reasons(self):
+        package = V.build_package()
+        evidence = package["chip_evidence"]
+        steps = [s for v in package["vectors"] for s in v["steps"]]
+        unconfirmed = {s["name"] for s in steps if not s["chip_confirmed"]}
+        block = self.enumeration_for(package, evidence)
+        self.assertIsNotNone(
+            block,
+            "chip_evidence has no not_confirmed_steps key, so a step can be "
+            "chip_confirmed=false and named nowhere - the shape behind the "
+            "F1 sightings",
+        )
+        self.assertEqual(
+            set(block),
+            unconfirmed,
+            "the enumeration must cover exactly the steps the flags call "
+            "unconfirmed, in both directions",
+        )
+        for name, reason in block.items():
+            with self.subTest(step=name):
+                self.assertTrue(
+                    str(reason).strip(),
+                    f"{name} is unconfirmed and carries no reason",
+                )
+
+    def test_the_generator_refuses_a_package_with_an_unnamed_unconfirmed_step(self):
+        """The rule as a function, exercised on the REAL defective artifact.
+
+        The chip repo's `tb/r2-vectors/manifest.json` is the live instance: 18
+        steps, 15 confirmed, the three ceiling/zero-count steps named nowhere.
+        It is chip-side and I do not edit it, but the rule is what should have
+        caught it, so the rule is run against that exact shape here - and it
+        must both REJECT it and NAME the three steps, or it would only be a
+        shape check that a reader has to interpret.
+        """
+        steps = [
+            {"name": "status_header", "chip_confirmed": True},
+            {"name": "read_imem_at_ceiling_15", "chip_confirmed": False},
+            {"name": "read_imem_over_ceiling", "chip_confirmed": False},
+            {"name": "read_dmem_zero_count", "chip_confirmed": False},
+        ]
+        reasons = {}  # exactly what that manifest carries
+        with self.assertRaises(FRAMEWORK.UnconfirmedStepNotExplained) as caught:
+            FRAMEWORK.not_confirmed_enumeration(steps, reasons)
+        message = str(caught.exception)
+        for name in (
+            "read_imem_at_ceiling_15",
+            "read_imem_over_ceiling",
+            "read_dmem_zero_count",
+        ):
+            self.assertIn(name, message)
+
+    def test_the_enumeration_refuses_a_reason_for_a_confirmed_step(self):
+        """The other direction: a reason left behind by a flip.
+
+        The flip that confirms a step must not leave its "not confirmed"
+        explanation in the package, where it would go on naming a step the
+        chip has run - the mirror image of the defect this guards.
+        """
+        steps = [{"name": "status_reports_the_hold", "chip_confirmed": True}]
+        reasons = {"status_reports_the_hold": "added 2026-09-25, awaiting the chip"}
+        with self.assertRaises(FRAMEWORK.StaleUnconfirmedReason) as caught:
+            FRAMEWORK.not_confirmed_enumeration(steps, reasons)
+        self.assertIn("status_reports_the_hold", str(caught.exception))
+
+    def test_the_enumeration_is_json_shaped_so_the_drift_gate_can_see_it(self):
+        """A `dict` reason map must survive the artifact round trip.
+
+        `--check` compares the PARSED document to a fresh build, so a value
+        that is a set or tuple here reports STALE immediately after `--write`
+        and sends the reader to the wrong fix. The R2 block already learned
+        that with `confirmed_steps`; the enumeration has to not relearn it.
+        """
+        evidence = V.build_package()["chip_evidence"]
+        block = evidence["not_confirmed_steps"]
+        self.assertIsInstance(block, dict)
+        for reason in block.values():
+            self.assertIsInstance(reason, str)
+        # and it survives a dump/load round trip byte for byte
+        self.assertEqual(
+            json.loads(json.dumps(evidence))["not_confirmed_steps"], block
+        )
 
 
 if __name__ == "__main__":
