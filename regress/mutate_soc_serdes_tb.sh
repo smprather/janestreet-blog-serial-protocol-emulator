@@ -71,7 +71,7 @@ cmp -s "$RTL" "$BAK" || { echo "FATAL: could not snapshot $RTL"; exit 2; }
 # The pad-level firmware image must be current: a stale hex is a silent pass.
 if [ ! -f "$ROOT/firmware/serdes_loop.hex" ]; then
   echo "  firmware image missing: building it first"
-  ( cd "$ROOT" && ./regress/run_firmware_tests.sh >/tmp/mut_soc_serdes_fw.log 2>&1 ) \
+  ( cd "$ROOT" && ./regress/run_firmware_tests.sh >${RLOG:-/tmp}/mut_soc_serdes_fw.log 2>&1 ) \
     || { echo "FATAL: could not build the firmware images"; exit 2; }
 fi
 
@@ -82,7 +82,7 @@ run_tb() {
   local sram
   sram=$(bash "$ROOT/regress/sram_model.sh" 2>/dev/null) || return 2
   iverilog -g2012 -s tb_pe_soc_serdes -o /tmp/mut_soc_serdes.vvp \
-    $SRCS $sram ../tb/tb_pe_soc_serdes.v >/tmp/mut_soc_serdes_cc.log 2>&1 || return 2
+    $SRCS $sram ../tb/tb_pe_soc_serdes.v >${RLOG:-/tmp}/mut_soc_serdes_cc.log 2>&1 || return 2
   timeout 300 vvp /tmp/mut_soc_serdes.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
@@ -112,7 +112,7 @@ check_mutation() {
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))
   elif [ $rc -eq 1 ]; then echo "  [$name] detected"; pass=$((pass+1))
-  else                     echo "  [$name] HARNESS ERROR: exit $rc"; tail -5 /tmp/mut_soc_serdes_cc.log "$LOG" 2>/dev/null; fail=$((fail+1))
+  else                     echo "  [$name] HARNESS ERROR: exit $rc"; tail -5 ${RLOG:-/tmp}/mut_soc_serdes_cc.log "$LOG" 2>/dev/null; fail=$((fail+1))
   fi
   restore; verify_restore
 }
@@ -122,7 +122,7 @@ run_tb
 rc=$?
 if [ $rc -ne 0 ]; then
   echo "  FATAL: the TB does not pass on the clean design (exit $rc)"
-  [ $rc -eq 2 ] && tail -5 /tmp/mut_soc_serdes_cc.log
+  [ $rc -eq 2 ] && tail -5 ${RLOG:-/tmp}/mut_soc_serdes_cc.log
   exit 2
 fi
 echo "  [baseline] passes on the unmutated design"

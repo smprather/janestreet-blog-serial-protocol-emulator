@@ -76,7 +76,7 @@ survived=0
 
 run_tb() {
   if ! iverilog -g2012 -s tb_pe_soc_eth -o /tmp/mut_eth_soc.vvp $SRCS \
-       >/tmp/mut_eth_soc_cc.log 2>&1; then
+       >${RLOG:-/tmp}/mut_eth_soc_cc.log 2>&1; then
     return 2
   fi
   timeout 300 vvp /tmp/mut_eth_soc.vvp >"$LOG" 2>&1

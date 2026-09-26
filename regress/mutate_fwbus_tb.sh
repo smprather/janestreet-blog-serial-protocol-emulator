@@ -44,7 +44,7 @@ SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
 SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v $SRAM_MODEL"
 # run_all.sh captures this script's stdout in $RLOG/mutate_fwbus.log; keep each
 # simulator run on a different path so it cannot truncate the outer log.
-LOG=/tmp/mutate_fwbus_case.log
+LOG=${RLOG:-/tmp}/mutate_fwbus_case.log
 BAK=$(mktemp -d /tmp/fwbus_mut.XXXXXX)
 
 # The three (firmware, testbench) pairs. The firmware is the DUT of each.
@@ -106,12 +106,12 @@ verify_restore() {
 run_tb() {
   local fw="$1" tb="$2"
   if ! python3 "$ROOT/tools/fw/peasm.py" "$ROOT/firmware/$fw.pe" \
-        -o "$ROOT/firmware/$fw.hex" >/tmp/mut_fwbus_asm.log 2>&1; then
+        -o "$ROOT/firmware/$fw.hex" >${RLOG:-/tmp}/mut_fwbus_asm.log 2>&1; then
     return 2
   fi
   if ! (cd "$ROOT/sim" && iverilog -g2012 -s "$tb" \
         -o "/tmp/mut_fwbus_$tb.vvp" $SRCS "$ROOT/tb/$tb.v") \
-        >/tmp/mut_fwbus_cc.log 2>&1; then
+        >${RLOG:-/tmp}/mut_fwbus_cc.log 2>&1; then
     return 2
   fi
   (cd "$ROOT/sim" && timeout 300 vvp "/tmp/mut_fwbus_$tb.vvp") >"$LOG" 2>&1

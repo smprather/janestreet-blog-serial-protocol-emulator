@@ -3999,3 +3999,57 @@ LEFT in the tree, not what you set out to move.**
 
 So the honest state is: 26 of **44** fixed log paths are now per-worktree, the
 18 that remain are named above, and they are the same one-line change each.
+
+## 2026-09-27 act (c): TASK-START -- THE EIGHTEEN, COUNTED FROM THE TREE
+
+Last entry's rule: **count what is LEFT in the tree, not what you set out to
+move.** So the list comes from a grep of `regress/` and `tools/`, not from the
+survey that produced "nine remaining" and stopped.
+
+These are each harness's OWN logs -- `_cc` (cross-check), `_fw` (fuzz/whatever
+the suite calls it), `_case`, `_asm` -- written by the harness while it runs, not
+by `run_all.sh`. Same collision, same one-line fix, same `${RLOG:-/tmp}`
+fallback so a standalone run is unaffected.
+
+### ZERO UNGUARDED, AND BOTH PATHS PROVEN BY RUNNING A HARNESS
+
+**The count is from the TREE, not from the list** -- the rule last entry set,
+and the rule that the "9 remaining" survey broke:
+
+    fixed /tmp log paths left unguarded:  0
+    now guarded (${RLOG:-/tmp}/...):     32
+
+**AND BOTH BEHAVIOURS ARE PROVEN BY RUNNING A REAL HARNESS, not by reasoning
+about a variable.** `regress/mutate_serdes_tb.sh`, twice, same script:
+
+| | exit | its logs landed in |
+| :--- | :--- | :--- |
+| `RLOG=$R …` (as `run_all.sh` calls it) | **0** | `$R` — `mutate_serdes.log`, `mut_serdes_cc.log` |
+| `env -u RLOG …` (a human, standalone) | **0** | `/tmp` — the **old** paths, unchanged |
+
+**So the change is invisible to anyone who did not come through `run_all.sh`,
+which is the whole point: a per-worktree fix that broke the standalone path
+would have traded one silent failure for a louder one.**
+
+`bash -n` on all nine touched harnesses, and the repository's own
+`check_shell_syntax.sh` passes all 36 scripts.
+
+**AND NO COMMENT WAS REWRITTEN AS IF IT WERE CODE.** A path inside a comment is
+not a write, and the sweep checked for that first -- one of the nine earlier
+findings was a comment that I had nearly counted as a second writer.
+
+### WHAT IS ACTUALLY SETTLED HERE, AND IT IS NOT ONLY THE LOGS
+
+This started as 17 safe paths and became **44**, and the two expansions were
+both **scope errors in a survey that answered its question exactly**:
+
+1. the survey asked "which paths does `run_all.sh` name?", which cannot see a
+   harness's own logs -- 9 were listed as remaining and 18 were invisible;
+2. it treated any second mention of a literal as a second *writer*, and a
+   **comment** is a mention -- `mutate_fwbus` was never a fault.
+
+**Both times the number on the label was confidently wrong, and both times the
+cause was the same: a correct answer to a question scoped smaller than the
+problem.** The fix that caught them was not a better survey -- it was **counting
+what is left in the tree**, which is the one number that cannot be scoped into
+looking complete.

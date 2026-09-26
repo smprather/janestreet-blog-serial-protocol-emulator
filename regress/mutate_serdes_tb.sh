@@ -54,7 +54,7 @@ SRCS="../rtl/pe_serdes.v ../tb/tb_pe_serdes.v"
 
 run_tb() {
   iverilog -g2012 -s tb_pe_serdes -o /tmp/mut_serdes.vvp $SRCS \
-    >/tmp/mut_serdes_cc.log 2>&1 || return 2
+    >${RLOG:-/tmp}/mut_serdes_cc.log 2>&1 || return 2
   timeout 120 vvp /tmp/mut_serdes.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }

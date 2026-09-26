@@ -53,7 +53,7 @@ SOC="$ROOT/rtl/pe_soc.v"
 MAC="$ROOT/rtl/pe_eth_mac.v"
 TOP="$ROOT/rtl/tt_um_protocol_emulator.v"
 LOG="${RLOG:-/tmp}/mutate_eth_tx_loop.log"
-CCLOG=/tmp/mutate_eth_tx_loop_cc.log
+CCLOG=${RLOG:-/tmp}/mutate_eth_tx_loop_cc.log
 PRISTINE=$(mktemp -d /tmp/pristine_eth_tx_loop.XXXXXX)
 BAK=$(mktemp -d /tmp/backup_eth_tx_loop.XXXXXX)
 
@@ -92,7 +92,7 @@ for hex in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe \
 done
 if [ -n "$missing" ]; then
   echo "  firmware images missing:$missing - building them first"
-  ( cd "$ROOT" && ./regress/run_firmware_tests.sh >/tmp/mut_eth_tx_loop_fw.log 2>&1 ) \
+  ( cd "$ROOT" && ./regress/run_firmware_tests.sh >${RLOG:-/tmp}/mut_eth_tx_loop_fw.log 2>&1 ) \
     || { echo "FATAL: could not build the firmware images"; exit 2; }
 fi
 

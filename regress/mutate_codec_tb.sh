@@ -55,7 +55,7 @@ FILES=(rtl/pe_codec_mux.v rtl/pe_bitstuff.v rtl/pe_nrzi.v rtl/pe_manch.v)
 # escalates to running every suite rather than guessing.
 MUTABLE="rtl/pe_codec_mux.v rtl/pe_bitstuff.v rtl/pe_nrzi.v rtl/pe_manch.v"
 LOG="${RLOG:-/tmp}/mutate_codec.log"
-CCLOG=/tmp/mutate_codec_cc.log
+CCLOG=${RLOG:-/tmp}/mutate_codec_cc.log
 
 BAKDIR=$(mktemp -d /tmp/mutate_codec.XXXXXX)
 cleanup() {
