@@ -36,7 +36,7 @@ skinparam rectangle<<open>> {
   BorderColor #999999
 }
 
-rectangle "TRIGGER\n<b>host</b>, pin 6\n\n<b>10 us</b> minimum\n\n<b>MEASURED 601 clocks\n= 10 016.667 us</b>\nthe act derives\n<b>4 * 149 + 4 = 600</b>" as T <<red>>
+rectangle "TRIGGER\n<b>host</b>, pin 6\n\n<b>10 us</b> minimum\n\n<b>MEASURED 601 clocks\n= 10.0167 us</b>\nthe act derives\n<b>4 * 149 + 4 = 600</b>" as T <<red>>
 rectangle "RECOVERY\n<b>the sensor settles</b>\n\nSR_RECOV_LEN = 117\nthe stated 2 010 us\n\n<b>its absence was a real\ndefect; its presence did\nnot make measurement 1\nhappen</b>" as R <<dev>>
 rectangle "8 x 40 kHz BURSTS\n<b>the sensor</b>\n\nthe device emits a\nchirp and then holds ECHO\nhigh for the round trip\n\n<b>the firmware never\nlooks at these</b> - it\ncannot resynchronise to\na burst it did not send" as B <<dev>>
 rectangle "ECHO\n<b>sensor</b>, pin 5, RELEASED\nand READ BACK\n\n<b>HIGH FOR THE ROUND TRIP</b>\n\n<b>THE ANSWER IS THE WIDTH,\brather than a level.</b>\n\nwidth = 2 * distance / 0.343" as E <<dev>>

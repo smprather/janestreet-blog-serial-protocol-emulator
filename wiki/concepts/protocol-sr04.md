@@ -110,14 +110,14 @@ about the case that could overflow.
 ```text
 FAIL: the firmware banked both measurements (dmem[10] = 01)
 FAIL: the model saw exactly 2 triggers (1) -- a trigger that is driven rather than pulsed shows up here
-FAIL: the trigger pulse is EXACTLY 600 clocks = 10000.000 us (measured 601 = 10016.667 us), and the device asks for 10 us minimum
+FAIL: the trigger pulse is EXACTLY 600 clocks = 10000.000 us (measured 601 = 10016.667 us), and the device asks for 10 us minimum [sic]
 FAIL: measurement 1: the measured width 1160 us is outside 1 % (floor 2 us) of the model's 5816 us
 FAIL: measurement 1: 1160 us is X mm, not 999 mm -- us*11/64 is exact and this is an equality
 ```text
 
 | quantity | derived / datasheet | measured | status |
 |---|---|---|---|
-| trigger pulse | `4 × 149 + 4 = 600` clocks = 10.000 µs | **601 clocks = 10 016.667 µs** | FAIL, one clock long |
+| trigger pulse | `4 × 149 + 4 = 600` clocks = 10.000 µs | **601 clocks = 10.0167 µs** | FAIL, one clock long |
 | echo 1 | 1 160 µs | **1 160 µs** | PASS, exact |
 | echo 2 | 5 816 µs | **1 160 µs** | FAIL, never measured |
 | mm from echo 1 | `1160 × 11/64 = 199.375` | **199 mm** | PASS, an equality |
@@ -190,3 +190,30 @@ cell clears every window in print.
   driven
 - [[tx-timing-generation]] — why a counted delay is a count of instructions and not a
   number of microseconds
+
+## A note on the quoted failure message, which is itself wrong
+
+The testbench's failing check prints:
+
+```text
+FAIL: the trigger pulse is EXACTLY 600 clocks = 10000.000 us (measured 601 = 10016.667 us)  [sic]
+```
+
+**That message is out by a factor of 1000.** 600 clocks at 60 MHz is **10.000 µs**,
+and 601 clocks is **10.0167 µs** — not 10 000 µs and 10 016.667 µs. The
+*clock counts* in the message are right; the *conversions* are wrong.
+
+It is quoted here verbatim, and marked `[sic]`, because a page that quietly
+"corrects" the message it is reporting on is misreporting it. The figures and the
+table above carry the corrected values.
+
+This is a defect in `tb/tb_pe_soc_sr04.v`, which is not this page's to change, and
+it is worth flagging for its owner: **a failing message that is wrong in its units
+is worse than no message**, because the first thing a reader does with a red act's
+output is quote it.
+
+It is also the fourth instance of the same class this page's figures had — a clock
+count and a microsecond conversion printed side by side, with only one of them
+derived — and it was caught by `tools/diag/delay_lattice.py`, not by reading. That is
+the argument for the gate, and the fourth finding arrived on its first full run over
+all thirty-two files.

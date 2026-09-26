@@ -7,7 +7,7 @@
 '
 '   FAIL the firmware banked both measurements (dmem[10] = 01)
 '   FAIL the model saw exactly 2 triggers (1)
-'   FAIL the trigger is EXACTLY 600 clocks = 10000.000 us (measured 601)
+'   FAIL the trigger is EXACTLY 600 clocks = 10000.000 us (measured 601)  [sic]
 '   FAIL measurement 1: 1160 us is outside 1 % of the model's 5816 us
 '   FAIL measurement 1: 1160 us is X mm, not 999 mm
 '
@@ -46,7 +46,7 @@ note over TRIG
   datasheet's 10 us minimum exactly.
 end note
 note over TRIG
-  <b>MEASURED 601 CLOCKS = 10 016.667 us.</b>
+  <b>MEASURED 601 CLOCKS = 10.0167 us.</b>
 
   One clock long. The device asks for a MINIMUM so
   this is harmless to a real sensor, and the check
@@ -168,7 +168,7 @@ note over CPU, ECHO
   <b>THE TIMING TABLE, marking what is measured.</b>
   ...
   | quantity | datasheet / derivation | measured | status |
-  | trigger pulse | >= 10 us; the act derives 4*149+4 = 600 clocks = 10.000 us | <b>601 clocks = 10 016.667 us</b> | FAIL, one clock long |
+  | trigger pulse | >= 10 us; the act derives 4*149+4 = 600 clocks = 10.000 us | <b>601 clocks = 10.0167 us</b> | FAIL, one clock long |
   | recovery | the sensor's own settling; SR_RECOV_LEN = 117, the stated 2 010 us | not separable in this run | open |
   | echo 1 | 1 160 us | <b>1 160 us</b> | PASS, exact |
   | echo 2 | 5 816 us | <b>1 160 us</b> | FAIL, the second measurement never ran |

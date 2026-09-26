@@ -47,15 +47,29 @@ WHAT IT CHECKS, and all three halves matter:
 It also proves it can fail. See the negative control at the end.
 
 Usage:  tools/diag/delay_lattice.py [repo-root]
+        tools/diag/delay_lattice.py --selftest [repo-root]
 Exit 0 = every quoted number agrees, 1 = a disagreement, each one named.
+--selftest plants real errors in a copy of the real files and demands that
+THIS PROGRAM exit non-zero, then demands it goes green again once they are
+removed. It is the only control that tests the exit code rather than a function
+inside this file.
 """
+import os
 import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 CLK_HZ = 60_000_000
-ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[2]
+# Options are filtered out before the root is resolved. The first version of
+# this line took sys.argv[1] blindly, so `delay_lattice.py --selftest` set ROOT
+# to a directory literally named "--selftest" and the self-test reported "cannot
+# run, required files are absent" - which is the gate refusing for the right
+# reason and the WRONG one, and indistinguishable from a real missing file.
+# A gate that cannot tell those two apart will eventually be believed.
+_args = [a for a in sys.argv[1:] if not a.startswith("--")]
+ROOT = Path(_args[0]).resolve() if _args else Path(__file__).resolve().parents[2]
 
 # "1 250 clocks = 20.8 us", "60 004 clocks = 1 000.07 us", "69 clocks = 1.15 µs",
 # "a 69-clock (1.15 µs) step", "511 clocks, i.e. 8.52 us", "625 clocks - 10.42 us".
@@ -116,6 +130,9 @@ def _tolerance_as_printed(value: str) -> float:
     return 0.5 * 10 ** -decimals * 1.0001
 
 
+SIC = "[sic]"
+
+
 def audit_conversions(path: Path) -> list[str]:
     """every 'N clocks = X us' in one file, recomputed. Returns the failures.
 
@@ -124,9 +141,24 @@ def audit_conversions(path: Path) -> list[str]:
     anything, and a reader who sees a traceback reads it as "the checker is
     broken" rather than "the figure is wrong" -- which is the one conclusion
     that must not be available.
+
+    A line marked [sic] is EXEMPT, and the exemption is deliberately narrow and
+    deliberately visible in the source. It exists for exactly one case: a
+    verbatim quotation of a message that is ITSELF wrong.
+    tb_pe_soc_sr04.v's failing check prints "600 clocks = 10000.000 us", which
+    is 1000x out -- 600 clocks at 60 MHz is 10.000 us -- and a page that quotes
+    that message has to show it verbatim or it is misquoting the thing it is
+    reporting on.
+
+    An exemption is where a gate stops being believed, so it is not left on
+    trust: the self-test plants a wrong conversion, shows the gate failing,
+    adds the marker, shows the gate passing, and removes it again. If the marker
+    ever stops being what does the work, the self-test fails.
     """
     failures = []
     for lineno, line in enumerate(path.read_text().splitlines(), 1):
+        if SIC in line:
+            continue
         for m in CONV.finditer(line):
             raw = m.group(1)
             printed = m.group(2)
@@ -271,10 +303,134 @@ TARGETS = [
 REQUIRED = TARGETS
 
 
+def selftest() -> int:
+    """Prove the GATE fails, end to end, by running it as a subprocess.
+
+    WHY THIS IS SEPARATE FROM THE IN-PROCESS CONTROLS IN main(). Those prove
+    that audit_conversions() and the FORBIDDEN scan notice a planted error. They
+    do NOT prove that the GATE exits non-zero when it notices -- a bug in main()
+    that discarded the returned list, or forgot to fold `fail` into the exit
+    code, would pass every in-process control in this file and report PASS over
+    a wrong figure. The only thing that tests the exit code is the exit code,
+    observed from outside this process.
+
+    And it has to be non-vacuous in the other direction: a run that returns 1
+    "correctly" because the fixture is broken anyway would satisfy a naive
+    assertion. So the clean fixture must PASS first, and the planted fixture
+    must then fail, and the un-planted one must pass again. A gate only ever
+    seen green is a gate nobody has tested; a gate seen failing on demand is a
+    gate that has been.
+    """
+    if not all((ROOT / p).exists() for p in REQUIRED):
+        print("SELFTEST: cannot run, required files are absent")
+        return 1
+
+    with tempfile.TemporaryDirectory() as td:
+        # a fixture that is a real copy of the real files, not a toy: a toy
+        # would not contain the very lines the gate is supposed to be reading
+        fixture = Path(td) / "repo"
+        for rel in REQUIRED:
+            dst = fixture / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_text((ROOT / rel).read_text())
+
+        def run_gate() -> tuple[int, str]:
+            proc = subprocess.run(
+                [sys.executable, str(Path(__file__).resolve()), str(fixture)],
+                capture_output=True, text=True, check=False,
+            )
+            return proc.returncode, proc.stdout
+
+        def require(label: str, want_fail: bool) -> bool:
+            rc, out = run_gate()
+            if want_fail and rc == 0:
+                print(f"FAIL  {label}: the gate returned 0 and should have failed")
+                print("      " + "\n      ".join(l for l in out.splitlines() if l.startswith("FAIL"))[:400])
+                return False
+            if not want_fail and rc != 0:
+                print(f"FAIL  {label}: the gate returned {rc} and should have passed")
+                return False
+            print(f"ok    {label}: gate exit {rc}")
+            return True
+
+        print("== end-to-end self-test: plant a real error, demand the gate fail ==")
+        good = True
+        # (0) the clean fixture must PASS, or everything after is meaningless
+        if not require("clean fixture", want_fail=False):
+            return 1
+
+        # (1) the conversion audit's own class: a wrong conversion, in the
+        #     appositive form and the micro sign, which is the shape D3 took
+        #     when it sat live in a wiki page with this gate green
+        target = fixture / TARGETS[-1]
+        original = target.read_text()
+        target.write_text(original + "\na 69-clock (1.22 \u00b5s) step\n")
+        good &= require("planted wrong conversion (69 clocks = 1.22 us)", want_fail=True)
+        target.write_text(original)
+
+        # (2) the FORBIDDEN scan's class: a caught number re-inserted
+        target.write_text(original + f"\none outer step is ({FORBIDDEN[0][0]})\n")
+        good &= require(f"planted {FORBIDDEN[0][0]!r}", want_fail=True)
+        target.write_text(original)
+
+        # (3) a lattice entry that disagrees with the MEASURED wire value: the
+        #     check the script exists for, exercised end to end rather than
+        #     only in the table it prints. It is planted through the environment
+        #     rather than by mutating this process's MEASURED_US, because the
+        #     gate runs as a SUBPROCESS and would never see an in-process edit --
+        #     a self-test that passed vacuously for that reason would be worse
+        #     than none.
+        env = dict(os.environ, DELAY_LATTICE_MEASURED=f"{ENTRIES[0][1]}+500")
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), str(fixture)],
+            capture_output=True, text=True, check=False, env=env,
+        )
+        if proc.returncode == 0:
+            good = False
+            print("FAIL  planted a wrong MEASURED_US: the gate returned 0 and "
+                  "should have failed")
+        else:
+            print(f"ok    planted a wrong MEASURED_US for {ENTRIES[0][1]!r}: "
+                  f"gate exit {proc.returncode}")
+        target.write_text(original)
+
+        # (4) THE EXEMPTION MUST BE THE ONLY THING THAT SUPPRESSES A FINDING.
+        #     Without this, [sic] could stop working at any time and the gate
+        #     would simply stop catching that class - which is how a gate rots.
+        target.write_text(original + "\n69 clocks = 1.22 \u00b5s\n")
+        good &= require("planted wrong conversion, no marker", want_fail=True)
+        target.write_text(original + f"\n69 clocks = 1.22 \u00b5s  {SIC}\n")
+        good &= require(f"same conversion marked {SIC!r}", want_fail=False)
+        target.write_text(original)
+
+        # (5) and the gate must be green again once every planted error is gone
+        if not require("all planted errors removed", want_fail=False):
+            return 1
+
+    if not good:
+        print("SELFTEST: FAILED")
+        return 1
+    print("SELFTEST: PASS")
+    return 0
+
+
 def main() -> int:
     fail = 0
 
     print("== the derivation, and how it sits against the measured wire ==")
+    # A test seam, and only for the self-test: override one entry's measured
+    # value by LABEL+DELTA so a subprocess can be made to disagree with the
+    # derivation. It is the one way a fixture can reach the table, because the
+    # table lives in this file rather than in the tree being scanned.
+    _plant = os.environ.get("DELAY_LATTICE_MEASURED", "")
+    if _plant and "+" in _plant:
+        _lbl, _delta = _plant.rsplit("+", 1)
+        try:
+            _delta_f = float(_delta)
+        except ValueError:
+            _delta_f = None
+        if _lbl in MEASURED_US and _delta_f is not None:
+            MEASURED_US[_lbl] = (MEASURED_US[_lbl][0] + _delta_f, MEASURED_US[_lbl][1])
     for _fig, label, n1, n2, n3 in ENTRIES:
         s, t = step(n2, n3), total(n1, n2, n3)
         line = (
@@ -383,4 +539,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(selftest() if "--selftest" in sys.argv else main())
