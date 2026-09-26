@@ -276,20 +276,30 @@ def step(state, a):
 
 
 def routes(start, stop, budget=20000):
-    """every route from `start` back to `stop`, as a cost in clocks, with the
-    counted delay loops RUN rather than assumed"""
+    """Every route from `start` back to `stop`, as (clocks, the counted delay
+    loop it went round).
+
+    The delay loop is NAMED in the result because the three routes out of the
+    encoder's tail are three different loops with three different constants,
+    and a report that says "128 clocks" without saying WHICH one is 128 is a
+    report that cannot be acted on: the fit is per loop.
+    """
     out: list = []
-    stack: list = [(start, 0, 0, None, None)]
+    # A walk state is (pc, clocks, depth, A, X, the loop last charged). A and X
+    # are concrete where the listing makes them so and None where it does not,
+    # and None propagates: a branch downstream of an unknown A is taken both
+    # ways, which is the honest answer rather than a guess.
+    stack: list = [(start, 0, 0, None, None, None)]
     while stack:
-        a, cost, depth, A, X = stack.pop()
+        a, cost, depth, A, X, used = stack.pop()
         if cost > budget or depth > 2000:
             continue
         if a == stop and depth:
-            out.append(cost)
+            out.append((cost, used))
             continue
         mn = mnem.get(a, ("", ""))[0]
         nA, nX, _ = step((A, X), a)
-        nxt, extra = a + 1, 0
+        nxt, extra, nused = a + 1, 0, used
         if mn in ("JMP", "JZ", "JNZ"):
             t = words[a] & TMASK
             if t >= N:
@@ -313,38 +323,43 @@ def routes(start, stop, budget=20000):
                     rA, rX = pA, pX
                     p += 1
                 extra = n - 1  # the branch itself is already charged
+                nused = t
             else:
                 if mn == "JMP":  # a JMP is unconditional: the fall-through
-                    stack.append((t, cost + 1, depth + 1, nA, nX))
+                    stack.append((t, cost + 1, depth + 1, nA, nX, used))
                     continue  # is not an instruction anybody executes
                 taken = None
                 if nA is not None:
                     taken = (nA != 0) if mn == "JNZ" else (nA == 0)
                 if taken is None or taken:
-                    stack.append((t, cost + 1, depth + 1, nA, nX))
+                    stack.append((t, cost + 1, depth + 1, nA, nX, used))
                 if taken:
                     continue
-        stack.append((nxt, cost + 1 + extra, depth + 1, nA, nX))
+        stack.append((nxt, cost + 1 + extra, depth + 1, nA, nX, nused))
     return out
 
 
+rs: list = []
 if len(OUTS) < 2:
     print(f"  only {len(OUTS)} OUT TXPIN in the program: nothing to bracket")
 else:
     start = OUTS[-1]
     rs = routes(start, start)
     hist = {}
-    for c in rs:
-        hist[c] = hist.get(c, 0) + 1
-    for c in sorted(hist):
+    for c, loop in rs:
+        hist[(c, loop)] = hist.get((c, loop), 0) + 1
+    for c, loop in sorted(hist, key=lambda k: (k[1] is None, k[1] or 0, k[0])):
         flag = "" if c == 120 else "  *** NOT 120 ***"
-        print(f"    {c:4d} clocks  x{hist[c]}{flag}")
-    bad_iv = [c for c in rs if c != 120]
-    if not rs:
-        print("  NO ROUTE RETURNS to the OUT: the loop never drives a second edge")
-    print(
-        f"  routes between two OUT TXPIN: {len(rs)}, and the ones that are "
-        f"not exactly 120 clocks: {len(bad_iv)}"
-        + ("" if not bad_iv and rs else "  *** SEE ABOVE ***")
-    )
+        print(
+f"    {c:4d} clocks  x{hist[(c, loop)]}"
+f"  (delay loop at {loop}){flag}"
+        )
+bad_iv = [c for c, _ in rs if c != 120]
+if not rs:
+    print("  NO ROUTE RETURNS to the OUT: the loop never drives a second edge")
+print(
+    f"  routes between two OUT TXPIN: {len(rs)}, and the ones that are "
+    f"not exactly 120 clocks: {len(bad_iv)}"
+    + ("" if rs and not bad_iv else "  *** SEE ABOVE ***")
+)
 print(f"\nwords={N}")

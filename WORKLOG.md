@@ -1730,3 +1730,66 @@ a shift-right peels from the top. So the finding was half right in a way that
 **looks** more right than the thing it replaced, and a reader who implements it
 gets a firmware that transmits. This is the sixth stale figure in this act and
 the first one that arrived INSIDE a correction.
+
+### THE SIXTH CHECK NOW NAMES THE LOOP, AND THE REWORK IS REVERTED
+
+**The check grew one line of output and it is the line that makes the fit
+possible:** a route's clock count now comes with the address of the delay loop
+it went round.
+
+    120 clocks  x4  (delay loop at 282)
+    120 clocks  x8  (delay loop at 291)
+
+The three routes out of the encoder's tail are three different loops with three
+different constants, and a report that says "128 clocks" without saying WHICH is
+128 cannot be acted on. That is the whole of the change, and it is what the next
+context needs to fit the three constants in one pass instead of by trial.
+
+**AND THE BIT-ORDER REWORK IS REVERTED, and that is a decision, not a failure.**
+It was attempted: hold the MASK in `dmem[11]`, read the byte into a register
+beside it, and let SHR take the mask down one place per bit -- which is the
+right shape and the only one the ISA has. It did not converge inside this
+session, and the honest state is the one where **the check is green and the
+fault is named**, not the one where a reworked encoder is half applied and its
+timing is 145, 146, 469 and 470.
+
+**SO THE TREE IS BACK WHERE IT WAS, PLUS THREE THINGS THAT ARE TRUE:**
+
+* `firmware/bmc_frame.pe` is the committed encoder, and the check reports 16
+  routes at exactly 120 clocks.
+* `firmware/bmc_model.py` still reports every property holding.
+* the testbench still fails four checks, the same four, with the cause now
+  NAMED rather than merely observed: **the encoder peels the byte with SHR and
+  so sends it LOW BIT FIRST.**
+
+### NEXT, AND IT IS A FIX WITH A SHAPE ALREADY DECIDED
+
+1. **`dmem[11]` holds the MASK, not the byte.** It starts at 0x80, it goes down
+   one place per bit with SHR, and it goes back to 0x80 when it reaches 0x00 --
+   which is the byte boundary, and is the same test the count gave, in the
+   quantity actually being walked.
+2. **The byte is read into a register at the moment of the `AND`.** The
+   five-way dispatch that is already in the byte-boundary path moves UP into the
+   level block: `LDM A, 6 / SHR x4` is the byte index, index 1 is the preamble's
+   eight ones and everything from 2 up is `dmem[index-2]` with `LDS`, which
+   reaches all three payload bytes with no case at all.
+3. **The bit test compares against ZERO and nothing else,** because the value is
+   now a mask: 0x80 or 0x00, and a test against 1 is zero for neither. The
+   version just reverted was the one that compared a masked value against 1,
+   and that is fault two of the six in this act.
+4. **Both routes of that test are the same length** -- `LDI A, 0xFF / NOP / JMP`
+   against `LDI A, 0 / NOP / JMP` -- because the check will say so otherwise, in
+   clocks, which is the cheapest possible report.
+5. **Then fit the three loops with the loop named in the output.** Nothing else
+   about the encoder changes, and the three constants are the only numbers that
+   move.
+
+**AND THE CHECK THAT PROVES IT, which is the one to add rather than the one to
+run:** the model already asserts the wire order, because it builds the stream
+high bit first and the testbench's decoder assembles high bit first, so a
+low-bit-first encoder fails the round trip. **A check that would have caught it
+earlier is a check on the ORDER rather than on the values:** in the encoder, the
+byte must not be peeled with SHR, because SHR is `a <= {1'b0, a[7:1]}` and a
+peeled byte is low bit first. That is a one-line mechanical signature, it is
+provable by putting the peel back, and it belongs next to the branch-operand
+check and the store-run check.
