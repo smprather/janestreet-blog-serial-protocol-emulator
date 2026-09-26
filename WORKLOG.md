@@ -2909,3 +2909,43 @@ rather than a vacuous pass.**
 **AND THE FIRST ROW IS THE WHOLE ARGUMENT FOR THE EXERCISE**, because it is the
 fault that was in the tree yesterday, reproduced exactly, and named with a line
 number -- a dead arm that had a wiki row describing the fault it caught.
+
+## 2026-09-27 act (c): TASK-START -- RUN THE SUITE I EDITED, IN FULL
+
+I removed a case from a 58-case mutation suite and then ran TWO of those cases.
+**The rest of the suite has not been run since the edit**, and the reasoning
+that it must be unaffected -- "the CASES list never contained that id, so the
+count is unchanged" -- is a deduction, not a measurement. This act exists
+because deductions about instruments have been wrong here before.
+
+**MEASURED, the whole suite, 5m22s:**
+
+    firmware tree byte-identical after the run (cmp-verified, all 14 files)
+    timing-TB mutations: 58 cases, 58 detected, 0 survived, 0 harness errors
+    RESULT: PASS
+
+**AND 58 OF 58 IS THE NUMBER THAT MATTERS, because it was not what the suite
+would have said had the arm been listed.** `sv-idle-level` was never in the
+CASES list, so the case count was 58 before the removal too -- but had anyone
+wired it, the table would have read **58 detected, 1 survived**, and the
+survivor would have been a case that injects nothing at all. **The suite now
+has no survivor to explain, and every case in it kills its mutant.**
+
+**AND THE TREE IS BYTE-IDENTICAL AFTER THE RUN** (cmp-verified, both `.pe` and
+`.hex`, 7 programs), so the harness restores what it writes and the arm removal
+left no residue. That check is the one that would have caught a half-restored
+mutant -- the 2026-09-24 OOM left exactly one on disk and it presented as a
+3-TB regression failure.
+
+### AND THE NEW GATE IS IN THE PIPELINE, CHECKED RATHER THAN ASSUMED
+
+**`bmc_checks.py` spent a whole act out of the regression because it had no
+verdict, and a gate that is not run is a gate that does not exist.** So the
+new arm/CASES check was looked up in `run_all.sh` rather than trusted: it is
+invoked at `regress/run_all.sh:572`, inside the harness the manager gates on,
+so it runs with everything else.
+
+One observability note, named rather than left: on success that block does not
+`cat` its log, so the "58 dispatch arm(s), 58 case entry(ies)" line is not in
+the normal run's output. The exit code is wired, which is the part that
+matters; the line is for whoever runs the gate directly.
