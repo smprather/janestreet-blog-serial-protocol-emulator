@@ -1,0 +1,166 @@
+@startuml proto-nec-ir-frame
+' ===========================================================================
+' proto-nec-ir-frame.puml - (b) the NEC 32-bit frame, its repeat code, and what
+' this act actually puts on the wire.
+'
+' A REAL NEC remote frame is 32 bits, LSB first, in four bytes, each followed by
+' its one's complement so a receiver can reject a frame corrupted in the light
+' path:
+'   address   ~address   command   ~command
+'
+' and the auto-repeat is a special 16-bit sequence: command 0x00 followed by
+' 0xFF, inside the SAME leader, sent ~40 ms after the original while the key is
+' held. That is a real NEC feature and the frame figure has to show it, because
+' "what does a repeat code look like" is a question this diagram exists to answer.
+'
+' WHAT THIS ACT SENDS IS NOT 32 BITS. firmware/nec_ir.pe sends a valid NEC FRAME
+' ENVELOPE - leader, leader gap, eight bit-slots, stop burst - around a single
+' payload byte, 0xA5. The 32-bit payload with its inverse bytes is NOT exercised.
+' The figure says which is which rather than drawing a 32-bit frame the firmware
+' does not produce.
+' ===========================================================================
+
+title NEC infrared - the frame grammar, the repeat code, and what this act sends\n<font size=12>the protocol's frame is 32 bits; this act sends the envelope around ONE byte</font>
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam rectangle {
+  BorderColor #33555
+  FontName monospaced
+  FontSize 12
+}
+skinparam rectangle<<gate>> {
+  BackgroundColor #FFF4D6
+  BorderColor #C8B800
+}
+skinparam rectangle<<sent>> {
+  BackgroundColor #D6F5D6
+  BorderColor #3A7A3A
+}
+skinparam rectangle<<notsent>> {
+  BackgroundColor #EFEFEF
+  BorderColor #999999
+}
+skinparam rectangle<<real>> {
+  BackgroundColor #F4F7FB
+}
+
+rectangle "LEADER\n\n<b>9 ms</b> of 38 kHz burst\n\n<b>measured 8 988.0 us</b>\nin <b>343</b> carrier cycles\n\nsent as IR_LEADR runs of\nIR_LEAD cycles, because the\nEIGHT-BIT IMMEDIATE cannot\nhold 342" as L <<sent>>
+rectangle "LEADER GAP\n\n<b>4.5 ms</b> of silence\n\n<b>measured 4 504.0 us</b>\n\nthis gap is what tells a\nreceiver a frame is STARTING\nrather than continuing" as G <<sent>>
+
+rectangle "SLOT 0\nbit 0 of 0xA5 = 1" as S0 <<sent>>
+rectangle "SLOT 1\nbit 1 of 0xA5 = 0" as S1 <<sent>>
+rectangle "SLOT 2\nbit 2 of 0xA5 = 1" as S2 <<sent>>
+rectangle "SLOT 3\nbit 3 of 0xA5 = 0" as S3 <<sent>>
+rectangle "SLOT 4\nbit 4 of 0xA5 = 0" as S4 <<sent>>
+rectangle "SLOT 5\nbit 5 of 0xA5 = 1" as S5 <<sent>>
+rectangle "SLOT 6\nbit 6 of 0xA5 = 0" as S6 <<sent>>
+rectangle "SLOT 7\nbit 7 of 0xA5 = 1" as S7 <<sent>>
+
+rectangle "STOP BURST\n\n<b>552.0 us</b> in 22 cycles\n\nthen the pad is released\n\n<b>WITHOUT IT A RECEIVER CANNOT</b>\n<b>TELL THE FRAME ENDED from a</b>\n<b>very long gap</b>" as ST <<sent>>
+
+rectangle "RELEASE\n\ndmem[14] = 0:\nthe frame is out" as P <<gate>>
+
+L -[#3A7]-> G
+G -[#3A7]-> S0
+S0 -[#3A7]-> S1
+S1 -[#3A7]-> S2
+S2 -[#3A7]-> S3
+S3 -[#3A7]-> S4
+S4 -[#3A7]-> S5
+S5 -[#3A7]-> S6
+S6 -[#3A7]-> S7
+S7 -[#3A7]-> ST
+ST -[#3A7]-> P
+
+note bottom of S0
+  <b>A 0 and a 1 have the SAME burst and different gaps.</b>
+  ...
+  | bit | burst | gap | slot |
+  | <b>0</b> | 552.0 us | <b>1 694.9 us</b> (datasheet 1 687.5) | 2 246.9 us |
+  | <b>1</b> | 552.0 us | <b>562.2 us</b> (datasheet 562.5) | 1 114.2 us |
+  ...
+  The burst is IDENTICAL, so the value is carried entirely by the silence. There
+  is no level to read and no clock to resynchronise to, which is why this is the
+  sharpest timing claim in the family: a gap 3 % long is still a zero, and a gap
+  30 % short is not a one.
+end note
+
+note bottom of S7
+  <b>Why 0xA5 and nothing else.</b>
+  Both bit values appear in the byte, and there are six transitions in eight. Its
+  bit-reverse is 0xA5 - it is a palindrome - and its complement is 0x5A, and
+  NEITHER is anything a wrong bit order produces by accident. So a firmware that
+  reversed the byte, complemented it, or rotated it cannot pass.
+end note
+
+rectangle "THE PROTOCOL'S REAL 32-BIT FRAME - NOT EXERCISED BY THIS ACT" as HDR <<real>>
+rectangle "ADDRESS\n8 bits, LSB first" as AD <<notsent>>
+rectangle "~ADDRESS\n8 bits, the one's complement" as NAD <<notsent>>
+rectangle "COMMAND\n8 bits, LSB first" as CM <<notsent>>
+rectangle "~COMMAND\n8 bits, the one's complement" as NCM <<notsent>>
+
+HDR -[#99A,hidden]-> AD
+AD -[#99A]-> NAD
+NAD -[#99A]-> CM
+CM -[#99A]-> NCM
+
+note right of HDR
+  A real NEC frame is <b>32 bits</b> in four bytes, each byte followed by its
+  one's complement, so a receiver can reject a frame corrupted on the way through
+  the air. The four are the ADDRESS of the remote and the COMMAND of the key, and
+  the inverses are the only error detection NEC has - there is no checksum, no
+  acknowledge and no retry.
+
+  <b>firmware/nec_ir.pe sends ONE byte, not four.</b> The envelope
+  (leader, gap, eight slots, stop burst) is a correct NEC frame, and the payload
+  in it is 0xA5. So what this act proves is the FRAMING and the CARRIER; the
+  32-bit payload with its inverse bytes is not exercised, and the figure marks
+  those four boxes as unsent rather than drawing a frame the firmware does not
+  produce.
+end note
+
+rectangle "THE REPEAT CODE - NOT EXERCISED BY THIS ACT" as RH <<real>>
+rectangle "LEADER + GAP\n<b>again</b>, about 40 ms\nafter the original" as RL <<notsent>>
+rectangle "COMMAND = 0x00\n8 zero bits" as RC0 <<notsent>>
+rectangle "~COMMAND = 0xFF\n8 one bits" as RC1 <<notsent>>
+
+RH -[#99A,hidden]-> RL
+RL -[#99A]-> RC0
+RC0 -[#99A]-> RC1
+
+note right of RH
+  NEC's auto-repeat is a <b>different 16-bit sequence, not a repeat of the
+  32</b>. While a key is held the remote re-sends a leader, a gap, and then
+  command <b>0x00</b> with its inverse <b>0xFF</b> - and the inverse is what
+  makes it unambiguous, because 0x00 is also a legitimate command code. A
+  receiver tells "held" from "pressed" by the 0x00/0xFF pair and by the ~40 ms
+  spacing, not by the byte count.
+
+  This act does not send it. The figure shows it because "how does a repeat code
+  differ from a frame" is the question the NEC frame diagram has to answer, and
+  answering it with only the frame would leave the question open.
+end note
+
+legend bottom
+  |= part |= this act | the protocol |=
+  | leader, leader gap | <b>SENT</b> (green) | same | 
+  | 8 bit-slots, LSB first | <b>SENT</b> (green) | same, 32 slots in a real frame |
+  | stop burst | <b>SENT</b> (green) | same |
+  | 32-bit payload: address, ~address, command, ~command | <b>NOT SENT</b> (grey) | required |
+  | the 0x00 / 0xFF repeat | <b>NOT SENT</b> (grey) | required for auto-repeat |
+
+  <b>Frame length, and why a period error cannot make the frame
+  internally inconsistent.</b> One byte is 32.06 ms: 9 + 4.5 + 8 x 2.25 + 0.5625.
+  The burst and the gap are independent counts, so an error in the carrier shows
+  up as a wrong frequency and an error in a gap shows up as a wrong slot - and
+  neither can quietly cancel the other inside one frame.
+
+  <b>Green means measured in this simulation. Grey means the protocol has it and
+  this act does not send it.</b> The distinction is drawn here rather than left
+  to the reader, because a diagram that draws the protocol's frame and does not
+  say which parts the firmware produces is a diagram that overstates the claim.
+end legend
+
+@enduml
