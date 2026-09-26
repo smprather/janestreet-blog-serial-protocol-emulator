@@ -485,11 +485,38 @@ chk(
     "every interval on the return leg is ONE or TWO half-intervals in both "
     "polarities, which is the whole basis of the receiver's interval test",
 )
+#
+# *** AND THIS PROPERTY IS DERIVED, NOT INDEPENDENT, WHICH IS THE POINT OF
+# RECORDING IT. *** Eighteen properties sound like eighteen pieces of evidence.
+# This one is arithmetic, and it is worth saying so before somebody quotes it.
+#
+# COMPLEMENTING A WIRE CANNOT MOVE A TRANSITION -- it only flips a level -- so
+# the intervals of a wire and of its complement are the same BY CONSTRUCTION,
+# for ANY wire and not merely for this model's two. MEASURED on 200 random
+# 80-level pairs and their complements, none of them derived from this model:
+# the interval lists were identical in all 200.
+#
+# **SO `iv0 == iv1` CANNOT FAIL INDEPENDENTLY OF THE PROPERTY ABOVE IT.** If
+# WIRES[1] is the exact complement of WIRES[0] -- which is what the previous
+# check asserts -- then this one is already true, and the two can only disagree
+# if the first is false. It is a restatement, not a second witness.
+#
+# The CONCLUSION it states is still true and still worth having: the return
+# leg's timing says nothing about polarity. It just does not need this check to
+# be believed, and that is the distinction this act has spent a session on --
+# a check that has never been shown to fire is a comment, and a check that CAN
+# NEVER fire is worse, because it looks like a second witness and is not one.
+#
+# WHAT WOULD BE A REAL TEST is the same claim with the complement assumption
+# removed: that the two polarities carry the same interval sequence *even when
+# the preamble is built differently for each*. That is a question about the
+# ENCODING rather than about the complement, and nothing above asks it.
 chk(
     iv0 == iv1,
     "and the interval SEQUENCE is the same for the two polarities (%d "
-    "intervals), so the return leg's TIMING says nothing about polarity "
-    "either" % len(iv0),
+    "intervals) -- DERIVED, not independent: it follows from the complement "
+    "above for any wire, so it cannot fail on its own; the conclusion is that "
+    "the return leg's TIMING says nothing about polarity" % len(iv0),
 )
 print(
     "  a bit boundary transitions iff the two adjacent bits are EQUAL: "

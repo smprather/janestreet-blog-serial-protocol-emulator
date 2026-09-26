@@ -3452,3 +3452,90 @@ inference, one level more dangerous, because a lock that still has a live
 owner is the mechanism working rather than the mechanism failing -- the
 difference that matters is whether a PROCESS holds it, and that is not mine to
 judge from here.
+
+## 2026-09-27 act (c): TASK-START -- ARE ANY OF THE MODEL'S 18 PROPERTIES VACUOUS?
+
+**I claimed the unblocked half was exhausted and I did not check the one
+instrument in it I have never shown can fail.** This act's rule is that a check
+which has never been shown to fire is a comment, and I have applied it to
+`bmc_checks.py`'s seven (all proven by injection), to `bmc_models_agree.py`'s
+disagree branch (proven by self-test), and to the arm/CASES gate (proven three
+ways).
+
+**`bmc_model.py` has EIGHTEEN properties and I have never once shown that any
+of them can fail.** The only evidence I have that its self-check works is a
+single injection I made while debugging the agreement check, which reported
+"11 PROPERTIES FAILED" -- so eleven of them are known to fire on that fault, and
+**the other seven are unknown.**
+
+**AND THE WORTHWHILE QUESTION IS STRONGER THAN "do they fire". IT IS WHETHER
+ANY OF THEM IS VACUOUS -- true BY CONSTRUCTION rather than by measurement.** A
+property like "the two encodings' output streams are the exact COMPLEMENT of one
+another" may be true because the model computes FM1 as the complement of FM0
+and cannot do otherwise, in which case checking it is arithmetic dressed as a
+result, and this act has a name for that: it is the check that cannot see.
+
+### ONE OF THE EIGHTEEN IS NOT A CHECK, AND MEASURED SO RATHER THAN ARGUED
+
+**`iv0 == iv1` CANNOT FAIL INDEPENDENTLY.** Complementing a wire flips levels
+and cannot move a transition, so the intervals of a wire and of its complement
+are the same **by construction, for any wire at all** -- not merely for this
+model's two. **MEASURED on 200 random 80-level pairs and their complements, none
+of them derived from this model: the interval lists were identical in all 200.**
+
+So the property is a **restatement** of the complement check above it, not a
+second witness. The two can only disagree if the first is false. It is the
+worse half of this act's rule: a check never shown to fire is a comment, and a
+check that **can never** fire is worse, because it is dressed as a second
+witness and is not one.
+
+**THE CONCLUSION IS STILL TRUE AND STILL WORTH HAVING** -- the return leg's
+timing says nothing about polarity. It simply does not need this check to be
+believed. So the annotation says that, and the property's own output now carries
+it: *"DERIVED, not independent: it follows from the complement above for any
+wire, so it cannot fail on its own."*
+
+**AND IT NAMES THE REAL TEST, which nothing in the file asks:** the same claim
+with the complement assumption **removed** -- that the two polarities carry the
+same interval sequence *even when the preamble is built differently for each*.
+That is a question about the ENCODING rather than about the complement, and it
+is the property that would make the sentence load-bearing rather than true.
+
+### AND THE EIGHTEEN ARE NOT EIGHTEEN WITNESSES, WHICH IS THE HEADLINE
+
+One of eighteen is provably a restatement. **That is one found, by reading
+each condition for whether it can fail** -- and the file offers eighteen
+conditions of wildly different strength, from `Tx(0).byte_at(b)` against the
+independent `bits()` (a real cross-implementation check) to the complement
+identity above. **A reader counting eighteen has no way to tell which is which**,
+and the act's whole instrument history is that a number of checks is not a
+measure of their strength.
+
+**SO THE NEXT SESSION'S ITEM IS NAMED, NOT STARTED, because it wants a
+measurement rather than an opinion:** classify all eighteen as
+*can-fail-independently* / *derived from an earlier property* / *vacuous*, by
+mutating the model once per class and watching which count falls. Until that is
+done, **`bmc_model.py`'s "all properties hold" is a true sentence about eighteen
+conditions of unknown and unequal strength**, and this entry is the first proof
+that at least one of them was empty.
+
+### AND A LINT BLOCKER I AM DELIBERATELY NOT CLEARING
+
+Annotating the property surfaced **28 `UP031` findings** — "use format
+specifiers instead of percent format" — across `bmc_model.py`. **27 of the 28
+are pre-existing**: the file uses `%` throughout and the linter is seeing it
+for the first time, because I had not edited this file before today.
+
+**I AM NOT CONVERTING THEM, and the reason is the merge window, not the
+lint.** Converting 28 statements is a large, purely cosmetic diff to a file in
+the *unblocked* set, days-old branch, with a merge-gate re-run in flight in the
+main tree -- a diff that is pure merge-conflict surface for no behavioural gain.
+**My own added line follows the file's existing convention rather than
+introducing a mixed style into it**, and that is the lesser evil against 27
+pre-existing instances.
+
+**Stating it rather than clearing it silently**, because a blocker that is
+dismissed in the log and still in the tool is worse than one that is named: the
+conversion is a mechanical, self-verifying follow-up (capture the model's
+output, convert, diff the output byte-for-byte, and the change is proven safe),
+and it belongs in a session with no merge in flight.
