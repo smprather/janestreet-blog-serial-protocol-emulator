@@ -398,3 +398,43 @@ needed for it is here: the exact carry (exhaustively verified, twice, in two
 and three-slot forms), the conversion's structure, the two measurements the
 act claims, and the testbench's checks, which are the right checks and need
 one change -- reading each answer when it is banked.
+
+---
+
+## UPDATE 4: THE DESIGN CHANGE IS TRIED, AND IT IS THE RIGHT DIRECTION
+
+The shape the last update prescribed -- ONE measurement per run, the answer
+slots free for the whole conversion, the three temporaries at {6, 7, 11} so
+that US survives to the main term's Q setup -- assembles and runs:
+
+* 385 words;
+* the firmware banks ONE answer to dmem[6..7] and **parks**, with DONE = 1;
+* the two failing measurement checks are now stale by construction, because
+  the testbench still expects two banked answers per run.
+
+**TWO THINGS ARE STILL WRONG, and both are named rather than guessed.**
+
+1. **The answer is 256 mm where 199 is expected.** The conversion's own terms
+   were correct in the previous shape (the trace printed 1 and 9 at the two
+   banks), so this is a NEW observation about the new shape rather than a
+   known fault reappearing, and it needs the same treatment: trace the term and
+   the accumulator at the single bank, on the copy, and read the numbers.
+2. **THE TESTBENCH READS A LOCATION WHOSE MEANING THE DESIGN JUST CHANGED.**
+   It reports "firmware 0 us" because it reads the width from dmem[2..3], and
+   in this shape dmem[2..3] are the conversion's own temporaries -- the same
+   "read it in the wrong place" defect as the US read in the FM0/FM1 act and
+   as the period check in this act's own earlier state. The testbench has to
+   follow the design change: run the firmware once per distance, read the
+   answer at dmem[6..7] AS IT IS BANKED, and read the WIDTH from wherever the
+   firmware leaves it once the design no longer needs it during the conversion
+   (or not at all, if the width is only ever a testbench-side measurement).
+
+**SO THE REMAINING WORK ON THIS ACT IS NOW SHORT AND SPECIFIC**, and it is a
+design change plus a testbench that matches it, not a hunt:
+
+* finish the one-answer firmware (the 256 is one number to trace);
+* restructure tb_pe_soc_sr04.v to run the firmware TWICE -- once per
+  distance, resetting between -- and check each answer as it is banked;
+* then the two cheap items already recorded: peasm's `4*149+4` derivation
+  against the 601 clocks the hardware measures, and the inter-measureval
+  check's `t_trig_in[1]` guard.
