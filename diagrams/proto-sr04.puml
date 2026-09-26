@@ -1,0 +1,163 @@
+@startuml proto-sr04
+' ===========================================================================
+' proto-sr04.puml - (a) the HC-SR04 ranging engine, both sides.
+'
+' *** STATUS: THIS ACT IS RED. *** firmware/sr04_range.pe + tb/tb_pe_soc_sr04.v
+' elaborate on real RTL and FAIL 5 checks. It is NOT wired into run_all.sh.
+' The figures draw the design and mark what is measured and what is open, because
+' a figure that draws a failing act as if it passed is the one artefact this
+' whole branch exists to prevent.
+'
+' WHAT IS PROVEN: the CONVERSION, on measurement 0. 1160 us -> 199 mm, and the
+' expected value is 199 mm. us*11/64 is an EQUALITY here, and it holds exactly.
+'
+' WHAT IS OPEN: the SECOND measurement never runs. The firmware banks one
+' measurement (dmem[10] = 01), the model saw one trigger, and the trigger pulse
+' is 601 clocks where the act's own derivation says 600.
+' ===========================================================================
+
+title HC-SR04 ranging - the protocol engine on both sides\n<font size=12>STATUS: RED - 5 checks fail; the CONVERSION is proven on measurement 0, the second measurement is not reached</font>
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #33555
+  FontName monospaced
+}
+skinparam rectangle {
+  BorderColor #33555
+  FontName monospaced
+}
+skinparam rectangle<<red>> {
+  BackgroundColor #FADADA
+  BorderColor #AA3030
+  BorderThickness 2
+}
+skinparam rectangle<<green>> {
+  BackgroundColor #D6F5D6
+  BorderColor #3A7A3A
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C8B800
+  FontName monospaced
+  FontSize 11
+}
+
+state "STATUS: RED\n5 checks fail, not in run_all.sh" as RED <<red>>
+RED : measurement 0: echo 1160 us\n  -> firmware 1160 us -> 199 mm\n  -> EXPECTED 199 mm   PASS\n\nmeasurement 1: echo 5816 us\n  -> firmware 1160 us -> X mm\n  -> EXPECTED 999 mm   FAIL\n\ndmem[10] = 01: only ONE banked\nthe model saw 1 trigger, not 2\nthe trigger is 601 clocks, not 600
+
+' ---------------------------------------------------------------- EMITTER --
+state "FIRMWARE SIDE - firmware/sr04_range.pe" as EMIT {
+
+  [*] --> PINS
+  PINS : TRIG = pin 6 (SR_TRIG, 0x40), DRIVEN by us\nECHO = pin 5 (SR_ECHO, 0x20), RELEASED\nand READ BACK as the pad\n<b>TWO SEPARATE PADS, because the host drives one\nand listens on the other.</b> Writing a level and\nan enable together - the idiom the other acts\nuse - is impossible here, and the firmware does\nnot try: dmem[5] is the level and PINOE is the\nenable, and they are written on purpose.
+
+  state "TRIGGER\na 10 us pulse" as TRG
+  TRG : TXPIN = SR_TRIG, PINOE = SR_TRIG, then a\nCOUNTED delay, then release.\n<b>EXACT IN CLOCKS: 4 * SR_TRIG + 4, and SR_TRIG = 149\nmakes that 600 clocks = 10.000 us exactly.</b>\n\n<b>MEASURED 601 CLOCKS = 10.0167 us.</b> The device\nasks for 10 us MINIMUM so the extra clock is\nharmless to a real sensor - and the check is an\nequality anyway, because the act claims the\ncount and not a datasheet floor.\n\nThe constant is a COUNT OF INSTRUCTIONS and not\nmicroseconds, which is why it lives in peasm's\nCONSTS and why the act can be perturbed through\n--const at all.
+
+  state "RECOVERY\nwait for the sensor" as REC
+  REC : SR_RECOV_LEN = 117 on (4,40):\n(4*117 + 5) = 473 clocks? no -\nthe stated 120 615 clocks = 2 010 us, which\nclears the sensor's own settling time\n<b>AND ITS ABSENCE WAS A REAL DEFECT:</b> the device\nneeds a moment after the trigger before ECHO\nmeans anything, and a program that measures the\nline immediately is reading the recovery.\n\n<b>MEASURED: the model saw only ONE trigger,</b> so this\npath is where the second measurement is lost.\n\nsee the open-defect note for the status.\n\nSTATE MACHINE in dmem[13], 0..4, dispatched by a\ncumulative subtract chain.
+
+  state "WAIT FOR THE ECHO'S RISING EDGE" as EUP
+  EUP : spin on the pad until ECHO goes high.\n<b>THE ECHO IS CAPTURED, NOT SAMPLED,</b> which is\nwhat makes this act safe at 4 m: the answer is\nthe WIDTH of a pulse, and a width does not care\nwhen you looked at it.
+
+  state "MEASURE\nt = the echo width in us" as MEAS
+  MEAS : the 1 us counter read as a DIFFERENCE,\nexactly as in freqmeter.pe and for the same\nreason: the clear-on-read flag on port 6 is ONE\nBIT, so a poll loop longer than a tick reports\nseveral ticks as one.\n\n<b>THERE IS NO 16-BIT SUBTRACT HERE EITHER,</b> and for\nthe same reason as the meter: the counter is RESET\nat the echo's rising edge and read at its falling\nedge, so the answer is whatever accumulated.\n\n<b>MEASURED 1160 us</b> against the model's 1160 us -\nexact, and the check is 1 % with a 2 us floor.
+
+  state "CONVERT\nmm = us * 11/64, exactly" as CON
+  CON : <b>THE CONVERSION IS THE ACT,</b> and it is where\nthe ISA bites. No multiply, no divide, no carry\nflag - only JZ/JNZ.\n\n  us = 64q + r\n  us*11/64 = 11q + 11r/64 = 11q + floor(11r/64)\n              ^^^^^^^^^   ^^^^^^^^^^^^\n              EXACT, because 11q is an integer\n\nSo no 16x16 multiply, no division and no\napproximation. The plan assumed a multiply; this\nidentity removes it.\n\nQ = us >> 6        ACC = 11*(us & 63), then >> 6\nT = 11*(us >> 6)   T += ACC, and T is the answer\n\n<b>MEASURED 199 mm, expected 199 mm. EXACT.</b>\n1160 * 11/64 = 199.375 -> 199.
+
+  state "BANK\nthe answer" as BNK
+  BNK : dmem[10] is the measurement count, and\n<b>IT READS 01, NOT 02.</b> The firmware banked one\nmeasurement; the second never ran. This is the\nfirst of the five failing checks and it is a\nsymptom, not the fault - the cause is upstream, in\nthe trigger and recovery path.
+
+  PINS --> TRG
+  TRG --> REC
+  REC --> EUP
+  EUP --> MEAS
+  MEAS --> CON
+  CON --> BNK
+  BNK --> [*]
+}
+
+' --------------------------------------------------------------- SENSOR/SRC --
+state "SENSOR MODEL - tb/tb_pe_soc_sr04.v" as SRC {
+
+  [*] --> ARM
+  ARM : the model presents two targets, so the\nfirmware is asked for TWO measurements:\n  echo 1 160 us  -> expect 199 mm\n  echo 5 816 us  -> expect 999 mm\n<b>THE SECOND TARGET IS THE ONE THAT MAKES THE ACT\nWORTH RUNNING:</b> 1 160 us fits in twelve bits and\n5 816 us does not, so the two together exercise the\nten-bit path and the high byte.
+
+  state "TRIGGER\ndetected" as TR2
+  TR2 : <b>THE MODEL SAW EXACTLY 1 TRIGGER.</b> The check\ncarries its own explanation - "a trigger that is\ndriven rather than pulsed shows up here" - which is\nthe right way to write a failing check: the reader\nlearns the shape of the defect from the message.
+
+  state "CHECKS" as CHK <<red>>
+  CHK : FAIL the firmware banked both measurements\nFAIL the model saw exactly 2 triggers\nFAIL the trigger is EXACTLY 600 clocks (601)\nFAIL measurement 1: 1160 us is outside 1 % of 5816\nFAIL measurement 1: 1160 us is X mm, not 999 mm\n\n<b>AND NOTE WHAT IS NOT AMONG THEM:</b> no conversion\ncheck failed, and no first-measurement check\nfailed. The arithmetic the act exists to demonstrate\nis correct on the one measurement that ran.
+
+  ARM --> TR2
+  TR2 --> CHK
+}
+
+EMIT -[#3A7,hidden]-> SRC : trigger out, echo in,\nand the answer is a NUMBER rather than\na waveform - the only act in the\nfamily whose output is a quantity
+
+note bottom of CON
+  <b>A MULTIPLY BY ELEVEN IS FOUR DOUBLINGS AND TWO ADDS.</b>
+  ...
+  x -> 2x -> 4x -> 5x -> 10x -> 11x
+  ...
+  (5x is 4x + x, and 10x is 5x doubled.) No loop, no counter, no
+  second temporary: the multiplicand stays in Q throughout.
+  ...
+  <b>AND A DOUBLING IS THE CHEAPEST 16-BIT OPERATION THIS ISA
+  HAS, and unlike any other 16-bit add it needs NO both-zero
+  guard.</b> The carry out of lo+lo is BIT 7 OF THE ORIGINAL
+  LOW BYTE, so one AND with 0x80 and one JNZ is the whole
+  test; and "the result is zero" means "nothing carried",
+  because doubling zero cannot carry and is the only way to
+  reach zero.
+  ...
+  A general add of a variable IS different: 0 + 0 = 0 is not a
+  carry, so the addends must be re-read to tell a wrap from a
+  pair of zeros. <b>That asymmetry is the reason the conversion
+  is mostly doublings.</b>
+  ...
+  <b>No 16-bit overflow is possible anywhere in the conversion,</b> and the
+  largest value involved is 11 * (23000 >> 6) = 3949: the intermediates
+  are 8q = 2872 and 10q = 3590, and the second term is
+  11 * 63 = 693. <b>Recorded rather than assumed,</b> because an
+  unnoticed overflow in the high byte is invisible from the
+  outside - the answer would still be a plausible millimetre
+  figure.
+end note
+
+note bottom of TRG
+  <b>THE 11/64 CONSTANT, AND WHY ITS ERROR IS STATED
+  RATHER THAN ABSORBED.</b>
+  ...
+    t (us) = 2 * d (mm) / 0.343 mm/us
+    d (mm) = t * 11/64 = t * 0.171875
+  ...
+  11/64 is <b>+0.22 % long</b> against the speed of sound. That error belongs
+  to the CONSTANT, not to the arithmetic: the conversion below is EXACT for
+  11/64, which is a different and checkable claim from "the range is right to
+  two parts in a thousand", and only the first one can be asserted as an
+  equality.
+end note
+
+note bottom of REC
+  <b>WHAT IS KNOWN AND WHAT IS NOT, about the open defect.</b>
+  ...
+  The second measurement is lost, the bank holds one result, and the model saw one
+  trigger. The failure is therefore upstream of the conversion - in the path that
+  issues the second trigger and re-arms for the second echo - and NOT in the
+  arithmetic, which is exact on the measurement that did run.
+  ...
+  <b>WHAT IS NOT CLAIMED HERE:</b> which instruction is wrong. The five failing
+  checks say the second measurement does not happen; they do not say why, and a
+  figure that drew a cause would be drawing a hypothesis. <b>The 601-vs-600 trigger
+  is the most likely place to look</b> - it is a one-instruction error of exactly
+  the kind this family has found six times - and it is stated as a place to look,
+  not as the fault.
+end note
+
+@enduml

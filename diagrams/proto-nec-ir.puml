@@ -1,0 +1,151 @@
+@startuml proto-nec-ir
+' ===========================================================================
+' proto-nec-ir.puml - (a) the NEC infrared protocol engine, both sides.
+'
+' The sharpest timing claim in the repository and the only act in the family
+' with NO WIRE: the only thing that leaves the pin is light. A receiver has to
+' find a 38 kHz burst, integrate it and time the SILENCES between bursts, and
+' there is nothing to resynchronise to at all.
+'
+' Measured off the pin by tb/tb_pe_soc_ir_nec.v (real RTL, 60 MHz):
+'   carrier 38 049 Hz (+0.128 %), LOW half 787.95-794.95 clocks,
+'   HIGH half 788.95 (spread 0.01), leader 8 988.0 us in 343 carrier cycles,
+'   leader gap 4 504.0 us, eight data bursts of 552.0 us, stop burst 552.0 us,
+'   decoded a5
+' ===========================================================================
+
+title NEC infrared - the protocol engine on both sides\n<font size=12>38 kHz carrier, 9 ms leader, LSB first; no wire, so nothing resynchronises</font>
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #33555
+  FontName monospaced
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C8B800
+  FontName monospaced
+  FontSize 11
+}
+
+' ---------------------------------------------------------------- EMITTER --
+state "FIRMWARE SIDE - firmware/nec_ir.pe" as EMIT {
+
+  [*] --> PIN
+  PIN : PINOE = 0x00, TXPIN = 0x00, PINOE = IR_DATA\n<b>LOW emits: the cathode is on the pin.</b>\nOpen-drain is deliberately not set - there is\nnothing to contend with on an LED.
+
+  state "CARRIER\none half period" as CAR
+  CAR : this is the ONLY thing that has to be\nexact, and the reason is in the note.\n\nph9: OUT TXPIN, 0x00 (source, HIGH half)\n   IR_H1 = 5 on (2,44): the step is 193 clocks\nph0: OUT TXPIN, 0x00 (sink, LOW half)\n   IR_H2 = 6 on (2,34): the step is 153 clocks\n\n<b>789 clocks each, and the two are fitted\nSEPARATELY on different pairs</b>, because the\nphase ladder costs 7 clocks more coming out of\nphase 1 than out of phase 0.
+
+  state "COUNT\ncycles in this run" as CNT
+  CNT : dmem[7]--, more cycles? next run?\ndmem[1]--, 0 means THE BURST IS OVER\n<b>THE COUNT IS TWO LEVELS BECAUSE OF THE EIGHT-BIT\nIMMEDIATE.</b> A burst longer than 255 cycles is\nseveral runs of at most 255, and the reload\nlands on the first cycle of a run. 9 ms is 342\ncycles and LDI A, 342 assembled to LDI A, 86 -\na perfectly good 38 kHz carrier whose 9 ms\nleader was 2.3 ms, and nothing downstream\nnoticed. Hence IR_LEADR runs of IR_LEAD cycles.
+
+  state "WHICH END\nof a burst" as WHICH
+  WHICH : dmem[6]: 0 = leader, 1 = a data bit,\n2 = the stop burst\n<b>THE VALUES ARE 0,1,2 BECAUSE THE LADDER BELOW\nENUMERATES THEM.</b> A ladder that does not cover\nits own input domain is the same defect three\ntimes in this repository: dmem[6] held 2/3/4 -\nthe phase numbers themselves, the obvious\nthing to write - and the ladder treated anything\npast 1 as the stop burst, so the frame ended\nafter the leader with a well-formed carrier and\nnothing in it. A dispatch is a FUNCTION over the\nvalues the program actually PRODUCES.
+
+  state "LEADER GAP\n4.5 ms of silence" as LG
+  LG : release the pad - the gap IS silence\nIR_LEADGAP = 255 on the (3,130) pair, NOT\n(4,40): (4,40) wants 529 outer steps and\n529 & 0xFF is 17, so 4.5 ms came out 136 us -\nwhich does not look like a truncated constant,\nit looks like a transmitter that is in a hurry.
+
+  state "SEND A BYTE\nLSB first" as BYT
+  BYT : dmem[0] = 0xA5 and is NEVER MODIFIED -\nit is the record the TB compares against\nwhat it decoded off the wire.\ndmem[3] is the rotating copy, dmem[2] the\nbits left, dmem[4] the bit just sent.\n\n<b>THE BIT IS THE COPY'S OWN BIT 0 AND THE COPY IS\nROTATED RIGHT AFTER EACH SLOT</b>, so there is no\nshifting to get wrong - the same idiom the\n1-Wire write path uses, for the same reason.\n\n<b>THIS BLOCK WAS, FOR A WHILE, UNREACHABLE:</b> it\nsat after a JMP with nothing pointing at it, so\nthe bit counter was never set, the loop ran 255\ntimes instead of eight, and the frame that left\nthe pin was a valid carrier with a valid-looking\nburst train and the wrong number of slots in\nit. Falling into a setup block is the cheap way\nto write one and the expensive way to miss one.
+
+  state "A 0\nshort burst, long gap" as Z
+  Z : IR_BIT = 21 carrier cycles = 552.0 us burst\nthen IR_GAP0 = 200 on (4,40) = 1 694.9 us\nslot total 2 246.9 us
+
+  state "A 1\nshort burst, short gap" as O
+  O : the same 552.0 us burst\nthen IR_GAP1 = 67 on (4,40) = 562.2 us\nslot total 1 114.2 us
+
+  state "STOP BURST" as STP
+  STP : ONE final 552.0 us burst, then release.\n<b>IT IS THE PART OF A FRAME A FIRMWARE WRITTEN FOR\n"SEND THE BYTE" USUALLY LEAVES OUT,</b> and the\nframe a receiver is timing needs: without it a\nreceiver cannot tell the frame ended rather than\nthat the remote is transmitting a very long gap.
+
+  state "DLY1/DLY2/DLY3" as DLY
+  DLY : total(n1,n2,n3) = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4\nFOUR pairs, and each is chosen for what it must\ndo:\n  (2,44)  step  193 clocks   the HIGH half\n  (2,34)  step  153 clocks   the LOW half\n  (4,40)  step  511 clocks   IR_GAP0, IR_GAP1, IR_BIT\n  (3,130) step 1064 clocks   IR_LEADGAP only\n<b>A PHASE IN dmem[12] CHOOSES THE RETURN ADDRESS</b>,\nbecause the ISA cannot return to seven addresses.
+
+  state "PARK" as PRK
+  PRK : dmem[14] = 0 is the frame-sent flag, and\ndmem[0] still holds the byte that was sent,\nso there is nothing to bank.
+
+  PIN --> CAR
+  CAR --> CNT : a half period is over
+  CNT --> CAR : more cycles
+  CNT --> WHICH : the burst is over
+  WHICH --> LG : dmem[6] == 0
+  LG --> DLY
+  DLY --> BYT
+  BYT --> Z : the bit was 0
+  BYT --> O : the bit was 1
+  Z --> CAR
+  O --> CAR
+  BYT --> STP : eight bits sent
+  STP --> PRK
+}
+
+' --------------------------------------------------------------- RECEIVER --
+state "RECEIVER SIDE - tb/tb_pe_soc_ir_nec.v" as REC {
+
+  [*] --> EDGES
+  EDGES : every width is measured in TENTHS OF A\nNANOSECOND from $realtime, not in $time.\n<b>$time is scaled to the module's timeunit and\nreturns an integer, so every width here would be\nin tenths of a nanosecond - and a 0.06 % claim\ncannot be supported by an instrument that\nquantises to 0.4 %.</b>
+
+  state "BURSTS\nfrom the edges" as BUR
+  BUR : 541 pulses -> 10 bursts: the leader, eight\ndata bits, the stop. Two PASSES, not a running\naccumulator: the first version reported every\nburst as 22 carrier cycles while measuring its\nwidth correctly - not a combination of numbers any\nwaveform has.
+
+  state "DECODE\nthe silences" as DEC
+  DEC : a gap of about 1 687.5 us is a ZERO\na gap of about 562.5 us is a ONE\n\n<b>THE RECEIVER DECODES NOTHING ELSE.</b> With no\nclock on the wire, the SILENCE LENGTH is the only\ncarrier of information the receiver has, and the\nbit value IS the gap.
+
+  state "CHECK\nwhat is claimed" as CHK
+  CHK : 1. both half periods measured off the pin\n2. THE TWO DISTRIBUTIONS COMPARED AGAINST EACH\n   OTHER, to within a clock - the act's whole point\n3. the carrier is on frequency\n4. the leader is 9 ms in a whole number of cycles\n5. the leader gap is 4.5 ms\n6. exactly 8 data bursts, gaps 4 long and 4 short\n7. the stop burst is present\n8. the decode is a5 and dmem[0] is a5\n9. non-vacuity: 6 bit-transitions in 7
+
+  EDGES --> BUR
+  BUR --> DEC
+  DEC --> CHK
+}
+
+EMIT -[#3A7,hidden]-> REC : light. There is no wire,\nno pull-up, no level to read back -\nonly the arrival of bursts and the\nsilences between them.
+
+note bottom of EMIT
+  <b>Why the carrier is fitted to the CLOCK and not to
+  microseconds, and why that matters more here than
+  anywhere else in the block.</b>
+
+  A half period at 38 kHz is 60e6/(2*38000) = 789.47
+  clocks, so 789 clocks is 38.0228 kHz - +0.06 % - and
+  there is NO WAY TO BE WRONG BY MORE THAN HALF A
+  CLOCK if the constant is one of those two.
+
+  A carrier is the one quantity that cannot be a little
+  bit late. A gap 3 % long is a gap a receiver still
+  calls a zero. A carrier 1 % off is not a carrier.
+
+  And the two halves are fitted on DIFFERENT (n2,n3)
+  pairs, because the phase ladder costs 7 clocks more
+  coming out of phase 1 than out of phase 0:
+    low  half = ladder 13 + 4*193 + 4 = 13 + 772 = 789
+    high half = ladder 20 + 5*153 + 4 = 20 + 769 = 789
+  The delay ALONE cannot make them equal, because
+  the ladder cost is not a multiple of either step.
+  The TB measures both halves off the pin, so the
+  ladder costs above are a PREDICTION and the measured
+  788.95 / 787.95-794.95 is the number claimed.
+end note
+
+note bottom of CHK
+  <b>Check 2 is the act, and the mutation gate is what
+  found it.</b>
+
+  "Each half is constant" is not "the two halves are
+  EQUAL". A mutant that put BOTH half periods on the
+  same delay pair produced a carrier of 788 clocks one
+  way and 782 the other: 38.05 kHz against 37.88,
+  0.4 % asymmetric on every edge - inside every
+  frequency window a real receiver has - and it
+  PASSED.
+
+  A receiver does not care that the carrier is on
+  frequency; it cares that the carrier is a CARRIER,
+  and one whose halves differ is a square wave at
+  38 kHz with the wrong duty cycle.
+end note
+
+@enduml

@@ -1,0 +1,185 @@
+@startuml proto-sr04-timing
+' ===========================================================================
+' proto-sr04-timing.puml - (c) HC-SR04 timing, and exactly which numbers are
+' measured and which are still open.
+'
+' From tb/tb_pe_soc_sr04.v on real RTL (60 MHz, Icarus, the real SRAM macro):
+'
+'   FAIL the firmware banked both measurements (dmem[10] = 01)
+'   FAIL the model saw exactly 2 triggers (1)
+'   FAIL the trigger is EXACTLY 600 clocks = 10000.000 us (measured 601)  [sic]
+'   FAIL measurement 1: 1160 us is outside 1 % of the model's 5816 us
+'   FAIL measurement 1: 1160 us is X mm, not 999 mm
+'
+'     measurement 0: echo 1160 us -> firmware 1160 us -> 199 mm  (expected 199)
+'     measurement 1: echo 5816 us -> firmware 1160 us -> X mm    (expected 999)
+' ===========================================================================
+
+title HC-SR04 - timing, with the RED state stated rather than drawn over\n<font size=12>the 10 us trigger is 601 clocks where the act derives 600; the second echo is never measured</font>
+
+hide stereotype
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #33555
+  LifeLineBorderColor #33555
+  LifeLineBackgroundColor #FAFAFA
+  ParticipantBorderColor #33555
+  ParticipantBackgroundColor #F4F7FB
+  ParticipantFontName monospaced
+  ActorFontName monospaced
+  NoteFontName monospaced
+  GroupFontName monospaced
+}
+
+participant "CPU\npe_cpu.v" as CPU
+participant "TRIG\npin 6" as TRIG
+participant "the sensor\nmodel" as SENSE
+participant "ECHO\npin 5, read back" as ECHO
+participant "the 1 us counter\nport 4" as TICK
+
+== measurement 0: this one works ==
+
+CPU -> TRIG : TXPIN = SR_TRIG, PINOE = SR_TRIG
+note over TRIG
+  <b>4 * SR_TRIG + 4 = 4 * 149 + 4 = 600 clocks = 10.000 us</b>,
+  which is the act's own derivation and the
+  datasheet's 10 us minimum exactly.
+end note
+note over TRIG
+  <b>MEASURED 601 CLOCKS = 10.0167 us.</b>
+
+  One clock long. The device asks for a MINIMUM so
+  this is harmless to a real sensor, and the check
+  is an equality anyway because the act claims the
+  COUNT rather than a datasheet floor.
+end note
+TRIG -> SENSE : the trigger
+CPU -> TRIG : the counted delay, then release
+SENSE -> ECHO : recovery, then 8 x 40 kHz, then ECHO HIGH
+note over ECHO
+  The firmware does not look at the 8 bursts: it
+  cannot resynchronise to a burst it did not send.
+  <b>THE ANSWER IS THE WIDTH OF THE PULSE, not a level,</b>
+  which is what makes this act safe at 4 m - a width
+  does not care when you looked at it.
+end note
+CPU -> ECHO : spin until the echo goes HIGH
+note over ECHO
+  <b>THE ECHO IS CAPTURED, NOT SAMPLED.</b> The counter
+  is RESET at this edge and READ at the falling edge,
+  so there is no 16-bit subtract - and this machine
+  has no carry flag, so a subtract is a four-case
+  analysis on bit 7 and a compare is the same
+  analysis again. One reset removes both.
+end note
+CPU -> TICK : read the COUNTER, not the flag
+note over TICK
+  <b>THE 1 us COUNTER, read as a DIFFERENCE</b> - exactly as
+  in freqmeter.pe, for the same reason: the clear-on-read
+  flag on port 6 is ONE BIT, so a poll loop longer than a
+  tick reports several ticks as one, and the loss is
+  invisible in the result.
+
+  Port 7 is the 4.33 us UART half-bit tick and is not a
+  microsecond.
+end note
+TICK -> CPU : now
+CPU -> CPU : t = the accumulated microseconds
+note over CPU
+  <b>MEASURED 1160 us</b> against the model's 1 160 us -
+  <b>EXACT</b>, and the check is 1 % with a 2 us floor.
+end note
+CPU -> CPU : mm = us * 11/64, exactly
+note over CPU
+  us = 64q + r, so us*11/64 = 11q + floor(11r/64), exactly,
+  because 11q is an integer. Four doublings and two adds
+  for each multiply by eleven, no loop and no second
+  temporary.
+end note
+note over CPU
+  <b>1160 * 11/64 = 199.375 -> 199 mm. EXPECTED 199 mm.</b>
+  ...
+  <b>THE CONVERSION IS EXACT, AND IT IS THE ACT.</b> The
+  testbench asserts it as an equality, not a window.
+end note
+CPU -> CPU : bank it, dmem[10] = 1
+
+== measurement 1: this one does not ==
+
+SENSE -> ECHO : the echo for the second target
+note over SENSE
+  <b>THE MODEL PREPARED 5 816 us -> expect 999 mm.</b>
+
+  The large target is the one that makes the act worth
+  running: 1 160 us fits in twelve bits and 5 816 us
+  does not, so the pair exercises the ten-bit path AND
+  the high byte. A single near target would prove the
+  conversion works and say nothing about the case that
+  could overflow - and an overflow in the high byte is
+  invisible from the outside, because the answer would
+  still be a plausible millimetre figure.
+end note
+note over SENSE
+  <b>FAIL: THE MODEL SAW EXACTLY 1 TRIGGER, NOT 2.</b>
+
+  The check carries its own explanation in the TB: "a
+  trigger that is driven rather than pulsed shows up
+  here" - which is the right way to write a failing
+  check, because the reader learns the SHAPE of the
+  defect from the message instead of going to hunt for
+  it in the design.
+end note
+note over CPU
+  <b>FAIL: dmem[10] = 01. THE FIRMWARE BANKED ONE
+  MEASUREMENT.</b>
+  ...
+  and the second reading is still the FIRST one's:
+    measurement 1: echo 5816 us -> firmware 1160 us
+  ...
+  <b>THE FAILURE IS UPSTREAM OF THE CONVERSION.</b> The
+  arithmetic is exact on the measurement that ran, and
+  every failing check is about the second measurement
+  not happening rather than about the answer being
+  wrong.
+end note
+
+== the open defect, and what is NOT claimed ==
+
+note over CPU, ECHO
+  <b>WHAT IS KNOWN:</b> the second measurement is lost, the bank holds one result,
+  the model saw one trigger, and the trigger is one clock long.
+  ...
+  <b>WHAT IS NOT CLAIMED:</b> which instruction is wrong. The five failing checks
+  say the second measurement does not happen; they do not say why, and a figure
+  that drew a cause would be drawing a hypothesis presented as a finding.
+  ...
+  <b>WHERE TO LOOK FIRST:</b> the 601-vs-600 trigger, because it is a
+  one-instruction error of exactly the kind this family has found six times, and
+  because it sits in the path that issues the second trigger and re-arms for the
+  second echo. Stated as a place to look, not as the fault.
+  ...
+  <b>WHAT IS NOT IN THE REGRESSION:</b> tb_pe_soc_sr04.v is tracked but NOT wired
+  into regress/run_all.sh, so a green gate says nothing about this act in either
+  direction. The act's own state has to be read from running it, and running it is
+  how this page's numbers were obtained.
+end note
+
+note over CPU, ECHO
+  <b>THE TIMING TABLE, marking what is measured.</b>
+  ...
+  | quantity | datasheet / derivation | measured | status |
+  | trigger pulse | >= 10 us; the act derives 4*149+4 = 600 clocks = 10.000 us | <b>601 clocks = 10.0167 us</b> | FAIL, one clock long |
+  | recovery | the sensor's own settling; SR_RECOV_LEN = 117, the stated 2 010 us | not separable in this run | open |
+  | echo 1 | 1 160 us | <b>1 160 us</b> | PASS, exact |
+  | echo 2 | 5 816 us | <b>1 160 us</b> | FAIL, the second measurement never ran |
+  | mm from echo 1 | 1160 * 11/64 = 199.375 | <b>199 mm</b> | PASS, an equality |
+  | mm from echo 2 | 5816 * 11/64 = 999.4 | <b>X</b> | FAIL, X is an unwritten byte |
+  | measurements banked | 2 | <b>1</b> (dmem[10] = 01) | FAIL |
+  ...
+  <b>AND NOTE WHAT IS NOT IN THE TABLE.</b> No row says the conversion is wrong,
+  because no conversion check failed. A red table that mixes a proven property with
+  a broken one, and does not say which is which, is worse than a red table: the
+  reader cannot tell whether to trust the arithmetic or distrust it.
+end note
+
+@enduml

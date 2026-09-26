@@ -1,0 +1,223 @@
+@startuml proto-nec-ir-timing
+' ===========================================================================
+' proto-nec-ir-timing.puml - (c) NEC wire timing, in the real numbers.
+'
+' Measured off the pin by tb/tb_pe_soc_ir_nec.v on real RTL (60 MHz):
+'   carrier            38 049 Hz (nominal 38 000, +0.128 %)
+'   LOW half           13.133-13.249 us  (787.95-794.95 clocks)
+'   HIGH half          13.149 us          (788.95 clocks, spread 0.01)
+'   half-period spread 7.00 clocks LOW, 0.01 HIGH, over 521 pulses
+'   leader             8 988.0 us in 343 carrier cycles
+'   leader gap         4 504.0 us
+'   data bursts        eight at 552.0 us
+'   gaps               four long (a zero) and four short (a one)
+'   stop burst         552.0 us in 22 carrier cycles
+'   decoded            a5
+' ===========================================================================
+
+title NEC infrared - wire timing\n<font size=12>carrier 38 049 Hz; halves 787.95-794.95 and 788.95 clocks, compared against EACH OTHER</font>
+
+hide stereotype
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #33555
+  LifeLineBorderColor #33555
+  LifeLineBackgroundColor #FAFAFA
+  ParticipantBorderColor #33555
+  ParticipantBackgroundColor #F4F7FB
+  ParticipantFontName monospaced
+  ActorFontName monospaced
+  NoteFontName monospaced
+  GroupFontName monospaced
+}
+
+participant "CPU\npe_cpu.v" as CPU
+participant "pad 6\nTXPIN / PINOE" as PAD
+participant "IR LED\ncathode on the pin:\nLOW emits" as LED
+participant "the air\n38 kHz" as AIR
+participant "a receiver\nno clock, no wire" as RECV
+
+== the carrier: the one thing that cannot be a little bit late ==
+
+CPU -> PAD : PINOE = IR_DATA - the LED is driven
+note over PAD
+  <b>LOW emits.</b> The cathode is on the pad, so the
+  levels are inverted relative to every other act in
+  this family. Open-drain is deliberately NOT set:
+  there is nothing to contend with on an LED.
+end note
+note over CPU
+  THE CARRIER IS FITTED TO THE CLOCK, NOT TO MICROSECONDS.
+
+  A half period at 38 kHz is
+    60e6 / (2 * 38000) = 789.47 clocks
+  so 789 clocks is <b>38.0228 kHz</b>, <b>+0.06 %</b>, and
+  there is NO WAY TO BE WRONG BY MORE THAN HALF A
+  CLOCK if the constant is one of 789 or 790.
+end note
+group one carrier cycle - two half periods, fitted SEPARATELY
+  CPU -> PAD : ph9: TXPIN = 0x00 - source, the HIGH half
+  note over CPU
+    <b>IR_H1 = 5 on the (2,44) pair.</b>
+    one outer step = 10 + (4*44 + 7) = <b>193 clocks</b>
+    ladder 13 + 4*193 + 4 = 13 + 776 = <b>789 clocks</b>
+  end note
+  note over LED
+    <b>HIGH half measured 788.95 clocks = 13.149 us</b>
+    spread over 521 pulses: <b>0.01 clocks</b>
+  end note
+  CPU -> PAD : ph0: TXPIN = 0x00 - sink, the LOW half
+  note over CPU
+    <b>IR_H2 = 6 on the (2,34) pair.</b>
+    one outer step = 10 + (4*34 + 7) = <b>153 clocks</b>
+    ladder 20 + 5*153 + 4 = 20 + 769 = <b>789 clocks</b>
+  end note
+  note over LED
+    <b>LOW half measured 787.95 - 794.95 clocks</b>
+    spread: <b>7.00 clocks</b> - and that spread is
+    the subject of the check below, not an error
+  end note
+end group
+RECV -> AIR : the carrier
+note over RECV
+  A carrier 1 % off is not a carrier. A gap 3 % long is
+  still a gap a receiver calls a zero - which is why
+  the CARRIER is the quantity fitted to the clock and
+  the GAPS are the quantities fitted to microseconds,
+  and why they are not fitted the same way.
+end note
+
+== the leader: 9 ms, split in two because of the eight-bit immediate ==
+
+CPU -> LED : 342 carrier cycles
+note over CPU
+  <b>LDI A, 342 ASSEMBLED TO LDI A, 86</b> - the ISA's
+  immediate is EIGHT BITS, and 342 & 0xFF = 86.
+
+  The frame that left the pin was a perfectly good
+  38 kHz carrier whose 9 ms leader was <b>2.3 ms</b>.
+  Nothing downstream noticed: the carrier was right,
+  the bursts were right, the gaps were right. Only
+  the LEADER was wrong, and only because a count
+  did not fit in an immediate.
+end note
+note over LED
+  <b>measured 8 988.0 us in 343 carrier cycles</b>
+
+  Hence IR_LEADR = 2 runs of IR_LEAD = 171 cycles
+  each: 2 x 171 = 342.
+end note
+CPU -> PAD : PINOE = 0x00 - RELEASE
+note over LED
+  <b>4.5 ms of silence: measured 4 504.0 us</b>
+
+  This gap is what tells a receiver a frame is
+  STARTING rather than continuing.
+end note
+note over CPU
+  <b>IR_LEADGAP = 255 ON THE (3,130) PAIR, NOT (4,40).</b>
+  (4,40) wants 529 outer steps for 4.5 ms, and
+  529 & 0xFF is 17 - so the leader's gap came out
+  <b>136 us</b> instead of 4.5 ms.
+
+  And 136 us does not look like a truncated constant.
+  It looks like a TRANSMITTER THAT IS IN A HURRY,
+  which is the worst kind of wrong: plausible, small,
+  and in the one place a receiver uses for frame
+  detection. (3,130) has a 1 064-clock step, so 255
+  outer steps reach the target inside one byte:
+  254 * 1064 + 4 = <b>270 260 clocks = 4 504.33 us</b>.
+end note
+
+== the eight data bits: the value IS the silence ==
+
+group a 0-bit - short burst, LONG silence
+  CPU -> LED : IR_BIT = 21 carrier cycles
+  note over LED
+    <b>552.0 us of 38 kHz</b>
+  end note
+  CPU -> PAD : release
+  note over LED
+    <b>1 694.9 us of silence</b> (datasheet 1 687.5)
+    IR_GAP0 = 200 on (4,40): 199*511 + 4 = 101 693 clk
+  end note
+  note over RECV
+    the receiver times the SILENCE, and a long one is
+    a zero. 199*511 + 4 = 101 693 clocks = 1 694.88 us.
+  end note
+end group
+
+group a 1-bit - short burst, SHORT silence
+  CPU -> LED : the same 552.0 us burst
+  CPU -> PAD : release
+  note over LED
+    <b>562.2 us of silence</b> (datasheet 562.5)
+    IR_GAP1 = 67 on (4,40): 66*511 + 4 = 33 730 clk
+  end note
+  note over RECV
+    a short silence is a one. 66*511 + 4 = 33 730
+    clocks = 562.17 us.
+  end note
+end group
+
+note over CPU, RECV
+  0xA5 = 1010 0101, <b>LSB first</b>:
+  1,0,1,0,0,1,0,1 - four ones and four zeros, which is
+  exactly what the TB found: <b>gaps 4 long (a zero) and
+  4 short (a one)</b>, and <b>6 bit-transitions in 7</b>.
+  ...
+  The burst is IDENTICAL for both values, so the value is
+  carried entirely by the silence. The bit is the rotating
+  copy's own bit 0 and the copy is rotated right after each
+  slot, so there is no shifting to get wrong.
+end note
+
+== the stop burst: the part a "send the byte" firmware leaves out ==
+
+CPU -> LED : one final burst
+note over LED
+  <b>552.0 us in 22 carrier cycles</b>, then release.
+end note
+note over RECV
+  <b>WITHOUT IT A RECEIVER CANNOT TELL THE FRAME ENDED
+  rather than that the remote is transmitting a very
+  long gap.</b> It is the part of a frame a firmware
+  written for "send the byte" usually leaves out, and
+  the TB counts the carrier cycles to see it is there.
+end note
+
+== the check the mutation gate forced into the TB ==
+
+note over CPU, RECV
+  <b>"Each half is constant" IS NOT "the two halves are EQUAL".</b>
+  ...
+  The gate's first run had three survivors of eleven. One put BOTH half periods
+  on the same delay pair, which produced a carrier of 788 clocks one way and 782
+  the other: <b>38.05 kHz against 37.88, 0.4 % asymmetric on every edge</b> -
+  inside every frequency window a real receiver has - and it PASSED.
+  ...
+  A receiver does not care that the carrier is on frequency. It cares that the
+  carrier is a CARRIER, and one whose halves differ is a square wave at 38 kHz
+  with the wrong duty cycle. So the TB now measures the two DISTRIBUTIONS
+  <b>against each other</b>, to within a clock, and that check is the act's
+  whole point.
+  ...
+  The other two survivors were a burst of 20 carrier cycles (526 us, -6.4 %,
+  which the old +/-10 % window accepted - now +/-5 %, which admits the two widths
+  a whole number of cycles can produce, 21 at -1.7 % and 22 at +2.9 %, and
+  rejects the third) and a mutant that was BEHAVIOURALLY A NO-OP because its
+  anchor was written against the byte's LOAD rather than its ROTATE.
+end note
+
+note over CPU, RECV
+  <b>A "whole number of carrier cycles" check was written and then DELETED as
+  unsound.</b> The burst opens with a two-instruction initiation pulse, so its
+  span is not a whole number of periods - and the check fired on all ten bursts
+  INCLUDING THE CORRECT ONES.
+
+  A check that is wrong about what it measures is worse than no check: the first
+  thing anyone would do is loosen the tolerance until it went away, and then the
+  loosened tolerance is the one that is believed.
+end note
+
+@enduml

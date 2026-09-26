@@ -1,0 +1,193 @@
+@startuml proto-fm-biphase-timing
+' ===========================================================================
+' proto-fm-biphase-timing.puml - (c) the bi-phase timing the act is built on.
+'
+' *** STATUS: designed WIP. The numbers below are the DESIGN's constants, from
+' firmware/bmc_frame.pe and tb/tb_pe_soc_bmc.v on fw-timing-protocols. They are
+' NOT measured, because the act is 7/7 RED. A timing figure for a passing act
+' would carry measured numbers; this one carries the targets the checks assert
+' against, and says so, because a figure that cannot tell the two apart is a
+' figure that overstates the evidence.
+' ===========================================================================
+
+title FM0/FM1 bi-phase - the timing the act is built on\n<font size=12>DESIGN constants, not measured: this act is 7/7 RED on fw-timing-protocols</font>
+
+hide stereotype
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #33555
+  LifeLineBorderColor #33555
+  LifeLineBackgroundColor #FAFAFA
+  ParticipantBorderColor #33555
+  ParticipantBackgroundColor #F4F7FB
+  ParticipantFontName monospaced
+  ActorFontName monospaced
+  NoteFontName monospaced
+  GroupFontName monospaced
+}
+
+participant "ENCODER\nthe TB, or the\nfirmware on OUT_PAD" as ENC
+participant "the wire\nno clock on it" as WIRE
+participant "DECODER\ntimestamps, it does\nnot synchronise" as DEC
+participant "the 1 us counter" as TICK
+
+== why the half-interval is a WHOLE number of microseconds ==
+
+note over ENC, DEC
+  <b>THE BIT PERIOD IS 4 us: TWO 2 us HALF-INTERVALS.</b>
+  ...
+  And that is not tidiness. The decoder TIMESTAMPS the level on the 1 us counter
+  and compares it with the level recorded at the last CHANGE, and <b>that comparison
+  is only exact if every transition lands on a tick.</b> A bit period that is not a
+  multiple of the counter's unit would make the decoder's OWN ARITHMETIC the least
+  accurate thing in the act - and a decoder whose timing is its weakest part is not
+  a decoder that has been measured, it is one that has been assumed.
+  ...
+  The half-interval is therefore <b>COUNTED, not waited on:</b> 120 clocks = 2 us
+  exactly at 60 MHz. A loop waiting on the free-running tick would inherit the
+  phase residual the WS2812 act documented - up to a full microsecond, which here
+  is HALF A HALF-INTERVAL.
+end note
+
+== the three symbols, as waveforms ==
+
+group symbol 0 - the same in FM0 and FM1
+  ENC -> WIRE : |  transition   (the middle)
+  WIRE -> DEC : the decoder timestamps this at a TICK
+  note over DEC
+    a 0 <b>HAS</b> a transition at the END of its interval -
+    and it has one in BOTH encodings, so the 0 is the
+    symbol a receiver can get right first.
+  end note
+end group
+
+group symbol 1 in FM0 - the extra transition is the whole difference
+  ENC -> WIRE : |  transition   (the middle)   <-- FM0's
+  note over DEC
+    a data transition <b>INSIDE</b> the first half-interval is
+    what says "FM0". A sample-based edge detector cannot
+    see the difference at all: all three symbols have a
+    transition somewhere.
+  end note
+end group
+
+group symbol 1 in FM1 - no transition anywhere in the bit
+  note over WIRE
+    <b>NO transition at all inside this bit.</b>
+  end note
+  note over DEC
+    <b>AND THIS IS A CLEAN SQUARE WAVE IN A RUN OF ONES</b> -
+    one transition per bit, in the middle, from which the
+    decoder recovers its clock exactly.
+    ...
+    <b>THE FIRST VERSION OF THE TESTBENCH CLAIMED THAT A RUN
+    OF ONES IN FM1 WAS THE "NO TRANSITIONS" STREAM AND
+    THEREFORE NOT A DECODABLE FRAME.</b> That claim was in
+    the TB header, in the encoder, and in two WORKLOG lines,
+    and it was wrong in all four.
+    ...
+    <b>It was the INSTRUMENT that was wrong</b> - the pattern
+    this whole block exists to demonstrate - and it is why
+    the act was written with <b>TWO decoders from the wire
+    rules</b> rather than one decoder and one encoder that
+    agree by construction. A pair that agrees by construction
+    agrees even when both are wrong.
+  end note
+end group
+
+== the decoder's actual job: compare with the last CHANGE ==
+
+DEC -> TICK : read the counter
+TICK -> DEC : now
+DEC -> DEC : level == dmem[4] (the level at the last change)?
+note over DEC
+  <b>A BI-PHASE RECEIVER DOES NOT SYNCHRONISE ON A LEVEL.\b>
+  ...
+  It TIMESTAMPS the level and compares it with the level recorded at the last
+  CHANGE, and it is that comparison which RECOVERS THE CLOCK. There is no other
+  clock in the system: the one the receiver runs on is the one it takes from the
+  data.
+  ...
+  <b>THE BOUNCE IS FORCED BY THE ISA.</b> The store-forward a transition detector
+  wants, X = ram[X], cannot be written: <b>OP_LDS (0xB) is a <= ram[x] with NO X
+  destination</b>, and the encoding that looks like it, LDM X,addr with arg[7]=1, is
+  a <b>DIRECT</b> load whose address field is the <b>top nibble only</b> and cannot
+  even name byte 8. So the old level lives in a memory byte -
+  ...
+  <b>and that byte belongs to this decoder and to NOTHING ELSE.</b> A scratch shared
+  between a routine and its caller is how the DS18B20 act lost a byte counter to the
+  delay routine.
+end note
+DEC -> DEC : no change: keep timestamping
+DEC -> DEC : changed: dmem[8] += 1 half-interval
+
+note over DEC
+  <b>WHY THE BIT IS DECIDED ONCE PER BIT AND NOT ONCE PER
+  TRANSITION.</b>
+  ...
+  A bit is TWO half-intervals, so counting transitions and calling each one a bit
+  gives two bits where there is one. And the distinction that matters - <b>a data
+  transition INSIDE a bit</b> - is only visible if the decoder is counting
+  half-intervals rather than edges, because an edge is an edge wherever it falls.
+  ...
+  dmem[8] counts half-intervals and dmem[12,13] holds the bit under construction.
+end note
+
+== the enabled-flag trap, which is the sixth of its kind ==
+
+note over ENC, DEC
+  <b>PINOE = 0x00 RELEASES EVERY PAD, AND IN PARTICULAR THE INPUT.</b>
+  ...
+  A pad the firmware DRIVES reads back its own register through PIN, not the wire.
+  <b>Claiming the input pad means the firmware never sees the stream at all.</b>
+  ...
+  The first version of this init CLAIMED the input - writing BMC_IN to PINOE, on the
+  reasoning that "the input is the device's, so claim it" - and the symptom was that
+  <b>NO TRANSITION WAS EVER DETECTED</b>, which reads as a decoder that does not work
+  rather than as an enable written backwards.
+  ...
+  <b>It is the SIXTH time in this block that a level and an enable have been
+  confused,</b> and the only reason it was found at all is that the testbench's
+  check NAMES THE FLAG and the flag was 0xFF.
+end note
+
+== the one input the act must be able to FAIL on ==
+
+note over ENC, DEC
+  <b>A LINE HELD CONSTANT IS THE INPUT THAT MATTERS MOST.</b>
+  ...
+  <b>EVERY</b> bit of a well-formed frame carries a transition in its middle,
+  because "bi-phase" means the level changes WITHIN the interval. So a line held
+  CONSTANT - which is what a disconnected, shorted or dead sensor looks like on the
+  wire - has <b>no transitions at all and carries no clock</b>, and a receiver that
+  locked on to it has locked on to nothing.
+  ...
+  THAT is the stream the last check presents, and the firmware's answer to it must be
+  a <b>DECLARED FAILURE (dmem[3] = 0xFF) rather than a byte it invented.</b>
+  ...
+  <b>A DECODER THAT CANNOT FAIL IS NOT A DECODER.</b>
+end note
+
+== the design's timing constants, and what is NOT measured ==
+
+note over ENC, DEC
+  |= quantity |= value | source | measured? |=
+  | half-interval | <b>2 us</b> = 120 clocks | the encoder's counted delay | NO - act is RED |
+  | bit period | <b>4 us</b> | two half-intervals | NO |
+  | the counter's unit | <b>1 us</b> = 60 clocks | port 0x4, I2CTICK | n/a - it is the SoC's |
+  | a 1's extra transition, FM0 | at the <b>START</b> of the interval | the wire rules | NO |
+  | a 1's transitions, FM1 | <b>none</b> inside the bit | the wire rules | NO |
+  | a 0's transition | at the <b>END</b>, both encodings | the wire rules | NO |
+  ...
+  <b>NOTHING IN THIS TABLE HAS BEEN MEASURED,</b> and the figure says so in its own
+  title. Every other timing figure in this set carries measured numbers from a
+  passing act; this one carries the DESIGN's targets, which is what the seven RED
+  checks are asserting against.
+  ...
+  <b>What is NOT modelled, and is stated rather than buried:</b> one inter-frame gap,
+  and <b>no noise, no jitter and no line-length limit</b>. Those are the things a real
+  receiver's worst case lives in, and pretending otherwise would be claiming a
+  robustness this act does not test.
+end note
+
+@enduml

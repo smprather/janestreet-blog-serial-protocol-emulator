@@ -154,9 +154,18 @@ this block exists to prevent, and it is why every one of these fitted numbers is
 `CONSTS` entry in `tools/fw/peasm.py` rather than a literal in the source — which is
 also what lets `--const OW_RST=40` perturb it for the mutation suite.
 
-The pair changes once: `(4,40)` gives a 511-clock (8.5 µs) step for the reset, and
-`(2,13)` gives a 69-clock (1.22 µs) step for everything after, which is what a 5 µs
-write slot needs.
+The pair changes once: `(4,40)` gives a 511-clock (8.52 µs) step for the reset, and
+`(2,13)` gives a 69-clock (**1.15 µs**) step for everything after, which is what a
+5 µs write slot needs.
+
+**69 clocks is 1.15 µs, not 1.22 µs**, and the difference is the same class of slip
+as the servo's: a clock count and its conversion printed side by side with only
+one of them derived. 69 ÷ 60 = 1.15 exactly. The 1.22 was copied from
+`firmware/ds18b20.pe`'s header, which carries the same conversion error, and the
+page's own derivation proves it — `(23-1)*69 + 4 = 1 522` clocks = 25.37 µs is only
+consistent with a 1.15 µs step. `tools/diag/delay_lattice.py` now recomputes every
+"N clocks = X µs" in every figure and every page, which is what catches it
+mechanically instead of by re-reading.
 
 ## Why the open-drain bit is deliberately NOT set
 
