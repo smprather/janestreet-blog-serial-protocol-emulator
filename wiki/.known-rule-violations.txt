@@ -88,27 +88,3 @@
 # IF YOU HAVE TO PIN SOMETHING AGAIN: fix the page first. A pin is a record that
 # a rule is currently not met, and the whole value of this file was that every
 # line in it was true. See regress/check_wiki_pages.sh for the rules themselves.
-
-# ---------------------------------------------------------------------------
-# STATUS 2026-09-26: NO PINNED VIOLATIONS REMAIN. Both rules this file was
-# pinning are CLEAN across all 43 hand-written pages:
-#
-#   no-frontmatter      0 of 43   was 4  (3 plans/ + 1 reference/)
-#   zero-outbound-links 0 of 43   was 8  (7 plans/ + 1 reference/)
-#
-# Collected 12-to-0, and the two halves were collected SEPARATELY on purpose: the
-# gate's STALE check is what forces a pin out, so deleting pins in the same change
-# that fixed the pages is the only way to keep the two from disagreeing. A page
-# fixed here with its pin left behind is a red that names the page and the rule.
-#
-# THE HEADER IS KEPT DELIBERATELY, not because there is anything left to pin but
-# because the mechanism has to be able to come BACK. Both directions are still
-# enforced: a new violation is NEW and red, and re-adding a line here for a
-# violation that no longer fails is STALE and red. An empty baseline that is
-# deleted cannot record that this corpus was once 12 red, and the next person to
-# break a rule would have no idea a file like this exists.
-#
-# IF YOU HAVE TO PIN SOMETHING AGAIN: fix the page first, and note the policy
-# above - a violation that only appears at MERGE time is PREDICTED AND REPORTED to
-# the page's owner, not pre-pinned, because a pin is a statement about a page on
-# the branch holding it. See regress/check_wiki_pages.sh for the rules themselves.

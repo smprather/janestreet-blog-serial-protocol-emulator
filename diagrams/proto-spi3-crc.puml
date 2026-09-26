@@ -137,8 +137,9 @@ end group
 group RESP — 8 rises, MISO MSB first
   S -> I : rise 24..31  0110 1111   = 0x6F
   note over I
-    resp = word XOR 0x7E5A, applied
-    byte-wise by the slave model.
+    resp = word[15:8] XOR 0x7E, one byte.
+    The mask's low half (0x5A) is dead: the
+    slave's response register is 8 bits wide.
   end note
 end group
 group CRC8(RESP) — 8 rises, the receive-side check

@@ -123,6 +123,13 @@ package "Protocol and timing acts as firmware\none CPU, one pin matrix, TWO tick
   pads --> p_sr04 : pins
 }
 
+package "Per-act protocol figures — one family per firmware persona act" {
+  component "proto-<act>   the act's own figure\ndht11 · dmx512 · ds18b20 · fm-biphase\nfreqmeter · i2c-adv · midi · nec-ir\nservo · spi3-crc · sr04 · uart-flow · ws2812" as pf_act
+  component "proto-<act>-frame\nthe frame / encoding layer\n7 of the 13 acts carry one" as pf_frame
+  component "proto-<act>-timing\nthe cell / cadence layer\n7 of the 13 acts carry one" as pf_timing
+  pf_act --> pf_frame : pf_frame --> pf_timing
+}
+
 package "Chip-host protocol figures and concept pages — the documented wire contract" {
   component "proto-spi-framing\nthe request/response word and bit\nlayout, and the WAIT-WORD rule" as p_docframe
   component "proto-r2-read-path\nthe four read opcodes, the 11-word\nheader, the read-count ceiling" as p_docread
@@ -167,7 +174,8 @@ package "Delivery model — parallel worktree fleet" {
 pads -[hidden]down-> p_r2port
 p_r2wait -[hidden]down-> p_r3ctr
 p_r3sem -[hidden]down-> p_proto
-p_sr04 -[hidden]down-> p_docframe
+p_sr04 -[hidden]down-> pf_act
+pf_timing -[hidden]down-> p_docframe
 p_docarch -[hidden]down-> p_fvtool
 p_fvsmt -[hidden]down-> p_wbus
 
@@ -234,6 +242,20 @@ note bottom of p_fvsmt
   next-value function. It also validates the pipeline: the known-inductive
   pe_ctrl subset passes there too, so a FAILED run on a hard claim means the
   CLAIM, not the tool.
+end note
+
+note bottom of pf_act
+  29 figures across 13 act families, on a deliberate naming convention: the
+  bare `proto-<act>` is the act's own figure, and `-frame` and `-timing` split
+  it into the encoding layer and the cell/cadence layer. Seven acts carry all
+  three (dht11, ds18b20, fm-biphase, freqmeter, nec-ir, servo, sr04); the other
+  six carry the bare figure only, because those acts have one story to tell
+  rather than two layers over it.
+
+  The maps name the whole convention rather than listing 29 nodes, because a
+  list that long stops being a map. What matters for a reader is that the
+  family exists, what its three members mean, and that the act list is
+  complete.
 end note
 
 note bottom of p_docframe
