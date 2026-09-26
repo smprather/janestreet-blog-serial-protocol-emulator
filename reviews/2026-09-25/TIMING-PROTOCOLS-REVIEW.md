@@ -773,3 +773,150 @@ clock (a 2.6 M clock TB that woke up 2.6 M times to decide whether the pin had
 moved would spend its wall time deciding it had not), and the DONE flag is
 polled every 256 clocks rather than every clock, because the firmware is parked
 once it is set and a per-clock read of `dut.dmem` is 2.6 M hierarchical reads.
+
+---
+
+## MERGE-REPAIR: six acts red in main, and the cause was not in the six acts
+
+**manager dispatch 2026-09-25 · commit `3657847` on `fw-timing-protocols`**
+
+### What was reported
+
+All six acts fail in main (5b4731f and later) with `dmem = xx`, zero edges.
+They were green on the branch they were verified on. The manager's hypothesis
+was that the merge dropped something in the act dependency chain, with
+`tools/fw/peasm.py` named as the visible difference.
+
+### What the evidence said, and it was not the hypothesis
+
+**Every one of the twelve files the six acts own is byte-identical between main
+and the green branch** — six `.pe`, six `.hex`, six TBs, and `peasm.py`. That
+was checked by object hash (`git rev-parse main:<path>` against
+`HEAD:<path>`), not by eye. There is nothing in the six acts to repair.
+
+The `peasm.py` difference the manager saw is **this branch's uncommitted
+Block 3 WIP**: the `FM_IN` / `FM_PER_BASE` / `FM_HI_BASE` constants and the
+block's comment. It is work in progress on this branch, not damage done by the
+merge, and it is now a separate commit (`d88e316`) that a `git diff` of two
+trees will not confuse with a merge artefact again.
+
+The real difference was one file the six acts do not own and do depend on:
+**`rtl/pe_cpu.v`**, where the R3 debug-control block added two **module
+inputs**, `dbg_hold` and `dbg_step`.
+
+### The mechanism
+
+```verilog
+wire cpu_exec = dbg_step || (run && !dbg_hold);   // R3, as merged
+```
+
+A testbench that predates those ports leaves them unconnected. The port arrives
+as `Z`, so `!dbg_hold` is `X`, so `cpu_exec` is `X`, so **`if (cpu_exec)` is
+false and the core never commits an instruction**. Every observable in the
+system then stays at its reset value: `dmem` reads back `x`, the pad never
+moves, and the testbench reports zero edges and eventually a watchdog.
+
+The evidence that this is the whole story is a **pattern**, not an argument.
+Of the nineteen testbenches that instantiate `pe_soc`:
+
+| tie `dbg_hold`? | count | result |
+|---|---|---|
+| no | **7** | **all 7 fail** (the six acts + the RED frequency meter) |
+| yes | 12 | all 12 pass (`tb_pe_soc_tick`'s comment reads "R3: debug control idle here") |
+
+Seven failing out of nineteen, and the seven are exactly the seven that do not
+name the ports. A merge that dropped content does not produce that shape; a
+new port with no default does, precisely.
+
+### The repair, in two independent hunks
+
+1. **`rtl/pe_cpu.v`, where the input is consumed.** The gate now tests both
+   debug inputs with **case equality against `1'b1`**, so anything that is not
+   a hard one reads as "not held" / "no step" — the debug interface is
+   inactive unless something actively asserts it. In synthesis this is the
+   identical expression (`x` and `z` do not exist in hardware), so the netlist
+   does not change. The convention belongs at the consumer rather than at
+   every call site, because a call site is the one place that can forget it.
+2. **The six acts' TBs, plus the frequency meter's**, tie the ports
+   explicitly, so no act *depends* on an RTL convention and the two repairs
+   cannot mask each other.
+
+Either alone is sufficient; both are kept.
+
+### Reported, not touched: the formal wrapper
+
+`formal/pe_soc/formal_pe_soc.v` also instantiates `pe_soc` without naming
+these two ports. There a floating input is not a dead core but a **free
+variable**, so every `pe_soc` target is proved with the debug hold free rather
+than inactive — weaker, not broken, and invisible in the current results.
+That is the R3 owner's call to make, so it is flagged rather than fixed here.
+
+### And a pre-existing failure the merge also carries
+
+`R3 golden package: FAILED` — `reviews/2026-09-25/r3-hex/README.md` and
+`tb/r3-vectors/README.md` disagree about the chip-confirmation status (25 of 26
+steps claimed chip-confirmed in simulation, versus none). **Reproduced
+identically in a pristine export of main**, so it is not caused by the repair.
+Also out of scope here; flagged for the R3 owner.
+
+### Verification
+
+All on real RTL, Icarus, the real `1P_1024x16` SRAM macro, in throwaway
+`git archive` exports of main so the main worktree was never touched.
+
+| probe | contents | result |
+|---|---|---|
+| **B** | `main` as merged, unpatched | **6/6 FAIL** (`edges=0`, `dmem=xx`) |
+| **A** | `main` + the `rtl/pe_cpu.v` hunk **only** | **6/6 PASS** |
+| **C** | `main` + the six TB hunks **only** | **6/6 PASS** |
+| **worktree** | `main` + both (this branch) | **6/6 PASS** |
+
+The commands, from any `git archive main` export, with
+`SRAM=$(regress/sram_model.sh)` and
+`RTL="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v"`:
+
+```sh
+cd tb
+for t in ws2812 servo dht11 ds18b20 ir_nec stepper_ramp; do
+  iverilog -g2012 -s tb_pe_soc_$t -o /tmp/v_$t.vvp $RTL $SRAM tb_pe_soc_$t.v
+  timeout 900 vvp /tmp/v_$t.vvp | grep -E '^(PASS|FAIL)'
+done
+```
+
+**Run these from the `tb/` directory.** The testbenches `$readmemh` a path
+relative to it (`../firmware/<name>.hex`), and running the same binaries from
+`/tmp` produces `ERROR: $readmemh: Unable to open ...` and then
+`FAIL: ... edges=0` — a failure signature **identical** to the real defect. I
+produced two rounds of exactly that false evidence before noticing, and it is
+the most dangerous coincidence in this whole episode: a wrong working
+directory reproduces the merge bug perfectly.
+
+### Two process notes worth keeping
+
+**I broke my own repair once, silently.** The port list ended without a
+trailing comma, so the `.dbg_hold` line became part of the comment and the port
+was still unconnected — the same defect as not writing it, and it elaborates
+and runs. All six acts still failed. Nothing but *compiling* caught it: no
+test, no gate, no assertion. An elaboration failure is the only instrument
+that sees a port that is syntactically fine and semantically absent.
+
+**A full suite run in this worktree filled `/tmp` and left mutants in the
+tree.** `run_all.sh --fast -j8` reached RTL 46/46 and FIRMWARE 37/37 — with
+the frequency-meter act included and green — and then eight mutation harnesses
+failed with `OSError: [Errno 28] No space left on device`, and one of them
+could not restore its snapshot: `FATAL: rtl/pe_eth_mac.v does not match the
+snapshot after restore`. Sixteen files were left mutated. This is the
+documented hazard (the per-worktree lock protects files from concurrent
+*runs*, not from a restore that fails), reproduced by running out of disk.
+Recovery was `git checkout -- firmware/ rtl/ formal/`; the tree is clean at
+`3657847` and `mutate_eth_mac_tb.sh` then reported **30 detected, 0 survived,
+0 harness errors** with the tree byte-identical afterwards — so those eight
+failures were environmental, not the repair.
+
+**And I killed another worker's run doing it.** Stopping my own suite with
+`pkill -9 -f "[v]vp"` matched **the manager's own verification run** in
+`/tmp/vm-red`, which then exited 137 (SIGKILL) and printed
+`MERGE GATE: RED — DO NOT PUSH HEAD`. The pattern was self-match-proof but not
+*scope*-proof: a pattern that cannot match itself can still match everyone
+else's processes. `pkill` is the wrong instrument in a shared `/tmp`; naming
+the process tree and killing by PID is the right one.
