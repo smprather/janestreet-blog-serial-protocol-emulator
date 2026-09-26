@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -680,6 +681,84 @@ class TestTheJudgeFacingCountsAreCurrent(unittest.TestCase):
             "the opening must scope its count to the read-path steps",
         )
 
+
+class TestTheRunbooksCommandsAreReal(unittest.TestCase):
+    """The runbook's commands must be commands, not plausible-looking text.
+
+    The existing bring-up pin checks that certain strings APPEAR in the
+    document. It does not check that they WORK: a renamed script, a moved
+    module or a dropped flag leaves every pin green and leaves the operator
+    holding a board with a runbook that fails at its first line. That is the
+    worst place to discover a typo, and the cheapest thing to check is that the
+    paths exist and the flags parse.
+
+    The acceptance invocation is checked by handing its tokens to the real
+    `parse_args`, so this is not "does the text look like a command" - it is
+    "does the tool accept this command line".
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = read(BRINGUP)
+        cls.command_paths = cls._paths_in_command_positions(cls.text)
+        cls.usage_flags = cls._flags_from_help()
+
+    @staticmethod
+    def _paths_in_command_positions(text):
+        """`tools/...` paths where the runbook RUNS them, not where it names them.
+
+        Scoped to fenced blocks and lines that start with a command, because a
+        prose mention like `tools/host_bridge/{main,pe_frame,tt_adapter}.py` is
+        a source list, not a command - and the first version of this swept both
+        in, then failed on a directory and on a brace expression it had
+        truncated. A pin that fires on prose is a pin people turn off.
+        """
+        paths = set()
+        in_block = False
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("```"):
+                in_block = not in_block
+                continue
+            if in_block or stripped.startswith(
+                    ("python3", "tools/", "MICROPYTHON", "$ ", "ls ", "sudo ")):
+                paths.update(re.findall(r"tools/[A-Za-z0-9_./-]+", stripped))
+        return sorted(paths)
+
+    @staticmethod
+    def _flags_from_help():
+        """The flags the runner advertises, from the runner's own --help.
+
+        Read from the tool rather than from its source, so a renamed flag
+        cannot leave the pin agreeing with a stale copy of itself.
+        """
+        result = subprocess.run(
+            [sys.executable, "-m", "tools.host_bridge.acceptance", "--help"],
+            capture_output=True, text=True, check=False, cwd=str(REPO_ROOT))
+        return set(re.findall(r"(--[a-z-]+)", result.stdout))
+
+    def test_every_script_the_runbook_runs_exists(self):
+        self.assertGreaterEqual(
+            len(self.command_paths), 3,
+            "the runbook should name the scripts it runs; found "
+            f"{self.command_paths}")
+        for path in self.command_paths:
+            with self.subTest(path=path):
+                self.assertTrue((REPO_ROOT / path).is_file(),
+                                f"the runbook runs {path}, which does not exist")
+
+    def test_every_flag_the_runbook_uses_is_one_the_runner_accepts(self):
+        flags = set(re.findall(r"(?<![\w-])(--[a-z-]+)",
+                               "\n".join(line for line in self.text.splitlines()
+                                        if "acceptance.py" in line)))
+        self.assertIn("--device", flags, "the runbook's device run should be pinned")
+        self.assertTrue(self.usage_flags, "could not read the runner's --help")
+        for flag in sorted(flags):
+            with self.subTest(flag=flag):
+                self.assertIn(
+                    flag, self.usage_flags,
+                    f"the runbook tells the operator to pass {flag}, which "
+                    f"acceptance.py does not accept")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
