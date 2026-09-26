@@ -1,0 +1,181 @@
+@startuml proto-ds18b20
+' ===========================================================================
+' proto-ds18b20.puml - (a) the DS18B20 1-Wire protocol engine, both sides.
+'
+' 1-Wire inverts the DHT11's problem. The DHT11 is sampled BETWEEN two windows;
+' a DS18B20 read slot is sampled INSIDE the slot, and it is the DEVICE that
+' initiates: after the host's reset the sensor answers with a presence pulse, so
+' for the second half of the exchange the firmware is reading a line the sensor
+' is driving.
+'
+' The lesson the whole file is built on is the split between the two kinds of
+' wait:
+'   where the wire ANNOUNCES an event  -> WAIT for the event (spin on the pin)
+'   where the wire does not             -> COUNT
+' Steps 1, 3, 4 and the inner delay of step 5 are counted; step 2 and the first
+' half of step 5 are edge waits. The first DHT11 design counted its way through
+' the sensor's bit periods and drifted 40 us over twenty zero bits.
+' ===========================================================================
+
+title DS18B20 - the 1-Wire protocol engine on both sides\n<font size=12>reset, presence, 0xCC, 0xBE, two read bytes; LSB first, sampled INSIDE the slot</font>
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #33555
+  FontName monospaced
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C8B800
+  FontName monospaced
+  FontSize 11
+}
+
+' ---------------------------------------------------------------- EMITTER --
+state "FIRMWARE SIDE - firmware/ds18b20.pe" as EMIT {
+
+  [*] --> CLAIM
+  CLAIM : PINOE = 0x00, TXPIN = OW_DATA, PINOE = OW_DATA\n<b>1-Wire idles HIGH, and the idle state is the pull-up</b>
+
+  state "RESET\nthe host's pulse" as RST
+  RST : TXPIN = 0x00 - the line goes LOW\ndmem[12] = 0 (the delay's return phase)\nCOARSE pair (4,40), OW_RST = 58: 485.5 us\n<b>A COUNTED DELAY, because nothing on the wire\nsays when 480 us is up</b>
+
+  state "PH0\nrelease, then settle" as PH0
+  PH0 : PINOE = 0x00 - RELEASE, the sensor may pull low\ndmem[12] = 1\nFINE pair (2,13) from here on: one outer step\nis 69 clocks = 1.22 us, which is what a 5 us\nslot needs\nOW_T15 = 14, a 15 us settle
+
+  state "PH1\nwait for the PRESENCE" as PH1
+  PH1 : spin until LOW, then spin until HIGH.\n<b>BOTH edges are waited for, with no counted 15 us\nbetween them</b> - the pulse's length is the\nsensor's to choose (60-240 us) and the host\ncannot know it. If no sensor is there the first\nloop never exits, which is correct for a bus\nwith no timeout in this ISA.
+
+  state "WRITE A BIT\nLSB first, no shifting" as WB
+  WB : the bit to send is the byte's own BIT 0, so\nthe loop needs no shift: read the byte, mask\nbit 0, send, SHR the byte so the next bit 0 is\nthe next bit of the frame.\ndmem[6] holds the byte to send, dmem[2] the\nbits left. EIGHT slots per byte.\n\n<b>THE WRITE PATH MUST CLAIM THE PIN.</b>\n1-Wire writes DRIVE: release-then-set-the-level\ndoes not pull the line down, and the pin is\nRELEASED at ph0, so TXPIN = 0 alone would leave\nthe line HIGH and the sensor would see a 1 for\nevery bit. The model caught this - it decoded 0\nwrite bits because the line never went low.
+
+  state "a 1:\nshort low, then release" as W1
+  W1 : PINOE = OW_DATA, TXPIN = 0x00\nOW_T5 = 5: 5 us of low, the datasheet's 1-15 us\nthen PH2, which RELEASES and waits\nOW_T55 = 49: the rest of the slot, ~55 us
+
+  state "a 0:\nhold low for the WHOLE slot" as W0
+  W0 : PINOE = OW_DATA, TXPIN = 0x00, and it\nSTAYS: the phase goes to 3, not to 2\nOW_T65 = 57: 65 us, the datasheet's ~60 us\nthen PH3 releases and the next slot starts high
+
+  state "PH5\nthe byte is sent" as PH5
+  PH5 : SHR the byte, dmem[2]--, more bits?\ndmem[7]-- : 2 then 1 then 0. After the decrement,\n0 means BOTH 0xCC and 0xBE are out.\n<b>THE DELAY AND THE PROTOCOL MUST HAVE DISJOINT\ndmem OWNERSHIP.</b> This counter was on dmem[10],\nwhich is the DELAY ROUTINE's middle-counter\nTARGET - so every delay overwrote it and the\nbyte transition read whatever the delay left\nbehind. A shared slot between them is not a\nwarning, it is a lost phase transition.
+
+  state "READ A BIT\nthe hybrid wait" as RB
+  RB : the host INITIATES: PINOE = OW_DATA,\nTXPIN = 0x00 - a 6 us initiation pulse, because\nthe SENSOR presents the bit as a LEVEL held\nacross a known instant.\nOW_T40 = 23: a fixed 25.4 us wait, then\n\n<b>A previous version SPUN for the sensor's own\nfalling edge here, and it raced the model's\ntransitions: the line was still low from the\ninitiation, so the loop exited at once and every\nsample landed a whole slot early. Counting to a\nfixed instant cannot race.</b>
+
+  state "PH4\nSAMPLE THE LEVEL" as PH4
+  PH4 : IN A, PIN; AND A, OW_DATA\nJNZ rb_was_zero\n\n<b>RELEASED (high) is a ZERO on the wire;\nPULLED DOWN (low) is a ONE - the OPPOSITE of a\nwrite slot, where the host pulling the line down\nIS the zero.</b> The first version read the\nopposite and both bytes came back EXACTLY\ncomplemented: 0x2b as 0xd4 and 0x01 as 0xfe.\n\nthen SHR the accumulator with the new bit at the\nTOP, so the FIRST bit read slides down to bit0 by\nthe eighth: 1-Wire is LSB first.
+
+  state "DLY1/DLY2/DLY3\nthe delay" as DLY
+  DLY : total(n1,n2,n3) = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4 clocks\nTWO pairs:\n  (4,40)  511 clocks = 8.5 us a step - the reset\n  (2,13)   69 clocks = 1.22 us a step - the slots\n\n<b>A DISPATCH IS A FUNCTION OVER EVERY PHASE THE\nPROGRAM USES.</b> dmem[12] carries the phase and a\nsubtract chain picks the return address, because\nthe ISA cannot return to seven addresses. Two\nbugs lived in this chain, both from patching one\ndispatch for two different loops: it first handled\n0-3 and sent everything >= 4 to ph4, which\ndropped a write-1's high period into the read path;\nand when the read loop was given phases 4 and 5\nit collided with the write loop's 4 and 5.
+
+  state "PARK\ndone" as PARK
+  PARK : dmem[14] = 1 - both bytes are in. THE TB'S\nOBSERVABLE, so "hung mid-byte" (0) and\n"finished" (1) are different failures.\nTXPIN = 0x00, then JMP halt: no HALT in the ISA.
+
+  CLAIM --> RST
+  RST --> DLY
+  DLY --> PH0 : dmem[12] == 0
+  PH0 --> DLY
+  DLY --> PH1 : dmem[12] == 1
+  PH1 --> WB : presence found
+  WB --> W1 : bit 0 set
+  WB --> W0 : bit 0 clear
+  W1 --> DLY
+  DLY --> PH2 : dmem[12] == 2, a 1's low is over
+  PH2 --> DLY
+  DLY --> PH5 : dmem[12] == 5, the 55 us are over
+  PH5 --> WB : more bits, or the next byte
+  W0 --> DLY
+  DLY --> PH3 : dmem[12] == 3, a 0's slot is over
+  PH3 --> PH5 : the byte is sent
+  PH5 --> RB : dmem[7] hit 0: BOTH commands are out
+  RB --> DLY
+  DLY --> PH4 : dmem[12] == 4, the sample instant
+  PH4 --> RB : dmem[3] != 0, or the next byte
+  PH4 --> PARK : dmem[8] hit 0
+}
+
+' --------------------------------------------------------------- SENSOR/SRC --
+state "SENSOR SIDE - tb/tb_pe_soc_ds18b20.v" as SRC {
+
+  [*] --> WATCH
+  WATCH : the model is written FROM THE DATASHEET,\nnot from the firmware - which is why it was\nright when the firmware was wrong\n\n<b>it drives tRDV at the datasheet's MAXIMUM\n(15 us), so "sampled too early" is falsifiable</b>\nand its read edges come off the PADS rather than\noff its own state, which is what stopped it\nlosing the master's next release while still\ninside the previous bit's hold
+
+  state "RESET + PRESENCE" as RP
+  RP : host low >= 480 us, then the sensor\npulls low for 60-240 us and releases
+
+  state "COMMANDS" as CMD
+  CMD : 0xCC SKIP ROM, then 0xBE READ SCRATCHPAD,\nLSB first, eight slots each, and both are\nDECODED FROM THE WIRE
+
+  state "SCRATCHPAD" as SP
+  SP : sixteen read slots, the model's own\ndecode, and the firmware's two banked bytes\n<b>2b 01</b>
+
+  state "CHECK\nwhat is claimed" as CHK
+  CHK : 1. the reset pulse is > 480 us\n2. the presence pulse is inside 60..240 us\n   AND the host's pin_oe is released on every\n   clock of it\n3. every WRITE slot's low period is inside its\n   own band (1-15 us for a 1, 60-120 for a 0)\n4. exactly 16 read slots\n5. every read slot's initiation pulse is inside\n   1-15 us\n6. the SAMPLE INSTANT is inside the sensor's\n   data window with >= 2 us of margin at BOTH\n   ends\n7. dmem[0..1] == 2b 01, LSB first\n8. dmem[14] == 1
+
+  WATCH --> RP
+  RP --> CMD
+  CMD --> SP
+  SP --> CHK
+  CHK --> WATCH
+}
+
+EMIT -[#3A7,hidden]-> SRC : ONE wire, open-drain in law\nand in the model, and the direction of\nthe pull-down REVERSES between the two halves
+
+note bottom of EMIT
+  <b>Why the polarity is different in the two directions,
+  and why the two cannot share one sample idiom.</b>
+
+  In a 1-Wire READ slot a ONE is the line LOW: the
+  slave holds it down for the rest of the slot. In a
+  WRITE slot it is the other way about, because there
+  the host is the one pulling down. The read path
+  first borrowed the write path's sample test, and
+  both bytes came back exactly complemented.
+
+  A sensor that transmits its data inverted still
+  transmits DATA. Both bytes still had eight bits and
+  a plausible number of ones. Nothing in the run looks
+  wrong until the bytes are compared - which is why the
+  way to tell a polarity bug from a protocol bug is to
+  look at the ACCUMULATOR, not the waveform.
+end note
+
+note bottom of RB
+  <b>Why the read is "wait, then count to a fixed instant"
+  and not "wait for an edge".</b>
+
+  The obvious version spins for the sensor's own falling
+  edge. It races: the line is still LOW from the host's
+  own initiation pulse, so the loop exits at once and
+  every sample lands a whole slot early. The version
+  that works is release, wait 25.4 us, SAMPLE THE LEVEL -
+  which is the DHT11 lesson applied the other way round.
+  There, the host had to synchronise because the sensor's
+  bit PERIOD varies. Here the host has to count because
+  the sensor's bit VALUE is a LEVEL, and a level read at a
+  fixed instant needs no edge at all.
+end note
+
+note bottom of SRC
+  <b>Why the open-drain bit is deliberately NOT set.</b>
+
+  pe_pinmux has an OD bit and this is the open-drain
+  case, so leaving it clear looks like an omission. It
+  is a decision, and it costs something: with OD set, a
+  pin holding 1 RELEASES rather than drives high, so
+  with OD set a pin holding 1 READS BACK AS RELEASED -
+  a write of 1 and a write of 0 look identical on the
+  pin, and the edge-wait loops cannot see the sensor's
+  pulses at all.
+
+  OD buys nothing here and costs the one thing the pin
+  read-back is for. The i2c_pins.pe idiom - "write out=1
+  or out=0 and never touch oe or od again" - is right
+  for a bus where the LEVEL IS THE DATA. 1-Wire is the
+  opposite case: the data is a TIME and the level is
+  just a carrier for it.
+end note
+
+@enduml

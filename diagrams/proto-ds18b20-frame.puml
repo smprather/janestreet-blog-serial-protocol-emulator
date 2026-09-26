@@ -1,0 +1,127 @@
+@startuml proto-ds18b20-frame
+' ===========================================================================
+' proto-ds18b20-frame.puml - (b) the DS18B20 command and scratchpad layout,
+' and the two slot grammars that carry it.
+'
+' A DS18B20 has a 64-bit ROM code (a family code, a 48-bit serial number and a
+' parity bit) and a nine-byte scratchpad. This act addresses one sensor with
+' SKIP ROM, so the ROM code never appears on the wire - and that is worth saying
+' in the figure, because "no ROM code" is a decision and not an absence.
+' ===========================================================================
+
+title DS18B20 - the bytes on the wire, and the two slot grammars\n<font size=12>SKIP ROM means the 64-bit ROM code is never sent; bits are LSB first</font>
+
+left to right direction
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam rectangle {
+  BorderColor #33555
+  FontName monospaced
+  FontSize 12
+}
+skinparam rectangle<<g>> {
+  BackgroundColor #FFF4D6
+  BorderColor #C8B800
+}
+skinparam rectangle<<w>> {
+  BackgroundColor #DCE6F5
+  BorderColor #5577AA
+}
+skinparam rectangle<<r>> {
+  BackgroundColor #D6F5D6
+  BorderColor #3A7A3A
+}
+skinparam rectangle<<off>> {
+  BackgroundColor #EFEFEF
+  BorderColor #999999
+}
+
+rectangle "RESET\n\n<b>485.7 us</b> of LOW\nhost-driven\n\nfloor: <b>480 us</b>" as A <<g>>
+rectangle "PRESENCE\n\n<b>120.0 us</b>\nSENSOR-driven\n\nband: 60 .. 240 us\n\n<b>the device initiates</b> - it is the\nonly act in the family where\nthe far end speaks first" as B <<g>>
+rectangle "0xCC  SKIP ROM\n\n<b>8 write slots</b>\n\none addressed sensor,\nso the 64-bit ROM code\nis NEVER sent" as C <<w>>
+rectangle "0xBE  READ SCRATCHPAD\n\n<b>8 write slots</b>\n\nthen 16 read slots\nfollow, unattended" as D <<w>>
+rectangle "SCRATCHPAD BYTE 0\n\n<b>0x2B</b> = <b>43</b>\nthe temperature,\nLSB byte first\n\n8 read slots" as E <<r>>
+rectangle "SCRATCHPAD BYTE 1\n\n<b>0x01</b>\n\n8 read slots\n\nbytes 2..8 exist and are not\nread: the loop is the same for\neach and sixteen slots\ndemonstrate the SLOT TIMING as\nwell as seventy-two, at a third\nof the simulated time. The byte\ncount is one number in dmem[3]." as F <<r>>
+rectangle "PARK\n\ndmem[14] = 1" as G <<off>>
+
+A -[#3A7]-> B
+B -[#3A7]-> C
+C -[#3A7]-> D
+D -[#3A7]-> E : 8 read slots
+E -[#3A7]-> F : 8 more
+F -[#3A7]-> G
+
+note bottom of A
+  <b>The reset is COUNTED, not waited for.</b>
+
+  Nothing on the wire announces that 480 us is up, so
+  it is the delay routine's job - OW_RST = 58 on the
+  (4,40) pair, 485.5 us nominal, 485.7 measured.
+end note
+
+note bottom of B
+  <b>The presence is WAITED FOR, twice.</b>
+
+  Two spin loops, and no counted delay between them:
+  the pulse's length is the sensor's to choose
+  (60-240 us) and the host cannot know it. If no
+  sensor is there the first loop simply never exits,
+  which is the correct behaviour for a bus with no
+  timeout in this ISA - and the testbench
+  distinguishes "no sensor" from "sensor present"
+  by whether the program got past this point.
+end note
+
+note top of C
+  <b>Why 0xCC and not a 64-bit ROM code.</b>
+
+  A ROM match is the addressable case: the host sends
+  all eight ROM bytes, the sensor compares them with its
+  own, and only the addressed one answers. With one
+  sensor on the bus that is 64 slots to learn nothing,
+  and it is the case that costs 64 slots of simulation.
+
+  SKIP ROM is 8 slots and is exactly right here. What
+  it costs is stated rather than glossed: with it, a bus
+  with two sensors would have BOTH answer, and the two
+  read streams would collide. The act claims the
+  single-sensor case and says so.
+end note
+
+note bottom of D
+  <b>Why the two halves of the exchange need different sample idioms.</b>
+
+  A write slot: the HOST pulls the line low. A 1 is a
+  short low then a release; a 0 is the low held for the
+  whole slot.
+
+  A read slot: the SENSOR holds the line. A 0 leaves it
+  released for the rest of the slot; a 1 pulls it low
+  again for 1-15 us after the initiation pulse.
+
+  So in the read direction a ONE is LOW and in the
+  write direction a ZERO is LOW. The read path first
+  borrowed the write path's test and both bytes came
+  back exactly complemented - 0x2b as 0xd4, 0x01 as
+  0xfe. A sensor that transmits its data inverted still
+  transmits DATA.
+end note
+
+legend bottom
+  |= direction |= a 0 is |= a 1 is |= host's job |=
+  | <b>WRITE</b> (host -> sensor) | the line LOW for the WHOLE slot, ~60 us | a SHORT low (1-15 us) then RELEASE for the rest | drive low, and <b>CLAIM the pin first</b> |
+  | <b>READ</b> (sensor -> host) | the line RELEASED for the rest of the slot | the line PULLED DOWN again for 1-15 us | release, then <b>SAMPLE THE LEVEL</b> at a fixed instant |
+
+  <b>THE BITS ARE LSB FIRST</b>, which is the opposite of the DHT11 and of the
+  WS2812. The write path needs no shift at all - it masks the byte's own bit 0,
+  sends, and rotates the byte right so the next bit 0 is the next bit of the
+  frame. The read path shifts the accumulator <b>right</b> with the new bit at
+  the top, so the first bit read slides down to bit 0 by the eighth.
+
+  Copying the DHT11's shift-LEFT + bit-at-LSB here is the defect the mutation
+  case ow-bit-order pins: every byte comes back REVERSED, with the right bit
+  count and the wrong values.
+end legend
+
+@enduml

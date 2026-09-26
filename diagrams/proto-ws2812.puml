@@ -1,0 +1,119 @@
+@startuml proto-ws2812
+' ===========================================================================
+' proto-ws2812.puml - (a) the WS2812 protocol engine, as two state machines.
+'
+' A WS2812 strip is a CLOCKLESS receiver: it samples the line at one instant
+' in every 1.25 us cell and there is nothing on the wire to resynchronise to.
+' So the protocol engine has to be modelled on BOTH sides at once - the
+' firmware's emitter (firmware/ws2812.pe) and the testbench's strip decoder
+' (tb/tb_pe_soc_ws2812.v) - because the only thing that makes the two agree is
+' a set of numbers that both sides derive from the same 60 MHz grid.
+'
+' THE 75-CLOCK CELL, from firmware/ws2812.pe bitcell:
+'   instr 1-9    select the level for this cell from the mask and the byte
+'   instr 10     OUT TXPIN, A    <- THE CELL STARTS ON THIS EDGE
+'   instr 11-56  46 NOPs          the high period
+'   instr 57-58  OUT TXPIN, 0x00  tHIGH1 = 48 clocks = 800.0 ns
+'   instr 59-61  mask >>= 1       0x80 -> 0x40 -> ... -> 0x01 -> 0
+'   instr 62     JZ byteend       a zero mask means the byte is done
+'   instr 63-77  14 pads + JMP, OR the 14-instruction byte-end path
+'   ---
+'   75 clocks = 1.25 us at 60 MHz, with NO remainder. The period is not a
+'   constant calibrated against a tick; it is the LENGTH OF THE CODE, because
+'   the core is single-cycle (rtl/pe_cpu.v: one instruction, one clock, no
+'   stalls, no pipeline bubbles).
+' ===========================================================================
+
+title WS2812 - the protocol engine on both sides\n<font size=12>800 kHz single-wire NRZ, 1.25 us cells, 75 clocks exactly</font>
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #33555
+  FontName monospaced
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C8B800
+  FontName monospaced
+  FontSize 11
+}
+
+' ---------------------------------------------------------------- EMITTER --
+state "FIRMWARE SIDE - firmware/ws2812.pe" as EMIT {
+
+  [*] --> IDLE
+  IDLE : <b>IDLE</b>\nline high, push-pull\npinned to bit 6, one pad claimed
+
+  state "RESET\n>50 us of low" as RESET
+  RESET : OUT TXPIN, 0x00\ndmem[9]=WS_RST1=10, dmem[10]=WS_RST2=99\n(10-1)*(4*99+7)+4 = 3 631 clocks = 60.5 us\ndmem[6]=G, dmem[7]=0, dmem[4]=0x80
+
+  state "DLY1 / DLY2\nthe counted delay" as DLY
+  DLY : total = (n1-1)*(4*n2+7)+4 clocks\ndmem[11] is RELOADED from dmem[10] every\nouter pass - without the reload the inner\ncounter reads 0, wraps to 255, and the\n"reset" becomes 1.1 M clocks
+
+  state "BITCELL\nthe 75-clock cell" as CELL
+  CELL : A = dmem[6] AND dmem[4]\nA = 0 ? stay low : load LED_DIN (0x40)\nboth paths padded to the same length\n10: OUT TXPIN, A  <- cell starts\n57-58: OUT TXPIN, 0x00  <- 48 clocks of high\n59-61: dmem[4] >>= 1\n62: JZ byteend   (mask is now 0)
+
+  state "BYTEEND\nthe equalised branch" as BYTE
+  BYTE : X = dmem[7]\nif 2 - X == 0 the FRAME IS DONE\nelse dmem[7]++, dmem[6] = next byte,\ndmem[4] = 0x80\n14 instructions either way
+
+  IDLE --> RESET : the frame repeats\n(two frames, so a reset\nBETWEEN them is visible)
+  RESET --> DLY
+  DLY --> CELL
+  CELL --> CELL : mask != 0\n(14 NOPs, then JMP bitcell)
+  CELL --> BYTE : mask == 0\n(the eighth cell)
+  BYTE --> CELL : dmem[7] < 2
+  BYTE --> RESET : dmem[7] == 2\n24 cells sent
+}
+
+' ---------------------------------------------------------------- DECODER --
+state "STRIP SIDE - tb/tb_pe_soc_ws2812.v" as DEC {
+
+  [*] --> WAIT_RISE
+  WAIT_RISE : watch the WIRE, not the data register\nreleased = the strip's pull-up = 1
+
+  state "ANCHOR\nfind the frame" as ANCH
+  ANCH : a low longer than 50 us is a RESET,\nso the NEXT rising edge is cell 0.\nanchoring on the first two rising edges is\nthe classic TB defect here: for this data\nthose are cell 0 and cell 3
+
+  state "SAMPLE\none instant per cell" as SMP
+  SMP : cell k begins at t0 + 75k EXACTLY\nthe line is sampled at +42 clocks\n(0.70 us, the strip's sample point)\nline high -> 1, line low -> 0\nbit 23 first: GRB order
+
+  state "CHECK\nwhat is claimed" as CHK
+  CHK : 1. all 24 cells on the 75-clock grid\n2. span == 24 * 75 clocks exactly\n3. tHIGH1 == 48 clocks (800.0 ns)\n4. tLOW(1) >= 450 ns\n5. every 1 still high at +42 clocks\n6. reset > 50 us, twice\n7. pin_oe never released (n_released == 0)
+
+  WAIT_RISE --> ANCH : low > 50 us\n(RESET_MIN_US)
+  ANCH --> SMP
+  SMP --> SMP : k < 23
+  SMP --> CHK : k == 23
+  CHK --> WAIT_RISE : the frame repeats
+}
+
+EMIT -[#3A7,hidden]-> DEC : the SAME 60 MHz grid\n75 clocks = 1.25 us, no remainder
+
+note bottom of EMIT
+  <b>Why the mask is also the loop counter.</b>
+  After eight cells the mask has walked 0x80 -> ... -> 0x01 -> 0,
+  so SHR + JNZ ends the byte with no second counter. A first version kept a
+  separate 8..1 counter in dmem[3] and the cell came out at 77 clocks - over
+  budget, because the byte-boundary work had nowhere to hide the extra 3.
+
+  <b>Why the byte is not shifted.</b>
+  This ISA has SHR and no shift-left. "Mask bit 7, then shift the byte right"
+  reads like MSB-first and is not: after k shifts the bit due at k sits at
+  7-k, so bit 7 is zero from the second cell and the frame is 24 zeros.
+  Leaving the byte alone in dmem[6] and walking the mask keeps dmem[0..2] the
+  frame the firmware was given, in datasheet order.
+end note
+
+note bottom of DEC
+  <b>Why this TB claims equality, not a window.</b>
+  47 or 49 clocks is 783 or 817 ns and clears every datasheet window in
+  print. But a cell that is 74 clocks shifts every sample in the frame, and a
+  byte-boundary path one clock longer stretches three cells in every frame -
+  a frame 3/24 wrong, which no window check can see and a strip can.
+  Hence: measured on the PADS, in CLOCKS, requiring t0 + 75k.
+end note
+
+@enduml
