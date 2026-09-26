@@ -95,9 +95,12 @@ process.stdout.write(JSON.stringify({ prepended,
 def render_events(events):
     if NODE is None:
         raise unittest.SkipTest("node not installed")
-    result = subprocess.run([NODE, "-e", PAGE_DRIVER, str(APP_JS),
-                             json.dumps(events)],
-                            capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        [NODE, "-e", PAGE_DRIVER, str(APP_JS), json.dumps(events)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     if result.returncode != 0:
         raise AssertionError(f"node driver failed: {result.stderr[:400]}")
     return json.loads(result.stdout)
@@ -109,10 +112,11 @@ def make_api():
     port = LoopbackPort(bridge)
     transport = T.SerialTransport(port, clock=clock, sleep=clock.sleep)
     session = S.ControllerSession(lambda: transport, clock=clock)
-    config = SV.ServerConfig(repo_root=REPO_ROOT,
-                             sources_dir=REPO_ROOT / "tools" / "host_gui"
-                             / "tests" / "fixtures",
-                             web_dir=WEB)
+    config = SV.ServerConfig(
+        repo_root=REPO_ROOT,
+        sources_dir=REPO_ROOT / "tools" / "host_gui" / "tests" / "fixtures",
+        web_dir=WEB,
+    )
     return SV.Api(session, config), session, bridge, port
 
 
@@ -182,9 +186,9 @@ class TestTheServerDeliversEventsOverTheSocket(unittest.TestCase):
     def test_a_queued_event_is_delivered_with_the_shape_the_page_reads(self):
         # Queue an event BEFORE connecting, so the endpoint's next tick has
         # something to send and the test does not depend on a race.
-        self.port.incoming.append(json.dumps({
-            "v": 1, "event": "chip.status", "data": {"status": 0}
-        }).encode())
+        self.port.incoming.append(
+            json.dumps({"v": 1, "event": "chip.status", "data": {"status": 0}}).encode()
+        )
         with self.client.websocket_connect("/api/events") as socket:
             message = receive_within(socket)
         # the page reads `event.event` and `event.data`; a payload that does not
@@ -195,7 +199,7 @@ class TestTheServerDeliversEventsOverTheSocket(unittest.TestCase):
     def test_the_endpoint_exists_on_the_path_the_page_opens(self):
         """The page's URL is a claim about the server; check it is one."""
         with self.client.websocket_connect("/api/events"):
-            pass          # a 404 or a rejection raises here, by name
+            pass  # a 404 or a rejection raises here, by name
 
 
 class TestThePageRendersWhatTheServerSends(unittest.TestCase):
@@ -207,14 +211,16 @@ class TestThePageRendersWhatTheServerSends(unittest.TestCase):
         line = out["prepended"][0]
         self.assertIn("chip.status", line)
         self.assertIn("status", line)
-        self.assertNotIn("undefined", line,
-                         "a shape mismatch renders as undefined in the GUI")
+        self.assertNotIn(
+            "undefined", line, "a shape mismatch renders as undefined in the GUI"
+        )
 
     def test_a_chip_fault_is_flagged_as_an_error(self):
         out = render_events([{"event": "chip.irq", "data": {"faults": 1}}])
         self.assertIn("chip fault asserted", out["message"] or "")
-        self.assertTrue(out["isError"],
-                        "a chip fault must be marked as an error, not a note")
+        self.assertTrue(
+            out["isError"], "a chip fault must be marked as an error, not a note"
+        )
 
     def test_an_event_without_data_still_renders(self):
         """`data` is optional in the page; a bare event must not read undefined."""
