@@ -3251,3 +3251,24 @@ touching the other nine.
 3. leave the **9** alone until their reader is known, and say so in the file,
    because a half-fix that silently leaves nine paths shared is worse than a
    named remainder.
+
+## 2026-09-27 act (c): BLOCKED BY THE QUIET WINDOW -- and one audit that is not
+
+**The manager has frozen `regress/`, `rtl/`, `tb/` and
+`tools/diag/check_diagrams.sh`, and forbidden suite runs** (the dep-guard voids
+runs on concurrent edits; a merge-gate re-run is going in the main tree). Work
+continues in wiki pages, figures and firmware comments.
+
+**ALL THREE queued items are inside the frozen set, and none of them can be
+done in any reduced form:**
+
+| queued item | why it is blocked |
+| :--- | :--- |
+| re-run `regress/mutate_timing_tb.sh` alone, record its exit code | it is a **suite run**, which is forbidden outright |
+| repoint the 17 safe `/tmp` log paths in `run_all.sh` | `regress/` is frozen |
+| leave the 9 unsafe paths alone until their reader is known | that is a `regress/` edit too |
+
+**So the exit-code experiment is not delayed by caution, it is forbidden, and
+saying otherwise would be pretending.** None of the three is worth doing in a
+way that cannot be verified, and step 3 in particular is a 17-path repoint whose
+only proof is a full gate run -- which is exactly what the window forbids.
