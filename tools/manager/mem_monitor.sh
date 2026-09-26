@@ -97,7 +97,19 @@ while :; do
   pct=$((used * 100 / total))
   now=$(date +%s)
 
-  # ---- runaway brake: snapshot + kill oversized project tooling ------------
+  # --- /tmp capacity (2026-09-26: /tmp hit 100% and gates failed looking like logic bugs) ---
+# A full tmpfs makes fixtures un-writable: self-tests report "dirty" and a
+# resource fault and a logic fault produce the SAME verdict. Alert before that.
+tpct=$(df -P /tmp 2>/dev/null | awk 'NR==2{gsub("%","",$5); print $5}')
+if [ -n "$tpct" ] && [ "$tpct" -ge 85 ]; then
+  {
+    echo "MEM-MONITOR $(date '+%F %T'): /tmp is ${tpct}% full (resource fault incoming: gates will fail like logic bugs)"
+    df -h /tmp | tail -1
+    du -sh /tmp/* 2>/dev/null | sort -rh | head -8
+  } >>"$ALERT"
+fi
+
+# ---- runaway brake: snapshot + kill oversized project tooling ------------
   runaways=""
   while read -r pid rss rest; do
     [ -z "${pid:-}" ] && continue
