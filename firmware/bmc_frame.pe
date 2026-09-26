@@ -131,26 +131,27 @@ init:
         ; byte the preamble costs and it is the encoder's dead scratch, which
         ; belongs to nothing today.
         ;
-        ; IT IS SEEDED TO 1, and the first version seeded it to ZERO because
-        ; the `LDI A, 1` was left out and the preceding `LDI A, 0` was still in
-        ; scope. The comment said 1 and the instruction said 0, which is this
-        ; act's own recurring defect in its purest form: a comment that is
-        ; right and an instruction that is not, and the second is the one that
-        ; runs. Measured: every byte_done took the store path, so the preamble
-        ; was banked as payload -- four bytes banked, dmem[9] left at 4, and
-        ; dmem[3] never written, which is why the flag stayed 0xFF and the
-        ; receive bytes came out 1c 1c 1c.
+        ; *** AND IT IS SEEDED AT THE *END* OF INIT, WHICH IS WHERE IT BELONGS,
+        ; AND THE REASON IS THE FAULT THIS STEP COST A RESUME OVER. ***
+        ; The first version seeded it HERE, in the middle of the run of zero
+        ; stores, and the seeding needs an `LDI A, 1`. That left A = 1 for the
+        ; THREE STORES THAT FOLLOW, so dmem[5], dmem[11] and dmem[12] were all
+        ; seeded to 1 instead of 0 -- and dmem[11] is the MODE BYTE, so main's
+        ; `LDM A,11 / JNZ encoding` fired on the very first poll and the program
+        ; jumped into the encoder stub, where half_wait sets dmem[13] to 0xFF
+        ; and spins. That is how "the program reaches the encoder" and "the
+        ; preamble flag reads 0xFF" were the same fault, and neither the jump
+        ; check nor the reachability pass nor the adjacent-label check could
+        ; see it: all three of those are structural, and this is a DATA fault
+        ; inside a block whose stores inherit a register value set earlier in
+        ; the same block.
         ;
-        ; And the value has to be 1 because the FIRST thing on the wire is
-        ; supposed to be a preamble: a receiver that starts with this clear
-        ; banks the preamble as payload, which is what the act did for a whole
-        ; day. The alternative -- no flag, and a phase inferred from the byte
-        ; index -- is AMBIGUOUS, because the payload's own first byte reaches
-        ; dmem[9] = 1 with dmem[7] = 7 exactly as the preamble's second run
-        ; does, and the two cannot be told apart from the counters alone. That
-        ; ambiguity is the reason this byte exists.
-        LDI   A, 1
-        STM   13, A
+        ; So the run of zero stores below now carries its OWN `LDI A, 0` and
+        ; does not depend on anything above it, and the one store that needs a
+        ; non-zero value is at the very end where it cannot reach anything. Both
+        ; halves of that are the fix; either alone would leave the other trap
+        ; armed.
+        LDI   A, 0
         STM   5, A             ; THE TIMESTAMP OF THE LAST CHANGE, and the
                                ; init omitted this one too. the_pin READS
                                ; dmem[5] (LDM A,14 / SUB A,5) before it ever
@@ -186,6 +187,21 @@ init:
                                ; on to anything", which is the answer this
                                ; program gives a stream with no transitions,
                                ; and the answer the testbench demands.
+                               ;
+                               ; AND LAST, BECAUSE IT IS THE ONLY STORE IN THIS
+                               ; BLOCK THAT NEEDS A NON-ZERO VALUE: dmem[13] is
+                               ; "the preamble is still being consumed", and it
+                               ; has to start at 1 because the FIRST thing on
+                               ; the wire is supposed to be a preamble. A
+                               ; receiver that starts with it clear banks the
+                               ; preamble as payload, which is what this act did
+                               ; for a whole day. The alternative -- no flag,
+                               ; and a phase inferred from the byte index -- is
+                               ; AMBIGUOUS, because the payload's own first byte
+                               ; reaches dmem[9] = 1 with dmem[7] = 7 exactly as
+                               ; the preamble's second run does.
+        LDI   A, 1
+        STM   13, A
 
         ; ---- the poll loop ----------------------------------------------
 main:
@@ -363,14 +379,49 @@ resync:
         STM   15, A
         JMP   main
 bit_store:
-        LDM   A, 7
-        MOV   Y, A
+        ; *** THE BIT IS SHIFTED IN, AND IT WAS BEING ADDED AT ITS OWN INDEX. ***
+        ; The first version of this block was
+        ;     LDM A,7 / MOV Y,A / LDM A,12 / MOV X,A / MOV A,Y / ADD A,X
+        ; which computes dmem[12] + dmem[7]: it ADDS THE BIT INDEX to the byte
+        ; under construction, instead of adding the bit AT that index. The
+        ; comment above it called it "the bit is placed with a general add of
+        ; two bytes, whose carry is NOT tested: both are 0 or 1" -- and both
+        ; WERE 0 or 1, which is true of the index and of the bit, and is why it
+        ; looked right. It put every bit at position = its own index, so a
+        ; byte came out as the set of its own bit positions and nothing else.
+        ;
+        ; THAT IS WHY EVERY BYTE THIS ACT HAS EVER REPORTED HAS BEEN 1c. 0x1c
+        ; is 0001_1100, and it is what you get from bits landing at the
+        ; indices 2, 3 and 4 of a byte whose data bits were at those indices.
+        ; Three separate sessions read 1c 1c out of this program and I read it
+        ; as a PHASE problem, because the boundary decision was independently
+        ; known to be exact and a wrong phase was the obvious suspect. It was
+        ; never a phase problem. A right answer to the wrong question about the
+        ; arithmetic, arrived at by measuring, which is the best disguise this
+        ; block has produced.
+        ;
+        ; A LEFT SHIFT ON THIS ISA IS A DOUBLING -- there is no shift-left
+        ; opcode, and the recipe this act started from asked for a halving,
+        ; which is a DOUBLING wearing the wrong name. So: Y takes the bit, X
+        ; takes the byte, A doubles it, and the bit goes in at the low end.
+        ;
+        ; AND A IS THE BIT HERE, not dead -- the earlier comment on this block
+        ; said "AT bit_store, A IS DEAD", and that was true when the BOUNDARY
+        ; path also jumped here. It no longer does, because a boundary carries
+        ; the same data as the mid after it and emitting both was fault 1 of
+        ; this step. So the two changed together and the comment went stale in
+        ; the same commit, which is the second time in this block that a fix
+        ; made a comment false -- and the rule that catches it is the same one:
+        ; after an edit, read the WHOLE block and every comment in it.
+        MOV   Y, A             ; Y = the bit, which arrived in A on the mid path
         LDM   A, 12
         MOV   X, A
-        MOV   A, Y
-        ADD   A, X             ; the bit is placed with a general add of
-        STM   12, A            ; two bytes, whose carry is NOT tested: both
-        LDM   A, 7             ; are 0 or 1, so the sum never carries
+        ADD   A, X             ; A = the byte doubled, i.e. shifted left one
+        MOV   X, A
+        MOV   A, Y             ; A = the bit again
+        ADD   A, X             ; and in it goes at the low end
+        STM   12, A
+        LDM   A, 7
         ADD   A, 1
         STM   7, A
         ; ---- IS THE PREAMBLE OVER? --------------------------------------
@@ -392,6 +443,23 @@ bit_store:
         ; like a flaky wire.
         LDM   A, 13
         JZ    bit_counted       ; not the preamble: carry on into the payload
+        ; THE STATE IS dmem[9] = 1 AND dmem[7] = 7, AND THE FIRST VERSION TESTED
+        ; ONLY THE SECOND HALF OF THAT. So the preamble ended at its SEVENTH
+        ; bit rather than its fifteenth, cleared dmem[13], and the eighth bit
+        ; then arrived as an ordinary payload byte: measured, all four
+        ; byte_done events took the store path, dmem[9] was left at 4, and
+        ; dmem[3] was never written. The comment above this block said "dmem[9]
+        ; = 1 with dmem[7] = 7" and the code tested one byte of it, which is the
+        ; same defect as the comment that said "seeded to 1" over an instruction
+        ; that seeded 0 -- and it is the SECOND time in this one block that a
+        ; stated state and an implemented test have differed by a conjunct. A
+        ; comment describing a CONJUNCTION and a test of one conjunct is the
+        ; shape to look for, everywhere, from now on.
+        LDM   X, 9
+        LDI   A, 1
+        SUB   A, X             ; zero iff the preamble's FIRST byte is already
+        JNZ   bit_counted       ; behind us -- if it is not, dmem[7] = 7 is just
+                               ; the seventh bit of the preamble's first byte
         LDM   X, 7
         LDI   A, 7
         SUB   A, X             ; zero iff seven bits are in hand
