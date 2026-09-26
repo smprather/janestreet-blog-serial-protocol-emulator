@@ -228,7 +228,19 @@ bit_store:
         ADD   A, 1
         STM   7, A
         LDI   A, 8
-        SUB   A, 1
+        LDM   X, 7             ; THE SAME FAULT AS THE ONE EIGHT INSTRUCTIONS
+                               ; ABOVE, IN THE SAME SHAPE: `LDI A, 8 / SUB A, 1`
+                               ; computes 8 - 1 = 7, a CONSTANT, because SUB's
+                               ; operand field is an IMMEDIATE and this ISA has
+                               ; no `SUB A, <dmem>` form at all. So JZ byte_done
+                               ; never fired, the bit counter climbed to 23 and
+                               ; stopped, dmem[9] never advanced past 0, and
+                               ; dmem[0..2] stayed 00 -- the firmware counted
+                               ; bits and never finished a byte. The probe named
+                               ; it: dmem[7] = 23 after 24 bits, dmem[9] never
+                               ; moved. dmem[7] has to come through X to be on
+                               ; the right of a subtraction.
+        SUB   A, X             ; 8 - dmem[7]: zero at eight bits, a byte full
         JZ    byte_done
         JMP   main
 byte_done:
