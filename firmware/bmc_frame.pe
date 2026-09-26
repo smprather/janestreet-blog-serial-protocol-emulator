@@ -222,12 +222,34 @@ the_pin:
                                ; history that either of those two branches has
                                ; been reachable by a MEASUREMENT rather than by
                                ; a constant.
-        JMP   bit_edge
-        LDI   A, 0
-        STM   8, A             ; two half-intervals is a bit boundary
-        JMP   bit_edge
-half_done:
-        JMP   main
+        ; ---- AND THERE IS NOTHING BETWEEN HERE AND bit_edge --------------
+        ; There used to be, and finding that is the whole of this repair. The
+        ; (b) replacement ended at a `JMP bit_edge` and the tail of the block
+        ; it replaced -- LDI A,0 / STM 8,A / JMP bit_edge -- was left
+        ; UNDERNEATH it, so the listing read
+        ;     50 JZ first_half / 51 JMP bit_edge
+        ;     52 LDI A,0 / 53 STM 8,A / 54 JMP bit_edge / 55 JMP main
+        ; and 52..55 were DEAD, because 51 leaves the block first. That is a
+        ; FOURTH dead branch in this program; the check that finds dead
+        ; branches works, so shipping one means the check was run on the part
+        ; that changed rather than on the whole block. `half_done` was the
+        ; label on 55 and NOTHING EVER JUMPED TO IT -- the entire tail is
+        ; unreachable, which is why the run produced TWO writes to dmem[8]
+        ; rather than one per edge.
+        ;
+        ; THE `JMP bit_edge` AT 51 WENT WITH IT, and the note that came with
+        ; this repair was WRONG about why. It said the jump was mis-targeted,
+        ; because `JMP bit_edge` encodes 0x38 = 56 and 56 was read as the_pin.
+        ; 56 IS bit_edge. Counted from the assembler's listing: the_pin = 33,
+        ; half_done = 55, bit_edge = 56. A jump naming a label goes to that
+        ; label. The real reason the handler looked re-entered was the dead
+        ; tail holding four words open, and "fix the mis-targeted jump" would
+        ; have been a repair of a fault that was not there, made on the
+        ; strength of a decimal number read without the label map beside it.
+        ; The same number, read against the wrong table, is the whole failure.
+        ;
+        ; So the fall-through from the JZ now lands on bit_edge itself, which
+        ; is what the comment above has always claimed.
 
         ; ---- a bit boundary ---------------------------------------------
         ; A transition ON the second half-interval is a '0': a '1' has none

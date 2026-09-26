@@ -167,136 +167,235 @@ module tb_pe_soc_bmc;
   integer enc_idx = 0, enc_bit = 0, enc_half = 0;
   logic   enc_active = 0;
 
+  // THE BIT VALUE, taken out of the frame the way the checks below want it.
+  //
+  // `enc_bitval` USED TO TAKE A BIT NUMBER AND ANSWER "is it bit zero?", which
+  // is not the same question. The stimulus passed the BIT NUMBER 0..23, so
+  // every bit of A5 3C 96 except bit 0 encoded as a '1': the testbench sent a
+  // 24-bit RUN OF ONES, which under the old rules is a CONSTANT LINE. Measured
+  // on the wire: `in_line` changed THREE TIMES in a 3.9 ms run of a 24-bit
+  // frame, and the firmware's write-hook saw two intervals. The firmware was
+  // being handed a dead line and was answering correctly.
+  //
+  // A function whose parameter is named `b` and means "bit index" while its
+  // callers read it as "the bit" is this block's seventh constant-that-lies,
+  // and it hid because the self-check below called it with 7 for "a one" and 0
+  // for "a zero" -- the only two arguments for which "is it bit zero" and
+  // "what is the bit" give the same answer. A check written through the same
+  // lying function cannot find it. The check is now written against the
+  // LEVELS, and the bit value is carried explicitly.
   function automatic bit enc_bitval(input integer b);
-    enc_bitval = (b == 0) ? 1'b0 : 1'b1;              // LSB first
+    enc_bitval = ((b & 1) != 0);
   endfunction
 
-  // THE LEVEL IN A GIVEN HALF-INTERVAL, from the wire rules in the header of
-  // firmware/bmc_frame.pe. `carry` is the level at the END of the previous bit,
-  // which is the same thing as the level at the START of this one -- that is
-  // what makes the encoding STATEFUL, and it is why the old version could not
-  // express it at all.
+  // THE LEVEL IN A GIVEN HALF-INTERVAL, written from the CORRECTED wire
+  // rules -- the three that survived the second correction, and not from the
+  // first two versions, which are both wrong and both of which produced an
+  // encoder that ran and looked plausible:
   //
-  // THE THREE CASES, and each is one line of the rule:
-  //   a '0'  : h0 = carry,   h1 = ~carry   -> a transition in the MIDDLE
-  //   a '1', FM1 : h0 = ~carry, h1 = ~carry -> a transition at the START only
-  //   a '1', FM0 : h0 = carry,   h1 = carry -> NO TRANSITION AT ALL
+  //   1. EVERY BIT CARRIES A TRANSITION IN ITS MIDDLE. Always. Both encodings.
+  //      This is what makes the stream self-clocking, and it is the entire
+  //      reason the encoding exists.
+  //   2. THE DATA IS THE LEVEL OF THE FIRST HALF-INTERVAL.
+  //   3. FM0 MARKS A ONE HIGH, FM1 MARKS A ONE LOW. That is the WHOLE
+  //      difference between the two encodings.
   //
-  // AND THAT PRODUCES THE TWO BEHAVIOURS THE SPEC NOW PROMISES, which is the
-  // check rather than the claim: a run of ones under FM0 is a CONSTANT LINE
-  // (h0 and h1 are both `carry`, and `carry` is unchanged from bit to bit), and
-  // under FM1 it is a CLEAN SQUARE WAVE with a transition at every boundary
-  // (h0 flips against the previous h1, and h1 == h0, so nothing happens inside
-  // the bit). A '0' is the only case that transitions in the middle -- which is
-  // the manager's confirmed reading, and it is what puts the DATA in the
-  // POSITION of the transition and the CLOCK in the fixed interval between
-  // them.
+  // WHICH MEANS h1 = ~h0 IN EVERY CASE, and there is no `carry`.
   //
-  // fm0 IS READ IN THE BODY, which is the whole point: the previous version
-  // declared this parameter and never used it, so FM0 and FM1 encoded to the
-  // identical stream and the act's own headline check could not be run at all.
-  // THE PARENTHESES ARE NOT DECORATION: `return a ? b : c` parses as
-  // `return (a) ? b : c` and Icarus will not have it.
+  // THE `carry` IS GONE, and its removal is the finding: the old encoder
+  // threaded a `carry` through every half-interval and the whole self-check was
+  // written around a "run of ones is a constant line under FM0" property that
+  // needed it. That property was an ARTEFACT OF THE SUPERSEDED RULES. Under
+  // the corrected ones the encoding is STATELESS -- the level of half k
+  // depends on the bit and the polarity and on nothing that came before -- so
+  // the statefulness that the file spent a paragraph defending was a
+  // consequence of a rule that had already been thrown out.
+  //
+  // fm0 IS READ IN THE BODY, which has been true since the version that
+  // declared the parameter and never read it. THE PARENTHESES ARE NOT
+  // DECORATION: `return a ? b : c` parses as `return (a) ? b : c` and Icarus
+  // will not have it.
   function automatic bit enc_level(input integer b, input integer half,
-                                   input integer fm0, input bit carry);
-    bit data_one;
+                                   input integer fm0);
     bit h0;
-    data_one = enc_bitval(b);
-    h0 = data_one ? (fm0 ? carry : ~carry) : carry;
+    h0 = (fm0 != 0) ? enc_bitval(b) : ~enc_bitval(b);  // rule 2 + rule 3
     if (half == 0) return h0;
-    else           return (data_one ? h0 : ~h0);
+    else           return ~h0;                         // rule 1, unconditionally
   endfunction
 
+  // THE LEVEL AT HALF-INDEX k OF THE FRAME, which is what the stimulus walks.
+  // k/2 is the bit, k%2 is the half. One function, so the stimulus and the
+  // self-check cannot encode a frame differently -- the two of them sharing an
+  // implementation is fine HERE because neither is the thing under test: the
+  // firmware is, and it has never read this file.
+  //
+  // AND THE FIRST VERSION OF THIS FUNCTION WAS WRONG IN EXACTLY THE WAY THE
+  // FUNCTION IT REPLACED WAS WRONG, which is worth recording: it took a HALF
+  // index and indexed the frame with it (`by = k/8, bi = k%8`), so half-index
+  // 9 was read as bit 9 of byte 1 when it is bit 4 of byte 1. The wire then
+  // carried 17 level changes where the self-check derives 33, and the only
+  // reason it was found in one minute is that the probe counts the testbench's
+  // OWN output and compares it with the derivation. Two errors, four commits
+  // apart, both of them "an index computed in the wrong domain, in a function
+  // whose name says the domain". A name that says which index it takes is
+  // worth more than a comment that says it.
+  function automatic bit enc_frame_lev(input integer k, input integer fm0,
+                                       input integer fb0, input integer fb1,
+                                       input integer fb2);
+    integer bitno, by, bi;
+    bit d;
+    bitno = k / 2;                 // the BIT this half belongs to
+    by    = bitno / 8;
+    bi    = bitno % 8;
+    d     = ((by == 0 ? fb0 : (by == 1 ? fb1 : fb2)) >> bi) & 1;
+    enc_frame_lev = enc_level(d, k % 2, fm0);
+  endfunction
   // ---- THE ENCODER CHECKS ITSELF AGAINST THE PROMISED PROPERTIES ----------
   //
-  // The act's headline claim is that the two encodings are DIFFERENT and that
-  // the receiver can say which one it locked onto. Until now nothing in this
-  // file tested that, because the encoder could not express the difference --
-  // it declared an fm0 argument and never read it. These four checks are the
-  // ones that would have caught it, and they are here rather than in a review
-  // because a property nobody checks is a claim, not a rule.
+  // Written against the CORRECTED wire rules and against a DERIVATION, never
+  // against the encoder above. That distinction is the whole point and it is
+  // this block's sharpest finding: the previous four properties were all
+  // evaluated THROUGH enc_level, so they could only ever confirm that
+  // enc_level agreed with enc_level. They passed, and the frame that was
+  // actually put on the wire was twenty-four ones.
   //
-  // They are written against the SPEC, not against the implementation: a run of
-  // ones is a constant line under FM0 and a square wave under FM1, and the two
-  // encodings of one frame must not be the same stream.
-  integer enc_fail = 0, ei, eh, ediff, econst0, econst1;
-  bit   ec0, ec1, el0, el1, ecarry;
-  bit   s_fm0 [0:15];
-  bit   s_fm1 [0:15];
+  // A property is only worth having if the check and the thing under test were
+  // derived INDEPENDENTLY. Here the derivation is arithmetic on the frame: the
+  // level sequence, the transition positions, the intervals, the histogram.
+  // The expected histogram (18 one-half intervals, 14 two-half, for
+  // A5 3C 96) was computed by hand from the three rules and is asserted as a
+  // NUMBER, so if the encoder and the rules ever part company the check says
+  // which one moved.
+  integer enc_fail = 0, ei, eh, ek, kk;
+  bit   sc_bit  [0:NBITS-1];
+  bit   sc_lv0  [0:2*NBITS-1];
+  bit   sc_lv1  [0:2*NBITS-1];
+  integer sc_iv0 [0:2*NBITS-1];
+  integer sc_iv1 [0:2*NBITS-1];
+  integer sc_b0 = 8'hA5, sc_b1 = 8'h3C, sc_b2 = 8'h96;
+  integer n_iv0, n_iv1, n_mid_bad, n_data_bad, n_comp_bad, n_iv_bad;
+  integer n_iv1_half, n_iv2_half, n_bnd_eq, n_bnd_ne, n_prev, n_tr;
+
   task automatic enc_chk(input bit c, input string m);
     if (!c) begin $display("FAIL(encoder): %s", m); enc_fail++; end
   endtask
+
   initial begin
-    // (1) A RUN OF ONES UNDER FM0 IS A CONSTANT LINE. Eight 1s, the level held
-    //     from the first half of the first bit to the second half of the last.
-    ecarry = 1'b1; econst0 = 1;
-    for (ei = 0; ei < 8; ei = ei + 1)
-      for (eh = 0; eh < 2; eh = eh + 1) begin
-        el0 = enc_level(7, eh, 1, ecarry);          // 7 -> data_one = 1
-        if (el0 !== ecarry) econst0 = 0;
-        ecarry = el0;
+    // THE FRAME IS BUILT HERE, not read from enc_byte, because enc_byte is
+    // assigned by a LATER initial block and a check that reads a value another
+    // process has not written yet is this file's favourite instrument defect.
+    for (kk = 0; kk < 3; kk = kk + 1)
+      for (eh = 0; eh < 8; eh = eh + 1)
+        sc_bit[kk*8 + eh] = (((kk == 0 ? sc_b0 : (kk == 1 ? sc_b1 : sc_b2)) >> eh) & 1) != 0;
+
+    for (kk = 0; kk < 2*NBITS; kk = kk + 1) begin
+      sc_lv0[kk] = enc_level(sc_bit[kk/2] ? 1 : 0, kk%2, 1);
+      sc_lv1[kk] = enc_level(sc_bit[kk/2] ? 1 : 0, kk%2, 0);
+    end
+
+    // ---- THE DERIVATION, made once and used by all six properties ---------
+    // Intervals in HALF-INTERVALS, between consecutive transitions. The
+    // interval before the FIRST transition is not in here and must not be: the
+    // receiver has no previous transition to measure from, which is exactly
+    // what the preamble is for.
+    n_iv0 = 0; n_iv1 = 0; n_prev = -1; n_tr = 0;
+    for (kk = 1; kk < 2*NBITS; kk = kk + 1) begin
+      if (sc_lv0[kk] !== sc_lv0[kk-1]) begin
+        n_tr = n_tr + 1;
+        if (n_prev >= 0) begin sc_iv0[n_iv0] = kk - n_prev; n_iv0 = n_iv0 + 1; end
+        n_prev = kk;
       end
-    enc_chk(econst0,
-            "a run of ones under FM0 is a CONSTANT LINE -- the spec's promise, and the reason a preamble is needed");
-
-    // (2) A RUN OF ONES UNDER FM1 IS A CLEAN SQUARE WAVE: a transition at every
-    //     bit boundary, so the level at the start of each bit alternates.
-    ecarry = 1'b1; econst1 = 1; el1 = 1'b1;
-    for (ei = 0; ei < 8; ei = ei + 1)
-      for (eh = 0; eh < 2; eh = eh + 1) begin
-        el0 = enc_level(7, eh, 0, ecarry);
-        if (eh == 0 && el0 === el1) econst1 = 0;   // boundary must transition
-        el1 = el0;
-        ecarry = el0;
+    end
+    n_prev = -1;
+    for (kk = 1; kk < 2*NBITS; kk = kk + 1) begin
+      if (sc_lv1[kk] !== sc_lv1[kk-1]) begin
+        if (n_prev >= 0) begin sc_iv1[n_iv1] = kk - n_prev; n_iv1 = n_iv1 + 1; end
+        n_prev = kk;
       end
-    enc_chk(econst1,
-            "a run of ones under FM1 is a CLEAN SQUARE WAVE with a transition at every boundary");
+    end
 
-    // (3) THE TWO ENCODINGS OF ONE FRAME ARE NOT THE SAME STREAM. This is the
-    //     check the act exists to support, and the one the old encoder made
-    //     impossible: it returned the complement of the data on the first half
-    //     and the data on the second, for both encodings alike.
-    //
-    //     AND THE FIRST VERSION OF THIS CHECK WAS ITSELF WRONG, in the way
-    //     this block keeps producing: it kept ONE variable per encoding,
-    //     overwrote it on every half-interval, and compared the two at the
-    //     end. That compares the LAST level of each stream and calls it "they
-    //     differ" -- and both streams end at 0, so it reported a failure on an
-    //     encoder that was correct. A check that compares one value and
-    //     describes it as a comparison of streams is the same defect as
-    //     `SUB A, 1` read as "subtract one": the code does something
-    //     narrower than the sentence claims, and the sentence is what gets
-    //     believed. The whole sequence is compared here, all sixteen
-    //     half-intervals, because that is what the claim is about.
-    ecarry = 1'b1; ediff = 0;
-    for (ei = 0; ei < 8; ei = ei + 1) begin
-      s_fm0[ei*2]   = enc_level(ei, 0, 1, ecarry); ecarry = s_fm0[ei*2];
-      s_fm0[ei*2+1] = enc_level(ei, 1, 1, ecarry); ecarry = s_fm0[ei*2+1];
+    // (1) EVERY BIT CARRIES A TRANSITION IN ITS MIDDLE, in BOTH encodings.
+    //     Rule 1 stated as a check, over all 24 bits and both polarities.
+    n_mid_bad = 0;
+    for (ei = 0; ei < NBITS; ei = ei + 1) begin
+      if (sc_lv0[ei*2] === sc_lv0[ei*2+1]) n_mid_bad = n_mid_bad + 1;
+      if (sc_lv1[ei*2] === sc_lv1[ei*2+1]) n_mid_bad = n_mid_bad + 1;
     end
-    ecarry = 1'b1;
-    for (ei = 0; ei < 8; ei = ei + 1) begin
-      s_fm1[ei*2]   = enc_level(ei, 0, 0, ecarry); ecarry = s_fm1[ei*2];
-      s_fm1[ei*2+1] = enc_level(ei, 1, 0, ecarry); ecarry = s_fm1[ei*2+1];
-    end
-    for (ei = 0; ei < 16; ei = ei + 1)
-      if (s_fm0[ei] !== s_fm1[ei]) ediff = ediff + 1;
-    enc_chk(ediff > 0,
-            $sformatf("FM0 and FM1 encode one frame as DIFFERENT streams (%0d of 16 half-intervals differ) -- if these are the same the flag cannot be measured",
-                      ediff));
+    enc_chk(n_mid_bad == 0,
+            $sformatf("EVERY bit transitions in its middle, in both encodings (%0d of %0d bit-encodings held their level -- the rule the whole act rests on)",
+                      n_mid_bad, 2*NBITS));
 
-    // (4) A '0' TRANSITIONS IN ITS MIDDLE, in BOTH encodings -- the confirmed
-    //     reading, and the only case that carries data by transition position.
-    for (ei = 0; ei < 2; ei = ei + 1) begin
-      ecarry = 1'b1;
-      el0 = enc_level(0, 0, ei, ecarry);
-      el1 = enc_level(0, 1, ecarry ? 0 : 1, ecarry);
-      enc_chk(el0 !== el1,
-              $sformatf("a '0' transitions in the MIDDLE under %0s (half0 %0b, half1 %0b)",
-                        ei ? "FM0" : "FM1", el0, el1));
+    // (2) THE DATA IS THE LEVEL OF THE FIRST HALF-INTERVAL: FM0 high-for-one,
+    //     FM1 low-for-one. Checked against the bit, not against the encoder.
+    n_data_bad = 0;
+    for (ei = 0; ei < NBITS; ei = ei + 1) begin
+      if (sc_lv0[ei*2] !== sc_bit[ei])              n_data_bad = n_data_bad + 1;
+      if (sc_lv1[ei*2] !== (sc_bit[ei] ? 1'b0 : 1'b1)) n_data_bad = n_data_bad + 1;
     end
+    enc_chk(n_data_bad == 0,
+            $sformatf("THE DATA IS THE LEVEL OF THE FIRST HALF-INTERVAL, FM0 high-for-one and FM1 low-for-one (%0d of %0d disagreed with the bit)",
+                      n_data_bad, 2*NBITS));
+
+    // (3) THE TWO ENCODINGS ARE EXACT COMPLEMENTS of one another, level for
+    //     level. This is the act's headline claim, and the previous version of
+    //     it kept ONE variable per encoding, overwrote it every half-interval
+    //     and compared the LAST level -- which compares one value and calls it
+    //     a comparison of streams. All 48 half-intervals are compared here.
+    n_comp_bad = 0;
+    for (kk = 0; kk < 2*NBITS; kk = kk + 1)
+      if (sc_lv1[kk] !== (sc_lv0[kk] ? 1'b0 : 1'b1)) n_comp_bad = n_comp_bad + 1;
+    enc_chk(n_comp_bad == 0,
+            $sformatf("FM1 is the exact COMPLEMENT of FM0, all %0d half-intervals -- if these are the same stream the flag cannot be measured",
+                      2*NBITS));
+
+    // (4) *** THE ONE THAT DECIDES THE ACT'S SHAPE. *** The INTERVAL SEQUENCE
+    //     IS IDENTICAL for the two encodings, interval for interval. So the
+    //     timing of a frame says NOTHING about which encoding sent it, and the
+    //     flag CANNOT be recovered from a measured interval. This is why the
+    //     act needs a PREAMBLE: the polarity lives only in the LEVELS, and a
+    //     receiver that guesses decodes the frame into its complement.
+    n_iv_bad = (n_iv0 == n_iv1) ? 0 : 1;
+    for (kk = 0; (kk < n_iv0) && (kk < n_iv1); kk = kk + 1)
+      if (sc_iv0[kk] !== sc_iv1[kk]) n_iv_bad = n_iv_bad + 1;
+    enc_chk(n_iv_bad == 0,
+            $sformatf("the INTERVAL SEQUENCE IS THE SAME for FM0 and FM1 (%0d/%0d intervals, %0d differences) -- so the flag cannot come from the timing, and the PREAMBLE is not optional",
+                      n_iv0, n_iv1, n_iv_bad));
+
+    // (5) THE INTERVALS ARE ONE OR TWO HALF-INTERVALS, AND BOTH OCCUR. This is
+    //     the whole basis of the receiver's `interval == 2` test: the firmware
+    //     has no divide and no shift-right, so it COMPARES against a constant,
+    //     and that is only sound if the quantity takes exactly two values.
+    //     The counts are DERIVED (18 and 14 for A5 3C 96) and asserted, so the
+    //     firmware's measured histogram can be graded against them directly.
+    n_iv1_half = 0; n_iv2_half = 0;
+    for (kk = 0; kk < n_iv0; kk = kk + 1) begin
+      if      (sc_iv0[kk] == 1) n_iv1_half = n_iv1_half + 1;
+      else if (sc_iv0[kk] == 2) n_iv2_half = n_iv2_half + 1;
+    end
+    enc_chk((n_iv1_half == 18) && (n_iv2_half == 14) && (n_iv0 == 32),
+            $sformatf("the DERIVED interval histogram: 32 intervals, %0d of one half-interval (2 us) and %0d of two (4 us), and nothing else -- the firmware's write-hook is graded against exactly these numbers",
+                      n_iv1_half, n_iv2_half));
+
+    // (6) A BIT BOUNDARY CARRIES A TRANSITION IFF TWO ADJACENT BITS ARE EQUAL.
+    //     NOT "differ". The record has this line INVERTED, and the whole
+    //     receiver is read off it, so it is checked rather than trusted:
+    //       boundary transitions iff  h1(bit k) != h0(bit k+1)
+    //                             iff  ~d_k        != d_{k+1}
+    //                             iff  d_k         == d_{k+1}
+    n_bnd_eq = 0; n_bnd_ne = 0;
+    for (ei = 0; ei < NBITS-1; ei = ei + 1) begin
+      if (sc_lv0[ei*2+1] !== sc_lv0[(ei+1)*2]) begin
+        if (sc_bit[ei] == sc_bit[ei+1]) n_bnd_eq = n_bnd_eq + 1; else n_bnd_ne = n_bnd_ne + 1;
+      end
+    end
+    enc_chk((n_bnd_eq == 9) && (n_bnd_ne == 0),
+            $sformatf("a bit boundary transitions iff two ADJACENT BITS ARE EQUAL -- %0d equal-adjacent pairs gave one, %0d differing pairs gave one. The record says DIFFER and is inverted",
+                      n_bnd_eq, n_bnd_ne));
 
     if (enc_fail == 0)
-      $display("encoder self-check: all 5 properties hold");
+      $display("encoder self-check: all 6 properties hold (%0d transitions, 32 intervals = 18x2us + 14x4us)", n_tr);
+    else
+      $display("encoder self-check: %0d propert(y|ies) FAILED", enc_fail);
   end
 
   // ---- THE TESTBENCH'S DECODER, also from the wire rules ---------------
@@ -392,7 +491,13 @@ module tb_pe_soc_bmc;
   // ---- the testbench's stimulus and receiver, one process each ---------
   integer stim_bit = 0, stim_half = 0, stim_waited = 0;
   logic   stim_done = 0;
-  logic   stim_carry = 1'b1;   // the level carried across a bit boundary
+  // NO stim_carry ANY MORE. Under the corrected wire rules the encoding is
+  // stateless -- the level of a half-interval depends on the bit and the
+  // polarity and on nothing that came before it -- so the "level carried
+  // across a bit boundary" has no definition. It was the visible symptom of
+  // the superseded rules, and the property it existed to produce ("a run of
+  // ones under FM0 is a constant line") is false of the protocol as ruled.
+  logic   stim_idle = 1'b1;   // the idle level between frames
 
   // THE STIMULUS IS ARMED BY THE FIRMWARE'S RELEASE, and that is the whole
   // reason this act was red. It used to begin at time 0, which meant it
@@ -414,23 +519,53 @@ module tb_pe_soc_bmc;
     wait (run === 1'b1);
     stim_done = 0; stim_bit = 0; stim_half = 0; stim_waited = 0;
     in_line = 1'b1;
-    stim_carry = 1'b1;                 // the line idles high
+    // NO `carry` ANY MORE, and its deletion is not tidying. The old stimulus
+    // threaded the level at the end of the previous bit through every
+    // half-interval, and the whole "a run of ones is a constant line under
+    // FM0" property was built on it. That property came from the SUPERSEDED
+    // rules. Under the corrected ones -- every bit transitions in its middle,
+    // the data is the first half's level, FM1 marks a one low and FM0 marks a
+    // one high -- the encoding is STATELESS and the carry has nowhere to go.
+    // The line idles high.
     forever begin
       #(CLK_NS);
+      // THE HALF-INTERVAL IS EXACTLY HALF_CLOCKS, and it was ONE CLOCK TOO
+      // LONG. The test is `stim_waited >= HALF_CLOCKS` with the increment
+      // AFTER it, so the first half ran 121 clocks -- 2.0167 us against the
+      // 2.000 us the comment and the constant both claim. Over 48
+      // half-intervals that is 0.8 us of drift against a firmware that
+      // timestamps on a 1 us tick, which is most of a microsecond of error
+      // accumulating across exactly the quantity this act measures. The
+      // derived histogram (18 x 2 us + 14 x 4 us) is only true of a half that
+      // IS 2 us.
+      //
+      // This is the fifth wrong figure in this block and the second one of this
+      // exact shape: peasm's trigger is commented `4*149+4` and measures
+      // `4*SR_TRIG+5`. In both, a derivation was written down and the code
+      // counted something one larger, and in both nobody recomputed the
+      // derivation when the code was the thing that moved. The counter goes
+      // up first, so the counter is the honest half of the expression.
+      stim_waited = stim_waited + 1;
       if (stim_waited >= HALF_CLOCKS) begin
         stim_waited = 0;
+        // stim_bit is a BIT NUMBER; enc_frame_lev pulls the bit VALUE out of
+        // the frame and applies the rules to it. The previous two lines passed
+        // the bit number where a bit value was wanted, and every bit but bit 0
+        // went out as a '1' -- the testbench transmitted a 24-bit run of ones
+        // and the firmware was right to see almost nothing on the wire.
+        //
+        // THE TWO HALVES ARE TWO SEPARATE SLOTS, and the first version of this
+        // repair drove both of them in the SAME `#(CLK_NS)` tick, so the second
+        // assignment overwrote the first before anyone could see it: the wire
+        // carried 13 transitions where the encoder's own self-check derives 33.
+        // A ground-truth counter on the testbench's OWN output is what named
+        // it, in the same minute, which is the argument for having one.
         if (stim_half == 0) begin
-          in_line = enc_level(stim_bit, 0, enc_fm0, stim_carry);
+          in_line = enc_frame_lev(stim_bit*2, enc_fm0, enc_byte[0], enc_byte[1], enc_byte[2]);
           stim_half = 1;
         end else begin
-          in_line = enc_level(stim_bit, 1, enc_fm0, stim_carry);
+          in_line = enc_frame_lev(stim_bit*2 + 1, enc_fm0, enc_byte[0], enc_byte[1], enc_byte[2]);
           stim_half = 0;
-          // THE CARRY IS UPDATED AT EVERY BIT BOUNDARY, and that one line is
-          // what makes the encoding stateful and the two encodings differ: the
-          // next bit's first half is written against the level this bit ended
-          // on, so a '1' under FM0 leaves it alone (constant line through a run
-          // of ones) and a '1' under FM1 flips it (square wave).
-          stim_carry = in_line;
           if (stim_bit >= NBITS - 1) begin
             stim_done = 1;
             in_line = 1'b1;                    // idle high between frames
@@ -439,7 +574,6 @@ module tb_pe_soc_bmc;
           stim_bit = stim_bit + 1;
         end
       end
-      stim_waited = stim_waited + 1;
     end
   end
 
