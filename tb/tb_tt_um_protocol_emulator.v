@@ -202,16 +202,23 @@ module tb_tt_um_protocol_emulator;
       // The host-bus inputs are never driven by the chip.
       if (uio_oe[7] | uio_oe[5] | uio_oe[4])
         check(1'b0, "a host-bus input pin (uio[4],[5],[7]) is being driven");
-      // The uo_out[2] reclaim (Task 4, G6): while the matrix drives port bit 7
-      // the pad IS that level; otherwise uo_out[7:2] is dbg_pc[5:0] exactly,
-      // which is the reset-bit-identical rule. Checked on EVERY cycle, so the
-      // fallback cannot be true only at reset.
+      // The uo_out[2] reclaim (Task 4, G6) and the uo_out[3] pair leg
+      // (wiki/plans/eth-tx-line-driver.md): while the matrix drives port bit
+      // 7 the uo_out[2] pad IS that level, and uo_out[3] is eth_tx_n exactly
+      // while the Ethernet line owns the pair (eth_tx_n_en) and dbg_pc[1]
+      // otherwise; with port bit 7 released uo_out[7:2] is dbg_pc[5:0]
+      // exactly, which is the reset-bit-identical rule. Checked on EVERY
+      // cycle, so the fallback cannot be true only at reset.
       if (dut.pin_oe_bus[7]) begin
         if (uo_out[2] !== dut.pin_out_bus[7])
           check(1'b0, "uo_out[2] is not the eth_tx pad while port bit 7 drives");
-        if (uo_out[7:3] !== dut.dbg_pc[5:1])
-          check(1'b0, "uo_out[7:3] moved off dbg_pc[5:1]");
+        if (uo_out[3] !== (dut.eth_tx_n_en ? dut.eth_tx_n : dut.dbg_pc[1]))
+          check(1'b0, "uo_out[3] is not eth_tx_n while the Ethernet line owns the pair (or not dbg_pc[1] when it does not)");
+        if (uo_out[7:4] !== dut.dbg_pc[5:2])
+          check(1'b0, "uo_out[7:4] moved off dbg_pc[5:2]");
       end else begin
+        if (dut.eth_tx_n_en)
+          check(1'b0, "eth_tx_n_en is high while port bit 7 is released");
         if (uo_out[7:2] !== dut.dbg_pc[5:0])
           check(1'b0, "uo_out[7:2] is not dbg_pc[5:0] while the TX persona is off");
       end
@@ -227,13 +234,15 @@ module tb_tt_um_protocol_emulator;
   localparam int MAXCELLS = 4096;
   localparam int NEED     = 64 + 8*60 + 32;   // ARP-42 -> 60 stored + FCS
   logic [1:0] cellrec [0:MAXCELLS-1];   // {is_bit, decoded_bit}; 2'b00 = idle
+  logic [1:0] prec    [0:MAXCELLS-1];   // uo_out[2] (eth_tx)   at {h1, h2}
+  logic [1:0] nrec    [0:MAXCELLS-1];   // uo_out[3] (eth_tx_n) at {h1, h2}
   int         ncells;
-  logic       mh1, mh2;
+  logic       mh1, mh2, nh1, nh2;
   bit         tx_persona_active;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      ncells <= 0; mh1 <= 1'b0; mh2 <= 1'b0;
+      ncells <= 0; mh1 <= 1'b0; mh2 <= 1'b0; nh1 <= 1'b0; nh2 <= 1'b0;
     end else begin
       if (dut.u_soc.cell_en && !dut.u_soc.half_phase) begin
         if (mh1 === mh2) begin
@@ -242,12 +251,16 @@ module tb_tt_um_protocol_emulator;
           check(mh1 === ~mh2, "eth_tx pad: Manchester halves are not complementary");
           if (ncells < MAXCELLS) cellrec[ncells] <= {1'b1, mh2};
         end
+        if (ncells < MAXCELLS) begin
+          prec[ncells] <= {mh1, mh2};
+          nrec[ncells] <= {nh1, nh2};
+        end
         if (ncells < MAXCELLS) ncells <= ncells + 1;
-        mh1 <= uo_out[2];
+        mh1 <= uo_out[2]; nh1 <= uo_out[3];
       end else if (!dut.u_soc.half_phase) begin
-        mh1 <= uo_out[2];
+        mh1 <= uo_out[2]; nh1 <= uo_out[3];
       end else begin
-        mh2 <= uo_out[2];
+        mh2 <= uo_out[2]; nh2 <= uo_out[3];
       end
       // Push-pull driven while the persona owns the pad: every frame cell
       // must have the matrix driving port bit 7.
@@ -559,7 +572,7 @@ module tb_tt_um_protocol_emulator;
       check(dut.u_soc.dmem[8] === 8'hA5,
             $sformatf("eth_tx firmware never reported done (pc=%0d)", dut.dbg_pc));
     end
-    repeat (24) @(posedge clk);
+    repeat (60) @(posedge clk);   // the last FCS cell, 3 TP_IDL cells and one more
     ui_in[1] = 1'b0;
     #1;
     check(dut.pin_oe_bus[7] === 1'b1,
@@ -595,6 +608,23 @@ module tb_tt_um_protocol_emulator;
                 $sformatf("eth_tx pad: FCS bit %0d=%b want %b", k,
                           got[64 + 480 + k], fcs_want[k]));
         $display("    eth_tx pad: decoded %0d wire bits, FCS %08h", NEED, fcs_want);
+
+        // The pair AT THE PADS: uo_out[3] is the complement of uo_out[2] in
+        // every frame cell, then 3 positive TP_IDL cells (1/0), then both
+        // legs idle high (0 V across the transformer).
+        for (int k = 0; k < NEED; k++)
+          if (nrec[i0+k] !== ~prec[i0+k]) begin
+            check(1'b0, $sformatf("pair pads: frame cell %0d uo_out[3]=%b is not the complement of uo_out[2]=%b",
+                                  k, nrec[i0+k], prec[i0+k]));
+            break;
+          end
+        for (int k = 0; k < 3; k++)
+          check(prec[i0+NEED+k] === 2'b11 && nrec[i0+NEED+k] === 2'b00,
+                $sformatf("pair pads: TP_IDL cell +%0d uo_out[2]=%b uo_out[3]=%b, want 11/00",
+                          k, prec[i0+NEED+k], nrec[i0+NEED+k]));
+        check(prec[i0+NEED+3] === 2'b11 && nrec[i0+NEED+3] === 2'b11,
+              $sformatf("pair pads: after TP_IDL uo_out[2]=%b uo_out[3]=%b, want 11/11 (0 V)",
+                        prec[i0+NEED+3], nrec[i0+NEED+3]));
       end
     end
 

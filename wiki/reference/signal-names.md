@@ -15,7 +15,7 @@ tables are extracted from the Verilog by `tools/gen/signal_glossary.py`**
 (`--check` fails if this page is stale), so a renamed port cannot leave this
 page lying. The prose is the hand-written part; the interface is not.
 
-16 modules, 214 ports.
+16 modules, 217 ports.
 
 Two terms this page assumes and [[concepts/strobe-and-committing-edge]]
 defines: the **strobe** (`bit_en`) and the **committing edge**.
@@ -210,6 +210,7 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `tx_overlong` | out | 1 | _no note yet_ |
 | `ifg_active` | out | 1 | _no note yet_ |
 | `tx_bit` | out | 1 | _no note yet_ |
+| `line_drive` | out | 1 | The 10BASE-T pair is DRIVEN: high for every frame cell, for the 3-cell (300 ns) start-of-idle delimiter after the last FCS cell (also after an abort or underrun), and for each one-cell (100 ns) link pulse every `NLP_CELLS` quiet cells (16 ms). A register that moves only on cell boundaries; the SoC makes `eth_tx_n = wire ^ line_drive`. See [[plans/eth-tx-line-driver]]. |
 | `fv_ifg_cnt` | out | `[6:0]` | FORMAL ONLY — the gap counter, for the inductive IFG-floor proof. |
 | `fv_state` | out | `[2:0]` | FORMAL ONLY — the FSM state, for the IFG floor's structural precondition. |
 | `fv_fcs_left` | out | `[5:0]` | FORMAL ONLY — the FCS counter, for the frame-end precondition. |
@@ -306,6 +307,8 @@ defines: the **strobe** (`bit_en`) and the **committing edge**.
 | `pin_in` | inp | `[7:0]` | _no note yet_ |
 | `pin_out` | out | `[7:0]` | _no note yet_ |
 | `pin_oe` | out | `[7:0]` | _no note yet_ |
+| `eth_tx_n` | out | 1 | The 10BASE-T pair's second leg (`uo_out[3]`): the complement of the TX wire while `line_drive` is high, the wire itself otherwise — so an idle pair is 0 V with both legs high. `pin_out[7]` is the first leg. |
+| `eth_tx_n_en` | out | 1 | The Ethernet line owns the pair: `tx_path && overlay on pin 7 && pin 7 driven`. Selects `eth_tx_n` onto `uo_out[3]`; low at reset and whenever the SERDES (not the frame engine) owns the codec, so the pad falls back to `dbg_pc[1]`. |
 | `dbg_pc` | out | `[((IMEM_WORDS <= 2) ? 1 : ((IMEM_WORDS <= 256) ? 8 : $clog2(IMEM_WORDS)))-1:0]` | _no note yet_ |
 | `dbg_a` | out | `[7:0]` | _no note yet_ |
 | `dbg_x` | out | `[7:0]` | _no note yet_ |

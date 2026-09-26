@@ -181,14 +181,25 @@ module tb_pe_soc_eth_loop;
   bit  serdes_word_done;
   int  clk_tick, last_push_tick, max_push_gap;
   bit  push_seen;
+  // The pair's owner flag (wiki/plans/eth-tx-line-driver.md): uo_out[3]
+  // belongs to the Ethernet line only while the frame engine owns the codec.
+  // The owner probe is the case that tests it -- the SERDES drives pin 7
+  // through the overlay with tx_path LOW -- and serdes_on_pin7 proves that
+  // case actually happened, so the check cannot pass vacuously.
+  int  serdes_on_pin7;
+  bit  n_en_without_path;
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       wrap_pushes <= 0; bad_pushes <= 0; refused_start <= 1'b0;
       owner_rose_mid_serdes <= 1'b0; serdes_word_done <= 1'b0;
       clk_tick <= 0; last_push_tick <= 0; max_push_gap <= 0;
       push_seen <= 1'b0;
+      serdes_on_pin7 <= 0; n_en_without_path <= 1'b0;
     end else begin
       clk_tick <= clk_tick + 1;
+      if (dut.eng_ov_en[7] && dut.pin_oe[7] && !dut.tx_path)
+        serdes_on_pin7 <= serdes_on_pin7 + 1;
+      if (dut.eth_tx_n_en && !dut.tx_path) n_en_without_path <= 1'b1;
       // F2: the codec owner must not move to the frame engine while a SERDES
       // word is in flight.
       if (dut.ser_tx_busy && dut.tx_path) owner_rose_mid_serdes <= 1'b1;
@@ -386,8 +397,13 @@ module tb_pe_soc_eth_loop;
     check(serdes_word_done === 1'b1,
           "owner: the SERDES word never completed -- the claim disturbed it");
     check(dut.tx_path === 1'b0, "owner: tx_path must still be unclaimed at the end");
-    $display("    owner: readback=%02h rose_mid=%0d serdes_done=%0d tx_path=%0d",
-             dut.dmem[0], owner_rose_mid_serdes, serdes_word_done, dut.tx_path);
+    check(serdes_on_pin7 > 0,
+          "owner: the SERDES never drove pin 7 with tx_path low -- the pair-owner check is vacuous");
+    check(!n_en_without_path,
+          "owner: eth_tx_n_en rose with tx_path low (the SERDES does not own uo_out[3])");
+    $display("    owner: readback=%02h rose_mid=%0d serdes_done=%0d tx_path=%0d serdes_on_pin7=%0d clk",
+             dut.dmem[0], owner_rose_mid_serdes, serdes_word_done, dut.tx_path,
+             serdes_on_pin7);
   endtask
 
   initial begin

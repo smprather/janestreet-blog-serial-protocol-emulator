@@ -86,9 +86,9 @@ PROTOCOLS = [
     ),
     dict(
         name="10BASE-T", tb="tb_pe_eth", tier="stretch",
-        pins=[("eth_tx", 1, "out"), ("eth_rx", 1, "in")],
-        external="transformer / resistor ladder, or a PHY (LAN8720-class)",
-        note="Manchester is single-ended here, so 2 pins carry it; the ±2.5 V differential into 100 Ω is the board's problem, not the pad's. The TB models one `wire_lvl`.",
+        pins=[("eth_tx", 1, "out"), ("eth_tx_n", 1, "out"), ("eth_rx", 1, "in")],
+        external="TX: a line buffer + pulse transformer (RJ45 magnetics); RX: magnetics + a comparator",
+        note="TX is a PAIR, eth_tx (uo_out[2]) and eth_tx_n (uo_out[3]): the line has three states (+, −, 0 V idle) and one pad has two, so the link pulses and the start-of-idle delimiter need both (see [[plans/eth-tx-line-driver]]). The ±2.5 V into 100 Ω is made on the board, not by the pads; RX is one input behind a comparator. This TB models one `wire_lvl`; the pair is proven in `tb_pe_soc_eth_tx` and `tb_tt_um_protocol_emulator`.",
     ),
 ]
 
@@ -100,10 +100,12 @@ PROTOCOLS = [
 # uo_out[1] is IRQ_N, and the old ui_in[3:5] loader pads are freed.
 # Task 4 (2026-09-24): uo_out[2] is the 10BASE-T eth_tx pad (port bit 7
 # through a bit-identical mux); dbg_pc[0] is its fallback.
+# eth-tx-line-driver (2026-09-26, PROPOSED): uo_out[3] is the pair's second
+# leg eth_tx_n behind the same kind of mux; dbg_pc[1] is its fallback.
 DESIGN_PINOUT = {
     "ui_in": {0: "UART RX", 1: "run", 2: "10BASE-T RX"},
     "uo_out": {0: "UART TX / SPI SCLK", 1: "IRQ_N",
-               2: "eth_tx / dbg_pc[0]", 3: "dbg_pc[1]", 4: "dbg_pc[2]",
+               2: "eth_tx / dbg_pc[0]", 3: "eth_tx_n / dbg_pc[1]", 4: "dbg_pc[2]",
                5: "dbg_pc[3]", 6: "dbg_pc[4]", 7: "dbg_pc[5]"},
     "uio": {0: "I2C SDA", 1: "I2C SCL", 2: "SPI MOSI", 3: "SPI CS_N",
             4: "host CS_N", 5: "host MOSI", 6: "host MISO", 7: "host SCK"},
@@ -199,14 +201,14 @@ def build() -> tuple[str, list[str]]:
     committed = sum(len(v) for v in DESIGN_PINOUT.values())
     # Remaining demand after the pinned wires: UART (tx out, rx in), SPI (mosi
     # and cs_n are pinned; sclk/miso share the UART pads and are not counted
-    # separately), I2C (2 bidir), and 10BASE-T TX (out, the reclaimed pad) and
-    # RX (in).
-    pinned_out, pinned_in, pinned_bi = 4, 2, 2
+    # separately), I2C (2 bidir), and 10BASE-T TX (the reclaimed pair: two
+    # outs) and RX (in).
+    pinned_out, pinned_in, pinned_bi = 5, 2, 2
     rem_out = n_out - pinned_out
     rem_in = n_in - pinned_in
     rem_bi = n_bi - pinned_bi
-    # Reclaiming the six debug pins frees those uo_out pads and only those
-    # (UART TX and IRQ_N stay committed).
+    # Reclaiming the remaining debug pins frees those uo_out pads and only
+    # those (UART TX, IRQ_N and the 10BASE-T pair stay committed).
     debug_pins = sum(1 for v in DESIGN_PINOUT["uo_out"].values()
                      if v.startswith("dbg_pc"))
     free_rec = {"ui_in": free["ui_in"],
@@ -242,6 +244,12 @@ def build() -> tuple[str, list[str]]:
     a_in, a_bi_left, a_bi_short, a_out_short = shortfall(
         free_all["ui_in"], free_all["uo_out"], free_all["uio"])
     short_all = a_bi_short + a_out_short
+
+    # The prose below states counts that change whenever the pinout does, so
+    # agreement and the fit/short wording are computed, not typed (the
+    # 2026-09-26 pair reclaim turned "the outputs fit" false in place).
+    def n_of(n: int, one: str, many: str) -> str:
+        return f"{n} {one if n == 1 else many}"
 
     lines += [
         "## The answer",
@@ -279,7 +287,7 @@ def build() -> tuple[str, list[str]]:
         f"| `ui_in` | {len(DESIGN_PINOUT['ui_in'])} "
         f"({', '.join(DESIGN_PINOUT['ui_in'].values())}) | {free['ui_in']} |",
         f"| `uo_out` | {len(DESIGN_PINOUT['uo_out'])} "
-        f"(UART TX / SPI SCLK, IRQ_N, eth_tx, dbg_pc[5:1]) | {free['uo_out']} |",
+        f"(UART TX / SPI SCLK, IRQ_N, eth_tx, eth_tx_n, dbg_pc[5:2]) | {free['uo_out']} |",
         f"| `uio` | {len(DESIGN_PINOUT['uio'])} "
         f"({', '.join(DESIGN_PINOUT['uio'].values())}) | {free['uio']} |",
         f"| **total** | {committed} | **{free['ui_in']+free['uo_out']+free['uio']}** |",
@@ -300,14 +308,19 @@ def build() -> tuple[str, list[str]]:
         f"{free_rec['ui_in']} free `ui_in` and {r_in} `uio`; the {rem_bi} "
         f"bidir wires need {rem_bi} `uio` but only {r_bi_left} remain, so "
         f"{r_bi_short} bidir pads are missing; `uo_out` supplies "
-        f"{free_rec['uo_out']} of the {rem_out} outputs, so {r_out_short} "
-        f"output is missing.",
+        f"{min(free_rec['uo_out'], rem_out)} of the {rem_out} outputs, so "
+        f"{n_of(r_out_short, 'output is', 'outputs are')} missing.",
         "",
         "**Even shedding every overhead** — the run strap, IRQ_N, the debug",
-        f"pads and the host row reclaimed at runtime — still leaves {short_all} pad",
+        f"pads and the host row reclaimed at runtime — still leaves "
+        f"{n_of(short_all, 'pad', 'pads')}",
         f"short: the {rem_bi} bidirectional wires have only {free_all['uio']}",
-        f"reclaimed `uio`, while the {rem_out} outputs fit the "
-        f"{free_all['uo_out']} freed `uo_out` bits.",
+        (f"reclaimed `uio`, while the {rem_out} outputs fit the "
+         f"{free_all['uo_out']} freed `uo_out` bits."
+         if a_out_short == 0 else
+         f"reclaimed `uio`, and the {rem_out} outputs have only "
+         f"{free_all['uo_out']} freed `uo_out` bits "
+         f"({n_of(a_out_short, 'output', 'outputs')} short)."),
         "So \"all nine at once\" is not a feasible permanent pinout here, and the raw",
         "23-of-24 count this page used to carry hid both the arithmetic error (UART",
         "plus SPI is 6 wires, not 7) and the direction mix. The permanent-only design",
@@ -337,8 +350,11 @@ def build() -> tuple[str, list[str]]:
         "  bus-contention bug, not a pin-count one.",
         "- **USB LS** needs the 1.5 kΩ pull-up on D- to look like a device, and",
         "  series resistors for impedance.",
-        "- **10BASE-T** needs a transformer or PHY; true ±2.5 V differential into",
-        "  100 Ω cannot come from a GPIO. See [[concepts/physical-layer-gpio]].",
+        "- **10BASE-T** needs a line buffer and a pulse transformer on TX (the",
+        "  ±2.5 V differential into 100 Ω is made on the board from the two TX",
+        "  pads, never by a pad) and a comparator on RX. An external PHY would",
+        "  replace the chip's own Manchester layer. See",
+        "  [[concepts/physical-layer-gpio]] and [[plans/eth-tx-line-driver]].",
         "- **CAN** needs a transceiver; the chip only sees logic-level TX/RX.",
         "",
         "See [[concepts/gpio-signoff-corners]] for the rise/fall asymmetry that",

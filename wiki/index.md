@@ -2,7 +2,7 @@
 
 > **The map of the whole wiki.** Every page, one line each, grouped by what it
 > is for. Start with a reading path, not with this list.
-> Last updated 2026-09-25.
+> Last updated 2026-09-26.
 
 This wiki is one repository's record of a Tiny Tapeout protocol-emulator
 ASIC: a chip, a host stack, and — the part that is unusual — a verification
@@ -308,6 +308,12 @@ done.
   preamble/SFD, FCS via a TX-dedicated `pe_crc`, 64-byte pad folded into the
   FCS, the 96-bit-time IFG, runt/jabber policy, eight scope groups, and the
   pad-level plus RX-loopback acceptance tests. **COMPLETE (Tasks 1-7).**
+- [[plans/eth-tx-line-driver]] — the 10BASE-T line driver: the TX **pair**
+  (`eth_tx_n` on `uo_out[3]`, reclaimed from `dbg_pc[1]`), the 300 ns
+  start-of-idle delimiter and the 16 ms link pulses a link partner needs
+  before it accepts any frame, plus what the board must supply (line buffer,
+  magnetics, RX comparator). **PROPOSED on branch `eth-tx-line-driver`, not
+  merged.**
 - [[plans/ethernet-soc]] — 10BASE-T SoC integration: `pe_dru` → `pe_manch` →
   `pe_eth_mac` with `pe_crc`/`pe_fbuf` inside `pe_soc`, RX on the pin matrix,
   and the firmware frame-buffer walk.

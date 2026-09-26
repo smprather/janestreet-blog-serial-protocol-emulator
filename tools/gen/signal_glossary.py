@@ -133,6 +133,18 @@ NOTES: dict[tuple[str, str], str] = {
         "fv_stored_bytes",
     ): "FORMAL ONLY — the length the frame actually CONSUMES (must equal fv_pend_len; the atomicity half of F1's fix).",
     (
+        "pe_eth_tx",
+        "line_drive",
+    ): "The 10BASE-T pair is DRIVEN: high for every frame cell, for the 3-cell (300 ns) start-of-idle delimiter after the last FCS cell (also after an abort or underrun), and for each one-cell (100 ns) link pulse every `NLP_CELLS` quiet cells (16 ms). A register that moves only on cell boundaries; the SoC makes `eth_tx_n = wire ^ line_drive`. See [[plans/eth-tx-line-driver]].",
+    (
+        "pe_soc",
+        "eth_tx_n",
+    ): "The 10BASE-T pair's second leg (`uo_out[3]`): the complement of the TX wire while `line_drive` is high, the wire itself otherwise — so an idle pair is 0 V with both legs high. `pin_out[7]` is the first leg.",
+    (
+        "pe_soc",
+        "eth_tx_n_en",
+    ): "The Ethernet line owns the pair: `tx_path && overlay on pin 7 && pin 7 driven`. Selects `eth_tx_n` onto `uo_out[3]`; low at reset and whenever the SERDES (not the frame engine) owns the codec, so the pad falls back to `dbg_pc[1]`.",
+    (
         "pe_ctrl",
         "fv_resp_len",
     ): "FORMAL ONLY — response length, for the R2 no-wrap claims.",

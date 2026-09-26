@@ -36,6 +36,22 @@
 #                              so the 9th push writes TXLENL (index 24) and
 #                              a burst lands in CTRL (Review Focus 5).
 #
+# The 10BASE-T pair (wiki/plans/eth-tx-line-driver.md): uo_out[3] = eth_tx_n.
+#
+#   8. pair-leg-not-inverted  — eth_tx_n is the wire itself, so the pair is
+#                              0 V through every frame. Pad-level: wrapper TB.
+#   9. pair-drive-inverted    — the drive sense is flipped: the pair carries
+#                              nothing in a frame and sits at DC when idle.
+#  10. pair-owner-ignores-tx-path
+#                            — eth_tx_n_en drops its tx_path term, so a
+#                              SERDES persona on pin 7 takes uo_out[3] off the
+#                              debug PC. Only the owner probe in the loop TB
+#                              reaches that state (and counts it).
+#  11. pair-pad-not-mapped    — uo_out[3] is stuck on dbg_pc[1]: the frame is
+#                              perfect at the SoC and absent at the pad.
+#  12. pair-pad-always-eth    — uo_out[3] is eth_tx_n unconditionally: reset
+#                              is no longer bit-identical (dbg_pc[1] lost).
+#
 # RESTORE IS A FILE COPY with a cmp-verified pristine snapshot, restored after
 # EVERY mutation, plus EXIT/INT/TERM traps (the 2026-09-24 18:43 OOM killed a
 # suite mid-mutation and left the mutant on disk; the snapshot dir below is
@@ -223,6 +239,33 @@ check_mutation "fcs-verdict-wrong-convention" "rtl/pe_eth_mac.v" \
 check_mutation "push-wrap-into-ctrl" "rtl/pe_soc.v" \
   "            win_index     <= (win_index == 5'd23) ? 5'd16 : win_index + 5'd1;" \
   "            win_index     <= win_index + 5'd1;   // MUTANT: push escapes the 16-23 bank" loop
+
+# ---- the 10BASE-T pair (uo_out[3] = eth_tx_n) ------------------------------
+
+# 8. The second leg is not inverted: 0 V across the pair through every frame.
+check_mutation "pair-leg-not-inverted" "rtl/pe_soc.v" \
+  "  assign eth_tx_n    = eng_tx_wire ^ eth_line_drive;" \
+  "  assign eth_tx_n    = eng_tx_wire;   // MUTANT: the second leg is not inverted" tt
+
+# 9. The drive sense is flipped: nothing in a frame, DC when idle.
+check_mutation "pair-drive-inverted" "rtl/pe_soc.v" \
+  "  assign eth_tx_n    = eng_tx_wire ^ eth_line_drive;" \
+  "  assign eth_tx_n    = eng_tx_wire ^ ~eth_line_drive;   // MUTANT: drive sense inverted" tt
+
+# 10. The owner flag ignores tx_path: a SERDES on pin 7 takes uo_out[3].
+check_mutation "pair-owner-ignores-tx-path" "rtl/pe_soc.v" \
+  "  assign eth_tx_n_en = tx_path && eng_ov_en[7] && pin_oe[7];" \
+  "  assign eth_tx_n_en = eng_ov_en[7] && pin_oe[7];   // MUTANT: the SERDES may own uo_out[3]" loop
+
+# 11. uo_out[3] never carries eth_tx_n.
+check_mutation "pair-pad-not-mapped" "rtl/tt_um_protocol_emulator.v" \
+  "  assign uo_out[3]   = eth_tx_n_en ? eth_tx_n : dbg_pc[1];" \
+  "  assign uo_out[3]   = dbg_pc[1];   // MUTANT: uo_out[3] never carries eth_tx_n" tt
+
+# 12. uo_out[3] is eth_tx_n unconditionally: reset is no longer bit-identical.
+check_mutation "pair-pad-always-eth" "rtl/tt_um_protocol_emulator.v" \
+  "  assign uo_out[3]   = eth_tx_n_en ? eth_tx_n : dbg_pc[1];" \
+  "  assign uo_out[3]   = eth_tx_n;   // MUTANT: reset is no longer bit-identical" tt
 
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="
