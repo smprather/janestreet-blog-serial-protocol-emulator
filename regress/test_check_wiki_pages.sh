@@ -89,6 +89,7 @@ fresh_render() {
   # the folded gate derives REPO from BASH_SOURCE/../.., so it MUST sit at
   # <fixture>/tools/diag/ for it to check the fixture rather than this repo
   cp "$RENDER_CHECK" "$d/tools/diag/"
+  cp regress/check_wiki_links.sh "$d/regress/" 2>/dev/null
   # two sources, chosen for having the fewest files, plus every render either
   # produces (including PlantUML's numbered _00N siblings)
   for f in $(ls -S diagrams/*.puml | tail -2); do
@@ -140,13 +141,16 @@ fresh_minimal() {
     echo; echo "Rule: every tag on a page must appear in this taxonomy."
   } > "$d/wiki/SCHEMA.md"
   : > "$d/wiki/.known-rule-violations.txt"      # nothing pinned: nothing is wrong
-  n=21
+  n=34   # clears the link gate's 30-document scope floor
   for i in $(seq -w 1 $n); do
     d1=$(( (10#$i % 20) + 1 )); d2=$(( (10#$i % 20) + 2 ))
     printf '%% fixture page %s\n' "$i" > "$d/wiki/concepts/f$i.md"
     sed -i '1i ---\ntitle: Fixture f'"$i"'\ncreated: 2026-09-25\nupdated: 2026-09-25\ntype: concept\ntags: [alpha, bravo]\nconfidence: high\n---' \
       "$d/wiki/concepts/f$i.md"
-    printf '\nSee also [[concepts/f%d]] and [[concepts/f%d]].\n' "$d1" "$d2" >> "$d/wiki/concepts/f$i.md"
+    # zero-padded, because the pages are f01..fNN: an UNPADDED f1 does not exist
+    # when the page is f01, and the file-link gate correctly reported every one of
+    # them dead. The fixture was wrong, not the gate.
+    printf '\nSee also [[concepts/f%02d]] and [[concepts/f%02d]].\n' "$d1" "$d2" >> "$d/wiki/concepts/f$i.md"
     printf -- '- [[concepts/f%s]] — fixture.\n' "$i" >> "$d/wiki/index.md"
   done
   sed -i '1i # Index\n' "$d/wiki/index.md"
@@ -593,6 +597,124 @@ if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'HARNESS ERROR'; then
 else
   bad "a malformed pin line is a HARNESS ERROR, not a skip" "exit $rc
 $(printf '%s\n' "$out" | tail -3 | sed 's/^/        | /')"
+fi
+
+# ---- 38-45: the FILE-LINK gate ----------------------------------------------
+# The requirement that earned this gate: resolve BOTH [[wikilink]] conventions,
+# and PROVE it by planting one of each. A resolver that knows one form calls
+# every link in the other dead, and people then "fix" links that were fine - a
+# checker that invents dead links is worse than no checker, because the
+# repository learns to distrust its own prose. The first draft of this gate
+# reported 194 invented dead links and was reverted rather than shipped.
+LINKS=regress/check_wiki_links.sh
+
+# 38. the gate exists and parses
+if [ -f "$LINKS" ] && bash -n "$LINKS" 2>/dev/null; then
+  ok "the file-link gate exists and parses"
+else
+  bad "the file-link gate exists and parses" "$LINKS missing or unparseable"
+fi
+
+# 39. a clean fixture is green
+d=$(fresh_minimal links-clean)
+cp "$LINKS" "$d/regress/"
+cp wiki/.known-dead-links.txt "$d/wiki/"
+out=$(cd "$d" && bash "$LINKS" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'check_wiki_links: OK'; then
+  ok "a clean document set is green"
+else
+  bad "a clean document set is green" "exit $rc
+$(printf '%s\n' "$out" | tail -3 | sed 's/^/        | /')"
+fi
+
+# 40. BOTH conventions, LIVE, are not reported. This is the case diag-timing
+# asked for: a resolver that knows one form reports the other as dead.
+d=$(fresh_minimal links-both)
+cp "$LINKS" "$d/regress/"; cp wiki/.known-dead-links.txt "$d/wiki/"
+# a wiki-relative link ([[concepts/x]], the target exists) and a bare sibling
+# link ([[f02]], also exists) - plus a markdown file link that exists
+cat >> "$d/wiki/concepts/f05.md" <<'MD'
+
+See [[concepts/f06]] and [[f07]], and [f08](f08.md).
+MD
+out=$(cd "$d" && bash "$LINKS" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'check_wiki_links: OK'; then
+  ok "LIVE links in BOTH conventions plus a markdown link are not reported"
+else
+  bad "LIVE links in BOTH conventions plus a markdown link are not reported" "exit $rc
+$(printf '%s\n' "$out" | head -6 | sed 's/^/        | /')"
+fi
+
+# 41. a genuinely dead link is red, in EACH convention
+d=$(fresh_minimal links-dead)
+cp "$LINKS" "$d/regress/"; cp wiki/.known-dead-links.txt "$d/wiki/"
+cat >> "$d/wiki/concepts/f05.md" <<'MD'
+
+Broken: [[concepts/nope]] and [[alsonope]] and [x](missing.md).
+MD
+out=$(cd "$d" && bash "$LINKS" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] \
+   && printf '%s\n' "$out" | grep -q 'concepts/nope' \
+   && printf '%s\n' "$out" | grep -q 'alsonope' \
+   && printf '%s\n' "$out" | grep -q 'missing.md'; then
+  ok "a dead link is red in BOTH conventions and as a markdown link"
+else
+  bad "a dead link is red in BOTH conventions and as a markdown link" "exit $rc
+$(printf '%s\n' "$out" | head -6 | sed 's/^/        | /')"
+fi
+
+# 42. a sources: citation that does NOT resolve must not be reported - it is a
+# citation, not an outbound link, and reporting it is the false positive that
+# would invite "fixing" a citation which was never broken.
+d=$(fresh_minimal links-citation)
+cp "$LINKS" "$d/regress/"; cp wiki/.known-dead-links.txt "$d/wiki/"
+sed -i 's|^sources:.*|sources: [reviews/2026-01-01/does-not-exist.md]|' "$d/wiki/concepts/f05.md"
+out=$(cd "$d" && bash "$LINKS" 2>&1); rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "a non-resolving sources: citation is NOT reported (body-only rule)"
+else
+  bad "a non-resolving sources: citation is NOT reported (body-only rule)" "exit $rc
+$(printf '%s\n' "$out" | head -4 | sed 's/^/        | /')"
+fi
+
+# 43-44. the pin, both directions
+d=$(fresh_minimal links-pinned)
+cp "$LINKS" "$d/regress/"; cp wiki/.known-dead-links.txt "$d/wiki/"
+cat >> "$d/wiki/concepts/f05.md" <<'MD'
+
+Broken: [[concepts/nope]].
+MD
+printf 'wiki/concepts/f05.md concepts/nope synthetic pin, made dead on purpose\n' \
+  > "$d/wiki/.known-dead-links.txt"
+out=$(cd "$d" && bash "$LINKS" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'check_wiki_links: OK'; then
+  ok "a PINNED dead link is held green, not reported NEW"
+else
+  bad "a PINNED dead link is held green, not reported NEW" "exit $rc
+$(printf '%s\n' "$out" | head -4 | sed 's/^/        | /')"
+fi
+# and the anti-staleness direction: the pin outlives the defect -> red
+d=$(fresh_minimal links-stalepin)
+cp "$LINKS" "$d/regress/"; cp wiki/.known-dead-links.txt "$d/wiki/"
+printf 'wiki/concepts/f05.md concepts/nope pinned but nothing is broken\n' \
+  > "$d/wiki/.known-dead-links.txt"
+out=$(cd "$d" && bash "$LINKS" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'STALE'; then
+  ok "a pin that no longer bites is STALE-red"
+else
+  bad "a pin that no longer bites is STALE-red" "exit $rc
+$(printf '%s\n' "$out" | head -4 | sed 's/^/        | /')"
+fi
+
+# 45. a missing pin file is a HARNESS ERROR, not a pass
+d=$(fresh_minimal links-nopin)
+cp "$LINKS" "$d/regress/"; rm -f "$d/wiki/.known-dead-links.txt"
+out=$(cd "$d" && bash "$LINKS" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'HARNESS ERROR'; then
+  ok "a missing pin file is a HARNESS ERROR, not a pass"
+else
+  bad "a missing pin file is a HARNESS ERROR, not a pass" "exit $rc
+$(printf '%s\n' "$out" | head -3 | sed 's/^/        | /')"
 fi
 
 echo "test_check_wiki_pages: $pass passed, $fail failed"

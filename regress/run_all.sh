@@ -828,6 +828,20 @@ fi
 # digest is the same one regress/mutate_fwbus_tb.sh adopted.
 _diag_wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
 [ -n "$_diag_wt" ] || _diag_wt=shared
+# The FILE-LINK gate. The gates above ask whether the wiki's own RULES hold; this
+# one asks the question a reader actually has — does this link go anywhere. It is
+# the check that would have caught the README gallery losing its `proto-` prefix,
+# which broke 37 links in one commit and was found by a person reading the
+# rendered page. Scoped to the LIVE surface (wiki/** minus raw/, README, docs/) by
+# ruling: reviews/ records are evidence, and a path in one that was true when
+# written must not be rewritten to follow a rename, nor flagged forever.
+if bash regress/check_wiki_links.sh > /tmp/check_wiki_links.log 2>&1; then
+  echo "document links: OK ($(grep -m1 'document(s) scanned' /tmp/check_wiki_links.log | sed 's/^ *//'))"
+else
+  echo "document links: FAILED (see /tmp/check_wiki_links.log)"
+  tail -20 /tmp/check_wiki_links.log
+  stale=1
+fi
 if bash tools/diag/check_diagrams.sh > "/tmp/check_diagrams.${_diag_wt}.log" 2>&1; then
   echo "diagrams: OK ($(grep -c '^  ok:' "/tmp/check_diagrams.${_diag_wt}.log") check(s) passed; see tools/diag/check_diagrams.sh)"
 else
