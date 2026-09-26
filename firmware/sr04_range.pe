@@ -602,5 +602,32 @@ fin_hi:
                                ; machine whose states are never returned to
                                ; their entry point is a state machine that
                                ; runs once.
+        ; ---- the sensor's RECOVERY, before the next trigger -------------
+        ; This is a PROTOCOL requirement and not politeness. An HC-SR04 needs
+        ; tens of milliseconds after an echo before it will answer another
+        ; trigger, and a trigger inside that window is not answered AT ALL:
+        ; it is ignored, so the measurement that never comes back is silent.
+        ; The first version of this program re-triggered 7 us after banking,
+        ; which is inside the recovery of every real device and of the
+        ; testbench's model -- so the model's second trigger was never seen,
+        ; the second echo never came, and the run banked ONE answer and
+        ; stopped with no symptom beyond a missing one. 255 outer passes of
+        ; (4*SR_RECOV_LEN + 5) clocks = 120,615 clocks = 2010 us, which
+        ; clears the model's 2 ms by 10 us.
+        LDI   A, 255
+        STM   12, A            ; dmem[12..13] is Q, and Q is dead from here:
+recov_out:                    ; the conversion has already read it
+        LDI   A, SR_RECOV_LEN
+        STM   13, A
+recov_in:
+        LDM   A, 13
+        SUB   A, 1
+        STM   13, A
+        JNZ   recov_in         ; 4 clocks per inner pass
+        LDM   A, 12
+        SUB   A, 1
+        STM   12, A
+        JNZ   recov_out        ; 5 clocks per outer pass
+        JMP   main
 park:
         JMP   park

@@ -375,6 +375,17 @@ CONSTS: dict[str, int] = {
     "SR_TRIG": 0x40,
     "SR_ECHO": 0x20,
     "SR_TRIG_LEN": 149,
+    #   SR_RECOV_LEN is the sensor's RECOVERY wait, and its absence was the
+    #   last fault in this act: the firmware re-triggered 7 us after banking
+    #   and the testbench's model, which is inside its own 2 ms recovery
+    #   window, was not listening for a trigger -- so the second measurement
+    #   never happened and the act banked one answer and stopped. A real
+    #   HC-SR04 needs 50 ms worst case and IGNORES a trigger inside its
+    #   recovery, so a driver that re-triggers immediately is not being
+    #   impatient, it is being malformed. The wait is 255 outer passes of
+    #   (4*SR_RECOV_LEN + 5) clocks = 120,615 clocks = 2010 us, which clears
+    #   the model's 2 ms by 10 us.
+    "SR_RECOV_LEN": 117,
 }
 
 
