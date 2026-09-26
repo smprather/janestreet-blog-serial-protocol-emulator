@@ -133,6 +133,28 @@ function renderStatus(status) {
   noteHeartbeat(status.timer, status.run);
 }
 
+function renderDebug(debug) {
+  // The chip's own state word drives the label; "armed" and "hit" come from
+  // bp_flags, never from the address -- a breakpoint at 0 is legal and is
+  // only distinguishable by bit0.
+  $("debug-state").textContent = `${debug.state_name} (${debug.state})`;
+  $("debug-pc").textContent = `0x${debug.pc.toString(16).padStart(3, "0")}`;
+  $("debug-bp").textContent = debug.armed
+    ? `armed at 0x${debug.bp_addr.toString(16).padStart(3, "0")}` : "disarmed";
+  $("debug-bp-flags").textContent =
+    `0x${debug.bp_flags.toString(16).padStart(2, "0")}` +
+    `${debug.hit ? " (hit latched)" : ""}`;
+  // A missing run word means the RESPONSE did not report the strap: the
+  // five-word debug prefix (DEBUG_BP_SET, DEBUG_STEP) has no such word. Say so,
+  // rather than defaulting to 0 and telling an operator who armed a breakpoint
+  // on a RUNNING core that the run strap is low - which is exactly the state
+  // where they are about to be stopped by their own breakpoint.
+  const run = debug.run;
+  let runText = "not reported";
+  if (run !== undefined && run !== null) runText = run ? "high" : "low";
+  $("debug-run").textContent = runText;
+}
+
 // Liveness (P3, host half): the chip's heartbeat is the STATUS timer. A
 // RUNNING core whose timer stops advancing is exactly the liveness gap P3
 // describes, so the indicator is driven by whether the timer MOVES between
@@ -337,19 +359,6 @@ async function main() {
   }
 
   // ---- R3 debug panel ----------------------------------------------------
-  function renderDebug(debug) {
-    // The chip's own state word drives the label; "armed" and "hit" come from
-    // bp_flags, never from the address -- a breakpoint at 0 is legal and is
-    // only distinguishable by bit0.
-    $("debug-state").textContent = `${debug.state_name} (${debug.state})`;
-    $("debug-pc").textContent = `0x${debug.pc.toString(16).padStart(3, "0")}`;
-    $("debug-bp").textContent = debug.armed
-      ? `armed at 0x${debug.bp_addr.toString(16).padStart(3, "0")}` : "disarmed";
-    $("debug-bp-flags").textContent =
-      `0x${debug.bp_flags.toString(16).padStart(2, "0")}` +
-      `${debug.hit ? " (hit latched)" : ""}`;
-    $("debug-run").textContent = debug.run ? "high" : "low";
-  }
 
   async function debugCall(path, body) {
     try {
@@ -357,7 +366,10 @@ async function main() {
       const payload = result.debug || result.step || result.breakpoint;
       if (payload) renderDebug({ ...payload, state_name: result.state_name ||
         payload.state_name, armed: result.armed ?? Boolean(payload.bp_flags & 1),
-        hit: result.hit ?? Boolean(payload.bp_flags & 2), run: payload.run ?? 0 });
+        hit: result.hit ?? Boolean(payload.bp_flags & 2),
+        // left undefined when the response carries no run word, so the
+        // panel can say "not reported" instead of inventing "low"
+        run: payload.run });
       setDebugMessage(`${path} ok`);
       await refresh();
     } catch (error) {

@@ -10,7 +10,9 @@ rather than the document quietly lying to a judge.
 
 from __future__ import annotations
 
+import json
 import re
+import shutil
 import subprocess
 import sys
 import unittest
@@ -26,6 +28,12 @@ BRINGUP = DOCS / "host-bridge-bringup.md"
 # class attribute; a module constant is the one place a new pin should reach
 # for, so the duplication ends here rather than spreading.
 SCORECARD = DOCS / "submission-readiness.md"
+# The page, and a Node interpreter to drive its renderers in. The page's
+# behaviour is real logic in a real file, so a string check on it would prove
+# nothing - which is why the GUI pins here load app.js and call its functions,
+# the same way `test_chip_state_js.py` and `test_gui_capabilities.py` do.
+APP_JS = REPO_ROOT / "tools" / "host_gui" / "web" / "app.js"
+NODE = shutil.which("node")
 
 
 def read(path: Path) -> str:
@@ -834,6 +842,91 @@ class TestTheRunbooksCommandsAreReal(unittest.TestCase):
                     f"the runbook tells the operator to pass {flag}, which "
                     f"acceptance.py does not accept",
                 )
+
+
+class TestTheDebugPanelDoesNotInventTheRunStrap(unittest.TestCase):
+    """A response with no run word must not be rendered as "run low".
+
+    `DEBUG_BP_SET` and `DEBUG_STEP` answer with the five-word debug prefix
+    (status, state, pc, bp_addr, bp_flags) - there is NO run word in either,
+    because the chip is not reporting the strap there. The page filled the gap
+    with `run: payload.run ?? 0` and rendered it as "low", so an operator who
+    armed a breakpoint on a RUNNING core was told, in the panel, that the run
+    strap was down - in the exact state where they are about to be stopped by
+    their own breakpoint.
+
+    The rule the panel should follow is the one the rest of the page already
+    follows for a field it does not have: say so (`—`), rather than assert a
+    value nobody sent. This is the same class as the chip-state readout that
+    used to collapse four values into two.
+    """
+
+    DRIVER = r"""
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const elements = {};
+const document = {
+  getElementById: (id) => (elements[id] ||= { textContent: '', dataset: {},
+                                              disabled: false, style: {},
+                                              value: '', prepend() {},
+                                              append() {} }),
+  createElement: () => ({ textContent: '', dataset: {}, style: {},
+                          append() {}, appendChild() {}, prepend() {} }),
+};
+const window = {};
+const location = { host: 'localhost', protocol: 'http:' };
+const fetch = async () => ({ ok: true, json: async () => ({}) });
+const WebSocket = function () { throw new Error('no socket in the test'); };
+const body = source.replace(/\nmain\(\);\s*$/, '') +
+  '\nmodule.exports = { renderDebug };';
+const module_shim = { exports: {} };
+new Function('module', 'exports', 'require', 'document', 'window', 'location',
+             'fetch', 'WebSocket', 'setInterval', 'clearInterval', body)(
+  module_shim, module_shim.exports, require, document, window, location,
+  fetch, WebSocket, setInterval, clearInterval);
+const { renderDebug } = module_shim.exports;
+renderDebug(JSON.parse(process.argv[2]));
+process.stdout.write(JSON.stringify({ run: elements['debug-run'].textContent,
+                                      state: elements['debug-state'].textContent,
+                                      flags: elements['debug-bp-flags'].textContent }));
+"""
+
+    def render(self, debug):
+        if NODE is None:
+            self.skipTest("node not installed")
+        result = subprocess.run(
+            [NODE, "-e", self.DRIVER, str(APP_JS), json.dumps(debug)],
+            capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise AssertionError(f"node driver failed: {result.stderr[:400]}")
+        return json.loads(result.stdout)
+
+    def test_a_response_without_a_run_word_says_so(self):
+        """The `DEBUG_BP_SET` shape: five words, no strap."""
+        out = self.render({"state": 1, "state_name": "RUNNING", "pc": 0,
+                           "bp_addr": 2, "bp_flags": 1, "armed": True})
+        self.assertNotEqual(out["run"], "low",
+                            "no run word was sent, so 'low' is invented")
+        self.assertNotIn("undefined", out["run"])
+
+    def test_a_response_with_a_run_word_reports_it(self):
+        """The `DEBUG_STATUS` shape: the strap IS reported, and must show."""
+        out = self.render({"state": 3, "state_name": "BP_HIT", "pc": 2,
+                           "bp_addr": 2, "bp_flags": 3, "armed": True,
+                           "hit": True, "run": 1})
+        self.assertEqual(out["run"], "high")
+        out = self.render({"state": 0, "state_name": "STOPPED", "pc": 0,
+                           "bp_addr": 0, "bp_flags": 0, "armed": False,
+                           "run": 0})
+        self.assertEqual(out["run"], "low")
+
+    def test_the_rest_of_the_panel_still_renders(self):
+        """The fix must not cost the fields that ARE reported."""
+        out = self.render({"state": 3, "state_name": "BP_HIT", "pc": 2,
+                           "bp_addr": 2, "bp_flags": 3, "armed": True,
+                           "hit": True})
+        self.assertIn("BP_HIT", out["state"])
+        self.assertIn("hit latched", out["flags"])
 
 
 if __name__ == "__main__":
