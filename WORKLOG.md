@@ -3424,3 +3424,31 @@ in different worktrees. Those are reported, not touched.
 `regress/run_firmware_tests.sh` to make the self-test run on every regression,
 because a check that only runs when someone remembers it is the exact failure
 this act spent a session repairing in `bmc_checks.py`.
+
+## 2026-09-27 act (c): HOLDING -- THE WINDOW'S END CONDITION HAS NOT BEEN MET
+
+**The merge-gate re-run has stopped** -- no `run_all.sh` and no `verify_merge`
+in flight -- **and that is a PROXY, not the condition.** The manager's words
+were that the window ends **when protocol-worker reports its gate verdict**, and
+no such report has reached me. The absence of a running process is the same
+kind of signal as a comment that quotes an address, a summary that never
+printed, or a model that only ever confirms itself: **adjacent to the thing,
+standing in for the thing, and not the thing.**
+
+So I am holding rather than resuming, and the reason is recorded rather than
+implied:
+
+* `tb_pe_soc_bmc.v` and probes are HELD by the manager's explicit scoping, and
+  the TB-side decoder work is the next real item;
+* `regress/` is frozen, so the one-line `run_case` for the new self-test, the
+  17 log repoints, and the 9 unsafe paths all wait on the same signal;
+* suite runs remain forbidden, so the timing-suite exit-code experiment waits
+  for both the window AND a quiet machine.
+
+**A stale owner note remains at `/tmp/chip-run-all.352a21b1.owner`** from
+2026-09-26, belonging to another block. **Left exactly as it is**: removing
+another block's lock on the strength of "its process is gone" is the same
+inference, one level more dangerous, because a lock that still has a live
+owner is the mechanism working rather than the mechanism failing -- the
+difference that matters is whether a PROCESS holds it, and that is not mine to
+judge from here.
