@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# mutate_timing_tb.sh — mutation-test the four TIMING testbenches.
+# mutate_timing_tb.sh — mutation-test the TIMING testbenches.
 #
-# WHAT THIS IS FOR. The timing acts (WS2812, servo, DHT11, DS18B20) have a property
+# WHAT THIS IS FOR. The timing acts (WS2812, servo, DHT11, DS18B20, NEC IR,
+# stepper ramp, frequency meter, HC-SR04 ranging) have a property
 # none of the other protocols in this repository has: their DUT is partly the
 # FIRMWARE. The RTL is the already-verified CPU, pin matrix, timer and pads; what
 # is being tested is a program's instruction count. A testbench that passes
@@ -35,7 +36,8 @@
 # correctly", because it says the tree was never touched at all.
 #
 # THE IMAGE PATH IS A -D, NOT A STRING IN THE TESTBENCH. Each testbench reads its
-# image through a `WS2812_HEX / SERVO_HEX / DHT11_HEX / DS18B20_HEX` macro that
+# image through a `WS2812_HEX / SERVO_HEX / DHT11_HEX / DS18B20_HEX / NEC_HEX /
+# STEPPER_HEX / FREQMETER_HEX / SR04_HEX` macro that
 # defaults to the tree's firmware/<name>.hex, so a mutant case can be compiled
 # against its own image without editing a testbench. That also means the shipped
 # testbench and the mutant testbench are the SAME FILE, and a mutant cannot pass
@@ -57,7 +59,7 @@ SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
 # An EMPTY value means this suite mutates nothing in the repo and is therefore
 # NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
 # escalates to running every suite rather than guessing.
-MUTABLE="firmware/ws2812.pe firmware/ws2812.hex firmware/servo_sweep.pe firmware/servo_sweep.hex firmware/dht11_read.pe firmware/dht11_read.hex firmware/ds18b20.pe firmware/ds18b20.hex firmware/nec_ir.pe firmware/nec_ir.hex firmware/stepper_ramp.pe firmware/stepper_ramp.hex firmware/freqmeter.pe firmware/freqmeter.hex"
+MUTABLE="firmware/ws2812.pe firmware/ws2812.hex firmware/servo_sweep.pe firmware/servo_sweep.hex firmware/dht11_read.pe firmware/dht11_read.hex firmware/ds18b20.pe firmware/ds18b20.hex firmware/nec_ir.pe firmware/nec_ir.hex firmware/stepper_ramp.pe firmware/stepper_ramp.hex firmware/freqmeter.pe firmware/freqmeter.hex firmware/sr04_range.pe firmware/sr04_range.hex"
 SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v"
 TB_WS="$ROOT/tb/tb_pe_soc_ws2812.v"
 TB_SV="$ROOT/tb/tb_pe_soc_servo.v"
@@ -66,12 +68,13 @@ TB_DS="$ROOT/tb/tb_pe_soc_ds18b20.v"
 TB_NEC="$ROOT/tb/tb_pe_soc_ir_nec.v"
 TB_STP="$ROOT/tb/tb_pe_soc_stepper_ramp.v"
 TB_FM="$ROOT/tb/tb_pe_soc_freqmeter.v"
+TB_SR="$ROOT/tb/tb_pe_soc_sr04.v"
 JOBS="${MUTATE_TIMING_JOBS:-6}"
 mkdir -p "$ROOT/sim"
 
 # ---- the tree must not change ---------------------------------------------
 SNAP=$(mktemp -d /tmp/mut_timing_snap.XXXXXX)
-for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter; do
+for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter sr04_range; do
   cp "$ROOT/firmware/$f.pe"  "$SNAP/$f.pe"
   cp "$ROOT/firmware/$f.hex" "$SNAP/$f.hex"
 done
@@ -150,7 +153,7 @@ PYEOF
   return $rc
 }
 export -f run_case
-export ROOT SRCS SRAM_MODEL TB_WS TB_SV TB_DH TB_DS TB_NEC TB_STP TB_FM
+export ROOT SRCS SRAM_MODEL TB_WS TB_SV TB_DH TB_DS TB_NEC TB_STP TB_FM TB_SR
 
 # ---- the cases --------------------------------------------------------------
 # Each one is a defect a real firmware of this shape can have, chosen so the
@@ -217,6 +220,8 @@ fm-idx-stuck|freqmeter|the slot index never advanced, so both points report the 
 fm-finishes-early|freqmeter|the run declared finished after ONE point, leaving the second slot unwritten
 fm-high-byte-order|freqmeter|the high time banked high byte first, which reads as a real measurement times 256
 fm-per-base|freqmeter|the period slot's base address shifted, so the periods land on the high times
+sr-q-mask|sr04_range|the high byte's six-bit mask missing bit 3, so the 8000 us echo -- the one with r = 0 -- reads 1023 mm
+sr-trig-count|sr04_range|the +5 after 4*SR_TRIG_LEN turned back into a +4: a 600-clock, 10.000 us trigger
 CASES_EOF
 
 # The counts come from the $results file, not from four shell variables set
@@ -239,6 +244,7 @@ run_one() {
     ir-*) stem=nec_ir;       tb="$TB_NEC"; def=NEC_HEX ;;
     st-*) stem=stepper_ramp; tb="$TB_STP"; def=STEPPER_HEX ;;
     fm-*) stem=freqmeter;    tb="$TB_FM"; def=FREQMETER_HEX ;;
+    sr-*) stem=sr04_range;   tb="$TB_SR"; def=SR04_HEX ;;
     *) echo "HARNESS ERROR: unknown case id $id" >> "$results"; return 2 ;;
   esac
   case "$id" in
@@ -732,6 +738,49 @@ run_one() {
         STM   3, A'
       repl='        LDI   A, 7              ; SEVEN bits: one slot short of a byte
         STM   3, A' ;;
+    sr-q-mask)
+      # THE CASE THAT EARNS 8000 us ITS PLACE IN THE SET, and it was derived
+      # before it was run, which is the only reason it is worth recording. The
+      # conversion is Q = us >> 6 and r = us & 0x3F, reassembled across the byte
+      # boundary by OR-ing the low byte's six shifts into the high byte's six
+      # -- and the high byte is masked with 0x3F before its own two-bit left
+      # shift. Dropping ONE bit from that mask is a slip no reviewer would
+      # catch, and it is invisible in three of the four runs: the high bytes
+      # are 0x04, 0x16, 0x07 and 0x1F, and bit 3 is set in 0x1F ALONE. So the
+      # mutant is right for 1160, 5816 and 2000 and wrong only for 8000, where
+      # Q falls from 125 to 93 and the answer from 1375 to 1023.
+      #
+      # WHAT THIS SAYS ABOUT THE r = 0 RUN, and it is the opposite of what the
+      # set was assembled hoping: r = 0 does NOT make that run sensitive to the
+      # small term, it makes it BLIND to it. Measured, not assumed -- forcing
+      # the mask to 0x00 (r = 0 in every run) breaks 1160, 5816 and 2000 and
+      # leaves 8000 correct, because 11 * 0 is 0 whatever the chain computes.
+      # A 8000 us echo is therefore the only case that can catch a defect in
+      # the 11*Q half, and the only width whose us * 11 (88 000) overflows the
+      # sixteen bits a naive firmware would materialise it in. Both of those
+      # are the Q chain, which is where this mutation sits.
+      anchor="        AND   A, 0x3F          ; (us_hi & 0x3f), then a LEFT shift by two as
+        MOV   X, A"
+      repl="        AND   A, 0x37          ; MUTANT: bit 3 is gone from the mask
+        MOV   X, A" ;;
+    sr-trig-count)
+      # 4 * 149 + 5 = 601 CLOCKS, and the +5 is five instructions the pulse
+      # cannot do without. This deletes ONE of them -- the LDI that sets the
+      # ending level, which is redundant because the loop's last SUB has
+      # already left A at zero -- and the firmware stays otherwise perfect:
+      # same four answers, same widths, same one trigger per run.
+      #
+      # WHY IT IS WORTH A CASE. 600 clocks is 10.000 us, which SATISFIES the
+      # device's "> 10 us minimum". A window check passes this mutant; only the
+      # testbench's EQUALITY against 601 fails. So the act's real timing claim
+      # is that the pulse is exactly 601, and nothing else in the repository
+      # holds it to that -- which is also why the measured count is written
+      # down as 601 and not as "10 us".
+      anchor="        JNZ   trig_wait        ; 4 clocks per iteration
+        LDI   A, 0
+        OUT   TXPIN, A         ; TRIG falls here: 4*149 + 5 = 601 clocks"
+      repl="        JNZ   trig_wait        ; 4 clocks per iteration
+        OUT   TXPIN, A         ; MUTANT: 4*149 + 4 = 600 clocks" ;;
     *) return 2 ;;
   esac
   run_case "$id ($desc)" "$stem" "$tb" "$def" "$anchor" "$repl" "$extra"
@@ -756,11 +805,11 @@ rm -f "$CASES" "$results" "$CASELOG"
 
 # ---- the tree must not have changed ----------------------------------------
 stale=0
-for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter; do
+for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter sr04_range; do
   cmp -s "$SNAP/$f.pe" "$ROOT/firmware/$f.pe"  || { echo "FATAL: firmware/$f.pe was modified"; stale=1; }
   cmp -s "$SNAP/$f.hex" "$ROOT/firmware/$f.hex" || { echo "FATAL: firmware/$f.hex was modified"; stale=1; }
 done
-[ "$stale" -eq 0 ] && echo "firmware tree byte-identical after the run (cmp-verified, all 14 files: 7 programs, .pe and .hex)"
+[ "$stale" -eq 0 ] && echo "firmware tree byte-identical after the run (cmp-verified, all 16 files: 8 programs, .pe and .hex)"
 
 echo
 echo "timing-TB mutations: $n_cases cases, $n_ok detected, $n_surv survived, $n_err harness errors"
