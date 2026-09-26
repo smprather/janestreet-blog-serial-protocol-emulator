@@ -738,6 +738,50 @@ else
   tail -20 /tmp/check_wiki_pages.log
   stale=1
 fi
+# The DIAGRAMS, which until this gate existed had NO gate at all: 22 .puml
+# sources and 84 renders whose entire value is that they are correct pictures of
+# the code, with nothing in the suite that would have noticed one going stale,
+# one gaining a syntax error, or one losing its colocated SVG. PlantUML makes
+# this class of failure especially quiet: a .puml with a syntax error still
+# RENDERS, as an error image, so the committed artifact is a valid PNG of a
+# parser complaint and looks like a diagram to anything that only looks at files.
+#
+# It checks: every .puml parses (plantuml --check-syntax); every block has BOTH
+# formats colocated under the multi-block naming convention (<stem>, then
+# <stem>_001..<stem>_(N-1)); every render is neither older than its source nor
+# different from a fresh render of it (byte comparison, which is what catches the
+# data-source-line drift class an mtime test cannot see); and no render is
+# unclaimed by any source. Aspect is checked too, as a smoke alarm for a layout
+# accident rather than a style rule.
+#
+# The log paths are WORKTREE-SCOPED, unlike their neighbours above, on purpose:
+# sharing /tmp paths across gate logs is a known open defect here (14 logs at the
+# time of writing), and a new bare path would add to it rather than fix it. The
+# digest is the same one regress/mutate_fwbus_tb.sh adopted.
+_diag_wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
+[ -n "$_diag_wt" ] || _diag_wt=shared
+if bash tools/diag/check_diagrams.sh > "/tmp/check_diagrams.${_diag_wt}.log" 2>&1; then
+  echo "diagrams: OK ($(grep -c '^  ok:' "/tmp/check_diagrams.${_diag_wt}.log") check(s) passed; see tools/diag/check_diagrams.sh)"
+else
+  echo "diagrams: FAILED (see /tmp/check_diagrams.${_diag_wt}.log)"
+  tail -20 "/tmp/check_diagrams.${_diag_wt}.log"
+  stale=1
+fi
+# Its NEGATIVE CONTROL, in the suite and not merely available on request. A gate
+# that stops detecting is worse than no gate: it reports OK on a tree that is
+# broken, and the suite goes green on a claim nothing is testing. The self-test
+# plants a stale render, a hand-edited render, a broken .puml, a committed error
+# image, an unclaimed render and a missing block render, and requires the checker
+# to fail on every one while passing on an untouched synthetic fixture. It also
+# verifies each PLANTING actually changed something, because a no-op planting
+# otherwise reports itself as a broken checker.
+if bash tools/diag/check_diagrams.sh --self-test > "/tmp/check_diagrams_selftest.${_diag_wt}.log" 2>&1; then
+  echo "diagrams gate self-test: OK ($(grep -c 'ok:   self-test' "/tmp/check_diagrams_selftest.${_diag_wt}.log") of $(grep -c 'self-test —' "/tmp/check_diagrams_selftest.${_diag_wt}.log") cases behaved correctly)"
+else
+  echo "diagrams gate self-test: FAILED (see /tmp/check_diagrams_selftest.${_diag_wt}.log)"
+  tail -20 "/tmp/check_diagrams_selftest.${_diag_wt}.log"
+  stale=1
+fi
 # The local presentation viewer's fit arithmetic has its own focused check.
 # This uses an embedded SVG fixture and does not consume the project diagrams,
 # which are maintained as PlantUML source in diagrams/.
