@@ -162,6 +162,69 @@ ASPECT_MAX=15.0
 #      normalised by STRING EXPANSION rather than by a backreference regex --
 #      the backreference form was mangled twice on its way through this work.
 # The negative control below plants a white arrow and requires this to fire.
+# ---- the canonical palette, and the drift check ---------------------------
+# WHY THE PALETTE IS COPIED RATHER THAN INCLUDED: a shared file cannot reach the
+# sources in this toolchain. A top-level !include reaches only the FIRST block of
+# a multi-block source (verified), and a relative include fails from every
+# invocation style while an absolute path works and is unportable across
+# worktrees. So the palette is authored once and written verbatim into each
+# source, and THIS check is what keeps the copies honest. Without it "one place
+# the colours live" is only a comment.
+#
+#   NOTE  every figure                 6cef8ec7e7f7
+#   SEQ   figures with an actor        e6b4a55955c8
+#   STATE figures with states          4ae48999b2a9
+#
+# THE CANONICAL TEXT IS COMPARED BY DIGEST, NOT BY TEXT. Embedding 64 lines of
+# palette in a shell value or a python literal is what corrupted this check on
+# three separate attempts: a shell syntax error, then 18 false positives from a
+# one-character regex boundary, then a mangled negative control. A digest is
+# also STRICTER than a text compare -- any byte difference changes it -- so there
+# is no way for a block to look the same and hash differently.
+#
+# Trailing whitespace is normalised away on purpose: a capture regex ending at
+# `$` stops BEFORE the final newline under re.M, so demanding byte equality
+# would flag every source. A difference in COLOURS is not normalised, because
+# that is the drift worth catching -- a source that quietly re-values a
+# canonical colour, or grows a competing block of its own, which is exactly how
+# the white arrows came back the first time.
+#
+# Two groups of source are exempt, both by name and both for a stated reason:
+# the five figures owned and verified clean elsewhere, and the SYNTHETIC FIXTURES
+# the self-test plants its cases in. The fixtures are not real figures and
+# deliberately contain non-canonical colour, which is what several of the cases
+# are about.
+palette_drift() {  # source_file -> one line per drift finding on stdout
+  python3 - "$1" <<'PYD' 2>/dev/null
+import re, sys, hashlib
+CANON = set(("6cef8ec7e7f7", "e6b4a55955c8", "4ae48999b2a9"))
+EXEMPT = set(("project-plan.puml", "project-progress.puml", "proto-r2-read-path.puml",
+              "proto-r3-debug-control.puml", "proto-spi-framing.puml"))
+def dig(t):
+    return hashlib.sha1(re.sub(r"\s+$", "", t, flags=re.M).encode()).hexdigest()[:12]
+path = sys.argv[1]
+base = path.rsplit("/", 1)[-1]
+# EXEMPTION IS BY SANDBOX DIRECTORY, not by file name, and that detail was the
+# whole of the last two failures. A basename rule ("fixture-") missed case (g),
+# whose planted copy is named "a figure with spaces.puml", AND defeated case
+# (k) itself, because the file the drift case plants into is a fixture -- so the
+# check skipped precisely the file it was supposed to judge. One rule covers
+# both: anything inside a self-test sandbox is synthetic, and the drift case
+# therefore runs against a copy placed OUTSIDE the sandbox.
+if base in EXEMPT or "diag_selftest" in path:
+    raise SystemExit(0)
+s = open(path).read()
+if not re.search(r"^skinparam\s+NoteBackgroundColor", s, re.M):
+    print("missing the canonical NOTE palette")
+for m in re.finditer(r"^[ \t]*skinparam[ \t]+(?:sequence|state|component|package|"
+                     r"class|interface|legend)[ \t]*\{.*?^[ \t]*\}[ \t]*",
+                     s, re.M | re.S):
+    if dig(m.group(0)) not in CANON:
+        print("a non-canonical %s block -- the palette has drifted"
+              % m.group(0).split("{")[0].strip())
+PYD
+}
+
 white_check_svg() {  # svg -> one finding per line on stdout
   python3 - "$1" <<'PYW' 2>/dev/null
 import re, sys
@@ -420,6 +483,22 @@ check_dir() {
       fi
     done
   fi
+
+  # ---- 1b. the palette has not drifted from the canonical one --------------
+  local drift
+  for src in "$dir"/*.puml; do
+    [ -e "$src" ] || continue
+    drift=$(palette_drift "$src")
+    if [ -n "$drift" ]; then
+      while IFS= read -r dr; do
+        [ -n "$dr" ] || continue
+        bad_total=$((bad_total + 1))
+        fail "PALETTE DRIFT $(basename "$src"): $dr"
+      done <<EOF
+$drift
+EOF
+    fi
+  done
 
   # ---- 2a. every block has BOTH formats, colocated ------------------------
   for src in "$dir"/*.puml; do
@@ -908,6 +987,42 @@ PUJ
   else
     printf '  FAIL: self-test — j: red, but NOT with WHITE-ON-WHITE — it caught the\n'
     printf '        fixture breaking some other way\n'
+  fi
+
+  # (k) PALETTE DRIFT. The planted block is APPENDED, so the planting cannot be a
+  #     no-op, and the file is compared before and after so that a planting which
+  #     silently did nothing is reported as a broken case rather than a passing
+  #     one. Two earlier versions of this suite printed "planted"
+  #     unconditionally and one of them had matched nothing at all.
+  #
+  #     It runs against a copy placed OUTSIDE the self-test sandbox: everything
+  #     inside a sandbox is exempt as synthetic, so planting into the fixture
+  #     would have the check skip the very file it is meant to judge -- which is
+  #     what the first version of this case did.
+  fresh_case ck
+  if [ -f "$sandbox/ck/fixture-single.puml" ]; then
+    # mktemp with its OWN prefix, not "$sandbox/../...": bash does not normalise
+    # ".." in a string, so that path would still literally contain the sandbox
+    # marker and the exemption would skip the very file the case plants into.
+    # That is the second time this case defeated itself, and it is worth the
+    # comment.
+    out_dir=$(mktemp -d "/tmp/diag_driftcase.${_wt}.XXXXXX")
+    mkdir -p "$out_dir"
+    cp "$sandbox/ck/fixture-single.puml" "$out_dir/drifted-source.puml"
+    printf 'skinparam component {\n  BackgroundColor #DDEEFF\n  BorderColor #225588\n}\n' \
+      >> "$out_dir/drifted-source.puml"
+    results=$((results + 1))
+    out=$(palette_drift "$out_dir/drifted-source.puml")
+    rm -rf "$out_dir"
+    if [ -n "$out" ]; then
+      printf '  ok:   self-test — %-42s planted:  CAUGHT\n' "k a source whose palette has drifted"
+      caught=$((caught + 1))
+    else
+      printf '  FAIL: self-test — k: a DRIFTED palette was not caught\n'
+    fi
+  else
+    printf '  FAIL: self-test — k: no fixture to drift\n'
+    results=$((results + 1))
   fi
 
   printf '  -- self-test: %d of %d cases behaved correctly\n' "$caught" "$results"
