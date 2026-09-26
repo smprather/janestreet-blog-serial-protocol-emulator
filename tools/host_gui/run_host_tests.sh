@@ -31,7 +31,11 @@
 #      gate the chip must pass, NOT evidence that it does, and every R3 step
 #      is chip_confirmed=false until tb_pe_ctrl_r3 passes it byte-exactly.
 #   7. the MicroPython conformance run of the deployed bridge modules, when a
-#      `micropython` binary is on PATH (skipped with a note otherwise).
+#      `micropython` interpreter is available - on PATH, or named by
+#      $MICROPYTHON (skipped with a note otherwise). A check that only runs when
+#      someone happens to have it on PATH is a check that mostly does not run:
+#      this environment has a built unix port that is NOT on PATH, so the step
+#      skipped while the thing it guards was perfectly runnable.
 #   8. the deploy helper's dry run (payload manifest; the unit tests also
 #      exercise the real install and its refusals).
 #   9. a bounded protocol-fuzz campaign against both frame decoders and the
@@ -91,11 +95,14 @@ run "acceptance --fake" python3 tools/host_bridge/acceptance.py --fake
 # The deployed bridge must import and run on MicroPython. This runs the same
 # conformance harness on both interpreters when a micropython binary is
 # available (build the unix port: git clone micropython && make -C ports/unix).
-if command -v micropython >/dev/null 2>&1; then
+# The interpreter to use when one is not on PATH. A unix-port build is a local
+# artifact at an arbitrary path, so this is opt-in and the default is unchanged.
+MICROPYTHON_BIN="${MICROPYTHON:-micropython}"
+if command -v "$MICROPYTHON_BIN" >/dev/null 2>&1; then
     run "micropython conformance (bridge)" \
-        micropython tools/host_bridge/micropython_check.py
+        "$MICROPYTHON_BIN" tools/host_bridge/micropython_check.py
 else
-    printf '\n=== micropython conformance (bridge) ===\n[skip] micropython (not installed; see the runbook)\n'
+    printf '\n=== micropython conformance (bridge) ===\n[skip] no MicroPython interpreter (build the unix port, or set MICROPYTHON=/path/to/micropython)\n'
 fi
 
 printf '\n=== host gate: %s ===\n' "$([ "$failed" -eq 0 ] && echo PASS || echo FAIL)"

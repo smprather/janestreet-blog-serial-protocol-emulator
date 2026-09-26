@@ -669,6 +669,19 @@ class FakePE:
         # The RTL builds the prefix in the same cycle it latches the new
         # address: state and pc are the values at the REQUEST, while bp_addr
         # and bp_flags report the ARMED breakpoint. Arming clears a stale hit.
+        #
+        # It does NOT clear `debug_hold`, and that asymmetry is the chip's,
+        # not an omission here: `DEBUG_BP_SET` writes bp_en and bp_hit only
+        # (`pe_ctrl.v:1086-1087`). What follows from it is NOT "an arm on a
+        # held core is dead" - the step path latches the hit without the
+        # `!dbg_hold_r` the free-running path requires (`pe_ctrl.v:1067` vs
+        # `:692`), which is why the arm-then-step flow is legal and the
+        # acceptance act uses it. It is that the arm is STEP-ONLY: run into it
+        # and the hold makes the hit impossible while the chip still answers
+        # OK. "Fixing" this model to release the hold would make the host agree
+        # with a chip that does not do that, which is the one thing a model
+        # must not do; `test_r3.py` pins both halves - the armed-but-unrunnable
+        # state and the step that does latch.
         state, pc = self.state, self.pc
         self.bp_addr = address
         self.bp_en = True

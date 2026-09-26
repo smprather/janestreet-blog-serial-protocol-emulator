@@ -6,12 +6,18 @@ drift -- lives in `tools/host_gui/vectors.py`, shared with R3. This module is
 the R2 configuration (its evidence block, its rulings, its artifact paths) plus
 the R2 vector list.
 
-**The checked-in R2 artifacts are byte-identical across that extraction and
-must stay that way.** R2 is chip-confirmed (18/18 byte-exact in
-`tb_pe_ctrl_r2`) and the chip testbench consumes this hex export, so
-`python3 -m tools.host_gui.r2_vectors --check` is the regression proof for
-this file. Do not reword `PACKAGE_NOTICE` or the `SPEC` strings: they are
-part of the published artifact.
+**The checked-in R2 artifacts must stay byte-identical for the 18 steps the
+chip has confirmed, and they must stay TRUE.** Those two are different
+promises and both are enforced here. The chip's `tb_pe_ctrl_r2.v` consumes
+this hex export and passes those 18 steps byte-exactly, so
+`python3 -m tools.host_gui.r2_vectors --check` plus the byte fingerprint in
+`tests/test_r2_vectors.py` are the regression proof: adding a vector is
+allowed, changing a published byte is not. The prose around them is NOT
+frozen -- `PACKAGE_NOTICE`, the evidence counts and the rulings state what is
+and is not confirmed, so a step added without a chip re-run makes them say so
+(the R3 review found a shipped notice claiming the opposite of the flags in
+the same file, and the drift gate cannot catch that because both come from
+this module).
 
 Who uses it: the chip manager hands this to the protocol worker as the R2
 acceptance spec. Each step carries the exact framed request and response bytes
@@ -29,6 +35,8 @@ Manager RULINGs encoded here (2026-09-25):
 
 from __future__ import annotations
 
+import ast
+import sys
 from pathlib import Path
 
 from tools.host_gui import fake_pe as F
@@ -44,30 +52,147 @@ HEX_DIR = REPO_ROOT / "reviews" / "2026-09-25" / "r2-hex"
 TARGET = P.TARGET_HOST
 LOAD_WORDS = V.DEFAULT_LOAD_WORDS
 
+# The 18 steps the chip has confirmed, as a TUPLE rather than a set literal:
+# the flag-flip rewrites this literal, and a tuple gives it one unambiguous
+# start and end to anchor on (a set literal has neither). The order is the
+# package's own step order, so the published list reads like the run.
+CONFIRMED_STEP_NAMES = (
+    "read_imem_address_1_count_2",
+    "read_dmem_address_0_count_4",
+    "dump_core_header",
+    "status_header",
+    "read_cpu_while_running",
+    "read_cpu_full_width_regs",
+    "read_imem_not_ready",
+    "read_dmem_not_ready",
+    "dump_core_not_ready",
+    "read_imem_last_word",
+    "read_imem_past_end_no_wrap",
+    "read_dmem_past_end_no_wrap",
+    # the sticky-fault lifecycle trio (chip-confirmed with the rest)
+    "bad_read_answers_range",
+    "status_shows_sticky_fault",
+    "clear_fault_clears_the_bit",
+    # Host-side ceiling + zero-count vectors, added after the chip review; the
+    # chip re-ran them and they pass byte-exact (conformance 18/18; the ceiling
+    # and count==0->RANGE rules needed no RTL change).
+    "read_imem_at_ceiling_15",
+    "read_imem_over_ceiling",
+    "read_dmem_zero_count",
+    # Confirmed by the chip's re-run; see chip_evidence.
+    "status_reports_the_hold",
+    "dump_core_answers_the_same_header",
+    "status_reports_the_hit",
+    "dump_core_refused_the_strap_is_high",
+)
+
+# The four held-core steps the chip has NOT re-run. Named here rather than
+# derived, so the flip has a target list that cannot silently become empty.
+HELD_STEP_NAMES = (
+    "status_reports_the_hold",
+    "dump_core_answers_the_same_header",
+    "status_reports_the_hit",
+    "dump_core_refused_the_strap_is_high",
+)
+
+# The published bytes of every confirmed step: (request, response). THE FREEZE.
+# It lives here, beside the evidence, rather than in the test suite, because the
+# flip has to extend it atomically with the flags it is a statement about; the
+# test still compares every pair against a FRESH BUILD, which is the invariant
+# that matters (the freeze is against the model, not against this file).
+CONFIRMED_STEP_BYTES = {
+    "read_imem_address_1_count_2": (
+        "a55a11300001000200010002b9cd",
+        "a55a193000010003000010014002ca95",
+    ),
+    "read_dmem_address_0_count_4": (
+        "a55a1140000100020000000445e0",
+        "a55a19400001000300000a0b0c0d7c84",
+    ),
+    "dump_core_header": (
+        "a55a1150000100009b96",
+        "a55a19500001000b0000000000000000012300450078009a000700000003e6c0",
+    ),
+    "status_header": (
+        "a55a111000020000d3ae",
+        "a55a19100002000b0000000000000000012300450078009a0007000000032139",
+    ),
+    "read_cpu_while_running": (
+        "a55a1120000100008610",
+        "a55a192000010007000003ff00ff00ff00ffffff0001d415",
+    ),
+    "read_cpu_full_width_regs": (
+        "a55a1120000100008610",
+        "a55a192000010007000003ff00ff00ff00ffffff0000c434",
+    ),
+    "read_imem_not_ready": (
+        "a55a11300001000200000001be9e",
+        "a55a1930000100010006dd58",
+    ),
+    "read_dmem_not_ready": (
+        "a55a11400002000200000001cdc7",
+        "a55a1940000200010006b7eb",
+    ),
+    "dump_core_not_ready": (
+        "a55a115000030000f5f6",
+        "a55a19500003000100062ac1",
+    ),
+    "read_imem_last_word": (
+        "a55a11300001000203ff0001ea21",
+        "a55a19300001000200000000e4f4",
+    ),
+    "read_imem_past_end_no_wrap": (
+        "a55a11300002000203ff000202c0",
+        "a55a1930000200010003632f",
+    ),
+    "read_dmem_past_end_no_wrap": (
+        "a55a114000030002000f000269f4",
+        "a55a19400003000100034d1f",
+    ),
+    "read_imem_at_ceiling_15": (
+        "a55a1130000100020000000f5f50",
+        "a55a19300001001000000041100140020000000000000000000000000000000000000000000000001b97",
+    ),
+    "read_imem_over_ceiling": (
+        "a55a11300002000200000010640c",
+        "a55a1930000200010003632f",
+    ),
+    "read_dmem_zero_count": (
+        "a55a114000030002000000006587",
+        "a55a19400003000100034d1f",
+    ),
+    "bad_read_answers_range": (
+        "a55a11300001000207d000018a27",
+        "a55a19300001000100038dfd",
+    ),
+    "status_shows_sticky_fault": (
+        "a55a111000020000d3ae",
+        "a55a19100002000b0000000000000000000000000000000000000004000323b2",
+    ),
+    "clear_fault_clears_the_bit": (
+        "a55a11600003000100044dd4",
+        "a55a196000030002000000008830",
+    ),
+    "status_reports_the_hold": (
+        "a55a1110000100008afe",
+        "a55a19100001000b00000002000000000001004100000000000000000003444e",
+    ),
+    "dump_core_answers_the_same_header": (
+        "a55a115000020000c2c6",
+        "a55a19500002000b0000000200000000000100410000000000000000000383b7",
+    ),
+    "status_reports_the_hit": (
+        "a55a1110000100008afe",
+        "a55a19100001000b000000030001000000020041000000000000000000034516",
+    ),
+    "dump_core_refused_the_strap_is_high": (
+        "a55a115000020000c2c6",
+        "a55a19500002000100068090",
+    ),
+}
+
 CHIP_EVIDENCE = {
-    "confirmed_steps": {
-        "read_imem_address_1_count_2",
-        "read_dmem_address_0_count_4",
-        "dump_core_header",
-        "status_header",
-        "read_cpu_while_running",
-        "read_cpu_full_width_regs",
-        "read_imem_not_ready",
-        "read_dmem_not_ready",
-        "dump_core_not_ready",
-        "read_imem_last_word",
-        "read_imem_past_end_no_wrap",
-        "read_dmem_past_end_no_wrap",
-        "bad_read_answers_range",
-        "status_shows_sticky_fault",
-        "clear_fault_clears_the_bit",
-        # Host-side ceiling + zero-count vectors, added after the chip review;
-        # the chip re-ran them and they pass byte-exact (conformance now
-        # 18/18; the ceiling and count==0->RANGE rules needed no RTL change).
-        "read_imem_at_ceiling_15",
-        "read_imem_over_ceiling",
-        "read_dmem_zero_count",
-    },
+    "confirmed_steps": set(CONFIRMED_STEP_NAMES),
     "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md "
     "(section 'Conformance', per-vector table)",
     "testbench": "chip repo: tb/tb_pe_ctrl_r2.v",
@@ -75,7 +200,9 @@ CHIP_EVIDENCE = {
     "sparse overrides and register state, replays the 3-word LOAD "
     "precondition as a real framed frame, and compares every "
     "response byte (skipping wait words) to the golden stream",
-    "conformance": "18/18 golden steps PASS, byte-exact including CRC",
+    "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
+    "pending_steps": (),
+    "pending_reason": "These four steps were added on 2026-09-25 because R3's debug work made the R2 readback reachable in states 2 (DEBUG_HOLD) and 3 (BP_HIT) while no R2 vector exercised either. The chip has since re-run tb_pe_ctrl_r2 against them with the debug inputs driven and reported them byte-exact (tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25), so the pending set is empty and the notice is generated from the full count.",
     "scope": "This confirms the chip RTL in SIMULATION against the golden "
     "package. The real-board acceptance run (Pico over USB, physical "
     "shuttle) is still unexecuted and is not claimed here.",
@@ -83,17 +210,62 @@ CHIP_EVIDENCE = {
 }
 
 
-PACKAGE_NOTICE = (
-    "CHIP-CONFIRMED IN SIMULATION: every golden step in this package passes "
-    "byte-exactly (CRC included) in the chip repo's tb/tb_pe_ctrl_r2.v, with "
-    "the model image loaded per vector - see the chip repo's "
-    "reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance', which "
-    "names every step (18/18). NOT HARDWARE-CONFIRMED: the "
-    "real-board acceptance run (Pico over USB CDC with a physical shuttle) has "
-    "NOT been executed and is not claimed here. The host probes in "
-    "r2_reads.py still run against the FakePE model; what the chip confirms is "
-    "that the RTL matches these same expectations."
+HARDWARE_BOUNDARY = (
+    "NOT HARDWARE-CONFIRMED: the real-board acceptance run (Pico over USB CDC "
+    "with a physical shuttle) has NOT been executed and is not claimed here. "
+    "The host probes in r2_reads.py still run against the FakePE model; what "
+    "the chip confirms is that the RTL matches these same expectations."
 )
+
+
+def notice_for(*, confirmed: int, pending) -> str:
+    """The shipped notice, GENERATED from the flag arithmetic.
+
+    This is the F1 lesson applied structurally. The R3 review found a shipped
+    notice claiming the opposite of the flags in the same file, and the drift
+    gate STRUCTURALLY cannot catch that: the notice and the flags come from
+    this one source, so a fresh build faithfully reproduces whatever stale
+    prose sits here. Hand-maintaining a claim that the gate cannot check is
+    the defect, so the claim is now an expression of the numbers instead of a
+    sentence about them - there is no way to be right about one and wrong
+    about the other.
+    """
+    total = confirmed + len(pending)
+    where = (
+        "the chip repo's reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance'"
+    )
+    if not pending:
+        return (
+            f"CHIP-CONFIRMED IN SIMULATION: all {total} golden steps in this "
+            f"package pass byte-exactly (CRC included) in the chip repo's "
+            f"tb/tb_pe_ctrl_r2.v, with the model image loaded per vector; see "
+            f"{where}, which names every step ({confirmed}/{confirmed}). "
+            + HARDWARE_BOUNDARY
+        )
+    named = ", ".join(pending)
+    return (
+        f"PARTIALLY CHIP-CONFIRMED IN SIMULATION: {confirmed} of the {total} "
+        f"golden steps in this package - every R2 read-path step - pass "
+        f"byte-exactly (CRC included) in the chip repo's tb/tb_pe_ctrl_r2.v, "
+        f"with the model image loaded per vector; see {where}, which names "
+        f"every one of them ({confirmed}/{confirmed}). NOT CHIP-CONFIRMED: "
+        f"the {len(pending)} steps added 2026-09-25 for the R2 readback while "
+        f"the core is HELD at a breakpoint - {named} (state 2, a step-pause, "
+        f"and state 3, a live hit). Their expectations come from the frozen "
+        f"contract semantics, the chip has not re-run tb_pe_ctrl_r2 against "
+        f"them, and they are a gate, not evidence. " + HARDWARE_BOUNDARY
+    )
+
+
+def _notice(evidence: dict) -> str:
+    """The notice for an evidence block (the module's own, and a flipped one)."""
+    return notice_for(
+        confirmed=len(evidence.get("confirmed_steps", ())),
+        pending=tuple(evidence.get("pending_steps", ())),
+    )
+
+
+PACKAGE_NOTICE = _notice(CHIP_EVIDENCE)
 
 # The R2 package is the FIRST package, so it predates the framework's schema
 # stamp: `schema=None` keeps its JSON and manifest keys exactly as they were,
@@ -129,8 +301,17 @@ SPEC = V.Spec(
             "(manager ruling 2026-09-25)"
         ),
         (
-            f"chip R2 CONFIRMED: {CHIP_EVIDENCE['conformance']} "
+            f"chip R2 CONFIRMED: {CHIP_EVIDENCE['conformance'].split('.')[0]} "
             f"({CHIP_EVIDENCE['testbench']})"
+        ),
+        (
+            "the R2 register readback reports the DEBUG state, and the two "
+            "halves are distinguishable: the state word is "
+            "`dbg_hold ? (bp_hit ? 3 : 2) : (run ? 1 : 0)`, a breakpoint hit "
+            "holds the CORE and not the run strap (so state 3 arrives with "
+            "run=1), and DUMP_CORE is gated on the raw run strap - so it "
+            "answers the full header under a step-pause and NOT_READY under a "
+            "live hit (frozen contract semantics, 2026-09-25)"
         ),
     ),
     evidence=CHIP_EVIDENCE,
@@ -164,6 +345,230 @@ SPEC = V.Spec(
 ISA_PC_MAX = (1 << F.ISA_PC_BITS) - 1
 ISA_REG_MAX = (1 << F.ISA_A_BITS) - 1
 ISA_INSN_MAX = (1 << F.ISA_INSN_BITS) - 1
+
+
+# ---- the flag-flip choreography --------------------------------------------
+class FlipRefused(RuntimeError):
+    """The flip was REFUSED and nothing was changed. Always with a reason."""
+
+
+def _source_literal(source: str, name: str):
+    """Read a module-level literal out of source, without executing it.
+
+    Executing the source would re-run the whole module for a transform that
+    only needs three constants, and it would run it on a string that is not
+    necessarily the module. So the constants are PARSED.
+    """
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == name:
+                return ast.literal_eval(node.value)
+    raise FlipRefused(f"no module-level literal named {name} to work from")
+
+
+def _replace_span(source: str, start: str, end: str, replacement: str, what: str) -> str:
+    """Replace the text between two markers, or refuse.
+
+    The lesson from my own F1 fix (r3_vectors, 2026-09-25): a `str.replace`
+    whose result is not asserted is a silent no-op that still prints "updated".
+    So every span is located, counted, and checked, and a formatting change
+    upstream produces a clean refusal with a reason rather than a half-flip.
+    """
+    first = source.find(start)
+    if first < 0:
+        raise FlipRefused(f"{what}: the start marker {start!r} is gone")
+    if source.find(start, first + 1) >= 0:
+        raise FlipRefused(f"{what}: the start marker {start!r} is ambiguous")
+    last = source.find(end, first + len(start))
+    if last < 0:
+        raise FlipRefused(f"{what}: the end marker {end!r} is gone")
+    return source[: first + len(start)] + replacement + source[last:]
+
+
+def _literal_bounds(source: str, name: str) -> tuple[int, int]:
+    """The 1-based line of a literal's CLOSING bracket and of its first element.
+
+    Found through the AST rather than by searching for a name, so the
+    insertion point survives reformatting and does not hard-code whichever step
+    happens to be last today.
+    """
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == name:
+                if node.end_lineno is None or node.value.end_lineno is None:
+                    raise FlipRefused(
+                        f"{name}: the literal has no end position, so there "
+                        f"is nowhere to insert; the module may be a stub"
+                    )
+                return node.end_lineno, node.value.end_lineno
+    raise FlipRefused(f"no module-level literal named {name} to work from")
+
+
+def _evidence_is_already_flipped(source: str) -> bool:
+    """True when this source's evidence block has an EMPTY pending set.
+
+    Read from the PARSED evidence block, not by searching the text for a
+    marker: the flip's own guard contains that marker as a string literal, so a
+    text search finds itself and the "already confirmed" check never fires.
+    """
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if not (isinstance(target, ast.Name) and target.id == "CHIP_EVIDENCE"):
+                continue
+            if not isinstance(node.value, ast.Dict):
+                raise FlipRefused("CHIP_EVIDENCE is not a dict literal")
+            for key, value in zip(node.value.keys, node.value.values):
+                if not (isinstance(key, ast.Constant) and key.value == "pending_steps"):
+                    continue
+                return isinstance(value, (ast.Tuple, ast.List)) and not value.elts
+            raise FlipRefused("the evidence block has no pending_steps key")
+    raise FlipRefused("no module-level CHIP_EVIDENCE to work from")
+
+
+def _append_to_literal(source: str, name: str, body: str, what: str) -> str:
+    """Append lines INSIDE a module-level literal, or refuse.
+
+    Separate from `_replace_span` on purpose: appending to a literal and
+    rewriting a value are different operations, and using one for both is how
+    the first version of this deleted the eighteen names it was supposed to add
+    four to. The parse check at the end of the flip is what catches that class
+    of mistake, and `test_the_flip_moves_only_the_four_steps` is its guard.
+
+    The indent comes from the literal's FIRST element, not from its closing
+    bracket: a top-level tuple's `)` sits in column 0, so taking the indent
+    from there would emit entries at column 0 inside it - syntactically fine
+    and stylistically wrong, which is the kind of thing nobody notices until a
+    reviewer does.
+    """
+    end, first = _literal_bounds(source, name)
+    lines = source.splitlines(keepends=True)
+    if not 0 < end <= len(lines) or not 0 < first <= len(lines):
+        raise FlipRefused(f"{what}: the literal's bounds are out of range")
+    sample = lines[first - 1]
+    indent = " " * (len(sample) - len(sample.lstrip()))
+    block = "".join(
+        f"{indent}{line}\n" for line in body.rstrip("\n").split("\n") if line.strip()
+    )
+    return "".join(lines[: end - 1]) + block + "".join(lines[end - 1 :])
+
+
+def flip_held_steps(source: str, *, cite: str = "", date: str = "") -> str:
+    """Return this module's source with the four held-core steps CONFIRMED.
+
+    The trigger is the chip's green report and nothing else, so the report has
+    to be cited: a flip that could be run on a hunch is a flip that will be.
+    It also refuses if any already-published byte has changed, because a flip is
+    a statement ABOUT bytes - riding in on a byte edit would confirm steps
+    nobody re-ran - and it refuses if the steps are already confirmed, so a
+    second run reports the no-op instead of restating the conformance line from
+    a count it no longer has anything to add to.
+
+    A pure text transform: no imports, no writes. The CLI applies it to the real
+    file; the tests apply it to a copy. The NOTICE is not edited here, because
+    it is generated from the flags - editing it by hand is the defect this
+    whole mechanism exists to remove.
+
+    `cite` and `date` default to empty so that OMITTING one produces this
+    function's typed refusal, naming what is missing, rather than a TypeError
+    from Python: for a tool whose only job is to refuse safely, a missing
+    argument and an empty argument are the same event.
+    """
+    if not (cite or "").strip():
+        raise FlipRefused(
+            "a cite is required: the trigger is the chip's report, so the "
+            "report has to be named (chip repo review path)"
+        )
+    if not (date or "").strip():
+        raise FlipRefused("a date is required: a citation without a date rots silently")
+    if _evidence_is_already_flipped(source):
+        raise FlipRefused(
+            "the held-core steps are already confirmed (or the evidence block "
+            "was edited by hand) - nothing to flip"
+        )
+
+    # The byte freeze, checked against a FRESH build before anything is
+    # rewritten. This is the anti-laundering gate.
+    pinned = _source_literal(source, "CONFIRMED_STEP_BYTES")
+    names = _source_literal(source, "CONFIRMED_STEP_NAMES")
+    fresh = {}
+    for vector in build_package()["vectors"]:
+        for step in vector["steps"]:
+            fresh[step["name"]] = (step["request_hex"], step["response_hex"])
+    for name in sorted(set(names) | set(pinned)):
+        if name not in fresh:
+            raise FlipRefused(f"{name}: not a step in the package any more")
+        if tuple(pinned.get(name, ())) != fresh[name]:
+            raise FlipRefused(
+                f"{name}: the pinned byte pair does not match a fresh build, "
+                f"so flipping now would confirm a byte edit nobody re-ran"
+            )
+
+    count = len(names) + len(HELD_STEP_NAMES)
+    out = source
+    # 1. the four names join the confirmed tuple
+    out = _append_to_literal(
+        out,
+        "CONFIRMED_STEP_NAMES",
+        "\n# Confirmed by the chip's re-run; see chip_evidence.\n"
+        + "\n".join(f'"{name}",' for name in HELD_STEP_NAMES),
+        "confirmed-step names",
+    )
+    # 2. the four byte pairs join the freeze, from the SHIPPED bytes
+    out = _append_to_literal(
+        out,
+        "CONFIRMED_STEP_BYTES",
+        "\n".join(
+            f'"{name}": (\n    "{fresh[name][0]}",\n    "{fresh[name][1]}",\n),'
+            for name in HELD_STEP_NAMES
+        ),
+        "confirmed-step bytes",
+    )
+    # 3. the conformance line restates the arithmetic
+    out = _replace_span(
+        out,
+        '\n    "conformance": ',
+        '\n    "pending_steps":',
+        f'"{count}/{count} golden steps PASS, byte-exact including CRC, in '
+        f"the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: "
+        f"the R2 read-path steps plus the four held-core steps (state 2 "
+        f'step-pause, state 3 live hit). Reported in {cite}, {date}.",',
+        "conformance",
+    )
+    # 4. pending becomes history, with the report that cleared it
+    out = _replace_span(
+        out,
+        '\n    "pending_reason": ',
+        '\n    "scope":',
+        f"\"These four steps were added on 2026-09-25 because R3's debug work "
+        f"made the R2 readback reachable in states 2 (DEBUG_HOLD) and 3 "
+        f"(BP_HIT) while no R2 vector exercised either. The chip has since "
+        f"re-run tb_pe_ctrl_r2 against them with the debug inputs driven and "
+        f"reported them byte-exact ({cite}, {date}), so the pending set is "
+        f'empty and the notice is generated from the full count.",',
+        "pending reason",
+    )
+    # 5. pending_steps empties
+    out = _replace_span(
+        out, '\n    "pending_steps": ', '\n    "pending_reason":', "(),", "pending steps"
+    )
+    # 6. the date
+    out = _replace_span(out, '\n    "date": ', ",\n}", f'"{date}"', "date")
+    # 7. and the result must still be Python: a text transform that can emit
+    #    a file nobody can import is not a transform. `ast.parse` rather than
+    #    `compile`, because what is being checked is SYNTAX - the flipped file
+    #    gets imported normally by the gates, and building a code object here
+    #    would add an execution surface for no extra coverage.
+    try:
+        ast.parse(out)
+    except SyntaxError as exc:
+        raise FlipRefused(f"the flip produced invalid source: {exc}") from exc
+    return out
 
 
 def build_package() -> dict:
@@ -467,6 +872,114 @@ def build_package() -> dict:
         )
     )
 
+    # 8. The R2 readback while the core is HELD. R3's debug work gave the
+    #    chip a second and third way to be stopped, and R2's STATUS carries
+    #    the same 2-bit state word - so states 2 (DEBUG_HOLD, a step-pause)
+    #    and 3 (BP_HIT, a live hit) are now reachable, and NOTHING in this
+    #    package exercised either. A chip right on states 0/1 and wrong on
+    #    the held ones passed 18/18. The expectations below are read off the
+    #    frozen contract, not wished for:
+    #      * state = dbg_hold ? (bp_hit ? 3 : 2) : (run ? 1 : 0) - only a
+    #        hold can produce 2/3, and the latched hit is what separates
+    #        them;
+    #      * the STATUS `run` word is the STRAP, not the state. A breakpoint
+    #        hit holds the core, it does not drop the strap, so a live hit
+    #        arrives as state 3 WITH run=1;
+    #      * DUMP_CORE is gated on the raw `run` strap, so it answers the
+    #        full header under a step-pause (strap low) and NOT_READY under
+    #        a live hit (strap still high) even though the core is stopped
+    #        in both. Gating it on the hold instead would be a different,
+    #        and wrong, reading - these steps are what separate the two.
+    #
+    #    Both pre-states are REACHABLE, not invented: they are the pc/a a
+    #    real core has after executing the shipped image (imem 0x0041, 0x1001,
+    #    0x4002) - one DEBUG_STEP from the boot stop for the pause, and a
+    #    free-running stop on the armed breakpoint for the hit. A
+    #    conformance TB preloading a state the core cannot occupy proves
+    #    nothing (the chip review's M2 finding).
+    #
+    #    chip_confirmed=false: the chip's tb_pe_ctrl_r2 instantiates pe_ctrl
+    #    without the R3 debug inputs, so it cannot drive these at all yet.
+    image, pe = image_and_model(
+        "v09-status_while_step_paused",
+        pc=1,
+        a=0x41,
+        run=0,
+        debug={"bp_addr": 2, "bp_en": True, "bp_hit": False, "debug_hold": True},
+    )
+    vectors.append(
+        b.vector(
+            "status_while_step_paused",
+            "STATUS while the core is HELD in state 2 (DEBUG_HOLD, a "
+            "step-pause): the state word says so and the run strap is still "
+            "low, and DUMP_CORE still answers the identical header - a hold "
+            "is not a running core, so nothing the R2 read path refuses is "
+            "refused here.",
+            "n/a (register header)",
+            [
+                b.record(
+                    pe,
+                    "status_reports_the_hold",
+                    P.OP_STATUS,
+                    (),
+                    1,
+                    "state=2 (DEBUG_HOLD), run=0, pc=1",
+                    image["id"],
+                ),
+                b.record(
+                    pe,
+                    "dump_core_answers_the_same_header",
+                    P.OP_DUMP_CORE,
+                    (),
+                    2,
+                    "must equal the status header, state=2 included",
+                    image["id"],
+                ),
+            ],
+            image,
+        )
+    )
+
+    image, pe = image_and_model(
+        "v10-status_while_bp_hit",
+        pc=2,
+        a=0x41,
+        run=1,
+        debug={"bp_addr": 2, "bp_en": True, "bp_hit": True, "debug_hold": True},
+    )
+    vectors.append(
+        b.vector(
+            "status_while_bp_hit",
+            "STATUS while the core is HELD in state 3 (BP_HIT, a live hit on "
+            "an armed breakpoint): the state word says the hit latched, the PC "
+            "rests on the breakpoint, and the run strap is STILL HIGH - the "
+            "hit holds the core, it does not drop the strap. DUMP_CORE is then "
+            "NOT_READY, because its gate is that strap and not the hold.",
+            "n/a (status) + n/a (rejected)",
+            [
+                b.record(
+                    pe,
+                    "status_reports_the_hit",
+                    P.OP_STATUS,
+                    (),
+                    1,
+                    "state=3 (BP_HIT), run=1, pc=2 - the hit did not drop run",
+                    image["id"],
+                ),
+                b.record(
+                    pe,
+                    "dump_core_refused_the_strap_is_high",
+                    P.OP_DUMP_CORE,
+                    (),
+                    2,
+                    "NOT_READY: the gate is run=1, not the debug state",
+                    image["id"],
+                ),
+            ],
+            image,
+        )
+    )
+
     return b.package(vectors)
 
 
@@ -495,7 +1008,84 @@ def check_hex_export(directory=None) -> int:
     )
 
 
+def confirm_cli(argv: list[str]) -> int:
+    """`--confirm-held-steps`: flip the four held steps, with the chip's report.
+
+    Prints what it changed and what a human still owes, and then STOPS: it does
+    not regenerate the artifacts, because this process is holding the pre-flip
+    module in memory and would write the OLD flags back out. The regeneration
+    is a separate command, printed verbatim, so the sequence is explicit
+    rather than something the tool half-does.
+    """
+    import argparse
+    import difflib
+
+    parser = argparse.ArgumentParser(
+        prog="python3 -m tools.host_gui.r2_vectors --confirm-held-steps",
+        description="Confirm the four held-core R2 steps against the chip's "
+        "report. The trigger is the chip's GREEN report, not this "
+        "command.",
+    )
+    parser.add_argument(
+        "--cite",
+        required=False,
+        default="",
+        help="the chip report that cleared them (review path)",
+    )
+    parser.add_argument(
+        "--date", required=False, default="", help="the date of that report, YYYY-MM-DD"
+    )
+    args = parser.parse_args(argv)
+
+    module_path = Path(__file__).resolve()
+    try:
+        before = module_path.read_text(encoding="utf-8")
+        after = flip_held_steps(before, cite=args.cite, date=args.date)
+    except FlipRefused as exc:
+        print(f"REFUSED: {exc}")
+        return 1
+    module_path.write_text(after, encoding="utf-8")
+    diff = difflib.unified_diff(
+        before.splitlines(),
+        after.splitlines(),
+        fromfile=str(module_path),
+        tofile=str(module_path),
+        lineterm="",
+        n=1,
+    )
+    print("".join(line + "\n" for line in diff))
+    count = len(CONFIRMED_STEP_NAMES) + len(HELD_STEP_NAMES)
+    print(
+        "Now regenerate and verify the artifacts (this process held the "
+        "pre-flip module, so it must not write them itself):\n"
+        "  python3 -m tools.host_gui.r2_vectors --write\n"
+        "  python3 -m tools.host_gui.r2_vectors --hex\n"
+        "  python3 -m tools.host_gui.r2_vectors --check"
+    )
+    print(
+        f"\nAnd the prose a human still owes (the notice itself is generated, "
+        f"so it is already {count} of {count}):\n"
+        "  docs/demo-walkthrough.md  the R2 row: '18 of 22' -> "
+        f"'{count} of {count}', and the 4-unconfirmed sentence goes\n"
+        "  reviews/2026-09-25/R2-READ-VERIFICATION.md  the Status section\n"
+        "  reviews/2026-09-25/R2-HELD-STATUS-BYTES.md  the header claim\n"
+        "  tools/host_bridge/acceptance.py  _r2_detail's tag\n"
+        "  tools/host_gui/tests/test_docs.py  the walkthrough pin, if it "
+        "asserts the old wording\n"
+        "  wiki/STATUS.md + HANDOFF.md  the R2 notes\n"
+        "  The gates will NAME each one that is stale: test_r2_vectors' "
+        "notice guard,\n"
+        "  test_docs' walkthrough pins, and the acceptance beat-count/PASS-"
+        "count pins."
+    )
+    return 0
+
+
 def main(argv=None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--confirm-held-steps" in argv:
+        rest = [arg for arg in argv if arg != "--confirm-held-steps"]
+        return confirm_cli(rest)
     return V.run_cli(SPEC, build_package, argv)
 
 

@@ -1,0 +1,293 @@
+@startuml
+title SPI mode 3 + per-word CRC — the master engine, as the code has it
+' Sources: firmware/spi_mode3.pe (dmem[10] chain, bit_loop, fold_byte),
+'          tb/tb_pe_soc_spi3.v (the mode-3 slave model, the pin-discipline
+'          monitors, the reference CRC-8), tools/fw/peasm.py (TICKS_PER_BIT)
+' Program: CS_N v | WORD(16) | CRC8(WORD)(8) | RESP(8) | CRC8(RESP)(8) | CS_N ^
+'          three words: 0x1134 0x1245 0x1356, one CS_N frame each
+skinparam defaultFontName Monospaced
+skinparam state {
+  FontSize 11
+  BackgroundColor<<tx>>   #dce9f8
+  BorderColor<<tx>>       #4a6fa5
+  FontColor<<tx>>         #16324f
+  BackgroundColor<<rx>>   #dceee0
+  BorderColor<<rx>>       #4a8a5c
+  FontColor<<rx>>         #17452a
+  BackgroundColor<<crc>>  #fbe9cf
+  BorderColor<<crc>>      #b8813a
+  FontColor<<crc>>        #5a3d12
+  BackgroundColor<<box>>  #f2f2f2
+  BorderColor<<box>>      #808080
+  FontColor<<box>>        #303030
+}
+
+state "BUS FSM — dmem[10]\nthe chain is POSITIONAL: each branch tests the state one\nlower than the branch above, so a missing state does not\nbecome unreachable, it SHIFTS every state above it" as bus <<box>>
+state "0\nCS_N low, assemble\nword 0x1134+i" as s0
+state "1\nshift out the\nHIGH byte" as s1 <<tx>>
+state "2\nshift out the\nLOW byte" as s2 <<tx>>
+state "3\nfold CRC-8 over\nboth bytes" as s3 <<crc>>
+state "4\nshift out\nthe CRC-8" as s4 <<tx>>
+state "5\nreceive 8 bits\n-> dmem[1]" as s5 <<rx>>
+state "6\nstore it, fold\nCRC-8 over it" as s6 <<crc>>
+state "7\nreceive 8 bits\n-> dmem[2]" as s7 <<rx>>
+state "8\ncompare, record,\nCS_N high" as s8
+state "9\npark\ndmem[15]=0xA5" as s9
+state "dispatch\nmain: LDM A,10\nSUB A,1 / JZ" as dsp <<box>>
+
+[*] --> dsp
+dsp --> s0
+s0 --> s1
+s1 --> s2
+s2 --> s3
+s3 --> s4
+s4 --> s5
+s5 --> s6
+s6 --> s7
+s7 --> s8
+s8 --> dsp : dmem[5] < 3
+s8 --> s9 : dmem[5] == 3
+
+state "bit_loop — ONE mode-3 cell, full duplex\nentered and left with SCLK HIGH\ndmem[8] out, dmem[10] count, dmem[11] acc, dmem[12] return state" as bleng <<box>> {
+  state "1. LAUNCH\nMOSI while SCLK is HIGH\nout = 1 or 0 on bit 1;\ndmem[8] <<= 1" as b1 <<tx>>
+  state "2. FALL\nSCL low — the only moment\nMISO may change" as b2
+  state "3. WAIT\nsnapshot TIMER into X,\npoll until it changes\n(260 clocks = 4.3333 us)" as b3
+  state "4. RISE + SAMPLE\nSCL high: the slave captures MOSI\nIN A,PIN / AND A,8 reads MISO\nacc = acc*2 + bit" as b4 <<rx>>
+  b1 --> b2
+  b2 --> b3
+  b3 --> b4
+  b4 --> b1 : dmem[10]-- , 8 cells per byte
+}
+
+state "fold_byte — CRC-8 in an ISA with no XOR\ndmem[14] = crc, dmem[13] = input byte,\ndmem[3] = bytes left" as fold <<crc>> {
+  state "MSB first, 8 times per byte:\nV = 0x80 test, P = poly 0x07 if set\nXOR as (A|P) - (A&P):\n  0xFF + 0x07 = 0x06, but\n  0xFF XOR 0x07 = 0xF8,\n  so ADD cannot be used" as f1 <<crc>>
+}
+
+state "JMP bit_loop\nstates 1, 2, 4, 5, 7 all enter here" as blcall
+s0 --> blcall
+s1 --> blcall
+s2 --> blcall
+s4 --> blcall
+s5 --> blcall
+s7 --> blcall
+blcall --> bleng
+bleng --> dsp : bl_done -> dmem[10] = dmem[12]
+s3 --> fold
+s6 --> fold
+fold --> s4
+fold --> s7
+
+note right of s8
+  dmem[5]  words transmitted
+  dmem[6]  response CRCs that CHECKED OUT
+  dmem[7]  the last word's transmitted CRC-8
+  The comparison is on the firmware's own
+  side of the wire: recompute CRC-8(RESP)
+  in software and compare with the byte
+  that came back. A program that never
+  compared, or that always incremented,
+  reports 3 of 3 — so the TB corrupts one
+  response CRC on purpose and demands 2.
+end note
+@enduml
+
+@startuml
+title SPI mode 3 — one CS_N frame is 40 SCLK rises, in four fields
+skinparam defaultFontName Monospaced
+skinparam ParticipantBackgroundColor #eef3fb
+skinparam ParticipantBorderColor #4a6fa5
+skinparam ParticipantFontColor #16324f
+skinparam ActorBackgroundColor #fbe9cf
+skinparam ActorBorderColor #b8813a
+skinparam ActorFontColor #5a3d12
+skinparam SequenceGroupBackgroundColor #fbfbfb
+skinparam SequenceGroupBorderColor #b0b0b0
+skinparam ArrowColor #333333
+
+actor "master\npe_soc" as M
+participant "SCLK\nbit 0" as C
+participant "MOSI\nbit 1" as O
+participant "MISO\nbit 3" as I
+actor "slave\ndecodes the pins" as S
+
+M -> C : CS_N (bit 2) 1 -> 0
+M -> C : SCLK idles HIGH — the reset level happens to be 1
+group WORD — 16 rises, MOSI MSB first
+  M -> O : rise 0..7   0001 0001   = 0x11
+  S -> I : MISO idle LOW for rises 0..23
+  M -> O : rise 8..15  0011 0100   = 0x34
+  note over O
+    measured on the wire: word = 1134.
+    0x1134 is not a bit palindrome - its
+    reversal is 0x3411 - so a master that
+    shifted the other way is visible.
+  end note
+end group
+group CRC8(WORD) — 8 rises, the transmit-side integrity check
+  M -> O : rise 16..23  1100 1110   = 0xCE
+  note over S
+    the slave recomputes CRC-8 over the 16
+    bits it decoded and requires it to equal
+    these 8. A reference datapath written in
+    Verilog straight from the polynomial says
+    the same thing: a CRC checked against
+    itself proves nothing.
+  end note
+end group
+group RESP — 8 rises, MISO MSB first
+  S -> I : rise 24..31  0110 1111   = 0x6F
+  note over I
+    resp = word XOR 0x7E5A, applied
+    byte-wise by the slave model.
+  end note
+end group
+group CRC8(RESP) — 8 rises, the receive-side check
+  S -> I : rise 32..39  0000 1010   = 0x0A
+  note over M
+    the firmware recomputes this in
+    software and compares. Exactly 40
+    rises: a master that clocked 39 or 41
+    would still shift plausible bytes.
+  end note
+end group
+M -> C : CS_N 0 -> 1
+
+note over M, S
+  MODE 3 IS NOT MODE 0 WITH THE CLOCK INVERTED.  Both modes sample on the
+  RISING edge, so a mode-0 program is a plausible-looking mode-3 program for
+  the first half-frame and then delivers bit k-1 as bit k — shifted by one,
+  with nothing on the wire that looks wrong. The two things that catch it are
+  a slave that decodes the pins, and the check on the IDLE LEVEL.
+end note
+@enduml
+
+@startuml
+title SPI mode 3 — the two edges are the protocol, and they are the same in both directions
+skinparam defaultFontName Monospaced
+skinparam ParticipantBackgroundColor #eef3fb
+skinparam ParticipantBorderColor #4a6fa5
+skinparam ParticipantFontColor #16324f
+skinparam SequenceGroupBackgroundColor #fbfbfb
+skinparam SequenceGroupBorderColor #b0b0b0
+skinparam ArrowColor #333333
+
+actor "master" as M
+participant "SCLK" as C #fbe9cf
+participant "MOSI\nmaster drives" as O
+participant "MISO\nslave drives" as I
+actor "slave" as S #dceee0
+
+M -> C : SCLK HIGH (mode 3 idle)
+M -> O : launch bit k  — data changes while the clock is HIGH
+M -> C : SCLK FALLS
+S -> I : the only instant MISO may change
+M -> C : SCLK RISES  (one TIMER tick later)
+S -> O : the slave CAPTURES MOSI here
+M -> I : the master SAMPLES MISO here
+note over O, I
+  MOSI MUST NOT MOVE WHILE SCL IS LOW
+  MISO MUST NOT MOVE WHILE SCL IS HIGH
+  Two counters in the TB, both asserted 0.
+  They are the checks a mode-0 program fails
+  even when the decoded bytes happen to be
+  right — which is exactly the case a byte
+  comparison cannot see.
+end note
+note over C
+  IDLE LEVEL ALONE DOES NOT SEPARATE THE MODES.
+  Reset already drives the output register's
+  bit 0 HIGH, which is mode 3's idle clock by
+  coincidence and mode 0's ACTIVE edge by
+  construction. The property that does separate
+  them is an EDGE: in mode 3 SCLK must make no
+  falling edge at all while CS_N is high.
+end note
+@enduml
+
+@startuml
+!pragma teoz
+title SPI mode 3 — one bit cell: 5 phases over one measured 4.367 us = 262 clocks
+skinparam defaultFontName Monospaced
+robust "label" as F
+concise "SCLK" as C
+concise "MOSI" as O
+concise "nums" as N
+@0
+F is bl_launch
+C is 1
+O is "bit 7"
+N is "CPOL=1"
+@6
+F is bl_fall
+C is 0
+N is "the FALL"
+@12
+F is bl_wait
+N is "wait 260"
+@18
+F is bl_rise
+C is 1
+N is "the RISE"
+@24
+F is bl_sample
+O is "bit 6"
+C is 0
+N is "sample"
+@30
+N is "4.367 us"
+@36
+N is "< 21.67 us"
+@endsync
+@enduml
+
+@startuml
+!pragma teoz
+title SPI mode 3 — one CS_N frame, 40 rises, 4 fields; the axis counts RISES, not time
+skinparam defaultFontName Monospaced
+robust "slave field" as F
+concise "CS_N" as CS
+concise "rises" as R
+concise "wire" as W
+concise "the bytes" as B
+@0
+F is idle
+CS is 1
+W is "MISO low"
+B is "deselected"
+@1
+F is word
+CS is 0
+R is "0..15"
+W is "MOSI"
+B is "0x1134"
+@16
+F is crc_in
+R is "16..23"
+B is "0xCE"
+@24
+F is resp
+R is "24..31"
+W is "MISO"
+B is "0x6F"
+@32
+F is crc_resp
+R is "32..39"
+B is "0x0A"
+@40
+F is next_word
+CS is 1
+W is "MISO low"
+B is "40 rises"
+@41
+R is "40"
+B is "CS_N high"
+@46
+B is "no SCLK fall here"
+@52
+F is word
+CS is 0
+B is "next frame"
+@58
+B is "3 words, 120 rises"
+@endsync
+@enduml

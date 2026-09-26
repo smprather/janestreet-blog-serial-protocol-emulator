@@ -52,7 +52,7 @@ PIDFILE="${PIDFILE:-/tmp/pi-worker-supervisor.pid}"
 LOG="${LOG:-/tmp/pi-worker-supervisor.log}"
 ONCE=0; [ "${1:-}" = "--once" ] && ONCE=1
 
-WORKERS="0:pi-protocol-worker:protocol-worker 0:pi-gui-worker:gui-worker 0:pw-fw-timing:fw-timing 0:pw-fw-bus:fw-bus"
+WORKERS="0:pi-protocol-worker:protocol-worker 0:pi-gui-worker:gui-worker 0:pw-fw-timing:fw-timing 0:pw-fw-bus:fw-bus 0:pw-diag-timing:diag-timing 0:pw-diag-bus:diag-bus 0:pw-diag-proto:diag-proto 0:pw-wiki-features:wiki-features"
 FORBIDDEN_PROC_RE='(openroad|magic|netgen|klayout|run_librelane)'
 FORBIDDEN_CMD_RE='git (reset|clean|checkout --|restore|rebase|push --force)|rm -rf (/|~)([[:space:]]|$)|rm -rf /\*|tmux kill-'
 COLDSTART_LINE="Continue as your role per COLD-START.md and WORKLOG.md: log TASK-START in WORKLOG.md immediately, then pick the NEXT scoped task from the queue and start it IN THIS SAME TURN. The law (L1 telemetry / L2 no destructive git / L3 no physical flow / L4 repo boundary / L5 no shared-state kills / L6 interrupt file last) is enforced automatically."

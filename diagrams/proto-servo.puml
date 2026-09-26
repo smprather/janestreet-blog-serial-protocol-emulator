@@ -1,0 +1,128 @@
+@startuml proto-servo
+' ===========================================================================
+' proto-servo.puml - (a) the hobby-servo PWM protocol engine, both sides.
+'
+' A servo has no clock, no framing, no acknowledgement and no checksum. The
+' whole protocol is: hold the line high for between 1.0 and 2.0 ms, once every
+' 20 ms. The only question a servo asks of the wire is HOW LONG it was high,
+' and the only way to be wrong is to be wrong about time.
+'
+' firmware/servo_sweep.pe emits a five-position sweep; tb/tb_pe_soc_servo.v
+' measures it on the pads and reconstructs the frame period from the WIRE, not
+' from the program's intent.
+' ===========================================================================
+
+title Servo PWM - the protocol engine on both sides\n<font size=12>50 Hz frame, 1.0-2.0 ms pulse; a servo is a pulse width, nothing else</font>
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #33555
+  FontName monospaced
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C8B800
+  FontName monospaced
+  FontSize 11
+}
+
+' ---------------------------------------------------------------- EMITTER --
+state "FIRMWARE SIDE - firmware/servo_sweep.pe" as EMIT {
+
+  [*] --> TABLES
+  TABLES : TABLES\ndmem[0..4] pulse n1: 97, 145, 169, 121, 193\ndmem[5..9] gap   n1: 229, 223, 31, 31, 31\ndmem[10]  the position index, 0..4 then 5
+
+  state "IDLE\nthe line LOW" as IDLE
+  IDLE : the servo's idle level is LOW, and it is\nset BEFORE the pin is claimed.\nAN IDLE LEVEL THAT IS ONE INSTRUCTION LATE\nIS PART OF THE PROTOCOL
+
+  state "PULSE\nhold high" as PUL
+  PUL : Y = 0\nTXPIN = SRV_DATA (0x40)\nthen the delay on dmem[X + 0] with\n(n2,n3) = (2,152): one outer step is\n10 + (4*152 + 7) = 625 clocks = 10.4167 us
+
+  state "GAP\nhold low" as GAP
+  GAP : Y = 1\nTXPIN = 0x00\nthen the delay on dmem[X + 5] with\n(n2,n3) = (11,123): one outer step is\n10 + 10*(4*123 + 7) = 5000 clocks = 83.3333 us
+
+  state "NEXT\nadvance the index" as NXT
+  NXT : X++\nif X == 5 the sweep is done: park\nelse back to PULSE\ndmem[10] IS THE PROGRAM'S OUTPUT:\n0 = never started, 2 = hung,\n5 = finished, and the TB reads it
+
+  state "DLY1/DLY2/DLY3\nthe three-nested-counter delay" as DLY
+  DLY : total(n1,n2,n3) = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4 clocks\nBOTH INNER COUNTERS ARE RELOADED from their\ntargets (dmem[13], dmem[12]) at the top of\nevery pass. A version without the reloads\nreads zero, subtracts one, wraps to 255, and\nproduces hundreds of thousands of clocks where\nthousands were asked for - while looking\ncompletely correct. 19 ms as NOPs would be\n1.14 M words against 1 024 words of imem.\n\nREPRODUCING THE TABLE FROM THE FORMULA:\n  n1 = 97,  (2,152)  ->  96 * 625  + 4 =    60 004 clocks =  1 000.07 us\n  n1 = 229, (11,123) -> 228 * 5000 + 4 = 1 140 004 clocks = 19 000.07 us\n  slot 0 = 20 000.13 us, against a MEASURED\n  19 999.95 us - 0.0009 % apart, and out of\n  counts rather than a fitted constant.\n\nTHE OUTER STEP IS NOT 4*n3 + 11. It is\n10 + (n2-1)*(4*n3 + 7), so the (2,152) step is\n625 clocks and the (11,123) step is 5000.
+
+  TABLES --> IDLE
+  IDLE --> PUL : a position is due
+  PUL --> DLY
+  DLY --> GAP : Y = 0, a pulse finished
+  GAP --> DLY
+  DLY --> NXT : Y = 1, a gap finished
+  NXT --> PUL : X < 5
+  NXT --> [*] : X == 5
+}
+
+' ---------------------------------------------------------------- RECEIVER --
+state "SERVO SIDE - tb/tb_pe_soc_servo.v" as DEC {
+
+  [*] --> PAIR
+  PAIR : each RISE is paired with the NEXT fall\nafter it, NOT with the j-th fall in the list.\nThe pin has a LEADING fall - the firmware\ndriving the line from the released pull-up high\ndown to the idle low as it claims the pin - so\ncounting falls independently pairs pulse 0 with\nthat one and shifts EVERY measurement by a pulse.
+
+  state "WIDTHS\nfive measurements" as WID
+  WID : width[j] = fall(j) - rise(j)\ncompared against want[j], in the ORDER\nthe firmware emitted them\n\npulse 0: 1000 us  0 degrees\npulse 1: 1500 us  centre\npulse 2: 1750 us\npulse 3: 1250 us\npulse 4: 2000 us  full travel\nnot monotonic on purpose
+
+  state "FRAME\nrise to rise" as FRM
+  FRM : measured ACROSS TWO DIFFERENT pulse\nwidths - 1000 us then 1500 us - because that\nis the measurement that tells a SLOT from a\nDELAY.
+
+  state "CHECK\nwhat is claimed" as CHK
+  CHK : 1. exactly 5 rising edges\n2. every width inside 1000..2001 us\n3. every width within 30 us of the REQUEST\n4. frame period inside 19900..20100 us\n5. the short gaps still exceed 1000 us\n6. dmem[10] == 5 (the firmware finished)\n7. the last edge is LOW - the line idles low\n8. the widths are pairwise DISTINCT and span\n   more than 900 us - non-vacuity
+
+  PAIR --> WID
+  WID --> FRM
+  FRM --> CHK
+  CHK --> PAIR : the frame repeats\n(the firmware loops)
+}
+
+EMIT -[#3A7,hidden]-> DEC : the same three instructions,\nOUT, delay, OUT
+
+note bottom of EMIT
+  <b>Why the frame is a SLOT and not a delay.</b>
+  The obvious implementation is "pulse 1.5 ms, then
+  wait 18.5 ms". That works until the position
+  changes: a forgotten subtraction turns 50 Hz into
+  45 Hz at one end of the travel and 58 Hz at the
+  other. A servo notices - the position jitters
+  and the motor hums.
+
+  So each position carries its OWN gap, chosen as
+  20 ms minus its own pulse, and the rise-to-rise
+  interval is 20 ms whatever the pulse is. The gap
+  is not "the rest of the frame", it is the frame
+  minus the pulse.
+end note
+
+note bottom of DEC
+  <b>Why the order is a checkable property.</b>
+  A sweep that only grows can be satisfied by a
+  firmware that emits the right widths in the wrong
+  order, and a testbench that sorts its
+  measurements before checking them cannot tell
+  the difference. Emitting 1.0, 1.5, 1.75, 1.25,
+  2.0 makes measurement i comparable against
+  position i.
+end note
+
+note bottom of FRM
+  <b>Why two positions are a full 20 ms and three are not.</b>
+  Positions 0 and 1 sit a full 20 ms apart so the
+  frame rate can be measured. Positions 2..4 use a
+  2.5 ms gap - a fifth of that - which saves 45 ms
+  of simulated time. The trade is stated rather
+  than hidden: the 50 Hz claim rests on the
+  MEASURED frame period, and the sweep claim rests
+  on five measured pulse WIDTHS, which is all it
+  needs. Nothing about the width measurement is
+  weakened by the short gaps, and the TB labels
+  the short ones "a short sweep gap, not a frame"
+  rather than pretending they are slots.
+end note
+
+@enduml

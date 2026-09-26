@@ -54,6 +54,30 @@ KEY SEMANTICS, stated once so the probes below are not re-deriving them
   hold: with run=1 the core resumes, with run=0 it falls to the boot stop and
   the PC re-zeroes. Continuing *with* the breakpoint armed therefore costs
   step -> clear -> re-arm.
+* **BP_SET is NOT a release, and an arm made on a HELD core is step-only.** The
+  half that is easy to get backwards, and the one a host cannot discover from
+  a response. `DEBUG_BP_SET` clears `bp_en` and `bp_hit` but **not**
+  `dbg_hold_r` (`pe_ctrl.v:1086-1087`). Now the two hit paths, because they
+  differ and the difference is the whole trap:
+  - **free-running**: `bp_en && !dbg_hold_r && (run || dbg_step_r) &&
+    dbg_next_pc == bp_addr` (`pe_ctrl.v:692`) — gated on the hold being CLEAR,
+    so a core that is already held can never RUN into an armed address;
+  - **step**: `bp_hit <= bp_en && (dbg_next_pc == bp_addr)` (`pe_ctrl.v:1067`)
+    — **not** gated on the hold, so stepping onto an armed address from a held
+    core still latches the hit (state 2 -> 3).
+
+  So arming a held core is legal and useful — it is the stop-before flow the
+  R2 held-core steps 21/22 pin, and the acceptance act relies on it — but it
+  only ever fires by STEPPING. Run instead of step, and the breakpoint reports
+  ARMED while the hit is impossible. And the arm does not outlive a release,
+  because `DEBUG_BP_CLR` disarms as it releases: the order that ends armed is
+  always step -> clear -> re-arm. `session.bp_set` warns on the held case; it
+  does not refuse, because the chip supports it. (The chip's own record
+  describes only the free-running half — "a fresh hit cannot latch on a DUT
+  that is already held", `R2-HELD-CORE-CHIP-SIDE.md` §3, chip repo — which is
+  true of the run-into case it hit and over-broad as a general rule. Encoding
+  it as a blanket refusal broke the acceptance run's own arm-then-step beats,
+  which is how the over-breadth was found.)
 * **Rejected ops have no side effect.** A bad frame, a wrong payload length,
   or a BP_SET past the end of IMEM changes no debug register and executes no
   instruction.

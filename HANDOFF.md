@@ -90,7 +90,8 @@ user (separate session); no GUI/bridge implementation is dispatched here.
 
 <!-- BEGIN gui-worker host block (top notes) - keep whole; place BESIDE the
      chip-side top-of-file blocks when merging, do not interleave -->
-> **Host GUI R2 read-path (2026-09-25; now CHIP-CONFIRMED in simulation).**
+> **Host GUI R2 read-path (2026-09-25; 22 of 22 steps CHIP-CONFIRMED in
+> simulation).**
 > `tools/host_gui/r2_reads.py` is the single source of truth for the R2 read
 > obligations (bounded IMEM/DMEM reads, DUMP_CORE==STATUS header, non-halting
 > READ_CPU, run-gating, no-wrap range, full-width debug regs) — each probe
@@ -98,11 +99,18 @@ user (separate session); no GUI/bridge implementation is dispatched here.
 > the sticky-fault-on-range-read behaviour (default `latch` per manager
 > ruling). `reviews/2026-09-25/R2-READ-VERIFICATION.json` + `.md` are the
 > **portable golden-vector package** for the chip-side R2 testbench, generated
-> from the model with a drift gate. **Chip R2 has landed and the package is
-> chip-confirmed**: `tb_pe_ctrl_r2` passes all 15 golden steps byte-exact with
-> the model image loaded per vector (chip repo:
+> from the model with a drift gate. **Chip R2 has landed and all 22
+> golden steps are chip-confirmed**: `tb_pe_ctrl_r2` passes them
+> byte-exact with the model image loaded per vector (chip repo:
 > `reviews/2026-09-25/R2-READ-PATH-REVIEW.md`), and each step's
-> `chip_confirmed` flag cites that evidence. The real-board acceptance run is
+> `chip_confirmed` flag cites that evidence. Four of those 22 are the readback while
+> the core is HELD at a breakpoint (`state=2` step-pause, `state=3` live hit
+> where the hit holds the core and not the run strap) — added 2026-09-25 after
+> the chip review found that surface untested, and shipped
+> `chip_confirmed=false` until the chip re-ran it — which it then did, with the
+> debug opcodes on a real `pe_ctrl` and no forcing: **22/22**, the four held
+> steps included (`R2-HELD-CORE-CHIP-SIDE.md` §7 in the chip repo, which is
+> where the `CHIP_EVIDENCE` citation comes from). The real-board acceptance run is
 > still unexecuted. The acceptance runner's R2 checks
 > (`acceptance.py --fake` → `PASS (22 PASS, 0 FAIL, 1 SKIP)`) are the host-side
 > gate for the same contract. Current host evidence:
@@ -125,7 +133,15 @@ user (separate session); no GUI/bridge implementation is dispatched here.
 > replies on the wire (the transport and session now serialize state + wire
 > access). The soak is bounded: 22 min / 1,891,812 cycles, RSS flat at
 > 57.3–57.6 MB after warmup (last-half slope 0.40 MB/h), GC objects +511,
-> PASS. Full record: `reviews/2026-09-25/HOST-SOAK-API-FUZZ.md`.
+> PASS. **Re-run 2026-09-25 under the poll-everywhere + state-word changes
+> (`d3cff8a`/`9ee8d00`/`5f1feb8`): 20 min / 1,885,304 cycles, verdict
+> BOUNDED, +0.68 MB over the run, independent `/proc` rate 1.08 MB/h vs the
+> earlier 1.1 MB/h, GC objects +511 again, throughput +10%. No growth
+> regression — see §5.1.** The two runs' absolute MB are NOT comparable
+> (different interpreter); the deltas, rate, verdict and object count are.
+> It does not cover the held-state branch (the soak takes no debug hold) or
+> the browser poll (no JS in the loop). Full record:
+> `reviews/2026-09-25/HOST-SOAK-API-FUZZ.md`.
 <!-- END gui-worker host block (top notes) -->
 
 > **Host GUI plan Task 8 — final verification, host scope, DONE (2026-09-25).**

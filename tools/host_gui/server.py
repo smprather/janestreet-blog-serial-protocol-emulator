@@ -45,6 +45,26 @@ class ApiError(Exception):
         self.status = status
 
 
+def error_response(exc: Exception) -> tuple[int, str]:
+    """(status, detail) for a REQUEST-level failure, or re-raise the exception.
+
+    Split out of the route wrapper so the decision is testable without fastapi,
+    which matters more than it sounds: the page shows the server's `detail`
+    field and falls back to a bare status line without it, so this mapping is
+    the difference between an operator reading "a fault is latched; clear it
+    before stepping the core" and reading "Internal Server Error".
+
+    Anything that is not a request-level error PROPAGATES on purpose. A blanket
+    except would disguise a real defect as a tidy 409 and send the reader
+    looking for their own mistake.
+    """
+    if isinstance(exc, ApiError):
+        return exc.status, str(exc)
+    if isinstance(exc, S.SessionError):
+        return 409, str(exc)
+    raise exc
+
+
 @dataclass(frozen=True)
 class ServerConfig:
     repo_root: Path
@@ -207,13 +227,16 @@ def create_app(api: Api, config: ServerConfig):
     app = FastAPI(title="PE Host Controller", version="0.1.0")
 
     def guarded(fn):
+        # The `except` names only the two request-level types, so a real defect
+        # still escapes as a 500 instead of arriving as a tidy 409. The decision
+        # itself lives in `error_response`, which needs no fastapi and is
+        # therefore testable in an environment without the optional extra.
         def handler(*args, **kwargs):
             try:
                 return fn(*args, **kwargs)
-            except ApiError as exc:
-                raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
-            except S.SessionError as exc:
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except (ApiError, S.SessionError) as exc:
+                status, detail = error_response(exc)
+                raise HTTPException(status_code=status, detail=detail) from exc
 
         return handler
 

@@ -1,28 +1,38 @@
 {
   "artifact": "R2 read-path $readmemh export",
-  "chip_confirmed": false,
+  "chip_confirmed": true,
   "chip_evidence": {
     "confirmed_steps": [
       "bad_read_answers_range",
       "clear_fault_clears_the_bit",
+      "dump_core_answers_the_same_header",
       "dump_core_header",
       "dump_core_not_ready",
+      "dump_core_refused_the_strap_is_high",
       "read_cpu_full_width_regs",
       "read_cpu_while_running",
       "read_dmem_address_0_count_4",
       "read_dmem_not_ready",
       "read_dmem_past_end_no_wrap",
+      "read_dmem_zero_count",
       "read_imem_address_1_count_2",
+      "read_imem_at_ceiling_15",
       "read_imem_last_word",
       "read_imem_not_ready",
+      "read_imem_over_ceiling",
       "read_imem_past_end_no_wrap",
       "status_header",
+      "status_reports_the_hit",
+      "status_reports_the_hold",
       "status_shows_sticky_fault"
     ],
-    "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+    "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
     "date": "2026-09-25",
     "harness": "chip-side TB loads imem.hex/dmem.hex, applies each vector's sparse overrides and register state, replays the 3-word LOAD precondition as a real framed frame, and compares every response byte (skipping wait words) to the golden stream",
-    "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+    "not_confirmed_steps": {},
+    "pending_reason": "These four steps were added on 2026-09-25 because R3's debug work made the R2 readback reachable in states 2 (DEBUG_HOLD) and 3 (BP_HIT) while no R2 vector exercised either. The chip has since re-run tb_pe_ctrl_r2 against them with the debug inputs driven and reported them byte-exact (tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25), so the pending set is empty and the notice is generated from the full count.",
+    "pending_steps": [],
+    "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
     "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
     "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
   },
@@ -299,9 +309,79 @@
         "x": 0,
         "y": 0
       }
+    },
+    "v09-status_while_step_paused": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": false,
+        "debug_hold": true
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v09-status_while_step_paused",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 65,
+        "faults": 0,
+        "insn": 0,
+        "pc": 1,
+        "run": 0,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 3,
+        "x": 0,
+        "y": 0
+      }
+    },
+    "v10-status_while_bp_hit": {
+      "debug": {
+        "bp_addr": 2,
+        "bp_en": true,
+        "bp_hit": true,
+        "debug_hold": true
+      },
+      "dmem": {
+        "bytes": 16,
+        "fill": 0,
+        "sparse": {}
+      },
+      "id": "v10-status_while_bp_hit",
+      "imem": {
+        "fill": 0,
+        "sparse": {
+          "0": 65,
+          "1": 4097,
+          "2": 16386
+        },
+        "words": 1024
+      },
+      "state": {
+        "a": 65,
+        "faults": 0,
+        "insn": 0,
+        "pc": 2,
+        "run": 1,
+        "selected_target": 0,
+        "timer": 0,
+        "words_written": 3,
+        "x": 0,
+        "y": 0
+      }
     }
   },
-  "notice": "CHIP-CONFIRMED IN SIMULATION: every golden step in this package passes byte-exactly (CRC included) in the chip repo's tb/tb_pe_ctrl_r2.v, with the model image loaded per vector - see the chip repo's reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance: 15/15, per vector', which names every step. NOT HARDWARE-CONFIRMED: the real-board acceptance run (Pico over USB CDC with a physical shuttle) has NOT been executed and is not claimed here. The host probes in r2_reads.py still run against the FakePE model; what the chip confirms is that the RTL matches these same expectations.",
+  "notice": "CHIP-CONFIRMED IN SIMULATION: all 22 golden steps in this package pass byte-exactly (CRC included) in the chip repo's tb/tb_pe_ctrl_r2.v, with the model image loaded per vector; see the chip repo's reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance', which names every step (22/22). NOT HARDWARE-CONFIRMED: the real-board acceptance run (Pico over USB CDC with a physical shuttle) has NOT been executed and is not claimed here. The host probes in r2_reads.py still run against the FakePE model; what the chip confirms is that the RTL matches these same expectations.",
   "readmemh_usage": "$readmemh(\"<file>\", mem); with an 8-bit mem[] filled from address 0; the stream is the frame's bytes in wire order.",
   "source_of_truth": [
     "tools/host_gui/r2_reads.py",
@@ -318,9 +398,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -353,9 +433,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -388,9 +468,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -423,9 +503,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -466,9 +546,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -505,9 +585,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -544,9 +624,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -569,9 +649,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -594,9 +674,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -627,9 +707,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -653,9 +733,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -678,9 +758,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -703,14 +783,20 @@
       ]
     },
     {
-      "chip_confirmed": false,
+      "chip_confirmed": true,
       "model_image_id": "v07b-read_ceiling_and_zero",
       "name": "read_ceiling_and_zero_count",
       "obligation": "A count over MAX_READ_WORDS=15 (or 0) is RANGE so the host splits; the model enforces the chip's ceiling (independent chip review).",
       "steps": [
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 0,
           "model_image_id": "v07b-read_ceiling_and_zero",
           "name": "read_imem_at_ceiling_15",
@@ -743,8 +829,14 @@
           "status": 0
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 4,
           "model_image_id": "v07b-read_ceiling_and_zero",
           "name": "read_imem_over_ceiling",
@@ -762,8 +854,14 @@
           "status": 3
         },
         {
-          "chip_confirmed": false,
-          "chip_evidence": null,
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
           "model_faults": 4,
           "model_image_id": "v07b-read_ceiling_and_zero",
           "name": "read_dmem_zero_count",
@@ -791,9 +889,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -816,9 +914,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -851,9 +949,9 @@
         {
           "chip_confirmed": true,
           "chip_evidence": {
-            "conformance": "15/15 golden steps PASS, byte-exact including CRC",
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
             "date": "2026-09-25",
-            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance: 15/15, per vector')",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
             "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
             "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
           },
@@ -873,6 +971,152 @@
           ],
           "sequence": 3,
           "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v09-status_while_step_paused",
+      "name": "status_while_step_paused",
+      "obligation": "STATUS while the core is HELD in state 2 (DEBUG_HOLD, a step-pause): the state word says so and the run strap is still low, and DUMP_CORE still answers the identical header - a hold is not a running core, so nothing the R2 read path refuses is refused here.",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
+          "model_faults": 0,
+          "model_image_id": "v09-status_while_step_paused",
+          "name": "status_reports_the_hold",
+          "opcode": 17,
+          "opcode_name": "OP_STATUS",
+          "request_bytes": 10,
+          "request_file": "status_while_step_paused.status_reports_the_hold.req.hex",
+          "response_bytes": 32,
+          "response_file": "status_while_step_paused.status_reports_the_hold.rsp.hex",
+          "response_hex": "a55a19100001000b00000002000000000001004100000000000000000003444e",
+          "response_payload_words": [
+            0,
+            2,
+            0,
+            0,
+            1,
+            65,
+            0,
+            0,
+            0,
+            0,
+            3
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
+          "model_faults": 0,
+          "model_image_id": "v09-status_while_step_paused",
+          "name": "dump_core_answers_the_same_header",
+          "opcode": 21,
+          "opcode_name": "OP_DUMP_CORE",
+          "request_bytes": 10,
+          "request_file": "status_while_step_paused.dump_core_answers_the_same_header.req.hex",
+          "response_bytes": 32,
+          "response_file": "status_while_step_paused.dump_core_answers_the_same_header.rsp.hex",
+          "response_hex": "a55a19500002000b0000000200000000000100410000000000000000000383b7",
+          "response_payload_words": [
+            0,
+            2,
+            0,
+            0,
+            1,
+            65,
+            0,
+            0,
+            0,
+            0,
+            3
+          ],
+          "sequence": 2,
+          "status": 0
+        }
+      ]
+    },
+    {
+      "chip_confirmed": true,
+      "model_image_id": "v10-status_while_bp_hit",
+      "name": "status_while_bp_hit",
+      "obligation": "STATUS while the core is HELD in state 3 (BP_HIT, a live hit on an armed breakpoint): the state word says the hit latched, the PC rests on the breakpoint, and the run strap is STILL HIGH - the hit holds the core, it does not drop the strap. DUMP_CORE is then NOT_READY, because its gate is that strap and not the hold.",
+      "steps": [
+        {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
+          "model_faults": 0,
+          "model_image_id": "v10-status_while_bp_hit",
+          "name": "status_reports_the_hit",
+          "opcode": 17,
+          "opcode_name": "OP_STATUS",
+          "request_bytes": 10,
+          "request_file": "status_while_bp_hit.status_reports_the_hit.req.hex",
+          "response_bytes": 32,
+          "response_file": "status_while_bp_hit.status_reports_the_hit.rsp.hex",
+          "response_hex": "a55a19100001000b000000030001000000020041000000000000000000034516",
+          "response_payload_words": [
+            0,
+            3,
+            1,
+            0,
+            2,
+            65,
+            0,
+            0,
+            0,
+            0,
+            3
+          ],
+          "sequence": 1,
+          "status": 0
+        },
+        {
+          "chip_confirmed": true,
+          "chip_evidence": {
+            "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
+            "date": "2026-09-25",
+            "review": "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance', per-vector table)",
+            "scope": "This confirms the chip RTL in SIMULATION against the golden package. The real-board acceptance run (Pico over USB, physical shuttle) is still unexecuted and is not claimed here.",
+            "testbench": "chip repo: tb/tb_pe_ctrl_r2.v"
+          },
+          "model_faults": 0,
+          "model_image_id": "v10-status_while_bp_hit",
+          "name": "dump_core_refused_the_strap_is_high",
+          "opcode": 21,
+          "opcode_name": "OP_DUMP_CORE",
+          "request_bytes": 10,
+          "request_file": "status_while_bp_hit.dump_core_refused_the_strap_is_high.req.hex",
+          "response_bytes": 12,
+          "response_file": "status_while_bp_hit.dump_core_refused_the_strap_is_high.rsp.hex",
+          "response_hex": "a55a19500002000100068090",
+          "response_payload_words": [
+            6
+          ],
+          "sequence": 2,
+          "status": 6
         }
       ]
     }

@@ -10,22 +10,90 @@ rather than the document quietly lying to a judge.
 
 from __future__ import annotations
 
+import json
 import re
+import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
+
+from tools.host_bridge import acceptance as ACC
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DOCS = REPO_ROOT / "docs"
 WALKTHROUGH = DOCS / "demo-walkthrough.md"
 BRINGUP = DOCS / "host-bridge-bringup.md"
+# The judge-facing scorecard. One test class below also carries this path as a
+# class attribute; a module constant is the one place a new pin should reach
+# for, so the duplication ends here rather than spreading.
+SCORECARD = DOCS / "submission-readiness.md"
+# The page, and a Node interpreter to drive its renderers in. The page's
+# behaviour is real logic in a real file, so a string check on it would prove
+# nothing - which is why the GUI pins here load app.js and call its functions,
+# the same way `test_chip_state_js.py` and `test_gui_capabilities.py` do.
+APP_JS = REPO_ROOT / "tools" / "host_gui" / "web" / "app.js"
+NODE = shutil.which("node")
 
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-class TestDemoWalkthrough(unittest.TestCase):
+class TestTheDistributionInstallsItsOwnExtra(unittest.TestCase):
+    """`pip install .[host-gui]` is the runbook's first step. It has to work.
+
+    The operator's board run starts with installing the extra. That command
+    FAILED on a fresh clone: the `[project]` table declares the extra, but
+    nothing told setuptools what the distribution contains, so flat-layout
+    auto-discovery found `tb/`, `sim/`, `rtl/`, `wiki/`, `flow/`, `regress/`,
+    `firmware/` and `diagrams/` and refused to guess. The error arrives while
+    BUILDING, so it looks like a packaging problem rather than a missing
+    install step - and nobody noticed because nobody ran it, for the same
+    reason nobody ran the server: the extra was never installed here.
+
+    These tests pin the two halves that can be checked without a network: that
+    the packaging is DECLARED (so a future scaffold cannot silently re-break
+    it), and that the extra still names the three modules the host actually
+    imports. The effect itself is verified by
+    `python3 -m pip install --dry-run ".[host-gui]"`, which is a command, not a
+    test - a gate that shelled out to pip would be slow and would need a
+    network, which is a worse trade than a documented command.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import tomllib
+
+        REPO_ROOT = Path(__file__).resolve().parents[3]
+        cls.text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        cls.data = tomllib.loads(cls.text)
+
+    def test_the_packaging_is_declared_so_flat_layout_discovery_cannot_guess(self):
+        setuptools = self.data.get("tool", {}).get("setuptools")
+        self.assertIsNotNone(
+            setuptools,
+            "without [tool.setuptools] the flat layout is ambiguous and the "
+            "install the runbook names fails before it resolves anything",
+        )
+        # This distribution ships no importable package on purpose (the header
+        # says so): the tools live in tools/ and are run from the clone. So the
+        # declaration must be an explicit EMPTY one, not a guess.
+        self.assertEqual(setuptools.get("packages", []), [])
+        self.assertEqual(setuptools.get("py-modules", []), [])
+
+    def test_the_extra_still_names_what_the_host_imports(self):
+        extra = self.data["project"]["optional-dependencies"]["host-gui"]
+        names = " ".join(extra)
+        # server.py imports fastapi and uvicorn; the transport imports pyserial
+        # lazily behind open_serial. If a module is added to the runtime and
+        # not to the extra, the board run fails at import with no clue why.
+        for module in ("fastapi", "uvicorn", "pyserial"):
+            with self.subTest(module=module):
+                self.assertIn(module, names)
+
+
+class TestTheDemoWalkthrough(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.text = read(WALKTHROUGH)
@@ -83,9 +151,15 @@ class TestDemoWalkthrough(unittest.TestCase):
         # pending.
         self.assertRegex(self.text, r"R2[^\n]*(chip-confirmed|LANDED|landed)")
         self.assertIn("R2-READ-PATH-REVIEW", self.text)
-        # the conformance count: the package is fully confirmed at 18/18 (the
-        # ceiling/zero-count vectors were proven after the 15 original ones)
-        self.assertIn("18/18", self.text)
+        # the conformance count, READ from the package's own evidence rather
+        # than remembered: the held-core steps were added 2026-09-25 and the
+        # chip has since confirmed them, so a hard-coded "18/18" would have
+        # been stale the moment the flip landed - and worse, it would have
+        # demanded the walkthrough understate a package that is now 22/22.
+        from tools.host_gui import r2_vectors as R2V
+
+        confirmed = len(R2V.CHIP_EVIDENCE["confirmed_steps"])
+        self.assertIn(f"{confirmed}/{confirmed}", self.text)
         self.assertNotRegex(
             self.text, r"Memory/register readback \(R2\)[^\n]*\*\*pending\*\*"
         )
@@ -97,6 +171,86 @@ class TestDemoWalkthrough(unittest.TestCase):
         # and it must carry the no-hardware fallback
         self.assertIn("Fallback demo", self.text)
         self.assertIn("no board", self.text.lower())
+
+    def test_the_r2_row_matches_the_packages_own_arithmetic(self):
+        """The row's counts are READ from the evidence, not remembered.
+
+        Both directions matter. While steps are unconfirmed the row must carry
+        the unconfirmed half and must not present itself as wholly confirmed;
+        once they are confirmed, keeping that qualification would UNDERSTATE a
+        package whose every step is proven. So the assertions follow the flags,
+        which is the only version of this test that stays true across a flip.
+        """
+        from tools.host_gui import r2_vectors as R2V
+
+        row = next(
+            line
+            for line in self.text.splitlines()
+            if "Memory/register readback (R2)" in line
+        )
+        confirmed = len(R2V.CHIP_EVIDENCE["confirmed_steps"])
+        pending = len(R2V.CHIP_EVIDENCE["pending_steps"])
+        self.assertIn(f"{confirmed}/{confirmed}", row)
+        self.assertIn(f"{confirmed} of {confirmed + pending}", row)
+        self.assertIn("R2-HELD-STATUS-BYTES.md", row)
+        if pending:
+            self.assertRegex(row, r"NOT confirmed|unconfirmed")
+            self.assertNotIn("| **chip-confirmed (simulation)** |", row)
+        else:
+            self.assertNotIn("unconfirmed", row)
+
+    def test_the_debug_act_documents_what_the_new_beats_prove(self):
+        """The walkthrough must describe the beats the run now performs.
+
+        Two beats were added to the judge-facing run: the held-state R2
+        readback, and the fault-state refusals. A document that lists the act
+        without them is not wrong exactly, but it leaves the reader with a
+        smaller story than the run tells - and the two facts that matter most
+        are the ones a reader would otherwise assume: the strap is what gates
+        DUMP_CORE, and the refusal rules are the HOST's, not the chip's.
+        """
+        # the act's own beat count, which the run produces
+        report = ACC.run_acceptance(fake=True)
+        demo_beats = [c.name for c in report.checks if c.name.startswith("r3_demo_")]
+        with self.subTest(beats=demo_beats):
+            self.assertIn(f"the {len(demo_beats)} r3_demo_* beats", self.text)
+        # ...and the run's total PASS count, for the same reason: a number in a
+        # judge-facing document that nobody re-derives is a number that rots
+        passes = sum(1 for c in report.checks if c.status == "PASS")
+        with self.subTest(passes=passes):
+            self.assertIn(f"{passes} PASS, 0 FAIL", self.text)
+        # the two new beats are named, so a reader can find them
+        self.assertIn("r3_demo_held_readback", self.text)
+        self.assertIn("fault_refusals", self.text)
+        # and what they prove, in the document's own words
+        self.assertIn("DUMP_CORE", self.text)
+        # whitespace-tolerant: prose wraps, and a pattern that only matches a
+        # single line is a pattern that fails on a rewrap rather than on a lie
+        self.assertRegex(
+            self.text, r"gate[d]?\s+is\s+the\s+(run\s+)?strap|strap\s+is\s+what\s+gates"
+        )
+        self.assertRegex(self.text, r"host('s)?\s+own\s+policy|HOST's\s+rule")
+        # the honest boundary: the four held-core steps are not yet chip-confirmed
+        from tools.host_gui import r2_vectors as R2V
+
+        confirmed = len(R2V.CHIP_EVIDENCE["confirmed_steps"])
+        self.assertIn(f"{confirmed} of {confirmed}", self.text)
+
+    def test_the_pending_board_row_says_what_the_run_now_covers(self):
+        """The pending row is a claim about scope, and the scope just grew.
+
+        The board run used to skip the debug act. It no longer does, so a row
+        that says only "needs a board" understates what a board run would
+        demonstrate - and this row is the one a judge reads to decide what is
+        left.
+        """
+        row = next(
+            line
+            for line in self.text.splitlines()
+            if "Board-in-the-loop acceptance" in line
+        )
+        self.assertIn("debug act", row)
+        self.assertIn("pending", row.lower())
 
     def test_liveness_is_presented_as_a_chip_confirmed_capability(self):
         # P3 closed chip-side: STATUS carries pc/a/x/y/timer and READ_CPU is
@@ -149,6 +303,154 @@ class TestBringupRunbook(unittest.TestCase):
             if line.startswith("| ") and "---" not in line
         ]
         self.assertGreaterEqual(len(rows), 8)  # a real triage table
+
+    def test_the_runbook_says_the_device_run_includes_the_debug_act(self):
+        """What the device run DOES, since the act stopped being skipped.
+
+        Section 4 enumerates the scripted sequence for `--device`. Before
+        bce4ee0 that list was complete, because the debug act was skipped
+        without a FakePE. Now the device run performs the whole `r3_demo` group
+        as well, so an operator reading an accurate-but-stale list would not
+        know to expect eight debug beats - and, worse, the "what a healthy run
+        looks like" sentence claimed EVERY step passes except `uart`, which on
+        an R1-only shuttle would be false the moment the act ran.
+        """
+        text = read(BRINGUP)
+        section = text[
+            text.index("## 4. Run the real acceptance") : text.index(
+                "## 5. Failure triage"
+            )
+        ]
+        # The SEQUENCE LINE, not the section: a first version of this asserted
+        # the word "breakpoint" appeared somewhere below, which the explanatory
+        # paragraph satisfied on its own — so deleting the act from the list
+        # left the pin green. Asserting on a superset is how a pin rots.
+        sequence = next(
+            (line for line in section.splitlines() if "register dump" in line), ""
+        )
+        self.assertIn(
+            "debug act", sequence, "the device-run sequence omits the debug act"
+        )
+        # and the healthy-run claim has to name the precondition it depends on
+        self.assertRegex(
+            section, r"R3|0x21", "the healthy-run claim must say the debug act needs R3"
+        )
+        self.assertNotIn("every step passes except `uart`", section)
+
+    def test_every_beat_with_its_own_failure_mode_has_a_triage_row(self):
+        """The beats whose failure means something SPECIFIC need a row.
+
+        Three beats are deliberately not listed, and the reason is part of the
+        pin so it cannot drift into "everything must have a row": `assemble` is
+        a host-side assembly error carrying its own message, and
+        `disconnect`/`reconnect` fail for reasons that already failed earlier in
+        the same run, so a row would only repeat one.
+
+        `heartbeat` is the one that matters most for a FIRST board run: in
+        `--fake` the model scripts the timer increment, so the beat cannot fail;
+        on hardware the chip's `dbg_timer` has to actually advance within 3
+        tries x 0.25 s. That is the beat most likely to surprise someone holding
+        a board, and it had no row at all.
+        """
+        text = read(BRINGUP)
+        start = text.index("| Symptom")
+        table = text[start : text.index("\n\n", start)]
+        rows = [
+            line
+            for line in table.splitlines()
+            if line.startswith("| ") and "---" not in line
+        ]
+        for beat in ("heartbeat", "readback", "clear_fault"):
+            with self.subTest(beat=beat):
+                self.assertTrue(
+                    any(beat in row.lower() for row in rows),
+                    f"the {beat} beat can fail for its own reason and the triage "
+                    f"table says nothing about it",
+                )
+
+    def test_the_heartbeat_row_names_the_hardware_window(self):
+        """An operator reading a `timer stuck` failure needs the window.
+
+        The beat polls three times at 0.25 s, so the honest statement is
+        "within about three quarters of a second", not "eventually" - and the
+        likely causes are a core that is not actually running, or a SoC tick
+        that never reaches `dbg_timer`. A row that only says "check the wiring"
+        makes the reader guess.
+        """
+        text = read(BRINGUP)
+        start = text.index("| Symptom")
+        table = text[start : text.index("\n\n", start)]
+        # a list, then index: `next(..., None)` leaves the type Optional and
+        # every assertion below would be reasoning about a value that may not
+        # be there. Requiring exactly one also stops two rows drifting apart.
+        matches = [line for line in table.splitlines() if "heartbeat" in line.lower()]
+        self.assertEqual(
+            len(matches), 1, "the triage table needs exactly one heartbeat row"
+        )
+        row = matches[0]
+        self.assertRegex(
+            row,
+            r"0\.75|three quarters|0\.25",
+            "the row should state the window the beat gives up in",
+        )
+        self.assertRegex(
+            row, r"dbg_timer|tick|strap", "the row should name a candidate cause"
+        )
+
+    def test_the_read_length_failure(self):
+        """A defect I found on this host, reachable only on hardware.
+
+        The bridge reads a fixed budget of wait words past every reply, so the
+        words after the frame come off a RELEASED MISO pad. When the reader did
+        not trim to the length field, EVERY op failed - including `ping` - with
+        "length field does not match the frame", which reads like a protocol bug
+        and is not one. An operator meets this on the board and has no other
+        place to look, so the row has to exist and name the exact error text.
+        """
+        text = read(BRINGUP)
+        rows = [
+            line
+            for line in text.splitlines()
+            if "length field does not match the frame" in line
+        ]
+        # exactly one: a duplicated triage row is itself a doc smell, and two
+        # would let them drift apart
+        self.assertEqual(len(rows), 1, "the triage table needs one read-length row")
+        row = rows[0]
+        self.assertIn(
+            "released", row.lower(), "the row must name the released pad as the cause"
+        )
+        # and it must not blame the contract, which is what makes this failure
+        # expensive to diagnose from the symptom alone
+        self.assertIn("MISO", row)
+
+    def test_the_r2_triage_row_does_not_quote_a_stale_step_count(self):
+        """The row quoted '15 steps'; the count has moved twice since.
+
+        A triage table is read under time pressure by someone holding a board,
+        so a stale count in it is a claim with a short half-life. The expected
+        numbers come from the evidence block, not from this file's memory: a
+        pin that hard-codes the count stops failing when the count moves and
+        starts DEMANDING the old one instead, which is how the row was pinned
+        at '18 read-path steps' after the chip confirmed all 22.
+        """
+        from tools.host_gui import r2_vectors as R2V
+
+        evidence = R2V.CHIP_EVIDENCE
+        confirmed = len(evidence["confirmed_steps"])
+        pending = len(evidence["pending_steps"])
+        total = confirmed + pending
+        text = read(BRINGUP)
+        row = next(line for line in text.splitlines() if "r2_read_*" in line)
+        self.assertNotIn("the 15 steps", row)
+        self.assertIn(str(total), row)
+        # never present a partial count as the package
+        if pending:
+            self.assertNotIn(
+                f"all {confirmed}",
+                row,
+                "the package is PARTIAL; the triage row must not claim it whole",
+            )
 
 
 class TestSubmissionReadiness(unittest.TestCase):
@@ -298,6 +600,429 @@ class TestDebugActIsHonest(unittest.TestCase):
         self.assertIn("exactly one instruction", lowered)
         self.assertIn("stop-before", lowered)
         self.assertRegex(self.text, r"had \*\*not\*\*\s*\n?\s*run")
+
+
+class TestThePageAndTheServerAgreeOnTheRoutes(unittest.TestCase):
+    """The page and the server are joined by URL strings, and nothing checked it.
+
+    Every FastAPI test SKIPS in this environment (the extra is not installed
+    here), so the one surface a board operator's browser actually talks to has
+    no coverage at all. This is the half that does not need the extra: compare
+    what the page CALLS against what the server REGISTERS, statically.
+
+    Both directions matter, and they fail differently:
+      * a page call with no route is a 404 at runtime, on a board, in front of
+        an operator - and it would be the first thing anyone notices, which is
+        the worst place to find out;
+      * a route nobody calls is dead surface: not wrong, but it is the thing
+        that rots silently while looking supported.
+
+    The page's socket URL is built inside `eventSocketUrl()` rather than written
+    as a literal, so a literal-only scan MISSES `/api/events` and would report a
+    working endpoint as dead. The scan therefore reads the built URL too - the
+    first version of this would have produced exactly that false positive, and
+    the honest way to find a route the page reaches indirectly is to say so.
+
+    `/api/assemble` is a route the page does not call: the page posts a source
+    to `/api/load`, which assembles server-side, and the route exists for
+    scripted and fuzz use (fuzz_server.py drives it directly). It is named
+    explicitly rather than excused by a prefix rule, so a NEW uncalled route
+    fails this test and has to be explained.
+
+    KNOWN LIMIT, stated rather than left for a reader to discover: this
+    compares PATHS, not VERBS. A page that POSTed a path the server registers
+    GET-only would pass this test and fail at runtime with 405 Method Not
+    Allowed. The verbs were checked by reading every call site on 2026-09-25 and
+    are correct - `start`/`stop`/`dump` come off a table of `[id, path]` pairs
+    fed to `api(path, { method: "POST" })`; the four debug paths go through
+    `debugCall`, which hard-codes `method: "POST"`; `connect` and `load` name
+    the verb inline. Inferring that from the source needs a real JS parse,
+    because the verb sits at a distance from the path literal, and a REGEX that
+    guessed it would be a pin that fails open - the exact failure mode this
+    class was written to avoid. So the limit is written here instead: if you
+    ever see a 405 from the GUI, this is the check that did not catch it.
+    """
+
+    PAGE_ONLY_ROUTES = frozenset(
+        {
+            "/api/assemble": "the page posts a source to /api/load, which "
+            "assembles server-side; this route is for scripted "
+            "and fuzz callers (fuzz_server.py drives it)",
+        }
+    )
+
+    # The path pattern allows DIGITS. It did not at first: the class was
+    # `[a-z_/]`, so a path like `/api/read_cpu_v2` matched nothing at all -
+    # invisible in BOTH directions, which is the worst kind of hole in a
+    # comparison. It was found by mutating the page with exactly such a path
+    # and watching the pin stay green. `test_the_scanner_sees_digits` now pins
+    # the scanner itself, so the hole cannot reopen quietly.
+    PAGE_PATH = re.compile(r'"(/api/[A-Za-z0-9_/-]+)"')
+    BUILT_PATH = re.compile(r"\$\{location\.host\}(/api/[A-Za-z0-9_/-]+)")
+    ROUTE = re.compile(r'@app\.\w+\("(/api/[A-Za-z0-9_/-]+)"\)')
+
+    @classmethod
+    def setUpClass(cls):
+        root = Path(__file__).resolve().parents[3]
+        cls.page = (root / "tools" / "host_gui" / "web" / "app.js").read_text(
+            encoding="utf-8"
+        )
+        cls.server = (root / "tools" / "host_gui" / "server.py").read_text(
+            encoding="utf-8"
+        )
+        # every quoted /api/... in the page, PLUS the ones it BUILDS: the
+        # socket URL is a template over location.host, and a literal-only scan
+        # misses it (the first version did, and reported a working endpoint as
+        # dead). All three patterns capture the leading slash, because a capture
+        # group around `api/...` silently drops it and the patterns then
+        # disagree about the same path.
+        cls.page_calls = set(cls.PAGE_PATH.findall(cls.page))
+        cls.page_calls.update(cls.BUILT_PATH.findall(cls.page))
+        cls.routes = set(cls.ROUTE.findall(cls.server))
+
+    def test_the_scanner_sees_digits_in_a_path(self):
+        """The comparison's own sensitivity, pinned.
+
+        A hole in the SCANNER is worse than a hole in an assertion: it makes
+        both directions vacuous for the affected paths, and it fails open. This
+        feeds the patterns a path with a digit in it, which is the case that
+        was silently dropped.
+        """
+        snippet = 'api("/api/read_cpu_v2")'
+        self.assertEqual(self.PAGE_PATH.findall(snippet), ["/api/read_cpu_v2"])
+        self.assertEqual(self.ROUTE.findall('@app.get("/api/status2")'), ["/api/status2"])
+        self.assertEqual(
+            self.BUILT_PATH.findall("${location.host}/api/events3"), ["/api/events3"]
+        )
+
+    def test_the_comparison_saw_both_sides(self):
+        """A comparison that matched nothing would pass every other test here."""
+        self.assertGreaterEqual(len(self.page_calls), 10)
+        self.assertGreaterEqual(len(self.routes), 10)
+        self.assertIn("/api/status", self.page_calls)
+        self.assertIn("/api/status", self.routes)
+        # and the indirectly-built socket URL is in the page's calls
+        self.assertIn("/api/events", self.page_calls)
+
+    def test_every_page_call_is_a_registered_route(self):
+        missing = sorted(self.page_calls - self.routes)
+        self.assertEqual(
+            missing,
+            [],
+            f"the page calls routes the server does not register: "
+            f"{missing} - a 404 on a board, in front of an operator",
+        )
+
+    def test_every_registered_route_is_called_or_explained(self):
+        uncalled = sorted(self.routes - self.page_calls)
+        self.assertEqual(
+            set(uncalled),
+            set(self.PAGE_ONLY_ROUTES),
+            f"routes the page never calls: {uncalled}. Name each "
+            f"one in PAGE_ONLY_ROUTES with why, or call it.",
+        )
+
+
+class TestTheJudgeFacingCountsAreCurrent(unittest.TestCase):
+    """Two documents a judge or an operator reads FIRST, with stale counts.
+
+    The R2 count has moved three times: 15 golden steps became 18 when the
+    ceiling vectors landed, the package became PARTIAL when the four held-core
+    steps were added (18 of 22), and then the chip re-ran those four and it
+    became 22 of 22. Both documents below were updated once and then left,
+    which is how a claim rots: the number was right on the day someone wrote
+    it and nobody revisited it because nothing failed.
+
+    THE EXPECTED NUMBERS ARE NOW READ, NOT TYPED. This class used to pin the
+    literal "18 of 22" in both documents, which is the defect wearing a
+    test's clothes: when the chip confirmed the fourth pair the pin did not
+    fail, it DEMANDED that the package keep under-reporting itself, and the
+    two documents were rewritten back to the number the pin knew. The lesson
+    is the flip's own - a hard-coded count is a claim that goes stale and then
+    fights the truth - so the claims are now compared against
+    `r2_vectors.CHIP_EVIDENCE`, which the flag-flip maintains, and what is
+    asserted is that the documents agree with the flags in BOTH states.
+
+    Dated review records are deliberately NOT swept - `wiki/log.md` and the
+    per-day review files record what was true then, and rewriting them would
+    destroy the only honest record of the change. These two are LIVE: one is
+    the scorecard, the other is the runbook's opening, which is the first
+    paragraph an operator reads about what is on the shuttle.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from tools.host_gui import r2_vectors as R2V
+
+        evidence = R2V.CHIP_EVIDENCE
+        cls.confirmed = len(evidence["confirmed_steps"])
+        cls.pending = len(evidence["pending_steps"])
+        cls.total = cls.confirmed + cls.pending
+        cls.full = cls.pending == 0
+
+    def test_the_scorecard_states_the_packages_own_confirmation_count(self):
+        row = next(
+            line
+            for line in read(SCORECARD).splitlines()
+            if "Host-controller story" in line
+        )
+        if self.full:
+            # the full case: every step confirmed, and the scorecard says so
+            self.assertIn(f"all {self.confirmed} of its {self.total} golden steps", row)
+        else:
+            # the partial case: the count must be scoped, and the held-core
+            # steps must be named as NOT yet re-run. A regex, not a literal,
+            # so the pin fails on the CLAIM rather than on phrasing.
+            self.assertRegex(row, rf"{self.confirmed} of (its )?{self.total}")
+            self.assertIn("await the chip's re-run", row)
+        # whatever the state, the row must not present the read-path count as
+        # if it were the whole package - the original defect.
+        self.assertNotIn(
+            "18/18 chip-confirmed",
+            row,
+            "the scorecard presents 18/18 as the whole R2 contract",
+        )
+
+    def test_the_runbooks_opening_names_the_current_step_count(self):
+        text = read(BRINGUP)
+        opening = text[: text.index("## 1.")]
+        self.assertNotIn(
+            "all 15 golden steps",
+            opening,
+            "the runbook's opening still says 15 golden steps",
+        )
+        self.assertIn(str(self.total), opening)
+        if self.full:
+            self.assertIn(f"all {self.confirmed}", opening)
+        # and it must scope the count, never present it as the whole package
+        # while some steps are unconfirmed
+        self.assertRegex(
+            opening,
+            r"read-path|of 22|22 steps|all 22",
+            "the opening must scope its count to the confirmed steps",
+        )
+        if not self.full:
+            self.assertNotIn(
+                f"all {self.confirmed}",
+                opening,
+                "the package is PARTIAL; the opening must not claim it whole",
+            )
+
+
+class TestTheRunbooksCommandsAreReal(unittest.TestCase):
+    """The runbook's commands must be commands, not plausible-looking text.
+
+    The existing bring-up pin checks that certain strings APPEAR in the
+    document. It does not check that they WORK: a renamed script, a moved
+    module or a dropped flag leaves every pin green and leaves the operator
+    holding a board with a runbook that fails at its first line. That is the
+    worst place to discover a typo, and the cheapest thing to check is that the
+    paths exist and the flags parse.
+
+    The acceptance invocation is checked by handing its tokens to the real
+    `parse_args`, so this is not "does the text look like a command" - it is
+    "does the tool accept this command line".
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = read(BRINGUP)
+        cls.command_paths = cls._paths_in_command_positions(cls.text)
+        cls.usage_flags = cls._flags_from_help()
+
+    @staticmethod
+    def _paths_in_command_positions(text):
+        """`tools/...` paths where the runbook RUNS them, not where it names them.
+
+        Scoped to fenced blocks and lines that start with a command, because a
+        prose mention like `tools/host_bridge/{main,pe_frame,tt_adapter}.py` is
+        a source list, not a command - and the first version of this swept both
+        in, then failed on a directory and on a brace expression it had
+        truncated. A pin that fires on prose is a pin people turn off.
+        """
+        paths = set()
+        in_block = False
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("```"):
+                in_block = not in_block
+                continue
+            if in_block or stripped.startswith(
+                ("python3", "tools/", "MICROPYTHON", "$ ", "ls ", "sudo ")
+            ):
+                paths.update(re.findall(r"tools/[A-Za-z0-9_./-]+", stripped))
+        return sorted(paths)
+
+    @staticmethod
+    def _flags_from_help():
+        """The flags the runner advertises, from the runner's own --help.
+
+        Read from the tool rather than from its source, so a renamed flag
+        cannot leave the pin agreeing with a stale copy of itself.
+        """
+        result = subprocess.run(
+            [sys.executable, "-m", "tools.host_bridge.acceptance", "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=str(REPO_ROOT),
+        )
+        return set(re.findall(r"(--[a-z-]+)", result.stdout))
+
+    def test_every_script_the_runbook_runs_exists(self):
+        self.assertGreaterEqual(
+            len(self.command_paths),
+            3,
+            f"the runbook should name the scripts it runs; found {self.command_paths}",
+        )
+        for path in self.command_paths:
+            with self.subTest(path=path):
+                self.assertTrue(
+                    (REPO_ROOT / path).is_file(),
+                    f"the runbook runs {path}, which does not exist",
+                )
+
+    def test_every_flag_the_runbook_uses_is_one_the_runner_accepts(self):
+        flags = set(
+            re.findall(
+                r"(?<![\w-])(--[a-z-]+)",
+                "\n".join(
+                    line for line in self.text.splitlines() if "acceptance.py" in line
+                ),
+            )
+        )
+        self.assertIn("--device", flags, "the runbook's device run should be pinned")
+        self.assertTrue(self.usage_flags, "could not read the runner's --help")
+        for flag in sorted(flags):
+            with self.subTest(flag=flag):
+                self.assertIn(
+                    flag,
+                    self.usage_flags,
+                    f"the runbook tells the operator to pass {flag}, which "
+                    f"acceptance.py does not accept",
+                )
+
+
+class TestTheDebugPanelDoesNotInventTheRunStrap(unittest.TestCase):
+    """A response with no run word must not be rendered as "run low".
+
+    `DEBUG_BP_SET` and `DEBUG_STEP` answer with the five-word debug prefix
+    (status, state, pc, bp_addr, bp_flags) - there is NO run word in either,
+    because the chip is not reporting the strap there. The page filled the gap
+    with `run: payload.run ?? 0` and rendered it as "low", so an operator who
+    armed a breakpoint on a RUNNING core was told, in the panel, that the run
+    strap was down - in the exact state where they are about to be stopped by
+    their own breakpoint.
+
+    The rule the panel should follow is the one the rest of the page already
+    follows for a field it does not have: say so (`—`), rather than assert a
+    value nobody sent. This is the same class as the chip-state readout that
+    used to collapse four values into two.
+    """
+
+    DRIVER = r"""
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const elements = {};
+const document = {
+  getElementById: (id) => (elements[id] ||= { textContent: '', dataset: {},
+                                              disabled: false, style: {},
+                                              value: '', prepend() {},
+                                              append() {} }),
+  createElement: () => ({ textContent: '', dataset: {}, style: {},
+                          append() {}, appendChild() {}, prepend() {} }),
+};
+const window = {};
+const location = { host: 'localhost', protocol: 'http:' };
+const fetch = async () => ({ ok: true, json: async () => ({}) });
+const WebSocket = function () { throw new Error('no socket in the test'); };
+const body = source.replace(/\nmain\(\);\s*$/, '') +
+  '\nmodule.exports = { renderDebug };';
+const module_shim = { exports: {} };
+new Function('module', 'exports', 'require', 'document', 'window', 'location',
+             'fetch', 'WebSocket', 'setInterval', 'clearInterval', body)(
+  module_shim, module_shim.exports, require, document, window, location,
+  fetch, WebSocket, setInterval, clearInterval);
+const { renderDebug } = module_shim.exports;
+renderDebug(JSON.parse(process.argv[2]));
+process.stdout.write(JSON.stringify({ run: elements['debug-run'].textContent,
+                                      state: elements['debug-state'].textContent,
+                                      flags: elements['debug-bp-flags'].textContent }));
+"""
+
+    def render(self, debug):
+        if NODE is None:
+            self.skipTest("node not installed")
+        result = subprocess.run(
+            [NODE, "-e", self.DRIVER, str(APP_JS), json.dumps(debug)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise AssertionError(f"node driver failed: {result.stderr[:400]}")
+        return json.loads(result.stdout)
+
+    def test_a_response_without_a_run_word_says_so(self):
+        """The `DEBUG_BP_SET` shape: five words, no strap."""
+        out = self.render(
+            {
+                "state": 1,
+                "state_name": "RUNNING",
+                "pc": 0,
+                "bp_addr": 2,
+                "bp_flags": 1,
+                "armed": True,
+            }
+        )
+        self.assertNotEqual(
+            out["run"], "low", "no run word was sent, so 'low' is invented"
+        )
+        self.assertNotIn("undefined", out["run"])
+
+    def test_a_response_with_a_run_word_reports_it(self):
+        """The `DEBUG_STATUS` shape: the strap IS reported, and must show."""
+        out = self.render(
+            {
+                "state": 3,
+                "state_name": "BP_HIT",
+                "pc": 2,
+                "bp_addr": 2,
+                "bp_flags": 3,
+                "armed": True,
+                "hit": True,
+                "run": 1,
+            }
+        )
+        self.assertEqual(out["run"], "high")
+        out = self.render(
+            {
+                "state": 0,
+                "state_name": "STOPPED",
+                "pc": 0,
+                "bp_addr": 0,
+                "bp_flags": 0,
+                "armed": False,
+                "run": 0,
+            }
+        )
+        self.assertEqual(out["run"], "low")
+
+    def test_the_rest_of_the_panel_still_renders(self):
+        """The fix must not cost the fields that ARE reported."""
+        out = self.render(
+            {
+                "state": 3,
+                "state_name": "BP_HIT",
+                "pc": 2,
+                "bp_addr": 2,
+                "bp_flags": 3,
+                "armed": True,
+                "hit": True,
+            }
+        )
+        self.assertIn("BP_HIT", out["state"])
+        self.assertIn("hit latched", out["flags"])
 
 
 if __name__ == "__main__":
