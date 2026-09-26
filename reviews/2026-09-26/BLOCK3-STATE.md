@@ -286,3 +286,68 @@ conclusion, and the same discipline applies: measure it, do not reason it.
 first time the whole procedure has run end to end without a placement error.
 What is left is one arithmetic question that the checks have now narrowed to
 a single byte, and it is not a placement problem any more.
+
+---
+
+## UPDATE 2: THE TRACE NAMES IT, AND IT IS THE ANSWER SLOTS
+
+The probe printed the term, the accumulator and the scratch at the instant each
+bank happens:
+
+    [bank] N=1 | T(term)=1 ACC=199 | slot0=199 slot1=182
+    [bank] N=2 | T(term)=9 ACC=231 | slot0=222 slot1=231
+
+**T(term) is CORRECT AT BOTH BANKS: 1 for r=8 and 9 for r=56** (11*8>>6 = 1,
+11*56>>6 = 9). **The conversion is right.** And the two answers the
+testbench reads are 222 and 999 -- of which 999 is right and 222 is not.
+
+**222 is `sum` -- the second conversion's SCRATCH, sitting in slot 0.**
+
+### The fault, stated exactly
+
+I chose dmem[6..9] as the exact add's four temporaries because they are "unwritten
+until the bank". **That is true of the answer for the CURRENT slot and false of
+the PREVIOUS one.** The order inside one conversion is: the small term's chain
+(scratch 6-9), the shift, the main term's chain (scratch 6-9), the final add,
+and the BANK LAST. So the N=0 bank writes measurement 0 into 6,7 -- and the N=1
+conversion's temporaries then **overwrite 6,7 with its scratch**. The testbench
+reads the slots at the end, by which time slot 0 holds the second conversion's
+leftover `sum` and not the first measurement's answer.
+
+**So measurement 1 is exact at 999 mm because its bank is the last write in the
+run, and measurement 0 reads 222 because its answer was destroyed by the next
+conversion's scratch.** Neither the arithmetic nor the carry is at fault. The
+exact add is correct; the ALLOCATION is not, and the allocation was my choice
+four resumes ago, made for a reason that was almost right.
+
+### The constraint this exposes, and it is the act's real one
+
+**SIXTEEN BYTES IS NOT ENOUGH FOR TWO BANKED ANSWERS PLUS FOUR ADD TEMPORARIES
+DISJOINTLY.** The temporaries need four bytes that nothing else reads; the
+answers need four; the accumulators need four (two of 16-bit values); the tick
+needs one; PREV and STATE need two; the count, the flag, the width and the two
+Q bytes need five more. The arithmetic cannot be blamed for the shortfall and
+no arrangement of the existing map fixes it.
+
+**THE THREE WAYS OUT, and the one I would take:**
+
+1. **BANK ONE POINT PER RUN**, as the frequency meter does with two. The
+   temporaries then have the whole map to themselves and nothing to destroy,
+   at the cost of a run per measurement.
+2. **SAVE THE TERM BEFORE THE MAIN TERM'S CHAIN** -- the term is one byte, it
+   is finished before the main chain starts, and one byte outside 6-9 is enough
+   to keep it. This is the smallest change and it makes the two banked answers
+   safe, because only the CURRENT slot is ever scratch and the previous one is
+   not.
+3. **REORDER: run the main term FIRST.** It needs Q = us>>6, which is the only
+   thing US is used for, and after that US is dead for the whole conversion --
+   so dmem[2],dmem[3] become available as temporaries and the answer slots
+   stop being the only candidates.
+
+Option 2 is the one to implement: the term is finished before the main term's
+chain, it is ONE byte, and the fix is to put it somewhere the chain does not
+write. The failing case is a testbench reading an answer that a later
+conversion overwrote, and the next session should make the testbench say so
+directly -- check each answer AS IT IS BANKED rather than all of them at the
+end, which is the same "read it in the wrong place" family as the two earlier
+instrument defects in this act.
