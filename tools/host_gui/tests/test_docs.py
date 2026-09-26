@@ -501,5 +501,102 @@ class TestDebugActIsHonest(unittest.TestCase):
         self.assertRegex(self.text, r"had \*\*not\*\*\s*\n?\s*run")
 
 
+class TestThePageAndTheServerAgreeOnTheRoutes(unittest.TestCase):
+    """The page and the server are joined by URL strings, and nothing checked it.
+
+    Every FastAPI test SKIPS in this environment (the extra is not installed
+    here), so the one surface a board operator's browser actually talks to has
+    no coverage at all. This is the half that does not need the extra: compare
+    what the page CALLS against what the server REGISTERS, statically.
+
+    Both directions matter, and they fail differently:
+      * a page call with no route is a 404 at runtime, on a board, in front of
+        an operator - and it would be the first thing anyone notices, which is
+        the worst place to find out;
+      * a route nobody calls is dead surface: not wrong, but it is the thing
+        that rots silently while looking supported.
+
+    The page's socket URL is built inside `eventSocketUrl()` rather than written
+    as a literal, so a literal-only scan MISSES `/api/events` and would report a
+    working endpoint as dead. The scan therefore reads the built URL too - the
+    first version of this would have produced exactly that false positive, and
+    the honest way to find a route the page reaches indirectly is to say so.
+
+    `/api/assemble` is a route the page does not call: the page posts a source
+    to `/api/load`, which assembles server-side, and the route exists for
+    scripted and fuzz use (fuzz_server.py drives it directly). It is named
+    explicitly rather than excused by a prefix rule, so a NEW uncalled route
+    fails this test and has to be explained.
+    """
+
+    PAGE_ONLY_ROUTES = frozenset({
+        "/api/assemble": "the page posts a source to /api/load, which "
+                         "assembles server-side; this route is for scripted "
+                         "and fuzz callers (fuzz_server.py drives it)",
+    })
+
+    # The path pattern allows DIGITS. It did not at first: the class was
+    # `[a-z_/]`, so a path like `/api/read_cpu_v2` matched nothing at all -
+    # invisible in BOTH directions, which is the worst kind of hole in a
+    # comparison. It was found by mutating the page with exactly such a path
+    # and watching the pin stay green. `test_the_scanner_sees_digits` now pins
+    # the scanner itself, so the hole cannot reopen quietly.
+    PAGE_PATH = re.compile(r'"(/api/[A-Za-z0-9_/-]+)"')
+    BUILT_PATH = re.compile(r'\$\{location\.host\}(/api/[A-Za-z0-9_/-]+)')
+    ROUTE = re.compile(r'@app\.\w+\("(/api/[A-Za-z0-9_/-]+)"\)')
+
+    @classmethod
+    def setUpClass(cls):
+        root = Path(__file__).resolve().parents[3]
+        cls.page = (root / "tools" / "host_gui" / "web" / "app.js").read_text(
+            encoding="utf-8")
+        cls.server = (root / "tools" / "host_gui" / "server.py").read_text(
+            encoding="utf-8")
+        # every quoted /api/... in the page, PLUS the ones it BUILDS: the
+        # socket URL is a template over location.host, and a literal-only scan
+        # misses it (the first version did, and reported a working endpoint as
+        # dead). All three patterns capture the leading slash, because a capture
+        # group around `api/...` silently drops it and the patterns then
+        # disagree about the same path.
+        cls.page_calls = set(cls.PAGE_PATH.findall(cls.page))
+        cls.page_calls.update(cls.BUILT_PATH.findall(cls.page))
+        cls.routes = set(cls.ROUTE.findall(cls.server))
+
+    def test_the_scanner_sees_digits_in_a_path(self):
+        """The comparison's own sensitivity, pinned.
+
+        A hole in the SCANNER is worse than a hole in an assertion: it makes
+        both directions vacuous for the affected paths, and it fails open. This
+        feeds the patterns a path with a digit in it, which is the case that
+        was silently dropped.
+        """
+        snippet = 'api("/api/read_cpu_v2")'
+        self.assertEqual(self.PAGE_PATH.findall(snippet), ["/api/read_cpu_v2"])
+        self.assertEqual(
+            self.ROUTE.findall('@app.get("/api/status2")'), ["/api/status2"])
+        self.assertEqual(self.BUILT_PATH.findall(
+            "${location.host}/api/events3"), ["/api/events3"])
+
+    def test_the_comparison_saw_both_sides(self):
+        """A comparison that matched nothing would pass every other test here."""
+        self.assertGreaterEqual(len(self.page_calls), 10)
+        self.assertGreaterEqual(len(self.routes), 10)
+        self.assertIn("/api/status", self.page_calls)
+        self.assertIn("/api/status", self.routes)
+        # and the indirectly-built socket URL is in the page's calls
+        self.assertIn("/api/events", self.page_calls)
+    def test_every_page_call_is_a_registered_route(self):
+        missing = sorted(self.page_calls - self.routes)
+        self.assertEqual(missing, [],
+                         f"the page calls routes the server does not register: "
+                         f"{missing} - a 404 on a board, in front of an operator")
+
+    def test_every_registered_route_is_called_or_explained(self):
+        uncalled = sorted(self.routes - self.page_calls)
+        self.assertEqual(set(uncalled), set(self.PAGE_ONLY_ROUTES),
+                         f"routes the page never calls: {uncalled}. Name each "
+                         f"one in PAGE_ONLY_ROUTES with why, or call it.")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
