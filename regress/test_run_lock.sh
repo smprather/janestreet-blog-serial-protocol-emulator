@@ -194,12 +194,21 @@ fi
 # still be refused. A real reentrant child inherits the lock DESCRIPTOR, which
 # is the evidence the fix now requires; this one inherits only the name, so
 # there is nothing behind it.
+#
+# The 9>&- is load-bearing and is why this case only works when the suite
+# caught it the FIRST time: this gate runs INSIDE run_all.sh, which is itself a
+# lock holder, so fd 9 is open in every descendant. Without closing it the
+# probe inherits a descriptor, the fast path legitimately fires, and the case
+# fails -- a failure that means nothing about the defect. Closing fd 9 makes
+# the probe what it claims to be: a process that inherited the NAME and nothing
+# else, which is the whole hazard. A case that only passes outside the suite is
+# a case that is not testing the thing it names.
 if start_case staleheld 'sleep 30'; then
   if CHIP_RUN_LOCK_FILE="$WORK/staleheld.lock" \
      CHIP_RUN_OWNER_FILE="$WORK/staleheld.probe.owner" \
      CHIP_RUN_WATCHDOG=0 \
      CHIP_RUN_LOCK_HELD=1 \
-     bash -c ". '$HERE/run_lock.sh'; chip_take_run_lock stale" \
+     bash -c ". '$HERE/run_lock.sh'; chip_take_run_lock stale" 9>&- \
        > "$WORK/staleheld.second.log" 2>&1; then
     bad "H: a stale CHIP_RUN_LOCK_HELD let a second run start while the lock was held"
   else
