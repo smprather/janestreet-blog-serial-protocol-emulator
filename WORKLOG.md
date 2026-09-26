@@ -1793,3 +1793,19 @@ byte must not be peeled with SHR, because SHR is `a <= {1'b0, a[7:1]}` and a
 peeled byte is low bit first. That is a one-line mechanical signature, it is
 provable by putting the peel back, and it belongs next to the branch-operand
 check and the store-run check.
+
+## 2026-09-27 act (c): TASK-START -- THE MASK, AND THE ORDER CHECK
+
+Starting the fix whose shape the last entry decided: **`dmem[11]` holds the
+MASK, the byte is read beside it, and the byte is not peeled with SHR.** No
+re-deriving this time -- the shape, the four rules and the three constants to
+fit are all written down one entry above, and the check now names the delay
+loop beside every route so the fit is arithmetic rather than trial.
+
+**AND THE ORDER CHECK GOES IN WITH IT, not after it**, because it is the check
+that would have caught the fault an hour earlier and its absence is the reason
+an hour was needed: *in the encoder, the byte must not be peeled with SHR.* It
+is a one-line mechanical signature -- `SHR` applied to a byte the encoder is
+consuming is a low-bit-first transmitter, because `SHR` is `a <= {1'b0, a[7:1]}`
+-- it is provable by putting the peel back, and it belongs beside the
+branch-operand and store-run checks rather than in a handoff as advice.

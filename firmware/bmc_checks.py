@@ -350,10 +350,7 @@ else:
         hist[(c, loop)] = hist.get((c, loop), 0) + 1
     for c, loop in sorted(hist, key=lambda k: (k[1] is None, k[1] or 0, k[0])):
         flag = "" if c == 120 else "  *** NOT 120 ***"
-        print(
-f"    {c:4d} clocks  x{hist[(c, loop)]}"
-f"  (delay loop at {loop}){flag}"
-        )
+        print(f"    {c:4d} clocks  x{hist[(c, loop)]}  (delay loop at {loop}){flag}")
 bad_iv = [c for c, _ in rs if c != 120]
 if not rs:
     print("  NO ROUTE RETURNS to the OUT: the loop never drives a second edge")
