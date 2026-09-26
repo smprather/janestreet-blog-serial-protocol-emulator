@@ -211,6 +211,41 @@ class TestBringupRunbook(unittest.TestCase):
         ]
         self.assertGreaterEqual(len(rows), 8)  # a real triage table
 
+    def test_the_triage_table_covers_the_read_length_failure(self):
+        """A defect I found on this host, reachable only on hardware.
+
+        The bridge reads a fixed budget of wait words past every reply, so the
+        words after the frame come off a RELEASED MISO pad. When the reader did
+        not trim to the length field, EVERY op failed - including `ping` - with
+        "length field does not match the frame", which reads like a protocol bug
+        and is not one. An operator meets this on the board and has no other
+        place to look, so the row has to exist and name the exact error text.
+        """
+        text = read(BRINGUP)
+        rows = [line for line in text.splitlines()
+                if "length field does not match the frame" in line]
+        # exactly one: a duplicated triage row is itself a doc smell, and two
+        # would let them drift apart
+        self.assertEqual(len(rows), 1, "the triage table needs one read-length row")
+        row = rows[0]
+        self.assertIn("released", row.lower(),
+                      "the row must name the released pad as the cause")
+        # and it must not blame the contract, which is what makes this failure
+        # expensive to diagnose from the symptom alone
+        self.assertIn("MISO", row)
+
+    def test_the_r2_triage_row_does_not_quote_a_stale_step_count(self):
+        """The row quoted '15 steps'; the package is 18 of 22 confirmed.
+
+        A triage table is read under time pressure by someone holding a board,
+        so a stale count in it is a claim with a short half-life.
+        """
+        text = read(BRINGUP)
+        row = next(line for line in text.splitlines()
+                   if "r2_read_*" in line)
+        self.assertNotIn("the 15 steps", row)
+        self.assertIn("18 read-path steps", row)
+
 
 class TestSubmissionReadiness(unittest.TestCase):
     SCORECARD = REPO_ROOT / "docs" / "submission-readiness.md"
