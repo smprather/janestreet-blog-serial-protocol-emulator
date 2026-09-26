@@ -721,7 +721,8 @@ class TestTheRunbooksCommandsAreReal(unittest.TestCase):
                 in_block = not in_block
                 continue
             if in_block or stripped.startswith(
-                    ("python3", "tools/", "MICROPYTHON", "$ ", "ls ", "sudo ")):
+                ("python3", "tools/", "MICROPYTHON", "$ ", "ls ", "sudo ")
+            ):
                 paths.update(re.findall(r"tools/[A-Za-z0-9_./-]+", stripped))
         return sorted(paths)
 
@@ -734,31 +735,46 @@ class TestTheRunbooksCommandsAreReal(unittest.TestCase):
         """
         result = subprocess.run(
             [sys.executable, "-m", "tools.host_bridge.acceptance", "--help"],
-            capture_output=True, text=True, check=False, cwd=str(REPO_ROOT))
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=str(REPO_ROOT),
+        )
         return set(re.findall(r"(--[a-z-]+)", result.stdout))
 
     def test_every_script_the_runbook_runs_exists(self):
         self.assertGreaterEqual(
-            len(self.command_paths), 3,
-            "the runbook should name the scripts it runs; found "
-            f"{self.command_paths}")
+            len(self.command_paths),
+            3,
+            f"the runbook should name the scripts it runs; found {self.command_paths}",
+        )
         for path in self.command_paths:
             with self.subTest(path=path):
-                self.assertTrue((REPO_ROOT / path).is_file(),
-                                f"the runbook runs {path}, which does not exist")
+                self.assertTrue(
+                    (REPO_ROOT / path).is_file(),
+                    f"the runbook runs {path}, which does not exist",
+                )
 
     def test_every_flag_the_runbook_uses_is_one_the_runner_accepts(self):
-        flags = set(re.findall(r"(?<![\w-])(--[a-z-]+)",
-                               "\n".join(line for line in self.text.splitlines()
-                                        if "acceptance.py" in line)))
+        flags = set(
+            re.findall(
+                r"(?<![\w-])(--[a-z-]+)",
+                "\n".join(
+                    line for line in self.text.splitlines() if "acceptance.py" in line
+                ),
+            )
+        )
         self.assertIn("--device", flags, "the runbook's device run should be pinned")
         self.assertTrue(self.usage_flags, "could not read the runner's --help")
         for flag in sorted(flags):
             with self.subTest(flag=flag):
                 self.assertIn(
-                    flag, self.usage_flags,
+                    flag,
+                    self.usage_flags,
                     f"the runbook tells the operator to pass {flag}, which "
-                    f"acceptance.py does not accept")
+                    f"acceptance.py does not accept",
+                )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
