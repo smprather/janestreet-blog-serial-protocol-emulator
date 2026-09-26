@@ -14,10 +14,13 @@ verified on a real MicroPython) and the triage table at the bottom.
 - A Linux host with Python 3.12+ and the host extra:
   `pip install .[host-gui]` (adds `pyserial`, plus the GUI's fastapi/uvicorn).
 - Chip R1 (framed host bus, `IRQ_N`, target 1) and **R2 (register/memory
-  readback) are both landed** on the shuttle — R2 passes all 15 golden steps
-  byte-exact against this repo's `R2-READ-VERIFICATION.json` package. So a
-  healthy run should pass the `r2_*` read checks too; if they go red on real
-  hardware, that is a board-level problem to triage, not the expected state.
+  readback) are both landed** on the shuttle. R2's golden package has **22
+  steps, of which 18 read-path steps are chip-confirmed byte-exact** against
+  this repo's `R2-READ-VERIFICATION.json`; the remaining four cover the readback
+  while the core is HELD at a breakpoint and await the chip's re-run
+  (`R2-HELD-STATUS-BYTES.md`). So a healthy run should pass the `r2_*` read
+  checks; if they go red on real hardware, that is a board-level problem to
+  triage, not the expected state.
 
 ## 1. Flash and mount the board
 

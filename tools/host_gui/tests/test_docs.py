@@ -21,6 +21,10 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 DOCS = REPO_ROOT / "docs"
 WALKTHROUGH = DOCS / "demo-walkthrough.md"
 BRINGUP = DOCS / "host-bridge-bringup.md"
+# The judge-facing scorecard. One test class below also carries this path as a
+# class attribute; a module constant is the one place a new pin should reach
+# for, so the duplication ends here rather than spreading.
+SCORECARD = DOCS / "submission-readiness.md"
 
 
 def read(path: Path) -> str:
@@ -171,7 +175,11 @@ class TestTheDemoWalkthrough(unittest.TestCase):
             if "Memory/register readback (R2)" in line
         )
         self.assertIn("18/18", row)
-        self.assertIn("18 of 22", row)
+        # a regex, not a literal: the claim is "18 of 22", and insisting on the
+        # exact words makes the pin fail on phrasing ("18 of its 22") instead of
+        # on the claim. Same lesson as the walkthrough's whitespace-tolerant
+        # patterns - a pin that breaks on a reword is a pin people disable.
+        self.assertRegex(row, r"18 of (its )?22")
         self.assertRegex(row, r"NOT confirmed|unconfirmed")
         self.assertIn("R2-HELD-STATUS-BYTES.md", row)
         # the unqualified "this row is wholly chip-confirmed" form is exactly
@@ -620,6 +628,46 @@ class TestThePageAndTheServerAgreeOnTheRoutes(unittest.TestCase):
             f"routes the page never calls: {uncalled}. Name each "
             f"one in PAGE_ONLY_ROUTES with why, or call it.",
         )
+
+
+class TestTheJudgeFacingCountsAreCurrent(unittest.TestCase):
+    """Two documents a judge or an operator reads FIRST, with stale counts.
+
+    The R2 count has moved twice: 15 golden steps became 18 when the ceiling
+    vectors landed, and the package became PARTIAL when the four held-core
+    steps were added (18 of 22). Both documents below were updated once and
+    then left, which is how a claim rots: the number was right on the day
+    someone wrote it and nobody revisited it because nothing failed.
+
+    Dated review records are deliberately NOT swept - `wiki/log.md` and the
+    per-day review files record what was true then, and rewriting them would
+    destroy the only honest record of the change. These two are LIVE: one is
+    the scorecard, the other is the runbook's opening, which is the first
+    paragraph an operator reads about what is on the shuttle.
+    """
+
+    def test_the_scorecard_does_not_claim_the_whole_r2_contract_is_confirmed(self):
+        row = next(line for line in read(SCORECARD).splitlines()
+                   if "Host-controller story" in line)
+        self.assertNotIn(
+            "18/18 chip-confirmed", row,
+            "the scorecard presents 18/18 as the whole R2 contract; the package "
+            "is 18 of 22 with four held-core steps unconfirmed")
+        # a regex, not a literal: the claim is "18 of 22", and insisting on the
+        # exact words makes the pin fail on PHRASING ("18 of its 22") instead
+        # of on the claim. Same lesson as the walkthrough's whitespace-tolerant
+        # patterns - a pin that breaks on a reword is a pin people disable.
+        self.assertRegex(row, r"18 of (its )?22")
+
+    def test_the_runbooks_opening_names_the_current_step_count(self):
+        text = read(BRINGUP)
+        opening = text[:text.index("## 1.")]
+        self.assertNotIn("all 15 golden steps", opening,
+                         "the runbook's opening still says 15 golden steps")
+        self.assertIn("18", opening)
+        # and it must not read as "the whole package is confirmed"
+        self.assertRegex(opening, r"read-path|of 22|22 steps",
+                         "the opening must scope its count to the read-path steps")
 
 
 if __name__ == "__main__":

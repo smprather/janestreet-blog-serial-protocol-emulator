@@ -23,7 +23,7 @@ demo walkthrough, and check every number against the artifacts that back it.
 | Honesty of claims | **A** | Proven vs simulated vs pending is explicit everywhere; the R2 read path is marked chip-confirmed-in-simulation with the hardware run explicitly not claimed. |
 | Cross-references | **B−** | A few bare filenames in the walkthrough (`uart_echo.pe`, `main.py`, `R2-READ-PATH-REVIEW.md`) are ambiguous without their directory; the R2 review lives in the **chip** repo, not this one. |
 | Wiki as entry point | **B+** | `wiki/index.md` is a clear catalog; `wiki/STATUS.md` carries the live work list. Both a little stale relative to the host work (managed by the chip side). |
-| Host-controller story | **A−** | Bridge is MicroPython-verified (five deployment blockers found and fixed), the R2 read contract is 18/18 chip-confirmed, liveness surfaces in the GUI — all recorded, none overclaimed. |
+| Host-controller story | **A−** | Bridge is MicroPython-verified (five deployment blockers found and fixed), the R2 read contract is chip-confirmed for 18 of its 22 golden steps (the four held-core steps await the chip's re-run), liveness surfaces in the GUI — all recorded, none overclaimed. |
 
 **Overall: strong submission.** The demo is real, the claims are honest, and
 the one thing a judge cannot yet see (a physical board run) is the one thing
