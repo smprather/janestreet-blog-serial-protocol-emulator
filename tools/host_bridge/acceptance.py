@@ -674,14 +674,15 @@ def run_acceptance(
         # say which covers which. The tail is written out instead.
         report.record(
             "r3_demo_held_readback",
-            held.state == 3 and held.run == 1
+            held.state == 3
+            and held.run == 1
             and session.state == SessionState.BP_HIT
             and cpu_held.pc == DEMO_BP
             and dump_refusal.startswith("DUMP_CORE refused"),
             f"the R2 readback of a HELD core, which is the path the GUI polls: "
             f"STATUS reports state={held.state} (BP_HIT) run={held.run} and the "
             f"session reports {session.state} - a core parked on a breakpoint "
-            f"is not \"stopped\", it is BP_HIT, and run=1 is the strap still "
+            f'is not "stopped", it is BP_HIT, and run=1 is the strap still '
             f"high; {dump_refusal}, because DUMP_CORE's gate is the run STRAP "
             f"and the core answering NOT_READY (status 6) is the chip agreeing; "
             f"READ_CPU still answers (pc={cpu_held.pc}) because it is the one "

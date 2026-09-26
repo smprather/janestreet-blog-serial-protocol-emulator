@@ -14,16 +14,32 @@ from tools.host_bridge import acceptance as ACC
 from tools.host_gui.transport import TransportError
 
 EXPECTED_CHECKS = (
-    "open", "hello", "prepare", "sclk", "assemble", "load", "readback",
-    "start", "heartbeat", "stop", "dump", "irq", "fault", "clear_fault",
-    "uart", "disconnect", "reconnect",
+    "open",
+    "hello",
+    "prepare",
+    "sclk",
+    "assemble",
+    "load",
+    "readback",
+    "start",
+    "heartbeat",
+    "stop",
+    "dump",
+    "irq",
+    "fault",
+    "clear_fault",
+    "uart",
+    "disconnect",
+    "reconnect",
 )
 
 
 class TestFakeDryRun(unittest.TestCase):
     def test_fake_dry_run_passes_and_never_opens_a_serial_device(self):
-        with mock.patch("tools.host_gui.transport.open_serial",
-                        side_effect=AssertionError("--fake opened a device")):
+        with mock.patch(
+            "tools.host_gui.transport.open_serial",
+            side_effect=AssertionError("--fake opened a device"),
+        ):
             report = ACC.run_acceptance(fake=True)
         self.assertTrue(report.passed, report.render())
         names = [check.name for check in report.checks]
@@ -38,8 +54,7 @@ class TestFakeDryRun(unittest.TestCase):
 
     def test_fake_dry_run_only_skips_uart(self):
         report = ACC.run_acceptance(fake=True)
-        skipped = [check.name for check in report.checks
-                   if check.status == "SKIP"]
+        skipped = [check.name for check in report.checks if check.status == "SKIP"]
         self.assertEqual(skipped, ["uart"])
         uart = next(c for c in report.checks if c.name == "uart")
         self.assertIn("no bridge op", uart.detail)
@@ -55,9 +70,14 @@ class TestFakeDryRun(unittest.TestCase):
     def test_fake_dry_run_covers_the_r2_read_contract(self):
         report = ACC.run_acceptance(fake=True)
         names = {check.name for check in report.checks}
-        for expected in ("r2_read_imem", "r2_read_dmem", "r2_range",
-                         "r2_read_cpu", "r2_dump_header",
-                         "r2_range_fault_lifecycle"):
+        for expected in (
+            "r2_read_imem",
+            "r2_read_dmem",
+            "r2_range",
+            "r2_read_cpu",
+            "r2_dump_header",
+            "r2_range_fault_lifecycle",
+        ):
             with self.subTest(check=expected):
                 self.assertIn(expected, names)
         r2 = [c for c in report.checks if c.name.startswith("r2_")]
@@ -66,13 +86,11 @@ class TestFakeDryRun(unittest.TestCase):
             with self.subTest(check=check.name):
                 self.assertEqual(check.status, "PASS")
                 # Chip R2 is confirmed in simulation; the hardware run is not.
-                self.assertIn("chip-confirmed in simulation",
-                              check.detail.lower())
+                self.assertIn("chip-confirmed in simulation", check.detail.lower())
 
     def test_range_fault_lifecycle_check_reports_the_sticky_fault(self):
         report = ACC.run_acceptance(fake=True)
-        check = next(c for c in report.checks
-                     if c.name == "r2_range_fault_lifecycle")
+        check = next(c for c in report.checks if c.name == "r2_range_fault_lifecycle")
         self.assertEqual(check.status, "PASS")
         # The manager ruling: a bad read latches sticky FAULT_RANGE and
         # CLEAR_FAULT clears it; the detail must record both facts.
@@ -165,22 +183,25 @@ class TestTheHeldReadbackAndRefusalBeats(unittest.TestCase):
         self.assertNotIn("tb_pe_ctrl_r3_conf", detail)
         # ...while still attributing the debug-hold STATE to the R3 vectors in
         # its own words, because that part IS chip-confirmed in simulation
-        self.assertIn("chip-confirmed in SIMULATION through the R3 vectors",
-                      detail)
+        self.assertIn("chip-confirmed in SIMULATION through the R3 vectors", detail)
 
     def test_the_fault_refusal_beat_sits_between_fault_and_clear_fault(self):
         """Placement, not just presence: nothing in the run is reordered."""
-        refusal = [name for name in self.order
-                   if name not in ("fault", "clear_fault")
-                   and "refus" in name]
+        refusal = [
+            name
+            for name in self.order
+            if name not in ("fault", "clear_fault") and "refus" in name
+        ]
         self.assertEqual(len(refusal), 1, f"expected one refusal beat: {self.order}")
         self.assertLess(self.order.index("fault"), self.order.index(refusal[0]))
-        self.assertLess(self.order.index(refusal[0]),
-                        self.order.index("clear_fault"))
+        self.assertLess(self.order.index(refusal[0]), self.order.index("clear_fault"))
 
     def test_the_fault_refusal_beat_separates_host_policy_from_a_chip_claim(self):
-        detail = next(c.detail for c in self.report.checks
-                      if "refus" in c.name and c.name != "fault").lower()
+        detail = next(
+            c.detail
+            for c in self.report.checks
+            if "refus" in c.name and c.name != "fault"
+        ).lower()
         # the refusal rules are the HOST's own, and the beat must say so
         self.assertIn("host", detail)
         self.assertIn("policy", detail)
@@ -189,8 +210,11 @@ class TestTheHeldReadbackAndRefusalBeats(unittest.TestCase):
         self.assertIn("hardware acceptance not yet run", detail)
 
     def test_the_fault_refusal_beat_proves_the_fault_state_dump_answers(self):
-        detail = next(c.detail for c in self.report.checks
-                      if "refus" in c.name and c.name != "fault")
+        detail = next(
+            c.detail
+            for c in self.report.checks
+            if "refus" in c.name and c.name != "fault"
+        )
         # the sticky fault word is header field 9 and it is the diagnostic
         self.assertIn("FAULT", detail.upper())
         self.assertIn("0x0001", detail)
@@ -198,26 +222,33 @@ class TestTheHeldReadbackAndRefusalBeats(unittest.TestCase):
     def test_the_demo_beat_count_is_what_the_run_produces(self):
         """The walkthrough states a beat count; it must be the real one."""
         demo_beats = [name for name in self.order if name.startswith("r3_demo_")]
-        self.assertEqual(len(demo_beats), 8,
-                         f"7 numbered + 1 unnumbered held readback: {demo_beats}")
-        numbered = [name for name in demo_beats
-                    if name[len("r3_demo_"):].split("_")[0].isdigit()]
+        self.assertEqual(
+            len(demo_beats), 8, f"7 numbered + 1 unnumbered held readback: {demo_beats}"
+        )
+        numbered = [
+            name for name in demo_beats if name[len("r3_demo_") :].split("_")[0].isdigit()
+        ]
         self.assertEqual(len(numbered), 7, numbered)
 
 
 class TestDeviceOpen(unittest.TestCase):
     def test_permission_error_carries_the_dialout_hint(self):
-        with (mock.patch("tools.host_gui.transport.open_serial",
-                         side_effect=PermissionError("denied")),
-              self.assertRaises(TransportError) as caught):
+        with (
+            mock.patch(
+                "tools.host_gui.transport.open_serial",
+                side_effect=PermissionError("denied"),
+            ),
+            self.assertRaises(TransportError) as caught,
+        ):
             ACC.build_serial_link("/dev/ttyACM0")
         message = str(caught.exception)
         self.assertIn("/dev/ttyACM0", message)
         self.assertIn("dialout", message)
 
     def test_open_failure_is_reported_not_raised(self):
-        with mock.patch.object(ACC, "build_serial_link",
-                               side_effect=TransportError("boom: dialout")):
+        with mock.patch.object(
+            ACC, "build_serial_link", side_effect=TransportError("boom: dialout")
+        ):
             report = ACC.run_acceptance(fake=False, device="/dev/nope")
         self.assertFalse(report.passed)
         self.assertIn("dialout", report.render())
@@ -229,16 +260,15 @@ class TestCli(unittest.TestCase):
         self.assertEqual(ACC.main(["--fake"], printer=lambda _line: None), 0)
 
     def test_main_returns_nonzero_when_the_link_cannot_open(self):
-        with mock.patch.object(ACC, "build_serial_link",
-                               side_effect=TransportError("no device")):
-            code = ACC.main(["--device", "/dev/nope"],
-                            printer=lambda _line: None)
+        with mock.patch.object(
+            ACC, "build_serial_link", side_effect=TransportError("no device")
+        ):
+            code = ACC.main(["--device", "/dev/nope"], printer=lambda _line: None)
         self.assertEqual(code, 1)
 
     def test_fake_and_device_are_mutually_exclusive(self):
         with self.assertRaises(SystemExit):
-            ACC.main(["--fake", "--device", "/dev/ttyACM0"],
-                     printer=lambda _line: None)
+            ACC.main(["--fake", "--device", "/dev/ttyACM0"], printer=lambda _line: None)
 
 
 if __name__ == "__main__":

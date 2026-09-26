@@ -137,8 +137,7 @@ class TestDemoWalkthrough(unittest.TestCase):
         """
         # the act's own beat count, which the run produces
         report = ACC.run_acceptance(fake=True)
-        demo_beats = [c.name for c in report.checks
-                      if c.name.startswith("r3_demo_")]
+        demo_beats = [c.name for c in report.checks if c.name.startswith("r3_demo_")]
         with self.subTest(beats=demo_beats):
             self.assertIn(f"the {len(demo_beats)} r3_demo_* beats", self.text)
         # ...and the run's total PASS count, for the same reason: a number in a
@@ -154,8 +153,8 @@ class TestDemoWalkthrough(unittest.TestCase):
         # whitespace-tolerant: prose wraps, and a pattern that only matches a
         # single line is a pattern that fails on a rewrap rather than on a lie
         self.assertRegex(
-            self.text,
-            r"gate[d]?\s+is\s+the\s+(run\s+)?strap|strap\s+is\s+what\s+gates")
+            self.text, r"gate[d]?\s+is\s+the\s+(run\s+)?strap|strap\s+is\s+what\s+gates"
+        )
         self.assertRegex(self.text, r"host('s)?\s+own\s+policy|HOST's\s+rule")
         # the honest boundary: the four held-core steps are not yet chip-confirmed
         self.assertRegex(self.text, r"18 of 22|not yet re-run|not yet confirmed")
