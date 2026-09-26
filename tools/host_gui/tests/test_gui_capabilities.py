@@ -115,9 +115,17 @@ def gui_buttons(state):
     if NODE is None:
         raise unittest.SkipTest("node not installed")
     result = subprocess.run(
-        [NODE, "-e", DRIVER, str(APP_JS),
-         json.dumps({"state": state, "session_id": "s", "sclk_hz": 60_000_000})],
-        capture_output=True, text=True, check=False)
+        [
+            NODE,
+            "-e",
+            DRIVER,
+            str(APP_JS),
+            json.dumps({"state": state, "session_id": "s", "sclk_hz": 60_000_000}),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     if result.returncode != 0:
         raise AssertionError(f"node driver failed: {result.stderr[:400]}")
     return json.loads(result.stdout)
@@ -145,8 +153,7 @@ process.stdout.write(module_shim.exports.eventSocketUrl());
 def _stack():
     clock = FakeClock()
     bridge = F.FakeBridge()
-    transport = T.SerialTransport(LoopbackPort(bridge), clock=clock,
-                                  sleep=clock.sleep)
+    transport = T.SerialTransport(LoopbackPort(bridge), clock=clock, sleep=clock.sleep)
     return S.ControllerSession(lambda: transport, clock=clock), bridge
 
 
@@ -253,8 +260,10 @@ class TestGuiButtonsMatchTheSession(unittest.TestCase):
             for button, operation in {**BUTTON_OPS, **DEBUG_BUTTON_OPS}.items():
                 with self.subTest(state=state, button=button):
                     self.assertEqual(
-                        gui["buttons"][button], session_accepts(state, operation),
-                        f"{button} in {state}: the page and the session disagree")
+                        gui["buttons"][button],
+                        session_accepts(state, operation),
+                        f"{button} in {state}: the page and the session disagree",
+                    )
 
     def test_the_register_poll_follows_the_non_halting_read(self):
         """READ_CPU answers in every state the session is connected in, so the
@@ -269,8 +278,9 @@ class TestGuiButtonsMatchTheSession(unittest.TestCase):
         for state in STATES:
             with self.subTest(state=state):
                 accepted = session_accepts(state, POLLED_OP)
-                self.assertEqual(gui_buttons(state)["cpu_poll_ms"],
-                                 CPU_POLL_MS if accepted else None)
+                self.assertEqual(
+                    gui_buttons(state)["cpu_poll_ms"], CPU_POLL_MS if accepted else None
+                )
 
     def test_a_breakpoint_hit_keeps_both_views_of_the_pc_live(self):
         """The regression, stated as one assertion.
@@ -302,14 +312,16 @@ class TestGuiButtonsMatchTheSession(unittest.TestCase):
                 self.assertTrue(url.endswith("/api/events"), url)
                 self.assertIn("localhost", url)
 
-
     def socket_url(self, protocol):
         """The page's own function, given a page scheme, answering with a URL."""
         if NODE is None:
             raise unittest.SkipTest("node not installed")
         result = subprocess.run(
             [NODE, "-e", SOCKET_DRIVER, str(APP_JS), protocol, "localhost"],
-            capture_output=True, text=True, check=False)
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         if result.returncode != 0:
             raise AssertionError(f"node driver failed: {result.stderr[:400]}")
         return result.stdout.strip()

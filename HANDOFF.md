@@ -43,7 +43,15 @@
 > replies on the wire (the transport and session now serialize state + wire
 > access). The soak is bounded: 22 min / 1,891,812 cycles, RSS flat at
 > 57.3–57.6 MB after warmup (last-half slope 0.40 MB/h), GC objects +511,
-> PASS. Full record: `reviews/2026-09-25/HOST-SOAK-API-FUZZ.md`.
+> PASS. **Re-run 2026-09-25 under the poll-everywhere + state-word changes
+> (`d3cff8a`/`9ee8d00`/`5f1feb8`): 20 min / 1,885,304 cycles, verdict
+> BOUNDED, +0.68 MB over the run, independent `/proc` rate 1.08 MB/h vs the
+> earlier 1.1 MB/h, GC objects +511 again, throughput +10%. No growth
+> regression — see §5.1.** The two runs' absolute MB are NOT comparable
+> (different interpreter); the deltas, rate, verdict and object count are.
+> It does not cover the held-state branch (the soak takes no debug hold) or
+> the browser poll (no JS in the loop). Full record:
+> `reviews/2026-09-25/HOST-SOAK-API-FUZZ.md`.
 <!-- END gui-worker host block (top notes) -->
 
 > **Host GUI plan Task 8 — final verification, host scope, DONE (2026-09-25).**

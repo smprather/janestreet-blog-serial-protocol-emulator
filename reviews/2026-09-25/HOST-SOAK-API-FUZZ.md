@@ -164,6 +164,62 @@ into a flat band, not a leak. The run drove 1.89 M cycles (~1,433/s) through
 the real host path, including ~3,780 assemblies, ~3,780 hostile timeout
 cycles, ~7,400 protocol-fuzz chunks and ~37,800 FastAPI route calls.
 
+## 5.1 Re-run under the poll-everywhere change (2026-09-25, manager dispatch)
+
+Three host behaviour changes landed after the run above (`d3cff8a` the readback
+state word, `9ee8d00` the GUI buttons/polls, `5f1feb8` the debug panel). The
+manager's question was the right one: `9ee8d00` changes the page's steady-state
+request pattern, so the soak was re-run under the new behaviour with the same
+seed, the same sampling and an INDEPENDENT `/proc` sampler alongside it, so both
+series are measured the same way as the run above.
+
+```
+python3 -m tools.host_gui.soak_host --minutes 20 --seed 20260926 \
+    --sample-every 1000 --sample-seconds 2 --http --json /tmp/soak_new_result.json
+```
+
+**Read the deltas, not the absolute megabytes: the interpreter differs.** The
+run above used a venv interpreter and this one `python3 3.14.7`, and the
+process baselines differ by ~24 MB (53.71 vs 29.81 MB). Absolute RSS across
+different interpreters is not a comparison; the growth, the rate, the verdict
+and the object count are.
+
+| Signal | Earlier (22 min, venv) | Re-run (20 min, 3.14.7) | Read |
+|---|---|---|---|
+| runner verdict | bounded | **bounded** (`ok: true`) | same |
+| growth over the run | +3.596 MB | **+0.68 MB** | threshold is 8 MB: 12× headroom |
+| headline rate | 9.81 MB/h | **2.04 MB/h** | the headline baseline is the min of the first quarter, so it is conservative by construction (§5) |
+| 5-min window means | 57.13 / 57.33 / 57.41 / 57.49 / 57.44 | **28.79 / 28.88 / 28.96 / 29.04 / 29.08** | same shape: +0.08–0.10 MB per window |
+| drift across the run | +0.31 MB over 22 min | **+0.29 MB over 20 min** | identical |
+| last-half slope | +0.40 MB/h | **+1.03 MB/h** | see below |
+| last 5 min | 57.44 → 57.31 (falling) | **29.00 → 29.08 (rising)** | see below |
+| independent `/proc` rate | +280 kB / 15 min ≈ **1.1 MB/h** | +324 kB / 18 min ≈ **1.08 MB/h** | the one number that matches |
+| live GC objects | 59,608–60,119, delta **+511** | 20,496–21,007, delta **+511** | same residue, both dominated by the sample list |
+| cycles | 1,891,812 @ 1,433/s | **1,885,304 @ 1,571/s** | +10% throughput, same seed and cycle mix |
+
+**The one metric that moved, read honestly.** The last-half slope went 0.40 →
+1.03 MB/h. It is the same drift measured over a shorter window: the earlier
+run's final window happened to turn DOWN (57.49 → 57.44) while this one turned
+up (29.04 → 29.08), and at 20 minutes a slope is dominated by which two
+endpoints it gets. 0.63 MB/h is ~53 kB per 5-minute window, and the two runs
+agree on the quantity that has no endpoint-selection bias — the independent
+`/proc` series, 1.1 vs 1.08 MB/h. Both are an order of magnitude below anything
+that would matter (at 2 MB/h a 24 h run is +48 MB), and neither run shows
+growth that persists as the window lengthens. **No growth regression.**
+
+**What this run does NOT cover, stated rather than implied:**
+
+- **The held-state branch is not exercised.** `soak_host.py` never takes a debug
+  hold — it contains no `debug_step`/`bp_set`/`bp_clr` at all — so the new
+  `status()` branch for states 2/3 (the one `d3cff8a` added) is not taken. The
+  run covers the paths the soak drives: status at STOPPED/RUNNING/FAULTED, dump,
+  both reads, assembly, reconnect, hostile timeouts, fuzz, HTTP routes.
+- **No browser is in the loop**, so the `app.js` poll-interval change cannot be
+  measured here at all — not its memory, and not its request rate. That change's
+  risk is request RATE, not growth: one in-flight poll per interval with no
+  accumulation, against a session whose `read_cpu` handler is untouched. It is a
+  board-time observation, which is what the run is waiting for anyway.
+
 ## 6. Files added/changed (this task; `e5280fd` + the soak-record commit)
 
 | File | Change |
