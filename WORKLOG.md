@@ -3892,3 +3892,46 @@ to finish:**
 
 That last row is new, and it is the one that would have cost the most: every
 other check protects the *file*, and that one protects the *starting point*.
+
+## 2026-09-27 act (c): TASK-START -- THE 17 SAFE /tmp LOG REPOINTS
+
+The collision that made a gate print `timing TB mutations: FAILED` directly
+over a suite that printed `RESULT: PASS`: `run_all.sh` keeps its results in
+FIXED `/tmp` paths, per-worktree locks make concurrent runs possible by design,
+and two runs in different worktrees overwrite each other's result files.
+
+**The directory is keyed on the REPO ROOT, not on a worktree name and not on
+`$TMPDIR`**, so two worktrees get two directories for the reason that matters --
+they are different checkouts of different trees -- and a single worktree gets a
+STABLE path, so a run that fails can be read afterwards instead of being
+overwritten by the next one.
+
+### THE SEVENTEEN ARE REPOINTED, AND THE PROOF IS THAT TWO ROOTS DIVERGE
+
+    RLOG="/tmp/run_all.$(printf '%s' "$REPO_ROOT" | md5sum | cut -c1-12)"
+
+**40 references across 17 paths**, `RLOG` defined at line 93 and first used at
+565, `bash -n` clean, and the repository's own `check_shell_syntax.sh` passes
+all 36 scripts.
+
+**THE KEY IS THE REPO ROOT HASHED, and the two properties that matter are both
+now measured rather than argued:**
+
+| property | measurement |
+| :--- | :--- |
+| two worktrees get two directories | `/tmp/worktrees/fw-timing` -> `run_all.ce9bd1b6b021`; `/home/mylesp/worktrees/eth-tx-line-driver` -> `run_all.760824dcfe05` |
+| one worktree gets a STABLE directory | `ce9bd1b6b021 == ce9bd1b6b021`, so a run that fails is still readable after the fact instead of being overwritten by the next one |
+| a real gate actually writes there | `check_mutation_lists.sh` -> `$RLOG/check_mutation_lists.log`, 26 lines, exit 0, **and the old shared `/tmp/check_mutation_lists.log` still carries its OLD timestamp** -- it was not touched |
+
+**A HASH OF THE ROOT RATHER THAN A WORKTREE NAME, because the name is a
+convention and the root is the thing that actually differs.** Two checkouts of
+the same commit at different paths are different worktrees and must not share a
+log; two runs of the same checkout must.
+
+**AND THE NINE ARE LEFT ALONE, NAMED IN THE SOURCE.** The split is measured: a
+path is safe iff `run_all.sh` both WRITES it and is the ONLY script that
+hard-codes the literal. The nine that fail are read by their writer too, so
+repointing them here alone would break the pair. They stay shared, and the
+comment says so, **because a half-fix that silently leaves nine shared paths is
+worse than a stated remainder** -- and the one that bit this act was precisely a
+silent remainder read as a fix.

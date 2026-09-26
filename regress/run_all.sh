@@ -58,6 +58,42 @@ trap '_on_exit' EXIT
 # any later `dirname "$0"` resolves against the wrong directory. Gates that are
 # invoked mid-script use this. (The param-guard gate failed exactly this way.)
 REPO_ROOT="$(pwd)"
+#
+# ---- THE LOG DIRECTORY, AND IT IS PER-WORKTREE FOR A MEASURED REASON -------
+#
+# Every gate below writes its result to a fixed `/tmp/<name>.log` and reads it
+# back to decide PASS or FAIL. **Two gate runs in different worktrees therefore
+# overwrite each other's result files**, and per-worktree locks make concurrent
+# runs possible BY DESIGN -- so a verdict can be read out of a file another
+# worktree is still writing.
+#
+# MEASURED, and not predicted: two concurrent runs produced
+#     timing TB mutations: FAILED
+#     ... 58 case rows ...
+#     timing-TB mutations: 58 cases, 58 detected, 0 survived, 0 errors
+#     RESULT: PASS
+# A gate said FAILED directly over a suite that printed PASS on the same page.
+# The verdict is the exit code; the table beside it is a `tail` of a shared file.
+#
+# THE KEY IS THE REPO ROOT, hashed -- not a worktree NAME, because the name is
+# a convention and the root is the thing that actually differs; not $TMPDIR,
+# because that is shared. And it is STABLE for a given worktree, so a run that
+# fails can still be read after the fact instead of being overwritten by the
+# next one.
+#
+# SEVENTEEN paths are repointed here. THE OTHER NINE ARE DELIBERATELY NOT, and
+# the split is measured rather than guessed: a path is safe iff run_all.sh both
+# WRITES it (a redirect) and is the ONLY script that hard-codes the literal.
+# The nine that fail that test -- mutate_codec, mutate_ctrl, mutate_eth_soc,
+# mutate_eth_tx, mutate_eth_tx_loop, mutate_fwbus, mutate_serdes,
+# mutate_soc_serdes, check_formal_ifdef -- are read by their WRITER as well, so
+# repointing them here alone would break the pair. **They stay on their shared
+# paths and that is named rather than quietly left**, because a half-fix that
+# silently leaves nine shared paths is worse than a stated remainder.
+RLOG="/tmp/run_all.$(printf '%s' "$REPO_ROOT" | md5sum | cut -c1-12)"
+mkdir -p "$RLOG" || { echo "run_all.sh: cannot create $RLOG" >&2; exit 1; }
+# THE DIRECTORY IS EXPORTED so a sub-gate can put its own results in here too.
+export RLOG
 # Stamp the dependency set now that the root is known. Every regress/ script is
 # included because this file invokes most of them and any of them could be the
 # one under edit.
@@ -526,11 +562,11 @@ fi
 #
 # Invoked via REPO_ROOT captured at the top: this file cds into sim/ and back,
 # and $0 may be relative, so any later `dirname "$0"` resolves wrongly.
-if "$REPO_ROOT/regress/param_guards.sh" > /tmp/param_guards.log 2>&1; then
+if "$REPO_ROOT/regress/param_guards.sh" > $RLOG/param_guards.log 2>&1; then
   echo "param guards: OK"
 else
   echo "param guards: FAILED"
-  cat /tmp/param_guards.log
+  cat $RLOG/param_guards.log
   fail=$((fail+1))
   failed_names+=("param_guards")
 fi
@@ -540,11 +576,11 @@ fi
 # helper made all sixteen mutation suites run to completion, report their real
 # verdicts, and exit 4 — and `bash -n regress/*.sh` had said "all parse", because
 # bash -n over a glob parses the FIRST file and passes the rest as arguments.
-if "$REPO_ROOT/regress/check_shell_syntax.sh" > /tmp/check_shell_syntax.log 2>&1; then
-  echo "regress script syntax: OK ($(tail -1 /tmp/check_shell_syntax.log))"
+if "$REPO_ROOT/regress/check_shell_syntax.sh" > $RLOG/check_shell_syntax.log 2>&1; then
+  echo "regress script syntax: OK ($(tail -1 $RLOG/check_shell_syntax.log))"
 else
   echo "regress script syntax: FAILED"
-  cat /tmp/check_shell_syntax.log
+  cat $RLOG/check_shell_syntax.log
   fail=$((fail+1))
   failed_names+=("check_shell_syntax")
 fi
@@ -554,11 +590,11 @@ fi
 # harness added would take the lock, be stamped and never be checked - which is a
 # mid-run edit yielding a false pass with nothing saying so. Same drift class as
 # the MUTABLE check below, one layer over.
-if "$REPO_ROOT/regress/check_harness_preflight.sh" > /tmp/check_harness_preflight.log 2>&1; then
-  echo "harness pre-flight coverage: OK ($(tail -1 /tmp/check_harness_preflight.log))"
+if "$REPO_ROOT/regress/check_harness_preflight.sh" > $RLOG/check_harness_preflight.log 2>&1; then
+  echo "harness pre-flight coverage: OK ($(tail -1 $RLOG/check_harness_preflight.log))"
 else
   echo "harness pre-flight coverage: FAILED"
-  cat /tmp/check_harness_preflight.log
+  cat $RLOG/check_harness_preflight.log
   fail=$((fail+1))
   failed_names+=("check_harness_preflight")
 fi
@@ -569,11 +605,11 @@ fi
 # file. The check belongs in the FULL gate too, not only in the mapper: a list is
 # only trustworthy while something keeps proving it, and this is the master gate
 # that everything else trusts.
-if "$REPO_ROOT/regress/check_mutation_lists.sh" > /tmp/check_mutation_lists.log 2>&1; then
+if "$REPO_ROOT/regress/check_mutation_lists.sh" > $RLOG/check_mutation_lists.log 2>&1; then
   echo "mutation MUTABLE lists: OK"
 else
   echo "mutation MUTABLE lists: FAILED"
-  cat /tmp/check_mutation_lists.log
+  cat $RLOG/check_mutation_lists.log
   fail=$((fail+1))
   failed_names+=("check_mutation_lists")
 fi
@@ -722,7 +758,7 @@ fi
 # instantiates needs a legal placement and hooks for all three of its supplies,
 # or LibreLane leaves it unplaced and unpowered. Static check only -- no
 # physical flow, DRC or LVS.
-python3 tools/checks/macro_flow_config.py > /tmp/macro_flow.log 2>&1
+python3 tools/checks/macro_flow_config.py > $RLOG/macro_flow.log 2>&1
 macro_rc=$?
 if [ "$macro_rc" -eq 0 ]; then
   echo "macro flow config: OK (placements, pin-to-net hooks and the Metal4 ladder complete)"
@@ -732,10 +768,10 @@ elif [ "$macro_rc" -eq 2 ]; then
   # checker returns 2 ONLY for that case, so findings and yosys failures
   # still land in the FAILED branch below.
   echo "macro flow config: SKIPPED (required PDK geometry unavailable)"
-  cat /tmp/macro_flow.log
+  cat $RLOG/macro_flow.log
 else
   echo "macro flow config: FAILED"
-  cat /tmp/macro_flow.log
+  cat $RLOG/macro_flow.log
   stale=1
 fi
 # The gate's own negative tests (E2-1/E2-2/E2-3): a wrong pin-to-net mapping,
@@ -743,15 +779,15 @@ fi
 # skip and a yosys-elaboration failure must all behave as designed. The
 # mutations run on a COPY of the flow config/PDN script, never the tracked
 # files, and the harness reports SKIPPED when its baseline is incomplete.
-if run_mutation_suite mutate_macro_flow_config.sh ./regress/mutate_macro_flow_config.sh > /tmp/mutate_macro_flow.log 2>&1; then
-  if grep -q "^SKIPPED" /tmp/mutate_macro_flow.log; then
+if run_mutation_suite mutate_macro_flow_config.sh ./regress/mutate_macro_flow_config.sh > $RLOG/mutate_macro_flow.log 2>&1; then
+  if grep -q "^SKIPPED" $RLOG/mutate_macro_flow.log; then
     echo "macro flow config negatives: SKIPPED (required PDK geometry unavailable)"
   else
     echo "macro flow config negatives: OK (pin-to-net, typed views, per-type geometry, ladder, skip and yosys-failure checks)"
   fi
 else
   echo "macro flow config negatives: FAILED"
-  tail -20 /tmp/mutate_macro_flow.log
+  tail -20 $RLOG/mutate_macro_flow.log
   stale=1
 fi
 # The CRC constants are checked against the RevEng catalogue on every run, not
@@ -796,11 +832,11 @@ fi
 # because a baseline that silently outlives its defect is a checklist rather than
 # a pin. Its negative control (13 cases, including the stale direction and the
 # fail-closed paths) is regress/test_check_wiki_pages.sh.
-if bash regress/check_wiki_pages.sh > /tmp/check_wiki_pages.log 2>&1; then
-  echo "wiki page rules: OK ($(grep -c . /tmp/check_wiki_pages.log) line(s); see regress/check_wiki_pages.sh)"
+if bash regress/check_wiki_pages.sh > $RLOG/check_wiki_pages.log 2>&1; then
+  echo "wiki page rules: OK ($(grep -c . $RLOG/check_wiki_pages.log) line(s); see regress/check_wiki_pages.sh)"
 else
-  echo "wiki page rules: FAILED (see /tmp/check_wiki_pages.log)"
-  tail -20 /tmp/check_wiki_pages.log
+  echo "wiki page rules: FAILED (see $RLOG/check_wiki_pages.log)"
+  tail -20 $RLOG/check_wiki_pages.log
   stale=1
 fi
 # The DIAGRAMS, which until this gate existed had NO gate at all: 22 .puml
@@ -878,11 +914,11 @@ fi
 # The local presentation viewer's fit arithmetic has its own focused check.
 # This uses an embedded SVG fixture and does not consume the project diagrams,
 # which are maintained as PlantUML source in diagrams/.
-if python3 tools/checks/canvas_viewer.py > /tmp/canvas_viewer.log 2>&1; then
+if python3 tools/checks/canvas_viewer.py > $RLOG/canvas_viewer.log 2>&1; then
   echo "canvas viewer: OK"
 else
   echo "canvas viewer: FAILED"
-  cat /tmp/canvas_viewer.log
+  cat $RLOG/canvas_viewer.log
   stale=1
 fi
 
@@ -905,22 +941,22 @@ else
   stale=1
 fi
 
-if bash formal/run_formal.sh > /tmp/run_formal.log 2>&1; then
+if bash formal/run_formal.sh > $RLOG/run_formal.log 2>&1; then
   echo "formal safety proofs: OK (see formal/results/summary.txt for per-property status)"
 else
   echo "formal safety proofs: FAILED (counterexample or build error)"
-  tail -20 /tmp/run_formal.log
+  tail -20 $RLOG/run_formal.log
   stale=1
 fi
 
 # The non-vacuity evidence for those proofs: every proof must kill the mutant
 # that attacks its claim. Runs in its own proof shape per case (BMC or
 # induction) and takes the run lock reentrantly via CHIP_RUN_LOCK_HELD.
-if bash formal/mutants.sh > /tmp/run_formal_mutants.log 2>&1; then
+if bash formal/mutants.sh > $RLOG/run_formal_mutants.log 2>&1; then
   echo "formal mutant checks: OK (see formal/results/mutants.txt for the per-mutant table)"
 else
   echo "formal mutant checks: FAILED (a mutant survived -- a claim is a blind spot)"
-  tail -20 /tmp/run_formal_mutants.log
+  tail -20 $RLOG/run_formal_mutants.log
   stale=1
 fi
 
@@ -932,11 +968,11 @@ fi
 # real stripper for every 0..15 wait words, so the seam that held finding B1
 # cannot silently reopen. It also asserts an all-filler stream raises rather
 # than decoding to a plausible-looking success.
-if python3 regress/cross_check_wait_words.py > /tmp/cross_wait_words.log 2>&1; then
+if python3 regress/cross_check_wait_words.py > $RLOG/cross_wait_words.log 2>&1; then
   echo "wait-word cross-check: OK (chip filler <-> host stripper, 0..15)"
 else
   echo "wait-word cross-check: FAILED"
-  cat /tmp/cross_wait_words.log
+  cat $RLOG/cross_wait_words.log
   stale=1
 fi
 
@@ -949,11 +985,11 @@ fi
 # exit, a reentrant child, and a background subshell that must NOT fire the
 # kill trap. It uses a private lock file, so it never touches the worktree lock
 # and is safe to run beside a real run.
-if bash regress/test_run_lock.sh > /tmp/test_run_lock.log 2>&1; then
+if bash regress/test_run_lock.sh > $RLOG/test_run_lock.log 2>&1; then
   echo "run-lock process tree: OK (every signal reaps the run; no bystander killed)"
 else
   echo "run-lock process tree: FAILED"
-  cat /tmp/test_run_lock.log
+  cat $RLOG/test_run_lock.log
   stale=1
 fi
 
@@ -1053,38 +1089,38 @@ fi
 # then cmp-verifies that the tree was never written to -- a stronger statement
 # than "restored correctly". It is the slowest suite here (the servo TB is 66 s
 # per case) and runs at MUTATE_TIMING_JOBS, default 6.
-if run_mutation_suite mutate_timing_tb.sh ./regress/mutate_timing_tb.sh > /tmp/mutate_timing.log 2>&1; then
+if run_mutation_suite mutate_timing_tb.sh ./regress/mutate_timing_tb.sh > $RLOG/mutate_timing.log 2>&1; then
   echo "timing TB mutations: OK (no unexplained survivors)"
 else
   echo "timing TB mutations: FAILED"
-  tail -20 /tmp/mutate_timing.log
+  tail -20 $RLOG/mutate_timing.log
   stale=1
 fi
 
-if run_mutation_suite mutate_spi_tb.sh ./regress/mutate_spi_tb.sh > /tmp/mutate_spi.log 2>&1; then
+if run_mutation_suite mutate_spi_tb.sh ./regress/mutate_spi_tb.sh > $RLOG/mutate_spi.log 2>&1; then
   echo "spi TB mutations: OK (no unexplained survivors)"
 else
   echo "spi TB mutations: FAILED"
-  tail -20 /tmp/mutate_spi.log
+  tail -20 $RLOG/mutate_spi.log
   stale=1
 fi
 
 # The frame buffer's TB, mutation-tested on BOTH implementations (the macro and
 # the FLOP=1 fallback), because the fallback exists to stand in for the macro --
 # so a test that only covered one would leave that claim unchecked.
-if run_mutation_suite mutate_fbuf_tb.sh ./regress/mutate_fbuf_tb.sh > /tmp/mutate_fbuf.log 2>&1; then
+if run_mutation_suite mutate_fbuf_tb.sh ./regress/mutate_fbuf_tb.sh > $RLOG/mutate_fbuf.log 2>&1; then
   echo "fbuf TB mutations: OK (no unexplained survivors)"
 else
   echo "fbuf TB mutations: FAILED"
-  tail -20 /tmp/mutate_fbuf.log
+  tail -20 $RLOG/mutate_fbuf.log
   stale=1
 fi
 
-if run_mutation_suite mutate_eth_mac_tb.sh ./regress/mutate_eth_mac_tb.sh > /tmp/mutate_eth_mac.log 2>&1; then
+if run_mutation_suite mutate_eth_mac_tb.sh ./regress/mutate_eth_mac_tb.sh > $RLOG/mutate_eth_mac.log 2>&1; then
   echo "eth_mac TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_mac TB mutations: FAILED"
-  tail -20 /tmp/mutate_eth_mac.log
+  tail -20 $RLOG/mutate_eth_mac.log
   stale=1
 fi
 
@@ -1212,11 +1248,11 @@ fi
 # whose comparison never fires) fails 3 of its 7 cases, so the test is not
 # vacuous. It uses a private stamp directory and touches nothing in the repo, so
 # it is safe to run while a real run holds the worktree lock.
-if bash "$REPO_ROOT/regress/test_dep_guard.sh" > /tmp/test_dep_guard.log 2>&1; then
+if bash "$REPO_ROOT/regress/test_dep_guard.sh" > $RLOG/test_dep_guard.log 2>&1; then
   echo "harness-edit pre-flight: OK (fires on a changed script, quiet on an unchanged one)"
 else
   echo "harness-edit pre-flight: FAILED"
-  cat /tmp/test_dep_guard.log
+  cat $RLOG/test_dep_guard.log
   stale=1
 fi
 
