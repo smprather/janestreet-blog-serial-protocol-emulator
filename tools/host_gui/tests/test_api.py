@@ -8,7 +8,9 @@ absent, and the HTTP integration tests are skipped unless it is installed.
 
 from __future__ import annotations
 
+import importlib
 import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -34,6 +36,70 @@ def make_api(sources_dir: Path):
     config = SV.ServerConfig(repo_root=REPO_ROOT, sources_dir=sources_dir,
                              web_dir=WEB)
     return SV.Api(session, config), session, bridge
+
+
+class TestThePageAndTheApiAgreeOnResponseKeys(unittest.TestCase):
+    """The page and the API are joined by response KEYS as well as by paths.
+
+    The route pin checks that every path the page calls is one the server
+    registers. This checks the other half: every key the page reads off a
+    response is one the API actually sends. A rename on either side — an
+    envelope key changed in `server.py`, or a field the page starts reading —
+    leaves the page rendering `undefined` at runtime, on a board, with every
+    other gate green.
+
+    The API side is measured by CALLING the methods, not by reading their
+    source: a text scan of `server.py` would be a fourth scanner of mine today,
+    and every one of those has been wrong at least once. So the keys come from
+    a real session driven through the same sequence the acceptance run uses,
+    which is why this needs no fastapi and runs in this environment.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # only the Api is needed: the session and bridge are what make it work
+        api = make_api(FIXTURES)[0]
+        cls.keys = set()
+        for response in cls._drive(api):
+            cls.keys.update(response)
+
+    @staticmethod
+    def _drive(api):
+        """Every API response a page can see, in the order the GUI gets them."""
+        api.connect()
+        yield api.sources()
+        yield api.assemble("echo.pe")
+        loaded = api.load("echo.pe")
+        yield loaded
+        yield api.start()
+        yield api.status()
+        yield api.read_cpu()
+        yield api.debug_status()
+        yield api.stop()
+        yield api.dump()
+        yield api.bp_set(3)
+        yield api.debug_step()
+        yield api.bp_clr()
+        yield api.resume_with_breakpoint(3)
+        yield api.health()
+
+    def test_the_drive_reached_every_response_shape(self):
+        """A drive that returned nothing would pass the test below."""
+        for key in ("status", "cpu", "dump", "debug", "step", "breakpoint",
+                    "manifest", "load", "sources", "state"):
+            with self.subTest(key=key):
+                self.assertIn(key, self.keys)
+
+    def test_every_key_the_page_reads_is_one_the_api_sends(self):
+        page = (REPO_ROOT / "tools" / "host_gui" / "web" / "app.js").read_text(
+            encoding="utf-8")
+        read = set(re.findall(r"result\.([a-z_]+)", page))
+        self.assertGreaterEqual(len(read), 5,
+                                f"the page read almost nothing: {read}")
+        missing = sorted(read - self.keys)
+        self.assertEqual(
+            missing, [],
+            f"the page reads {missing}, which no API response carries")
 
 
 class TestSourceResolution(unittest.TestCase):
@@ -171,8 +237,13 @@ class TestWebAssets(unittest.TestCase):
 
 class TestOptionalDependencies(unittest.TestCase):
     def test_have_fastapi_flag_matches_import(self):
+        # Imported DYNAMICALLY, not as a static `import fastapi`: the extra is
+        # optional, so a static import is a claim that it exists. This is the
+        # same reasoning as the dynamic TestClient lookup in
+        # test_event_stream.py — the two places in the tree that touch the
+        # optional server stack both resolve it the same way.
         try:
-            import fastapi  # noqa: F401
+            importlib.import_module("fastapi")
         except ImportError:
             self.assertFalse(SV.HAVE_FASTAPI)
         else:
@@ -186,7 +257,8 @@ class TestOptionalDependencies(unittest.TestCase):
 
     @unittest.skipUnless(SV.HAVE_FASTAPI, "fastapi not installed")
     def test_fastapi_routes_when_installed(self):
-        from fastapi.testclient import TestClient
+        TestClient = importlib.import_module(
+            "fastapi.testclient").TestClient
         self.api, _, _ = make_api(FIXTURES)
         client = TestClient(SV.create_app(self.api, self.api.config))
         self.assertTrue(client.get("/api/health").json()["ok"])

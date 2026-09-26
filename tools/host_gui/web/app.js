@@ -61,8 +61,9 @@ const STEPPABLE = ["LOADED", "STOPPED", "DEBUG_HOLD", "BP_HIT"];
 // is" - is pinned by tests/test_gui_capabilities.py, which drives this
 // function with both page schemes.
 function eventSocketUrl() {
+  const secure = location.protocol === "https:";
+  const scheme = secure ? "wss:" : "ws:";
   // nosemgrep: javascript.lang.security.detect-insecure-websocket
-  const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   return `${scheme}//${location.host}/api/events`;
 }
 
