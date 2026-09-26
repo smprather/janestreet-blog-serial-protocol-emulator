@@ -79,11 +79,6 @@ CONFIRMED_STEP_NAMES = (
     "read_imem_at_ceiling_15",
     "read_imem_over_ceiling",
     "read_dmem_zero_count",
-# Confirmed by the chip's re-run; see chip_evidence.
-"status_reports_the_hold",
-"dump_core_answers_the_same_header",
-"status_reports_the_hit",
-"dump_core_refused_the_strap_is_high",
 )
 
 # The four held-core steps the chip has NOT re-run. Named here rather than
@@ -173,22 +168,6 @@ CONFIRMED_STEP_BYTES = {
         "a55a11600003000100044dd4",
         "a55a196000030002000000008830",
     ),
-"status_reports_the_hold": (
-    "a55a1110000100008afe",
-    "a55a19100001000b00000002000000000001004100000000000000000003444e",
-),
-"dump_core_answers_the_same_header": (
-    "a55a115000020000c2c6",
-    "a55a19500002000b0000000200000000000100410000000000000000000383b7",
-),
-"status_reports_the_hit": (
-    "a55a1110000100008afe",
-    "a55a19100001000b000000030001000000020041000000000000000000034516",
-),
-"dump_core_refused_the_strap_is_high": (
-    "a55a115000020000c2c6",
-    "a55a19500002000100068090",
-),
 }
 
 CHIP_EVIDENCE = {
@@ -200,9 +179,18 @@ CHIP_EVIDENCE = {
     "sparse overrides and register state, replays the 3-word LOAD "
     "precondition as a real framed frame, and compares every "
     "response byte (skipping wait words) to the golden stream",
-    "conformance": "22/22 golden steps PASS, byte-exact including CRC, in the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: the R2 read-path steps plus the four held-core steps (state 2 step-pause, state 3 live hit). Reported in tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25.",
-    "pending_steps": (),
-    "pending_reason": "These four steps were added on 2026-09-25 because R3's debug work made the R2 readback reachable in states 2 (DEBUG_HOLD) and 3 (BP_HIT) while no R2 vector exercised either. The chip has since re-run tb_pe_ctrl_r2 against them with the debug inputs driven and reported them byte-exact (tb_pe_ctrl_r2 (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md, chip side, 2026-09-25): 22/22 golden steps byte-exact including the four held-core steps; the state-2 and state-3 pre-states are reached by DEBUG_BP_SET / DEBUG_STEP / DEBUG_BP_CLR on a real pe_ctrl, not forced; mutants swapping the 2/3 encoding and gating DUMP_CORE on the hold are each caught by these steps. NOT HARDWARE-CONFIRMED: no board has been run., 2026-09-25), so the pending set is empty and the notice is generated from the full count.",
+    "conformance": "18/18 of the R2 read-path golden steps PASS, byte-exact "
+    "including CRC. The 4 held-core steps below are NOT part of that run: "
+    "tb_pe_ctrl_r2 instantiates pe_ctrl without the R3 debug inputs, so it "
+    "cannot reach state 2/3 at all. The chip must re-run it against them.",
+    "pending_steps": HELD_STEP_NAMES,
+    "pending_reason": "These four steps were added on 2026-09-25 because R3's "
+    "debug work made the R2 readback reachable in states 2 (DEBUG_HOLD) and 3 "
+    "(BP_HIT) while no R2 vector exercised either - a chip right on states "
+    "0/1 and wrong on the held ones passed 18/18. They are contract-derived "
+    "expectations, NOT evidence: chip_confirmed=false until the chip re-runs "
+    "tb_pe_ctrl_r2 with the debug inputs driven and flips them with a "
+    "citation.",
     "scope": "This confirms the chip RTL in SIMULATION against the golden "
     "package. The real-board acceptance run (Pico over USB, physical "
     "shuttle) is still unexecuted and is not claimed here.",
@@ -534,7 +522,7 @@ def flip_held_steps(source: str, *, cite: str = "", date: str = "") -> str:
         out,
         '\n    "conformance": ',
         '\n    "pending_steps":',
-        f'"{count}/{count} golden steps PASS, byte-exact including CRC, in '
+        f' "{count}/{count} golden steps PASS, byte-exact including CRC, in '
         f"the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: "
         f"the R2 read-path steps plus the four held-core steps (state 2 "
         f'step-pause, state 3 live hit). Reported in {cite}, {date}.",',
@@ -545,7 +533,7 @@ def flip_held_steps(source: str, *, cite: str = "", date: str = "") -> str:
         out,
         '\n    "pending_reason": ',
         '\n    "scope":',
-        f'"These four steps were added on 2026-09-25 because R3\'s debug work '
+        f" \"These four steps were added on 2026-09-25 because R3's debug work "
         f"made the R2 readback reachable in states 2 (DEBUG_HOLD) and 3 "
         f"(BP_HIT) while no R2 vector exercised either. The chip has since "
         f"re-run tb_pe_ctrl_r2 against them with the debug inputs driven and "
@@ -555,10 +543,10 @@ def flip_held_steps(source: str, *, cite: str = "", date: str = "") -> str:
     )
     # 5. pending_steps empties
     out = _replace_span(
-        out, '\n    "pending_steps": ', '\n    "pending_reason":', "(),", "pending steps"
+        out, '\n    "pending_steps": ', '\n    "pending_reason":', " (),", "pending steps"
     )
     # 6. the date
-    out = _replace_span(out, '\n    "date": ', ",\n}", f'"{date}"', "date")
+    out = _replace_span(out, '\n    "date": ', ",\n}", f' "{date}"', "date")
     # 7. and the result must still be Python: a text transform that can emit
     #    a file nobody can import is not a transform. `ast.parse` rather than
     #    `compile`, because what is being checked is SYNTAX - the flipped file

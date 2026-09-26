@@ -11,6 +11,7 @@ import unittest
 from unittest import mock
 
 from tools.host_bridge import acceptance as ACC
+from tools.host_gui import r2_vectors as R2V
 from tools.host_gui.transport import TransportError
 
 EXPECTED_CHECKS = (
@@ -155,18 +156,30 @@ class TestTheHeldReadbackAndRefusalBeats(unittest.TestCase):
         self.assertIn("run=1", detail)
 
     def test_the_held_readback_beat_does_not_overclaim_the_r2_steps(self):
-        """The R2 held readback is 4 steps the chip has NOT re-run.
+        """The beat's R2 sentence must MATCH the package's evidence, either way.
 
-        The debug-hold STATE is covered by the R3 package (chip-confirmed in
-        simulation), but the R2 readback of that state is exactly the surface
-        the R3 review found untested, and its golden steps ship
-        `chip_confirmed=false` until the chip runs them. A demo line that
-        borrows the R3 tag wholesale would repeat the F1 defect - a claim
-        stronger than the evidence beside it.
+        This used to assert the partial wording ("18 of 22", "not yet"), which
+        is right only while the four held steps are pending. The beat's R2
+        sentence is now DERIVED from `r2_vectors.CHIP_EVIDENCE` (see
+        `_r2_evidence_summary`), so the assertion is too: it compares the beat
+        against the flags rather than against a remembered state. That is the
+        difference between a claim and a fact - a beat whose wording had to be
+        edited by hand on every flip would eventually be left behind, and it is
+        exactly the sentence a judge reads about what is NOT yet proven.
         """
         detail = self.by_name["r3_demo_held_readback"].detail
-        self.assertIn("18 of 22", detail)
-        self.assertIn("not yet", detail.lower())
+        evidence = R2V.CHIP_EVIDENCE
+        confirmed = len(evidence["confirmed_steps"])
+        pending = len(evidence["pending_steps"])
+        if pending:
+            self.assertIn(f"is {confirmed} of {confirmed + pending}", detail)
+            self.assertIn("not yet", detail.lower())
+        else:
+            self.assertIn(f"{confirmed}/{confirmed + pending}", detail)
+            self.assertNotIn("not yet", detail.lower(),
+                             "nothing is pending, so the beat must not say so")
+        # and the hardware boundary is unconditional
+        self.assertIn("Hardware acceptance NOT run", detail)
 
     def test_the_held_readback_beat_carries_one_claim_not_two(self):
         """One line, one package claim.

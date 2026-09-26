@@ -30,6 +30,7 @@ if __package__ in (None, ""):  # direct script run: put the repo root on path
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.host_gui import protocol as P
+from tools.host_gui import r2_vectors as R2V
 from tools.host_gui.fake_pe import FAULT_LOAD, FAULT_RANGE, IMEM_WORDS
 from tools.host_gui.image import ImageError, assemble_program
 from tools.host_gui.session import (
@@ -173,6 +174,27 @@ def build_serial_link(device):
     return Link(transport=SerialTransport(port))
 
 
+def _r2_evidence_summary() -> str:
+    """The R2 package's confirmation state, READ from its evidence block.
+
+    Derived, never typed. This text appears in judge-facing output, and it went
+    stale the moment the four held-core steps were confirmed - the exact failure
+    the generated notice exists to prevent, reintroduced one layer up in a
+    string no gate could check. So the number comes from the evidence block that
+    the flag-flip maintains, and it is right in both states by construction.
+    """
+    evidence = R2V.CHIP_EVIDENCE
+    confirmed = len(evidence["confirmed_steps"])
+    pending = len(evidence["pending_steps"])
+    total = confirmed + pending
+    if pending:
+        return (f"{confirmed}/{confirmed} read-path steps byte-exact; the "
+                f"package is {confirmed} of {total}, and the {pending} "
+                f"held-core steps are not yet re-run by the chip")
+    return (f"{confirmed}/{total} golden steps byte-exact, the four held-core "
+            f"steps included (state 2 step-pause, state 3 live hit)")
+
+
 def _r2_detail(text: str) -> str:
     """Tag every R2 read-path line with its evidence status.
 
@@ -186,8 +208,7 @@ def _r2_detail(text: str) -> str:
     """
     return (
         f"{text} [chip-confirmed in simulation for the R2 read-path steps "
-        f"(tb_pe_ctrl_r2, 18/18 byte-exact; the package is 18 of 22, the four "
-        f"held-core steps are not yet re-run by the chip); hardware "
+        f"(tb_pe_ctrl_r2: {_r2_evidence_summary()}); hardware "
         f"acceptance not yet run]"
     )
 
@@ -741,9 +762,9 @@ def run_acceptance(
             f"READ_CPU still answers (pc={cpu_held.pc}) because it is the one "
             f"NON-HALTING read. The debug-hold STATE is chip-confirmed in "
             f"SIMULATION through the R3 vectors; the R2 READBACK of that state "
-            f"is 4 golden steps at 18 of 22, which the chip has not yet "
-            f"re-run (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md) - "
-            f"unconfirmed, and the hardware run has not been executed]",
+            f"is {_r2_evidence_summary()} "
+            f"(reviews/2026-09-25/R2-HELD-STATUS-BYTES.md). Hardware "
+            f"acceptance NOT run]",
         )
 
         cpu = session.read_cpu()

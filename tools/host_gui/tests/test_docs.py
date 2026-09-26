@@ -151,13 +151,14 @@ class TestTheDemoWalkthrough(unittest.TestCase):
         # pending.
         self.assertRegex(self.text, r"R2[^\n]*(chip-confirmed|LANDED|landed)")
         self.assertIn("R2-READ-PATH-REVIEW", self.text)
-        # the conformance count: the R2 READ-PATH steps are confirmed 18/18
-        # (the ceiling/zero-count vectors were proven after the 15 original
-        # ones). The package is no longer wholly confirmed - 4 held-core
-        # steps were added 2026-09-25 and await a chip re-run - so the count
-        # alone is not the whole claim, and the row has to carry the
-        # unconfirmed half too.
-        self.assertIn("18/18", self.text)
+        # the conformance count, READ from the package's own evidence rather
+        # than remembered: the held-core steps were added 2026-09-25 and the
+        # chip has since confirmed them, so a hard-coded "18/18" would have
+        # been stale the moment the flip landed - and worse, it would have
+        # demanded the walkthrough understate a package that is now 22/22.
+        from tools.host_gui import r2_vectors as R2V
+        confirmed = len(R2V.CHIP_EVIDENCE["confirmed_steps"])
+        self.assertIn(f"{confirmed}/{confirmed}", self.text)
         self.assertNotRegex(
             self.text, r"Memory/register readback \(R2\)[^\n]*\*\*pending\*\*"
         )
@@ -170,31 +171,28 @@ class TestTheDemoWalkthrough(unittest.TestCase):
         self.assertIn("Fallback demo", self.text)
         self.assertIn("no board", self.text.lower())
 
-    def test_the_r2_row_does_not_claim_a_wholly_confirmed_package(self):
-        """18/18 is about the read-path steps; the package is 18 of 22.
+    def test_the_r2_row_matches_the_packages_own_arithmetic(self):
+        """The row's counts are READ from the evidence, not remembered.
 
-        The walkthrough is the judge-facing claim surface, and the R3 review's
-        F1 was exactly a shipped claim contradicting the flags in the same
-        repository. Four held-core steps ship unconfirmed, so the R2 row has
-        to say which half is which rather than presenting one number.
+        Both directions matter. While steps are unconfirmed the row must carry
+        the unconfirmed half and must not present itself as wholly confirmed;
+        once they are confirmed, keeping that qualification would UNDERSTATE a
+        package whose every step is proven. So the assertions follow the flags,
+        which is the only version of this test that stays true across a flip.
         """
-        row = next(
-            line
-            for line in self.text.splitlines()
-            if "Memory/register readback (R2)" in line
-        )
-        self.assertIn("18/18", row)
-        # a regex, not a literal: the claim is "18 of 22", and insisting on the
-        # exact words makes the pin fail on phrasing ("18 of its 22") instead of
-        # on the claim. Same lesson as the walkthrough's whitespace-tolerant
-        # patterns - a pin that breaks on a reword is a pin people disable.
-        self.assertRegex(row, r"18 of (its )?22")
-        self.assertRegex(row, r"NOT confirmed|unconfirmed")
+        from tools.host_gui import r2_vectors as R2V
+        row = next(line for line in self.text.splitlines()
+                   if "Memory/register readback (R2)" in line)
+        confirmed = len(R2V.CHIP_EVIDENCE["confirmed_steps"])
+        pending = len(R2V.CHIP_EVIDENCE["pending_steps"])
+        self.assertIn(f"{confirmed}/{confirmed}", row)
+        self.assertIn(f"{confirmed} of {confirmed + pending}", row)
         self.assertIn("R2-HELD-STATUS-BYTES.md", row)
-        # the unqualified "this row is wholly chip-confirmed" form is exactly
-        # the claim that stopped being true when the held steps landed
-        self.assertNotIn("| **chip-confirmed (simulation)** |", row)
-
+        if pending:
+            self.assertRegex(row, r"NOT confirmed|unconfirmed")
+            self.assertNotIn("| **chip-confirmed (simulation)** |", row)
+        else:
+            self.assertNotIn("unconfirmed", row)
     def test_the_debug_act_documents_what_the_new_beats_prove(self):
         """The walkthrough must describe the beats the run now performs.
 
@@ -227,7 +225,9 @@ class TestTheDemoWalkthrough(unittest.TestCase):
         )
         self.assertRegex(self.text, r"host('s)?\s+own\s+policy|HOST's\s+rule")
         # the honest boundary: the four held-core steps are not yet chip-confirmed
-        self.assertRegex(self.text, r"18 of 22|not yet re-run|not yet confirmed")
+        from tools.host_gui import r2_vectors as R2V
+        confirmed = len(R2V.CHIP_EVIDENCE["confirmed_steps"])
+        self.assertIn(f"{confirmed} of {confirmed}", self.text)
 
     def test_the_pending_board_row_says_what_the_run_now_covers(self):
         """The pending row is a claim about scope, and the scope just grew.

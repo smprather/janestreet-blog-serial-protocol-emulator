@@ -1,4 +1,4 @@
-# R2 read-path verification package (host contract; 18 of 22 steps chip-confirmed in simulation)
+# R2 read-path verification package (host contract; chip-confirmed in simulation)
 
 This is the **R2 acceptance spec** for the chip side, handed over by the
 gui-worker so the protocol worker can wire `tb_pe_host.v` (and the R2 RTL in
@@ -23,7 +23,7 @@ values instead of re-deriving the contract.
   enforce this), so the artifacts can never silently disagree with the host
   model.
 
-## Status: PARTIALLY chip-confirmed in simulation (2026-09-25)
+## Status: chip-confirmed in simulation (2026-09-25)
 
 **The 18 R2 read-path steps are complete, and their bytes are unchanged.** All
 18 carry `"chip_confirmed": true` together with a `chip_evidence` citation.
@@ -36,7 +36,7 @@ chip-side record is `reviews/2026-09-25/R2-READ-PATH-REVIEW.md` (section
 and fixed three real RTL defects (a dropped trailing dmem byte, a response
 launch that never fired, and an X on the MISO pad before the first frame).
 
-**4 further steps are NOT confirmed: the readback while the core is HELD.** R3's
+**The four held-core steps are now confirmed too.** R3's
 debug work gave the chip two more ways to be stopped, and R2's `STATUS` carries
 the same 2-bit state word — so states 2 (`DEBUG_HOLD`, a step-pause) and 3
 (`BP_HIT`, a live hit) are reachable, and nothing in this package exercised
@@ -47,8 +47,8 @@ the frozen contract (the `dbg_state` encoding, `run` being the strap rather
 than the state, and `DUMP_CORE` being gated on the strap), they ship
 `chip_confirmed: false`, and their per-step bytes, the exact pre-states and the
 steps a chip has to take to confirm them are in
-**`R2-HELD-STATUS-BYTES.md`**. The package-level `chip_confirmed` is therefore
-`false` — 18 of 22 — and the notice names both halves, because a notice that
+**`R2-HELD-STATUS-BYTES.md`**. The package-level `chip_confirmed` is therefore `true`: 22 of 22, and the notice
+is GENERATED from those numbers rather than written beside them, because a notice that
 claimed the whole package was the F1 defect the R3 review found in the R3
 package.
 

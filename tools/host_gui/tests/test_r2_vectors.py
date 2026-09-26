@@ -61,6 +61,22 @@ CONFIRMED_STEP_BYTES = V.CONFIRMED_STEP_BYTES
 HELD_STEPS = V.HELD_STEP_NAMES
 
 
+def confirmed_now() -> set[str]:
+    """The confirmed set, from the evidence block the flip maintains.
+
+    Every state-dependent assertion below reads this instead of a literal, so
+    the suite is correct on both sides of a flip. A test that hard-codes "18
+    of 22" is not a stronger claim than one that reads the number and checks
+    the claim against it - it is a claim that goes stale on the next flip and
+    then demands the package lie to satisfy it.
+    """
+    return set(V.CHIP_EVIDENCE["confirmed_steps"])
+
+
+def pending_now() -> tuple[str, ...]:
+    return tuple(V.CHIP_EVIDENCE["pending_steps"])
+
+
 class TestR2VectorPackage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -79,7 +95,8 @@ class TestR2VectorPackage(unittest.TestCase):
             1 for v in self.package["vectors"] for s in v["steps"] if s["chip_confirmed"]
         )
         self.assertEqual(confirmed, len(V.CONFIRMED_STEP_BYTES))
-        self.assertFalse(self.package["chip_confirmed"])
+        self.assertEqual(self.package["chip_confirmed"], not pending_now(),
+                         "the package-level flag IS the pending set being empty")
         self.assertIn("chip-confirmed in simulation", self.package["notice"].lower())
         # the honest boundary: simulation confirmed, hardware not
         self.assertIn("not hardware-confirmed", self.package["notice"].lower())
@@ -236,7 +253,7 @@ class TestReadmemhExport(unittest.TestCase):
         # package-level: PARTIAL. 18 read-path steps are confirmed; the
         # held-core steps added after R3 await a chip re-run, and a manifest
         # that said otherwise would be the field a chip TB reads first.
-        self.assertFalse(self.manifest["chip_confirmed"])
+        self.assertEqual(self.manifest["chip_confirmed"], not pending_now())
         for vector in self.manifest["vectors"]:
             with self.subTest(vector=vector["name"]):
                 # a vector is confirmed iff all its steps are
@@ -536,7 +553,8 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
                 )
                 self.assertEqual(len(vector["steps"]), 2)
                 self.assertIn(vector["model_image_id"], self.images)
-                self.assertFalse(vector["chip_confirmed"])
+                self.assertEqual(vector["chip_confirmed"],
+                                 not pending_now())
 
     def test_the_step_pause_reports_state_two_with_the_strap_still_low(self):
         step = self._steps("status_while_step_paused")["status_reports_the_hold"]
@@ -641,8 +659,12 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
                     for s in v["steps"]
                     if s["name"] == name
                 )
-                self.assertFalse(step["chip_confirmed"])
-                self.assertIsNone(step.get("chip_evidence"))
+                self.assertEqual(step["chip_confirmed"],
+                                 name in confirmed_now())
+                if step["chip_confirmed"]:
+                    self.assertIsNotNone(step.get("chip_evidence"))
+                else:
+                    self.assertIsNone(step.get("chip_evidence"))
 
     def test_the_held_steps_replay_from_the_shipped_image(self):
         """The golden bytes are regenerable from the shipped image alone."""
@@ -666,8 +688,12 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
         for name in HELD_STEPS:
             with self.subTest(step=name):
                 self.assertIn(name, shipped)
-                self.assertFalse(shipped[name]["chip_confirmed"])
-                self.assertIsNone(shipped[name]["chip_evidence"])
+                self.assertEqual(shipped[name]["chip_confirmed"],
+                                 name in confirmed_now())
+                if shipped[name]["chip_confirmed"]:
+                    self.assertIsNotNone(shipped[name]["chip_evidence"])
+                else:
+                    self.assertIsNone(shipped[name]["chip_evidence"])
                 for key in ("request_file", "response_file"):
                     self.assertTrue((V.HEX_DIR / shipped[name][key]).is_file())
 
@@ -699,10 +725,18 @@ class TestTheNoticeMatchesTheFlagArithmetic(unittest.TestCase):
         ]
 
     def test_the_confirmed_and_unconfirmed_counts_are_stated(self):
-        self.assertEqual(len(self.confirmed), 18)
-        self.assertEqual(sorted(self.unconfirmed), sorted(HELD_STEPS))
-        self.assertIn("18/18", self.notice)
-        self.assertIn(str(len(self.unconfirmed)), self.notice)
+        # derived, not literal: these numbers move when the chip confirms more
+        # steps, and a test that hard-codes them goes stale on the next flip
+        # and then insists the package misreport itself
+        self.assertEqual(set(self.confirmed), confirmed_now())
+        self.assertEqual(sorted(self.unconfirmed), sorted(pending_now()))
+        total = len(self.confirmed) + len(self.unconfirmed)
+        self.assertIn(f"{len(self.confirmed)}/{len(self.confirmed)}",
+                      self.notice)
+        if self.unconfirmed:
+            self.assertIn(f"{len(self.confirmed)} of the {total}", self.notice)
+        else:
+            self.assertIn(f"all {total} golden steps", self.notice)
 
     def test_every_unconfirmed_step_is_named(self):
         for name in self.unconfirmed:
@@ -710,12 +744,24 @@ class TestTheNoticeMatchesTheFlagArithmetic(unittest.TestCase):
                 self.assertIn(name, self.notice)
 
     def test_the_notice_makes_none_of_the_contradicted_claims(self):
+        """Forbid the claims that would be FALSE in the CURRENT state.
+
+        A claim list written for one state becomes wrong the moment the state
+        moves: the full-case notice says "all 22 golden steps ... pass" BY
+        DESIGN once nothing is pending, and a list that forbade that phrase
+        would be demanding the package understate itself. So the overstatement
+        clause is conditional, and the two phrasings that are false in BOTH
+        states stay unconditional.
+        """
         lowered = self.notice.lower()
-        for claim in (
+        total = len(self.confirmed) + len(self.unconfirmed)
+        claims = [
             "every golden step in this package passes",
-            f"all {len(self.confirmed) + len(self.unconfirmed)} golden steps",
             "fully confirmed",
-        ):
+        ]
+        if self.unconfirmed:
+            claims.append(f"all {total} golden steps")
+        for claim in claims:
             with self.subTest(claim=claim):
                 self.assertNotIn(claim, lowered)
 
@@ -724,16 +770,19 @@ class TestTheNoticeMatchesTheFlagArithmetic(unittest.TestCase):
         self.assertIn("has not been executed", self.notice.lower())
 
     def test_the_rulings_do_not_contradict_themselves(self):
+        # the ruling quotes the conformance line, so the number it carries is
+        # whatever the evidence says - read from there, not typed
+        confirmed = len(self.confirmed)
         for ruling in self.package["rulings_applied"]:
             if "confirmed" in ruling.lower():
                 with self.subTest(ruling=ruling[:40]):
-                    self.assertIn("18/18", ruling)
+                    self.assertIn(f"{confirmed}/{confirmed}", ruling)
                     self.assertNotIn("every", ruling.lower())
 
     def test_the_hex_manifest_carries_the_identical_notice(self):
         manifest = json.loads((V.HEX_DIR / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["notice"], self.notice)
-        self.assertFalse(manifest["chip_confirmed"])
+        self.assertEqual(manifest["chip_confirmed"], not pending_now())
 
 
 if __name__ == "__main__":

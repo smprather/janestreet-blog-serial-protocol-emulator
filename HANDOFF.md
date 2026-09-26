@@ -2,7 +2,7 @@
 
 <!-- BEGIN gui-worker host block (top notes) - keep whole; place BESIDE the
      chip-side top-of-file blocks when merging, do not interleave -->
-> **Host GUI R2 read-path (2026-09-25; 18 of 22 steps CHIP-CONFIRMED in
+> **Host GUI R2 read-path (2026-09-25; 22 of 22 steps CHIP-CONFIRMED in
 > simulation).**
 > `tools/host_gui/r2_reads.py` is the single source of truth for the R2 read
 > obligations (bounded IMEM/DMEM reads, DUMP_CORE==STATUS header, non-halting
@@ -11,16 +11,18 @@
 > the sticky-fault-on-range-read behaviour (default `latch` per manager
 > ruling). `reviews/2026-09-25/R2-READ-VERIFICATION.json` + `.md` are the
 > **portable golden-vector package** for the chip-side R2 testbench, generated
-> from the model with a drift gate. **Chip R2 has landed and 18 of the 22
+> from the model with a drift gate. **Chip R2 has landed and all 22
 > golden steps are chip-confirmed**: `tb_pe_ctrl_r2` passes those 18
 > byte-exact with the model image loaded per vector (chip repo:
 > `reviews/2026-09-25/R2-READ-PATH-REVIEW.md`), and each of those steps'
 > `chip_confirmed` flag cites that evidence. The other 4 are the readback while
 > the core is HELD at a breakpoint (`state=2` step-pause, `state=3` live hit
 > where the hit holds the core and not the run strap) — added 2026-09-25 after
-> the chip review found that surface untested, shipped `chip_confirmed=false`
-> with the package flag therefore `false`; bytes/pre-states for the chip in
-> `reviews/2026-09-25/R2-HELD-STATUS-BYTES.md`. The real-board acceptance run is
+> the chip review found that surface untested, and shipped
+> `chip_confirmed=false` until the chip re-ran it — which it then did, with the
+> debug opcodes on a real `pe_ctrl` and no forcing: **22/22**, the four held
+> steps included (`R2-HELD-CORE-CHIP-SIDE.md` §7 in the chip repo, which is
+> where the `CHIP_EVIDENCE` citation comes from). The real-board acceptance run is
 > still unexecuted. The acceptance runner's R2 checks
 > (`acceptance.py --fake` → `PASS (22 PASS, 0 FAIL, 1 SKIP)`) are the host-side
 > gate for the same contract. Current host evidence:

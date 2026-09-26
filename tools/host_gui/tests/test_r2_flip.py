@@ -30,35 +30,43 @@ from __future__ import annotations
 
 import ast
 import json
-import shutil
 import unittest
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 from tools.host_gui import r2_vectors as V
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE = REPO_ROOT / "tools" / "host_gui" / "r2_vectors.py"
+# The flip's INPUT, frozen: the module as it stood with the four held-core steps
+# still pending. It is a fixture rather than a copy of HEAD because the shipped
+# module now REFUSES the transform, so a suite that read its input from HEAD
+# would stop testing the mechanism the moment the tool was used. It is an input,
+# not a copy of the truth, so it cannot drift into a second source of claims.
+PREFLIP = (REPO_ROOT / "tools" / "host_gui" / "tests" / "fixtures"
+           / "r2_vectors_preflip.py")
 
 CITE = "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance')"
 DATE = "2026-09-26"
 
 
 class FlipHarness(unittest.TestCase):
-    """A copy of the module in a temp dir, so a flip can be exercised safely."""
+    """The flip exercised on its frozen input, never on the shipped module."""
 
     def setUp(self):
-        self._tmp = TemporaryDirectory()
-        self.dir = Path(self._tmp.name)
-        self.copy = self.dir / "r2_vectors.py"
-        shutil.copy(MODULE, self.copy)
-        self.addCleanup(self._tmp.cleanup)
+        self.source_text = PREFLIP.read_text(encoding="utf-8")
+        # the premise, asserted rather than assumed: the shipped module must be
+        # the FLIPPED one (pending set empty), or this suite is measuring the
+        # wrong direction - it exists to test the transform, not the outcome
+        self.assertIn(
+            '"pending_steps": (),', MODULE.read_text(encoding="utf-8"),
+            "the shipped module should be flipped; this suite exercises the "
+            "pre-flip input on purpose")
 
     def source(self) -> str:
-        return self.copy.read_text(encoding="utf-8")
+        return self.source_text
 
     def flipped(self, **kwargs):
-        """Run the flip over the copy; return the resulting source text."""
+        """Run the flip over the input; return the resulting source text."""
         params = {"cite": CITE, "date": DATE, **kwargs}
         return V.flip_held_steps(self.source(), **params)
 
@@ -128,12 +136,13 @@ class TestTheFlipMovesOnlyTheFourSteps(FlipHarness):
         namespace: dict = {}
         exec(compile(flipped, "r2_vectors.py", "exec"), namespace)  # noqa: S102
         evidence = namespace["CHIP_EVIDENCE"]
-        before = set(
-            json.loads((V.SPEC.artifact).read_text(encoding="utf-8"))["chip_evidence"][
-                "confirmed_steps"
-            ]
-        )
+        # "before" is the flip's own INPUT, not the shipped artifact. Reading it
+        # from the artifact compares the transform against a file the transform
+        # has already been applied to, which made this test assert that a second
+        # flip would add four more steps - a description of nothing.
+        before = set(V._source_literal(self.source(), "CONFIRMED_STEP_NAMES"))
         after = set(evidence["confirmed_steps"])
+        self.assertEqual(len(before), 18)
         self.assertTrue(
             before.issubset(after), "the flip must only ADD to the confirmed set"
         )
@@ -144,11 +153,15 @@ class TestTheFlipMovesOnlyTheFourSteps(FlipHarness):
         namespace: dict = {}
         exec(compile(flipped, "r2_vectors.py", "exec"), namespace)  # noqa: S102
         pinned = namespace["CONFIRMED_STEP_BYTES"]
-        for name, pair in V.CONFIRMED_STEP_BYTES.items():
+        # the INPUT's own freeze is the baseline (see the note above): the
+        # shipped table is already flipped, so measuring the transform's output
+        # against it would ask a second flip to add four more pairs
+        input_pinned = V._source_literal(self.source(), "CONFIRMED_STEP_BYTES")
+        for name, pair in input_pinned.items():
             with self.subTest(step=name):
                 self.assertEqual(tuple(pinned[name]), pair)
         self.assertEqual(
-            len(pinned), len(V.CONFIRMED_STEP_BYTES) + len(V.HELD_STEP_NAMES)
+            len(pinned), len(input_pinned) + len(V.HELD_STEP_NAMES)
         )
         # the new pairs are the SHIPPED bytes, not invented ones
         on_disk = json.loads(V.SPEC.artifact.read_text(encoding="utf-8"))
@@ -217,15 +230,26 @@ class TestTheNoticeIsGeneratedFromTheFlags(unittest.TestCase):
             ),
         )
 
-    def test_the_notice_says_18_of_22_while_four_are_pending(self):
-        notice = V.PACKAGE_NOTICE
-        self.assertEqual(len(V.CHIP_EVIDENCE["confirmed_steps"]), 18)
-        self.assertEqual(
-            sorted(V.CHIP_EVIDENCE["pending_steps"]), sorted(V.HELD_STEP_NAMES)
-        )
-        self.assertIn("18 of the 22", notice)
+    def test_the_shipped_notice_says_22_of_22_now_that_the_four_are_confirmed(self):
+        """The state the flip produced, and the state the guard must police.
+
+        This used to assert the PARTIAL wording (18 of the 22, four named).
+        After a legitimate flip that assertion is not merely stale — it is wrong,
+        and a test that kept it would be demanding the package lie. So the
+        numbers now come from the evidence block, the same source the notice is
+        generated from: the two cannot disagree, which is the entire point of
+        generating one from the other.
+        """
+        confirmed = len(V.CHIP_EVIDENCE["confirmed_steps"])
+        pending = tuple(V.CHIP_EVIDENCE["pending_steps"])
+        self.assertEqual(pending, ())
+        self.assertEqual(confirmed, 22)
+        self.assertIn(f"all {confirmed} golden steps", V.PACKAGE_NOTICE)
+        self.assertIn(f"({confirmed}/{confirmed})", V.PACKAGE_NOTICE)
+        self.assertNotIn("NOT CHIP-CONFIRMED", V.PACKAGE_NOTICE)
         for name in V.HELD_STEP_NAMES:
-            self.assertIn(name, notice)
+            self.assertNotIn(name, V.PACKAGE_NOTICE,
+                             "a confirmed step must not be listed as pending")
 
     def test_the_notice_generated_for_a_fully_confirmed_package_reads_right(self):
         """The other branch of the generator, which the flip will land on.
