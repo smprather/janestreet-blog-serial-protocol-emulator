@@ -4168,3 +4168,64 @@ that anyone made were of the table.** That is the same lesson as the model
 property that survived two faults aimed at its class, and the same lesson as
 `bmc_checks.py` printing counts and being read by hand: **a number you do not
 have cannot be a check, and a table is not a verdict.**
+
+## 2026-09-27 act (c): TASK-START -- THE TB-SIDE DECODER, THE LAST NAMED ITEM
+
+The handoff's third step, never done: **"The testbench's decoder to the wire
+rules, NOT to the firmware, and then let the two argue. Its present shape folds
+two transitions per bit and starts at the first change, which is the flaw this
+act was written to catch; it needs the same three-state phase the firmware has."**
+
+What exists on the TB side today is the ENCODER check -- `enc_wire_lev` and the
+level monitor. Whether a DECODER exists, and what shape it is, is the question.
+
+### THE HANDOFF'S THIRD STEP WAS ALREADY DONE, AND I ALMOST REWROTE IT
+
+The handoff's last instruction was to write the testbench's decoder "to the
+wire rules, NOT to the firmware... its present shape folds two transitions per
+bit and starts at the first change, which is the flaw this act was written to
+catch; it needs the same three-state phase the firmware has."
+
+**All three of its claims about the present are STALE, and I checked each rather
+than taking the list as a task list:**
+
+| the handoff said | the testbench has |
+| :--- | :--- |
+| "folds two transitions per bit" | `dec_phase` = 0 mid / 1 boundary / **2 UNKNOWN** (line 491) |
+| "starts at the first change" | `dec_phase = 2` on reset and on resync; a one-half gap is skipped while UNKNOWN and only a **two**-half gap emits |
+| "no receiver on the firmware's pad" | the receiver watches **`out_line`** -- line 527 `if (out_line !== dec_lev)`, and the bits are assembled from `out_line` at 547/559/598 |
+
+**AND IT IS THE ACT'S SECOND DIRECTION, CHECKED THREE WAYS AND LIVE:**
+
+    // DIRECTION 2: the firmware ENCODES and this testbench decodes.
+    check(dec_have == 1, "the testbench's decoder recovered a whole frame from the firmware's pad")
+    check(dec_byte[i] == enc_byte[i], "decoded byte %0d = %02h, the testbench encoded %02h")
+    check(dec_flag >= 0, ...)   // the flag: FM0 and FM1 differ only at the first half
+
+    PASS: all checks
+
+**THE TWO RED CHECKS THE HANDOFF NAMED -- "recovered no frame from the
+firmware's pad" and "its flag is -1" -- ARE THE TWO THAT NOW PASS.** They were
+made green by work done after the handoff was written, and the handoff was not
+updated, so its item 3 reads as outstanding when it was discharged.
+
+**SO I DID NOT START THE REFACTOR, AND THAT IS THE JUDGEMENT WORTH WRITING
+DOWN.** Extracting that receiver into a reusable task and driving a second
+instance from it is a real piece of work against a **working, passing**
+testbench, undertaken on the strength of a premise that a grep would have
+disproved in one call. **A handoff is a SNAPSHOT OF CLAIMS, not a task list**,
+and the claims decay fastest in the direction where later work fixed them --
+which is exactly the direction this act spent its whole session moving.
+
+### ACT (c) IS CLOSED, AND WHAT IS PROVEN IN WHICH DIRECTION
+
+| direction | who encodes | who decodes | the check |
+| :--- | :--- | :--- | :--- |
+| **1. in** | the testbench (`enc_wire_lev`) | **the firmware** | `pass_rx` compared both ways; the firmware banked `a5 3c 96` under both flags with `dmem[3]` reading 0 then 1 |
+| **2. out** | **the firmware** | the testbench | `dec_byte[i] == enc_byte[i]`, plus `dec_have` and `dec_flag` |
+| the wire itself | -- | -- | all 80 levels per pass against the model, in both polarities |
+| the model | -- | -- | Python `bmc_model.py` vs Verilog `enc_wire_lev`: 80 levels x 2 polarities, identical |
+
+**The act's name is bi-phase LOOPBACK and the loop is closed in both
+directions, by a decoder on each side that the other side's polarity cannot
+fool** -- which was the whole argument for choosing loopback over anything else.
