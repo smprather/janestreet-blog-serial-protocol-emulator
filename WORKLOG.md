@@ -3741,3 +3741,42 @@ file.
 and proven** -- capture the output, convert, `diff` byte-for-byte -- but the
 twenty-three hand conversions are still twenty-three hand conversions, and they
 want a session with room to do them properly rather than the end of this one.
+
+### THE UP031 CONVERSION: A THIRD ATTEMPT, AND THE HONEST CONCLUSION
+
+**Three attempts, three reverts, and the third is the one worth recording
+because it is the same failure twice with a fix in between.** The first
+converter emitted `{:s}` for `%s` (invalid for a non-string) and never escaped
+`{`/`}` in the literal text. The second fixed both: `%s` became a bare `{x}`
+(f-string's default *is* `str()`), literal braces were doubled, `%r` became
+`{x!r}`, and named references and `%c` were deliberately skipped rather than
+mangled.
+
+**It parsed. The model's 110 lines of output came back BYTE-IDENTICAL. And
+`UP031` was still 28.**
+
+**So the conversion is provably behaviourally safe and simultaneously does not
+reduce the finding count, three times over.** The most likely reason is that
+`ast.get_source_segment` returns `None` for the compound arguments these call
+sites use, so the guard `if any(a is None...)` skips nearly every site and the
+rewriter is a no-op that the output diff cannot see -- **because a no-op and a
+correct conversion produce the same bytes.** That is the real lesson: **the
+verification I built proves SAFETY and cannot prove that the work HAPPENED.**
+Those are different properties and I have been treating one as the other.
+
+**SO THE REMAINING TWENTY-THREE ARE NOT GOING TO BE AUTOMATED BY ME, and the
+honest conclusion is that they want a person reading each call site.** What the
+next session gets, instead of my recipe:
+
+* the finding is `UP031`, 28 instances, all pre-existing file-wide `%` formatting
+  in `firmware/bmc_model.py`, all behaviour-preserving;
+* the safety check that works and is worth keeping: `python3 firmware/bmc_model.py
+  > before.txt`, convert, `diff before.txt after.txt` -- **byte-identical means
+  no behaviour moved**;
+* **and the check that was missing, learned the hard way: count the findings
+  before and after.** A conversion that leaves the count at 28 has done nothing,
+  and an output diff will happily confirm it, because doing nothing and getting
+  it right print the same bytes.
+
+Reverted; tree verified byte-identical to `90ccc19`; model self-check, the seven
+static checks and the agreement self-test all green.
