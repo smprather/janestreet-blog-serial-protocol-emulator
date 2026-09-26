@@ -425,15 +425,32 @@ class TestBringupRunbook(unittest.TestCase):
         self.assertIn("MISO", row)
 
     def test_the_r2_triage_row_does_not_quote_a_stale_step_count(self):
-        """The row quoted '15 steps'; the package is 18 of 22 confirmed.
+        """The row quoted '15 steps'; the count has moved twice since.
 
         A triage table is read under time pressure by someone holding a board,
-        so a stale count in it is a claim with a short half-life.
+        so a stale count in it is a claim with a short half-life. The expected
+        numbers come from the evidence block, not from this file's memory: a
+        pin that hard-codes the count stops failing when the count moves and
+        starts DEMANDING the old one instead, which is how the row was pinned
+        at '18 read-path steps' after the chip confirmed all 22.
         """
+        from tools.host_gui import r2_vectors as R2V
+
+        evidence = R2V.CHIP_EVIDENCE
+        confirmed = len(evidence["confirmed_steps"])
+        pending = len(evidence["pending_steps"])
+        total = confirmed + pending
         text = read(BRINGUP)
         row = next(line for line in text.splitlines() if "r2_read_*" in line)
         self.assertNotIn("the 15 steps", row)
-        self.assertIn("18 read-path steps", row)
+        self.assertIn(str(total), row)
+        # never present a partial count as the package
+        if pending:
+            self.assertNotIn(
+                f"all {confirmed}",
+                row,
+                "the package is PARTIAL; the triage row must not claim it whole",
+            )
 
 
 class TestSubmissionReadiness(unittest.TestCase):
@@ -709,11 +726,22 @@ class TestThePageAndTheServerAgreeOnTheRoutes(unittest.TestCase):
 class TestTheJudgeFacingCountsAreCurrent(unittest.TestCase):
     """Two documents a judge or an operator reads FIRST, with stale counts.
 
-    The R2 count has moved twice: 15 golden steps became 18 when the ceiling
-    vectors landed, and the package became PARTIAL when the four held-core
-    steps were added (18 of 22). Both documents below were updated once and
-    then left, which is how a claim rots: the number was right on the day
-    someone wrote it and nobody revisited it because nothing failed.
+    The R2 count has moved three times: 15 golden steps became 18 when the
+    ceiling vectors landed, the package became PARTIAL when the four held-core
+    steps were added (18 of 22), and then the chip re-ran those four and it
+    became 22 of 22. Both documents below were updated once and then left,
+    which is how a claim rots: the number was right on the day someone wrote
+    it and nobody revisited it because nothing failed.
+
+    THE EXPECTED NUMBERS ARE NOW READ, NOT TYPED. This class used to pin the
+    literal "18 of 22" in both documents, which is the defect wearing a
+    test's clothes: when the chip confirmed the fourth pair the pin did not
+    fail, it DEMANDED that the package keep under-reporting itself, and the
+    two documents were rewritten back to the number the pin knew. The lesson
+    is the flip's own - a hard-coded count is a claim that goes stale and then
+    fights the truth - so the claims are now compared against
+    `r2_vectors.CHIP_EVIDENCE`, which the flag-flip maintains, and what is
+    asserted is that the documents agree with the flags in BOTH states.
 
     Dated review records are deliberately NOT swept - `wiki/log.md` and the
     per-day review files record what was true then, and rewriting them would
@@ -722,23 +750,38 @@ class TestTheJudgeFacingCountsAreCurrent(unittest.TestCase):
     paragraph an operator reads about what is on the shuttle.
     """
 
-    def test_the_scorecard_does_not_claim_the_whole_r2_contract_is_confirmed(self):
+    @classmethod
+    def setUpClass(cls):
+        from tools.host_gui import r2_vectors as R2V
+
+        evidence = R2V.CHIP_EVIDENCE
+        cls.confirmed = len(evidence["confirmed_steps"])
+        cls.pending = len(evidence["pending_steps"])
+        cls.total = cls.confirmed + cls.pending
+        cls.full = cls.pending == 0
+
+    def test_the_scorecard_states_the_packages_own_confirmation_count(self):
         row = next(
             line
             for line in read(SCORECARD).splitlines()
             if "Host-controller story" in line
         )
+        if self.full:
+            # the full case: every step confirmed, and the scorecard says so
+            self.assertIn(f"all {self.confirmed} of its {self.total} golden steps", row)
+        else:
+            # the partial case: the count must be scoped, and the held-core
+            # steps must be named as NOT yet re-run. A regex, not a literal,
+            # so the pin fails on the CLAIM rather than on phrasing.
+            self.assertRegex(row, rf"{self.confirmed} of (its )?{self.total}")
+            self.assertIn("await the chip's re-run", row)
+        # whatever the state, the row must not present the read-path count as
+        # if it were the whole package - the original defect.
         self.assertNotIn(
             "18/18 chip-confirmed",
             row,
-            "the scorecard presents 18/18 as the whole R2 contract; the package "
-            "is 18 of 22 with four held-core steps unconfirmed",
+            "the scorecard presents 18/18 as the whole R2 contract",
         )
-        # a regex, not a literal: the claim is "18 of 22", and insisting on the
-        # exact words makes the pin fail on PHRASING ("18 of its 22") instead
-        # of on the claim. Same lesson as the walkthrough's whitespace-tolerant
-        # patterns - a pin that breaks on a reword is a pin people disable.
-        self.assertRegex(row, r"18 of (its )?22")
 
     def test_the_runbooks_opening_names_the_current_step_count(self):
         text = read(BRINGUP)
@@ -748,13 +791,22 @@ class TestTheJudgeFacingCountsAreCurrent(unittest.TestCase):
             opening,
             "the runbook's opening still says 15 golden steps",
         )
-        self.assertIn("18", opening)
-        # and it must not read as "the whole package is confirmed"
+        self.assertIn(str(self.total), opening)
+        if self.full:
+            self.assertIn(f"all {self.confirmed}", opening)
+        # and it must scope the count, never present it as the whole package
+        # while some steps are unconfirmed
         self.assertRegex(
             opening,
-            r"read-path|of 22|22 steps",
-            "the opening must scope its count to the read-path steps",
+            r"read-path|of 22|22 steps|all 22",
+            "the opening must scope its count to the confirmed steps",
         )
+        if not self.full:
+            self.assertNotIn(
+                f"all {self.confirmed}",
+                opening,
+                "the package is PARTIAL; the opening must not claim it whole",
+            )
 
 
 class TestTheRunbooksCommandsAreReal(unittest.TestCase):

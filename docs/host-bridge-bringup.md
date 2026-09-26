@@ -15,10 +15,11 @@ verified on a real MicroPython) and the triage table at the bottom.
   `pip install .[host-gui]` (adds `pyserial`, plus the GUI's fastapi/uvicorn).
 - Chip R1 (framed host bus, `IRQ_N`, target 1) and **R2 (register/memory
   readback) are both landed** on the shuttle. R2's golden package has **22
-  steps, of which 18 read-path steps are chip-confirmed byte-exact** against
-  this repo's `R2-READ-VERIFICATION.json`; the remaining four cover the readback
-  while the core is HELD at a breakpoint and await the chip's re-run
-  (`R2-HELD-STATUS-BYTES.md`). So a healthy run should pass the `r2_*` read
+  steps, all 22 chip-confirmed byte-exact** against this repo's
+  `R2-READ-VERIFICATION.json` — including the four that read back while the
+  core is HELD at a breakpoint (`R2-HELD-STATUS-BYTES.md`; the chip's re-run
+  that confirmed them is `R2-HELD-CORE-CHIP-SIDE.md` §7 in the chip repo). So a
+  healthy run should pass the `r2_*` read
   checks; if they go red on real hardware, that is a board-level problem to
   triage, not the expected state.
 
@@ -113,7 +114,7 @@ assuming a problem.
 | `FAIL hello` / `board error during hello: project ... not found` | shuttle name wrong for this board | pass `--project <name>` matching the fitted shuttle; confirm in the board REPL with the TT SDK |
 | `FAIL sclk` / `board error during prepare: host SPI pin map is not configured` | no `pins` map supplied | `tt_adapter.TTAdapter` needs `pins={sck,mosi,miso}` for your board revision (RP2040 vs RP2350 GPIO numbers differ) — plan Open Item 2 |
 | `spi.timeout` on load / every SPI step | CS/SCK/MOSI/MISO not wired, or a shuttle without the framed protocol | check the lower PMOD host-SPI row wiring; confirm the fitted shuttle has R1 |
-| `r2_read_*` / `r2_dump_header` FAIL, others PASS | the read path is chip-confirmed in simulation but the board disagrees | compare against `R2-READ-VERIFICATION.json`; the 18 read-path steps are the same ones `tb_pe_ctrl_r2` passes (22 in the package, 4 held-core steps still unconfirmed) - a board-only failure points at the MISO read path or wiring, not the contract |
+| `r2_read_*` / `r2_dump_header` FAIL, others PASS | the read path is chip-confirmed in simulation but the board disagrees | compare against `R2-READ-VERIFICATION.json`; all 22 steps in the package are the same ones `tb_pe_ctrl_r2` passes byte-exact (18 read-path + 4 held-core, all confirmed) - a board-only failure points at the MISO read path or wiring, not the contract |
 | EVERY op FAILs with `bad PE response: length field does not match the frame` or `CRC mismatch` - including `hello` and `ping`, which use no payload | the host clocks a fixed budget of wait words past the end of every reply (the chip may emit up to 15 filler words before a bounded read), so the words after the frame come off a **released** MISO pad: `pe_ctrl` drives MISO only while a response shifts | the reader trims the buffer to the frame's own length field, so idle words are discarded. If you see this, you are on an older host build without that trim, OR the pad is being driven by something else while idle (a wiring or shuttle problem) - check the MISO row first, then confirm your host has `pe_frame.strip_wait_words` trimming to the length field |
 | `irq`/`fault` steps FAIL | the fitted shuttle predates R1's `IRQ_N`, or the adapter was built without `irq_enabled` | check the shuttle revision; `irq_n()` returns `None` (SKIP) when IRQ is unavailable |
 | `heartbeat` FAIL / `timer stuck at N` | the chip's `dbg_timer` did not move within the beat's window (3 tries x 0.25 s, so about **0.75 s**) | the one beat the `--fake` dry run cannot rehearse: there the model scripts the increment, so it can only fail on hardware. In order of likelihood: the core is not actually running (the `start` beat passed, so check the strap reached the shuttle), the SoC tick never reaches `dbg_timer` on this shuttle, or the readback path is returning a stale header. Re-run with `--fake` to confirm the host side is sound, then read `status` twice by hand in the board REPL |
@@ -143,10 +144,6 @@ This is not a corner case for us: the host's own acceptance demo
 (`r3_demo_6_clear_releases`) depends on exactly this release, and an operator
 whose GUI died mid-debug will come back to a chip that looks powered and
 configured but will not run until they clear the breakpoint.
-
-The host runner **never reports a timed-out or unacknowledged operation as
-success** — a `FAIL` means the real thing failed, so read the `error` string
-in the report before retrying.
 
 ## 7. Running the host gate (and the optional MicroPython step)
 

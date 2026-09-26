@@ -13,9 +13,10 @@
 > 1 SKIP. **Nothing here is chip-confirmed yet**: the PE host protocol, read
 > path and IRQ are RTL phases R1/R2 (plan Tasks 3-5, under the chip-side
 > manager), and the real Pico/USB run is unexecuted. **R2 has since landed
-> on the chip and is chip-confirmed in simulation** (22 of 22 golden steps
-> byte-exact; the 4 held-at-a-breakpoint readback steps are still
-> unconfirmed); the host side carries the session/API/page read_cpu, the R2
+> on the chip and is chip-confirmed in simulation** (all 22 golden steps
+> byte-exact, the 4 held-at-a-breakpoint readback steps among them, confirmed
+> by the chip's re-run with the debug opcodes on a real `pe_ctrl`); the host side
+> carries the session/API/page read_cpu, the R2
 > read gate and idle-fault visibility. See
 > `reviews/2026-09-25/HOST-GUI-R2-PREP.md` and
 > [[plans/host-controller-gui]].

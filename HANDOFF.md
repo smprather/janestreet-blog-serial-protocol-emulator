@@ -12,10 +12,10 @@
 > ruling). `reviews/2026-09-25/R2-READ-VERIFICATION.json` + `.md` are the
 > **portable golden-vector package** for the chip-side R2 testbench, generated
 > from the model with a drift gate. **Chip R2 has landed and all 22
-> golden steps are chip-confirmed**: `tb_pe_ctrl_r2` passes those 18
+> golden steps are chip-confirmed**: `tb_pe_ctrl_r2` passes them
 > byte-exact with the model image loaded per vector (chip repo:
-> `reviews/2026-09-25/R2-READ-PATH-REVIEW.md`), and each of those steps'
-> `chip_confirmed` flag cites that evidence. The other 4 are the readback while
+> `reviews/2026-09-25/R2-READ-PATH-REVIEW.md`), and each step's
+> `chip_confirmed` flag cites that evidence. Four of those 22 are the readback while
 > the core is HELD at a breakpoint (`state=2` step-pause, `state=3` live hit
 > where the hit holds the core and not the run strap) — added 2026-09-25 after
 > the chip review found that surface untested, and shipped

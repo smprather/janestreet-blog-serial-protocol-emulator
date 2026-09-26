@@ -202,13 +202,14 @@ def _r2_evidence_summary() -> str:
 def _r2_detail(text: str) -> str:
     """Tag every R2 read-path line with its evidence status.
 
-    Chip R2 is landed and the R2 READ-PATH steps are chip-confirmed IN
-    SIMULATION (chip repo `tb_pe_ctrl_r2`: 18 golden steps byte-exact, see
-    `R2-READ-PATH-REVIEW.md`). The package is PARTIAL: four held-core steps
-    added 2026-09-25 ship `chip_confirmed=false` until the chip re-runs them, so
-    this tag states 18 of 22 rather than a total that would be false. The
-    hardware run — this script against a real Pico and shuttle — is still
-    unexecuted, so the tag says exactly that.
+    Chip R2 is landed and every step in the package is chip-confirmed IN
+    SIMULATION (chip repo `tb_pe_ctrl_r2`, see `R2-READ-PATH-REVIEW.md` for the
+    read-path steps and `R2-HELD-CORE-CHIP-SIDE.md` for the four held-core ones
+    the chip re-ran on 2026-09-25). What the tag states is read from
+    `_r2_evidence_summary()`, so it is right in both states by construction
+    rather than by remembering which one shipped last. The hardware run — this
+    script against a real Pico and shuttle — is still unexecuted, so the tag
+    says exactly that.
     """
     return (
         f"{text} [chip-confirmed in simulation for the R2 read-path steps "
@@ -902,8 +903,7 @@ def run_acceptance(
             f"chip has no such rule and would execute the step, so nothing here "
             f"is chip-confirmed. What IS a chip claim: {dump_line} "
             f"[chip-confirmed in simulation for the R2 read-path steps "
-            f"(tb_pe_ctrl_r2, 18/18 byte-exact; the package is 18 of 22, the "
-            f"four held-core steps are not yet re-run by the chip); hardware "
+            f"(tb_pe_ctrl_r2: {_r2_evidence_summary()}); hardware "
             f"acceptance not yet run]",
         )
         try:
