@@ -44,7 +44,7 @@
 
 set -u
 INTERVAL="${INTERVAL:-30}"
-NUDGE_COOLDOWN="${NUDGE_COOLDOWN:-180}"
+NUDGE_COOLDOWN="${NUDGE_COOLDOWN:-600}"
 STALL_ALERT_S="${STALL_ALERT_S:-900}"
 WORKLOG="${WORKLOG:-/home/mylesp/janestreet-blog-serial-protocol-emulator/WORKLOG.md}"
 ALERT="${ALERT:-/tmp/pi-manager-interrupt}"
