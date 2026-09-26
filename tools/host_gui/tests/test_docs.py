@@ -896,35 +896,72 @@ process.stdout.write(JSON.stringify({ run: elements['debug-run'].textContent,
             self.skipTest("node not installed")
         result = subprocess.run(
             [NODE, "-e", self.DRIVER, str(APP_JS), json.dumps(debug)],
-            capture_output=True, text=True, check=False)
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         if result.returncode != 0:
             raise AssertionError(f"node driver failed: {result.stderr[:400]}")
         return json.loads(result.stdout)
 
     def test_a_response_without_a_run_word_says_so(self):
         """The `DEBUG_BP_SET` shape: five words, no strap."""
-        out = self.render({"state": 1, "state_name": "RUNNING", "pc": 0,
-                           "bp_addr": 2, "bp_flags": 1, "armed": True})
-        self.assertNotEqual(out["run"], "low",
-                            "no run word was sent, so 'low' is invented")
+        out = self.render(
+            {
+                "state": 1,
+                "state_name": "RUNNING",
+                "pc": 0,
+                "bp_addr": 2,
+                "bp_flags": 1,
+                "armed": True,
+            }
+        )
+        self.assertNotEqual(
+            out["run"], "low", "no run word was sent, so 'low' is invented"
+        )
         self.assertNotIn("undefined", out["run"])
 
     def test_a_response_with_a_run_word_reports_it(self):
         """The `DEBUG_STATUS` shape: the strap IS reported, and must show."""
-        out = self.render({"state": 3, "state_name": "BP_HIT", "pc": 2,
-                           "bp_addr": 2, "bp_flags": 3, "armed": True,
-                           "hit": True, "run": 1})
+        out = self.render(
+            {
+                "state": 3,
+                "state_name": "BP_HIT",
+                "pc": 2,
+                "bp_addr": 2,
+                "bp_flags": 3,
+                "armed": True,
+                "hit": True,
+                "run": 1,
+            }
+        )
         self.assertEqual(out["run"], "high")
-        out = self.render({"state": 0, "state_name": "STOPPED", "pc": 0,
-                           "bp_addr": 0, "bp_flags": 0, "armed": False,
-                           "run": 0})
+        out = self.render(
+            {
+                "state": 0,
+                "state_name": "STOPPED",
+                "pc": 0,
+                "bp_addr": 0,
+                "bp_flags": 0,
+                "armed": False,
+                "run": 0,
+            }
+        )
         self.assertEqual(out["run"], "low")
 
     def test_the_rest_of_the_panel_still_renders(self):
         """The fix must not cost the fields that ARE reported."""
-        out = self.render({"state": 3, "state_name": "BP_HIT", "pc": 2,
-                           "bp_addr": 2, "bp_flags": 3, "armed": True,
-                           "hit": True})
+        out = self.render(
+            {
+                "state": 3,
+                "state_name": "BP_HIT",
+                "pc": 2,
+                "bp_addr": 2,
+                "bp_flags": 3,
+                "armed": True,
+                "hit": True,
+            }
+        )
         self.assertIn("BP_HIT", out["state"])
         self.assertIn("hit latched", out["flags"])
 
