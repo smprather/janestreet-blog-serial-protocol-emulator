@@ -215,13 +215,14 @@ print(
 # machine does. A loop that is not a counted delay now shows its real length,
 # and a half-interval that is one clock out is a FAILURE with a number on it.
 print("\nHALF-INTERVAL CHECK (every route between two OUT TXPIN, in clocks):")
-OUTS = [
-    a for a in sorted(mnem)
-    if mnem[a][0] == "OUT" and "TXPIN" in mnem[a][1]
-]
+OUTS = [a for a in sorted(mnem) if mnem[a][0] == "OUT" and "TXPIN" in mnem[a][1]]
 TMASK = (1 << PCW) - 1
-ALU = {"ADD": lambda a, b: a + b, "SUB": lambda a, b: a - b,
-       "AND": lambda a, b: a & b, "OR": lambda a, b: a | b}
+ALU = {
+    "ADD": lambda a, b: a + b,
+    "SUB": lambda a, b: a - b,
+    "AND": lambda a, b: a & b,
+    "OR": lambda a, b: a | b,
+}
 
 
 def operand(ops):
@@ -315,7 +316,7 @@ def routes(start, stop, budget=20000):
             else:
                 if mn == "JMP":  # a JMP is unconditional: the fall-through
                     stack.append((t, cost + 1, depth + 1, nA, nX))
-                    continue      # is not an instruction anybody executes
+                    continue  # is not an instruction anybody executes
                 taken = None
                 if nA is not None:
                     taken = (nA != 0) if mn == "JNZ" else (nA == 0)

@@ -1622,3 +1622,45 @@ as a failure so it can be un-marked, and this one does not pass yet. The
 ruling's wiring step is the last thing left in this act, and it is the right
 order: the two legs argue first, and the regression hears about it when they
 agree.
+
+## 2026-09-27 act (c): TASK-START -- THE LOCK LANDS TWO HALF-INTERVALS EARLY
+
+Resuming from the entry above with the two measured faults it names, in the
+order it names them. The state is unchanged from `0992c45` except that a
+formatter has been over the three Python files: **checked, not assumed** --
+`bmc_checks.py` still reports 16 routes at 120, `bmc_model.py` still reports all
+properties hold, and `tb/probes/labels.py` still emits the `L_` defines, so the
+reformat is behaviour-preserving and is not part of this step.
+
+**WHAT IS ALREADY MEASURED AND IS NOT YET EXPLAINED, restated so the next line
+of work is not a re-derivation:**
+
+* the testbench's decoder locks the CLOCK and not the POLARITY: three bytes
+  `80 00 80` for `a5 3c 96`, flag -1;
+* the return leg carries **66 changes and 6 two-half gaps** per pass where the
+  model derives **63 and 16**;
+* `probe_tb_classify.v` shows the lock landing **two half-intervals early**: the
+  first 4 us gap emits a mid and the NEXT one emits another, which cannot
+  happen inside the preamble's eight zeros, where every half-interval
+  transitions.
+
+**66 - 63 = 3 and 16 - 6 = 10.** Three boundaries that transition where the rules
+say they do not, and ten two-half gaps that are one half-interval short. Both
+numbers are the same fact seen twice, and the classify trace is where it is
+visible: if the lock is early by a half-interval then the receiver is calling
+the SECOND half of bit 0 a mid, and every interval after it is measured from
+the wrong edge.
+
+**THE ORDER, AND IT IS THE ORDER THE TRACE ALREADY IMPLIES:**
+
+1. `tb/probes/probe_tb_classify.v` -- read the classification trace in full and
+   say WHICH transition the receiver locked on and which one it should have
+   locked on. The wire rules answer it: the lock must be the two-half gap that
+   the preamble's run of eight identical bits puts at the 0-to-1 boundary, and
+   nothing else in that run is a two-half gap.
+2. `tb/probes/probe_pad_intervals.v` -- find the three extra changes, which is
+   the same question from the transmitter's side: which boundary is
+   transitioning that the rules say is silent.
+3. Only then the firmware, and only if (1) and (2) agree that the WIRE is wrong
+   rather than the receiver. They cannot both be right, and saying which one is
+   wrong is the whole of this step.

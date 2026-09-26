@@ -28,7 +28,9 @@ if not F.is_file():
 # flowing onwards into every L_ define.
 listing = subprocess.run(
     ["python3", "tools/fw/peasm.py", str(F), "--listing"],
-    capture_output=True, text=True, check=True,
+    capture_output=True,
+    text=True,
+    check=True,
 ).stdout
 
 addr, labels = 0, {}

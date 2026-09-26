@@ -348,8 +348,8 @@ for f in (1, 0):
 #      is a property of the MODEL before it is a property of silicon.
 # =====================================================================
 
-TX_HALF_TOTAL = 2 * len(bits())   # 80 half-intervals: 40 bits, two halves each
-IDLE_OUT = 0                     # the OUTPUT pad idles LOW: init writes TXPIN 0
+TX_HALF_TOTAL = 2 * len(bits())  # 80 half-intervals: 40 bits, two halves each
+IDLE_OUT = 0  # the OUTPUT pad idles LOW: init writes TXPIN 0
 fail = 0
 
 
@@ -434,8 +434,10 @@ print()
 print("=" * 70)
 print("THE ENCODER, MODELLED FROM THE WIRE RULES. THE RETURN LEG IS")
 print("dmem[0..2] RE-ENCODED UNDER dmem[3], SO IT CARRIES THE SAME 40 BITS")
-print("THE INPUT LEG DID: %d bits = %d half-intervals = %d us."
-      % (len(bits()), TX_HALF_TOTAL, TX_HALF_TOTAL * HALF_US))
+print(
+    "THE INPUT LEG DID: %d bits = %d half-intervals = %d us."
+    % (len(bits()), TX_HALF_TOTAL, TX_HALF_TOTAL * HALF_US)
+)
 print("=" * 70)
 WIRES = {}
 for fl in (0, 1):
@@ -445,58 +447,86 @@ for fl in (0, 1):
     want = [level(k, fm0) for k in range(TX_HALF_TOTAL)]
     print(" %s" % ("FM0 (dmem[3] = 0)" if fl == 0 else "FM1 (dmem[3] = 1)"))
     print("    first 8 half-intervals: %s" % "".join(str(x) for x in tx.wire[:8]))
-    chk(tx.wire == want,
+    chk(
+        tx.wire == want,
         "the counter-driven transmitter agrees with the wire rules, "
         "half-interval for half-interval (%d of %d)"
-        % (sum(1 for a, b in zip(tx.wire, want) if a == b), TX_HALF_TOTAL))
-    chk(len(tx.wire) == TX_HALF_TOTAL,
-        "it drives exactly %d half-intervals and stops" % TX_HALF_TOTAL)
-chk(all(WIRES[1][k] == 1 - WIRES[0][k] for k in range(TX_HALF_TOTAL)),
+        % (sum(1 for a, b in zip(tx.wire, want) if a == b), TX_HALF_TOTAL),
+    )
+    chk(
+        len(tx.wire) == TX_HALF_TOTAL,
+        "it drives exactly %d half-intervals and stops" % TX_HALF_TOTAL,
+    )
+chk(
+    all(WIRES[1][k] == 1 - WIRES[0][k] for k in range(TX_HALF_TOTAL)),
     "the two encodings' output streams are the exact COMPLEMENT of one "
-    "another, all %d half-intervals" % TX_HALF_TOTAL)
-chk(WIRES[0] == [level(k, 1) for k in range(TX_HALF_TOTAL)],
+    "another, all %d half-intervals" % TX_HALF_TOTAL,
+)
+chk(
+    WIRES[0] == [level(k, 1) for k in range(TX_HALF_TOTAL)],
     "AND the return leg is the SAME level sequence the input leg was -- "
-    "same bits, same flag, so the act is a round trip, not a new frame")
+    "same bits, same flag, so the act is a round trip, not a new frame",
+)
 
 print()
 print("WHAT THE FIRMWARE'S HALF-INTERVAL HAS TO BE, from the wire rules:")
 iv0, tr0 = tx_ivs(WIRES[0])
 iv1, tr1 = tx_ivs(WIRES[1])
-print("  FM0: %d transitions, %d intervals: %d of one half-interval and "
-      "%d of two" % (len(tr0), len(iv0), iv0.count(1), iv0.count(2)))
-print("  FM1: %d transitions, %d intervals: %d of one half-interval and "
-      "%d of two" % (len(tr1), len(iv1), iv1.count(1), iv1.count(2)))
-chk(set(iv0) == {1, 2} and set(iv1) == {1, 2},
+print(
+    "  FM0: %d transitions, %d intervals: %d of one half-interval and "
+    "%d of two" % (len(tr0), len(iv0), iv0.count(1), iv0.count(2))
+)
+print(
+    "  FM1: %d transitions, %d intervals: %d of one half-interval and "
+    "%d of two" % (len(tr1), len(iv1), iv1.count(1), iv1.count(2))
+)
+chk(
+    set(iv0) == {1, 2} and set(iv1) == {1, 2},
     "every interval on the return leg is ONE or TWO half-intervals in both "
-    "polarities, which is the whole basis of the receiver's interval test")
-chk(iv0 == iv1,
+    "polarities, which is the whole basis of the receiver's interval test",
+)
+chk(
+    iv0 == iv1,
     "and the interval SEQUENCE is the same for the two polarities (%d "
     "intervals), so the return leg's TIMING says nothing about polarity "
-    "either" % len(iv0))
-print("  a bit boundary transitions iff the two adjacent bits are EQUAL: "
-      "the return leg's payload has %d equal-adjacent pairs of 23"
-      % sum(1 for i in range(23) if bits()[16 + i] == bits()[17 + i]))
+    "either" % len(iv0),
+)
+print(
+    "  a bit boundary transitions iff the two adjacent bits are EQUAL: "
+    "the return leg's payload has %d equal-adjacent pairs of 23"
+    % sum(1 for i in range(23) if bits()[16 + i] == bits()[17 + i])
+)
 print()
 print("THE FIVE BYTES THE ENCODER DISPATCHES ON, and the eight masks:")
 for b in range(5):
-    byte = Tx(0).byte_at(b * 8)   # byte_at takes a BIT index: b*8 is the first
-    print("  bit %2d..%2d -> byte %d = %02x   masks %s"
-          % (b * 8, b * 8 + 7, b // 8, byte,
-             " ".join("%02x" % (0x80 >> i) for i in range(8))))
-chk([(Tx(0).byte_at(b) >> (7 - b % 8)) & 1 for b in range(40)] == bits(),
-    "the five dispatched bytes carry the 40 bits the input leg carried, "
-    "bit for bit")
+    byte = Tx(0).byte_at(b * 8)  # byte_at takes a BIT index: b*8 is the first
+    print(
+        "  bit %2d..%2d -> byte %d = %02x   masks %s"
+        % (
+            b * 8,
+            b * 8 + 7,
+            b // 8,
+            byte,
+            " ".join("%02x" % (0x80 >> i) for i in range(8)),
+        )
+    )
+chk(
+    [(Tx(0).byte_at(b) >> (7 - b % 8)) & 1 for b in range(40)] == bits(),
+    "the five dispatched bytes carry the 40 bits the input leg carried, bit for bit",
+)
 
 print()
 print("THE ROUND TRIP, THROUGH THIS FILE'S OWN RECEIVER, AT THREE OFFSETS")
 print("AND WITH THE RETURN LEG'S OWN IDLE LEVEL (LOW, not the input's HIGH):")
 for fl in (0, 1):
     for off in (20, 37, 64):
-        rx = rx_on(WIRES[fl], off, IDLE_OUT,
-                   off + 2 * HALF_US * TX_HALF_TOTAL + 8)
+        rx = rx_on(WIRES[fl], off, IDLE_OUT, off + 2 * HALF_US * TX_HALF_TOTAL + 8)
         ok = (rx.d[0], rx.d[1], rx.d[2], rx.d[3]) == (FRAME[0], FRAME[1], FRAME[2], fl)
-        chk(ok, "flag %d at t=%2d us: banked %02x %02x %02x, dmem[3] = %d"
-            % (fl, off, rx.d[0], rx.d[1], rx.d[2], rx.d[3]))
+        chk(
+            ok,
+            "flag %d at t=%2d us: banked %02x %02x %02x, dmem[3] = %d"
+            % (fl, off, rx.d[0], rx.d[1], rx.d[2], rx.d[3]),
+        )
 print()
 print("  AND THE IDLE LEVEL IS NOT A DETAIL, which is why it is a parameter")
 print("  above: with the return leg idling HIGH instead of LOW the frame-")
@@ -505,20 +535,23 @@ print("  FM1 would get none, the opposite of the input leg. The lock holds")
 print("  either way, because it is made by the preamble's two-half gap and")
 print("  not by the level the line happened to be resting at.")
 for fl in (0, 1):
-    rx = rx_on(WIRES[fl], 20, IDLE,
-               20 + 2 * HALF_US * TX_HALF_TOTAL + 8)
-    chk((rx.d[0], rx.d[1], rx.d[2], rx.d[3]) == (FRAME[0], FRAME[1], FRAME[2], fl),
+    rx = rx_on(WIRES[fl], 20, IDLE, 20 + 2 * HALF_US * TX_HALF_TOTAL + 8)
+    chk(
+        (rx.d[0], rx.d[1], rx.d[2], rx.d[3]) == (FRAME[0], FRAME[1], FRAME[2], fl),
         "  the same, with the return leg idling HIGH: banked %02x %02x %02x, "
-        "dmem[3] = %d" % (rx.d[0], rx.d[1], rx.d[2], rx.d[3]))
+        "dmem[3] = %d" % (rx.d[0], rx.d[1], rx.d[2], rx.d[3]),
+    )
 
 print()
 print("THE ENCODER MUST NOT TRANSMIT A FLAG IT NEVER MEASURED, and the")
 print("model says so as a rule rather than leaving it to the firmware:")
-rx = Rx(phase_states=3, idem="trace")   # never polled: dmem[3] = 0xFF
-chk(rx.d[3] == 0xFF,
+rx = Rx(phase_states=3, idem="trace")  # never polled: dmem[3] = 0xFF
+chk(
+    rx.d[3] == 0xFF,
     "dmem[3] = 0xFF is 'I have not locked onto anything', and the encoder's "
     "entry test sends NOTHING on it -- an unmeasured polarity is not a "
-    "polarity, and the frame in dmem[0..2] came off a wire that did")
+    "polarity, and the frame in dmem[0..2] came off a wire that did",
+)
 
 print()
 if fail:
