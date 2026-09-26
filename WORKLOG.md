@@ -2106,3 +2106,63 @@ been shown to drop events.
    must not be peeled with `SHR`. That is certain, it is independent of every
    instrument in this act, and it is the check whose absence cost the hour that
    produced this entry.
+
+## 2026-09-27 act (c): TASK-START -- MAKE THE PROBE COMPLETE, OR STOP USING IT
+
+The queue is the instrument, not the firmware: a probe that drops four events in
+a row and prints a plausible table is worse than no probe, and every row it does
+print has missing neighbours. **So the first thing this probe must do is prove
+it saw everything** — a hit counter and the largest half-interval count it
+witnessed, printed as a total rather than inferred from gaps in a table.
+
+**AND THE QUESTION IT THEN ANSWERS IS ONE NUMBER: did the encoder drive 80
+`OUT TXPIN`, or fewer?** The counter advanced by five across a 605-clock gap, so
+either four OUTs were missed by the probe or four were never driven, and those
+are very different findings: the first is an instrument fault and the second is
+the wire going quiet for four half-intervals, which the histogram would have
+hidden because a run of identical bits has the same intervals as a correct one.
+
+### THE INSTRUMENT IS STILL NOT PROVING ITSELF, AND THAT IS THE FINDING
+
+Two more things about the probe, both of them the same shape as the last two
+entries: **the measurement instrument is wrong before the thing it measures can
+be.**
+
+* **THE ROW LABELS LAG BY ONE.** `pq_n <= pq_n + 1` is non-blocking and the
+  `$display` is in the same clock, so the row labelled `OUT 76` is the
+  seventy-seventh hit. That is harmless on its own and it is *why the gaps could
+  not be read as missed events*: consecutive printed labels are not
+  consecutive hits.
+* **THE TOTAL NEVER PRINTED.** The probe counts every hit and announces the
+  total at 1100 us, and the announcement is not in the output at all — the last
+  line of the run is the testbench's own `FAIL` at 2434 us. So the one number
+  that would settle "did it see 80 or 77" is the number that is missing, and a
+  probe whose summary line does not appear cannot be used to certify itself.
+
+**SO THE LEVELS OF THE RETURN LEG ARE STILL UNMEASURED**, and I want that on the
+record plainly, because the temptation in the next context will be to read the
+rows that did print. What is established:
+
+| what | state |
+| :--- | :--- |
+| the interval histogram (46 one-half, 16 two-half, 63 changes per pass) | measured, and the model's exactly |
+| the mask sequence in the listing (`0x80`…`0x01`, back to `0x80`) | read off the listing, and correct |
+| all 24 routes between two `OUT TXPIN` | exactly 120 clocks, by the check |
+| the preamble on the wire | `0x7f` after seven mids, `0xFF` on the eighth, flag 0 |
+| **the LEVELS the encoder actually drives** | **not measured** |
+
+**AND THE WAY OUT OF THIS IS NOT ANOTHER PROBE.** The model already asserts the
+levels — it builds the return leg half-interval by half-interval in both
+polarities and its own receiver recovers `a5 3c 96` from it — so what is
+missing is not a derivation but a comparison between the model's level sequence
+and the pad's. **One number closes it: the count of level CHANGES on the pad
+must be 63 per pass, and the count of half-intervals at each level must match
+the model's first 80 entries.** The pad probe can print the level at each
+half-interval index as a string — the same shape as the bit-string probe, and
+the same trick that made the frame's order readable at a glance.
+
+**AND THE ORDER CHECK, which is certain and needs no instrument:**
+*in the encoder, the byte must not be peeled with `SHR`.* `SHR` is
+`a <= {1'b0, a[7:1]}` and there is no shift-LEFT to re-align, so a peeled byte
+goes out low bit first. Provable by putting the peel back, and it is the check
+whose absence cost this session's hour. **Write it before the next probe.**
