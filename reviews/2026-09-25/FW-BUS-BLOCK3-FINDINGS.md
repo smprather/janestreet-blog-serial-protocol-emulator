@@ -770,7 +770,7 @@ that.
 
 | fix | commit | where |
 | --- | --- | --- |
-| `spi_mode3.pe` response bytes `0x6B/0x2C/0xD9` -> `0x6D/0x6C/0x6F` | `1798abf` | `fw-bus-protocols` (pushed) |
+| `spi_mode3.pe` response bytes `0x6B/0x2C/0xD9` -> **`0x6F/0x6C/0x6D`** | `1798abf` then `e8d9dc0` | `fw-bus-protocols` |
 | `dmx512.pe` "fifteen NOPs" -> 14 in the transmitter, 16 in the file | `1798abf` | `fw-bus-protocols` (pushed) |
 | `servo_sweep.pe` steps 619/4655 -> **625**/**5000** | `dcb27df` | `fwbus/block3-mergeprep` |
 
@@ -783,6 +783,18 @@ which is the only test that settles it. The `servo_sweep` fix is on the prep
 branch because that file **does not exist on `fw-bus-protocols`** — it lives on
 `main`/`fw-timing-protocols` — and the prep tree has `main` merged, so the
 correction lands *with* Block 3.
+
+**`e8d9dc0` corrects `1798abf`, in this file's own lesson.** The spi3 response
+bytes were right and **reversed**: `1798abf` listed them in the TB's *literal*
+order (`WORD_HI = {8'h13, 8'h12, 8'h11}`) where a concatenation is MSB-first, so
+the last literal is index 0 and `0x11` is the *first* word on the wire. The
+routing supplied the wire order; `tb_pe_soc_spi3.v` already prints it
+(`word=1134 ... resp=6f`, `word=1245 ... resp=6c`, `word=1356 ... resp=6d`).
+The file now pairs each response with the word that produces it. Worth keeping:
+**arithmetic in the right order and the wrong order are both internally
+consistent**, so a self-consistent derivation can still be published backwards
+with every step checking out — and here the file's own immediately-preceding
+word list was what made the reversal visible.
 
 ## What is prepared, and what is pending
 
