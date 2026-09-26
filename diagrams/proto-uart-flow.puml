@@ -78,45 +78,46 @@ end note
 @enduml
 
 @startuml
-title UART RTS/CTS — one byte is ten cells, and the ninth clock is the handshake
+title UART RTS/CTS — one byte of 0xA5 is ten cells, and RTS brackets the whole frame
 skinparam defaultFontName Monospaced
 skinparam ParticipantBackgroundColor #eef3fb
 skinparam ParticipantBorderColor #4a6fa5
 skinparam ParticipantFontColor #16324f
+skinparam ActorBackgroundColor #dceee0
+skinparam ActorBorderColor #4a8a5c
+skinparam ActorFontColor #17452a
 skinparam SequenceGroupBackgroundColor #fbfbfb
 skinparam SequenceGroupBorderColor #b0b0b0
 skinparam ArrowColor #333333
 
-actor "receiver" as R #dceee0
+actor "receiver" as R
 participant "RTS\nbit 4" as RTS #fbe9cf
 participant "CTS\nbit 5" as CTS #fbe9cf
 participant "TX\nbit 0" as TX
 actor "master" as M
 
-R -> RTS : "I am ready to receive"
 M -> RTS : RTS HIGH — asserted BEFORE CTS is read
-R -> CTS : CTS HIGH
+R -> CTS : CTS HIGH, in response to RTS
 note over RTS, CTS
-  ORDER IS ASSERTED, NOT INFERRED. A driver
-  that waited for CTS first deadlocks against
-  a receiver that only raises CTS in response
-  to RTS, and the TB's second case is exactly
-  what such a receiver looks like.
+  ORDER IS ASSERTED, NOT INFERRED. RTS is the MASTER's pin and CTS is the
+  receiver's; the receiver never drives RTS. A driver that waited for CTS
+  before asserting RTS deadlocks against a receiver that only raises CTS when
+  asked, and the TB's second case is exactly what such a receiver looks like.
 end note
 participant "start" as st
-participant "d0" as d0
-participant "d1" as d1
-participant "d2" as d2
-participant "d3" as d3
-participant "d4" as d4
-participant "d5" as d5
-participant "d6" as d6
-participant "d7" as d7
+participant "d0\n1" as d0
+participant "d1\n0" as d1
+participant "d2\n1" as d2
+participant "d3\n0" as d3
+participant "d4\n0" as d4
+participant "d5\n1" as d5
+participant "d6\n0" as d6
+participant "d7\n1" as d7
 participant "stop" as sp
 participant "next" as nx
 
 M -> st : TX low
-st -> d0 : one bit = 2 TIMER ticks = 520 clks = 8.667 us
+st -> d0 : one cell = 2 TIMER ticks = 520 clks = 8.667 us
 d0 -> d1
 d1 -> d2
 d2 -> d3
@@ -136,11 +137,15 @@ note over d0, d7
   transmitter that shifted the wrong way is
   visible rather than accidentally correct.
 end note
-note over sp
-  10 cells per byte, 2 ticks each.
-  RTS is re-asserted inside every single
-  OUT, so it cannot be dropped by a
-  refactor of the bit loop.
+note over st, sp
+  TEN cells: a start bit, eight data bits LSB
+  first, and a stop bit. The handshake is NOT
+  a ninth clock — it brackets the frame: RTS is
+  high from before the first start bit until
+  after the last stop bit, and it is
+  re-asserted inside every single OUT, so it
+  cannot be dropped by a refactor of the bit
+  loop.
 end note
 @enduml
 
@@ -162,6 +167,7 @@ actor "master\npoll loop" as M
 
 R -> C : CTS LOW for 24,000 clocks
 activate M
+M -> S : RTS asserted FIRST, before CTS is read at all
 M -> C : read CTS, find it LOW
 loop the wait — one iteration every six clocks, dmem[3] saturates at 0xFF
   M -> C : read CTS again
