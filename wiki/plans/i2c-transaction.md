@@ -1,14 +1,24 @@
+---
+title: I2C transaction layer Implementation Plan
+created: 2026-09-23
+updated: 2026-09-26
+type: plan
+tags: [protocol, architecture, verification, firmware, timing]
+sources: [wiki/STATUS.md, wiki/plans/through-i2c.md, wiki/concepts/i2c-on-the-matrix.md, rtl/pe_pinmux.v, rtl/pe_soc.v, firmware/i2c_xfer.pe, tools/fw/peemu.py, tb/tb_pe_soc_i2c_xfer.v]
+confidence: high
+---
+
 # I2C transaction layer Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A firmware I2C master transaction on real RTL — START, 7-bit address + R/W, data byte with ACK, repeated START, read byte with NACK, STOP — verified by an independent slave model in the emulator and in an RTL testbench, with standard-mode timing measured at the pin.
 
-**Architecture:** Firmware only; no new RTL. The pin matrix (`rtl/pe_pinmux.v`), the 1 µs tick (`pe_soc` ports 4/6) and the open-drain/read-back contract are already built and measured (`wiki/concepts/i2c-on-the-matrix.md`). The transaction is a new program, `firmware/i2c_xfer.pe`, plus two independent slave models: one in `tools/fw/peemu.py` for the fast loop, one in the RTL TB.
+**Architecture:** Firmware only; no new RTL. The pin matrix (`rtl/pe_pinmux.v`), the 1 µs tick (`pe_soc` ports 4/6) and the open-drain/read-back contract are already built and measured ([[concepts/i2c-on-the-matrix]]). The transaction is a new program, `firmware/i2c_xfer.pe`, plus two independent slave models: one in `tools/fw/peemu.py` for the fast loop, one in the RTL TB.
 
 **Tech Stack:** ISA firmware (`tools/fw/peasm.py`), bit-accurate emulator (`tools/fw/peemu.py`), Icarus Verilog TB, the existing `mutate_i2c_tb.sh` style.
 
-**Spec:** `wiki/plans/through-i2c.md` (steps 6–7 and the firmware design sections) reconciled below, plus `wiki/concepts/i2c-on-the-matrix.md` (the measured timing and the three traps). `wiki/STATUS.md` item 3 is the work item.
+**Spec:** [[plans/through-i2c]] (steps 6–7 and the firmware design sections) reconciled below, plus `wiki/concepts/i2c-on-the-matrix.md` (the measured timing and the three traps). `wiki/STATUS.md` item 3 is the work item.
 
 > **Status 2026-09-23: COMPLETE, including the review-focus gaps.** Tasks 1–4
 > are done: the emulator checker and the RTL TB are both in the regression

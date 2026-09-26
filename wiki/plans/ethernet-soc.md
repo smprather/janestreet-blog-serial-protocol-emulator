@@ -1,3 +1,13 @@
+---
+title: 10BASE-T SoC integration Implementation Plan
+created: 2026-09-23
+updated: 2026-09-26
+type: plan
+tags: [ethernet, protocol, architecture, verification, gpio, firmware]
+sources: [wiki/STATUS.md, wiki/concepts/ethernet-receive-path.md, wiki/concepts/ethernet-scope.md, wiki/reference/block-diagram.md, wiki/reference/crc-config.md, wiki/decisions/adr-003-memory-plan.md, rtl/pe_dru.v, rtl/pe_manch.v, rtl/pe_eth_mac.v, rtl/pe_crc.v, rtl/pe_fbuf.v, rtl/pe_soc.v, tb/tb_pe_soc_eth.v, firmware/eth_rx.pe]
+confidence: high
+---
+
 # 10BASE-T SoC integration Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +18,7 @@
 
 **Tech Stack:** Verilog-2001/2012 RTL, Icarus Verilog (`iverilog`/`vvp`), Verilator + yosys lint gate, the repo's Python assembler (`tools/fw/peasm.py`).
 
-**Spec:** `wiki/STATUS.md` "Next steps (ordered)" item 1, plus `wiki/concepts/ethernet-receive-path.md` (the chain's contract) and `wiki/reference/block-diagram.md` (what "orphan" means). `wiki/reference/crc-config.md` fixes the CRC constants; `wiki/decisions/adr-003-memory-plan.md` fixes the 2 KB frame buffer.
+**Spec:** `wiki/STATUS.md` "Next steps (ordered)" item 1, plus [[concepts/ethernet-receive-path]] (the chain's contract) and [[reference/block-diagram]] (what "orphan" means). [[reference/crc-config]] fixes the CRC constants; [[decisions/adr-003-memory-plan]] fixes the 2 KB frame buffer.
 
 ## Global Constraints
 
