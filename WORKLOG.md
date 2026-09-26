@@ -3133,3 +3133,65 @@ gets far enough to use it.
   is gone" therefore remains a deduction about a 32-minute pipeline.** It is a
   deduction I have been wrong about repeatedly in this act, so it is left
   standing as an open item rather than written down as a result.
+
+## 2026-09-27 act (c): TASK-START -- THE RE-RUN, NOW THAT THE LOCK IS FREE
+
+The one open item from the last entry: the full gate has not been re-run since
+the wiki-date fix, and "my failure is gone" is still a deduction. This entry is
+that measurement, or a record of why it could not be taken.
+
+### THE FIX IS CONFIRMED, AND A NEW FAILURE IS MINE, AND IT IS NOT WHAT IT SAYS
+
+**`delay-lattice numbers` IS GONE FROM THE GATE.** The wiki-date fix worked:
+the line does not appear in the second full run, while `FIRMWARE: 42 PASS 42
+FAIL 0` and `TOTAL: 47 PASS 47 FAIL 0` are both green. **The open deduction from
+the last entry is now a measurement, and the act's own failure is resolved.**
+
+The two failures that are not mine are unchanged and identical: `run-lock
+process tree: FAILED` and `R3 golden package: FAILED`.
+
+**AND THERE IS A THIRD, IN MY OWN SUITE, THAT CONTRADICTS THE REPORT BESIDE
+IT:**
+
+    timing TB mutations: FAILED          <- run_all.sh's verdict, from the exit code
+      ... 58 case rows, all "detected" ...
+      timing-TB mutations: 58 cases, 58 detected, 0 survived, 0 harness errors
+      RESULT: PASS                       <- what the suite printed
+
+**A gate said FAILED over a suite that printed PASS on the same page.** The
+verdict comes from the **exit code**, and the table beside it is a `tail -20` of
+`/tmp/mutate_timing.log`. The suite has three non-zero paths that are not
+survivors — `chip_dep_check` (rc=4) and the firmware-tree `cmp` (exit 1) — and
+**I CANNOT ATTRIBUTE WHICH, because of what follows.**
+
+### AND THE REASON I CANNOT ATTRIBUTE IT IS THE FINDING
+
+**`regress/run_all.sh` keeps its results in FIXED `/tmp` PATHS** —
+`/tmp/mutate_timing.log`, `/tmp/check_mutation_lists.log`,
+`/tmp/check_wiki_pages.log`, `/tmp/delay_lattice.*.log` and at least five
+more — **and there are five `run_all.sh` processes on the machine right now,
+across worktrees.** Per-worktree locks make concurrent runs *possible* by
+design, and the two runs then **overwrite each other's result files**, because
+nothing in the path is per-worktree.
+
+So the log the gate `tail`s may be another run's, the exit code may belong to a
+different tree, and **a verdict can be read out of a file a different worktree
+is still writing.** That is this act's whole subject — an instrument whose
+result is not the result it claims to be — except that here it is not a probe
+with a stale address, it is the gate's own plumbing, and it is the class the
+`sv-idle-level` finding belongs to.
+
+**AND THE FIX IS THE OBVIOUS ONE, WHICH IS WHY IT IS NAMED RATHER THAN DONE
+IN A HURRY:** every result path becomes per-worktree (`$ROOT`-derived, or
+`mktemp` like the mutation suites already use for their own per-case
+directories). `mutate_timing_tb.sh` already does this correctly for its case
+directories and logs, which is why it is the wrapper that has to change.
+
+**WHAT IS LEFT OPEN, precisely, for the next session — and it is one command:**
+1. re-run `regress/mutate_timing_tb.sh` **alone**, with nothing else on the
+   machine, and record **its exit code and not its table** — the table said
+   PASS on a run whose gate said FAILED, so the table is not the evidence;
+2. if it exits 0, the in-gate failure was the collision above; if it exits
+   non-zero, the fault is real and is in the suite this act edited;
+3. either way, make `run_all.sh`'s result paths per-worktree, and prove the
+   change by running two gate runs at once and showing they no longer collide.
