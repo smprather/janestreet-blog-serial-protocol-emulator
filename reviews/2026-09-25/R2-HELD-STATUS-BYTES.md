@@ -91,6 +91,38 @@ session's opening LOAD as a real framed frame, as the TB already does.
 
 ## What the chip has to do to confirm them
 
+### Deriving the step table from this package (do not hand-type it)
+
+Ruling 2026-09-25 (manager): **one source of truth is this package's generator**,
+and the chip-side `tb/r2-vectors/` copy is a DERIVED SNAPSHOT with a drift gate
+against it. So the table is computed, never retyped — a hand-typed table is how
+the chip copy came to carry 18 steps and a 15/15 notice while this package was at
+22 of 22.
+
+The whole derivation is four fields per step, all of them already in
+`reviews/2026-09-25/r2-hex/manifest.json`:
+
+```python
+import json, pathlib
+m = json.loads(pathlib.Path("reviews/2026-09-25/r2-hex/manifest.json").read_text())
+for v in m["vectors"]:
+    for s in v["steps"]:
+        print(s["name"],
+              f'{v["name"]}.{s["name"]}.req.hex',
+              f'{v["name"]}.{s["name"]}.rsp.hex',
+              s["request_bytes"], s["response_bytes"], 0)
+```
+
+That yields **22** lines (so `R2_NUM_STEPS 22`), all 44 referenced `.hex` files
+ship in `r2-hex/`, and the four held-core lines come out byte-identical to the
+ones printed below — which is the check worth running before touching the chip's
+copy, because it confirms the two sides derive the same table rather than merely
+claiming to. `m["chip_confirmed"]` is `True` and
+`m["chip_evidence"]["not_confirmed_steps"]` is `{}`: the chip has run every step
+in the package, so there is no subset to be careful about. (A step that the chip
+had NOT run would appear in that key, by name, with its reason — the generator
+refuses to emit a package where one is unconfirmed and unexplained.)
+
 1. Copy the four steps' 8 new `.hex` files from `reviews/2026-09-25/r2-hex/`
    into `tb/r2-vectors/`, and re-generate the step table
    (`tb/r2-vectors/r2_steps.txt`, and `R2_CONFORMANCE_RUN.vh`) from the new
