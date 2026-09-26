@@ -140,7 +140,14 @@ module tb_pe_soc_ws2812;
     .dbg_rd_req(1'b0), .dbg_rd_dmem(1'b0), .dbg_rd_addr(16'h0000),
     .dbg_rd_data(), .dbg_rd_valid(),
     .pin_in(pin_in_bus), .pin_out(pin_out_bus), .pin_oe(pin_oe_bus),
-    .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_timer(dbg_timer)
+    .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_timer(dbg_timer),
+    // R3 debug control, idle. These two ports arrived with the R3 block, and a
+    // testbench that predates them leaves them UNCONNECTED -- which arrives as
+    // Z, makes the core's execute gate X, and the firmware then never executes
+    // a single instruction: every dmem read comes back x and the pin never
+    // moves. rtl/pe_cpu.v now defaults them defensively too; this tie-off is
+    // the act not DEPENDING on that, so the two repairs cannot mask each other.
+    .dbg_hold(1'b0), .dbg_step(1'b0)
   );
 
   always #(CLK_NS/2) clk = ~clk;

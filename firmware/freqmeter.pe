@@ -1,0 +1,280 @@
+; freqmeter.pe -- an input frequency and duty meter: the pin is an INPUT and
+; this program recovers two numbers from a waveform it does not control.
+;
+; THE ACT. Six of the timing acts in this repository DRIVE a pad. This one
+; LISTENS, which is a different shape of problem: the PWM arrives from
+; outside, the program cannot ask when the edges are coming, and the answer it
+; has to produce is a count between two edges it did not schedule. The number
+; that is the claim is the ACCURACY OF THE COUNT.
+;
+; WHAT IS MEASURED, per run: two 16-bit pairs -- (period, high time), in whole
+; microseconds -- for two consecutive periods of the incoming PWM. The
+; testbench sweeps the input over 158 Hz to 10 kHz with a varying duty and
+; checks every banked point, not the ends of the sweep.
+;
+; WHY THE LOW END IS THE POINT OF THE ACT. At 100 Hz the period is 10 000 us,
+; which does not fit in one 8-bit counter. A firmware that counts into a byte
+; wraps and reports 16 us for a 100 Hz signal: a wrong ANSWER rather than a
+; wrong precision, and a defect with no symptom at 10 kHz. That is why the
+; counters below are 16-bit, and why the mutation gate perturbs the high byte
+; specifically.
+;
+; THE TIMEBASE, and the trap in it. This SoC has TWO tick counters and they
+; are not the same size. Port 7 (STATUS) is the UART HALF-BIT tick: 260
+; clocks, 4.33 us, because it exists to place a serial sample mid-cell. Port
+; 4 (I2CTICK) is the free-running 1 us counter, and port 6 is its clear-on-
+; read FLAG. The first version of this program counted STATUS, and measured
+; 0.24 ticks per microsecond -- a factor of 4.33 out, reporting a 200 us
+; period as 46. A tick counter whose name says TIMER is not a microsecond.
+;
+; And the flag is not used either. A clear-on-read flag is one bit, so a poll
+; loop that takes longer than a tick reports several ticks as one, and the
+; loss is invisible in the result. This program instead READS THE COUNTER
+; and adds the DIFFERENCE:
+;
+;     elapsed = (now - previous) mod 256
+;
+; which is exact for any loop up to 255 us long, and this loop is 1.3 us --
+; two hundred times inside it. There is no flag to lose, so a slow iteration
+; (and the bank below is the slowest thing in the program) makes the
+; measurement LATE BY EXACTLY THE RIGHT AMOUNT rather than wrong. The
+; difference is also why the subtraction needs no carry test: the borrow of
+; (previous - now) is only ever used as "is it zero", which is the one
+; comparison the ISA has.
+;
+; THE ISA CONSTRAINT THAT SHAPES THE REST. The machine is 8-bit with no carry
+; flag -- only JZ/JNZ exist -- so 16-bit arithmetic is hand-built. A 16-bit
+; INCREMENT is the cheap case. A 16-bit ADD of a VARIABLE is the one this
+; program needs, and it is affordable because of something specific to it: the
+; addend is the elapsed time, which is never zero, so "the low byte came out
+; zero" means the low byte WRAPPED and the high byte must be incremented,
+; with no both-zero case to guard against. A program adding two memory values
+; would need that guard, because 0 + 0 = 0 is not a carry.
+;
+; A 16-bit SUBTRACT is a different matter entirely and this program contains
+; none. That is the design:
+;
+;     THE PERIOD IS T AT THE RISING EDGE, BECAUSE T IS RESET AT EVERY RISING
+;     EDGE. THE HIGH TIME IS H AT THE RISING EDGE, BECAUSE H IS ALSO RESET
+;     THERE AND STOPS COUNTING AT THE FALLING EDGE.
+;
+; Two resets remove every subtract, every compare and every divide. A 16-bit
+; borrow test is a four-case analysis on bit 7 and a compare is the same
+; thing again; neither appears here because neither is needed. The two
+; counters are the elapsed time SINCE THE LAST EDGE rather than a difference
+; of two absolute times, and that is also why the measurement is immune to a
+; tick the program failed to notice.
+;
+; THE RESOLUTION IS ONE MICROSECOND, and that is the honest specification of
+; this instrument: the counter is in microseconds, so the relative error is
+; 1/period -- 0.01 % at 100 Hz and 1.0 % at 10 kHz. The testbench's tolerance
+; is therefore 1 % of the period with a floor of one and a half ticks, stated
+; per point, because the instrument's resolution IS the claim. Counting CLOCKS
+; would be finer, and the way to get that is to count the pin rather than the
+; tick; the 1 us counter is used here because it is the timebase this SoC
+; has, and the pin is sampled every 14 clocks (0.23 us) so the EDGE is found
+; well inside the microsecond the counter then rounds it to.
+;
+; MEMORY. This machine has SIXTEEN bytes of data memory (DMEM_BYTES = 16 in
+; rtl/pe_soc.v, and every top level passes 16). The map below uses all
+; sixteen, which is why the program banks two points per run rather than a
+; whole sweep:
+;
+;     0,1   dmem[0..1]  T, the period counter, reset at every rising edge
+;     2,3   dmem[2..3]  H, the high-time counter, reset at every rising edge
+;     4     dmem[4]     the previous pad level (00 or 40)
+;     5     dmem[5]     the slot the next pair is banked into: FF before the
+;                       first rising edge, then 0, then 1, then 2 when both
+;                       are banked
+;     6     dmem[6]     1 when the run has banked both slots
+;     7     dmem[7]     the previous reading of the 1 us counter
+;     8,9   slot 0 period      10,11  slot 0 high time
+;    12,13  slot 1 period      14,15  slot 1 high time
+;
+; dmem[5] doubling as the "not started yet" state is how a separate FIRST
+; byte was avoided: the program needs one more byte than the sixteen it has,
+; and the slot index is the one value that is not a measurement.
+;
+; The first rising edge banks NOTHING, and cannot: the program started in the
+; middle of a period, so the time since the previous rising edge is not a
+; period. That is a property of the protocol rather than a bug -- a receiver
+; that starts mid-period misses that one period -- and it is why the
+; testbench presents each run's first period as a warm-up and does not check
+; it. The slot base addresses are the constants FM_PER_BASE (8) and
+; FM_HI_BASE (10) in tools/fw/peasm.py, and the mutation gate perturbs them:
+; on a sixteen-byte machine a shifted base overlaps the working counters
+; rather than running off the end of memory.
+;
+; REQUIREMENT ON THE SIGNAL, and it is a real one: the line idles HIGH. A PWM
+; output idles high between frames, so the previous-level byte is initialised
+; to the high level and the initial high is not mistaken for a rising edge. A
+; line that idles low would need that byte initialised to 0; it is one
+; immediate, and stating it is better than a program that silently assumes.
+
+        ; ---- init ------------------------------------------------------
+init:
+        LDI   A, 0
+        OUT   PINOE, A        ; release EVERY pad: this program only listens.
+                               ; PINOE is a whole register -- a write meaning
+                               ; "this pin" is also a write meaning "the other
+                               ; pin", which has bitten this project four times.
+        IN    A, I2CTICK      ; the 1 us counter, seeded from where it is NOW
+        STM   7, A            ; rather than from zero, or the first elapsed
+                               ; time would be the counter's whole age
+        LDI   A, FM_IN
+        STM   4, A             ; the line idles high (see the header)
+        LDI   A, 0
+        STM   0, A             ; T = 0
+        STM   2, A             ; H = 0
+        STM   6, A             ; not done
+        LDI   A, 0xFF
+        STM   5, A             ; no rising edge has been seen yet
+
+        ; ---- the poll loop ----------------------------------------------
+        ; The pin is sampled on EVERY iteration, not only when a microsecond
+        ; has passed: the edge is then found to within one iteration (14
+        ; clocks, 0.23 us) rather than to within a whole microsecond, and the
+        ; counter still rounds the result to microseconds because that is
+        ; what a microsecond counter counts.
+main:
+        IN    A, I2CTICK       ; the free-running 1 us counter
+        LDM   X, 7             ; X = the previous reading
+        MOV   Y, A             ; Y = now
+        MOV   A, Y
+        STM   7, A             ; the previous reading becomes NOW, whether or
+                               ; not a microsecond has passed -- on the
+                               ; iterations where none has, it is unchanged
+        SUB   A, X             ; A = now - previous. One subtraction does
+        JZ    the_pin          ; both jobs: ZERO means no microsecond has
+                               ; passed, and NONZERO means A IS the elapsed
+                               ; time, 1..255. The ISA has no carry flag and
+                               ; this is the only way to get it: the borrow of
+                               ; (now - previous) is thrown away and the
+                               ; VALUE is what matters.
+        MOV   X, A             ; X = the elapsed time
+
+        ; --- T += elapsed -------------------------------------------
+        LDM   A, 0
+        ADD   A, X
+        STM   0, A
+        JZ    t_carry          ; the low byte wrapped, so the high one must
+        JMP   t_done           ; too. Both zero is impossible: the addend is
+t_carry:                       ; the elapsed time and is never zero.
+        LDM   A, 1
+        ADD   A, 1
+        STM   1, A
+t_done:
+        ; --- H += elapsed, the high-time counter ---------------------
+        LDM   A, 2
+        ADD   A, X
+        STM   2, A
+        JZ    h_carry
+        JMP   the_pin
+h_carry:
+        LDM   A, 3
+        ADD   A, 1
+        STM   3, A
+
+        ; ---- the pad, sampled every iteration -------------------------
+        ; Both values are 00 or FM_IN, so A - X is zero EXACTLY when the level
+        ; is unchanged. This is the ISA's only byte comparison and the whole
+        ; firmware rests on it: JZ/JNZ are the only flags there are.
+the_pin:
+        IN    A, PIN            ; driven pins read back, released pins the pad
+        AND   A, FM_IN
+        MOV   X, A              ; X = the level now
+        LDM   A, 4
+        SUB   A, X
+        JZ    main              ; unchanged: no edge, go round again
+
+        MOV   A, X
+        JZ    fall              ; A == 0: the line went LOW
+        JMP   rise
+
+        ; ---- a FALLING edge: the high time is complete ----------------
+fall:
+        MOV   A, X
+        STM   4, A             ; the level now, which is 0
+
+        ; H is banked straight into the slot dmem[5] names. It is written HERE
+        ; and not at the rising edge because H is live in between, and the
+        ; falling edge is the only instant at which it holds the high time and
+        ; nothing else. The stride between the slots is four bytes, so the
+        ; address is FM_HI_BASE + 4*IDX, and 4*IDX is two doublings -- a
+        ; 16-bit-free add of a VARIABLE, the one the ISA can express:
+        ; ADD A, X.
+        LDM   A, 5
+        MOV   X, A
+        ADD   A, X              ; 2 * IDX
+        MOV   X, A
+        ADD   A, X              ; 4 * IDX
+        MOV   X, A
+        LDI   A, FM_HI_BASE
+        ADD   A, X
+        MOV   X, A              ; X = the high-time address of this slot
+        LDM   A, 2
+        STS   [X], A
+        INCX
+        LDM   A, 3
+        STS   [X], A
+        JMP   main
+
+        ; ---- a RISING edge: the period is complete, and H is the high --
+rise:
+        MOV   A, X
+        STM   4, A             ; the level now, which is FM_IN
+
+        LDM   A, 5
+        MOV   X, A
+        LDI   A, 0xFF
+        SUB   A, X              ; zero exactly when no rising edge has been
+        JZ    first_rise        ; seen yet, which is the reference edge
+
+        LDM   A, 5
+        MOV   X, A
+        ADD   A, X
+        MOV   X, A
+        ADD   A, X
+        MOV   X, A              ; X = 4 * IDX
+        LDI   A, FM_PER_BASE
+        ADD   A, X
+        MOV   X, A              ; X = the period address of this slot
+        LDM   A, 0
+        STS   [X], A
+        INCX
+        LDM   A, 1
+        STS   [X], A
+
+        LDM   A, 5
+        JNZ   fin               ; IDX was 1, so both slots are now full
+        LDI   A, 1
+        STM   5, A
+        JMP   rearm
+
+first_rise:
+        LDI   A, 0
+        STM   5, A             ; slot 0 is next; nothing is banked yet
+        JMP   rearm
+
+fin:
+        LDI   A, 2
+        STM   5, A             ; both slots are banked, and the index says so
+        LDI   A, 1
+        STM   6, A             ; DONE
+        JMP   park
+
+        ; ---- rearm: both counters restart from this edge ---------------
+        ; The reset comes AFTER the bank, on purpose. A reset before it would
+        ; bank zero -- and a zero period is a value no check on the duty can
+        ; explain, which is why the two were written in this order rather than
+        ; the other way round.
+rearm:
+        LDI   A, 0
+        STM   0, A
+        STM   1, A
+        STM   2, A
+        STM   3, A
+        JMP   main
+
+park:
+        JMP   park              ; the run is finished; the host reads dmem

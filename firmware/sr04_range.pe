@@ -1,0 +1,633 @@
+; sr04_range.pe -- HC-SR04 ultrasonic ranging: a 10 us trigger, the echo pulse
+; width measured to the microsecond, and that width converted to millimetres.
+;
+; THE PROTOCOL, and it is the only act here whose ANSWER is a number rather
+; than a waveform. A 10 us pulse on TRIG makes the device emit eight 40 kHz
+; bursts and then hold ECHO high for the round trip, so the WIDTH of the echo
+; pulse is the distance:
+;
+;     t (us) = 2 * d (mm) / 0.343 mm/us   ->   d (mm) = t * 0.17150
+;
+; and the constant everybody uses is 11/64 = 0.171875, which is +0.22 % long
+; against the speed of sound. That error belongs to the CONSTANT and is stated
+; rather than absorbed: the arithmetic below is EXACT for 11/64.
+;
+; THE CONVERSION IS THE ACT, and it is where the ISA bites. No multiply, no
+; divide, no carry flag -- only JZ/JNZ. Four facts decide the program.
+;
+; 1. A 64-BYTE TABLE IS NOT AVAILABLE. The usual trick for us*11/64 is a
+;    lookup of floor(11r/64) over the low six bits. This machine has SIXTEEN
+;    bytes of data memory (DMEM_BYTES = 16 in rtl/pe_soc.v, and every top
+;    level passes 16) and they are all spoken for, so that is not a choice
+;    being declined; it does not fit.
+;
+; 2. THE MULTIPLY IS NOT NEEDED. Write us = 64q + r. Then
+;
+;        us * 11 / 64  =  11q + 11r/64  =  11q + floor(11r/64)
+;
+;    EXACTLY, because 11q is an integer. So the conversion is a multiply by
+;    ELEVEN of a ten-bit number, a multiply by eleven of a six-bit number, and
+;    one add. The plan for this act assumed a 16x16 multiply; this identity
+;    removes it, along with the division and the approximation the plan
+;    expected the division to cost.
+;
+; 3. A MULTIPLY BY ELEVEN IS FOUR DOUBLINGS AND TWO ADDS:
+;
+;        x -> 2x -> 4x -> 5x -> 10x -> 11x
+; 
+;    (5x is 4x + x, and 10x is 5x doubled.) No loop, no counter, no second
+;    temporary: the multiplicand stays in Q throughout.
+; 
+; 4. A DOUBLING IS THE CHEAPEST 16-BIT OPERATION THIS ISA HAS, and unlike any
+;    other 16-bit add it needs NO both-zero guard. The carry out of lo+lo is
+;    BIT 7 OF THE ORIGINAL LOW BYTE, so one AND with 0x80 and one JNZ is the
+;    whole test; and "the result is zero" means "nothing carried", because
+;    doubling zero cannot carry and is the only way to reach zero. A general
+;    add of a variable is different: 0 + 0 = 0 is not a carry, so the
+;    addends must be re-read to tell a wrap from a pair of zeros. That
+;    asymmetry is the reason the conversion is mostly doublings.
+; 
+;    No 16-bit overflow is possible anywhere in the conversion, and the
+;    largest value involved is 11 * (23000 >> 6) = 3949: the intermediates are
+;    8q = 2872 and 10q = 3590, and the second term is 11 * 63 = 693. That is
+;    recorded rather than assumed, because an unnoticed overflow in the high
+;    byte is invisible from the outside -- the answer would still be a
+;    plausible millimetre figure.
+; 
+; THE TIMEBASE is the 1 us counter read as a DIFFERENCE, exactly as in
+; freqmeter.pe and for the same reason: the clear-on-read flag on port 6 is one
+; bit, so a poll loop longer than a tick reports several ticks as one. Port 7
+; is the 4.33 us UART half-bit tick and is not a microsecond.
+; 
+; THE ECHO IS CAPTURED, NOT SAMPLED, which is what makes this act safe at 4 m.
+; A 23 ms echo is 1.38 M clocks, and nothing here polls per clock, stores an
+; edge list, or can miss an edge: the program waits for ECHO to rise, counts
+; microseconds until it falls, and the count IS the measurement. The longest
+; span without a poll is the 10 us trigger, where the program's worst case is
+; a few hundred clocks; the 300 us sensor response is spent in a
+; two-instruction poll loop.
+; 
+; MEMORY. Sixteen bytes, all of them:
+; 
+;     0,1   T   the microsecond counter, and LATER the main term (11q).
+;             The reuse is safe for a reason rather than by luck: the
+;             conversion runs at the ECHO FALLING edge, by which time the
+;             width is already latched in US, and the next edge of ECHO is a
+;             whole measurement away. T is dead until then.
+;     2,3   US  the measured echo width, microseconds
+;     4     PREV  the previous ECHO level (00 or 20)
+;     5     STATE what the program is waiting for
+;     6,7   slot 0's answer, millimetres
+;     8,9   slot 1's answer
+;    10     N   how many measurements are banked
+;    11     DONE
+;    12,13  Q   the multiplicand
+;    14,15  ACC the small term (11r, then 11r/64)
+; 
+; Two measurements per run, and not because the arithmetic is expensive: an
+; answer is two bytes and the machine has sixteen.
+; 
+; THE TRIGGER PULSE is a COUNTED delay, not a wait on the tick, so its width
+; is exact in clocks: 4 * SR_TRIG + 4 clocks, and SR_TRIG = 149 makes that
+; exactly 600 clocks = 10.000 us. The value lives in peasm's CONSTS table
+; because a fitted instruction count cannot be reached by editing the source,
+; and a mutation gate that cannot perturb the number a protocol depends on is
+; not testing the protocol.
+
+        ; ---- init ------------------------------------------------------
+init:
+        LDI   A, 0
+        OUT   TXPIN, A         ; the level, low
+        OUT   PINOE, A         ; and BOTH pads RELEASED. The init claims
+                               ; nothing: the only claim of TRIG in this program
+                               ; is inside the trigger, because a pad claimed
+                               ; here would be DRIVEN between measurements --
+                               ; a held level where the device expects an idle
+                               ; one, and a real device reads that as a
+                               ; malformed trigger.
+        LDI   A, 0
+        STM   0, A
+        STM   2, A             ; T = 0, US = 0
+        STM   4, A             ; PREV = 0, the level ECHO IDLES AT. It was
+                               ; left at its reset value, which is X -- and an X
+                               ; in the edge detector is not a level that does
+                               ; not match: `A - X` is X, `JZ` on X is FALSE,
+                               ; so the very first poll reported an EDGE. The
+                               ; run then went one event out of step from the
+                               ; first instruction and the state machine reached
+                               ; its "the echo has ended" branch before any
+                               ; echo existed. PREV's initial value is part of
+                               ; the program's contract with the device.
+        STM   5, A             ; state 0: trigger first
+        STM   10, A
+        IN    A, I2CTICK
+        STM   11, A            ; the previous 1 us reading, SEEDED FROM THE
+                               ; COUNTER and not from zero: seeded with zeros
+                               ; the first elapsed time would be the counter's
+                               ; whole age. One byte is enough because the
+                               ; difference is taken mod 256 and the loop is
+                               ; 1.3 us. This byte was the DONE flag in the
+                               ; first draft, and ACC (14,15) held the reading
+                               ; instead -- which ALIASES: the conversion
+                               ; overwrites dmem[14..15] and the poll loop
+                               ; reads the previous reading from there. It
+                               ; happens to be harmless (the microsecond count
+                               ; only measures the echo, and T is zeroed at
+                               ; the echo's rising edge, so a garbage elapsed
+                               ; after a conversion lands in a counter that is
+                               ; about to be zeroed) -- but "harmless by
+                               ; accident" is exactly the reasoning that
+                               ; produced every invisible defect in this
+                               ; block, so the two roles are separated and
+                               ; the completion flag is the slot count.
+
+        ; ---- the poll loop ----------------------------------------------
+main:
+        IN    A, I2CTICK
+        LDM   X, 11
+        MOV   Y, A
+        MOV   A, Y
+        STM   11, A
+        SUB   A, X             ; now - previous: ZERO means no microsecond has
+        JZ    the_pin          ; passed, and NONZERO means A IS the elapsed time
+        MOV   X, A             ; (1..255). One subtraction, both jobs -- and
+                                ; the borrow of it is used only as a zero test,
+                                ; which is the one comparison the ISA has.
+        LDM   A, 0             ; T += elapsed
+        ADD   A, X
+        STM   0, A
+        JZ    t_carry
+        JMP   state_go
+t_carry:
+        LDM   A, 1
+        ADD   A, 1
+        STM   1, A
+
+        ; ---- ECHO, sampled on every iteration --------------------------
+        ; Both levels are 00 or SR_ECHO, so A - X is zero EXACTLY when the
+        ; level is unchanged: the ISA's only byte comparison, and the whole
+        ; edge detector rests on it.
+state_go:
+        ; The STATE is dispatched HERE, once per pass, and not from inside the
+        ; edge detector. The first version dispatched it from the edge path,
+        ; which works exactly once: after the first bank the pads are idle and
+        ; ECHO never changes again, so no edge ever arrives, the trigger is
+        ; never re-entered, and the run banks one measurement and stops. A
+        ; state machine whose states are only reachable through an external
+        ; event is a state machine that runs once.
+        LDM   A, 5
+        JZ    trig_go          ; state 0: the trigger is due, unconditionally
+
+the_pin:
+        IN    A, PIN
+        AND   A, SR_ECHO
+        MOV   X, A
+        LDM   A, 4
+        SUB   A, X
+        JZ    main             ; no edge
+        MOV   A, X
+        STM   4, A             ; the level now, whichever it is
+
+        LDM   A, 5
+        SUB   A, 1
+        JZ    echo_up          ; state 1: the echo has started
+        JMP   echo_down        ; state 2: the echo has ended
+
+        ; ---- the trigger: claim TRIG, then SR_TRIG_LEN iterations of a
+        ; ---- four-clock loop. The claim is HERE and not in the init, so the
+        ; ---- pad is RELEASED between measurements; and the LEVEL is written
+        ; ---- before the ENABLE, so the pin's rising edge is the enable's own
+        ; ---- effect and not one instruction early. PINOE is a whole
+        ; ---- register, so both bits are written every time: a write claiming
+        ; ---- one pad is also a write giving the other away, and that family
+        ; ---- has now bitten this repository five times, twice in this act.
+        ; ---- The first version of this program claimed TRIG in the INIT and
+        ; ---- released it at the end of the first pulse, so its trigger was a
+        ; ---- side effect of the init and its pulse measured 627 clocks
+        ; ---- instead of the 600 the delay is fitted to.
+trig_go:
+        LDI   A, SR_TRIG
+        OUT   TXPIN, A
+        LDI   A, SR_TRIG
+        OUT   PINOE, A         ; TRIG driven, ECHO still released
+        LDI   A, SR_TRIG_LEN
+        STM   12, A            ; the delay counter, and SR_TRIG_LEN rather
+trig_wait:                    ; than SR_TRIG: those two constants are 149 and
+                               ; 0x40, the PIN and the LENGTH, and the first
+                               ; version of this line used the pin. The pulse
+                               ; came out 260 clocks = 4.3 us -- under the
+                               ; device's 10 us minimum, and caught by the
+                               ; testbench's EQUALITY against 600 clocks, which
+                               ; is the whole reason that check is an equality
+                               ; and not the datasheet's ">= 10 us". dmem[12] is
+                               ; Q's low byte, dead until the conversion.
+        LDM   A, 12
+        SUB   A, 1
+        STM   12, A
+        JNZ   trig_wait        ; 4 clocks per iteration
+        LDI   A, 0
+        OUT   TXPIN, A         ; TRIG falls here: 4*149 + 4 = 600 clocks
+        OUT   PINOE, A         ; and BOTH pads are RELEASED on the very next
+                               ; clock, with no LDI in between: A is already 0,
+                               ; so the pad is never driven at a level for a
+                               ; single clock after the pulse, which is what
+                               ; "TRIG is never driven while it is not
+                               ; pulsing" is there to catch. This is the FIFTH
+        LDI   A, 1             ; write in this repository that confused a
+        STM   5, A             ; level with an enable: writing SR_TRIG to
+                               ; PINOE drives TRIG LOW, which is a held level
+                               ; and not an idle one. The first version of this
+                               ; program did exactly that, and the testbench
+                               ; caught it as "TRIG is never driven while it
+                               ; is not pulsing" -- a check written for a
+                               ; different act's failure, firing on this one.
+        JMP   main
+        JMP   main
+
+echo_up:
+        LDI   A, 0
+        STM   0, A
+        STM   1, A             ; T = 0 HERE, not at the trigger: the sensor's
+        LDI   A, 2             ; response delay is not part of the distance.
+        STM   5, A             ; and the STATE ADVANCES, which the first
+        JMP   main             ; version of this line did not do: with the
+                               ; state still 1, the echo's FALLING edge was
+                               ; read as a second rising edge, the width was
+                               ; never latched, and the run banked nothing at
+                               ; all. Two states are needed to tell the two
+                               ; edges of the same pulse apart, and the state
+                               ; machine is the only place that can.
+
+echo_down:
+        LDM   A, 0             ; T is the round trip. Latched into US first,
+        STM   2, A             ; because the conversion overwrites dmem[0..1]
+        LDM   A, 1
+        STM   3, A
+        LDI   A, 2
+        STM   5, A
+        JMP   convert
+
+        ; =================================================================
+        ; THE CONVERSION.  mm = us*11/64, exactly.
+        ;   Q   = us >> 6        ACC = 11*(us & 63), then >> 6
+        ;   T   = 11*(us >> 6)   T  += ACC, and T is the answer
+        ; =================================================================
+convert:
+        ; ---- the small term: ACC = 11 * (us & 63) ---------------------
+        LDM   A, 2
+        AND   A, 0x3F
+        STM   12, A
+        LDI   A, 0
+        STM   13, A            ; Q = r
+        LDM   A, 12
+        STM   0, A            ; ACC = Q, and THAT is where the chain starts:
+        LDM   A, 13            ; x -> 2x -> 4x -> 5x -> 10x -> 11x is a chain
+        STM   1, A            ; out of x, so an accumulator initialised to
+        JMP   acc_x2           ; ZERO computes 3x instead of 11x and returns a
+                               ; number, which is the worst kind of wrong.
+acc_x2:                         ; ACC *= 2
+        LDM   X, 0
+        LDI   A, 0x80
+        AND   A, X             ; bit 7 of the ORIGINAL low byte IS the carry
+        JNZ   acc_x2_c
+        LDM   X, 1
+        LDM   A, 1
+        ADD   A, X
+        STM   1, A
+        JMP   acc_x2_e
+acc_x2_c:
+        LDM   X, 1
+        LDM   A, 1
+        ADD   A, X
+        ADD   A, 1
+        STM   1, A
+acc_x2_e:
+        LDM   X, 0
+        LDM   A, 0
+        ADD   A, X
+        STM   0, A
+        JMP   acc_x4
+acc_x4:                         ; ACC *= 2  ->  4r
+        LDM   X, 0
+        LDI   A, 0x80
+        AND   A, X
+        JNZ   acc_x4_c
+        LDM   X, 1
+        LDM   A, 1
+        ADD   A, X
+        STM   1, A
+        JMP   acc_x4_e
+acc_x4_c:
+        LDM   X, 1
+        LDM   A, 1
+        ADD   A, X
+        ADD   A, 1
+        STM   1, A
+acc_x4_e:
+        LDM   X, 0
+        LDM   A, 0
+        ADD   A, X
+        STM   0, A
+        JMP   acc_x5
+acc_x5:                         ; ACC += Q    ->  5r, a GENERAL add
+        LDM   X, 12
+        LDM   A, 0
+        ADD   A, X
+        STM   0, A
+        JNZ   acc_x5_h
+        LDM   A, 12            ; zero: carried, unless the addend was zero
+        JZ    acc_x5_h
+        LDM   A, 1
+        ADD   A, 1
+        STM   1, A
+acc_x5_h:
+        LDM   X, 13
+        LDM   A, 1
+        ADD   A, X
+        STM   1, A
+        JMP   acc_x10
+acc_x10:                        ; ACC *= 2  ->  10r
+        LDM   X, 0
+        LDI   A, 0x80
+        AND   A, X
+        JNZ   acc_x10_c
+        LDM   X, 1
+        LDM   A, 1
+        ADD   A, X
+        STM   1, A
+        JMP   acc_x10_e
+acc_x10_c:
+        LDM   X, 1
+        LDM   A, 1
+        ADD   A, X
+        ADD   A, 1
+        STM   1, A
+acc_x10_e:
+        LDM   X, 0
+        LDM   A, 0
+        ADD   A, X
+        STM   0, A
+        JMP   acc_x11
+acc_x11:                        ; ACC += Q    ->  11r
+        LDM   X, 12
+        LDM   A, 0
+        ADD   A, X
+        STM   0, A
+        JNZ   acc_x11_h
+        LDM   A, 12
+        JZ    acc_x11_h
+        LDM   A, 1
+        ADD   A, 1
+        STM   1, A
+acc_x11_h:
+        LDM   X, 13
+        LDM   A, 1
+        ADD   A, X
+        STM   1, A
+
+        ; ---- ACC >>= 6, the term: 11r is at most 693, so the result is
+        ; ---- at most 10 and fits in ONE byte with a zero high byte.
+        LDM   A, 0
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        STM   0, A            ; (acc_lo >> 6) | ((acc_hi & 0x0f) << 2)
+        LDM   A, 1
+        AND   A, 0x0F          ; the bits that survive, then a LEFT shift by
+        MOV   X, A             ; two -- which is two DOUBLINGS, because this
+        ADD   A, X             ; ISA has SHR and no SHL. The first version of
+        MOV   X, A             ; these two lines emulated the left shift with
+        ADD   A, X             ; a right shift and two adds, which is not the
+        LDM   X, 0            ; same operation: it gave (acc_hi>>2)+2 where
+        OR    A, X             ; (acc_hi&0x0f)<<2 was meant, and a 1160 us echo
+        STM   0, A            ; came out as 779 mm instead of 199.
+        LDI   A, 0
+        STM   1, A
+
+        ; ---- Q = us >> 6, across the byte boundary -------------------
+        ; A 16-bit shift right by six, in bytes. SHR is one bit at a time and
+        ; there is no rotate, so the six bits that leave the top of the low
+        ; byte are put back at the bottom of the high byte, which is what
+        ; the OR is for. A shift LEFT by two of the high byte, computed as
+        ; two shifts and two adds, is the same thing seen from the other
+        ; end and is one instruction shorter than the shifts it replaces.
+        LDM   A, 2
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        STM   12, A
+        LDM   A, 3
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A                ; SIX shifts, not two: a 16-bit >>6 shifts
+        STM   13, A            ; BOTH bytes by six, and the high byte was
+                               ; written with two. That made Q 274 where it
+                               ; should have been 18, and a 1160 us echo came
+                               ; out as 822 mm -- a plausible millimetre
+                               ; figure, which is the whole problem with this
+                               ; act: nothing about a wrong answer here looks
+                               ; wrong.
+        LDM   A, 3
+        AND   A, 0x3F          ; (us_hi & 0x3f), then a LEFT shift by two as
+        MOV   X, A             ; two doublings -- the same correction as the
+        ADD   A, X             ; small term's shift above, and the same reason
+        MOV   X, A             ; to write it down twice: there is no SHL here
+        ADD   A, X             ; and emulating one from SHR is wrong in a way
+        LDM   X, 12            ; that still returns a number
+        OR    A, X
+        STM   12, A
+
+        ; ---- ACC = 11 * (us >> 6): the same five steps, one accumulator
+        ; away. T is dead from the falling edge onward, which is the only
+        ; reason there is a second accumulator at all.
+        LDM   A, 12
+        STM   14, A             ; T = Q, for the same reason ACC = Q above
+        LDM   A, 13
+        STM   15, A
+        JMP   t_x2
+t_x2:
+        LDM   X, 14
+        LDI   A, 0x80
+        AND   A, X
+        JNZ   t_x2_c
+        LDM   X, 15
+        LDM   A, 15
+        ADD   A, X
+        STM   15, A
+        JMP   t_x2_e
+t_x2_c:
+        LDM   X, 15
+        LDM   A, 15
+        ADD   A, X
+        ADD   A, 1
+        STM   15, A
+t_x2_e:
+        LDM   X, 14
+        LDM   A, 14
+        ADD   A, X
+        STM   14, A
+        JMP   t_x4
+t_x4:
+        LDM   X, 14
+        LDI   A, 0x80
+        AND   A, X
+        JNZ   t_x4_c
+        LDM   X, 15
+        LDM   A, 15
+        ADD   A, X
+        STM   15, A
+        JMP   t_x4_e
+t_x4_c:
+        LDM   X, 15
+        LDM   A, 15
+        ADD   A, X
+        ADD   A, 1
+        STM   15, A
+t_x4_e:
+        LDM   X, 14
+        LDM   A, 14
+        ADD   A, X
+        STM   14, A
+        JMP   t_x5
+t_x5:                            ; T += Q, a general add with the guard
+        LDM   X, 12
+        LDM   A, 14
+        ADD   A, X
+        STM   14, A
+        JNZ   t_x5_h
+        LDM   A, 12
+        JZ    t_x5_h
+        LDM   A, 15
+        ADD   A, 1
+        STM   15, A
+t_x5_h:
+        LDM   X, 13
+        LDM   A, 15
+        ADD   A, X
+        STM   15, A
+        JMP   t_x10
+t_x10:
+        LDM   X, 14
+        LDI   A, 0x80
+        AND   A, X
+        JNZ   t_x10_c
+        LDM   X, 15
+        LDM   A, 15
+        ADD   A, X
+        STM   15, A
+        JMP   t_x10_e
+t_x10_c:
+        LDM   X, 15
+        LDM   A, 15
+        ADD   A, X
+        ADD   A, 1
+        STM   15, A
+t_x10_e:
+        LDM   X, 14
+        LDM   A, 14
+        ADD   A, X
+        STM   14, A
+        JMP   t_x11
+t_x11:
+        LDM   X, 12
+        LDM   A, 14
+        ADD   A, X
+        STM   14, A
+        JNZ   t_x11_h
+        LDM   A, 12
+        JZ    t_x11_h
+        LDM   A, 15
+        ADD   A, 1
+        STM   15, A
+t_x11_h:
+        LDM   X, 13
+        LDM   A, 15
+        ADD   A, X
+        STM   15, A
+
+        ; ---- ACC += T, and ACC is the answer in millimetres --------
+        LDM   X, 0
+        LDM   A, 14
+        ADD   A, X
+        STM   14, A
+        JNZ   fin_hi
+        LDM   A, 0
+        JZ    fin_hi
+        LDM   A, 15
+        ADD   A, 1
+        STM   15, A
+fin_hi:
+        LDM   X, 1
+        LDM   A, 15
+        ADD   A, X
+        STM   15, A
+
+        ; ---- bank, then either trigger again or finish -----------------
+        LDM   A, 10
+        MOV   X, A
+        ADD   A, X             ; 2 * N
+        MOV   X, A
+        ADD   A, 1
+        ADD   A, 1
+        ADD   A, 1
+        ADD   A, 1             ; 2*N + 4
+        ADD   A, 1
+        ADD   A, 1             ; 2*N + 6: slot N's low address (6, then 8)
+        MOV   X, A
+        LDM   A, 14
+        STS   [X], A
+        INCX
+        LDM   A, 15
+        STS   [X], A
+        LDM   A, 10
+        ADD   A, 1
+        STM   10, A
+        LDI   A, 2
+        SUB   A, 1             ; one banked, or two?
+        JZ    park              ; two: the run is finished and the host reads
+        LDI   A, 0
+        OUT   PINOE, A         ; release BOTH pads while the sensor recovers
+        LDI   A, 0
+        STM   5, A             ; and STATE back to 0, for the same reason the
+        JMP   main             ; echo's rising edge sets it to 2: a state
+                               ; machine whose states are never returned to
+                               ; their entry point is a state machine that
+                               ; runs once.
+        ; ---- the sensor's RECOVERY, before the next trigger -------------
+        ; This is a PROTOCOL requirement and not politeness. An HC-SR04 needs
+        ; tens of milliseconds after an echo before it will answer another
+        ; trigger, and a trigger inside that window is not answered AT ALL:
+        ; it is ignored, so the measurement that never comes back is silent.
+        ; The first version of this program re-triggered 7 us after banking,
+        ; which is inside the recovery of every real device and of the
+        ; testbench's model -- so the model's second trigger was never seen,
+        ; the second echo never came, and the run banked ONE answer and
+        ; stopped with no symptom beyond a missing one. 255 outer passes of
+        ; (4*SR_RECOV_LEN + 5) clocks = 120,615 clocks = 2010 us, which
+        ; clears the model's 2 ms by 10 us.
+        LDI   A, 255
+        STM   12, A            ; dmem[12..13] is Q, and Q is dead from here:
+recov_out:                    ; the conversion has already read it
+        LDI   A, SR_RECOV_LEN
+        STM   13, A
+recov_in:
+        LDM   A, 13
+        SUB   A, 1
+        STM   13, A
+        JNZ   recov_in         ; 4 clocks per inner pass
+        LDM   A, 12
+        SUB   A, 1
+        STM   12, A
+        JNZ   recov_out        ; 5 clocks per outer pass
+        JMP   main
+park:
+        JMP   park

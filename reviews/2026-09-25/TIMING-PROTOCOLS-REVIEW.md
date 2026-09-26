@@ -545,3 +545,378 @@ the direction never changed. And a *mutation* can survive without being a defect
 value changes nothing on the wire, and loosening a check to catch it would be
 claiming to catch a no-op. Both are the same error one level apart: a gate
 element that reports success without asserting anything.
+
+---
+
+## Act (b) Block 3 — INPUT FREQUENCY + DUTY METER — CLOSED, in the regression
+
+`firmware/freqmeter.pe` (103 words) + `tb/tb_pe_soc_freqmeter.v` + 4 peasm
+CONSTS (`FM_IN`, `FM_PER_BASE`, `FM_HI_BASE`, and the map comment that goes
+with them).
+
+### Why this act is a different shape of problem
+
+The other six all **drive** a pad. This one **listens**. The PWM arrives from
+outside, the program cannot ask when the edges are coming, and the answer it
+has to produce is a count between two edges it did not schedule. So the number
+that is the claim is not a delay at all — it is the **accuracy of a count**,
+and the honest way to state that is per point, because the instrument's
+resolution *is* the specification:
+
+| point | period | relative error of a 1 µs counter |
+|---|---|---|
+| 10 000 µs (100 Hz) | 10 000 | 0.01 % |
+| 100 µs (10 kHz) | 100 | 1.0 % |
+
+The tolerance is therefore 1 % of the period with a floor of 1.5 ticks, and at
+the fast end of the sweep the *tolerance* is the dominant term and the
+quantisation is a percent of it. A single accuracy number would be a false
+claim at one end or the other.
+
+### The ISA constraint, and what it cost
+
+No carry flag, only `JZ`/`JZ`… only `JZ`/`JNZ`. Three arithmetic facts decided
+the whole program, and they are worth stating because the third one is the
+expensive one:
+
+1. **A 16-bit increment is cheap.** `+1` on the low byte is exactly zero when
+   it carries, so the carry test is one `JZ` on the low result.
+2. **A 16-bit add of a variable is affordable, but only just.** The carry test
+   is the same `JZ`, except that `0 + 0 = 0` is not a carry, so a general
+   addend needs a *guard*: when the low result is zero, reload the low operand
+   and test it for zero too. This program gets that guard away **for free**,
+   because its addend is the elapsed microsecond count and is therefore never
+   zero — "the low byte came out zero" can then only mean "the low byte
+   wrapped". The guard is not skipped, it is *unnecessary*, and the comment
+   says which.
+3. **A 16-bit subtract is a different machine.** The borrow of `a - b` cannot
+   be read off the difference: `(a-b) mod 256` has two preimages, one positive
+   and one negative, for every value except zero. Getting it exactly needs a
+   four-case analysis on bit 7, and a *compare* is the same analysis again.
+
+So the program contains **no 16-bit subtract and no compare at all**, and the
+design is what removes them:
+
+> the period is `T` at the rising edge, because `T` is **reset** at every
+> rising edge; the high time is `H` at the rising edge, because `H` is also
+> reset there and stops counting at the falling edge.
+
+Two resets remove every subtract, every compare and every divide. The
+firmware therefore measures rather than computes — the act's commit message
+called it *capture only* before a line of it existed, and that is what it
+turned out to be, for a reason the commit message could not have known.
+
+### The trap in the timebase, and why the flag is not used
+
+This SoC has **two** tick counters and they are not the same size:
+
+| port | name | period | what it is for |
+|---|---|---|---|
+| 0x7 | `STATUS` | 260 clocks = **4.33 µs** | the UART half-bit tick: it exists to place a serial sample mid-cell |
+| 0x4 | `I2CTICK` | 60 clocks = **1 µs** | the free-running microsecond counter |
+| 0x6 | `I2CSTAT` | 1 µs | that counter's clear-on-read flag |
+
+The first version counted `STATUS`, and measured 0.24 ticks per microsecond: a
+factor of 4.33 out, reporting a 200 µs period as 46. A tick counter whose name
+says TIMER is not a microsecond.
+
+The fix is not to use the 1 µs *flag* either. A clear-on-read flag is one bit,
+so a poll loop that takes longer than a tick reports several ticks as one, and
+the loss is invisible in the result — the measurement is simply short, by an
+amount that depends on how busy the program was. This program reads the
+**counter** and adds the **difference**:
+
+```text
+elapsed = (now - previous) mod 256
+```
+
+exact for any loop up to 255 µs, and this loop is 1.3 µs — two hundred times
+inside it. Two properties follow, and both are bought by the same three
+instructions:
+
+* there is no flag to lose, so a slow iteration (the bank is the slowest thing
+  in the program) makes the measurement late by **exactly the right amount**
+  rather than wrong;
+* the borrow of `now - previous` is used only as "is it zero", which is the
+  one comparison the ISA has. The *value* of the same subtraction is the
+  elapsed time, so one `SUB` does both jobs.
+
+### The machine has sixteen bytes, and the testbench had to be told
+
+`DMEM_BYTES = 16` in `rtl/pe_soc.v`, and every top level passes 16. A period is
+two bytes and a high time two, so the firmware banks **two points per run** and
+the sweep is **six runs of three periods** — the first period of each run is a
+warm-up, and it is not checked, for a reason that is a property of the protocol
+rather than of the firmware: the firmware starts in the middle of it, so the
+time since the previous rising edge is not a period. A receiver that starts
+mid-period misses that one period. A testbench that pretended otherwise would
+be asking the firmware to measure something it was never present for.
+
+The RED testbench (ccb6b8d) asked for sixteen points in `dmem[0..63]` on a
+machine with sixteen bytes: twelve of its own expectations were read out of an
+address space that does not exist, and its DONE flag at `dmem[14]` was *inside
+the data it was reporting*. **A test that sizes memory to what it wishes for is
+a test that reports success without measuring anything**, and the count of such
+elements in this block is now three.
+
+The map uses all sixteen, and one byte is shared rather than found: the slot
+index doubles as the "no rising edge seen yet" state (`FF`), because the
+program needed one byte more than the machine has and the slot index is the one
+value that is not a measurement.
+
+### Measured (real RTL, Icarus + the real SRAM macro)
+
+Twelve banked points, each checked against a **second, independent measurement
+of the pad** (the receiver in the TB), not against the generator's table — a
+generator that knew the answer would agree with a firmware that had the sweep
+wrong.
+
+```text
+point  0: period   8000 us ( 125.00 Hz)  high 6000 us  duty 75.0 %  [pad 8000.000 / 75.00 %]
+point  1: period  10001 us (  99.99 Hz)  high 2500 us  duty 25.0 %  [pad 10000.000 / 25.00 %]
+point  2: period   3150 us ( 317.46 Hz)  high 1039 us  duty 33.0 %  [pad 3150.000 / 33.00 %]
+point  3: period   4000 us ( 250.00 Hz)  high  400 us  duty 10.0 %  [pad 4000.000 / 10.00 %]
+point  4: period   1600 us ( 625.00 Hz)  high 1056 us  duty 66.0 %  [pad 1600.000 / 66.00 %]
+point  5: period   2000 us ( 500.00 Hz)  high 1600 us  duty 80.0 %  [pad 2000.000 / 80.00 %]
+point  6: period    801 us (1248.44 Hz)  high  480 us  duty 59.9 %  [pad  800.000 / 60.00 %]
+point  7: period   1000 us (1000.00 Hz)  high  399 us  duty 39.9 %  [pad 1000.000 / 40.00 %]
+point  8: period    400 us (2500.00 Hz)  high  180 us  duty 45.0 %  [pad  400.000 / 45.00 %]
+point  9: period    500 us (2000.00 Hz)  high  275 us  duty 55.0 %  [pad  500.000 / 55.00 %]
+point 10: period     80 us (12500.00 Hz) high   12 us  duty 15.0 %  [pad   80.000 / 15.00 %]
+point 11: period    100 us (10000.00 Hz) high   50 us  duty 50.0 %  [pad  100.000 / 50.00 %]
+```
+
+Every period is exact except three, by exactly **one tick** — 10 001, 801 and
+399 against 10 000, 800 and 400 — and the duty follows to a tenth of a point
+(59.9, 39.9) because the two counts share the same edge discipline. Those
+three are the resolution showing up in the log instead of hiding in a
+tolerance, which is what a measured-truth record should look like.
+
+The 16-bit claim is point 1: 10 001 µs, from a counter whose low byte wrapped
+**39 times**. A firmware counting into a byte reports **16 µs** there, and has
+no symptom at any other point in the sweep.
+
+### Defects found, in the firmware (2) and in the testbench (4)
+
+**Firmware**
+
+1. **The wrong tick counter.** Port 7 is the 4.33 µs UART half-bit tick, not
+   a microsecond. Every measurement was a factor of 4.33 out, and *short* at
+   every point — the shape a timebase mistake always has, and invisible in a
+   log that only prints the two slowest points.
+2. **A clear-on-read flag for a timebase.** Not a wrong answer yet, but the
+   design was one busy iteration away from losing ticks silently; replaced by
+   the counter difference, which is immune.
+
+**Testbench**
+
+3. **`pin_in_bus` put the PWM on bit 5, not bit 6.** `{1'b1, 1'b1, pwm,
+   5'b11111}` is eight bits with `pwm` third from the top — the firmware reads
+   bit 6, so the pad never appeared to change and the firmware sat in its
+   poll loop for 60 ms reporting nothing. Inherited from the RED testbench, and
+   the reason the first full run's only output was a watchdog. The three
+   sibling acts all write the same concatenation correctly
+   (`{1'b1, ow_line, 6'b111111}`), so the correct form was in the repository
+   and was not copied.
+4. **The receiver was armed before the pad was presented, not when the
+   firmware was released.** Whether presenting the pad high is itself an edge
+   depends on where the previous run's waveform stopped, so the edge list had
+   a spurious entry on some runs and not others, and the index arithmetic
+   (`2k+1`, `2k+2`) was off by one exactly when nobody was looking. Two of the
+   twelve points were compared against the wrong interval. Armed at the
+   release instead, the list *is* the firmware's own view of the signal.
+5. **A ternary that was never a comparison.** `if (a > b ? w : f)` parses as
+   `if ((a > b) ? w : f)`, and both arms of the ternary are nonzero, so the
+   condition was **always true**: the period and high-time checks reported
+   "12 of 12 are not" for values that differed by 0.0000 µs, and a check that
+   fires on correct data is a check nobody will read twice. The same
+   expression, in a `$display`, evaluated correctly — which is why it took a
+   debug copy with the difference printed to find.
+6. **A result that was never written passed every arithmetic check.** A
+   comparison against an unknown is false in Verilog, so a firmware that banked
+   one point and left the other slot alone passed the period check, the
+   high-time check, the duty check and the DONE check. Found by asking what a
+   `fm-finishes-early` mutant would do, before writing the mutant: the TB now
+   has an explicit "was it actually written" check.
+
+### Non-vacuity
+
+Ten mutation cases, all detected. Two of them exist because this act's own
+failure modes demanded them:
+
+| mutant | what it proves |
+|---|---|
+| `fm-tick-port` | the timebase is the 1 µs counter and not the 4.33 µs one |
+| `fm-t-high-byte` | the 16-bit claim: the high byte really is incremented |
+| `fm-h-high-byte` | …in the *other* counter too (the longest high time, 6 000 µs, is not covered by the longest period) |
+| `fm-wrong-pad` | the pad mask constant, reached through `--const` because a `sed` of the `.pe` cannot reach peasm's table |
+| `fm-no-rearm` | the reset that makes the measurement elapsed-time rather than absolute-time — and it is the one mutant whose **first** point is still correct |
+| `fm-double-count` | the counters advance once per elapsed microsecond |
+| `fm-idx-stuck` | the slot index advances |
+| `fm-finishes-early` | the run does not stop after one point (and it is caught only by the new X check) |
+| `fm-high-is-period` | the high time is banked from the high-time counter, not the period counter — every duty would read 100 %, which is a value a careless reader accepts |
+| `fm-per-base` | the slot base constant, where a shifted base *overlaps* the working counters on a sixteen-byte machine instead of running off the end |
+
+Plus the testbench's own non-vacuity: the twelve periods and the twelve high
+times are pairwise distinct, the duties are neither constant nor 50 % twice
+running, and at least one banked period is above 255 while another is inside a
+byte — which is the 16-bit claim stated from both sides.
+
+### The cost, stated
+
+~43 ms of 60 MHz — 2.6 M clocks, the largest simulation in this repository, and
+~55 s of wall. It is not trimmed: the 100 Hz point is where the 16-bit claim is
+tested, and dropping it would leave the act asserting something it had not
+measured. Two things were done about the cost and neither weakened a claim —
+the generator is **edge-driven with absolute delays** rather than woken once per
+clock (a 2.6 M clock TB that woke up 2.6 M times to decide whether the pin had
+moved would spend its wall time deciding it had not), and the DONE flag is
+polled every 256 clocks rather than every clock, because the firmware is parked
+once it is set and a per-clock read of `dut.dmem` is 2.6 M hierarchical reads.
+
+---
+
+## MERGE-REPAIR: six acts red in main, and the cause was not in the six acts
+
+**manager dispatch 2026-09-25 · commit `3657847` on `fw-timing-protocols`**
+
+### What was reported
+
+All six acts fail in main (5b4731f and later) with `dmem = xx`, zero edges.
+They were green on the branch they were verified on. The manager's hypothesis
+was that the merge dropped something in the act dependency chain, with
+`tools/fw/peasm.py` named as the visible difference.
+
+### What the evidence said, and it was not the hypothesis
+
+**Every one of the twelve files the six acts own is byte-identical between main
+and the green branch** — six `.pe`, six `.hex`, six TBs, and `peasm.py`. That
+was checked by object hash (`git rev-parse main:<path>` against
+`HEAD:<path>`), not by eye. There is nothing in the six acts to repair.
+
+The `peasm.py` difference the manager saw is **this branch's uncommitted
+Block 3 WIP**: the `FM_IN` / `FM_PER_BASE` / `FM_HI_BASE` constants and the
+block's comment. It is work in progress on this branch, not damage done by the
+merge, and it is now a separate commit (`d88e316`) that a `git diff` of two
+trees will not confuse with a merge artefact again.
+
+The real difference was one file the six acts do not own and do depend on:
+**`rtl/pe_cpu.v`**, where the R3 debug-control block added two **module
+inputs**, `dbg_hold` and `dbg_step`.
+
+### The mechanism
+
+```verilog
+wire cpu_exec = dbg_step || (run && !dbg_hold);   // R3, as merged
+```
+
+A testbench that predates those ports leaves them unconnected. The port arrives
+as `Z`, so `!dbg_hold` is `X`, so `cpu_exec` is `X`, so **`if (cpu_exec)` is
+false and the core never commits an instruction**. Every observable in the
+system then stays at its reset value: `dmem` reads back `x`, the pad never
+moves, and the testbench reports zero edges and eventually a watchdog.
+
+The evidence that this is the whole story is a **pattern**, not an argument.
+Of the nineteen testbenches that instantiate `pe_soc`:
+
+| tie `dbg_hold`? | count | result |
+|---|---|---|
+| no | **7** | **all 7 fail** (the six acts + the RED frequency meter) |
+| yes | 12 | all 12 pass (`tb_pe_soc_tick`'s comment reads "R3: debug control idle here") |
+
+Seven failing out of nineteen, and the seven are exactly the seven that do not
+name the ports. A merge that dropped content does not produce that shape; a
+new port with no default does, precisely.
+
+### The repair, in two independent hunks
+
+1. **`rtl/pe_cpu.v`, where the input is consumed.** The gate now tests both
+   debug inputs with **case equality against `1'b1`**, so anything that is not
+   a hard one reads as "not held" / "no step" — the debug interface is
+   inactive unless something actively asserts it. In synthesis this is the
+   identical expression (`x` and `z` do not exist in hardware), so the netlist
+   does not change. The convention belongs at the consumer rather than at
+   every call site, because a call site is the one place that can forget it.
+2. **The six acts' TBs, plus the frequency meter's**, tie the ports
+   explicitly, so no act *depends* on an RTL convention and the two repairs
+   cannot mask each other.
+
+Either alone is sufficient; both are kept.
+
+### Reported, not touched: the formal wrapper
+
+`formal/pe_soc/formal_pe_soc.v` also instantiates `pe_soc` without naming
+these two ports. There a floating input is not a dead core but a **free
+variable**, so every `pe_soc` target is proved with the debug hold free rather
+than inactive — weaker, not broken, and invisible in the current results.
+That is the R3 owner's call to make, so it is flagged rather than fixed here.
+
+### And a pre-existing failure the merge also carries
+
+`R3 golden package: FAILED` — `reviews/2026-09-25/r3-hex/README.md` and
+`tb/r3-vectors/README.md` disagree about the chip-confirmation status (25 of 26
+steps claimed chip-confirmed in simulation, versus none). **Reproduced
+identically in a pristine export of main**, so it is not caused by the repair.
+Also out of scope here; flagged for the R3 owner.
+
+### Verification
+
+All on real RTL, Icarus, the real `1P_1024x16` SRAM macro, in throwaway
+`git archive` exports of main so the main worktree was never touched.
+
+| probe | contents | result |
+|---|---|---|
+| **B** | `main` as merged, unpatched | **6/6 FAIL** (`edges=0`, `dmem=xx`) |
+| **A** | `main` + the `rtl/pe_cpu.v` hunk **only** | **6/6 PASS** |
+| **C** | `main` + the six TB hunks **only** | **6/6 PASS** |
+| **worktree** | `main` + both (this branch) | **6/6 PASS** |
+
+The commands, from any `git archive main` export, with
+`SRAM=$(regress/sram_model.sh)` and
+`RTL="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v"`:
+
+```sh
+cd tb
+for t in ws2812 servo dht11 ds18b20 ir_nec stepper_ramp; do
+  iverilog -g2012 -s tb_pe_soc_$t -o /tmp/v_$t.vvp $RTL $SRAM tb_pe_soc_$t.v
+  timeout 900 vvp /tmp/v_$t.vvp | grep -E '^(PASS|FAIL)'
+done
+```
+
+**Run these from the `tb/` directory.** The testbenches `$readmemh` a path
+relative to it (`../firmware/<name>.hex`), and running the same binaries from
+`/tmp` produces `ERROR: $readmemh: Unable to open ...` and then
+`FAIL: ... edges=0` — a failure signature **identical** to the real defect. I
+produced two rounds of exactly that false evidence before noticing, and it is
+the most dangerous coincidence in this whole episode: a wrong working
+directory reproduces the merge bug perfectly.
+
+### Two process notes worth keeping
+
+**I broke my own repair once, silently.** The port list ended without a
+trailing comma, so the `.dbg_hold` line became part of the comment and the port
+was still unconnected — the same defect as not writing it, and it elaborates
+and runs. All six acts still failed. Nothing but *compiling* caught it: no
+test, no gate, no assertion. An elaboration failure is the only instrument
+that sees a port that is syntactically fine and semantically absent.
+
+**A full suite run in this worktree filled `/tmp` and left mutants in the
+tree.** `run_all.sh --fast -j8` reached RTL 46/46 and FIRMWARE 37/37 — with
+the frequency-meter act included and green — and then eight mutation harnesses
+failed with `OSError: [Errno 28] No space left on device`, and one of them
+could not restore its snapshot: `FATAL: rtl/pe_eth_mac.v does not match the
+snapshot after restore`. Sixteen files were left mutated. This is the
+documented hazard (the per-worktree lock protects files from concurrent
+*runs*, not from a restore that fails), reproduced by running out of disk.
+Recovery was `git checkout -- firmware/ rtl/ formal/`; the tree is clean at
+`3657847` and `mutate_eth_mac_tb.sh` then reported **30 detected, 0 survived,
+0 harness errors** with the tree byte-identical afterwards — so those eight
+failures were environmental, not the repair.
+
+**And I killed another worker's run doing it.** Stopping my own suite with
+`pkill -9 -f "[v]vp"` matched **the manager's own verification run** in
+`/tmp/vm-red`, which then exited 137 (SIGKILL) and printed
+`MERGE GATE: RED — DO NOT PUSH HEAD`. The pattern was self-match-proof but not
+*scope*-proof: a pattern that cannot match itself can still match everyone
+else's processes. `pkill` is the wrong instrument in a shared `/tmp`; naming
+the process tree and killing by PID is the right one.
