@@ -189,13 +189,17 @@ MAX_WAIT_WORDS = 15  # the chip's worst-case wait words (R2 read contract)
 
 
 def strip_wait_words(raw: bytes, max_wait: int = MAX_WAIT_WORDS) -> bytes:
-    """Return the real frame from a response that may lead with 0xFFFF words.
+    """Return the real FRAME from a read buffer that may lead with 0xFFFF words.
 
     Mirrors ``tools/host_bridge/pe_frame.py`` (the Pico cannot import the host
     package, so the codec is kept in two copies that a fuzzer and a parity
     test tie together). Leading-ONLY and bounded, so a 0xFFFF inside a payload
-    is data. Raises ``FrameError`` if no real frame follows, so an all-filler
-    stream is a timeout rather than a bogus decode.
+    is data; and trimmed to the LENGTH FIELD, because the Pico's read buffer is
+    longer than the reply (it clocks a fixed budget of wait words for every
+    opcode, so a ready-immediate frame is followed by words the chip never
+    sent). Raises ``FrameError`` if no real frame follows — a timeout rather
+    than a bogus decode — or if the buffer ends inside the frame the length
+    field declares.
     """
     if len(raw) < 4:
         raise FrameLengthError("response too short to hold a frame")
@@ -205,7 +209,16 @@ def strip_wait_words(raw: bytes, max_wait: int = MAX_WAIT_WORDS) -> bytes:
         index += 1
     if index >= len(words) or words[index] == 0xFFFF:
         raise FrameCRCError(f"no frame after {index} wait words (chip bound {max_wait})")
-    return _bytes_from_words(words[index:])
+    remaining = words[index:]
+    if len(remaining) < MIN_FRAME_WORDS:
+        raise FrameLengthError("response too short to hold a frame")
+    frame_words = HEADER_WORDS + remaining[HEADER_WORDS - 1] + TRAILER_WORDS
+    if len(remaining) < frame_words:
+        raise FrameLengthError(
+            f"response truncated: {len(remaining)} words, the length field "
+            f"declares {frame_words}"
+        )
+    return _bytes_from_words(remaining[:frame_words])
 
 
 def decode_frame(raw: bytes) -> Frame:

@@ -1,0 +1,167 @@
+@startuml proto-fm-biphase-frame
+' ===========================================================================
+' proto-fm-biphase-frame.puml - (b) the FM0/FM1 symbol rules, the one bit that
+' differs, and the sixteen bytes of receiver state.
+'
+' There is no packet, no header, no checksum and no acknowledge in bi-phase
+' coding. What there IS is a symbol rule, and the whole of the protocol is in
+' it. So the breakout worth drawing is the symbol table, the FM0/FM1
+' difference, and the map - because on a sixteen-byte machine the receiver's
+' state IS the design.
+' ===========================================================================
+
+title FM0/FM1 bi-phase - the symbol rules, and the receiver's sixteen bytes\n<font size=12>there is no packet: a bit is two half-intervals and the value is a transition pattern</font>
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam rectangle {
+  BorderColor #33555
+  FontName monospaced
+  FontSize 12
+}
+skinparam rectangle<<fm0>> {
+  BackgroundColor #DCE6F5
+  BorderColor #5577AA
+}
+skinparam rectangle<<fm1>> {
+  BackgroundColor #D6F5D6
+  BorderColor #3A7A3A
+}
+skinparam rectangle<<both>> {
+  BackgroundColor #F4F7FB
+}
+skinparam rectangle<<red>> {
+  BackgroundColor #FADADA
+  BorderColor #AA3030
+}
+
+rectangle "THE RULES\nfrom which EVERYTHING here and in\ntb_pe_soc_bmc.v is written\nindependently" as R <<both>>
+
+rectangle "<b>0</b>\n\nfirst half: | transition\nsecond half: transition\n\n<b>the SAME in FM0 and FM1</b>" as Z0 <<both>>
+rectangle "<b>1</b> in <b>FM0</b>\n\nfirst half: | transition   <-- FM0's\nsecond half: NO transition\n\n<b>FM0 ADDS A TRANSITION AT THE START\nOF THE INTERVAL FOR A 1</b>" as M0 <<fm0>>
+rectangle "<b>1</b> in <b>FM1</b>\n\nfirst half: NO transition\nsecond half: NO transition\n\n<b>NO transition anywhere in the bit</b>" as M1 <<fm1>>
+
+rectangle "DECODE\nread dmem[3]" as DEC <<fm0>>
+rectangle "the ONLY difference\nbetween the two encodings" as DIFF <<red>>
+
+R -[#3A7]-> Z0
+R -[#3A7]-> M0
+R -[#3A7]-> M1
+DEC -[#3A7]-> Z0
+DEC -[#3A7]-> M0
+DEC -[#3A7]-> M1
+M0 -[#C09000]-> DIFF
+M1 -[#C09000]-> DIFF
+
+note top of R
+  <b>FOUR RULES, AND THEY ARE THE WHOLE PROTOCOL.</b>
+  ...
+  1. a bit is <b>TWO half-intervals</b>
+  2. a <b>1</b> has <b>NO transition at the END</b> of its interval, in BOTH encodings
+  3. a <b>0</b> <b>HAS</b> one, in BOTH encodings
+  4. <b>FM0 adds a transition at the START of the interval for a 1; FM1 does not</b>
+  ...
+  <b>RULE 4 IS THE ONLY DIFFERENCE BETWEEN THE TWO ENCODINGS,</b> and therefore the
+  only thing a receiver has to establish in order to know which one it is reading.
+  ...
+  <b>A BIT PERIOD IS A WHOLE NUMBER OF MICROSECONDS</b> - 2 us a half-interval, so
+  4 us a bit - and that is not tidiness. The receiver timestamps the level on the 1 us
+  counter and compares it with the level at the last CHANGE, and that comparison is
+  only exact if every transition lands on a tick. A bit period that is not a multiple
+  of the counter's unit would make the decoder's own arithmetic the least accurate
+  thing in the act.
+end note
+
+note right of DIFF
+  <b>WHY A RECEIVER CANNOT SKIP STEP 4, AND WHY THAT IS
+  THE CLAIM.</b>
+  ...
+  A sample-based edge detector asks "did the level move?". That question is
+  answered identically by all three symbols, because all three have a transition
+  somewhere. <b>It cannot distinguish FM0 from FM1 at all.</b>
+  ...
+  What distinguishes them is a transition in the <b>middle</b> of the first
+  half-interval - a data transition INSIDE a bit, not at its edge. So the decoder
+  has to accumulate half-intervals and decide ONCE PER BIT rather than once per
+  transition, and that is why dmem[8] counts half-intervals and the bit is
+  assembled in dmem[12,13].
+  ...
+  <b>THIS IS WHAT THE ACT CLAIMS:</b> not "the firmware drives a bi-phase stream"
+  but "the firmware RECOVERS THE CLOCK from a stream it shares no clock with, and
+  SAYS WHICH ENCODING IT LOCKED ONTO".
+end note
+
+note bottom of M1
+  <b>A RUN OF ONES IN FM1 IS A CLEAN SQUARE WAVE, NOT A
+  DEAD LINE.</b>
+  ...
+  One transition per bit, in the middle, and the decoder recovers its clock from
+  exactly those transitions.
+  ...
+  <b>THE FIRST VERSION OF tb_pe_soc_bmc.v CLAIMED OTHERWISE:</b> that a run of ones
+  in FM1 was the "no transitions" stream, and therefore not a decodable frame. That
+  claim was in the TB header, in the encoder below, and in two WORKLOG lines, and
+  <b>it was wrong in all four.</b>
+  ...
+  It was the INSTRUMENT that was wrong, which is the pattern this whole block
+  exists to demonstrate, and it is the reason the act was written with TWO decoders
+  from the wire rules rather than one decoder and one encoder that agree by
+  construction: <b>a pair that agrees by construction agrees even when both are
+  wrong.</b>
+  ...
+  The stream that genuinely carries no clock is a line held CONSTANT - which is
+  what a disconnected, shorted or dead sensor looks like - and there the firmware's
+  answer must be a <b>DECLARED FAILURE (0xFF) rather than a byte it invented.</b>
+  A decoder that cannot fail is not a decoder.
+end note
+
+rectangle "THE SIXTEEN BYTES, AND THE MAP IS THE DESIGN" as MAP <<both>>
+rectangle "0,1,2\n<b>the three bytes\nrecovered from\nthe input pad</b>" as B0 <<both>>
+rectangle "3\n<b>the ENCODING FLAG</b>\n0 = FM0\n1 = FM1\n0xFF = no transitions\n\n<b>the observable</b>" as B3 <<fm1>>
+rectangle "4\n<b>the level at the last\nCHANGE</b>\n\nthe store-forward\nthe ISA cannot\nexpress - see note" as B4 <<fm0>>
+rectangle "5\n<b>the microsecond\ntimestamp of the\nlast change</b>" as B5 <<fm0>>
+rectangle "6\n<b>the byte this program\nENCODES onto the\noutput pad</b>" as B6 <<fm1>>
+rectangle "7  bit counter\n8  half-intervals in\n     the current bit\n9  byte index" as B789 <<both>>
+rectangle "10  previous 1 us\n     reading, for the\n     elapsed difference\n11  phase: 0 = decode,\n     1 = encode" as B1011 <<both>>
+rectangle "12,13\n<b>the bit under\nconstruction, then the\nbyte being shifted out</b>" as B1213 <<fm0>>
+rectangle "14,15  scratch for the\n     elapsed time and\n     the shift" as B1415 <<both>>
+
+MAP -[#3A7]-> B0
+MAP -[#3A7]-> B3
+MAP -[#3A7]-> B4
+MAP -[#3A7]-> B5
+MAP -[#3A7]-> B6
+MAP -[#3A7]-> B789
+MAP -[#3A7]-> B1011
+MAP -[#3A7]-> B1213
+MAP -[#3A7]-> B1415
+
+note bottom of B4
+  <b>THE BOUNCE, AND IT IS FORCED BY THE ISA, NOT CHOSEN.</b>
+  ...
+  A transition detector wants a store-forward: <b>X = ram[X]</b>. On this machine it
+  cannot be written. <b>OP_LDS (0xB) is <font name="Courier">a <= ram[x]</font> with NO X
+  destination</b>, so the idiom is inexpressible; and the encoding that looks like it,
+  <b>LDM X,addr with arg[7]=1</b>, is a <b>DIRECT</b> load whose address field is the
+  <b>top nibble only</b> - it cannot even name byte 8.
+  ...
+  So the old level lives in a MEMORY byte, and every access to it costs a load and a
+  store. <b>And that byte belongs to this decoder and to nothing else:</b> a scratch
+  shared between a routine and its caller is how the DS18B20 act lost a byte counter
+  to the delay routine.
+end note
+
+note bottom of B3
+  <b>THREE BYTES PER DIRECTION, AND THE LIMIT IS THE
+  MACHINE.</b>
+  ...
+  A receiver's state - the transition timestamp, the previous level, the bit
+  counter, the phase flag and the frame being assembled - is most of sixteen
+  bytes, and the bounce byte is most of the rest. Three bytes is what is left.
+  ...
+  The limit is stated here rather than discovered later, because a receiver that
+  runs out of memory mid-frame produces a plausible wrong answer and nothing else.
+end note
+
+@enduml

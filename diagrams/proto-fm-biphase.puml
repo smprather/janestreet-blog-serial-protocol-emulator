@@ -1,0 +1,148 @@
+@startuml proto-fm-biphase
+' ===========================================================================
+' proto-fm-biphase.puml - (a) the FM0/FM1 bi-phase engine, both sides.
+'
+' *** STATUS: A DESIGNED WIP AND IT IS RED. *** firmware/bmc_frame.pe and
+' tb/tb_pe_soc_bmc.v exist on branch fw-timing-protocols (commits e708e69 and
+' b2cb76c) and are NOT in main. The testbench was written RED-first and the
+' first firmware draft assembles and runs, but all seven of its checks fail.
+'
+' The figures draw the DESIGN, and mark the state. This is the only act in the
+' family that is judged on a RECEIVER rather than on a waveform, so the
+' transmitter's state machine is the smaller half of this diagram.
+' ===========================================================================
+
+title FM0/FM1 bi-phase - the receiver, which is the whole act\n<font size=12>STATUS: designed WIP, on fw-timing-protocols, not in main, 7/7 checks RED</font>
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #33555
+  FontName monospaced
+}
+skinparam rectangle {
+  BorderColor #33555
+  FontName monospaced
+}
+skinparam rectangle<<red>> {
+  BackgroundColor #FADADA
+  BorderColor #AA3030
+  BorderThickness 2
+}
+skinparam rectangle<<wip>> {
+  BackgroundColor #FFF4D6
+  BorderColor #C8B800
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C8B800
+  FontName monospaced
+  FontSize 11
+}
+
+state "STATUS\n7 of 7 checks RED\n\ne708e69 the RED TB\nb2cb76c the first\nfirmware draft, which\nASSEMBLES and RUNS" as RED <<red>>
+RED : the act is no longer RED because there\nis no firmware - it is RED because a first\ndraft does not yet decode.\n\n<b>THE DISTINCTION MATTERS: the checks are the\nREFERENCE now, not a description of them.</b>
+
+' --------------------------------------------------------------- RECEIVER --
+state "RECEIVER - the half that is the act" as DEC {
+
+  [*] --> RELEASED
+  RELEASED : PINOE = 0x00 - RELEASE EVERY PAD, AND IN\nPARTICULAR THE INPUT.\n\n<b>THIS IS THE WHOLE DECODER IN ONE BIT.</b> A pad\nthe firmware DRIVES reads back its own register\nthrough PIN, not the wire, so claiming the input\npad means the firmware never sees the stream at\nall.\n\nThe first version CLAIMED the input - writing\nBMC_IN to PINOE, reasoning that "the input is the\ndevice's, so claim it" - and the symptom was that\n<b>NO TRANSITION WAS EVER DETECTED</b>, which reads\nas a decoder that does not work rather than as an\nenable written backwards.\n\n<b>It is the SIXTH time in this block that a level and\nan enable have been confused,</b> and the only reason\nit was found at all is that the testbench's check\nNAMES THE FLAG and the flag was 0xFF.\n\nsee the bounce note for the ISA constraint here
+
+  state "SAMPLE\ntimestamp the level" as SMP
+  SMP : IN A, PIN; AND A, BMC_IN\nnow = the 1 us counter\n\n<b>A BI-PHASE RECEIVER DOES NOT SYNCHRONISE ON A LEVEL.\nIt TIMESTAMPS the level and compares it with the\nlevel recorded at the last CHANGE</b> - and it is that\ncomparison which recovers the clock. There is no\nother clock in the system.
+
+  state "CHANGED?" as CHG
+  CHG : dmem[4] = the level at the last CHANGE\ndmem[5] = its microsecond timestamp\n\n<b>THE BOUNCE, AND IT IS FORCED BY THE ISA.</b>\nOn this machine the store-forward a transition\ndetector wants cannot be written: OP_LDS (0xB) is\na <= ram[x] with NO X destination, so X = ram[X]\nis inexpressible, and the encoding that looks like\nit, LDM X,addr with arg[7]=1, is a DIRECT load whose\naddress field is the top NIBBLE only and cannot even\nname byte 8. So the old level lives in a MEMORY\nbyte.\n\n<b>And that byte belongs to this decoder and to NOTHING\nELSE: a scratch shared between a routine and its\ncaller is how the DS18B20 act lost a byte counter to\nthe delay routine.</b>
+
+  state "FOLD\nintervals into BITS" as FLD
+  FLD : dmem[8] += 1 per half-interval, and the bit\nis decided ONCE PER BIT rather than once per\ntransition, because a bit is TWO half-intervals and\n<b>A DATA TRANSITION INSIDE A BIT IS WHAT DISTINGUISHES\nFM0 FROM FM1</b>.\n\nThis is the design decision the act exists to make.\nA sample-based edge detector cannot distinguish the\ntwo encodings at all.
+
+  state "FLAG\nwhich encoding" as FLG
+  FLG : dmem[3]: 0 = FM0, 1 = FM1, 0xFF = no transitions\n\n<b>A RUN OF ONES IN FM1 IS A CLEAN SQUARE WAVE</b> -\none transition per bit, in the middle - and the\ndecoder recovers its clock from exactly those\ntransitions. <b>IT IS NOT A DECODABLE-NOTHING CASE</b>:\nthe first version of the TB claimed it was, and the\nclaim was in the TB header, in the encoder, and in\ntwo WORKLOG lines, and was wrong in all four.
+
+  state "BANK\nthe three bytes" as BNK
+  BNK : dmem[0..2], LSB first, from the wire rules\nrather than from the firmware
+
+  RELEASED --> SMP
+  SMP --> CHG
+  CHG --> SMP : no change: keep timestamping
+  CHG --> FLD : the level moved
+  FLD --> SMP
+  FLD --> FLG : two half-intervals: the bit is decided
+  FLG --> BNK : a byte is complete
+}
+
+' --------------------------------------------------------------- TRANSMIT --
+state "TRANSMITTER - the smaller half" as ENC {
+
+  state "DECODE -> ENCODE\ndmem[11]" as SW <<wip>>
+  SW : after the three bytes are recovered, the same\nprogram ENCODES a byte on the OTHER pad, and\n<b>NEITHER SIDE IS TOLD WHAT THE OTHER SENT</b>
+
+  state "COUNT\nthe half-interval" as CNT
+  CNT : 120 clocks = <b>2 us</b>, and it is COUNTED, not\nwaited on: the receiver timestamps in whole\nmicroseconds, and a period that is not a whole\nnumber of them would make this act's OWN arithmetic\nthe least accurate thing in it.\n\n<b>THE BIT PERIOD IS A WHOLE NUMBER OF MICROSECONDS\nBECAUSE THE COMPARISON IS ONLY EXACT THEN.</b>
+
+  state "SHIFT\nthe byte out" as SFT
+  SFT : dmem[6] the byte, dmem[7] the bit counter,\ndmem[12,13] the bit under construction and then\nthe byte being shifted out
+
+  SW --> CNT
+  CNT --> SFT
+  SFT --> CNT
+}
+
+' ------------------------------------------------------------------ TB SIDE --
+state "TESTBENCH - two decoders, written from the WIRE RULES" as TB {
+  [*] --> ENCB
+  ENCB : encodes a byte on IN_PAD, and the firmware\nmust recover it
+  state "DECODE\nthe firmware's output" as DEC2
+  DEC2 : decodes the firmware's stream on OUT_PAD\n<b>WRITTEN FROM THE SAME WIRE RULES, NOT FROM THE\nFIRMWARE</b>\n\n<b>and the act was written with TWO decoders for exactly\nthat reason</b> - one decoder and one encoder that\nagree by construction would agree even when both are\nwrong, and the first version of this file was the TB\nheader, the encoder and two WORKLOG lines all\nasserting the same false claim about a run of ones.
+  ENCB --> DEC2
+}
+
+DEC -[#3A7,hidden]-> TB : one stream in, one out
+ENC -[#3A7,hidden]-> TB
+
+note bottom of SMP
+  <b>WHY THIS ACT IS NOT A SEVENTH TIMING ACT.</b>
+  ...
+  Every other act in this block is judged on a WAVEFORM a receiver can decode. This
+  one is judged on a <b>RECEIVER</b>: the code lives in the TRANSITIONS, not in the
+  levels, and the only clock in the system is the one the receiver recovers from the
+  data.
+  ...
+  So the claim is not "the firmware drives a bi-phase stream" but <b>"the firmware
+  RECOVERS THE CLOCK from a stream it shares no clock with, and says which encoding it
+  locked onto."</b>
+end note
+
+note bottom of FLG
+  <b>CONSEQUENCE ONE: A HELD-CONSTANT LINE IS NOT A FRAME, AND
+  THE FIRMWARE'S ANSWER MUST BE A DECLARED FAILURE.</b>
+  ...
+  EVERY bit of a well-formed frame carries a transition in its middle, because
+  "bi-phase" means the level changes WITHIN the interval. So a line held CONSTANT -
+  which is what a disconnected, shorted or dead sensor looks like on the wire - has
+  no transitions at all and carries no clock, and a receiver that locked on to it
+  has locked on to nothing.
+  ...
+  THAT is the stream the last check presents, and the firmware's answer to it must
+  be a <b>DECLARED FAILURE rather than a byte it invented:</b> a decoder that cannot
+  fail is not a decoder.
+end note
+
+note bottom of ENC
+  <b>THE LIMITS, stated rather than buried.</b>
+  ...
+  <b>Three bytes per direction,</b> because the machine has SIXTEEN BYTES of data
+  memory and a receiver's state - the transition timestamp, the previous level, the
+  bit counter, the phase flag and the frame being assembled - is most of that, and a
+  scratch byte for the store-forward the ISA cannot express is most of the rest.
+  ...
+  <b>One inter-frame gap, and no noise, no jitter and no line-length limit.</b> Those
+  are the things a real receiver's worst case lives in, and pretending otherwise
+  would be claiming a robustness this act does not test.
+end note
+
+@enduml

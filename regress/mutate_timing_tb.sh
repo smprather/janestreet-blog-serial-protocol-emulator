@@ -50,6 +50,14 @@ cd "$(dirname "$0")/.."
 chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
 SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
+# MUTABLE — what this harness EDITS inside the repo. Read by
+# regress/verify_merge.sh (the merge gate) to decide whether a narrowed gate
+# has to run this suite, and by regress/check_mutation_lists.sh to prove the
+# list still covers every file the harness writes. Evidence: the `for f in ...` firmware list it snapshots into $SNAP and restores.
+# An EMPTY value means this suite mutates nothing in the repo and is therefore
+# NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
+# escalates to running every suite rather than guessing.
+MUTABLE="firmware/ws2812.pe firmware/ws2812.hex firmware/servo_sweep.pe firmware/servo_sweep.hex firmware/dht11_read.pe firmware/dht11_read.hex firmware/ds18b20.pe firmware/ds18b20.hex firmware/nec_ir.pe firmware/nec_ir.hex firmware/stepper_ramp.pe firmware/stepper_ramp.hex firmware/freqmeter.pe firmware/freqmeter.hex"
 SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v"
 TB_WS="$ROOT/tb/tb_pe_soc_ws2812.v"
 TB_SV="$ROOT/tb/tb_pe_soc_servo.v"
@@ -68,7 +76,19 @@ for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter; do
   cp "$ROOT/firmware/$f.hex" "$SNAP/$f.hex"
 done
 cleanup() { rm -rf "$SNAP"; }
-trap cleanup EXIT
+# THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). ONE trap, not two: a
+# second `trap … EXIT` REPLACES the first, so `trap cleanup EXIT` followed by
+# `trap _chip_dep_exit EXIT` silently stops the snapshot from ever being removed
+# — a worse regression than the race being guarded, and one the first version of
+# this wiring introduced. So the handler calls cleanup() itself, in order, and
+# only then the check. Stamped when the lock was taken.
+_chip_dep_exit() {
+  local rc=$?
+  cleanup
+  chip_dep_check "run_$(basename "$0")" || rc=4
+  exit "$rc"
+}
+trap _chip_dep_exit EXIT
 
 # ---- one case, in its own directory ---------------------------------------
 # $1 name  $2 firmware stem  $3 TB  $4 -D macro name  $5 anchor  $6 replacement

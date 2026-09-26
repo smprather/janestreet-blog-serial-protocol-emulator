@@ -1,0 +1,310 @@
+@startuml
+title DMX512-A at 250 kbaud — the frame layer, and the one counted cell every byte uses
+' Sources: firmware/dmx512.pe (break/mark loops, tx_byte's 11 cells, the page
+'          arithmetic), tb/tb_pe_soc_dmx512.v (the lean receiver, the two
+'          floors, the per-slot comparison), tools/fw/peasm.py (SDA.. no:
+'          TX is bit 0, the shared 8-bit port),
+'          reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md (the measured numbers)
+' Program: break 22 cells, mark 3 cells, START code 0x00, then 512 data slots
+skinparam defaultFontName Monospaced
+skinparam state {
+  FontSize 11
+  BackgroundColor<<brk>>  #f6d9d9
+  BorderColor<<brk>>      #b05050
+  FontColor<<brk>>        #6a2020
+  BackgroundColor<<slot>> #dce9f8
+  BorderColor<<slot>>     #4a6fa5
+  FontColor<<slot>>       #16324f
+  BackgroundColor<<fold>> #dceee0
+  BorderColor<<fold>>     #4a8a5c
+  FontColor<<fold>>       #17452a
+  BackgroundColor<<box>>  #f2f2f2
+  BorderColor<<box>>      #808080
+  FontColor<<box>>        #303030
+}
+
+state "FRAME LAYER — break, mark, start code, 512 slots" as fr <<box>> {
+  state "THE BREAK\nLDI A,0 / OUT TXPIN  — the line going LOW IS the break\nLDI A,22 / STM 6,A\n117 iterations of a 2-instruction body plus\n236 clocks of delay = 240 clocks per iteration\n= 22 x 4.000 us = 88.000 us" as f1 <<brk>>
+  state "THE MARK\nLDI A,1 / OUT TXPIN  — released ONCE, here, not in\nthe loop: an OUT inside it would make the mark\ndepend on which iteration it was\nLDI A,3 = 3 x 4.000 = 12.000 us" as f2 <<brk>>
+  state "THE START CODE\ndmem[7] = 0, dmem[8] = 0x00\nit goes out through the SAME transmitter as\nthe data slots, so there is one bit format in\nthis file and not two" as f3 <<slot>>
+  state "first_data\ndmem[1] = 0, dmem[2] = 0, dmem[9] = 0\nTHE PAGE COUNTER, and this line is the whole\ndifference between a frame that ends and a\ntransmitter that runs for ever. It was left\nuninitialised, so at the first page boundary\nit was x, x+1 is x, and SUB A,2 on an x is an\nx: the frame never stopped" as f4 <<box>>
+  state "slots\ndmem[8] = dmem[2]  (the slot value IS the ramp)\ndmem[7] = 1  (this one IS a data slot)" as f5 <<slot>>
+  state "slot_done\ndmem[2] + 1  (8 bits, so this wraps at 255 by itself)\ndmem[1] + 1 / JZ page_end\nTHE PAGE COUNTER IS NOT INCREMENTED HERE,\nand the first version did it on every slot,\nwhich ended the frame after TWO data slots —\nbecause 2 was the page count and the page\ncounter was being asked to count slots" as f6 <<box>>
+  state "page_end\ndmem[9] + 1 / SUB A,2 / JZ done\n512 data slots = 2 pages of 256" as f7 <<box>>
+  state "done\ndmem[10] = 0xA5" as f8
+  state "park" as f9
+  f1 --> f2
+  f2 --> f3
+  f3 --> f4
+  f4 --> f5
+  f5 --> f6
+  f6 --> f5 : not a page boundary
+  f6 --> f7 : 256 slots
+  f7 --> f5 : dmem[9] < 2
+  f7 --> f8 : dmem[9] == 2
+  f8 --> f9
+}
+
+state "TRANSMITTER — 250 kbaud, 8N2, one loop over ELEVEN bit cells" as tx <<box>> {
+  state "sbit — the dispatch, and its four different lengths\nLDM A,5 / SUB A,9 / JZ sb_stop\nSUB A,1 / JZ sb_stop2 / JZ sb_start\ncells 1-8: 7 instructions of dispatch then LDM+AND+OUT\ncell 0: the same 7, the last JZ taken\ncell 9: 2 instructions of dispatch, then LDI+OUT\ncell 10: 3 of dispatch, then LDI+OUT" as g0 <<box>>
+  state "the DATA branch\nLDM A,0 / AND A,1 / OUT TXPIN — LSB first\nthen LDM/SHR/STM: the shift lives HERE and\nnot in the common tail. On a ramp the LOW\nbits are the difference between a fixture\nthat works and one that does not" as g1 <<slot>>
+  state "sb_start — cell 0\nLDI A,0 / OUT TXPIN\n3 NOPs. This dispatch is one instruction\nshorter than a data cell's, and the cell that\nhas to be 240 clocks is the DATA cell after\nit, not this one" as g2 <<brk>>
+  state "sb_stop — cell 9\n5 NOPs: the shortest dispatch in the file, and\nthe cell it must make correct is cell 8.\nThen LDI A,1 / OUT, then 2 NOPs, for\ncell 9 rather than this one" as g3 <<brk>>
+  state "sb_stop2 — cell 10\n4 NOPs, and they are here for cell 9's sake,\nnot this cell's. FALLS THROUGH into sb_hold:\nthis is the last cell of a slot, so it has\nno successor whose length has to match" as g4 <<brk>>
+  state "sb_hold\nLDI A,109  (1 clock) then SUB A,1 / JNZ\n= 109 x 2 = 218.  21 + 1 + 218 = 240 clocks\n= 4.000 us = exactly 250,000 baud\n218 = 2 x 109 and 109 is prime: this or a\n109-instruction body run twice, which is the\nsame arithmetic written in 107 NOPs" as g5 <<box>>
+  g0 --> g1
+  g0 --> g2
+  g0 --> g3
+  g0 --> g4
+  g1 --> g5
+  g2 --> g5
+  g3 --> g5
+  g4 --> g5
+  g5 --> g0 : dmem[4]--, dmem[5]++
+}
+
+state "slot_out — ONE EXIT FOR ALL 513 SLOTS\nNO RETURN POINT AND NO DISPATCH: the frame layer\nJMPs in and this block falls out of the\ntransmitter's last cell, so the continuation IS\nthe program counter. Noticing that the control\nflow already provides the thing the ISA lacks is\nworth more than the dmem slot would have been.\ndmem[3]++ then dmem[7] decides what leaving means" as so <<box>>
+
+[*] --> fr
+fr --> tx
+tx --> so
+so --> f5 : dmem[7] = 1
+so --> f4 : dmem[7] = 0, the start code's exit
+
+note right of so
+  THE START CODE'S EXIT MUST NOT ADVANCE THE
+  RAMP. The payload is deliberately "data slot k
+  has value k", so the first data slot is 0x00,
+  and an exit that advanced the ramp on the way
+  past the start code would make the first data
+  slot 0x01 and the payload "k + 1" - still a
+  ramp, still a legal fixture, and one index out
+  of step with every document describing it. The
+  first version had exactly that bug and the TB
+  caught it as a single mismatched slot, which is
+  the cheapest possible way to catch an
+  off-by-one in a 513-slot frame.
+end note
+@enduml
+
+@startuml
+title DMX512-A — one frame is a break, a mark, a START code and 512 slots
+skinparam defaultFontName Monospaced
+skinparam ParticipantBackgroundColor #eef3fb
+skinparam ParticipantBorderColor #4a6fa5
+skinparam ParticipantFontColor #16324f
+skinparam ActorBackgroundColor #fbe9cf
+skinparam ActorBorderColor #b8813a
+skinparam ActorFontColor #5a3d12
+skinparam SequenceGroupBackgroundColor #fbfbfb
+skinparam SequenceGroupBorderColor #b0b0b0
+skinparam ArrowColor #333333
+
+actor "master\npe_soc" as M
+participant "wire\nbit 0" as W
+actor "receiver" as R
+
+M -> W : BREAK — 22 cells of LOW = 88.06 us measured (floor 87.5)
+W -> R : a receiver will not look at a frame that does not begin with a break
+M -> W : MARK — 3 cells of HIGH = 12.38 us measured (floor 8.0)
+group slot 0: the START code, through the SAME transmitter
+  M -> W : 0x00 = 11 cells of 8N2
+  note over W
+    The start code is what tells a receiver what
+    the 512 slots MEAN. 513 slots with no start
+    code is the most common way to end up with a
+    working fixture that lights nothing.
+  end note
+end
+group slots 1..512: a wrapping 8-bit ramp, two pages of 256
+  M -> W : slot 1 = 0x01 ... slot 128 = 0x80 ... slot 256 = 0x00 ... slot 512 = 0xFF
+  note over M
+    An 8-bit register incremented with an 8-bit
+    add IS a wrapping ramp, so the payload costs
+    two instructions per slot to produce, and the
+    TB recomputes all 512 independently rather
+    than trusting a 513-entry list of its own.
+  end note
+  note over M, R
+    AND THE BIT ORDER IS NOT A PALINDROME ANYWHERE:
+    slot 1 is 0x01 and slot 128 is 0x80, so a
+    transmitter that shifted the wrong way produces
+    0x80 and 0x01 - swapped, not identical. That is
+    what makes the per-slot comparison worth
+    anything, and it is why the payload is a ramp
+    and not a constant.
+  end note
+end
+
+note over M, R
+  513 x 11 x 4.000 us = 22.572 ms of frame, plus the break and the mark.
+  The TB's drain window is derived from that: 26 ms, which is 15% of headroom
+  over a number that is computed rather than guessed. The first version of a
+  testbench that guessed allowed 900 us — a twentieth of the frame — and
+  reported a truncated stream as if it were a protocol failure.
+
+  HOW A SLOT'S START BIT IS FOUND, since a falling edge is not one: within a
+  slot of 8N2 the LAST possible falling edge is at cell 8, because cells 9 and
+  10 are both stop bits and cannot fall. A fall at least 9.5 cells after the
+  current slot's start bit is therefore not inside that slot, and the next
+  slot's start bit is the only thing it can be. The first slot is anchored on
+  the BREAK, which is 88 us of LOW and is not confusable with anything.
+end note
+@enduml
+
+@startuml
+title DMX512-A — the three START-code ranges, and the one this firmware sends
+skinparam defaultFontName Monospaced
+skinparam ParticipantBackgroundColor #eef3fb
+skinparam ParticipantBorderColor #4a6fa5
+skinparam ParticipantFontColor #16324f
+skinparam ActorBackgroundColor #fbe9cf
+skinparam ActorBorderColor #b8813a
+skinparam ActorFontColor #5a3d12
+skinparam SequenceGroupBackgroundColor #fbfbfb
+skinparam SequenceGroupBorderColor #b0b0b0
+skinparam ArrowColor #333333
+
+participant "START code\nslot 0" as S0
+participant "0x00\nall-slot" as R00 #dceee0
+participant "0x01..0x7F\nfirst 1..127 slots" as R01
+participant "0x80..0xFF\nstart address" as R80
+actor "receiver" as RX
+
+S0 -> RX : slot 0 arrives
+group the all-slot code — the ONLY one this firmware sends
+  S0 -> R00 : 0x00
+  R00 -> RX : every one of the 512 data slots is a\ndimmer or fixture level; no follow-up slot
+end
+group the patch-cable range
+  S0 -> R01 : 0x01 .. 0x7F
+  R01 -> RX : the following slots are patch-cable\npositions: code 0x2A starts at slot 42
+end
+group the start-address range
+  S0 -> R80 : 0x80 .. 0xFF
+  R80 -> RX : the NEXT TWO slots are one big-endian\n16-bit slot number, and the frame starts there
+end
+
+note over S0, RX
+  DMX512-A defines exactly these three ranges, and the START code is what tells a
+  receiver what the 512 slots MEAN. Sending 512 slots with no START code is the
+  most common way to end up with a working fixture that lights nothing.
+
+  THIS FIRMWARE SENDS 0x00 AND NOTHING ELSE, and it goes out through the SAME
+  transmitter as the data slots — so there is one bit format in the file rather
+  than two, and a START code sent by a different code path is a START code that
+  can disagree with the slots.
+
+  The TB's expected-slot function returns 0x00 for slot 0 and (n-1) & 0xFF for
+  every slot after it, so a START code from either of the other two ranges would
+  be caught on slot 0 and on the slot count that follows.
+end note
+note over R00
+  WHY 0x00 IS THE RIGHT CHOICE FOR A
+  FIXTURE: it is the only range that
+  needs no follow-up slot, so all 512
+  payload slots are payload. A
+  start-address code would spend two of
+  the 513 on the address.
+end note
+@enduml
+
+@startuml
+title DMX512-A — one slot is eleven cells, 8N2; the axis is 2 units per cell
+skinparam defaultFontName Monospaced
+robust "branch" as F
+concise "TX pin" as T
+concise "cells" as N
+@0
+F is "cell 0 start"
+T is 0
+N is "start"
+@2
+F is "cells 1-8 data"
+T is 0
+N is "d0 = 0"
+@4
+T is 0
+N is "d1 = 0"
+@6
+T is 0
+N is "d2 = 0"
+@8
+T is 0
+N is "d3 = 0"
+@10
+T is 0
+N is "d4 = 0"
+@12
+T is 0
+N is "d5 = 0"
+@14
+T is 0
+N is "d6 = 0"
+@16
+T is 0
+N is "d7 = 0"
+@18
+F is "cell 9 stop"
+T is 1
+N is "stop 1"
+@20
+F is "cell 10 stop"
+T is 1
+N is "stop 2"
+@22
+F is "next slot"
+T is 1
+N is "mark"
+@26
+N is "240 clks"
+@30
+N is "4.000 us"
+@36
+N is "slot 44.0 us"
+@42
+N is "3.9998 measured"
+@endsync
+@enduml
+
+@startuml
+!pragma teoz
+title DMX512-A — the frame's parts. One slot = 11 cells = 44.0 us; the slot boxes are REPRESENTATIVE, not all 512
+skinparam defaultFontName Monospaced
+concise "TX pin" as T
+concise "frame layer" as L
+concise "the numbers" as N
+@0
+T is 0
+L is break
+N is "88.06 us"
+@22
+T is 1
+L is mark
+N is "12.38 us"
+@25
+T is 0
+L is start_code
+N is "0x00"
+@36
+L is slot1
+N is "slot 1"
+@47
+L is slot2
+N is "slot 2"
+@58
+L is slots
+N is "..."
+@69
+L is slot128
+N is "slot 128"
+@80
+L is slot512
+N is "slot 512"
+@91
+L is done
+N is "dmem[10]=0xA5"
+@104
+N is "floors: 87.5 and 8.0"
+@endsync
+@enduml

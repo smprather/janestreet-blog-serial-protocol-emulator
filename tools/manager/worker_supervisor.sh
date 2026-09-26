@@ -52,7 +52,7 @@ PIDFILE="${PIDFILE:-/tmp/pi-worker-supervisor.pid}"
 LOG="${LOG:-/tmp/pi-worker-supervisor.log}"
 ONCE=0; [ "${1:-}" = "--once" ] && ONCE=1
 
-WORKERS="0:pi-protocol-worker:protocol-worker 0:pi-gui-worker:gui-worker 0:pw-fw-timing:fw-timing 0:pw-fw-bus:fw-bus"
+WORKERS="0:pi-protocol-worker:protocol-worker 0:pi-gui-worker:gui-worker 0:pw-fw-timing:fw-timing 0:pw-fw-bus:fw-bus 0:pw-diag-timing:diag-timing 0:pw-diag-bus:diag-bus 0:pw-diag-proto:diag-proto 0:pw-wiki-features:wiki-features"
 FORBIDDEN_PROC_RE='(openroad|magic|netgen|klayout|run_librelane)'
 FORBIDDEN_CMD_RE='git (reset|clean|checkout --|restore|rebase|push --force)|rm -rf (/|~)([[:space:]]|$)|rm -rf /\*|tmux kill-'
 COLDSTART_LINE="Continue as your role per COLD-START.md and WORKLOG.md: log TASK-START in WORKLOG.md immediately, then pick the NEXT scoped task from the queue and start it IN THIS SAME TURN. The law (L1 telemetry / L2 no destructive git / L3 no physical flow / L4 repo boundary / L5 no shared-state kills / L6 interrupt file last) is enforced automatically."
@@ -119,8 +119,8 @@ while :; do
     # Scope: destructive git is forbidden ONLY on the shared main worktree -
     # isolated feature worktrees (/tmp/worktrees/*) may rebase/reset their own
     # branches freely (2026-09-25 misfire on fw-bus's legitimate rebase).
-    if printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | grep -v '/tmp/worktrees' | grep -q .; then
-      ev=$(printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | grep -v '/tmp/worktrees' | tail -1 | head -c 200)
+    if printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | grep -v 'cd /tmp/' | grep -q .; then
+      ev=$(printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | grep -v 'cd /tmp/' | tail -1 | head -c 200)
       # Evidence dedup: the pane keeps history — never fire twice on the same
       # line (2026-09-25 double misfire on a stale pane line).
       ev_sig=$(printf '%s' "$ev" | md5sum | cut -c1-16)
@@ -135,14 +135,14 @@ while :; do
     fi
 
     # ---- telemetry stall while working -------------------------------------
-    newest_ts=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1 | cut -c1-16)
+    newest_ts=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1 | cut -c1-16)
     newest_epoch=$(date -d "$newest_ts" +%s 2>/dev/null || echo 0)
     now=$(date +%s)
     if printf '%s' "$pane_live" | grep -qE '─ (⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏) (Working|Thinking)|^.*(Working|Thinking) ─+$'; then
       rm -f "/tmp/pi-sup-idle-since-${agent}"
       # A worker whose newest line is IDLE-QUEUE-EMPTY cannot be
       # 'silent while working' — stale spinner scrollback is not activity.
-      newest_line=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1)
+      newest_line=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1)
       case "$newest_line" in *IDLE-QUEUE-EMPTY*) continue;; esac
       # Marker lifecycle: cleared the moment the worker resumes logging,
       # so a gap can re-alert if it recurs (the 02:44 marker never cleared).
@@ -166,8 +166,11 @@ while :; do
     [ $((now - idle_since)) -lt 60 ] && continue
     last=$(cat "/tmp/pi-sup-last-${agent}" 2>/dev/null || echo 0)
     [ $((now - last)) -lt "$NUDGE_COOLDOWN" ] && continue
-    newest=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1)
-    case "$newest" in *IDLE-QUEUE-EMPTY*) continue;; esac
+    # A worker on approved standby logs IDLE-QUEUE-EMPTY / standby, but the
+    # phrase may sit on any of its last few lines (reports interleave with
+    # bookkeeping lines). Check the last 3 and both phrases.
+    newest=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -3)
+    case "$newest" in *IDLE-QUEUE-EMPTY*|*standby*|*STANDBY*) continue;; esac
     echo "$now" >"/tmp/pi-sup-last-${agent}"
     if [ "$ONCE" -eq 1 ]; then
       echo "WOULD-NUDGE $agent ($(date '+%T')) last-worklog: ${newest:-none}"

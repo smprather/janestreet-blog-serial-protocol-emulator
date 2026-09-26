@@ -351,8 +351,8 @@ git commit -m "feat: expose PE debug and memory readback"
 **Files:**
 - Modify: `rtl/tt_um_protocol_emulator.v`
 - Modify: `info.yaml`
-- Modify: `wiki/reference/protocol-pin-budget.md`
-- Modify: `wiki/entities/tiny-tapeout.md`
+- Modify: [[reference/protocol-pin-budget]]
+- Modify: [[entities/tiny-tapeout]]
 - Modify: `wiki/reference/clock-arithmetic.md`
 - Modify: `README.md`
 
@@ -529,7 +529,7 @@ These are bounded decisions to resolve during implementation, not permission to 
 
 ## Related Records
 
-- `wiki/decisions/adr-007-pe-ctrl-passive-slave.md` records the original write-only loader decision that this plan supersedes with a bidirectional host contract.
+- [[decisions/adr-007-pe-ctrl-passive-slave]] records the original write-only loader decision that this plan supersedes with a bidirectional host contract.
 - `rtl/pe_ctrl.v` records the current mode-0 loader, run gating, asynchronous SCLK trap, and sticky load error.
 - `rtl/pe_soc.v` and `rtl/pe_imem.v` define the current write-only host port and memory interfaces.
 - `rtl/tt_um_protocol_emulator.v` defines the current pad ownership and free `uio[4:7]` positions.

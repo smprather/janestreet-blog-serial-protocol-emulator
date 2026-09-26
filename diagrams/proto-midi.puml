@@ -1,0 +1,314 @@
+@startuml
+title MIDI at 31.25 kbaud — the message layer and the counted cell that carries it
+' Sources: firmware/midi_xfer.pe (the message layer, sbit/sb_start/sb_stop,
+'          sb_hold's 13-clock body x 146), tb/tb_pe_soc_midi.v (the
+'          oversampling receiver, the per-frame rate measurement),
+'          reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md (the measured numbers)
+' Wire: 90 20 40 21 41 22 42 80 23 43 24 44 25 45
+'       6 messages, 2 status bytes, 14 bytes - not 18
+skinparam defaultFontName Monospaced
+skinparam state {
+  FontSize 11
+  BackgroundColor<<msg>>  #fbe9cf
+  BorderColor<<msg>>      #b8813a
+  FontColor<<msg>>        #5a3d12
+  BackgroundColor<<stat>> #dce9f8
+  BorderColor<<stat>>     #4a6fa5
+  FontColor<<stat>>       #16324f
+  BackgroundColor<<data>> #dceee0
+  BorderColor<<data>>     #4a8a5c
+  FontColor<<data>>       #17452a
+  BackgroundColor<<box>>  #f2f2f2
+  BorderColor<<box>>      #808080
+  FontColor<<box>>        #303030
+}
+
+state "MESSAGE LAYER — decides WHAT goes on the wire" as msg <<box>> {
+  state "main\nLDM A,1 (the message counter m)\nSUB A,6 / JZ done" as m0 <<box>>
+  state "is a status byte due?\nLDM A,2 (the mod-3 counter)\nJNZ go_note\nthe ISA has neither a\ndivision nor a modulo, and\nthat is why DECX exists" as m1 <<box>>
+  state "stat_on / stat_go\nm = 0 -> 0x90  note on\nm = 3 -> 0x80  note off\ndmem[3] = the status byte\ndmem[5]++ HERE, not in the\ntransmitter: it cannot tell a\nstatus byte from a data byte\nand must not guess" as m2 <<stat>>
+  state "go_note\nnote = 0x20 + m\ndmem[13] = 2 (velocity follows)" as m3 <<data>>
+  state "go_vel\nvelocity = 0x40 + m\ndmem[13] = 0 (message complete)" as m4 <<data>>
+  state "next_msg\ndmem[2] + 1, SUB A,3 / JZ mod3_zero\nthen dmem[1]++" as m5 <<box>>
+  state "done\ndmem[11] = 0xA5" as m6
+  m0 --> m1
+  m1 --> m2
+  m1 --> m3
+  m2 --> m5 : after the status byte
+  m3 --> m5 : after the note
+  m4 --> m5
+  m5 --> m0
+  m0 --> m6 : m == 6
+}
+
+state "TRANSMITTER — one loop over the ten bit cells of a frame\nno CALL/RET in this ISA, so a shared cell routine would need\na return address in a dmem slot and a dispatch to get back;\nten cells in a loop is also how the wire is actually shaped" as tx <<box>> {
+  state "sbit — the cell dispatch\nLDM A,7 / SUB A,9 / JZ sb_stop\nADD A,9 / JZ sb_start\n(8-bit arithmetic wraps, so\nthat ADD is the index again)" as t0 <<box>>
+  state "the DATA branch\nLDM A,0 / AND A,1 / OUT TXPIN\nLSB FIRST\nthen LDM/SHR/STM: THE SHIFT\nLIVES HERE AND NOT IN THE\nCOMMON TAIL - a cell that\ncarries no data bit must not\nconsume one" as t1 <<data>>
+  state "sb_start\nLDI A,0 / OUT TXPIN\n3 NOPs: this dispatch to a data\ncell is 2 instructions longer\nthan a data cell's own head,\nand they make up the difference" as t2 <<stat>>
+  state "sb_stop\n3 NOPs, then LDI A,1 / OUT\n5 more NOPs, AFTER the output:\nthe stop cell's own length is the\npath from its output to the NEXT\nframe's start bit" as t3 <<stat>>
+  state "sb_hold — THE PIECE THIS ACT EXISTS FOR\n11 NOPs + SUB A,1 + JNZ = a 13-clock body,\n146 iterations.  21 + 1 + 146 x 13 = 1920 clocks\n= 32.000 us = exactly 31,250 baud" as t4 <<box>>
+  t0 --> t1
+  t0 --> t2
+  t0 --> t3
+  t1 --> t4
+  t2 --> t4
+  t3 --> t4
+  t4 --> t0 : dmem[6]--, dmem[7]++\nthen return via dmem[13]
+}
+
+state "THE RETURN POINT — dmem[13]\n0 = the status byte, so next_msg\n1 = go_note, so the note follows\n2 = go_vel, so the message is done\nthe ISA has no CALL/RET, so a shared\ntransmitter gets an explicit\ncontinuation rather than being written\nout three times" as ret <<box>>
+
+[*] --> msg
+msg --> tx : JMP send_byte
+tx --> ret
+ret --> msg
+
+note right of t4
+  A CELL'S LENGTH BELONGS TO THE PATH
+  BETWEEN TWO CELLS. The time from one
+  cell's OUTPUT to the next cell's
+  OUTPUT depends on WHICH CELL IS NEXT,
+  because the dispatch that selects the
+  next cell's code is only partly
+  executed on each path. So the eleven
+  NOPs above exist only to make some
+  OTHER cell come out at 1920. Measured
+  at clock resolution, one frame showed
+  cells of 1921, 1920 and 1917 — a
+  receiver tolerates that and an
+  assertion about the rate does not.
+end note
+note right of t1
+  THE THREE DEFECTS THIS PROGRAM HAD,
+  none of which was found by reading
+  the code:
+   1 the rate was TWICE MIDI's (a cell
+     is a whole bit, not a half: 16.316
+     us measured = 61,286 baud)
+   2 every byte lost its two lowest bits
+     (the shift was in the common tail,
+     so the start and stop cells each
+     shifted: 0x90 went out as 0x24)
+   3 there was no stop bit at the end of
+     the frame, and the receiver decoded
+     THIRTEEN OF FOURTEEN bytes correctly
+     because a back-to-back stream's
+     missing stop bit is the next frame's
+     first cell. Only the last frame
+     failed, on a single stop sample.
+end note
+@enduml
+
+@startuml
+title MIDI — one byte is ten cells, and a message is three of them (or one and a quarter)
+skinparam defaultFontName Monospaced
+skinparam ParticipantBackgroundColor #eef3fb
+skinparam ParticipantBorderColor #4a6fa5
+skinparam ParticipantFontColor #16324f
+skinparam SequenceGroupBackgroundColor #fbfbfb
+skinparam SequenceGroupBorderColor #b0b0b0
+skinparam ArrowColor #333333
+
+participant "start" as st
+participant "d0" as d0
+participant "d1" as d1
+participant "d2" as d2
+participant "d3" as d3
+participant "d4" as d4
+participant "d5" as d5
+participant "d6" as d6
+participant "d7" as d7
+participant "stop" as sp
+participant "next" as nx
+
+note over st, nx
+  shown: 0x90, the note-on status byte, sent once at m = 0.
+  Every cell is 1920 clocks = 32.000 us, so a byte is
+  320.000 us and the 31.25 kbaud wire carries
+  3,125 bytes per second.
+end note
+st -> d0
+d0 -> d1
+d1 -> d2
+d2 -> d3
+d3 -> d4
+d4 -> d5
+d5 -> d6
+d6 -> d7
+d7 -> sp
+sp -> nx : back to back: the next frame's start bit
+note over d0, d7
+  LSB FIRST, so d0 is bit 0. 0x90 = 1001 0000:
+  the status byte is two nibbles - a
+  message type and a channel - and the
+  top bit being set is what makes the
+  wire self-delimiting: a receiver
+  decides "status or data" from the top
+  bit alone.
+end note
+
+@enduml
+
+@startuml
+title MIDI running status — six messages, two status bytes, fourteen bytes
+skinparam defaultFontName Monospaced
+skinparam ParticipantBackgroundColor #eef3fb
+skinparam ParticipantBorderColor #4a6fa5
+skinparam ParticipantFontColor #16324f
+skinparam ActorBackgroundColor #fbe9cf
+skinparam ActorBorderColor #b8813a
+skinparam ActorFontColor #5a3d12
+skinparam SequenceGroupBackgroundColor #fbfbfb
+skinparam SequenceGroupBorderColor #b0b0b0
+skinparam ArrowColor #333333
+
+actor "master" as M
+participant "wire" as W
+actor "receiver\nimplements the rule" as R
+
+group m = 0  note on — the status byte IS sent
+  M -> W : 90
+  W -> R : status 0x90 REPLACES the running status
+  M -> W : 20
+  M -> W : 40
+  R -> R : message 0: 90 20 40
+end
+group m = 1, 2  running status 0x90
+  M -> W : 21
+  M -> W : 41
+  R -> R : message 1: under 0x90
+  M -> W : 22
+  M -> W : 42
+  R -> R : message 2: under 0x90
+end
+group m = 3  a NEW status byte: the direction flips
+  M -> W : 80
+  W -> R : 0x80 REPLACES 0x90, it does not add to it
+  M -> W : 23
+  M -> W : 43
+  R -> R : message 3: note OFF
+end
+group m = 4, 5  running status 0x80
+  M -> W : 24
+  M -> W : 44
+  M -> W : 25
+  M -> W : 45
+  R -> R : messages 4 and 5: note OFF
+end
+
+note over M, R
+  SIX MESSAGES COST EIGHTEEN BYTES if every one repeats its
+  status byte, and fourteen with running status. The saving is the
+  point of the feature: a 31.25 kbaud wire saturates near 3,900
+  bytes per second and the status bytes are a fifth of them.
+
+  THE PART THAT IS EASY TO GET WRONG, and which the TB checks: a
+  receiver that KEPT 0x90 after seeing 0x80 would decode messages
+  4 and 5 as note-ONS - six messages, the right notes and
+  velocities, and the wrong direction on half of them. The
+  firmware sends 0x80 exactly once, at m = 3, and the TB's expected
+  list puts messages 4-6 under 0x80.
+
+  AND THE SAVING IS ASSERTED, NOT INFERRED: a firmware that
+  repeated the status byte would still decode into the right six
+  messages under a receiver that ignored running status, so the
+  byte count is checked directly - exactly 2 status bytes and
+  exactly 14 bytes on the wire, against 6 messages.
+end note
+@enduml
+
+@startuml
+!pragma teoz
+title MIDI — one frame of 0x90, ten cells of 1920 clocks = 32.000 us each; the axis is 4 units per cell
+skinparam defaultFontName Monospaced
+robust "branch" as F
+concise "TX pin" as T
+concise "cells" as N
+@0
+F is "cell 0 start"
+T is 0
+N is "start"
+@4
+F is "cells 1-7 data"
+T is 0
+N is "d0 = 0"
+@8
+T is 0
+N is "d1 = 0"
+@12
+T is 0
+N is "d2 = 0"
+@16
+T is 0
+N is "d3 = 0"
+@20
+T is 1
+N is "d4 = 1"
+@24
+T is 0
+N is "d5 = 0"
+@28
+T is 0
+N is "d6 = 0"
+@32
+T is 1
+N is "d7 = 1"
+@36
+F is "cell 9 stop"
+T is 1
+N is "stop"
+@40
+F is "next frame"
+T is 0
+N is "back to back"
+@48
+N is "1920 clks"
+@56
+N is "32.000 us"
+@64
+N is "measured 31.9987"
+@endsync
+@enduml
+
+@startuml
+!pragma teoz
+title MIDI — the rate window is 0.3%, and the delay loop's own quantisation is 0.68%
+skinparam defaultFontName Monospaced
+concise "clocks per cell" as C
+concise "cell length" as L
+concise "cell time" as TT
+concise "verdict" as V
+@0
+C is 1907
+L is "13 x 146 = 1898"
+TT is "31.783 us"
+V is "0.68% fast"
+@8
+C is 1920
+L is "13 x 147 = 1911"
+TT is "32.000 us"
+V is "THE ONE"
+@16
+C is 1933
+L is "13 x 148 = 1924"
+TT is "32.217 us"
+V is "0.68% slow"
+@24
+C is 1920
+L is "TB window +/-0.3%"
+TT is "1920 only"
+V is "one value"
+@36
+V is "MIDI allows +/-2%"
+@44
+V is "a 2% window"
+@52
+V is "admits all three"
+@60
+V is "the check dies"
+@68
+V is "0.3% < 0.68%"
+@76
+V is "kills the mutant"
+@endsync
+@enduml

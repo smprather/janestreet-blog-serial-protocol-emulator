@@ -31,6 +31,9 @@
     "conformance": "tb_pe_ctrl_r3_conf GREEN: 26/26 steps byte-exact, and 25 of them with NO divergence after this package's regeneration",
     "date": "2026-09-25",
     "harness": "tb_pe_ctrl_r3_conf loads imem.hex/dmem.hex, applies each vector's model_images[] state (registers plus bp_addr/bp_en/bp_hit/debug_hold), drives the step's request_file and compares the response word for word, CRC included. It also checks tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt: a divergence that CHANGES, or any divergence not listed, turns the gate red -- so a resolved host defect cannot read as 'known'",
+    "not_confirmed_steps": {
+      "status_full_readback": "Not confirmed on either side, and not a contract disagreement: for a free-running core `insn` is whatever the fetch pipeline happens to hold, which a static pre-state cannot pin. The expectation stays the manager-ruled landing word (0xF000) while tb_pe_ctrl_r3_conf's freeze-snapshot model reports 0x0000, because that model pins pc every cycle and collapses the fetch onto the fill word. A TB holding the core (state 2) would make insn deterministic at imem[pc] and could prove the word. See model_boundaries below."
+    },
     "review": "chip repo: reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md (the conformance record and the run lock)",
     "scope": "Chip-confirmed IN SIMULATION against the implemented R3 contract. The remaining step (status_full_readback) is a pinned TB model boundary, deliberately NOT claimed by either side: insn is not contract-determined for a free-running core, and the freeze-snapshot pre-state is a state the chip cannot physically occupy. Chip-side R3.1 hold-semantics polish is in flight and may change it. NOT hardware-confirmed: the real-board run (Pico over USB, physical shuttle) has never been executed.",
     "testbench": "chip repo: tb/tb_pe_ctrl_r3_conf.v"

@@ -49,8 +49,25 @@ BAK=$(mktemp -d /tmp/fwbus_mut.XXXXXX)
 
 # The three (firmware, testbench) pairs. The firmware is the DUT of each.
 FWS="i2c_adv spi_mode3 uart_flow"
+# MUTABLE — what this harness EDITS inside the repo. Read by
+# regress/verify_merge.sh (the merge gate) to decide whether a narrowed gate
+# has to run this suite, and by regress/check_mutation_lists.sh to prove the
+# list still covers every file the harness writes. Evidence: the FWS= list of firmware it copies, mutates and cmp-restores.
+# An EMPTY value means this suite mutates nothing in the repo and is therefore
+# NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
+# escalates to running every suite rather than guessing.
+MUTABLE="firmware/i2c_adv.pe firmware/i2c_adv.hex firmware/spi_mode3.pe firmware/spi_mode3.hex firmware/uart_flow.pe firmware/uart_flow.hex"
 
 cleanup() {
+  # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). Stamped when this
+  # harness took the run lock; verified HERE, because this is the only place it
+  # can be: the harness sets its own `trap cleanup EXIT` after sourcing
+  # run_lock.sh, and a second EXIT trap replaces the first, so a check installed
+  # over there would be silently discarded. If this script — or the lock helper it
+  # sources — changed while we were running, bash's incremental read means our
+  # verdict is untrustworthy in EITHER direction, so exit 4 (INCONCLUSIVE) rather
+  # than report a possibly-false pass.
+  chip_dep_check "run_$(basename "$0")" || exit 4
   for f in $FWS; do
     cp "$BAK/$f.pe" "$ROOT/firmware/$f.pe" 2>/dev/null
     cp "$BAK/$f.hex" "$ROOT/firmware/$f.hex" 2>/dev/null

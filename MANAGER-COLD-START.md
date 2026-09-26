@@ -88,6 +88,18 @@ worker; this file is the manager's restart prompt.
   `logs/worklog/YYYY-MM-DD[-NN].md` at ~10 MB or day boundaries; keep log
   lines ≤ ~500 chars (reports link to reviews/, never inline). The 58 MB
   GitHub-warning incident is why.
+- **Conflict-resolution scope (2026-09-25, learned the hard way): the
+  timestamp-union script is ONLY for `WORKLOG.md` and `wiki/log.md`.
+  Every other conflict — code, docs, configs — is HAND-MERGED hunk by hunk,
+  or resolved by taking one side wholesale after checking that side is a
+  superset.** A union script run over `acceptance.py` scrambled prose into
+  code and shipped it to main; syntax errors are the good outcome, silent
+  logic corruption is the bad one. When in doubt: restore one side clean,
+  re-apply the other side's delta as a patch, resolve remaining hunks by hand.
+  ALSO (2026-09-26): a conflict region is a DIFF ARTEFACT, not a block boundary —
+  a union of two apparently-complete sides can drop closing lines (`stale=1`/
+  `fi`) and leave 53 `if`/52 `fi`. ALWAYS `bash -n` (one per file!) a unioned
+  script before committing it.
 - **Merge gate (2026-09-25, learned the hard way): NEVER push a branch merge
   without running the affected TB set first.** The 5b4731f merge broke six
   green timing acts via a union resolution and was pushed red. Use

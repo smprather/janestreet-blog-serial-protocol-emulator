@@ -315,3 +315,9 @@ table.
 6. **A2 rationale**: decide whether two-frame latency is justified when A1 at
    5 MHz already meets the stated commit and per-bit constraints with similar
    margin.
+
+## See also
+
+- [[decisions/adr-007-pe-ctrl-passive-slave]] — the write-only loader decision this
+  readback path supersedes with a bidirectional host contract
+- [[reference/protocol-pin-budget]] — the `uio` pad budget this path spends

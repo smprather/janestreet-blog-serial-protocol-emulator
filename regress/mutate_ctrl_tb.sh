@@ -33,6 +33,14 @@ chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
 RTL="$ROOT/rtl/pe_ctrl.v"
 WRTL="$ROOT/rtl/tt_um_protocol_emulator.v"
+# MUTABLE — what this harness EDITS inside the repo. Read by
+# regress/verify_merge.sh (the merge gate) to decide whether a narrowed gate
+# has to run this suite, and by regress/check_mutation_lists.sh to prove the
+# list still covers every file the harness writes. Evidence: RTL= and WRTL=, each backed up and restored.
+# An EMPTY value means this suite mutates nothing in the repo and is therefore
+# NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
+# escalates to running every suite rather than guessing.
+MUTABLE="rtl/pe_ctrl.v rtl/tt_um_protocol_emulator.v"
 TB="$ROOT/tb/tb_pe_ctrl.v"
 SRCS="../rtl/pe_ctrl.v $TB"
 WTB_SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v ../rtl/pe_ctrl.v ../rtl/tt_um_protocol_emulator.v"
@@ -348,5 +356,15 @@ echo "=== $pass detected, $survived survived, $fail harness errors ==="
 [ $survived -gt 0 ] && { echo "SURVIVORS: the TB does not test what it claims."; exit 1; }
 [ $fail -gt 0 ] && { echo "HARNESS ERRORS: fix the harness first."; exit 1; }
 echo "OK: every framed-host-bus mutation (R1 + R2 read path) is detected by its testbench."
+  # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). Stamped when this
+  # harness took the run lock; verified HERE, because this is the only place it
+  # can be: the harness sets its own `trap cleanup EXIT` after sourcing
+  # run_lock.sh, and a second EXIT trap replaces the first, so a check installed
+  # over there would be silently discarded. If this script — or the lock helper it
+  # sources — changed while we were running, bash's incremental read means our
+  # verdict is untrustworthy in EITHER direction, so exit 4 (INCONCLUSIVE) rather
+  # than report a possibly-false pass.
+  chip_dep_check "run_$(basename "$0")" || exit 4
+
 exit 0
 

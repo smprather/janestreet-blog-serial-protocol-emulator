@@ -36,7 +36,7 @@ inconclusive=0
 survived=0
 
 # Files any mutation may touch, for the snapshot/restore.
-MUTABLE="rtl/pe_soc.v rtl/pe_pinmux.v firmware/i2c_pins.pe"
+MUTABLE="rtl/pe_soc.v rtl/pe_pinmux.v firmware/i2c_pins.pe firmware/i2c_pins.hex firmware/uart_echo.hex"
 
 # The pristine snapshot every restore is verified against. NOT git: a harness
 # must work in a `git archive` clone (which has no .git at all) and must not
@@ -170,6 +170,15 @@ restore_pristine() {
   return 0
 }
 cleanup() {
+  # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). Stamped when this
+  # harness took the run lock; verified HERE, because this is the only place it
+  # can be: the harness sets its own `trap cleanup EXIT` after sourcing
+  # run_lock.sh, and a second EXIT trap replaces the first, so a check installed
+  # over there would be silently discarded. If this script — or the lock helper it
+  # sources — changed while we were running, bash's incremental read means our
+  # verdict is untrustworthy in EITHER direction, so exit 4 (INCONCLUSIVE) rather
+  # than report a possibly-false pass.
+  chip_dep_check "run_$(basename "$0")" || exit 4
   restore_pristine
   rm -rf "$TMP" "$PRISTINE"
 }

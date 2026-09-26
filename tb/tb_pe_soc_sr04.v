@@ -89,6 +89,13 @@ module tb_pe_soc_sr04;
   localparam int DMEM_BYTES = 16;     // THE MACHINE'S SIZE
   localparam int BAUD = 115_200;
   localparam real CLK_NS = 1e9 / 60_000_000;
+  // CLK_US exists because CLK_NS is NANOSECONDS and this TB reports in
+  // microseconds. Folding one into the other is not a rounding detail: 600
+  // clocks is 10 000 ns = 10.000 us, and printing "600 clocks = 10000.000 us"
+  // is a claim that is wrong by 1000x. A red act's output gets quoted verbatim
+  // - it is the first thing a reader sees - so a unit error in a failure message
+  // is a defect in the report, not a cosmetic slip.
+  localparam real CLK_US = CLK_NS / 1000.0;
 
   // The firmware's map, named here because this file reads those bytes.
   localparam int F_US_LO  = 2;        // the measured echo width
@@ -451,7 +458,7 @@ module tb_pe_soc_sr04;
       // ---- 1. the trigger pulse, as an EQUALITY ------------------------
       check(trig_clocks == TRIG_CLOCKS,
             $sformatf("run %0d: the trigger pulse is EXACTLY %0d clocks = %0.3f us (measured %0d = %0.3f us), and the device asks for 10 us minimum",
-                      seg, TRIG_CLOCKS, TRIG_CLOCKS*CLK_NS, trig_clocks, trig_clocks*CLK_NS));
+                      seg, TRIG_CLOCKS, TRIG_CLOCKS*CLK_US, trig_clocks, trig_clocks*CLK_US));
       check(echo_rel_oe == 0,
             $sformatf("run %0d: ECHO was RELEASED on every clock of the trigger pulse (%0d clocks driven)",
                       seg, echo_rel_oe));

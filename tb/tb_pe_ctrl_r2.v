@@ -46,6 +46,7 @@ module tb_pe_ctrl_r2;
   logic        dbg_rd_req, dbg_rd_dmem, dbg_rd_valid;
   logic [15:0] dbg_rd_addr, dbg_rd_data;
   logic [9:0]  dbg_pc;
+  logic [9:0]  dbg_next_pc;
   logic [7:0]  dbg_a, dbg_x, dbg_y, dbg_timer;
   logic [15:0] dbg_insn;
 
@@ -89,7 +90,8 @@ module tb_pe_ctrl_r2;
     .dbg_rd_addr(dbg_rd_addr), .dbg_rd_data(dbg_rd_data),
     .dbg_rd_valid(dbg_rd_valid),
     .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_x(dbg_x), .dbg_y(dbg_y),
-    .dbg_insn(dbg_insn), .dbg_timer(dbg_timer)
+    .dbg_insn(dbg_insn), .dbg_timer(dbg_timer),
+    .dbg_next_pc(dbg_next_pc)
   );
 
   always_ff @(posedge clk or negedge rst_n) begin
@@ -196,7 +198,7 @@ module tb_pe_ctrl_r2;
   // from the gui-worker's manifest, read with $fgets/$sscanf so Icarus needs no
   // string arrays. Nothing about a vector is re-derived here: the file names
   // point at the golden .hex streams and the numbers are the manifest's.
-  localparam int R2_NUM_STEPS = 18;
+  localparam int R2_NUM_STEPS = 22;
 
 
   // Replay the session's opening LOAD (3 words) so the DUT's words_written
@@ -297,6 +299,156 @@ module tb_pe_ctrl_r2;
     if (faults !== 16'h0000)
       check(0, $sformatf("precondition: faults = %04h after CLEAR_FAULT, want 0",
                          faults));
+  endtask
+
+  // ---- THE HELD-CORE PRE-STATE (v09 / v10) -------------------------------
+  //
+  // WHY THIS EXISTS. The two vectors added by the gui-worker's held-core
+  // package (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md) report debug states 2
+  // and 3 — the compatibility surface R2's 18 shipped steps never exercise, and
+  // the chip review's MEDIUM 3. Those states need bp_en / bp_hit / dbg_hold_r,
+  // which are INTERNAL registers of pe_ctrl, so a coreless testbench cannot
+  // simply assign them.
+  //
+  // WHAT IS REAL AND WHAT IS MODELLED — the whole point of writing it down.
+  //   REAL: the DEBUG_BP_SET decode, the arm, the hit detection (pe_ctrl.v:690,
+  //   `bp_en && !dbg_hold_r && (run || dbg_step_r) && (dbg_next_pc ==
+  //   bp_addr)`), the DEBUG_STEP hold, the state encoding, and the STATUS /
+  //   DUMP_CORE response builders including the `if (run)` gate that makes
+  //   step 22 refuse. Every bit of the state these steps read is produced by
+  //   the RTL under test.
+  //   MODELLED: the CPU itself. This TB has no pe_cpu (the read port is served
+  //   from the package's memory IMAGE, which is what the 18 shipped steps
+  //   compare against), so the core's own port dbg_next_pc — the landing
+  //   address a real core presents — is driven by this testbench.
+  //
+  // WHY THAT IS NOT THE MEDIUM-2 DEFECT. The chip review's MEDIUM 2 is about a
+  // testbench FORCING a pre-state the RTL cannot reach. Nothing here is forced:
+  // the values on dbg_next_pc are the ones the package's OWN imem produces
+  // (0x0041 LDI A,0x41 at 0, 0x1001 OUT at 1, 0x4002 JMP 2 at 2) after
+  // executing the address the vector says it has, and tb_pe_ctrl_r3_conf proves
+  // on a REAL pe_cpu that the same two states are reachable by these same
+  // opcodes. This is the "drive it, don't force it" route the ask preferred;
+  // had it not been reachable, the fallback was to force and RECORD it as
+  // forced, and the difference is the difference between a conformance result
+  // and a tautology.
+  //
+  // Each prep ASSERTS the state it just established against the host's
+  // model_image.debug, so a prep that silently did nothing fails as
+  // "pre-state not reached" instead of as a confusing word mismatch inside a
+  // golden response.
+
+  // One real framed request: a debug opcode with its payload, CRC computed the
+  // same way the DUT computes it. `len` is the framing rule's own demand
+  // (tools/gen/gen_r3_vectors.py OP_LEN, which is transcribed from pe_ctrl's
+  // S_LEN): DEBUG_BP_SET carries one payload word, DEBUG_STEP none.
+  task automatic r2_debug_req(input logic [7:0] op, input int len,
+                              input logic [15:0] pay0, input int seq);
+    logic [15:0] fr [0:5];
+    logic [15:0] crc;
+    int n;
+    fr[0] = 16'hA55A;
+    fr[1] = {4'h1, op, 4'h0};          // version, opcode, host target
+    fr[2] = seq[15:0];
+    fr[3] = len;
+    fr[4] = pay0;
+    n = 4 + len;                       // words before the CRC
+    crc = 16'hFFFF;
+    for (int k = 0; k < n; k++) crc = r2_crcw(crc, fr[k]);
+    fr[n] = crc;
+    spi_cs_n = 1'b1; half_tick();
+    spi_cs_n = 1'b0; half_tick();
+    for (int k = 0; k < n + 1; k++) send_word(fr[k]);
+    spi_cs_n = 1'b1; half_tick();
+    repeat (8) @(posedge clk);
+  endtask
+
+  // Read a debug opcode's response frame and check the status word. The frame
+  // is 4 header words + rlen payload + 1 CRC, the same shape r2_clear_faults
+  // established; ST_OK is 0, so a frame that did not arrive cleanly reads as
+  // a failure here rather than as a mysterious mismatch later.
+  task automatic r2_debug_rsp(input int rlen, input string tag);
+    logic [15:0] w;
+    logic [15:0] status;
+    for (int k = 0; k < 4 + rlen + 1; k++) begin
+      recv_word(w);
+      if (k == 3) status = w;
+    end
+    if (status !== 16'h0000)
+      check(0, $sformatf("prep %s: status = %04h, want 0000 (the opcode was not accepted)", tag, status));
+  endtask
+
+  // The state the prep just built, checked against the host's own
+  // model_image.debug block. These read pe_ctrl's OWN registers and the state
+  // wire, not the testbench's intentions -- a READ of the internals, never an
+  // assignment to them. (The fv_* output taps would be the tidier way to say
+  // this, but they exist only under `ifdef FORMAL`, and this conformance run
+  // must exercise the shipping configuration, not the formal one.)
+  task automatic r2_assert_pre_state(input int want_state, input bit want_hit,
+                                      input bit want_hold, input string tag);
+    check(dut.dbg_state === want_state[1:0],
+          $sformatf("prep %s: dbg_state = %0d, want %0d", tag, dut.dbg_state, want_state));
+    check(dut.bp_hit === want_hit,
+          $sformatf("prep %s: bp_hit = %b, want %b", tag, dut.bp_hit, want_hit));
+    check(dut.bp_en === 1'b1,
+          $sformatf("prep %s: bp_en = %b, want 1 (the breakpoint must still be armed)", tag, dut.bp_en));
+    check(dut.dbg_hold_r === want_hold,
+          $sformatf("prep %s: dbg_hold_r = %b, want %b", tag, dut.dbg_hold_r, want_hold));
+  endtask
+
+  // A RELEASE first, on both preps, and the reason is an RTL-interface fact
+  // the host's model abstraction hides. pe_ctrl's DEBUG_BP_CLR clears bp_en,
+  // bp_hit AND dbg_hold_r; DEBUG_BP_SET clears bp_en and bp_hit but NOT
+  // dbg_hold_r. So on a DUT that is already held, arming again cannot latch a
+  // hit: pe_ctrl's hit condition is `bp_en && !dbg_hold_r && (run ||
+  // dbg_step_r) && (dbg_next_pc == bp_addr)` (pe_ctrl.v:690) and the second
+  // term is false. The first version of the v10 prep did exactly that and the
+  // core sat at state 2 with bp_hit clear -- which the golden step then
+  // reported as a word mismatch (state 0002, want 0003) rather than as the
+  // pre-state failure it was. Each prep now starts from a defined released
+  // state, so neither depends on what ran before it.
+  task automatic r2_release_debug;
+    r2_debug_req(8'h23, 0, 16'h0000, 16'h00C1);   // DEBUG_BP_CLR
+    r2_debug_rsp(5, "BP_CLR");
+    repeat (2) @(posedge clk);
+    check(dut.dbg_hold_r === 1'b0 && dut.bp_en === 1'b0 && dut.bp_hit === 1'b0,
+          "prep: DEBUG_BP_CLR did not release (hold/en/hit must all be clear)");
+  endtask
+
+  // v09 — the STEP-PAUSE hold (state 2): one DEBUG_STEP from the boot stop with
+  // the strap low, breakpoint armed at 2. The core is at 0 and lands on 1, so
+  // dbg_next_pc = 1 != bp_addr = 2 and the step leaves bp_hit clear — which is
+  // the whole difference between state 2 and state 3. After it, a = 0x41 (the
+  // LDI at 0 retired) and pc = 1, which is the pre-state the package states.
+  task automatic r2_prep_hold_step_pause;
+    r2_release_debug();
+    dbg_pc = 10'h000; dbg_a = 8'h00; dbg_next_pc = 10'h001;
+    r2_run = 1'b0;
+    r2_debug_req(8'h22, 1, 16'h0002, 16'h00E1);   // DEBUG_BP_SET, address 2
+    r2_debug_rsp(5, "v09 BP_SET");
+    r2_debug_req(8'h21, 0, 16'h0000, 16'h00E2);   // DEBUG_STEP
+    r2_debug_rsp(5, "v09 DEBUG_STEP");
+    // The architectural state the step leaves behind, as the package states it.
+    dbg_pc = 10'h001; dbg_a = 8'h41;
+    repeat (2) @(posedge clk);
+    r2_assert_pre_state(2, 1'b0, 1'b1, "v09 step-pause");
+  endtask
+
+  // v10 — the LIVE HIT (state 3): armed at 2, strap high, the core's next PC
+  // lands on the breakpoint, and pe_ctrl latches the hit and holds the core on
+  // the clock edge (pe_ctrl.v:690). Stop-BEFORE, so pc = 2 and the instruction
+  // at 2 has not run — which is why a = 0x41 (the LDI at 0 retired) while pc
+  // already reads 2. The run strap stays HIGH: the hit holds the core, it does
+  // not drop the strap, and step 22 is the step that pins that.
+  task automatic r2_prep_hold_bp_hit;
+    r2_release_debug();
+    dbg_pc = 10'h001; dbg_a = 8'h41; dbg_next_pc = 10'h002;
+    r2_run = 1'b1;
+    r2_debug_req(8'h22, 1, 16'h0002, 16'h00F1);   // DEBUG_BP_SET, address 2
+    r2_debug_rsp(5, "v10 BP_SET");
+    repeat (2) @(posedge clk);                     // the hit latches here
+    dbg_pc = 10'h002;                              // stop-before: at 2, not past it
+    r2_assert_pre_state(3, 1'b1, 1'b1, "v10 bp hit");
   endtask
 
   `include "../tb/r2-vectors/R2_CONFORMANCE_RUN.vh"

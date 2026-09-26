@@ -56,6 +56,8 @@ frame in the demos is checked against.
    wire bits). Firmware programs drive both (`eth_arp_echo`, `eth_tx_two`, a
    wrap probe and a busy probe).
 
+**Deep reading** — [`wiki/concepts/overview.md`](../wiki/concepts/overview.md) is the index. Per act: [UART RTS/CTS](../wiki/concepts/protocol-uart-flow.md) · [SPI mode 3 + per-word CRC](../wiki/concepts/protocol-spi3-crc.md) · [I2C read burst + clock stretching](../wiki/concepts/protocol-i2c-adv.md), plus the baseline pages [SPI as firmware](../wiki/concepts/spi-as-firmware.md) · [I2C on the matrix](../wiki/concepts/i2c-on-the-matrix.md) · [Ethernet receive path](../wiki/concepts/ethernet-receive-path.md). Figures: [uart-flow](../diagrams/proto-uart-flow.png) · [spi3-crc](../diagrams/proto-spi3-crc.png) · [i2c-adv](../diagrams/proto-i2c-adv.png)
+
 ## The debug act — arm a breakpoint, hit it, step across it, resume (R3)
 
 The four acts above are firmware personas. This one is the thing you cannot do
@@ -67,7 +69,7 @@ load — no side channel, no simulation-only hook.
 Run it yourself, no board needed:
 
 ```
-python3 tools/host_bridge/acceptance.py --fake   # the 7 r3_demo_* beats
+python3 tools/host_bridge/acceptance.py --fake   # the 8 r3_demo_* beats
 ```
 
 1. **Arm.** `DEBUG_BP_SET(2)` over the host bus. The response's five-word
@@ -98,6 +100,34 @@ python3 tools/host_bridge/acceptance.py --fake   # the 7 r3_demo_* beats
 7. **Resume with the breakpoint still wanted.** Step off → clear → re-arm. The
    GUI offers this as one action precisely because the naive "clear to get
    going" silently drops your breakpoint.
+
+**Two beats that make the awkward part explicit.** The numbered story above is
+the happy path; the run also demonstrates the two facts a debugger has to code
+around, because both were the kind of thing a reader would otherwise assume:
+
+- **`r3_demo_held_readback`** — the R2 readback of a *held* core, taken at the
+  moment of the hit, over exactly the path the GUI polls. `STATUS` reports
+  `state=3` (**BP_HIT**) with `run=1`, and the session reports `BP_HIT` rather
+  than "stopped" — a core parked on a breakpoint is not stopped, it is held, and
+  the strap is still high. `DUMP_CORE` is then **refused**, because *its gate is
+  the run strap* and the core answering `NOT_READY` (status 6) is the chip
+  agreeing; `READ_CPU` still answers, because it is the one **non-halting** read.
+  So the working readback of a core parked on a breakpoint is `STATUS`, not
+  `DUMP_CORE`. Honest standing: the debug-hold *state* is chip-confirmed in
+  simulation through the R3 vectors, and this R2 readback of it is confirmed
+  too: the chip re-ran the package with the debug opcodes on a real `pe_ctrl`
+  and **22/22** pass, the four held steps among them
+  (`reviews/2026-09-25/R2-HELD-CORE-CHIP-SIDE.md`; bytes and pre-states in
+  `R2-HELD-STATUS-BYTES.md`).
+- **`fault_refusals`** — the run's only demonstration of a *refusal*, and it
+  sits between the existing `fault` and `clear_fault` beats because that is the
+  only point where a fault is latched and not yet cleared. With a fault latched
+  the host refuses to drive the core (no step), and it refuses a step before a
+  load too, because there is nothing loaded to step. That is **the host's own
+  policy**, not a chip claim: the chip has no such rule and would execute the
+  step. What *is* a chip claim is on the same line — `DUMP_CORE` still answers a
+  faulted core, and its sticky fault word is header field 9, so that header *is*
+  the diagnostic.
 
 **One operational trap, worth knowing before you demo it.** Once the core is
 stopped on a breakpoint it is in a *debug hold*, and while held the run strap is
@@ -163,6 +193,8 @@ sides: **17.0 µs past the longest 0-release, 25.0 µs before the 1-release ends
 > fixed-wait host drifts 40 µs over twenty zero bits — three times the margin.
 > That is the single most useful thing this act demonstrates, and it is a
 > firmware property, not a hardware one.
+
+**Deep reading** — [WS2812](../wiki/concepts/protocol-ws2812.md) · [servo PWM](../wiki/concepts/protocol-servo.md) · [DHT11](../wiki/concepts/protocol-dht11.md) — each page carries the measured pulse widths and the tolerances they have to clear. Figures: [ws2812](../diagrams/proto-ws2812.png) · [ws2812-timing](../diagrams/proto-ws2812-timing.png) · [servo](../diagrams/proto-servo.png) · [servo-timing](../diagrams/proto-servo-timing.png) · [dht11](../diagrams/proto-dht11.png) · [dht11-timing](../diagrams/proto-dht11-timing.png)
 
 ### What the three acts cost, and what they prove about the claim
 
@@ -260,6 +292,8 @@ next STEP edge so the driver is given its setup time.
 > every pulse, then released *at exactly the STEP edge where a driver decodes
 > it* — four writes, one cause, and the direction never once changed on the wire.
 
+**Deep reading** — [DS18B20](../wiki/concepts/protocol-ds18b20.md) and [DHT11](../wiki/concepts/protocol-dht11.md) — the pages give the reset/presence timings each device demands and the margin this firmware leaves. Figures: [ds18b20](../diagrams/proto-ds18b20.png) · [ds18b20-frame](../diagrams/proto-ds18b20-frame.png) · [ds18b20-timing](../diagrams/proto-ds18b20-timing.png)
+
 ### What the three input acts cost, and what they add
 
 | | DS18B20 | NEC IR | Stepper |
@@ -307,6 +341,102 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
   Pico, owns reset, the 60 MHz project clock and the SPI pins, and was
   verified on a real MicroPython interpreter (not just by inspection).
 
+## The merge gate — a merge is never pushed without the tests its diff can break
+
+`regress/verify_merge.sh` is the gate. Before pushing a merge (or a branch that
+is about to be merged), run it:
+
+```sh
+./regress/verify_merge.sh                 # gate HEAD (the merge you are pushing)
+./regress/verify_merge.sh --list          # print the mapping, run nothing
+./regress/verify_merge.sh --fast -j8      # same gate, parallel
+./regress/verify_merge.sh --self-test     # the mapper's own 18 checks, no RTL
+```
+
+It maps the merge onto the testbenches that can be affected, using
+`regress/run_all.sh`'s **own** `CASES` table (parsed, not restated, so a case
+added to the suite cannot be invisible to the gate): a changed `rtl/foo.v`
+selects the cases that compile `foo.v`; a changed `tb/<case>.v` (or anything
+under `tb/<case>/`) selects that case; a changed `firmware/*` or `tools/fw/*`
+selects every case compiling `pe_cpu.v`/`pe_soc.v` — the cases whose DUT is
+partly firmware. It also maps what the *other* side gained while the branch was
+away (`merge-base..M^1`), which is the direction the actual 2026-09-25 failure
+came from. Anything it cannot map confidently is a **full** suite run, said out
+loud, never a quiet subset.
+
+Exit codes, and the reason each one exists:
+
+| code | meaning |
+| --- | --- |
+| 0 | the affected set is green |
+| 1 | red, **with a named failing case** |
+| 2 | usage / environment |
+| 3 | gate error — it could not confirm it ran the set it selected, or `run_all.sh` rejected its filter |
+| 4 | **inconclusive** — the run died (OOM, out of disk, the single-run lock) and named no failing case, **or a script it depends on changed while it was running**. Not a pass, not a red |
+
+**Why 4 exists, and the pre-flight that feeds it.** The gate's own first run
+exited 137 with an empty failure list, and a gate that reports "RED, the affected
+set failed" for a run that never finished is claiming something its log does not
+support. The same argument covers a worse case: bash reads a script
+*incrementally*, so editing a harness while it runs can make it report a **false
+PASS** — and a false pass is believed, which is the worst thing a gate here can
+do. `regress/dep_guard.sh` therefore stamps the **content** of the scripts a run
+executes and re-checks them on the way out; a change, or a vanished file, prints
+`CHIP-DEP-CHANGED` and the gate reports INCONCLUSIVE **even if the run exited 0**.
+It is checked over the whole `regress/` dependency set at the run's exit and again
+around each mutation suite, and `regress/test_dep_guard.sh` — a gate in its own
+right, inside the full suite — proves it fires on a real change, stays quiet on an
+unchanged run, ignores a content-preserving `touch`, and fails 3 of its 7 cases
+when its own comparison is disabled.
+
+**Why 4 exists.** The gate's own first run exited 137 with an empty failure
+list, and a gate that reports "RED, the affected set failed" for a run that never
+finished is claiming something its log does not support. Read 4 as "make the run
+finish", never as "the RTL is fine".
+
+**The 27-check self-test is not optional reading.** `--self-test` asserts the
+mapper's rules, the mutation mapping, the skip-print, the empty-selection
+refusal, *and* the hand-off contract between the gate and `run_all.sh`'s
+`--cases` / `MUTATE_ONLY` filters — the pairs that disagreed during this gate's
+own development and made a filter select nothing while the gate still had a
+selection to show. The count of checks it ran is itself asserted, so a
+self-test that silently stops exercising rules fails instead of reporting
+success.
+
+**The mutation suites are narrowed too, and the narrowing is printed.** By the
+manager's 2026-09-25 ruling a narrowed gate runs a mutation suite only when one
+of that suite's `MUTABLE` targets intersects the merge's changed set:
+
+```text
+--- mutation suites (2 run, 14 skipped by mapping, 16 total) ---
+  RUN   mutate_timing_tb         MUTABLE intersects the changed set (firmware/freqmeter.pe)
+  SKIP  mutate_ctrl_tb           no MUTABLE target among the changed files
+  RUN   mutate_macro_flow_config MUTABLE is empty: mutates nothing in the repo, never narrowed away
+```
+
+Measured cost of the 16 suites, sequential (2026-09-25): **1456 s**, and the
+distribution is lopsided — `mutate_eth_mac_tb` 378 s, `mutate_eth_tx_loop_tb`
+343 s, `mutate_timing_tb` 335 s against four suites under 5 s. The one figure that had been voided is now re-measured and valid:
+`mutate_timing_tb` at **323 s** (58 cases, 58 detected, 0 survived), and
+the total is 1456 s. It had first reported FAILED because a file edit
+landed while bash was executing it — a read/write race, not a defect in
+the harness, which was intact throughout. That race is now closed for
+every run that goes through the gate: see the pre-flight below and
+`reviews/2026-09-25/MERGE-GATE-MUTATION-NARROWING.md` §5 and §8.
+
+Three properties keep the narrowing honest, and all three escalate to running
+*more*, never less: a harness with no `MUTABLE` line is unmappable and runs
+everything; an empty selection is refused exactly as an empty case selection
+is; and the suite count `run_all.sh` reports is compared against the count the
+mapper chose, so a `MUTATE_ONLY` that matched nothing is a **gate error**, not a
+green with zero mutation coverage. `MUTATE_ONLY` travels as an environment
+variable, so `./regress/run_all.sh` — the master gate — is unchanged and always
+runs all 16. `regress/check_mutation_lists.sh` proves each list still covers
+every file its harness writes; it found two live gaps in already-published lists
+on its first run.
+
+Full evidence: `reviews/2026-09-25/MERGE-FORENSICS-5B4731F.md` §5-§6.
+
 ## What is proven, what is simulated, what is pending
 
 | Claim | Status | Evidence |
@@ -314,14 +444,14 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
 | UART / SPI / I2C / 10BASE-T personas run as firmware | **RTL-proven** | `tb_pe_soc_uart`, `tb_pe_soc_spi`, `tb_pe_soc_i2c*`, `tb_pe_soc_eth*`, `tb_pe_eth_tx` |
 | Full regression is green | **RTL-proven** | `./regress/run_all.sh --fast -j8` → exit 0 on a cold clone: **RTL 34/34, firmware 26/26, 12 mutation suites** (R2 and the wait-word gate are registered in `run_all`; see `docs/cold-clone-audit.md`) |
 | 60 MHz maps and routes | **RTL-proven (mapped, not routed)** | area + screen reports; physical flow intentionally out of scope |
-| Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, both fuzz campaigns, soak smoke, MicroPython conformance, acceptance `--fake` → 35 PASS, 0 FAIL, 1 SKIP) |
+| Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, both fuzz campaigns, soak smoke, MicroPython conformance, acceptance `--fake` → 37 PASS, 0 FAIL, 1 SKIP) |
 | Bridge on a real MicroPython | **measured** | built the MicroPython unix port and ran the deployed modules on it; found and fixed 5 deployment blockers (`reviews/2026-09-25/HOST-BRIDGE-MICROPYTHON.md`) |
 | Framed host bus (PING/LOAD/STATUS/CLEAR_FAULT/TARGET, target-1 loopback, sticky faults, `IRQ_N`) | **RTL-proven** | chip-side R1 landed and verified with mutation coverage; the host's bridge/acceptance drive the same contract |
 | Host protocol on real silicon (R1) | **LANDED + verified** | the chip team landed the framed bus, `IRQ_N` and target 1; the host stack speaks that exact contract today |
-| Memory/register readback (R2) | **chip-confirmed (simulation)** | chip R2 landed and registered in `run_all`: `tb_pe_ctrl_r2` reports **18/18** golden steps PASS, byte-exact (CRC included) with the model image loaded per vector, the opening 3-word LOAD replayed as a real frame, and `pe_ctrl` STA-screened. The record lives in the **chip** repo (`reviews/2026-09-25/R2-READ-PATH-REVIEW.md`); this repo's package consumed those same steps as its acceptance spec (`reviews/2026-09-25/R2-READ-VERIFICATION.json`) |
+| Memory/register readback (R2) | **chip-confirmed (simulation), 22 of 22 steps** | chip R2 landed and registered in `run_all`: `tb_pe_ctrl_r2` reports **22/22** golden steps PASS, byte-exact (CRC included) with the model image loaded per vector, the opening 3-word LOAD replayed as a real frame, and `pe_ctrl` STA-screened. The record lives in the **chip** repo (`reviews/2026-09-25/R2-READ-PATH-REVIEW.md`); this repo's package consumed those same steps as its acceptance spec (`reviews/2026-09-25/R2-READ-VERIFICATION.json`). that now includes the readback while the core is **held** at a breakpoint — `state=2` (a step-pause) and `state=3` (a live hit, where the hit holds the core and *not* the run strap, so `DUMP_CORE` is still `NOT_READY`): the chip re-ran the package with the debug opcodes on a real `pe_ctrl` and **22/22** pass, with mutants swapping the 2/3 encoding and gating `DUMP_CORE` on the hold each caught by the held steps. Evidence: `reviews/2026-09-25/R2-HELD-CORE-CHIP-SIDE.md`; bytes and pre-states in `R2-HELD-STATUS-BYTES.md` |
 | Liveness is observable (P3) | **chip-confirmed (simulation)** | R2's STATUS is 11 words incl. `pc/a/x/y/timer` at native widths, and `READ_CPU` is the one **non-halting** read, so a host can watch a RUNNING program (chip P3 finding closed; host GUI surfacing is this branch) |
-| Debug control: arm / hit / inspect / step / clear / resume (R3) | **chip-confirmed (simulation), 25/26 steps** | chip R3 landed; the chip's own `tb_pe_ctrl_r3_conf` is **GREEN 26/26** against the contract, with a 7-mutant gate (all caught) and formal proofs for S1–S4. It covers **25 of the 26** steps in this repo's golden package byte-exactly, and those 25 now carry `chip_confirmed=true` with the chip's citations; the one exception is a step whose expected `insn` is not contract-determined for a free-running core (a freeze-snapshot TB model boundary), which **both sides leave unproven** rather than "fixing" to match a testbench. The host's GUI panel, session state machine and the 7-beat `r3_demo_*` acceptance act drive the same contract; see `reviews/2026-09-25/R3-DEBUG-VERIFICATION.json` and `R3-VECTOR-BYTES.md`. **Not** hardware-confirmed |
-| Board-in-the-loop acceptance | **pending** | runner + runbook exist (`docs/host-bridge-bringup.md`); needs a board. This is the one thing the demo table marks not-done |
+| Debug control: arm / hit / inspect / step / clear / resume (R3) | **chip-confirmed (simulation), 25/26 steps** | chip R3 landed; the chip's own `tb_pe_ctrl_r3_conf` is **GREEN 26/26** against the contract, with a 7-mutant gate (all caught) and formal proofs for S1–S4. It covers **25 of the 26** steps in this repo's golden package byte-exactly, and those 25 now carry `chip_confirmed=true` with the chip's citations; the one exception is a step whose expected `insn` is not contract-determined for a free-running core (a freeze-snapshot TB model boundary), which **both sides leave unproven** rather than "fixing" to match a testbench. The host's GUI panel, session state machine and the 8-beat `r3_demo_*` acceptance act drive the same contract; see `reviews/2026-09-25/R3-DEBUG-VERIFICATION.json` and `R3-VECTOR-BYTES.md`. **Not** hardware-confirmed |
+| Board-in-the-loop acceptance | **pending** | runner + runbook exist (`docs/host-bridge-bringup.md`); needs a board. This is the one thing the demo table marks not-done. The run now covers the whole **debug act** too — it used to be skipped off a board, and a real core gets to the breakpoint on its own — so a board run demonstrates the flagship act, not just the load/readback path |
 | Physical flow (DRC/LVS) | **out of scope by design** | deferred in the plan; no physical tools run |
 
 The honest shape of the entry: the *chip* is a verified microcontroller with
@@ -351,8 +481,8 @@ If there is no board on the table, the whole story still runs, in order of
 1. **Show the GUI against the bridge on the same laptop.** Start the host
    stack; the acceptance runner's `--fake` mode is a complete, honest
    end-to-end run: real GUI/session/transport/bridge, a modelled chip.
-   `python3 tools/host_bridge/acceptance.py --fake` → 35 PASS, 0 FAIL, 1 SKIP
-   SKIP, and you can drive the same sequence from the browser.
+   `python3 tools/host_bridge/acceptance.py --fake` → 37 PASS, 0 FAIL, 1 SKIP,
+   and you can drive the same sequence from the browser.
 2. **Show the firmware on the emulator.** `python3 tools/fw/peemu.py
    firmware/uart_echo.hex --send "41 42"` — the exact words the hardware
    testbench checks, from the CPU model, in ~2 seconds.

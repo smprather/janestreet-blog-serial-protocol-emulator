@@ -53,6 +53,14 @@ cd "$(dirname "$0")/.."
 chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
 RTL="$ROOT/rtl/pe_eth_tx.v"
+# MUTABLE — what this harness EDITS inside the repo. Read by
+# regress/verify_merge.sh (the merge gate) to decide whether a narrowed gate
+# has to run this suite, and by regress/check_mutation_lists.sh to prove the
+# list still covers every file the harness writes. Evidence: RTL=; pe_crc appears only in a compile list.
+# An EMPTY value means this suite mutates nothing in the repo and is therefore
+# NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
+# escalates to running every suite rather than guessing.
+MUTABLE="rtl/pe_eth_tx.v"
 LOG=/tmp/mutate_eth_tx.log
 CCLOG=/tmp/mutate_eth_tx_cc.log
 PRISTINE=$(mktemp -d /tmp/pristine_eth_tx_tb.XXXXXX)
@@ -218,4 +226,14 @@ echo "    pristine snapshot kept for forensics: $PRISTINE"
 [ $survived -gt 0 ] && { echo "SURVIVORS: the TB does not test what it claims."; exit 1; }
 [ $fail -gt 0 ] && { echo "HARNESS ERRORS: fix the harness first."; exit 1; }
 echo "OK: every pe_eth_tx engine mutation is detected by tb_pe_eth_tx."
+  # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). Stamped when this
+  # harness took the run lock; verified HERE, because this is the only place it
+  # can be: the harness sets its own `trap cleanup EXIT` after sourcing
+  # run_lock.sh, and a second EXIT trap replaces the first, so a check installed
+  # over there would be silently discarded. If this script — or the lock helper it
+  # sources — changed while we were running, bash's incremental read means our
+  # verdict is untrustworthy in EITHER direction, so exit 4 (INCONCLUSIVE) rather
+  # than report a possibly-false pass.
+  chip_dep_check "run_$(basename "$0")" || exit 4
+
 exit 0

@@ -6,7 +6,7 @@ skinparam defaultFontName Monospaced
 skinparam packageStyle rectangle
 
 package "Demo host / board" {
-  component "Linux PC\nDemo host GUI (planned)" as pc
+  component "Linux PC\nhost GUI built; board acceptance open" as pc
   component "Tiny Tapeout demo board\nRP2040 controller (Raspberry Pi Pico)" as board
   component "Protocol wires" as wires
 }
@@ -96,6 +96,190 @@ serdes --> tx_mux : tx_bit (default owner)
 tx_frame --> tx_mux : eth_tx_bit
 tx_mux --> codec_tx : owned tx_bit into shared codec
 tx_mux --> pads : uo_out[2] eth_tx (G6, behind pin_oe_bus[7])
+
+package "Host read path (R2) — committed baseline" {
+  component "Bounded read port\npe_soc dbg_rd_*" as p_r2port
+  component "Wait-word contract\n0xFFFF filler, leading-only skip" as p_r2wait
+  p_r2port --> p_r2wait : answer cannot beat the fetch
+}
+
+package "R3 debug control — landed 2026-09-25" {
+  component "Debug-control contract\n0x21 STEP / 0x22 BP_SET / 0x23 BP_CLR /\n0x24 DEBUG_STATUS (10 words)" as p_r3ctr
+  component "bp comparator + debug mux\npe_ctrl / pe_cpu" as p_r3rtl
+  component "STOP-BEFORE semantics\n+ the bring-up trap" as p_r3sem
+  p_r3ctr --> p_r3rtl
+  p_r3ctr --> p_r3sem
+}
+
+package "Protocol and timing acts as firmware\none CPU, one pin matrix, TWO tick counters" {
+  component "Protocol acts\nI2C adv, SPI m3+CRC, UART RTS/CTS,\nMIDI 31.25k, DMX512-A 250k" as p_proto
+  component "Timing acts\nWS2812, servo, DHT11, DS18B20,\nNEC IR, stepper, freqmeter" as p_timing
+  component "HC-SR04 ranging\nplanned; the TB is not wired\ninto run_all.sh yet" as p_sr04
+  cpu --> p_proto : programs
+  cpu --> p_timing : programs
+  cpu --> p_sr04 : programs
+  pads --> p_proto : pins
+  pads --> p_timing : pins
+  pads --> p_sr04 : pins
+}
+
+package "Per-act protocol figures — one family per firmware persona act" {
+  component "proto-<act>   the act's own figure\ndht11 · dmx512 · ds18b20 · fm-biphase\nfreqmeter · i2c-adv · midi · nec-ir\nservo · spi3-crc · sr04 · uart-flow · ws2812" as pf_act
+  component "proto-<act>-frame\nthe frame / encoding layer\n7 of the 13 acts carry one" as pf_frame
+  component "proto-<act>-timing\nthe cell / cadence layer\n7 of the 13 acts carry one" as pf_timing
+  pf_act --> pf_frame : pf_frame --> pf_timing
+}
+
+package "Chip-host protocol figures and concept pages — the documented wire contract" {
+  component "proto-spi-framing\nthe request/response word and bit\nlayout, and the WAIT-WORD rule" as p_docframe
+  component "proto-r2-read-path\nthe four read opcodes, the 11-word\nheader, the read-count ceiling" as p_docread
+  component "proto-r3-debug-control\nthe four-state machine, STOP-BEFORE,\nthe masked run strap" as p_docdbg
+  component "Protocol pages\nhost-chip-protocol\ndebug-control" as p_docproto
+  component "Formal pages\nformal-verification\nprotocol-formal-gaps" as p_docformal
+  component "Architecture pages\nisa-and-soc\nsoc-wiring-and-memory" as p_docarch
+  p_docframe --> p_docread : p_docread --> p_docdbg
+  p_docdbg --> p_docproto : p_docproto --> p_docformal : p_docformal --> p_docarch
+}
+
+package "Verification — formal campaign" {
+  component "SMT / BMC toolchain\nfv_run.sh + smt_induct.sh" as p_fvtool
+  component "10 properties / 5 modules\npinmux, eth_tx, pe_ctrl, pe_soc, pe_cpu" as p_fvprops
+  component "Inductive IFG floor\neth_tx 96-cell gap, unbounded" as p_fvifg
+  component "R3 debug hold\nproved inductively, S1-S4" as p_fvhold
+  component "Mutant-kill gate\n14/14 caught, 0 survived" as p_fvmut
+  component "THE SMT UNLOCK — the 11th target\nsmt_induct.sh re-runs the same claims\nthrough write_smt2 + yosys-smtbmc/z3,\nwhere a register has ONE next-value\nfunction. It proved the pe_soc C2\nowner-set guard under a second,\nindependent engine." as p_fvsmt
+  p_fvtool --> p_fvprops
+  p_fvprops --> p_fvifg
+  p_fvprops --> p_fvhold
+  p_fvmut --> p_fvprops : non-vacuity
+  p_fvtool --> p_fvsmt : unlocks
+}
+
+package "Delivery model — parallel worktree fleet" {
+  component "fw-bus-protocols" as p_wbus
+  component "fw-timing-protocols" as p_wtime
+  component "host-controller-gui" as p_whost
+  component "docs/diag-bus, diag-timing,\ndiag-proto, wiki-features" as p_wdocs
+  component "Hardware acceptance\nphysical board — OPEN" as p_whw
+  p_whost --> p_wbus : host contract
+  p_wbus --> p_wtime : protocol acts
+  p_wdocs --> p_wbus : diagrams + wiki depth
+  p_wbus --> p_whw : next
+}
+
+' LAYOUT ONLY. Nodes at the same depth from a parent fan out horizontally, so
+' these sections would land as one wide row and flatten the diagram. The
+' hidden chain stacks them instead, which is what the "squarer aspect"
+' invariant in diagrams/README.md requires. No architecture is implied.
+pads -[hidden]down-> p_r2port
+p_r2wait -[hidden]down-> p_r3ctr
+p_r3sem -[hidden]down-> p_proto
+p_sr04 -[hidden]down-> pf_act
+pf_timing -[hidden]down-> p_docframe
+p_docarch -[hidden]down-> p_fvtool
+p_fvsmt -[hidden]down-> p_wbus
+
+note bottom of p_r3ctr
+  LANDED 2026-09-25, and this note corrects a first version that said
+  otherwise. That version claimed the RTL did not exist, measured in THIS
+  worktree -- which is behind main, where the landed control lives (21
+  references in pe_ctrl.v, 8 in pe_cpu.v). The lesson is the one this project
+  keeps paying for: a local measurement is not a project claim, and the eight
+  "missing" persona acts had already been caught the same way in the same
+  session.
+
+  THE BRING-UP TRAP is the part a host must design around: once the core is
+  HELD, the run strap is ignored BOTH WAYS. A hold is released only by
+  DEBUG_BP_CLR or by reset, because
+  cpu_exec = (dbg_step === 1'b1) || (run && !(dbg_hold === 1'b1))
+  (pe_cpu.v:233). A host that single-steps or hits a breakpoint and then
+  re-asserts run=1 to carry on finds the core STILL HELD, with no fault and
+  nothing in the response words to explain it.
+
+  THE === FORM IS THE CONTRACT, not decoration. An UNDRIVEN debug input then
+  reads as INACTIVE; the plain !dbg_hold form propagates x and freezes the core
+  at reset. The convention is enforced where the input is consumed rather than
+  at every call site, which is the only place a new call site cannot forget it.
+  Leaving those inputs undriven took six acts to their reset after the 5b4731f
+  merge.
+end note
+
+note bottom of p_proto
+  The architectural point of the whole firmware-protocols effort: these are not
+  peripherals. They are PROGRAMS on the same CPU, pin matrix and tick, which is
+  why a rate the 260-CLOCK UART half-bit tick cannot express (MIDI 31.25 kbaud,
+  DMX 250 kbaud) is still reachable -- by counting instructions. What each act
+  MEASURES on the pin belongs to the act's own page, which carries the
+  measurement table and links its figure: wiki/concepts/protocol-midi.md and
+  wiki/concepts/protocol-dmx512.md.
+
+  NAME THE TICK beside any conclusion drawn from it. This SoC has TWO tick
+  counters and they are not the same size: port 7 (STATUS) is the UART
+  HALF-BIT tick at 260 clocks / 4.33 us, and port 4 (I2CTICK) is a
+  free-running 1 us counter built from I2C_TICKS = CLK_HZ / 1_000_000 = 60
+  exactly (pe_soc.v:560), so it has no rounding error at all. So "the tick
+  cannot express a fraction" is true of the 260-clock tick and FALSE of the
+  1 us one, which divides 4.3333 us only inexactly but 4.000 us exactly. The
+  acts here count instructions rather than program either tick, so nothing in
+  this section depends on which one is meant -- but a reader who is not told
+  which tick will carry the wrong conclusion into their own act.
+end note
+
+note bottom of p_whw
+  THE REMAINING RED. Everything above is simulated and mapped; the physical
+  Pico/USB board acceptance is the one item no simulation can close.
+end note
+
+note bottom of p_fvsmt
+  A COUNT IS AN ASSERTION, so the two numbers in this section are deliberately
+  NOT the same kind of thing and must not be conflated:
+    * 10 PROPERTIES across 5 modules is what formal/results/summary.txt
+      records, and it stays 10. Do not let a larger target count overwrite it.
+    * 11 TARGETS is that same 10 plus the SMT unlock below.
+  The unlock exists because the built-in `sat -tempinduct` is a self-contained
+  k-induction over a sampling netlist in which a register's next-value is
+  DUPLICATED per sampling domain, which is why four pe_ctrl claims looked
+  toolchain-blocked. write_smt2 + yosys-smtbmc/z3 gives each register ONE
+  next-value function. It also validates the pipeline: the known-inductive
+  pe_ctrl subset passes there too, so a FAILED run on a hard claim means the
+  CLAIM, not the tool.
+end note
+
+note bottom of pf_act
+  29 figures across 13 act families, on a deliberate naming convention: the
+  bare `proto-<act>` is the act's own figure, and `-frame` and `-timing` split
+  it into the encoding layer and the cell/cadence layer. Seven acts carry all
+  three (dht11, ds18b20, fm-biphase, freqmeter, nec-ir, servo, sr04); the other
+  six carry the bare figure only, because those acts have one story to tell
+  rather than two layers over it.
+
+  The maps name the whole convention rather than listing 29 nodes, because a
+  list that long stops being a map. What matters for a reader is that the
+  family exists, what its three members mean, and that the act list is
+  complete.
+end note
+
+note bottom of p_docframe
+  The three figures are the wire contract drawn, and each is built from the
+  RTL rather than from the prose: the response builders, the dbg_state
+  equation, the hit latch and the execute gate. proto-spi-framing carries the
+  word/bit layout and the WAIT-WORD rule; proto-r2-read-path the 11-word
+  header field by field and the read-count ceiling; proto-r3-debug-control
+  the state machine, STOP-BEFORE and the masked run strap.
+
+  The six concept pages behind them are wiki/concepts/host-chip-protocol,
+  debug-control, formal-verification, protocol-formal-gaps, isa-and-soc and
+  soc-wiring-and-memory. The maps name all six so the documentation surface
+  is not understated: a page that exists but that no map points at is a page
+  the next reader will not find.
+end note
+
+note bottom of p_sr04
+  HC-SR04 ranging is PLANNED, and is the one firmware act whose testbench is
+  not wired into run_all.sh -- so a green suite is currently SILENT about it.
+  Measured standalone 2026-09-25: 5 checks fail. See the progress map, which
+  records the measurement rather than the intention.
+end note
 
 note bottom of pads
   Baseline firmware personas: UART, SPI master, I2C master.

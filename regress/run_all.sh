@@ -32,12 +32,40 @@ cd "$(dirname "$0")/.." || exit 1
 # shellcheck source=regress/run_lock.sh
 . "$(dirname "$0")/run_lock.sh"
 chip_take_run_lock "run_all.sh"
-trap 'chip_release_run_lock' EXIT
+# THE HARNESS-EDIT PRE-FLIGHT. A run may not report a verdict from scripts that
+# changed underneath it: bash reads a script INCREMENTALLY, so editing a harness
+# mid-run can make it report a FALSE PASS as easily as a false failure, and a
+# false pass is the worst thing a gate in this project can do. The dependency
+# guard stamps the CONTENT of the scripts this run executes and re-checks it on
+# the way out; a change exits 4 (INCONCLUSIVE) and never a green. See
+# regress/dep_guard.sh for why a content hash and not an mtime, and
+# regress/test_dep_guard.sh for the guard's own seven-case test — including the
+# negative control that proves it can fail.
+# shellcheck source=regress/dep_guard.sh
+. "$(dirname "$0")/dep_guard.sh"
+_on_exit() {
+  local rc=$?
+  # The pre-flight runs FIRST, before the lock is released: a run whose scripts
+  # moved has no verdict to protect, and the lock must not be held while this
+  # decides.
+  if ! chip_dep_check run_all; then rc=4; fi
+  chip_release_run_lock
+  exit "$rc"
+}
+trap '_on_exit' EXIT
 # Capture the repo root NOW, as an absolute path. This script cds into sim/ and
 # then back to the root, and `$0` may itself be relative ("./regress/run_all.sh"), so
 # any later `dirname "$0"` resolves against the wrong directory. Gates that are
 # invoked mid-script use this. (The param-guard gate failed exactly this way.)
 REPO_ROOT="$(pwd)"
+# Stamp the dependency set now that the root is known. Every regress/ script is
+# included because this file invokes most of them and any of them could be the
+# one under edit.
+_chip_deps=()
+for _f in "$REPO_ROOT"/regress/*.sh; do
+  [ -f "$_f" ] && _chip_deps+=("$_f")
+done
+chip_dep_stamp run_all "${_chip_deps[@]}"
 mkdir -p sim
 
 # ---- options ---------------------------------------------------------------
@@ -46,6 +74,12 @@ JOBS=$(nproc 2>/dev/null || echo 4)
 while [ $# -gt 0 ]; do
   case "$1" in
     --fast)   FAST=1 ;;
+    # Most specific first: `--cases=REGEX` before the bare `--cases REGEX`.
+    # They do not actually overlap (the bare pattern has no glob characters, so
+    # it matches only the literal string), but shellcheck reports the later one
+    # as unreachable and a reader has to stop and re-derive that.
+    --cases=*) FILTER_CASES="${1#--cases=}" ;;
+    --cases)  FILTER_CASES="${2:-}"; shift ;;
     -j*)      JOBS="${1#-j}" ;;
     -j)       shift; JOBS="${1:-$JOBS}" ;;
     -h|--help)
@@ -224,6 +258,17 @@ CASES=(
   # as the instruction memory (ADR-003). Byte granularity comes from the
   # macro's bit-mask port and the read lane is a register -- two silent
   # failure modes, both mutation-tested.
+  # The HC-SR04 RANGING ACT — WIRED, AND KNOWN-RED ON PURPOSE (2026-09-26).
+  # It used to be absent from this list entirely, and that was the defect: a red
+  # act nobody can see is a claim hazard, because "46/46 PASS" then reads as
+  # "the ranging act is verified" when in fact nothing has ever run it. It is
+  # wired here behind a <<wip>> marking rather than left out, and the marking is
+  # SELF-EXPIRING: a <<wip>> case that PASSES is reported as a FAILURE telling
+  # you to remove the marking, so the exemption cannot outlive the act it covers.
+  # That is the same discipline as the wiki-pages gate's pinned baseline with its
+  # STALE check — an exemption that can silently outlive its defect is a
+  # checklist, not a gate.
+  "tb_pe_soc_sr04|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_sr04|<<wip>>"
   "tb_pe_fbuf|../rtl/pe_fbuf.v|tb_pe_fbuf"
 
   # 10BASE-T on the SoC: wire -> DRU -> Manchester -> MAC + CRC + frame
@@ -320,7 +365,34 @@ CASES=(
   "tb_pe_soc_uart_flow|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_uart_flow"
 )
 
-pass=0; fail=0; failed_names=()
+# ---- OPTIONAL case filter (OFF by default; the merge gate's driver) --------
+# `--cases REGEX` runs only the cases whose NAME or TOP matches. Unused, the
+# ordinary full gate is byte-for-byte unchanged. When it IS used it PRINTS the
+# selected and skipped counts, and the summary line says FILTERED, because a
+# gate that silently runs less than it claims is worse than no gate -- that is
+# precisely how a red merge gets pushed.
+if [ -n "${FILTER_CASES:-}" ]; then
+  _sel=(); _skip=0
+  for c in "${CASES[@]}"; do
+    IFS='|' read -r _n _r _t <<< "$c"
+    # NAME and TOP are matched as SEPARATE lines, not as one "$_n $_t" line.
+    # That matters: a caller who anchors its pattern (^(a|b)$, which is what
+    # regress/verify_merge.sh builds from the case table) can then never match
+    # a two-field line, and the filter silently selects nothing. That is not
+    # hypothetical — verify_merge.sh's own GREEN demonstration hit it, and the
+    # only reason it was caught rather than believed is that the gate refuses
+    # to report a pass it cannot count.
+    if printf '%s\n' "$_n" "$_t" | grep -qE "${FILTER_CASES}"; then _sel+=("$c"); else _skip=$((_skip + 1)); fi
+  done
+  echo "(--cases ${FILTER_CASES}: ${#_sel[@]} selected, ${_skip} skipped)"
+  if [ "${#_sel[@]}" -eq 0 ]; then
+    echo "run_all.sh: --cases '${FILTER_CASES}' matched NO case" >&2
+    exit 2
+  fi
+  CASES=("${_sel[@]}")
+fi
+
+pass=0; fail=0; failed_names=(); WIP_LIST=""
 
 if [ "$FAST" -eq 1 ]; then
   # ---- parallel path --------------------------------------------------------
@@ -346,7 +418,7 @@ if [ "$FAST" -eq 1 ]; then
   # 2-state simulation cannot express the weak/strong distinction the TB is
   # built on. So the fast path stays on the 4-state simulator, where it belongs.
   work=$(mktemp -d)
-  trap 'rm -rf "$work"' EXIT
+  trap 'rm -rf "$work"; _on_exit' EXIT
 
   printf '%s\n' "${CASES[@]}" \
     | xargs -P "$JOBS" -I{} "$REPO_ROOT/regress/run_one_tb.sh" "{}" "$work"
@@ -356,27 +428,36 @@ if [ "$FAST" -eq 1 ]; then
   # directly would interleave, and a verdict could appear under another case's
   # name.
   for c in "${CASES[@]}"; do
-    IFS='|' read -r name rtl top <<< "$c"
-    result="$work/$top.result"
-    if [ ! -f "$result" ]; then
-      printf '%-18s NO-RESULT (worker died without writing one)\n' "$top"
-      fail=$((fail+1)); failed_names+=("$top(no-result)")
-      continue
-    fi
-    verdict=$(head -1 "$result")
-    if [ "$verdict" = "PASS" ]; then
-      printf '%-18s PASS\n' "$top"
-      pass=$((pass+1))
-    else
-      printf '%-18s %s\n' "$top" "$verdict"
-      tail -n +2 "$result" | sed 's/^/  /'
-      fail=$((fail+1)); failed_names+=("$top")
+        IFS='|' read -r name rtl top wip <<< "$c"
+        result="$work/$top.result"
+        if [ ! -f "$result" ]; then
+          printf '%-18s NO-RESULT (worker died without writing one)\n' "$top"
+          fail=$((fail+1)); failed_names+=("$top(no-result)")
+          continue
+        fi
+        verdict=$(head -1 "$result")
+        if [ "$verdict" = "PASS" ]; then
+          if [ "$wip" = "<<wip>>" ]; then
+            printf '%-18s WIP-NOW-PASSING (remove the <<wip>> marking)\n' "$top"
+            fail=$((fail+1)); failed_names+=("$top(wip-now-passing)")
+            continue
+          fi
+          printf '%-18s PASS\n' "$top"
+          pass=$((pass+1))
+        elif [ "$wip" = "<<wip>>" ]; then
+          printf '%-18s KNOWN-WIP (expected red; the act is not finished)\n' "$top"
+          tail -n +2 "$result" | sed 's/^/  /'
+          WIP_LIST="$WIP_LIST $top"
+        else
+          printf '%-18s %s\n' "$top" "$verdict"
+          tail -n +2 "$result" | sed 's/^/  /'
+          fail=$((fail+1)); failed_names+=("$top")
     fi
   done
 else
   # ---- serial path (default) ------------------------------------------------
 for c in "${CASES[@]}"; do
-  IFS='|' read -r name rtl top <<< "$c"
+  IFS='|' read -r name rtl top wip <<< "$c"
   tb="../tb/${name}.v"
   if ! iverilog -g2012 -s "$top" -o "/tmp/${top}.vvp" $rtl $SRAM_FLAGS "$tb" 2>"/tmp/${top}.err"; then
     printf '%-18s COMPILE-FAIL\n' "$top"
@@ -386,8 +467,17 @@ for c in "${CASES[@]}"; do
   fi
   out=$(vvp "/tmp/${top}.vvp" 2>&1)
   if grep -q '^PASS' <<< "$out"; then
+    if [ "$wip" = "<<wip>>" ]; then
+      printf '%-18s WIP-NOW-PASSING (remove the <<wip>> marking)\n' "$top"
+      fail=$((fail+1)); failed_names+=("$top(wip-now-passing)")
+      continue
+    fi
     printf '%-18s PASS\n' "$top"
     pass=$((pass+1))
+  elif [ "$wip" = "<<wip>>" ]; then
+    printf '%-18s KNOWN-WIP (expected red; the act is not finished)\n' "$top"
+    grep -E '^FAIL' <<< "$out" | head -5 | sed 's/^/  /'
+    WIP_LIST="$WIP_LIST $top"
   else
     printf '%-18s FAIL\n' "$top"
     grep -E '^FAIL' <<< "$out" | head -5
@@ -399,6 +489,13 @@ fi
 echo
 echo "========================================"
 echo "TOTAL: $((pass+fail))   PASS: $pass   FAIL: $fail"
+# The known-red acts are NAMED in the summary, every run, so a <<wip>> case can
+# never become invisible the way an unwired one was. An empty list prints
+# nothing rather than a reassuring dash, so "no WIP acts" is distinguishable
+# from "the summary was truncated".
+if [ -n "$WIP_LIST" ]; then
+  echo "KNOWN-WIP (ran, expected red, act unfinished):$WIP_LIST"
+fi
 if [ "$fw_rc" -ne 0 ]; then
   echo "firmware regression: FAILED (see above)"
   fail=$((fail+1))
@@ -420,6 +517,49 @@ else
   cat /tmp/param_guards.log
   fail=$((fail+1))
   failed_names+=("param_guards")
+fi
+
+# Every regress/ script must PARSE, one file per bash -n. This is a gate
+# because the failure it prevents is invisible in the output: a broken lock
+# helper made all sixteen mutation suites run to completion, report their real
+# verdicts, and exit 4 — and `bash -n regress/*.sh` had said "all parse", because
+# bash -n over a glob parses the FIRST file and passes the rest as arguments.
+if "$REPO_ROOT/regress/check_shell_syntax.sh" > /tmp/check_shell_syntax.log 2>&1; then
+  echo "regress script syntax: OK ($(tail -1 /tmp/check_shell_syntax.log))"
+else
+  echo "regress script syntax: FAILED"
+  cat /tmp/check_shell_syntax.log
+  fail=$((fail+1))
+  failed_names+=("check_shell_syntax")
+fi
+
+# Every mutation harness must be covered by the harness-edit pre-flight. The
+# wiring is correct today because of an edit, not because of a gate, and the next
+# harness added would take the lock, be stamped and never be checked - which is a
+# mid-run edit yielding a false pass with nothing saying so. Same drift class as
+# the MUTABLE check below, one layer over.
+if "$REPO_ROOT/regress/check_harness_preflight.sh" > /tmp/check_harness_preflight.log 2>&1; then
+  echo "harness pre-flight coverage: OK ($(tail -1 /tmp/check_harness_preflight.log))"
+else
+  echo "harness pre-flight coverage: FAILED"
+  cat /tmp/check_harness_preflight.log
+  fail=$((fail+1))
+  failed_names+=("check_harness_preflight")
+fi
+
+# The mutation suites' MUTABLE lists decide which suites a NARROWED merge gate
+# has to run (regress/verify_merge.sh), so a list that stopped covering the
+# files its harness writes would make that gate skip a suite guarding a changed
+# file. The check belongs in the FULL gate too, not only in the mapper: a list is
+# only trustworthy while something keeps proving it, and this is the master gate
+# that everything else trusts.
+if "$REPO_ROOT/regress/check_mutation_lists.sh" > /tmp/check_mutation_lists.log 2>&1; then
+  echo "mutation MUTABLE lists: OK"
+else
+  echo "mutation MUTABLE lists: FAILED"
+  cat /tmp/check_mutation_lists.log
+  fail=$((fail+1))
+  failed_names+=("check_mutation_lists")
 fi
 
 [ "$fail" -eq 0 ] || { echo "failed: ${failed_names[*]}"; exit 1; }
@@ -444,6 +584,90 @@ echo
 # exists, and a deleted TB must not leave the pin budget claiming coverage.
 # Regenerate with: python3 tools/gen/signal_glossary.py / tools/gen/pin_budget.py
 stale=0
+
+# ---- THE MUTATION SUITES, and the narrowing regress/verify_merge.sh asks for --
+#
+# MUTATE_ONLY is a REGEX over the suite basenames. Unset (the ordinary full gate,
+# the master/nightly run), EVERY suite runs and this file behaves exactly as
+# before. Set, only the matching suites run — and the run says so, loudly, with
+# the counts, because a gate that silently runs less than it claims is worse
+# than no gate. The manager's ruling (2026-09-25) is MAPPED, NOT SKIPPED: the
+# mapping lives in verify_merge.sh, which prints WHICH suites it selected and
+# WHY, and this file only carries out the selection.
+#
+# The narrowing is by the suite's own published MUTABLE list, so a merge that
+# changes a file a suite does not mutate never pays for that suite, while a
+# merge that changes one it DOES mutate always runs it. A suite that mutates
+# nothing in the repo (MUTABLE empty) is never narrowed away: the mapper keeps
+# it, and that is deliberate.
+# The key a suite is matched and reported by: the basename WITHOUT the .sh.
+# ONE place on purpose. The first version of this block derived the key in the
+# pre-flight loop but compared the RAW argument (mutate_x_tb.sh) in the runtime
+# wrapper, so an anchored MUTATE_ONLY selected 4 suites in the pre-flight and
+# then skipped all 16 at run time — a run with ZERO mutation coverage. The
+# gate's count cross-check caught it (that is what it is for), but a narrowing
+# that can disagree with itself in the same file is the defect, not the
+# cross-check.
+mut_key() { local b="${1##*/}"; printf '%s' "${b%.sh}"; }
+
+MUT_RAN=0; MUT_SKIPPED=0; MUT_SKIP_LIST=""
+MUT_ALL=(regress/mutate_*.sh)
+MUT_TOTAL=${#MUT_ALL[@]}
+if [ -n "${MUTATE_ONLY:-}" ]; then
+  _mhit=0
+  for _m in "${MUT_ALL[@]}"; do
+    if printf '%s\n' "$(mut_key "$_m")" | grep -qE "${MUTATE_ONLY}"; then _mhit=$((_mhit + 1)); fi
+  done
+  if [ "$_mhit" -eq 0 ]; then
+    echo "FATAL: MUTATE_ONLY='${MUTATE_ONLY}' matches NO mutation suite." >&2
+    echo "  A narrowed gate that runs zero mutation suites would report a green it did not earn." >&2
+    echo "  Matching suites are named mutate_<topic>_tb.sh; list them with:" >&2
+    echo "    grep -m1 '^# mutate' regress/mutate_*.sh" >&2
+    exit 2
+  fi
+  echo "(MUTATE_ONLY=${MUTATE_ONLY}: $((MUT_TOTAL - _mhit)) of $MUT_TOTAL mutation suites will be SKIPPED by mapping)"
+fi
+
+# One suite, or skipped-by-mapping. Sets MUT_RAN / MUT_SKIPPED and the list of
+# skipped names, which the summary prints — so the log alone says what ran.
+run_mutation_suite() {
+  local n="$1"; shift
+  local key
+  key=$(mut_key "$n")
+  if [ -n "${MUTATE_ONLY:-}" ] && ! printf '%s\n' "$key" | grep -qE "${MUTATE_ONLY}"; then
+    MUT_SKIPPED=$((MUT_SKIPPED + 1)); MUT_SKIP_LIST="$MUT_SKIP_LIST $key"
+    return 0
+  fi
+  MUT_RAN=$((MUT_RAN + 1))
+  # THE SUITE'S OWN PRE-FLIGHT, AND NOW ITS DUT TOO. This is the wrapper rather
+  # than 16 separate edits because it is the one place that knows which script
+  # each suite is — and because a harness's own `trap cleanup EXIT` would
+  # overwrite a trap installed inside it, so a per-harness EXIT trap cannot be
+  # made to work without editing all sixteen by hand.
+  #
+  # The MUTABLE targets are dependencies for the same reason the script is: a
+  # harness that mutates rtl/pe_soc.v is EXECUTING AGAINST that file, so an
+  # external edit to it is the same interference class as an edit to the script,
+  # and on 2026-09-25 that class produced a possible false survivor in
+  # mutate_eth_mac_tb.sh while the guard could not see it. The harness already
+  # publishes the exact file set it mutates, so the dependency list is already
+  # written down; it just was not being read as one.
+  _mut_deps=()
+  if [ -f "$1" ]; then
+    while IFS= read -r _md; do
+      [ -n "$_md" ] && _mut_deps+=("$REPO_ROOT/$_md")
+    done < <(grep -m1 '^MUTABLE=' "$1" | cut -d'"' -f2 | tr ' ' '\n')
+  fi
+  chip_dep_stamp "suite_$n" "$1" ${_mut_deps[@]+"${_mut_deps[@]}"}
+  "$@"
+  local rc=$?
+  if ! chip_dep_check "suite_$n"; then
+    echo "mutation suite $n: INCONCLUSIVE — the harness script or one of its MUTABLE targets changed while it was running" >&2
+    return 4
+  fi
+  return $rc
+}
+
 if python3 tools/gen/signal_glossary.py --check >/dev/null 2>&1; then
   echo "signal glossary up to date"
 else
@@ -503,7 +727,7 @@ fi
 # skip and a yosys-elaboration failure must all behave as designed. The
 # mutations run on a COPY of the flow config/PDN script, never the tracked
 # files, and the harness reports SKIPPED when its baseline is incomplete.
-if ./regress/mutate_macro_flow_config.sh > /tmp/mutate_macro_flow.log 2>&1; then
+if run_mutation_suite mutate_macro_flow_config.sh ./regress/mutate_macro_flow_config.sh > /tmp/mutate_macro_flow.log 2>&1; then
   if grep -q "^SKIPPED" /tmp/mutate_macro_flow.log; then
     echo "macro flow config negatives: SKIPPED (required PDK geometry unavailable)"
   else
@@ -544,6 +768,95 @@ if python3 tools/gen/block_diagram.py --check >/dev/null 2>&1; then
   echo "block diagram up to date"
 else
   echo "STALE: wiki/reference/block-diagram.md — run python3 tools/gen/block_diagram.py"
+  stale=1
+fi
+# The HAND-WRITTEN wiki pages, against the five rules wiki/SCHEMA.md states and
+# that nothing had ever checked. Every other documentation gate above is a
+# GENERATED-page drift check — it compares wiki/reference/* against tools/gen/* —
+# so a hand-written page could break every rule in the schema and no gate would
+# notice. The known violations are PINNED in wiki/.known-rule-violations.txt, one
+# line each with a reason, and the checker enforces the pin in BOTH directions: a
+# NEW violation is red, and a pinned violation that has been FIXED is also red,
+# because a baseline that silently outlives its defect is a checklist rather than
+# a pin. Its negative control (13 cases, including the stale direction and the
+# fail-closed paths) is regress/test_check_wiki_pages.sh.
+if bash regress/check_wiki_pages.sh > /tmp/check_wiki_pages.log 2>&1; then
+  echo "wiki page rules: OK ($(grep -c . /tmp/check_wiki_pages.log) line(s); see regress/check_wiki_pages.sh)"
+else
+  echo "wiki page rules: FAILED (see /tmp/check_wiki_pages.log)"
+  tail -20 /tmp/check_wiki_pages.log
+  stale=1
+fi
+# The DIAGRAMS, which until this gate existed had NO gate at all: 22 .puml
+# sources and 84 renders whose entire value is that they are correct pictures of
+# the code, with nothing in the suite that would have noticed one going stale,
+# one gaining a syntax error, or one losing its colocated SVG. PlantUML makes
+# this class of failure especially quiet: a .puml with a syntax error still
+# RENDERS, as an error image, so the committed artifact is a valid PNG of a
+# parser complaint and looks like a diagram to anything that only looks at files.
+#
+# It checks: every .puml parses (plantuml --check-syntax); every block has BOTH
+# formats colocated under the multi-block naming convention (<stem>, then
+# <stem>_001..<stem>_(N-1)); every render is neither older than its source nor
+# different from a fresh render of it (byte comparison, which is what catches the
+# data-source-line drift class an mtime test cannot see); and no render is
+# unclaimed by any source. Aspect is checked too, as a smoke alarm for a layout
+# accident rather than a style rule.
+#
+# The log paths are WORKTREE-SCOPED, unlike their neighbours above, on purpose:
+# sharing /tmp paths across gate logs is a known open defect here (14 logs at the
+# time of writing), and a new bare path would add to it rather than fix it. The
+# digest is the same one regress/mutate_fwbus_tb.sh adopted.
+_diag_wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
+[ -n "$_diag_wt" ] || _diag_wt=shared
+if bash tools/diag/check_diagrams.sh > "/tmp/check_diagrams.${_diag_wt}.log" 2>&1; then
+  echo "diagrams: OK ($(grep -c '^  ok:' "/tmp/check_diagrams.${_diag_wt}.log") check(s) passed; see tools/diag/check_diagrams.sh)"
+else
+  echo "diagrams: FAILED (see /tmp/check_diagrams.${_diag_wt}.log)"
+  tail -20 "/tmp/check_diagrams.${_diag_wt}.log"
+  stale=1
+fi
+# Its NEGATIVE CONTROL, in the suite and not merely available on request. A gate
+# that stops detecting is worse than no gate: it reports OK on a tree that is
+# broken, and the suite goes green on a claim nothing is testing. The self-test
+# plants a stale render, a hand-edited render, a broken .puml, a committed error
+# image, an unclaimed render and a missing block render, and requires the checker
+# to fail on every one while passing on an untouched synthetic fixture. It also
+# verifies each PLANTING actually changed something, because a no-op planting
+# otherwise reports itself as a broken checker.
+if bash tools/diag/check_diagrams.sh --self-test > "/tmp/check_diagrams_selftest.${_diag_wt}.log" 2>&1; then
+  echo "diagrams gate self-test: OK ($(grep -c 'ok:   self-test' "/tmp/check_diagrams_selftest.${_diag_wt}.log") of $(grep -c 'self-test —' "/tmp/check_diagrams_selftest.${_diag_wt}.log") cases behaved correctly)"
+else
+  echo "diagrams gate self-test: FAILED (see /tmp/check_diagrams_selftest.${_diag_wt}.log)"
+  tail -20 "/tmp/check_diagrams_selftest.${_diag_wt}.log"
+  stale=1
+fi
+# THE NUMBERS GATE, and its self-test, in the suite at last. Nothing invoked
+# tools/diag/delay_lattice.py: run_all.sh referenced seventy tool and script
+# paths and this was not one of them, so a gate that recomputes every "N clocks
+# = X us" in the timing figures and pages was a CHECK NOBODY PERFORMED. That is
+# the same hole one level up as a testbench nothing runs -- the suite is green
+# on a claim nothing is testing, which is the failure this project keeps paying
+# for. Wiring it is not an endorsement of its scope: it checks the pages its
+# owner maintains, and it is deliberately not asked about the rest of the wiki.
+#
+# The self-test is wired BESIDE the gate rather than left available on request,
+# for the reason the diagram gate's is: a gate that stops detecting reports OK
+# on a broken tree. The step counts are read out of the log at run time instead
+# of being written into this line, because a hardcoded "13/13" is a number that
+# goes stale in a file nobody re-reads -- and the count has already moved once.
+if python3 tools/diag/delay_lattice.py > "/tmp/delay_lattice.${_diag_wt}.log" 2>&1; then
+  echo "delay-lattice numbers: OK ($(grep -m1 '^RESULT' "/tmp/delay_lattice.${_diag_wt}.log"))"
+else
+  echo "delay-lattice numbers: FAILED (see /tmp/delay_lattice.${_diag_wt}.log)"
+  grep -E '^(FAIL|RESULT)' "/tmp/delay_lattice.${_diag_wt}.log" | head -10 | sed 's/^/    /'
+  stale=1
+fi
+if python3 tools/diag/delay_lattice.py --selftest > "/tmp/delay_lattice_selftest.${_diag_wt}.log" 2>&1; then
+  echo "delay-lattice gate self-test: OK ($(grep -c '^ok' "/tmp/delay_lattice_selftest.${_diag_wt}.log") check(s) passed, $(grep -c '^FAIL' "/tmp/delay_lattice_selftest.${_diag_wt}.log") failed)"
+else
+  echo "delay-lattice gate self-test: FAILED (see /tmp/delay_lattice_selftest.${_diag_wt}.log)"
+  tail -20 "/tmp/delay_lattice_selftest.${_diag_wt}.log"
   stale=1
 fi
 # The local presentation viewer's fit arithmetic has its own focused check.
@@ -628,6 +941,26 @@ else
   stale=1
 fi
 
+# The R2 golden package the conformance harness consumes: tb/r2-vectors/ is a
+# DERIVED SNAPSHOT of the host's package (reviews/2026-09-25/r2-hex), and this
+# gate is what stops it quietly becoming a second source of truth. The class
+# died twice on 2026-09-25/26 — the copy sat at 18 steps while the host was at
+# 22, the derived table never named three of its own steps, and the package
+# notice claimed "every golden step passes" while the same file's conformance
+# line said 15/15. Every existing gate compared the .hex BYTES and none looked
+# at the FLAGS. Unlike the R3 gate, manifest.json is NOT excluded here: this
+# snapshot is a byte copy, and the chip's evidence for each confirmation lives
+# in reviews/2026-09-25/R2-HELD-CORE-CHIP-SIDE.md rather than in an edited copy
+# of somebody else's file.
+if "$REPO_ROOT/regress/check_r2_package.sh" > /tmp/check_r2_package.log 2>&1; then
+  echo "R2 golden package: OK ($(tail -1 /tmp/check_r2_package.log))"
+else
+  echo "R2 golden package: FAILED (snapshot drift, or a claim that does not match its own flags)"
+  cat /tmp/check_r2_package.log
+  fail=$((fail+1))
+  failed_names+=("check_r2_package")
+fi
+
 # The R3 golden package the conformance harness consumes, in TWO places: the
 # review artifact and the TB's copy. A conformance gate is only worth the bytes
 # it compares, so the .hex streams must be byte-identical and the checked-in
@@ -686,7 +1019,7 @@ fi
 # testbench nobody mutation-tests is a testbench that quietly stops testing --
 # and this one has already been caught being vacuous twice (a wrong edge index
 # that made both interval checks unfailable, and a missing interval check).
-if ./regress/mutate_i2c_tb.sh > /tmp/mutate_i2c.log 2>&1; then
+if run_mutation_suite mutate_i2c_tb.sh ./regress/mutate_i2c_tb.sh > /tmp/mutate_i2c.log 2>&1; then
   echo "i2c TB mutations: OK (no unexplained survivors)"
 else
   echo "i2c TB mutations: FAILED"
@@ -704,7 +1037,7 @@ fi
 # then cmp-verifies that the tree was never written to -- a stronger statement
 # than "restored correctly". It is the slowest suite here (the servo TB is 66 s
 # per case) and runs at MUTATE_TIMING_JOBS, default 6.
-if ./regress/mutate_timing_tb.sh > /tmp/mutate_timing.log 2>&1; then
+if run_mutation_suite mutate_timing_tb.sh ./regress/mutate_timing_tb.sh > /tmp/mutate_timing.log 2>&1; then
   echo "timing TB mutations: OK (no unexplained survivors)"
 else
   echo "timing TB mutations: FAILED"
@@ -712,7 +1045,7 @@ else
   stale=1
 fi
 
-if ./regress/mutate_spi_tb.sh > /tmp/mutate_spi.log 2>&1; then
+if run_mutation_suite mutate_spi_tb.sh ./regress/mutate_spi_tb.sh > /tmp/mutate_spi.log 2>&1; then
   echo "spi TB mutations: OK (no unexplained survivors)"
 else
   echo "spi TB mutations: FAILED"
@@ -723,7 +1056,7 @@ fi
 # The frame buffer's TB, mutation-tested on BOTH implementations (the macro and
 # the FLOP=1 fallback), because the fallback exists to stand in for the macro --
 # so a test that only covered one would leave that claim unchecked.
-if ./regress/mutate_fbuf_tb.sh > /tmp/mutate_fbuf.log 2>&1; then
+if run_mutation_suite mutate_fbuf_tb.sh ./regress/mutate_fbuf_tb.sh > /tmp/mutate_fbuf.log 2>&1; then
   echo "fbuf TB mutations: OK (no unexplained survivors)"
 else
   echo "fbuf TB mutations: FAILED"
@@ -731,7 +1064,7 @@ else
   stale=1
 fi
 
-if ./regress/mutate_eth_mac_tb.sh > /tmp/mutate_eth_mac.log 2>&1; then
+if run_mutation_suite mutate_eth_mac_tb.sh ./regress/mutate_eth_mac_tb.sh > /tmp/mutate_eth_mac.log 2>&1; then
   echo "eth_mac TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_mac TB mutations: FAILED"
@@ -741,7 +1074,7 @@ fi
 
 # The SoC-level Ethernet TB is the only proof a PROGRAM can consume a frame,
 # so it gets the same treatment the block TBs get.
-if ./regress/mutate_eth_soc_tb.sh > /tmp/mutate_eth_soc.log 2>&1; then
+if run_mutation_suite mutate_eth_soc_tb.sh ./regress/mutate_eth_soc_tb.sh > /tmp/mutate_eth_soc.log 2>&1; then
   echo "eth_soc TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_soc TB mutations: FAILED"
@@ -752,7 +1085,7 @@ fi
 # The loader is how a program reaches silicon; its TB gets the same gate. The
 # run-transition cases (run rising in W_IDLE, W_PULSE or W_DONE) are the ones
 # the independent review found missing.
-if ./regress/mutate_ctrl_tb.sh > /tmp/mutate_ctrl.log 2>&1; then
+if run_mutation_suite mutate_ctrl_tb.sh ./regress/mutate_ctrl_tb.sh > /tmp/mutate_ctrl.log 2>&1; then
   echo "ctrl TB mutations: OK (no unexplained survivors)"
 else
   echo "ctrl TB mutations: FAILED"
@@ -763,7 +1096,7 @@ fi
 # The I2C transaction TB's DUT is the firmware, so its mutations are firmware
 # edits (bit order, repeated START, tLOW, STOP, arbitration, the tHD;DAT hold,
 # the read accumulator). Both the .pe and the .hex are restored and verified.
-if ./regress/mutate_i2c_xfer_tb.sh > /tmp/mutate_i2c_xfer.log 2>&1; then
+if run_mutation_suite mutate_i2c_xfer_tb.sh ./regress/mutate_i2c_xfer_tb.sh > /tmp/mutate_i2c_xfer.log 2>&1; then
   echo "i2c_xfer TB mutations: OK (no unexplained survivors)"
 else
   echo "i2c_xfer TB mutations: FAILED"
@@ -774,7 +1107,7 @@ fi
 # The word engine's unit suite: the integration split bit_en into tx/rx
 # enables, and the TB's directed split case is what proves the sides are
 # independent.
-if ./regress/mutate_serdes_tb.sh > /tmp/mutate_serdes.log 2>&1; then
+if run_mutation_suite mutate_serdes_tb.sh ./regress/mutate_serdes_tb.sh > /tmp/mutate_serdes.log 2>&1; then
   echo "serdes TB mutations: OK (no unexplained survivors)"
 else
   echo "serdes TB mutations: FAILED"
@@ -785,7 +1118,7 @@ fi
 # The word-engine integration: the plan's four required mutations (TX hold,
 # RX skip, doubled cell enable, strobe cross-wire) plus the two alignment
 # defects and the grid-aligned load. Each must fail tb_pe_soc_serdes.
-if ./regress/mutate_soc_serdes_tb.sh > /tmp/mutate_soc_serdes.log 2>&1; then
+if run_mutation_suite mutate_soc_serdes_tb.sh ./regress/mutate_soc_serdes_tb.sh > /tmp/mutate_soc_serdes.log 2>&1; then
   echo "soc serdes TB mutations: OK (no unexplained survivors)"
 else
   echo "soc serdes TB mutations: FAILED"
@@ -798,7 +1131,7 @@ fi
 # preset 0x51, the ones-only cfg[7] rule and the cfg[6:4] run length, the
 # registered clr/rx_err contract (clr reaches every stage), and the pipeline
 # order / bypass subsets / half_phase. All 13 mutations must fail the TB.
-if ./regress/mutate_codec_tb.sh > /tmp/mutate_codec.log 2>&1; then
+if run_mutation_suite mutate_codec_tb.sh ./regress/mutate_codec_tb.sh > /tmp/mutate_codec.log 2>&1; then
   echo "codec TB mutations: OK (no unexplained survivors)"
 else
   echo "codec TB mutations: FAILED"
@@ -812,7 +1145,7 @@ fi
 # and the done pulse. Two of them (pad-extra, ifg-95) SURVIVED the first
 # version of the suite and found two real gaps in tb_pe_eth_tx.v, which the
 # suite's own record carries.
-if ./regress/mutate_ctrl_r3_tb.sh > /tmp/mutate_ctrl_r3.log 2>&1; then
+if run_mutation_suite mutate_ctrl_r3_tb.sh ./regress/mutate_ctrl_r3_tb.sh > /tmp/mutate_ctrl_r3.log 2>&1; then
   echo "ctrl R3 debug mutations: OK (no unexplained survivors)"
 else
   echo "ctrl R3 debug mutations: FAILED"
@@ -820,7 +1153,7 @@ else
   stale=1
 fi
 
-if ./regress/mutate_eth_tx_tb.sh > /tmp/mutate_eth_tx.log 2>&1; then
+if run_mutation_suite mutate_eth_tx_tb.sh ./regress/mutate_eth_tx_tb.sh > /tmp/mutate_eth_tx.log 2>&1; then
   echo "eth_tx TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_tx TB mutations: FAILED"
@@ -834,7 +1167,7 @@ fi
 # convention and the window's push wrap. The pad mapping is only visible at
 # the PAD, so this harness runs BOTH tb_pe_soc_eth_loop and the pad-level
 # case in tb_tt_um_protocol_emulator.
-if ./regress/mutate_eth_tx_loop_tb.sh > /tmp/mutate_eth_tx_loop.log 2>&1; then
+if run_mutation_suite mutate_eth_tx_loop_tb.sh ./regress/mutate_eth_tx_loop_tb.sh > /tmp/mutate_eth_tx_loop.log 2>&1; then
   echo "eth_tx loopback TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_tx loopback TB mutations: FAILED"
@@ -848,12 +1181,35 @@ fi
 # CRC's comparison, the CTS wait, the RTS assertion -- and each TB must catch
 # every one that applies to it. A survivor means the TB does not test what it
 # claims, which is the failure mode this project treats as worse than a red.
-if ./regress/mutate_fwbus_tb.sh > /tmp/mutate_fwbus.log 2>&1; then
+if run_mutation_suite mutate_fwbus_tb.sh ./regress/mutate_fwbus_tb.sh > /tmp/mutate_fwbus.log 2>&1; then
   echo "fw-bus TB mutations: OK (no unexplained survivors)"
 else
   echo "fw-bus TB mutations: FAILED"
   tail -20 /tmp/mutate_fwbus.log
   stale=1
+fi
+
+# The harness-edit pre-flight's OWN test. It is a gate for the same reason the
+# run lock's contract test is: a guard that cannot fail looks exactly like a
+# guard that works, and this project's log holds three rules that reported
+# numbers they had never been shown to compute. The negative control (a guard
+# whose comparison never fires) fails 3 of its 7 cases, so the test is not
+# vacuous. It uses a private stamp directory and touches nothing in the repo, so
+# it is safe to run while a real run holds the worktree lock.
+if bash "$REPO_ROOT/regress/test_dep_guard.sh" > /tmp/test_dep_guard.log 2>&1; then
+  echo "harness-edit pre-flight: OK (fires on a changed script, quiet on an unchanged one)"
+else
+  echo "harness-edit pre-flight: FAILED"
+  cat /tmp/test_dep_guard.log
+  stale=1
+fi
+
+if [ -n "${MUTATE_ONLY:-}" ]; then
+  echo "mutation suites: $MUT_RAN ran, $MUT_SKIPPED SKIPPED by mapping (MUTATE_ONLY=${MUTATE_ONLY})"
+  [ -n "$MUT_SKIP_LIST" ] && echo "  skipped:$MUT_SKIP_LIST"
+  [ "$MUT_RAN" -eq 0 ] && { echo "  FATAL: zero mutation suites ran"; exit 2; }
+else
+  echo "mutation suites: $MUT_RAN ran (full gate — no narrowing)"
 fi
 
 [ "$stale" -eq 0 ] || exit 1

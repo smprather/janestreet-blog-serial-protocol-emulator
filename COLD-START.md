@@ -35,6 +35,87 @@ Log LINES are concise entries (≤ ~500 chars); full reports/evidence live in
 `reviews/` and interrupt files - link, do not inline. This rule exists because
 the log hit 58 MB and GitHub warned on every push.
 
+## DOCS AUTHORITY (manager ruling 2026-09-26): maps are the ARCHITECTURE
+## authority; figures cite the RTL, never a map
+`diagrams/project-plan.puml` and `diagrams/project-progress.puml` are the
+architecture authority and live on **main**. Two rules follow, and they exist
+because the branches began merging into each other and a figure drawn from a map
+that later moved becomes a stale claim wearing a figure's clothes:
+
+1. **A protocol figure must cite the RTL, the frozen contracts, or the frozen
+   reviews DIRECTLY — and must not restate a map claim as its source. A figure
+   quoting a map is a defect in the figure.** Maps may LINK figures; never the
+   reverse. So a figure's `Sources:` line points at `firmware/*.pe`, `rtl/*.v` or
+   a `reviews/` contract — never at `project-plan`/`project-progress`.
+2. **MAP-TRIGGER for the rolling docs review.** When the maps change on **main**,
+   re-grep the whole figure set for any claim that PARALLELS map content (the C1
+   class: a figure restating a number the map also states) and re-verify each
+   against the RTL. A map move then costs a re-grep instead of a rediscovery.
+
+The trigger baseline as of this ruling, so the next reviewer can tell in one
+command whether the trigger has fired:
+
+```sh
+git rev-parse --short main:diagrams/project-plan.puml      # was aa2554c
+git rev-parse --short main:diagrams/project-progress.puml  # was 42d4acc
+```
+
+Both were last moved by `3a2fd6a` ("refresh both maps to current reality, and
+take the three accuracy corrections"). Checked against this ruling at the time:
+**no figure on either docs branch cites a map as its source** — all five
+`proto-*.puml` source lines point at the firmware (`firmware/dmx512.pe`,
+`i2c_adv.pe`, `midi_xfer.pe`, `spi_mode3.pe`, `uart_flow.pe`), which is exactly
+the pattern the ruling wants. The single grep hit, `proto-freqmeter-timing.puml`
+saying "the map uses all sixteen bytes", is a MEMORY map and not `project-plan` —
+a false positive from the reviewer's own check, recorded because the next
+reviewer will hit it too.
+
+**THE TRIGGER HAS FIRED, and its semantics were SHARPENED at the same time
+(manager ruling, later on 2026-09-26) — the sharpened form is the one to use:**
+
+1. **A measured ACT result is the FIGURE's claim.** The map **LINKS the owning
+   figure and drops its own copy.** The six that triggered this: sr04's 5816 µs
+   and 1160 µs, DMX's 12.38 µs mark and 88.06 µs break, the freqmeter's 158 Hz
+   and 10 kHz endpoints. The map is architecture and indexes; it is not a second
+   data store.
+2. **Universal architecture constants MAY stay in the maps** — `I2CTICK` = 1 µs
+   and the 260-clock / 4.3333 µs UART half-bit. They are not act measurements,
+   and every act that uses or avoids that tick states it independently.
+3. **The trigger now checks FIGURES-against-RTL only.** A map-vs-figure overlap on
+   a *measured* number is a **DEFECT (a restatement)**, not a candidate to
+   triage — which is what pass 9's sweep had to treat as a candidate, by hand,
+   with a method it twice got wrong.
+
+The map edit is diag-proto's. The trigger's job on its next fire is therefore
+narrower and sharper: re-verify each act figure's measured numbers against the
+RTL and its testbench, and report any measured number that also appears in a map
+as a defect, with the figure named.
+
+## THE MERGE GATE (manager standing order, 2026-09-25). A merge is not pushed
+until `regress/verify_merge.sh` is green, and its output is quoted in the
+interrupt. This exists because 5b4731f was pushed with six RED timing acts and
+every gate the project owns had been green a minute earlier: R3's new
+`dbg_hold`/`dbg_step` inputs never reached the fw branch's testbenches, so their
+ports floated to Z, the execute gate went X and six unrelated programs sat at
+reset. No gate could catch it — until the merge, the two states did not coexist.
+`./regress/verify_merge.sh --list` prints the affected set and runs nothing;
+`--self-test` runs the mapper's own 27 checks; exit 1 is red WITH a named case,
+3 is a gate error, and **4 is inconclusive (the run died) — which is not a pass
+and must not be reported as one**. Full evidence:
+`reviews/2026-09-25/MERGE-FORENSICS-5B4731F.md` §5-§6.
+
+**The mutation suites are MAPPED, not skipped** (manager ruling 2026-09-25). A
+narrowed gate runs a suite only if one of its `MUTABLE` targets intersects the
+merge's changed set, and it PRINTS every suite as RUN or SKIP with the reason —
+so a green gate says what it covered and what it did not. Anything unmappable
+(no `MUTABLE` line) or an empty selection runs ALL suites; a suite with an EMPTY
+`MUTABLE` mutates nothing in the repo and is never narrowed away. The
+`MUTATE_ONLY` selector travels as an environment variable, so an ordinary
+`./regress/run_all.sh` — the master/nightly gate — is untouched and always runs
+everything. `regress/check_mutation_lists.sh` proves each `MUTABLE` list still
+covers every file its harness writes, and runs inside the full gate too: a
+stale list would make the mapper skip the suite guarding a changed file.
+
 ## Continuous work protocol (user standing order 2026-09-25: "I don't want
 to come back and find nobody working")
 

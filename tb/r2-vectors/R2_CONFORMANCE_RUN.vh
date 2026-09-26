@@ -9638,4 +9638,122 @@ task automatic r2_run_all;
       r2_step(12, 14, "clear_fault_clears_the_bit", 16'h0000);
     end
   end
+  // ---- status_while_step_paused (v09-status_while_step_paused) ----
+  // THE HELD-CORE VECTOR. Its debug state (bp_addr=2, bp_en=true, bp_hit=false, debug_hold=true) is INTERNAL to pe_ctrl, so the testbench reaches it through the DEBUG_BP_SET / DEBUG_STEP opcodes
+  // and the core's own dbg_next_pc port -- see r2_prep_held_* in tb_pe_ctrl_r2.v. Nothing is forced hierarchically, and the
+  // provenance of the pre-state is recorded there. The model_image below is the host's
+  // (pc/a/x/y/timer/insn/run), applied as the preloaded architectural state the read port serves.
+  begin : r2_v10
+    r2_preload_load();
+    r2_clear_faults();
+    r2_imem[0] = r2_imem_img[0];
+    r2_imem[1] = r2_imem_img[1];
+    r2_imem[2] = r2_imem_img[2];
+    r2_imem[3] = r2_imem_img[3];
+    r2_imem[4] = r2_imem_img[4];
+    r2_imem[5] = r2_imem_img[5];
+    r2_imem[6] = r2_imem_img[6];
+    r2_imem[7] = r2_imem_img[7];
+    r2_imem[8] = r2_imem_img[8];
+    r2_imem[9] = r2_imem_img[9];
+    r2_imem[10] = r2_imem_img[10];
+    r2_imem[11] = r2_imem_img[11];
+    r2_imem[12] = r2_imem_img[12];
+    r2_imem[13] = r2_imem_img[13];
+    r2_imem[14] = r2_imem_img[14];
+    r2_imem[15] = r2_imem_img[15];
+    r2_dmem[0] = r2_dmem_img[0];
+    r2_dmem[1] = r2_dmem_img[1];
+    r2_dmem[2] = r2_dmem_img[2];
+    r2_dmem[3] = r2_dmem_img[3];
+    r2_dmem[4] = r2_dmem_img[4];
+    r2_dmem[5] = r2_dmem_img[5];
+    r2_dmem[6] = r2_dmem_img[6];
+    r2_dmem[7] = r2_dmem_img[7];
+    r2_dmem[8] = r2_dmem_img[8];
+    r2_dmem[9] = r2_dmem_img[9];
+    r2_dmem[10] = r2_dmem_img[10];
+    r2_dmem[11] = r2_dmem_img[11];
+    r2_dmem[12] = r2_dmem_img[12];
+    r2_dmem[13] = r2_dmem_img[13];
+    r2_dmem[14] = r2_dmem_img[14];
+    r2_dmem[15] = r2_dmem_img[15];
+    r2_imem[0] = 16'h0041;
+    r2_imem[1] = 16'h1001;
+    r2_imem[2] = 16'h4002;
+    dbg_pc = 10'h001; dbg_a = 8'h41; dbg_x = 8'h00; dbg_y = 8'h00;
+    dbg_insn = 16'h0000; dbg_timer = 8'h00;
+    begin : r2_s10_0
+      $readmemh("../tb/r2-vectors/status_while_step_paused.status_reports_the_hold.req.hex", r2_req_mem);
+      $readmemh("../tb/r2-vectors/status_while_step_paused.status_reports_the_hold.rsp.hex", r2_rsp_mem);
+      r2_run = 1'b0;
+      r2_prep_hold_step_pause();
+      r2_step(10, 32, "status_reports_the_hold", 16'h0000);
+    end
+    begin : r2_s10_1
+      $readmemh("../tb/r2-vectors/status_while_step_paused.dump_core_answers_the_same_header.req.hex", r2_req_mem);
+      $readmemh("../tb/r2-vectors/status_while_step_paused.dump_core_answers_the_same_header.rsp.hex", r2_rsp_mem);
+      r2_run = 1'b0;
+      r2_step(10, 32, "dump_core_answers_the_same_header", 16'h0000);
+    end
+  end
+  // ---- status_while_bp_hit (v10-status_while_bp_hit) ----
+  // THE HELD-CORE VECTOR. Its debug state (bp_addr=2, bp_en=true, bp_hit=true, debug_hold=true) is INTERNAL to pe_ctrl, so the testbench reaches it through the DEBUG_BP_SET / DEBUG_STEP opcodes
+  // and the core's own dbg_next_pc port -- see r2_prep_held_* in tb_pe_ctrl_r2.v. Nothing is forced hierarchically, and the
+  // provenance of the pre-state is recorded there. The model_image below is the host's
+  // (pc/a/x/y/timer/insn/run), applied as the preloaded architectural state the read port serves.
+  begin : r2_v11
+    r2_preload_load();
+    r2_clear_faults();
+    r2_imem[0] = r2_imem_img[0];
+    r2_imem[1] = r2_imem_img[1];
+    r2_imem[2] = r2_imem_img[2];
+    r2_imem[3] = r2_imem_img[3];
+    r2_imem[4] = r2_imem_img[4];
+    r2_imem[5] = r2_imem_img[5];
+    r2_imem[6] = r2_imem_img[6];
+    r2_imem[7] = r2_imem_img[7];
+    r2_imem[8] = r2_imem_img[8];
+    r2_imem[9] = r2_imem_img[9];
+    r2_imem[10] = r2_imem_img[10];
+    r2_imem[11] = r2_imem_img[11];
+    r2_imem[12] = r2_imem_img[12];
+    r2_imem[13] = r2_imem_img[13];
+    r2_imem[14] = r2_imem_img[14];
+    r2_imem[15] = r2_imem_img[15];
+    r2_dmem[0] = r2_dmem_img[0];
+    r2_dmem[1] = r2_dmem_img[1];
+    r2_dmem[2] = r2_dmem_img[2];
+    r2_dmem[3] = r2_dmem_img[3];
+    r2_dmem[4] = r2_dmem_img[4];
+    r2_dmem[5] = r2_dmem_img[5];
+    r2_dmem[6] = r2_dmem_img[6];
+    r2_dmem[7] = r2_dmem_img[7];
+    r2_dmem[8] = r2_dmem_img[8];
+    r2_dmem[9] = r2_dmem_img[9];
+    r2_dmem[10] = r2_dmem_img[10];
+    r2_dmem[11] = r2_dmem_img[11];
+    r2_dmem[12] = r2_dmem_img[12];
+    r2_dmem[13] = r2_dmem_img[13];
+    r2_dmem[14] = r2_dmem_img[14];
+    r2_dmem[15] = r2_dmem_img[15];
+    r2_imem[0] = 16'h0041;
+    r2_imem[1] = 16'h1001;
+    r2_imem[2] = 16'h4002;
+    dbg_pc = 10'h002; dbg_a = 8'h41; dbg_x = 8'h00; dbg_y = 8'h00;
+    dbg_insn = 16'h0000; dbg_timer = 8'h00;
+    begin : r2_s11_0
+      $readmemh("../tb/r2-vectors/status_while_bp_hit.status_reports_the_hit.req.hex", r2_req_mem);
+      $readmemh("../tb/r2-vectors/status_while_bp_hit.status_reports_the_hit.rsp.hex", r2_rsp_mem);
+      r2_run = 1'b1;
+      r2_prep_hold_bp_hit();
+      r2_step(10, 32, "status_reports_the_hit", 16'h0000);
+    end
+    begin : r2_s11_1
+      $readmemh("../tb/r2-vectors/status_while_bp_hit.dump_core_refused_the_strap_is_high.req.hex", r2_req_mem);
+      $readmemh("../tb/r2-vectors/status_while_bp_hit.dump_core_refused_the_strap_is_high.rsp.hex", r2_rsp_mem);
+      r2_run = 1'b1;
+      r2_step(10, 12, "dump_core_refused_the_strap_is_high", 16'h0000);
+    end
+  end
 endtask

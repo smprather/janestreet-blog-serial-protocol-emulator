@@ -1,0 +1,184 @@
+@startuml
+title The R2 bounded-read path - four read opcodes, the 11-word core header, the read-count ceiling
+top to bottom direction
+skinparam componentStyle rectangle
+skinparam defaultFontName Monospaced
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam legendBackgroundColor #f8f8f8
+skinparam legendBorderColor #666666
+hide stereotype
+
+skinparam component {
+  BackgroundColor<<ops>> #dbe5f1
+  BorderColor<<ops>> #6c8ebf
+  FontColor<<ops>> #1f3864
+  BackgroundColor<<hdr>> #e5d8f7
+  BorderColor<<hdr>> #9673a6
+  FontColor<<hdr>> #4a235a
+  BackgroundColor<<live>> #d5e8d4
+  BorderColor<<live>> #82b366
+  FontColor<<live>> #1d4620
+  BackgroundColor<<ceil>> #ffe6cc
+  BorderColor<<ceil>> #d79b00
+  FontColor<<ceil>> #7f4b00
+  BackgroundColor<<refuse>> #f8cecc
+  BorderColor<<refuse>> #b85450
+  FontColor<<refuse>> #7b1c18
+}
+
+package "R2 closed the 'observe' half - four opcodes, and only ONE of them may be asked live" {
+  component "0x12 READ_CPU\n  request  len 0\n  response 7 words\n\nTHE ONLY NON-HALTING READ\nanswers while run = 1, which is\nthe entire point of the opcode:\na debugger must see a running\nprogram. Answers from registers\nin the request's own CRC cycle,\nso it emits ZERO wait words." as rdcpu <<live>>
+
+  component "0x13 READ_IMEM\n  request  (address, count)\n  address = WORD index\n  count   = WORDS, ascending\n\nNOT_READY while run = 1, no fault." as rdimem <<ops>>
+
+  component "0x14 READ_DMEM\n  request  (address, count)\n  address = BYTE index\n  count   = BYTES, ascending\n  TWO BYTES PER RESPONSE WORD,\n  HIGH BYTE FIRST (big-endian\n  within the word)\n\nNOT_READY while run = 1, no fault." as rdmem <<ops>>
+
+  component "0x15 DUMP_CORE\n  request  len 0\n  response THE 11-WORD HEADER,\n  word for word, while STOPPED\n\nNOT_READY while run = 1, no fault." as dumpecor <<ops>>
+
+  rdcpu --> rdimem : the read port arbitrates\nthe CPU address buses
+  rdimem --> rdmem
+  rdmem --> dumpecor
+}
+
+package "THE 11-WORD CORE HEADER - STATUS 0x11 and DUMP_CORE 0x15 return it identically" {
+  component "w0   STATUS CODE\nOK / BUSY / BAD_FRAME / RANGE /\nFAULT / UNSUPPORTED / NOT_READY" as h0 <<hdr>>
+  component "w1   STATE\n2 bits in the LOW half, upper 14 ZERO\n0 STOPPED   1 RUNNING\n2 DEBUG_HOLD   3 BP_HIT\nR2's old 0/1 keep their meaning;\n2/3 are new and only debug control\ncan enter them" as h1 <<hdr>>
+  component "w2   RUN\n1 bit, the STRAP level, not a\nhost-bus register" as h2 <<hdr>>
+  component "w3   TARGET\nthe selected target, echoed" as h3 <<hdr>>
+  component "w4   PC  -  FULL WIDTH\n10 bits (PCW in a 1,024-word\nmachine), upper 6 ZERO.\nThe old 8-bit dbg_pc truncation\nHAD TO GO" as h4 <<hdr>>
+  component "w5   A   -  8 bits\nThe ISA is the source of truth and\nno field is invented, so A STAYS\n8 bits even though the host's\nFakePE modelled 13" as h5 <<hdr>>
+  component "w6   X   -  8 bits" as h6 <<hdr>>
+  component "w7   Y   -  8 bits" as h7 <<hdr>>
+  component "w8   TIMER  -  8 bits" as h8 <<hdr>>
+  component "w9   FAULTS  -  sticky bits\n0x0001 FAULT_LOAD    run abort\n0x0002 FAULT_CRC     bad frame CRC\n0x0004 FAULT_RANGE   an out-of-range read\n0x0008 FAULT_PROTOCOL bad length/header,\nor a word truncated by CS_N rising\nCLEARED BY 0x16 CLEAR_FAULT" as h9 <<refuse>>
+  component "w10  WORDS_WRITTEN\nthe LOAD commit counter - the\nvectors assume 3 because a real\n3-word LOAD established it, so the\nnumber is never poked in" as h10 <<hdr>>
+
+  h0 --> h1
+  h1 --> h2
+  h2 --> h3
+  h3 --> h4
+  h4 --> h5
+  h5 --> h6
+  h6 --> h7
+  h7 --> h8
+  h8 --> h9
+  h9 --> h10
+}
+
+package "READ_CPU is a DIFFERENT SHAPE - 7 words, and it is the only place 'insn' appears" {
+  component "w0  STATUS CODE  OK\nw1  PC   10 bits, full width\nw2  A    8 bits\nw3  X    8 bits\nw4  Y    8 bits\nw5  INSN  16 bits, the LATCHED word\nw6  RUN  the strap level" as r7 <<live>>
+}
+
+package "THE READ-COUNT CEILING CONTRACT - one frame carries 15, and that is a contract, not a limit to discover" {
+  component "WHERE 15 COMES FROM\nresp_buf is 16 slots.\nSlot 0 is the status word,\nso 15 slots carry DATA.\nMAX_READ_WORDS = 15." as c1 <<ceil>>
+
+  component "READ_IMEM  count in WORDS\ncount  1 .. 15   accepted\ncount  16+       RANGE" as c2 <<ceil>>
+
+  component "READ_DMEM  count in BYTES\ncount  1 .. 30   accepted\n(two bytes per word,\n so ceil(count/2) data words)\ncount  31+       RANGE" as c3 <<ceil>>
+
+  component "count == 0 IS RANGE, DELIBERATELY\nnot a zero-length OK frame. An empty\nread is a host bug, and answering OK\nwith no words would leave the host\nunable to tell 'nothing requested' from\n'read refused'. Pinned by the\nread_ceiling_and_zero_count vector." as c4 <<ceil>>
+
+  component "OVERSIZE IS RANGE SO THE HOST SPLITS\nthe transfer - it is never silently\ntruncated, and never wrapped." as c5 <<ceil>>
+
+  component "OUT OF RANGE IS RANGE + STICKY\naddress+count past the end is RANGE,\nNEVER A WRAPPED READ, and latches\nFAULT_RANGE 0x0004 exactly like a\nwrite does. CLEAR_FAULT clears it." as c6 <<refuse>>
+
+  component "THE BOUNDS ARE CHECKED BEFORE ANY\nREAD IS ISSUED, so a rejected read\nnever touches memory at all." as c7 <<ceil>>
+}
+
+package "THE ASYMMETRY A DEBUGGER MUST NOT GET WRONG" {
+  component "A REFUSAL IS NOT A HOLD\nDUMP_CORE is gated on IF (run), not on\nIF (dbg_hold_r). With the strap HIGH the\ncore is stopped in the debug sense and\nDUMP_CORE must STILL refuse.\n\nProved by mutation: re-gating DUMP_CORE on\nthe hold instead of the strap drops the\nconformance to 6/22 - it is the step that\ncatches it, not an assertion." as asym <<refuse>>
+
+  component "AND THE OPPOSITE ASYMMETRY\nbounded reads are NOT_READY while run=1\nwith NO FAULT - a sequencing rejection,\nexactly like LOAD while running. So a\nrefusal latches nothing, and a host that\ntries again after stopping the core gets\na clean answer with no cleanup needed." as asym2 <<refuse>>
+}
+
+' LAYOUT ONLY, no architecture. The five sections read in order - the opcodes,
+' then the header they return, then READ_CPU's different shape, then the
+' ceiling, then the asymmetry - but as siblings they lay out as columns and the
+' diagram goes wide. This hidden chain stacks them so each section adds height
+' rather than width, which is the squarer-aspect invariant in
+' diagrams/README.md. Safe to delete.
+dumpecor -[hidden]down-> h0
+h10 -[hidden]down-> r7
+
+note bottom of rdcpu
+  READ_CPU IS THE ONE OP A DEBUGGER CAN
+  POLL ON A RUNNING CORE, and it is also the
+  one that reports insn. The subtlety, and
+  the reason this is drawn separately from
+  the 11-word header: insn is NOT
+  unconditionally imem[pc]. pe_cpu fetches
+  at next_pc while EXECUTING, at pc while
+  HELD, and at 0 at the boot stop. A
+  free-running readback therefore reports the
+  LANDING word, and at a freeze it reports
+  the LATCHED pipeline word. A harness that
+  synthesises a mid-execution snapshot
+  collapses that fetch pipeline, so its insn
+  is the collapsed one - a TESTBENCH
+  artefact, not an RTL disagreement.
+  Evidence: R3-DEBUG-CONTROL-CONTRACT.md
+  section 3, notes for the vector author.
+end note
+
+note bottom of h4
+  THE WIDTH CHANGE IS THE POINT OF R2, NOT A
+  DETAIL. STATUS now carries pc/a/x/y/timer
+  at NATIVE widths and READ_CPU answers
+  while run=1, so the P3 liveness gap is
+  closed on the chip side: a host can
+  actually see a running program. The
+  manager ruled the ISA is the source of
+  truth, which is why A stayed 8 bits and
+  the host model's 13-bit A was a MODEL BUG.
+end note
+
+note bottom of h9
+  FAULTS IS STICKY AND READ-BACK, so a host
+  sees a latched fault in the SAME header it
+  uses for registers. A sticky bit is not
+  cleared by a good read, and an
+  out-of-range READ latches exactly like a
+  write - so a host that probes past the end
+  once must call CLEAR_FAULT before its next
+  STATUS looks clean.
+end note
+
+note bottom of c4
+  TWO OF THE THREE REAL DEFECTS R2 FOUND WERE
+  IN EXACTLY THIS AREA, which is why the
+  ceiling is drawn as a contract: an ODD DMEM
+  BYTE COUNT DROPPED ITS TRAILING BYTE (held
+  in a half-word register and never emitted,
+  leaving the response a word short of its
+  declared length), and the RESPONSE LAUNCH
+  NEVER FIRED because it sat inside an arm
+  that the launch itself cleared. A third
+  left an X on the MISO pad before the first
+  frame, which the pad-level TB caught. None
+  of the three was visible from a spec.
+end note
+
+note bottom of asym
+  THIS IS THE SAME ASYMMETRY THE HOST-SIDE
+  MODEL CANNOT SHOW. A host model reaches a
+  held state by declaring debug_hold: true;
+  the CHIP reaches it by traffic, and the
+  traffic has to be legal. That is why the
+  held-core vectors had to DRIVE the debug
+  opcodes on the real pe_ctrl to build their
+  pre-state rather than forcing the
+  registers - the states 2 and 3 exist only
+  if the opcodes can produce them.
+end note
+
+legend left
+  |= Tone |= Meaning |
+  | <#d5e8d4> | Answers while the core is free-running |
+  | <#dbe5f1> | A bounded read - refused while run = 1 |
+  | <#e5d8f7> | A header field, at its native width |
+  | <#ffe6cc> | The count ceiling - a contract with the host |
+  | <#f8cecc> | A refusal, a fault, or the asymmetry between them |
+endlegend
+
+@enduml

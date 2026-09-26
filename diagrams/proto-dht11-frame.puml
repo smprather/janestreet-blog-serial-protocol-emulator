@@ -1,0 +1,127 @@
+@startuml proto-dht11-frame
+' ===========================================================================
+' proto-dht11-frame.puml - (b) the DHT11 40-bit frame.
+'
+' A DHT11 frame is five bytes, MSB first, with no header and no length:
+'   byte 0  humidity, integer part    (0x2C = 44 -> 40 % RH)
+'   byte 1  humidity, decimal part
+'   byte 2  temperature, integer part (0x01 = 1 -> 40.0 C)
+'   byte 3  temperature, decimal part
+'   byte 4  CHECKSUM = (b0 + b1 + b2 + b3) & 0xff
+'
+' Every one of the 40 bits is a WIDTH, not a level. The bit value IS the length
+' of the sensor's release, so the host has to be at a particular instant in each
+' bit rather than reading a level.
+' ===========================================================================
+
+title DHT11 - the 40-bit frame\n<font size=12>five bytes, MSB first; each bit is a WIDTH, not a level</font>
+
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam rectangle {
+  BorderColor #33555
+  FontName monospaced
+  FontSize 12
+}
+skinparam rectangle<<b>> {
+  BackgroundColor #F4F7FB
+}
+skinparam rectangle<<zero>> {
+  BackgroundColor #E8E8E8
+}
+skinparam rectangle<<gate>> {
+  BackgroundColor #FFF4D6
+  BorderColor #C8B800
+}
+
+rectangle "START\n\n<b>18 093 us</b> measured\n<b>18 000 us</b> required\n\nthe sensor's reset" as S <<gate>>
+rectangle "HOST WINDOW\n\n<b>30.0 us</b> measured\n<b>20 .. 40 us</b> required\n\ndriven HIGH, then\nRELEASED on pin_oe" as H <<gate>>
+rectangle "ACK\n\n<b>80 us</b> LOW\n<b>80 us</b> HIGH\n\nNEVER TIMED by the\nfirmware - skipped by\nthe edge-wait loop" as A <<gate>>
+
+rectangle "BYTE 0\nHUMIDITY, integer\n\n<b>0x2C</b> = 0010 1100\n= 44 -> <b>40 % RH</b>\n\n40 % x 0xFF is the\nmodelling shortcut the\nTB uses for the integer" as B0 <<b>>
+rectangle "BYTE 1\nHUMIDITY, decimal\n\n<b>0x01</b> = 0000 0001" as B1 <<b>>
+rectangle "BYTE 2\nTEMPERATURE, integer\n\n<b>0x01</b> = 0000 0001\n= 1 -> <b>40.0 C</b>" as B2 <<b>>
+rectangle "BYTE 3\nTEMPERATURE, decimal\n\n<b>0xAA</b> = 1010 1010" as B3 <<b>>
+rectangle "CHECKSUM\n\n<b>0x2C</b>\n\n0x2C + 0x01 + 0xAA + 0x55\n= 0x12C, and 0x12C & 0xFF = <b>0x2C</b>\n\n<b>the sensor sends it; the</b>\n<b>firmware RECORDS it and</b>\n<b>does not check it - the</b>\n<b>testbench does</b>" as CK <<b>>
+rectangle "BUS HOLD\n\n<b>50 us</b>\n\nthen the line is\nreleased and the\nsensor is left alone" as BH <<gate>>
+
+S -[#3A7]-> H
+H -[#3A7]-> A
+A -[#3A7]-> B0 : 8 bits
+B0 -[#3A7]-> B1
+B1 -[#3A7]-> B2
+B2 -[#3A7]-> B3
+B3 -[#3A7]-> CK
+CK -[#3A7]-> BH
+BH -[#3A7,dashed]-> S : a real driver loops;\nthis one reads once and parks
+
+note bottom of S
+  <b>The start signal is the longest single timed interval in the project.</b>
+  18 ms = 1.08 million clocks - 6.4 times the WS2812 reset and 900 times the
+  WS2812 bit cell - so it is what forces a three-level delay routine rather than
+  a NOP sled, and it is on the (6,255) pair whose outer step is 5 145 clocks
+  = 85.8 us.
+end note
+
+note bottom of H
+  <b>Why the host PULLS HIGH before releasing, which is not optional.</b>
+
+  The DHT11 pulls its own line LOW to answer, so the
+  host cannot simply stop driving and let the pull-up
+  win: the sensor would see a line that never went
+  high and would not start converting. Pulling it high
+  for 30 us guarantees a clean high-to-low transition
+  to answer with, and only then does the host become a
+  reader.
+
+  It is also the one place this program drives the line
+  high push-pull into a device that may pull it low,
+  which is safe only because the host has already
+  stopped driving by the time the sensor answers.
+end note
+
+note bottom of A
+  <b>Why the acknowledgement is skipped rather than timed.</b>
+
+  Nothing on the wire announces when the acknowledge is
+  over, so timing it would be another delay constant to
+  fit and another place to be wrong. Instead the firmware
+  falls into the same edge-wait loop it uses for bits:
+  the first round waits out the 80/80 us acknowledge and
+  the second one is bit 0. One loop, two uses.
+end note
+
+note bottom of CK
+  <b>Why the firmware records the checksum instead of checking it.</b>
+
+  A program that silently drops a bad frame is a program
+  whose failure is invisible - it looks like a sensor
+  that has gone quiet. So the byte is banked in dmem[4]
+  and the CHECK is left to whoever reads it, here the
+  testbench. The firmware's job is to be faithful to the
+  wire; the decision about what to do about it belongs
+  to the layer above.
+end note
+
+legend bottom
+  |= bit |= sensor: low | sensor: release | total | the host samples at 45 us into the release |=
+  | <b>0</b> | 50 us | <b>28 us</b> (the SHORT end of the 26-28 us window - a sensor inside its own spec) | 78 us | the line is already LOW again: 17 us of margin |
+  | <b>1</b> | 50 us | <b>70 us</b> | 120 us | the line is still HIGH: 25 us of margin |
+
+  <b>The bit PERIOD is not fixed</b> - 76..78 us for a 0 and 120 us for a 1 - and that is
+  the whole reason the host synchronises on edges instead of counting. At the 2 us
+  spread of the 0-bit, twenty zero bits is 40 us of slip against a 17 us margin: a
+  counting host tracks the nominal frame perfectly and then fails on a sensor that
+  is inside its own specification.
+
+  <b>THE SAMPLE CANNOT GO INSIDE THE RELEASE.</b> A line high 20 us into the release
+  is a 0 AND a 1. The two differ only afterwards, so the sample is aimed at the
+  45 us point where a 0 has already ended and a 1 has not.
+
+  <b>There is no 9th bit, no parity and no framing.</b> Forty bits, five bytes, and
+  an 8-bit sum.
+end legend
+
+@enduml

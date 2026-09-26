@@ -1,3 +1,13 @@
+---
+title: pe_ctrl (passive SPI load path) Implementation Plan
+created: 2026-09-23
+updated: 2026-09-26
+type: plan
+tags: [spi, protocol, architecture, verification, tooling]
+sources: [wiki/STATUS.md, wiki/decisions/adr-007-pe-ctrl-passive-slave.md, wiki/reference/block-diagram.md, wiki/reference/signal-names.md, rtl/pe_ctrl.v, rtl/pe_imem.v, rtl/tt_um_protocol_emulator.v, tb/tb_pe_ctrl.v]
+confidence: high
+---
+
 # pe_ctrl (passive SPI load path) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +18,7 @@
 
 **Tech Stack:** Verilog-2001/2012 RTL, Icarus Verilog, Verilator + yosys lint gate, Tiny Tapeout wrapper conventions.
 
-**Spec:** `wiki/decisions/adr-007-pe-ctrl-passive-slave.md` (the decision: passive slave, wrapper placement, v1 wire contract). `wiki/STATUS.md` "Next steps" item 2 is the work item. `rtl/pe_imem.v` and `rtl/tt_um_protocol_emulator.v` define the host port and pad contract it must satisfy.
+**Spec:** [[decisions/adr-007-pe-ctrl-passive-slave]] (the decision: passive slave, wrapper placement, v1 wire contract). `wiki/STATUS.md` "Next steps" item 2 is the work item. `rtl/pe_imem.v` and `rtl/tt_um_protocol_emulator.v` define the host port and pad contract it must satisfy.
 
 ## Global Constraints
 
@@ -22,7 +32,7 @@
 - **Every new testbench is self-checking, prints `PASS: <name>`, and is added to `regress/run_all.sh`'s `CASES`.** A TB nothing runs is not a test.
 - **`regress/lint.sh` has no accepted warnings.** Unused outputs and pads are sunk with the `wire _unused = &{...}` pattern.
 - **Every mutation harness restores by file copy and verifies the restore** — `git checkout` destroys untracked work (the eth_mac harness lesson).
-- **Generated docs are drift-gated**: regenerate `wiki/reference/block-diagram.md` and `wiki/reference/signal-names.md` in the same change, and refresh `wiki/reference/.block-diagram-cells` from `synth_area.sh` before regenerating the diagram.
+- **Generated docs are drift-gated**: regenerate [[reference/block-diagram]] and [[reference/signal-names]] in the same change, and refresh `wiki/reference/.block-diagram-cells` from `synth_area.sh` before regenerating the diagram.
 - **No `timescale` in RTL files.** The repo's RTL is timescale-free.
 - **Tiny Tapeout rules stay true:** `ena` gates nothing; every output is driven in every state.
 

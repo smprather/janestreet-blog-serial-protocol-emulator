@@ -40,7 +40,63 @@ confidence: high | medium | low
 - tooling
 - reference
 
-Rule: every tag on a page must appear in this taxonomy. Add new tags here first, then use them.
+### Extended 2026-09-25 (manager ruling)
+
+The list above was twenty entries and the wiki had outgrown it: **23 distinct
+tags were in active use across nine pages and none of them was in the
+taxonomy.** That is a defect in the taxonomy, not twenty-three defects in nine
+pages — the tags were descriptive, consistent and obviously useful, so they
+were added rather than removed.
+
+The same three groups as above, extended. **Every bullet below contains only
+comma-separated tags, with no prose**, because `regress/check_wiki_pages.sh`
+parses this section: a parenthetical left inside a bullet would be read as a
+tag. Commentary goes in the paragraphs, never in the list.
+
+Physical layer and the pin budget:
+
+- physical-layer, gpio, protocol, pads, pinout, wrapper
+
+Time:
+
+- cdr, oversampling, clocking, pvt, timing
+
+Signoff and physical implementation:
+
+- signoff, sta, spice, floorplan
+
+Architecture and the evidence around it:
+
+- architecture, verification, status, observability, integration
+
+The host bus and its tooling:
+
+- host-controller, host, loader, boot, debug, gui, pico, firmware
+
+Housekeeping:
+
+- reference, planning
+
+The individual protocol surfaces, kept distinct from `protocol` itself, which
+is the general claim that a protocol is a program:
+
+- ethernet, spi, usb, codec, serdes, tx, protocol-emulation
+
+That is 44 tags: the original 20 plus these 24. The twenty-fourth is `host`,
+added the same way and for the same reason when `concepts/host-stack` landed
+with it: a tag in active use, obviously useful, and in the same family as
+`host-controller`, `gui` and `pico`.
+
+Rule: every tag on a page must appear in this taxonomy. Add new tags here
+first, then use them.
+
+**This list is now enforced.** `regress/check_wiki_pages.sh` reads the
+taxonomy **out of this file** rather than hard-coding it, scoping its parse to
+the `## Tag Taxonomy` section, so the taxonomy and the gate cannot disagree:
+extending the taxonomy here and extending the gate are the same edit, and a
+tag added to a page but not to this file is red on the next regression. That
+coupling is the point — a rule nothing checks is a wish, and this project has
+been bitten by that shape enough to stop writing them.
 
 ## Page Thresholds
 - **Create a page** when a topic is central to the design or appears in 2+ sources

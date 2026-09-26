@@ -73,7 +73,7 @@ screen). Evidence: `reviews/2026-09-24/CLOSEOUT-HARDENING-REVIEW.md` and
 
 `pe_serdes` (539 cells) and `pe_codec_mux` (130 cells: `pe_bitstuff` 99,
 `pe_nrzi` 15, `pe_manch` 7, glue) are the last two **built, TB-verified,
-instantiated-nowhere** blocks (`wiki/reference/block-diagram.md`). They are the
+instantiated-nowhere** blocks ([[reference/block-diagram]]). They are the
 shared word engine and the line-code pipeline the stretch personas need:
 10BASE-T **transmit** (the receive chain is already in `pe_soc`), low-speed USB
 (NRZI + stuffing), CAN (stuffing), and a hardware-paced path for plain
@@ -170,7 +170,7 @@ precise, not weakened:
   cannot bit-bang 10BASE-T's 20 MHz half-cells or USB's NRZI+stuffing chain.
   The bit-banged port path remains the default and keeps working unchanged.
 
-The header, `wiki/concepts/spi-as-firmware.md` and the "no protocol hardware"
+The header, [[concepts/spi-as-firmware]] and the "no protocol hardware"
 line in STATUS must be updated in the same change.
 
 ## Interface and data path (recommended shape)
