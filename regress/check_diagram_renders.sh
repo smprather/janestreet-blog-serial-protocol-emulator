@@ -61,6 +61,7 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 DIR=diagrams
+BASELINE=wiki/.known-stale-renders.txt
 LIST_ONLY=0
 case "${1:-}" in
   "")        ;;
@@ -73,6 +74,14 @@ if [ ! -d "$DIR" ]; then
   echo "diagram renders: SKIPPED — $DIR is not a directory" >&2
   exit 0
 fi
+# Fail closed on the baseline. An absent pin file would make every known-stale
+# render a NEW finding and drown the real signal; it is not evidence of anything.
+if [ ! -f "$BASELINE" ]; then
+  echo "diagram renders: HARNESS ERROR — $BASELINE is missing, so no known-stale" >&2
+  echo "  render can be told from a new one. Not reporting a pass." >&2
+  exit 1
+fi
+
 n_src=$(find "$DIR" -maxdepth 1 -name '*.puml' | wc -l | tr -d ' ')
 if [ "$n_src" -lt 1 ]; then
   # A directory with no sources is not "nothing to check", it is a filter that
@@ -118,8 +127,37 @@ if [ "$LIST_ONLY" -eq 1 ]; then
 fi
 
 # --- per source: compare the whole set it emits -------------------------------
-stale=0; orphan=0; unproduced=0; compared=0
+stale=0; pinned_stale=0; orphan=0; unproduced=0; compared=0
 : > "$TMP/findings"
+: > "$TMP/findings.pinned"
+# The PINNED baseline: render files known to be stale, each with a reason, in the
+# same shape and for the same reason as wiki/.known-rule-violations.txt. A gate
+# written today is red on a corpus that has known defects owned by other people;
+# leaving the whole suite red is not a better answer than enumerating them, it is
+# the same answer with a worse disposition, because it gets the gate switched off
+# instead of the defects fixed. The pin is enforced BOTH ways — a stale render that
+# is NOT listed is NEW and red, and a listed render that is no longer stale is
+# STALE and red, so the pin cannot outlive its defect.
+: > "$TMP/pinned"
+: > "$TMP/pinned.reasons"
+n_pinned=0
+if [ -f "$BASELINE" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    set -- $line
+    if [ "$#" -lt 2 ]; then
+      echo "diagram renders: HARNESS ERROR — malformed line in $BASELINE:" >&2
+      echo "  $line" >&2
+      echo "  expected: <render-file> <reason>" >&2
+      exit 1
+    fi
+    printf '%s\n' "$1" >> "$TMP/pinned"
+    printf '%s\n' "$line" >> "$TMP/pinned.reasons"
+    n_pinned=$((n_pinned + 1))
+  done < "$BASELINE"
+fi
+LC_ALL=C sort -u -o "$TMP/pinned" "$TMP/pinned"
+is_pinned() { grep -qxF "$1" "$TMP/pinned"; }
 for f in "$DIR"/*.puml; do
   b=$(basename "$f" .puml)
   for ext in svg png; do
@@ -131,6 +169,10 @@ for f in "$DIR"/*.puml; do
         printf 'ORPHANED  %s — produced by %s.puml but not checked in\n' "$rel" "$b" >> "$TMP/findings"
       elif cmp -s "$DIR/$rel" "$prod"; then
         compared=$((compared + 1))
+      elif is_pinned "$rel"; then
+        pinned_stale=$((pinned_stale + 1))
+        printf 'STALE(pinned) %s — known-stale, awaiting a re-render by its owner\n' \
+          "$rel" >> "$TMP/findings.pinned"
       else
         stale=$((stale + 1))
         printf 'STALE     %s — differs from the render of %s.puml (checked in %s B, fresh %s B)\n' \
@@ -166,13 +208,47 @@ for r in "$DIR"/*.png "$DIR"/*.svg; do
   fi
 done
 
+# A pin that no longer bites is red. Without this the baseline is a ratchet that
+# silently becomes wrong: the owner re-renders, the entry stays, and the gate
+# keeps reporting a defect it can no longer see — so the log and the tree disagree
+# with nothing to say which is true. The remedy is printed, not guessed at.
+n_stale_pins=0
+if [ -s "$TMP/pinned" ]; then
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    # A pin can stop biting two DIFFERENT ways, and conflating them makes the
+    # finding unreadable: the render was re-rendered (fix the render, collect the
+    # pin) or the render is simply GONE (collect the pin, and notice the render
+    # vanished). Both are red, but they are not the same message. The self-test
+    # caught this by building a reduced tree in which pinned renders do not exist
+    # at all, and the gate reported "no longer stale" as though someone had fixed
+    # them — which is a claim about a file it cannot see.
+    if [ ! -f "$DIR/$rel" ]; then
+      n_stale_pins=$((n_stale_pins + 1))
+      why=$(awk -v k="$rel" '$1==k { $1=""; sub(/^ /,""); print; exit }' "$TMP/pinned.reasons")
+      printf 'STALE-PIN-ABSENT %s — pinned, but the render is not in the tree at all: DELETE this line from %s and check the render was not lost\n' \
+        "$rel" "$BASELINE" >> "$TMP/findings"
+      printf '      pinned reason: %s\n' "${why:-<none>}" >> "$TMP/findings"
+    elif ! grep -q "^STALE(pinned) $rel " "$TMP/findings.pinned" 2>/dev/null \
+       && ! grep -qF "$rel" "$TMP/findings"; then
+      n_stale_pins=$((n_stale_pins + 1))
+      why=$(awk -v k="$rel" '$1==k { $1=""; sub(/^ /,""); print; exit }' "$TMP/pinned.reasons")
+      printf 'STALE-PIN %s — pinned as known-stale but is no longer stale: DELETE this line from %s\n' \
+        "$rel" "$BASELINE" >> "$TMP/findings"
+      printf '      pinned reason: %s\n' "${why:-<none>}" >> "$TMP/findings"
+    fi
+  done < "$TMP/pinned"
+fi
+
 echo "  compared: $compared render(s) byte-for-byte; $n_src source(s)"
-if [ "$stale" -eq 0 ] && [ "$orphan" -eq 0 ] && [ "$unproduced" -eq 0 ]; then
-  echo "diagram renders: OK — every checked-in render matches its source"
+echo "  baseline: $n_pinned pinned known-stale render(s); $pinned_stale currently stale"
+if [ "$stale" -eq 0 ] && [ "$orphan" -eq 0 ] && [ "$unproduced" -eq 0 ] && [ "$n_stale_pins" -eq 0 ]; then
+  echo "diagram renders: OK — every checked-in render matches its source, except" \
+       "$pinned_stale pinned known-stale (listed in $BASELINE)"
   exit 0
 fi
 echo "diagram renders: FAILED" >&2
 [ -s "$TMP/findings" ] && cat "$TMP/findings" >&2
-echo "  stale=$stale orphaned=$orphan no-source=$unproduced" >&2
+echo "  new-stale=$stale orphaned=$orphan no-source=$unproduced stale-pins=$n_stale_pins" >&2
 echo "  fix: re-render with the command in diagrams/README.md, or delete the render." >&2
 exit 1

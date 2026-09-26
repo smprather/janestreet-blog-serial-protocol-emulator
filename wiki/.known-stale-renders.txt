@@ -1,0 +1,50 @@
+# .known-stale-renders.txt — the PINNED BASELINE for check_diagram_renders.sh
+#
+# WHY THIS FILE EXISTS, and why it is the same shape as
+# wiki/.known-rule-violations.txt rather than something new. That file already
+# solved this exact problem for wiki pages: a gate written today meets a corpus
+# carrying known defects owned by other people, and the choice is not "green" or
+# "red". It is "enumerate them with a reason, or get the gate switched off". A red
+# gate nobody can act on is eventually muted, and a muted gate protects nothing —
+# so the defects get enumerated here instead, where they are visible, dated, and
+# attached to whoever can clear them.
+#
+# THE SHAPE, and the half that matters. Each line is a render file that is
+# KNOWN to differ from a fresh render of its own source, plus a reason:
+#     <render-file> <reason...>
+# Fields: the first is machine-read, the rest never parsed. A malformed line is a
+# HARNESS ERROR, not a skip — a pin this checker cannot read is a pin that has
+# silently stopped being enforced, which is the exact failure the anti-staleness
+# direction below exists to prevent.
+#
+# ENFORCED BOTH WAYS, exactly as the page baseline is:
+#     a stale render NOT listed here          -> NEW         -> red
+#     a listed render that is NO LONGER stale -> STALE-PIN   -> red
+# The second direction is the one that makes a pin safe to write. Without it the
+# pin outlives its defect: the owner re-renders, the entry stays, and the gate
+# keeps reporting something it can no longer see, so the log and the tree disagree
+# with nothing to say which is true. When the owner re-renders, this gate turns
+# red and names the line to delete. The pin is a receipt, not an excuse.
+#
+# TO CLEAR ONE: re-render with the command in diagrams/README.md, then DELETE the
+# line. The checker refuses to pass with a pin that no longer bites, so this is
+# not optional bookkeeping.
+#
+# FOUND 2026-09-25, the day the gate landed. Both project maps' .puml sources
+# were edited in commit 5c6db3d WITHOUT re-rendering them; the renders were last
+# refreshed together with their sources in 3a2fd6a. So this is not a rendering
+# non-determinism artefact and not a false positive: the source moved and the
+# picture did not. A reader looking at project-plan.svg would be looking at a
+# correct picture OF SOMETHING, just not of the source beside it, which is the
+# failure mode this gate exists to make visible.
+#
+# ---------------------------------------------------------------------------
+# remedy for all four: re-render both maps with the two commands in
+# diagrams/README.md, then delete these four lines. The owner is whoever last
+# edits diagrams/project-*.puml; this worker is explicitly barred from touching
+# diagram files, which is why the lines are here rather than fixed here.
+
+project-plan.svg edited .puml in 5c6db3d without a re-render; 112288 B checked in vs 115687 B fresh
+project-plan.png edited .puml in 5c6db3d without a re-render; 491261 B checked in vs 503389 B fresh
+project-progress.svg edited .puml in 5c6db3d without a re-render; 138424 B checked in vs 140966 B fresh
+project-progress.png edited .puml in 5c6db3d without a re-render; 1420139 B checked in vs 1435437 B fresh

@@ -179,16 +179,16 @@ expect "an unmodified compliant wiki is green (positive control)" 0 "check_wiki_
 # The sed PREPENDS to whatever the tags line already holds rather than matching
 # its exact contents, so the case keeps working when an unrelated page edit
 # changes the tag list underneath it.
-d=$(fresh new-tag)
-if mutate "NEW off-taxonomy tag" "$d/wiki/concepts/spi-as-firmware.md" \
+d=$(fresh_minimal new-tag)
+if mutate "NEW off-taxonomy tag" "$d/wiki/concepts/f05.md" \
         's/^tags: \[/tags: [not-a-real-tag, /'; then
   expect "NEW off-taxonomy tag is red" 1 "not-a-real-tag" "$d"
 fi
 
 # ---- 3. a NEW missing frontmatter is red -----------------------------------
-d=$(fresh new-frontmatter)
+d=$(fresh_minimal new-frontmatter)
 # strip the frontmatter off a page that has one
-if mutate "NEW missing frontmatter" "$d/wiki/concepts/spi-as-firmware.md" \
+if mutate "NEW missing frontmatter" "$d/wiki/concepts/f05.md" \
         '1,/^---$/d; 1,/^---$/d'; then
   expect "NEW missing frontmatter is red" 1 "no-frontmatter" "$d"
 fi
@@ -196,16 +196,20 @@ fi
 # ---- 4. a NEW page with no outbound links is red ---------------------------
 # Every wikilink is rewritten to plain text, whatever the page happened to link
 # to, so the case does not depend on which links it starts with.
-d=$(fresh new-links)
-if mutate "NEW page with <2 outbound links" "$d/wiki/concepts/spi-as-firmware.md" \
+d=$(fresh_minimal new-links)
+if mutate "NEW page with <2 outbound links" "$d/wiki/concepts/f05.md" \
         's/\[\[[^]]*\]\]/plain-text/g'; then
   expect "NEW page with <2 outbound links is red" 1 "zero-outbound-links" "$d"
 fi
 
 # ---- 5. a page missing from the index is red -------------------------------
-d=$(fresh new-index)
+d=$(fresh_minimal new-index)
+# The fixture's own index, and one of the fixture's own pages. This sed pointed at
+# concepts/spi-as-firmware after the tree became the fixture, so it matched nothing
+# and the case tested an untouched tree - caught by the no-op guard, which is the
+# third time that guard has earned its keep.
 if mutate "page dropped from index.md" "$d/wiki/index.md" \
-        's/\[\[concepts\/spi-as-firmware\]\]/spi-as-firmware/'; then
+        's/\[\[concepts\/f05\]\]/concepts-f05-unlinked/'; then
   expect "page dropped from index.md is red" 1 "not-in-index" "$d"
 fi
 
@@ -270,20 +274,23 @@ EOF
 expect "fixed page AND removed pin is green (not STALE)" 0 "check_wiki_pages: OK" "$d"
 
 # ---- 8-10. fail-closed: the checker must not pass when it cannot see -------
-d=$(fresh no-baseline); rm -f "$d/wiki/.known-rule-violations.txt"
+# Fixture-based like the rest: a case that copies the 63-page corpus pays for
+# every page on every invocation, and the corpus is not what any of these is
+# about. It also removes the last dependence on a page another worker may edit.
+d=$(fresh_minimal no-baseline); rm -f "$d/wiki/.known-rule-violations.txt"
 expect "missing baseline is a HARNESS ERROR, not a pass" 1 "HARNESS ERROR" "$d"
-d=$(fresh no-schema);   rm -f "$d/wiki/SCHEMA.md"
+d=$(fresh_minimal no-schema);   rm -f "$d/wiki/SCHEMA.md"
 expect "missing schema is a HARNESS ERROR, not a pass" 1 "HARNESS ERROR" "$d"
 # a page list that collapses means the checker stopped looking, which must not
 # read as a clean wiki
-d=$(fresh empty-wiki); find "$d/wiki" -name '*.md' -delete
+d=$(fresh_minimal empty-wiki); find "$d/wiki" -name '*.md' -delete
 expect "no pages at all is a HARNESS ERROR, not a pass" 1 "HARNESS ERROR" "$d"
 
 # ---- 11. a malformed baseline line is an error, not a skip -----------------
 # A baseline entry the checker cannot read is an entry that has silently stopped
 # being enforced — which is precisely what the STALE direction exists to
 # prevent, so it has to fail closed too.
-d=$(fresh bad-baseline)
+d=$(fresh_minimal bad-baseline)
 printf 'plans/spi-pads.md zero-outbound-links\n' >> "$d/wiki/.known-rule-violations.txt"
 expect "baseline line with no reason is a HARNESS ERROR" 1 "HARNESS ERROR" "$d"
 
@@ -292,7 +299,7 @@ expect "baseline line with no reason is a HARNESS ERROR" 1 "HARNESS ERROR" "$d"
 # the wiki would be "off taxonomy" — loud, so this is the safe direction — but
 # it must be a HARNESS ERROR naming the cause, not a flood that hides a real
 # NEW violation in the noise.
-d=$(fresh bad-taxonomy)
+d=$(fresh_minimal bad-taxonomy)
 if mutate "renamed taxonomy heading" "$d/wiki/SCHEMA.md" \
         's/^## Tag Taxonomy$/## Tag Lexicon/'; then
   expect "renamed taxonomy heading is a HARNESS ERROR" 1 "HARNESS ERROR" "$d"
@@ -473,6 +480,10 @@ rectangle "fixture B" as B
 B -> B : also self
 @enduml
 PUML
+# An EMPTY pin file: this fixture is a reduced tree, so the real pin file names
+# renders it does not contain, and the gate would correctly report those pins as
+# stale. This case is about the compliant green path, not about pins.
+: > "$d/wiki/.known-stale-renders.txt"
 ( cd "$d" && JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=8192" \
     plantuml -tsvg diagrams/fixture-a.puml diagrams/fixture-b.puml >/dev/null 2>&1 \
   && JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=8192" \
@@ -607,6 +618,117 @@ $(printf '%s\n' "$blk" | sed 's/^/        | /')"
 done
 
 
+
+# ---- 33-36: the PINNED RENDER baseline, both directions ---------------------
+# A pin mechanism with no negative control is the thing this file exists to stop,
+# so both directions are proven, and so is the fail-closed path. The pin file is
+# what keeps the full suite green while four known-stale renders are owned by
+# someone else; it is only safe because a NEW stale render is still red and a pin
+# that stops biting is still red.
+# 33. a stale render that is NOT pinned is NEW and red
+d=$(fresh_render pin-new)
+victim=$(ls "$d"/diagrams/*.png 2>/dev/null | head -1)
+: > "$d/wiki/.known-stale-renders.txt"          # an empty pin file = nothing known
+printf 'x' >> "$victim"
+out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q "^STALE  *$(basename "$victim")"; then
+  ok "an UNPINNED stale render is NEW-red"
+else
+  bad "an UNPINNED stale render is NEW-red" "exit $rc
+$(printf '%s\n' "$out" | tail -4 | sed 's/^/        | /')"
+fi
+
+# 34. and it is green when the same render IS pinned
+d=$(fresh_render pin-ok)
+victim=$(ls "$d"/diagrams/*.png 2>/dev/null | head -1)
+printf 'x' >> "$victim"
+printf '%s synthetic fixture, made stale on purpose\n' "$(basename "$victim")" \
+  > "$d/wiki/.known-stale-renders.txt"
+out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'diagram renders: OK'; then
+  ok "a PINNED stale render is held green, not reported NEW"
+else
+  bad "a PINNED stale render is held green, not reported NEW" "exit $rc
+$(printf '%s\n' "$out" | tail -4 | sed 's/^/        | /')"
+fi
+
+# 35. a pin that NO LONGER BITES is red - the anti-staleness direction, and the
+# half that stops a pin outliving its defect. The render is COMPLIANT; the pin
+# claims it is stale. That contradiction is the finding.
+#
+# Two defects lived in this case as first written, and both are worth recording
+# because together they made it PASS FOR THE WRONG REASON. The printf had no %s,
+# so the filename argument was discarded and the pin actually named a file called
+# "a" - which does not exist, so the gate reported STALE-PIN-ABSENT; and the
+# assertion grepped for 'STALE-PIN', which is a SUBSTRING of 'STALE-PIN-ABSENT'.
+# So the case went green while testing the absent-render path, which is a
+# different defect with a different remedy. A test that cannot fail for the reason
+# it claims is the one failure mode this file exists to prevent, and it is invisible
+# precisely because it is green.
+d=$(fresh_render pin-stale)
+rel=$(ls "$d"/diagrams/*.png 2>/dev/null | head -1 | xargs basename)
+if [ -z "$rel" ]; then
+  bad "a pin that no longer bites is STALE-PIN-red" "the fixture produced no .png to pin, so the case tested nothing"
+else
+  printf '%s pinned but actually current, so the pin must be collected\n' "$rel" \
+    > "$d/wiki/.known-stale-renders.txt"
+  out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+  # The assertion is specific on purpose: it must match the re-rendered finding
+  # and NOT the absent one, or this case can pass on the wrong defect again.
+  if [ "$rc" -ne 0 ] \
+     && printf '%s\n' "$out" | grep -qE "^STALE-PIN $rel " \
+     && ! printf '%s\n' "$out" | grep -q 'STALE-PIN-ABSENT'; then
+    ok "a pin that no longer bites is STALE-PIN-red (and not confused with absent)"
+  else
+    bad "a pin that no longer bites is STALE-PIN-red (and not confused with absent)" "exit $rc
+$(printf '%s\n' "$out" | tail -4 | sed 's/^/        | /')"
+  fi
+fi
+
+# 35b. and the OTHER way a pin stops biting: the render is simply GONE. Distinct
+# remedy - collect the pin AND notice the render vanished - so it gets its own
+# case rather than being folded into 35.
+d=$(fresh_render pin-absent)
+rel=$(ls "$d"/diagrams/*.png 2>/dev/null | head -1 | xargs basename)
+if [ -z "$rel" ]; then
+  bad "a pin whose render is absent is STALE-PIN-ABSENT-red" "the fixture produced no .png, so the case tested nothing"
+else
+  printf '%s pinned, and this render does not exist in the tree\n' "$rel" \
+    > "$d/wiki/.known-stale-renders.txt"
+  rm -f "$d/diagrams/$rel"
+  out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+  if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q "STALE-PIN-ABSENT $rel "; then
+    ok "a pin whose render is absent is STALE-PIN-ABSENT-red"
+  else
+    bad "a pin whose render is absent is STALE-PIN-ABSENT-red" "exit $rc
+$(printf '%s\n' "$out" | tail -4 | sed 's/^/        | /')"
+  fi
+fi
+
+# 36. a missing pin file is a HARNESS ERROR, not a pass - an absent pin file
+# would make every known-stale render look NEW and drown the real signal.
+d=$(fresh_render pin-missing)
+rm -f "$d/wiki/.known-stale-renders.txt"
+out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'HARNESS ERROR'; then
+  ok "a missing pin file is a HARNESS ERROR, not a pass"
+else
+  bad "a missing pin file is a HARNESS ERROR, not a pass" "exit $rc
+$(printf '%s\n' "$out" | tail -3 | sed 's/^/        | /')"
+fi
+
+# 37. a malformed pin line is an error, not a skip, for the same reason the page
+# baseline treats one that way: a pin this checker cannot read has silently
+# stopped being enforced.
+d=$(fresh_render pin-malformed)
+printf 'onlyonefield\n' >> "$d/wiki/.known-stale-renders.txt"
+out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'HARNESS ERROR'; then
+  ok "a malformed pin line is a HARNESS ERROR, not a skip"
+else
+  bad "a malformed pin line is a HARNESS ERROR, not a skip" "exit $rc
+$(printf '%s\n' "$out" | tail -3 | sed 's/^/        | /')"
+fi
 
 echo "test_check_wiki_pages: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
