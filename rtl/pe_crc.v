@@ -3,10 +3,18 @@
 // Signal meanings: wiki/reference/signal-names.md#pe_crc
 // Constants to load: wiki/reference/crc-config.md (generated, checked).
 //
-// Firmware cannot do this. At 10BASE-T's 100 ns bit period the core has 4
-// clocks per bit and a software CRC-32 costs ~30 instructions per bit — over
-// budget by 7.5x (wiki/concepts/ethernet-scope.md). So CRC is one of the few
+// Firmware cannot do this. At 60 MHz a 10BASE-T 100 ns bit is 6 clocks, so a
+// byte is 8 x 6 = 48 clocks (the figure rtl/pe_eth_mac.v states), and a
+// software CRC-32 costs ~30 instructions per bit = ~240 per byte — over budget
+// by 5x exactly (wiki/concepts/ethernet-scope.md). So CRC is one of the few
 // things that has to be hardware, and this is that block.
+//
+// The comment above used to say "4 clocks per bit ... over budget by 7.5x",
+// which was wrong twice: 100 ns at 60 MHz is 6 clocks, not 4, and 30
+// instructions per BIT is ~240 per BYTE against 48 clocks, which is 5x, not
+// 7.5x. The direction of the claim never changed — firmware still cannot do it —
+// but a budget comment that is wrong by 50% teaches the next reader the wrong
+// baseline to reason from.
 //
 // ---------------------------------------------------------------------------
 // ONE SHIFT-RIGHT DATAPATH, NOT TWO

@@ -1,0 +1,143 @@
+@startuml proto-freqmeter-frame
+' ===========================================================================
+' proto-freqmeter-frame.puml - (b) what a "frame" is here, and the dmem map.
+'
+' There is no packet in this act, and drawing one would be the wrong picture.
+' The incoming PWM IS the frame: a period with a high time inside it, and the
+' only payload is the pair of 16-bit numbers the firmware recovers from it. So
+' the breakout worth drawing is (1) the two numbers and where they live, and
+' (2) the twelve banked points, because the 16-bit claim is only visible when
+' the points are laid out together.
+' ===========================================================================
+
+title Frequency + duty meter - the two numbers, and the twelve banked points\n<font size=12>no packet: the PWM period IS the frame, and the payload is a 16-bit pair</font>
+
+left to right direction
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam rectangle {
+  BorderColor #33555
+  FontName monospaced
+  FontSize 12
+}
+skinparam rectangle<<in>> {
+  BackgroundColor #DCE6F5
+  BorderColor #5577AA
+}
+skinparam rectangle<<out>> {
+  BackgroundColor #D6F5D6
+  BorderColor #3A7A3A
+}
+skinparam rectangle<<w>> {
+  BackgroundColor #EFEFEF
+  BorderColor #999999
+}
+skinparam rectangle<<hi>> {
+  BackgroundColor #FFF4D6
+  BorderColor #C8B800
+}
+
+rectangle "INCOMING PWM\nfrom outside\n\n<b>pad bit 6</b>\nFM_IN" as PW <<in>>
+rectangle "T\n<b>dmem[0..1]</b>\n\n16-bit PERIOD\n\nreset at every\nRISING edge\n\n<b>so T is the period\nat the rising edge</b>" as T <<out>>
+rectangle "H\n<b>dmem[2..3]</b>\n\n16-bit HIGH TIME\n\nreset at every\nRISING edge\n\n<b>stops counting at the\nFALLING edge</b>" as H <<out>>
+rectangle "BANK\n<b>dmem[5]</b> = the slot\n\nT high H low into\nthe pair dmem[5] names\n\n<b>FF before the first\npoint, so one byte\nis both the index and\nthe not-started state</b>" as B <<out>>
+rectangle "DONE\n<b>dmem[6]</b> = 1" as D <<out>>
+
+rectangle "dmem[4]\n\nthe PREVIOUS pad\nlevel (00 or 40)\n\n<b>the edge detector,\nand it is a LEVEL\ncompare</b>" as P <<w>>
+rectangle "dmem[7]\n\nthe PREVIOUS reading\nof the 1 us counter\n\n<b>elapsed = (now -\nprevious) mod 256</b>" as Q <<w>>
+
+PW -[#3A7]-> T
+PW -[#3A7]-> H
+PW -[#3A7]-> P
+P -[#3A7]-> T : a change to high RESETS both
+P -[#3A7]-> H : a change to low STOPS H
+Q -[#3A7]-> T : the elapsed time is added in
+Q -[#3A7]-> H
+T -[#3A7]-> B
+H -[#3A7]-> B
+B -[#3A7]-> D
+
+note top of T
+  <b>WHY T IS RESET AT EVERY RISING EDGE IS THE WHOLE
+  PROGRAM.</b>
+
+  The period could be computed as (now - last rising), but
+  that is a 16-BIT SUBTRACT and the ISA has no carry flag,
+  so the borrow of a-b cannot be read off the difference:
+  (a-b) mod 256 has two preimages, one positive and one
+  negative, for every value except zero. Getting it
+  exactly needs a four-case analysis on bit 7, and a
+  COMPARE is the same analysis again.
+
+  Resetting instead turns the question from "how long since
+  the last edge" into "how long since the edge that
+  started this one", which the counter answers by itself.
+  <b>Two resets remove every subtract, every compare and
+  every divide.</b>
+end note
+
+note bottom of H
+  <b>AND WHY H IS ALSO RESET AT THE RISING EDGE.</b>
+
+  Same reason, different edge: H accumulates while the
+  line is high and simply STOPS when it goes low, so the
+  high time is whatever is in H at the next rising edge.
+  No subtraction, no comparison, and no divide - the duty
+  falls out of the pair rather than being computed.
+end note
+
+rectangle "THE TWELVE BANKED POINTS, as measured on real RTL" as HDR <<hi>>
+
+rectangle "point 0\n\n<b>8 000 us</b>  125.00 Hz\nhigh <b>6 000 us</b>\nduty <b>75.0 %</b>" as P0 <<out>>
+rectangle "point 1\n\n<b>10 001 us</b>  99.99 Hz\nhigh <b>2 500 us</b>\nduty <b>25.0 %</b>\n\n<b>THE 16-BIT CLAIM:</b> the low\nbyte wrapped 39 times" as P1 <<hi>>
+rectangle "point 2\n\n<b>3 150 us</b>  317.46 Hz\nhigh <b>1 039 us</b>\nduty <b>33.0 %</b>" as P2 <<out>>
+rectangle "point 3\n\n<b>4 000 us</b>  250.00 Hz\nhigh <b>400 us</b>\nduty <b>10.0 %</b>" as P3 <<out>>
+rectangle "point 4\n\n<b>1 600 us</b>  625.00 Hz\nhigh <b>1 056 us</b>\nduty <b>66.0 %</b>" as P4 <<out>>
+rectangle "point 5\n\n<b>2 000 us</b>  500.00 Hz\nhigh <b>1 600 us</b>\nduty <b>80.0 %</b>" as P5 <<out>>
+rectangle "point 6\n\n<b>801 us</b>  1 248.44 Hz\nhigh <b>480 us</b>\nduty <b>59.9 %</b>" as P6 <<w>>
+rectangle "point 7\n\n<b>1 000 us</b>  1 000.00 Hz\nhigh <b>399 us</b>\nduty <b>39.9 %</b>" as P7 <<w>>
+rectangle "point 8\n\n<b>400 us</b>  2 500.00 Hz\nhigh <b>180 us</b>\nduty <b>45.0 %</b>" as P8 <<w>>
+rectangle "point 9\n\n<b>500 us</b>  2 000.00 Hz\nhigh <b>275 us</b>\nduty <b>55.0 %</b>" as P9 <<w>>
+rectangle "point 10\n\n<b>80 us</b>  12 500.00 Hz\nhigh <b>12 us</b>\nduty <b>15.0 %</b>" as P10 <<w>>
+rectangle "point 11\n\n<b>100 us</b>  10 000.00 Hz\nhigh <b>50 us</b>\nduty <b>50.0 %</b>" as P11 <<w>>
+
+note top of P1
+  <b>Why point 1 is the act.</b>
+
+  At 100 Hz the period is 10 000 us, which does not fit in
+  one 8-bit counter. A firmware that counts into a byte
+  wraps and reports <b>16 us</b> for a 100 Hz signal: a wrong
+  ANSWER rather than a wrong precision, and a defect
+  with <b>no symptom at any other point in the sweep</b>.
+
+  So the counters are 16-bit, and the mutation gate
+  perturbs the high byte specifically.
+end note
+
+note bottom of P6
+  <b>Three points are out by EXACTLY ONE TICK, and they are
+  printed as out rather than folded into a tolerance.</b>
+
+  10 001 against 10 000, 801 against 800, 399 against 400
+  - and the duty follows to a tenth of a point (59.9,
+  39.9) because the two counts share the same edge
+  discipline.
+
+  <b>That is the resolution showing up in the log instead
+  of hiding in a tolerance,</b> which is what a
+  measured-truth record should look like. A figure or a
+  page that printed "within 1 %" here would be hiding
+  the instrument's resolution in the one place a reader
+  wants to see it.
+end note
+
+note right of P8
+  The first six points are runs 0 and 1 (durations above
+  800 us); the last six are runs 2 to 5 (down to 80 us).
+  <b>The sweep is deliberately wide:</b> 158 Hz to 10 kHz
+  and ten different duties, so a firmware that is right at
+  one end and wrong at the other cannot pass by averaging.
+end note
+
+@enduml

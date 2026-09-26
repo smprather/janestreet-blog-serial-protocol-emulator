@@ -1,0 +1,150 @@
+@startuml proto-freqmeter
+' ===========================================================================
+' proto-freqmeter.puml - (a) the input frequency + duty meter engine, both sides.
+'
+' The other six timing acts DRIVE a pad. This one LISTENS: the PWM arrives from
+' outside, the program cannot ask when the edges are coming, and the answer it
+' has to produce is a count between two edges it did not schedule. So the number
+' that is the claim is not a delay at all - it is the ACCURACY OF A COUNT, and
+' the honest way to state it is per point, because the instrument's resolution IS
+' the specification.
+' ===========================================================================
+
+title Input frequency + duty meter - the protocol engine on both sides\n<font size=12>the pin is an INPUT; the claim is the accuracy of a COUNT, not a delay</font>
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #33555
+  FontName monospaced
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C8B800
+  FontName monospaced
+  FontSize 11
+}
+
+' ---------------------------------------------------------------- LISTENER --
+state "FIRMWARE SIDE - firmware/freqmeter.pe" as EMIT {
+
+  [*] --> POLL
+  POLL : read the 1 us COUNTER (port 4, I2CTICK),\nNOT the flag and NOT port 7\n<font size=10>(see the timebase note below)</font>
+
+  state "ELAPSED\n(now - previous) mod 256" as ELP
+  ELP : dmem[7] holds the previous reading.\n<b>THERE IS NO FLAG TO LOSE</b>, so a slow\niteration - and the BANK below is the\nslowest thing in the program - makes the\nmeasurement LATE BY EXACTLY THE RIGHT\nAMOUNT rather than wrong.\n\nthis loop is 1.3 us: two hundred times\ninside the 255 us the subtraction is\nexact for.\n\n<b>AND THE SUBTRACTION NEEDS NO CARRY TEST:</b> the\nborrow of (previous - now) is only ever used\nas "is it zero", which is the ONE comparison\nthe ISA has. One SUB does both jobs: the\nborrow IS the comparison, and the value IS\nthe elapsed time.
+
+  state "ADD\ninto H, and into T" as ADD
+  ADD : the addend is the elapsed time, which is\nNEVER ZERO, so "the low byte came out zero"\ncan only mean "the low byte WRAPPED" and the\nhigh byte must be incremented. No both-zero\nguard is needed - a program adding two memory\nvalues would need it, because 0 + 0 = 0 is\nnot a carry.\n\n<b>THERE IS NO 16-BIT SUBTRACT AND NO COMPARE IN THIS\nPROGRAM, AND THAT IS THE DESIGN - not a limitation\nworked around.</b>
+
+  state "PAD\nchanged?" as PAD
+  PAD : dmem[4] holds the previous pad level\n(00 or 40). IN A, PIN; AND A, FM_IN.
+
+  state "RISING\nreset both counters" as RIS
+  RIS : T (dmem[0..1]) = 0  - the period counter\nH (dmem[2..3]) = 0  - the high-time counter\n<b>THIS ONE DESIGN DECISION REMOVES EVERY 16-BIT\nSUBTRACT, EVERY COMPARE AND EVERY DIVIDE:</b>\n\n  the period is T at the RISING edge, because T is\n  RESET at every rising edge; the high time is H at\n  the RISING edge, because H is also reset there and\n  STOPS COUNTING at the falling edge.\n\n  The commit message called this act "capture only"\nbefore a line of it existed, and that is what it\nturned out to be, for a reason the commit message\ncould not have known.
+
+  state "FALLING\nstop H" as FAL
+  FAL : H stops counting here. Nothing to subtract:\nthe accumulator simply stops.
+
+  state "BANK\na 16-bit pair" as BNK
+  BNK : every 3 periods, (T, H) is banked into the\nslot dmem[5] names, and dmem[5] advances.\n<b>THE FIRST PERIOD OF EACH RUN IS A WARM-UP AND IS\nNOT CHECKED</b>, for a reason that is a property of\nthe PROTOCOL and not of the firmware: the\nfirmware starts in the middle of it, so the time\nsince the previous rising edge is not a period.\nA receiver that starts mid-period misses that\none period, and a testbench that pretended\notherwise would be asking the firmware to\nmeasure something it was never present for.
+
+  state "DONE" as DON
+  DON : dmem[6] = 1 when both slots are banked.\n<b>dmem[5] DOUBLES AS THE "NOT STARTED YET" STATE</b>\n(FF), because the program needed one byte more\nthan the machine has and the slot index is the\none value that is not a measurement.
+
+  POLL --> ELP
+  ELP --> ADD
+  ADD --> PAD
+  PAD --> RIS : the level CHANGED, to high
+  PAD --> FAL : the level CHANGED, to low
+  PAD --> ELP : no change: keep counting
+  RIS --> ELP
+  FAL --> ELP
+  ELP --> BNK : every third period
+  BNK --> ELP
+  BNK --> DON : both slots banked
+}
+
+' ------------------------------------------------------------- GENERATOR/TB --
+state "GENERATOR + RECEIVER - tb/tb_pe_soc_freqmeter.v" as SRC {
+
+  [*] --> SWEEP
+  SWEEP : 6 runs of 3 periods, 18 driven periods,\n12 banked points, <b>158 Hz to 10 000 Hz</b>\nwith a varying duty\n\n<b>THE GENERATOR IS EDGE-DRIVEN WITH ABSOLUTE\nDELAYS</b>, not woken once per clock: a 2.6 M\nclock TB that woke up 2.6 M times to decide\nwhether the pin had moved would spend its wall\ntime deciding it had not.
+
+  state "RECEIVE\nan independent measurement" as RCV
+  RCV : the receiver measures the pad with its\nOWN edge logic, and the firmware's banked\nvalues are checked against THAT - not against\nthe generator's table. <b>A generator that knew\nthe answer would agree with a firmware that had\nthe sweep wrong.</b>
+
+  state "CHECK\nwhat is claimed" as CHK
+  CHK : 1. every banked period is within 1 % of\n   the pad's period, with a floor of 1.5 ticks\n2. every banked high time likewise\n3. the duty follows\n4. the DONE flag is set, and every result was\n   ACTUALLY WRITTEN\n5. the twelve periods are pairwise DISTINCT\n6. the twelve duties are neither constant nor\n   50 % twice running\n7. at least one banked period is above 255 while\n   another is inside a byte - the 16-bit claim\n   stated from BOTH sides
+
+  SWEEP --> RCV
+  RCV --> CHK
+  CHK --> SWEEP
+}
+
+EMIT -[#3A7,hidden]-> SRC : the pad, driven from outside\nand read from inside, with no\nhandshake and no acknowledgement
+
+note bottom of ELP
+  <b>Why the tolerance is per point and not one number.</b>
+  The instrument's resolution IS the specification, and
+  a single accuracy figure would be a false claim at one
+  end or the other:
+
+  | point | period | error of a 1 us counter |
+  | 10 000 us (100 Hz) | 10 000 | <b>0.01 %</b> |
+  | 100 us (10 kHz) | 100 | <b>1.0 %</b> |
+
+  So the tolerance is 1 % of the period with a floor of
+  1.5 ticks: at the fast end of the sweep the TOLERANCE
+  is the dominant term and the quantisation is a percent
+  of it.
+end note
+
+note bottom of POLL
+  <b>THE TIMEBASE TRAP, and why the flag is not used
+  either. This SoC has TWO tick counters and they are
+  not the same size.</b>
+
+  | port | name | period | what it is for |
+  | 0x7 | STATUS | 260 clocks = <b>4.33 us</b> | the UART half-bit tick: it exists to place a serial sample mid-cell |
+  | 0x4 | I2CTICK | 60 clocks = <b>1 us</b> | the free-running microsecond counter |
+  | 0x6 | I2CSTAT | 1 us | that counter's clear-on-read FLAG |
+
+  The first version counted STATUS, and measured
+  <b>0.24 ticks per microsecond</b>: a factor of 4.33 out,
+  reporting a 200 us period as 46. A tick counter whose
+  name says TIMER is not a microsecond.
+
+  And the flag is not the fix. A clear-on-read flag is ONE
+  BIT, so a poll loop that takes longer than a tick
+  reports several ticks as one, and the loss is invisible
+  in the result - the measurement is simply short, by an
+  amount that depends on how busy the program was. This
+  program is one instruction from that defect and does not
+  have it, because it reads the COUNTER and adds the
+  DIFFERENCE.
+end note
+
+note bottom of BNK
+  <b>THE MACHINE HAS SIXTEEN BYTES, AND THE
+  TESTBENCH HAD TO BE TOLD.</b>
+
+  A period is two bytes and a high time two, so the
+  firmware banks TWO POINTS PER RUN and the sweep is SIX
+  RUNS OF THREE PERIODS.
+
+  The RED testbench had asked for sixteen points in
+  dmem[0..63] on a machine with sixteen bytes: twelve of
+  its own expectations were read out of an address space
+  that does not exist, and its DONE flag at dmem[14] was
+  INSIDE THE DATA IT WAS REPORTING.
+
+  <b>A test that sizes memory to what it wishes for is a
+  test that reports success without measuring anything,</b>
+  and the count of such elements in this block is now
+  three.
+end note
+
+@enduml

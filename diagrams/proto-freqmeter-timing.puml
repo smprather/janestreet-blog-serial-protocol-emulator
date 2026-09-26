@@ -1,0 +1,201 @@
+@startuml proto-freqmeter-timing
+' ===========================================================================
+' proto-freqmeter-timing.puml - (c) the input edge timing, and the accuracy
+' the instrument actually has.
+'
+' Measured by tb/tb_pe_soc_freqmeter.v on real RTL (60 MHz, Icarus, the real
+' SRAM macro) with firmware/freqmeter.pe. Twelve banked points, 158 Hz to
+' 10 000 Hz, each checked against a SECOND, INDEPENDENT measurement of the pad
+' rather than against the generator's table.
+' ===========================================================================
+
+title Frequency + duty meter - edge timing and the accuracy it has\n<font size=12>12 points, 158 Hz to 10 000 Hz; three are one tick out and are printed so</font>
+
+hide stereotype
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #33555
+  LifeLineBorderColor #33555
+  LifeLineBackgroundColor #FAFAFA
+  ParticipantBorderColor #33555
+  ParticipantBackgroundColor #F4F7FB
+  ParticipantFontName monospaced
+  ActorFontName monospaced
+  NoteFontName monospaced
+  GroupFontName monospaced
+}
+
+participant "GENERATOR\nedge-driven, absolute\ndelays" as GEN
+participant "the pad\npin 6" as PAD
+participant "CPU\npe_cpu.v" as CPU
+participant "the 1 us counter\nport 4, I2CTICK" as TICK
+participant "dmem[0..3]\nT and H" as ACC
+
+== a period arrives from outside ==
+
+GEN -> PAD : the line goes HIGH
+note over GEN
+  <b>THE GENERATOR IS EDGE-DRIVEN WITH ABSOLUTE DELAYS</b>,
+  not woken once per clock. A 2.6 M clock testbench that
+  woke up 2.6 M times to decide whether the pin had moved
+  would spend its wall time deciding it had not.
+end note
+CPU -> TICK : read the COUNTER, not the flag
+note over TICK
+  <b>60 clocks = exactly 1 us.</b> Port 0x4.
+
+  <b>NOT port 0x7 (STATUS), WHICH IS 260 CLOCKS = 4.33 us</b> -
+  the UART half-bit tick, which exists to place a serial
+  sample mid-cell. The first version counted it and
+  measured <b>0.24 ticks per microsecond</b>, reporting a
+  200 us period as 46. A tick counter whose name says
+  TIMER is not a microsecond.
+end note
+TICK -> CPU : now
+CPU -> CPU : elapsed = (now - dmem[7]) mod 256
+note over CPU
+  <b>THERE IS NO FLAG TO LOSE, AND THAT IS WHY THE
+  COUNTER IS READ RATHER THAN THE FLAG.</b>
+
+  A clear-on-read flag is ONE BIT, so a poll loop that takes
+  longer than a tick reports several ticks as one, and the
+  loss is invisible in the result - the measurement is
+  simply short, by an amount that depends on how busy the
+  program was. This program is one instruction from that
+  defect and does not have it.
+
+  Exact for any loop up to 255 us, and this loop is
+  <b>1.3 us</b> - two hundred times inside it.
+end note
+CPU -> ACC : T += elapsed (16-bit add)
+
+== the rising edge: the design decision ==
+
+CPU -> CPU : dmem[4] != 0x40 and the pad is high
+CPU -> ACC : T = 0, H = 0 - BOTH counters reset
+note over ACC
+  <b>THE PERIOD IS T AT THE RISING EDGE, BECAUSE T IS RESET
+  AT EVERY RISING EDGE. THE HIGH TIME IS H AT THE RISING
+  EDGE, BECAUSE H IS ALSO RESET THERE AND STOPS COUNTING
+  AT THE FALLING EDGE.</b>
+  ...
+  <b>TWO RESETS REMOVE EVERY 16-BIT SUBTRACT, EVERY COMPARE
+  AND EVERY DIVIDE.</b> And this machine has no carry flag,
+  so a 16-bit subtract is a four-case analysis on bit 7 and
+  a compare is the same analysis again. There is none of
+  either in the program, and that is the design rather than a
+  limitation worked around.
+
+  The commit message called this act "capture only" before a
+  line of it existed, and that is what it turned out to be,
+  for a reason the commit message could not have known.
+end note
+
+== the high time: the falling edge only STOPS the counter ==
+
+GEN -> PAD : the line goes LOW
+CPU -> ACC : H stops counting here
+note over ACC
+  Nothing to subtract. The accumulator simply stops, and at
+  the NEXT rising edge whatever is in H is the high time of
+  the period that just ended.
+end note
+
+== the 16-bit add, and the guard it does not need ==
+
+note over CPU
+  <b>THREE ARITHMETIC FACTS DECIDED THE WHOLE PROGRAM.</b>
+  ...
+  1. <b>A 16-bit INCREMENT IS CHEAP.</b> +1 on the low byte is exactly
+     zero when it carries, so the carry test is one JZ on the
+     low result.
+  ...
+  2. <b>A 16-BIT ADD OF A VARIABLE IS AFFORDABLE, BUT ONLY JUST.</b>
+     The carry test is the same JZ, except that 0 + 0 = 0 is
+     not a carry, so a general addend needs a GUARD: when the
+     low result is zero, reload the low operand and test it
+     for zero too.
+  ...
+     <b>This program gets that guard away FOR FREE,</b> because its
+     addend is the elapsed microsecond count and is therefore
+     NEVER ZERO - "the low byte came out zero" can then only
+     mean "the low byte wrapped". The guard is not skipped, it
+     is UNNECESSARY, and the comment says which. A program
+     adding two memory values would need it.
+  ...
+  3. <b>A 16-BIT SUBTRACT IS A DIFFERENT MACHINE,</b> and point 3 is
+     why this program contains none.
+end note
+
+== the bank, every third period ==
+
+CPU -> CPU : every 3 periods, bank (T, H) into the slot dmem[5] names
+note over ACC
+  <b>THE FIRST PERIOD OF EACH RUN IS A WARM-UP AND IS NOT
+  CHECKED</b>, for a reason that is a property of the PROTOCOL
+  and not of the firmware: the firmware starts in the middle
+  of it, so the time since the previous rising edge is not a
+  period.
+
+  <b>A receiver that starts mid-period misses that one period,</b>
+  and a testbench that pretended otherwise would be asking the
+  firmware to measure something it was never present for.
+end note
+CPU -> ACC : T high H low into dmem[slot*2 .. slot*2+1]
+note over ACC
+  <b>dmem[5] DOUBLES AS THE "NOT STARTED YET" STATE (FF),</b>
+  because the program needed one byte more than the machine
+  has and the slot index is the one value that is not a
+  measurement. The map uses all sixteen bytes and one byte is
+  shared rather than found.
+end note
+
+== the accuracy the instrument actually has ==
+
+note over GEN, ACC
+  <b>Every banked point, checked against a SECOND, INDEPENDENT
+  measurement of the pad</b> - the receiver in the TB, not
+  the generator's table. A generator that knew the answer
+  would agree with a firmware that had the sweep wrong.
+  ...
+  | point | period | high | duty | [pad] |
+  |  0 |   8 000 | 6 000 | 75.0 % | [8000.000 / 75.00 %] |
+  |  1 | <b>10 001</b> | 2 500 | 25.0 % | [10000.000 / 25.00 %] |
+  |  2 |   3 150 | 1 039 | 33.0 % | [3150.000 / 33.00 %] |
+  |  3 |   4 000 |   400 | 10.0 % | [4000.000 / 10.00 %] |
+  |  4 |   1 600 | 1 056 | 66.0 % | [1600.000 / 66.00 %] |
+  |  5 |   2 000 | 1 600 | 80.0 % | [2000.000 / 80.00 %] |
+  |  6 | <b>    801</b> |   480 | 59.9 % | [800.000 / 60.00 %] |
+  |  7 |   1 000 |   399 | 39.9 % | [1000.000 / 40.00 %] |
+  |  8 |     400 |   180 | 45.0 % | [400.000 / 45.00 %] |
+  |  9 |     500 |   275 | 55.0 % | [500.000 / 55.00 %] |
+  | 10 |      80 |    12 | 15.0 % | [80.000 / 15.00 %] |
+  | 11 |     100 |    50 | 50.0 % | [100.000 / 50.00 %] |
+  ...
+  <b>EVERY PERIOD IS EXACT EXCEPT THREE, BY EXACTLY ONE TICK</b> - 10 001,
+  801 and 399 against 10 000, 800 and 400 - and the duty follows to a tenth
+  of a point because the two counts share the same edge discipline.
+  ...
+  <b>THAT IS THE RESOLUTION SHOWING UP IN THE LOG INSTEAD OF HIDING IN A
+  TOLERANCE,</b> which is what a measured-truth record should look like.
+end note
+
+note over GEN, ACC
+  <b>WHY THE TOLERANCE IS PER POINT AND NOT ONE NUMBER.</b>
+  The instrument's resolution IS the specification:
+  ...
+  | point | period | relative error of a 1 us counter |
+  | 10 000 us (100 Hz) | 10 000 | <b>0.01 %</b> |
+  |      100 us (10 kHz) |    100 | <b>1.0 %</b> |
+  ...
+  So the tolerance is 1 % of the period with a floor of 1.5 ticks. At the fast
+  end of the sweep the TOLERANCE is the dominant term and the quantisation is a
+  percent of it. <b>A single accuracy number would be a false claim at one end or
+  the other,</b> and that is why the act states per point.
+  ...
+  <b>The 16-bit claim is point 1: 10 001 us, from a counter whose low byte wrapped
+  39 TIMES.</b> A firmware counting into a byte reports 16 us there, and has no
+  symptom at any other point in the sweep.
+end note
+
+@enduml

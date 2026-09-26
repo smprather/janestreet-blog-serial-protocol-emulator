@@ -44,7 +44,7 @@ state "FIRMWARE SIDE - firmware/ds18b20.pe" as EMIT {
   RST : TXPIN = 0x00 - the line goes LOW\ndmem[12] = 0 (the delay's return phase)\nCOARSE pair (4,40), OW_RST = 58: 485.5 us\n<b>A COUNTED DELAY, because nothing on the wire\nsays when 480 us is up</b>
 
   state "PH0\nrelease, then settle" as PH0
-  PH0 : PINOE = 0x00 - RELEASE, the sensor may pull low\ndmem[12] = 1\nFINE pair (2,13) from here on: one outer step\nis 69 clocks = 1.22 us, which is what a 5 us\nslot needs\nOW_T15 = 14, a 15 us settle
+  PH0 : PINOE = 0x00 - RELEASE, the sensor may pull low\ndmem[12] = 1\nFINE pair (2,13) from here on: one outer step\nis 69 clocks = 1.15 us, which is what a 5 us\nslot needs\nOW_T15 = 14, a 15 us settle
 
   state "PH1\nwait for the PRESENCE" as PH1
   PH1 : spin until LOW, then spin until HIGH.\n<b>BOTH edges are waited for, with no counted 15 us\nbetween them</b> - the pulse's length is the\nsensor's to choose (60-240 us) and the host\ncannot know it. If no sensor is there the first\nloop never exits, which is correct for a bus\nwith no timeout in this ISA.
@@ -68,7 +68,7 @@ state "FIRMWARE SIDE - firmware/ds18b20.pe" as EMIT {
   PH4 : IN A, PIN; AND A, OW_DATA\nJNZ rb_was_zero\n\n<b>RELEASED (high) is a ZERO on the wire;\nPULLED DOWN (low) is a ONE - the OPPOSITE of a\nwrite slot, where the host pulling the line down\nIS the zero.</b> The first version read the\nopposite and both bytes came back EXACTLY\ncomplemented: 0x2b as 0xd4 and 0x01 as 0xfe.\n\nthen SHR the accumulator with the new bit at the\nTOP, so the FIRST bit read slides down to bit0 by\nthe eighth: 1-Wire is LSB first.
 
   state "DLY1/DLY2/DLY3\nthe delay" as DLY
-  DLY : total(n1,n2,n3) = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4 clocks\nTWO pairs:\n  (4,40)  511 clocks = 8.5 us a step - the reset\n  (2,13)   69 clocks = 1.22 us a step - the slots\n\n<b>A DISPATCH IS A FUNCTION OVER EVERY PHASE THE\nPROGRAM USES.</b> dmem[12] carries the phase and a\nsubtract chain picks the return address, because\nthe ISA cannot return to seven addresses. Two\nbugs lived in this chain, both from patching one\ndispatch for two different loops: it first handled\n0-3 and sent everything >= 4 to ph4, which\ndropped a write-1's high period into the read path;\nand when the read loop was given phases 4 and 5\nit collided with the write loop's 4 and 5.
+  DLY : total(n1,n2,n3) = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4 clocks\nTWO pairs:\n  (4,40)  511 clocks = 8.5 us a step - the reset\n  (2,13)   69 clocks = 1.15 us a step - the slots\n\n<b>A DISPATCH IS A FUNCTION OVER EVERY PHASE THE\nPROGRAM USES.</b> dmem[12] carries the phase and a\nsubtract chain picks the return address, because\nthe ISA cannot return to seven addresses. Two\nbugs lived in this chain, both from patching one\ndispatch for two different loops: it first handled\n0-3 and sent everything >= 4 to ph4, which\ndropped a write-1's high period into the read path;\nand when the read loop was given phases 4 and 5\nit collided with the write loop's 4 and 5.
 
   state "PARK\ndone" as PARK
   PARK : dmem[14] = 1 - both bytes are in. THE TB'S\nOBSERVABLE, so "hung mid-byte" (0) and\n"finished" (1) are different failures.\nTXPIN = 0x00, then JMP halt: no HALT in the ISA.

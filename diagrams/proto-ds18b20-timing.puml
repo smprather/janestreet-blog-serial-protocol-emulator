@@ -58,7 +58,7 @@ end note
 CPU -> PAD : PINOE = 0x00 - RELEASE
 note over CPU
   FINE pair (2,13) from here on: one outer step is
-  10 + 1*59 = <b>69 clocks = 1.22 us</b>, which is what a
+  10 + 1*59 = <b>69 clocks = 1.15 us</b>, which is what a
   5 us slot needs. OW_T15 = 14, a 15 us settle.
 end note
 
