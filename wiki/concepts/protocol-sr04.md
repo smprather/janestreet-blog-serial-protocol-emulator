@@ -205,19 +205,34 @@ truncation is a no-op.
 
 ## The mutation coverage that pins the testbench
 
-**There is none, and that is a real gap rather than an omission in the writing.**
-`regress/mutate_timing_tb.sh` carries 60 cases across the timing family and **none of
-them are `sr04`**; the other six acts in the family are each pinned by several. The act
-is wired into `run_all.sh` and green, so it runs every night — but a suite that no
-mutant perturbs cannot distinguish "the testbench would notice" from "nothing ever
-tries to break this one".
+`regress/mutate_timing_tb.sh` carries **62** cases across the timing family, and **two
+of them are `sr04`**. An earlier revision of this page said it had none; that was true
+when written and is corrected here rather than quietly dropped.
 
-That is exactly the class this branch has been closing all along: a green gate proves
-the checks pass, not that they *can* fail. The identity here is strong enough to be
-worth pinning — a mutation that broke the `r = 0` case at 8 000 µs, or turned the
-`+ 5` in the trigger derivation back into a `+ 4`, would be caught only because a
-testbench pins 601 as an equality. Routed rather than written: `regress/` is not this
-branch's surface.
+| case | the change | what catches it, and why it is worth a case |
+|---|---|---|
+| `sr-trig-count` | deletes the redundant `LDI` that sets the trigger's ending level - the loop's last `SUB` has already left `A` at zero | **only the 601 equality.** The mutant produces 600 clocks = 10.000 us, which **satisfies** the device's "> 10 us minimum", and the firmware stays otherwise perfect: same four answers, same widths, same one trigger per run. A window check passes it |
+| `sr-q-mask` | drops **one** bit from the `0x3F` mask on the high byte of `us` | 1375 -> 1023 **on 8 000 us alone.** The high bytes are `0x04`, `0x16`, `0x07` and `0x1F`, and bit 3 is set in `0x1F` alone, so the mutant is right for the other three runs |
+
+`sr-trig-count` is the one that matters for this page, because it is the act's real
+claim stated in one line: **the trigger is exactly 601 clocks, and nothing in the
+repository holds it to that except an equality.** A window check - which is what the
+datasheet offers, and what every other act in this family is judged by - passes the
+mutant. That is also why the measured count is written down as **601** and not as
+"10 us".
+
+`sr-q-mask` is the case that earns 8 000 us its place, and it was derived *before* it
+was run. It is a slip no reviewer would catch: one bit of one mask, invisible in three
+of four runs, and the only thing that notices is the input whose high byte happens to
+have that bit set.
+
+**What is still not covered, and the direction matters.** Two cases out of 62 is thin
+for an act whose whole claim is an equality, and note which term each one exercises:
+`sr-trig-count` exercises the **timing**, `sr-q-mask` exercises the **big term** of
+the conversion. Nothing yet perturbs the **small** term, `floor(11r/64)`, and the
+mutant that would do it - forcing the small term to zero - is invisible in exactly the
+run one might expect it to be caught by. That is the tabulated blindness above, and it
+is why "two cases" should be read as a start rather than as coverage.
 
 ## Limits, stated rather than implied
 
@@ -231,7 +246,8 @@ branch's surface.
 - **The 11/64 constant is 0.22 % long.** The arithmetic is exact *for that constant*;
   the ranging inherits the constant's error, and the two claims are kept apart above
   rather than merged into one word.
-- **No mutation coverage.** Stated above, with what it would have pinned.
+- **Two mutation cases out of 62, and neither perturbs the small term.** Stated
+  above, with what is covered and what is not.
 
 ## What changed, and why this page says so
 

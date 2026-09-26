@@ -124,7 +124,7 @@ note bottom of C
   would still be a plausible millimetre figure.
 end note
 
-rectangle "THE FOUR MEASURED CONVERSIONS - and the one where truncation is a no-op" as HDR <<gate>>
+rectangle "THE FOUR MEASURED CONVERSIONS - and the one that ISOLATES the big term" as HDR <<gate>>
 
 rectangle "run 0\n\necho <b>1 160 us</b>\n\n1 160 x 11/64\n= 199.375\n-> <b>199 mm</b>\n\n<font size=10>product exact,\n199 is its\ntruncation</font>" as P0 <<ok>>
 rectangle "run 1\n\necho <b>5 816 us</b>\n\n5 816 x 11/64\n= 999.4375\n-> <b>999 mm</b>\n\n<font size=10>exercises the ten-bit\npath AND the high\nbyte</font>" as P1 <<ok>>
@@ -194,15 +194,24 @@ note bottom of HDR
             invisible from the outside, because the answer would still be a plausible
             millimetre figure
   2 000 us  a mid target
-  8 000 us  the r = 0 case, where the conversion's truncation is a no-op
+  8 000 us  the r = 0 case: it ISOLATES 11*Q, it is the only width whose\n            us x 11 overflows 16 bits, and it is the only one a\n            high-byte mask slip can reach
   ...
-  <b>THE GAP THAT WAS HERE IS NOW CLOSED, and it is worth recording.</b> The mutation
-  suite regress/mutate_timing_tb.sh carries 60 cases across the timing family and
-  <b>none are sr04</b>. A suite that no mutant perturbs cannot distinguish "the
-  testbench would notice" from "nothing ever tries to break this one". A mutation
-  that broke the r = 0 case at 8 000 us, or turned the + 5 back into a + 4, would be
-  caught ONLY because a testbench pins 601 as an equality. Routed, not written:
-  regress/ is not this branch's surface.
+  <b>THE MUTATION GAP IS NOW PARTLY CLOSED - two cases of 62, and the DIRECTION</b>
+  <b>EACH EXERCISES MATTERS.</b>
+  ...
+  An earlier revision of this figure said sr04 had NO mutation coverage. That was
+  true when written; it is corrected here rather than dropped. regress/
+  mutate_timing_tb.sh now carries 62 cases and TWO are sr04.
+  ...
+  | case | the change | what catches it |
+  | <b>sr-trig-count</b> | deletes the redundant LDI setting the trigger's ending level | <b>ONLY the 601 equality</b> - 600 clocks = 10.000 us SATISFIES the device's "> 10 us minimum", so a WINDOW check passes the mutant |
+  | <b>sr-q-mask</b> | drops ONE bit from the 0x3F mask on the high byte of us | 1375 -> 1023 on 8 000 us ALONE, because bit 3 is set in 0x1F alone |
+  ...
+  <b>WHAT IS STILL UNCOVERED:</b> sr-trig-count exercises the TIMING and
+  sr-q-mask exercises the BIG TERM. <b>Nothing yet perturbs the SMALL TERM,</b>
+  floor(11r/64) - and the mutant that would do it, forcing the small term to zero, is
+  invisible in exactly the run one might expect. That is the blindness tabulated
+  below, and it is why "two cases" is a start rather than coverage.
 end note
 
 @enduml

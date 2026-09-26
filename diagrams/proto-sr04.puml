@@ -42,7 +42,7 @@ skinparam note {
 }
 
 state "STATUS: GREEN\n4 runs, 4 distances\n199 / 999 / 343 / 1375 mm" as OK <<green>>
-OK : image: 387 words loaded (637 NOP-filled)\n\nrun 0: echo 1160 us -> 199 mm\nrun 1: echo  5816 us -> 999 mm\nrun 2: echo 2000 us -> 343 mm\nrun 3: echo 8000 us -> 1375 mm\n\n<b>ALL FOUR EXACT.</b> Run 3 is the interesting one:\n8000 = 64 x 125, so r = 0 and the\nconversion's truncation is a NO-OP.\n\n<b>NO MUTATION COVERAGE.</b> mutate_timing_tb.sh has\n60 cases and none are sr04, while the\nother six acts here are each pinned by\nseveral. The act runs every night and\nnothing ever tries to break it - see\nthe note at the bottom.
+OK : image: 387 words loaded (637 NOP-filled)\n\nrun 0: echo 1160 us -> 199 mm\nrun 1: echo  5816 us -> 999 mm\nrun 2: echo 2000 us -> 343 mm\nrun 3: echo 8000 us -> 1375 mm\n\n<b>ALL FOUR EXACT.</b> Run 3 is the interesting one:\n8000 = 64 x 125, so r = 0 and the\nconversion's truncation is a NO-OP.\n\n<b>TWO MUTATION CASES</b> of 62 in the family: sr-trig-count and sr-q-mask.\nThe first is caught ONLY by the 601 equality, because 600 clocks\nstill SATISFIES the device's "> 10 us minimum".
 
 ' ---------------------------------------------------------------- EMITTER --
 state "FIRMWARE SIDE - firmware/sr04_range.pe" as EMIT {
@@ -109,10 +109,7 @@ note bottom of CON
   is exact only AGAINST A TRUNCATING EXPECTATION - and the testbench's "expected 199"
   IS that truncation, so the two agree by construction rather than by luck.
   ...
-  <b>3. RUN 3 HAS NO TRUNCATION.</b> 8000 = 64 * 125, so r = 0, floor is the
-  identity, and 1375 is the whole product. That is the one input where the word is
-  exact with nothing left over, and it is why four targets beat two: the set now
-  contains a case that distinguishes senses 1 and 2 BY ITSELF.
+  <b>3. RUN 3 HAS NO TRUNCATION.</b> 8000 = 64 * 125, so r = 0, floor is the\n  identity, and 1375 is the whole product - the one input where the word\n  means exact with nothing left over.\n  ...\n  <b>AND r = 0 DOES NOT MAKE IT A SHARPER TEST OF THE SMALL TERM. IT MAKES\n  IT BLIND TO IT</b> - the opposite of what an earlier revision claimed.\n  With the small term forced to 0: 1160 gives 198 (WRONG), 5816 gives 990\n  (WRONG), 2000 gives 341 (WRONG) and <b>8000 still gives 1375</b>. The small\n  term contributes 1, 9, 2 and <b>0</b> respectively.\n  ...\n  <b>SO RUN 3 DOES NOT TEST THE SMALL TERM AT ALL - IT ISOLATES THE BIG ONE,</b>\n  and that is what earns it its place.\n  ...\n  <b>IT IS SHARP IN THE OTHER DIRECTION, which is where sr-q-mask comes\n  from:</b> the conversion masks the high byte of us with 0x3F, and those high\n  bytes are 0x04, 0x16, 0x07 and 0x1F - <b>bit 3 is set in 0x1F ALONE</b> - so a\n  slip in that mask is invisible in three runs and caught only here, where Q\n  falls 125 -> 93 and the answer 1375 -> 1023.\n  ...\n  <b>AND IT IS THE ONLY WIDTH WHOSE us x 11 OVERFLOWS 16 BITS:</b>\n  8000 x 11 = 88 000 against a 65 535 ceiling. The nearest miss is\n  5816 x 11 = 63 976, 1 559 short of it - so 5816 and 8000 BRACKET the\n  boundary rather than sitting on one side of it.
   ...
   A figure or a page that said only "the conversion is exact" was making claim 1 and
   being read as claim 2. That is the defect, and the four-run table above is what
@@ -120,20 +117,31 @@ note bottom of CON
 end note
 
 note bottom of BNK
-  <b>NO MUTATION COVERAGE, and it is a real gap rather than an omission in the
-  writing.</b>
+  <b>TWO MUTATION CASES, AND THE DIRECTION EACH EXERCISES MATTERS.</b>
   ...
-  regress/mutate_timing_tb.sh carries 60 cases across the timing family and <b>none
-  of them are sr04</b>; the other six acts in the family are each pinned by several.
-  The act is wired into run_all.sh and green, so it runs every night - but a suite
-  that no mutant perturbs cannot distinguish "the testbench would notice" from
-  "nothing ever tries to break this one".
+  regress/mutate_timing_tb.sh carries 62 cases across the timing family and TWO
+  are sr04. An earlier revision of this figure said none; that was true when
+  written and is corrected here rather than dropped.
   ...
-  The identity is strong enough to be worth pinning: a mutation that broke the r = 0
-  case at 8 000 us, or turned the + 5 in the trigger derivation back into a + 4,
-  would be caught ONLY because a testbench pins 601 as an equality. Routed rather
-  than written - regress/ is not this branch's surface.
+  | case | the change | what catches it |
+  | <b>sr-trig-count</b> | deletes the redundant LDI that sets the trigger's ending level - the loop's last SUB has already left A at zero | <b>ONLY the 601 equality.</b> The mutant gives 600 clocks = 10.000 us, which SATISFIES the device's "> 10 us minimum", and the firmware stays otherwise perfect: same four answers, same widths, same one trigger per run. <b>A WINDOW CHECK PASSES IT.</b> |
+  | <b>sr-q-mask</b> | drops ONE bit from the 0x3F mask on the high byte of us | 1375 -> 1023 <b>on 8 000 us ALONE</b> - the high bytes are 0x04, 0x16, 0x07 and 0x1F, and bit 3 is set in 0x1F alone |
+  ...
+  <b>sr-trig-count IS THIS ACT'S REAL CLAIM IN ONE LINE:</b> the trigger is exactly
+  601 clocks and nothing in the repository holds it to that except an equality.
+  Every other act in this family is judged by a WINDOW, and a window passes the
+  mutant. That is also why the measured count is written down as 601 rather
+  than as "10 us".
+  ...
+  <b>AND WHAT IS STILL UNCOVERED:</b> two of 62 is thin for an act whose whole
+  claim is an equality. sr-trig-count exercises the TIMING; sr-q-mask exercises
+  the BIG TERM of the conversion. <b>Nothing yet perturbs the SMALL TERM</b>,
+  floor(11r/64) - and the mutant that would do it, forcing the small term to
+  zero, is invisible in exactly the run one might expect. That is the
+  tabulated blindness in the CON note above, and it is why "two cases" should
+  be read as a start rather than as coverage.
 end note
+
 
 note bottom of TRG
   <b>WHAT THIS FIGURE USED TO SAY, and why it is recorded rather than

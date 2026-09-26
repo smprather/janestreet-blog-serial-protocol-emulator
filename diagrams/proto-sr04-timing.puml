@@ -133,17 +133,31 @@ group run 2 - a mid target
   end note
 end group
 
-group run 3 - the case where truncation is a NO-OP
+group run 3 - the case that ISOLATES the big term
   SENSE -> ECHO : 8 000 us
   CPU -> CPU : mm = 8000 * 11/64 = 1375 EXACTLY -> 1375 mm
   note over CPU
     <b>EXPECTED 1375 mm, and nothing was truncated.</b>
     ...
-    8 000 = 64 x 125, so r = 0 and floor() is the identity.
-    This is the one input where "exact" means exact with
-    nothing left over - and it is why four targets beat two:
-    the set now contains a case that tells the two senses
-    of the word apart BY ITSELF.
+    8 000 = 64 * 125, so r = 0 and floor() is the identity.
+    ...
+    <b>AND THAT MAKES IT BLIND TO THE SMALL TERM, NOT SHARPER FOR IT</b> - the
+    opposite of what an earlier revision of this figure claimed. With the small
+    term forced to 0: 1160 -> 198 WRONG, 5816 -> 990 WRONG, 2000 -> 341 WRONG,
+    and 8000 still -> 1375. The small term contributes 1, 9, 2 and <b>0</b>.
+    ...
+    <b>So run 3 does not test the small term at all - it ISOLATES 11*Q,</b> and
+    that is what earns it its place. Two further reasons, and both are the
+    OPPOSITE direction to blindness - they are where this run is SHARP:
+    ...
+    * the conversion masks the high byte of us with 0x3F, and those high bytes
+      are 0x04, 0x16, 0x07 and 0x1F. <b>Bit 3 is set in 0x1F ALONE</b>, so a
+      slip in that mask (mutation sr-q-mask) is invisible in three runs and
+      caught only here: Q falls 125 -> 93, the answer 1375 -> 1023.
+    * <b>it is the only width whose us x 11 OVERFLOWS 16 bits</b>: 8 000 x 11 =
+      88 000 against a 65 535 ceiling. The nearest miss is 5 816 x 11 = 63 976,
+      1 559 short - so 5 816 and 8 000 BRACKET the boundary rather than sitting
+      on one side of it.
   end note
 end group
 
@@ -159,8 +173,9 @@ note over CPU, ECHO
   | mm from echo 1 | 1160 x 11/64 = 199.375 | <b>199 mm</b> | host | PASS, truncated exactly |
   | mm from echo 2 | 5816 x 11/64 = 999.4375 | <b>999 mm</b> | host | PASS, truncated exactly |
   | mm from echo 3 | 2000 x 11/64 = 343.75 | <b>343 mm</b> | host | PASS, truncated exactly |
-  | mm from echo 4 | 8000 x 11/64 = 1375 | <b>1375 mm</b> | host | PASS, NOT truncated - r = 0 |
+  | mm from echo 4 | 8000 x 11/64 = 1375 | <b>1375 mm</b> | host | PASS - no truncation, r = 0, and the only 16-bit overflow |
   | runs banked | 4 | <b>4</b> | host | PASS |
+  | mutation cases | 2 of 62 in the family | <b>sr-trig-count, sr-q-mask</b> | both | PASS, both detected |
   | the firmware image | 1 024 words of imem | <b>387 words, 637 NOP-filled</b> | host | PASS - see below |
   ...
   <b>AND NOTE WHAT IS NOT IN THE TABLE.</b> No row is a failure, and no row is a
