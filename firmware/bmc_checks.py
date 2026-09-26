@@ -2,6 +2,12 @@ import re
 import subprocess
 import sys
 
+# The two open()/subprocess calls below are deliberately NOT wrapped in
+# try/except, and a linter says so: this gate is run ON a file, and if the
+# file is missing or the assembler will not run, the right behaviour is to
+# stop with the reason on the screen. A gate that swallows its own failure and
+# prints a clean report is worse than no gate, which is this act's whole
+# subject.
 f=sys.argv[1] if len(sys.argv)>1 else 'firmware/bmc_frame.pe'
 with open(f) as _fh: src=_fh.read().split('\n')
 addr=0; labels={}; mnem={}

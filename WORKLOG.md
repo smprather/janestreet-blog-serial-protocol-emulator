@@ -1379,3 +1379,31 @@ are compared against each other: two different flags and the same three bytes.
 is a ten-word stub whose `half_wait` cannot terminate, and the testbench's
 decoder folds two transitions per bit -- the same flaw this act was written to
 catch. Both are the next step, and both are marked `<<wip>>>` until they are.
+
+**The model and the gate now live in the repository**, beside the firmware they
+are about: `firmware/bmc_model.py` and `firmware/bmc_checks.py`. /tmp has been
+cleaned twice this session with a handoff file in it, and a model that decided
+the shape of a fix cannot live where a cleanup can take it.
+
+**Two more permanent checks, and both are proven against the fault they were
+written for** -- a copy of the firmware with that exact fault put back, and the
+copy goes non-zero while the real file stays clean:
+
+* **a store run split by a setter that CHANGED the value.** This is the fourth
+  check the handoff asked for, and its mechanical signature took three tries to
+  get right, which is worth recording: NOT "a run of stores" (33 findings, all
+  of them the ordinary `LDI A,k / STM n,A` idiom, i.e. no information), and NOT
+  "a setter in the middle of a run" (which never happens, because the setter
+  BREAKS the run). The signature is TWO runs of two or more stores with only a
+  setter between them and the two setters differing. The correct init has that
+  shape once, with the same setter on both sides.
+* **a JZ/JNZ whose A did not come from a SUB or from a load of the byte being
+  tested.** JZ and JNZ test A and not a flag, so a branch after a `LDM X, n` is
+  testing whatever A happened to hold -- which, in the polarity gate, was the
+  level. That fault inverted every payload byte and no structural check could
+  see it.
+
+**Left red, and it should be:** the encode direction. The firmware's encoder is
+still the ten-word stub whose `half_wait` cannot terminate, and the testbench's
+decoder still folds two transitions per bit -- the same flaw this act was
+written to catch. Two checks are red for that reason and both name it.
