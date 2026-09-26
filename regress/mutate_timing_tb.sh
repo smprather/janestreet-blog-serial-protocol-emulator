@@ -43,7 +43,22 @@
 # testbench and the mutant testbench are the SAME FILE, and a mutant cannot pass
 # by accident because it was running a different TB.
 set -u
-cd "$(dirname "$0")/.."
+# THE HARNESS'S OWN PATH, resolved once, HERE, before the cd below moves the
+# working directory. The case-list correspondence check further down re-reads
+# this file to count the arms in run_one, and $0 does not survive a cd on its
+# own: this harness is invoked as ./regress/mutate_timing_tb.sh by run_all.sh,
+# and by the time the check runs the relative path is being resolved from a
+# different directory. A check that read the wrong file would count zero arms
+# and report a duplicate-arm failure for a tree that has none -- loud, at
+# least, but a gate that cries wolf on a clean tree is a gate people learn to
+# re-run until it agrees. So the path is pinned to an absolute one here, while
+# it is still trivially correct, rather than reconstructed later.
+SELF="$PWD/${0#./}"
+# || exit, because a cd that fails leaves this harness running against whatever
+# directory it happened to start in and reporting a verdict about it. That is
+# not a hypothetical: the whole point of the checks below is that a verdict
+# must name the files it actually ran.
+cd "$(dirname "$0")/.." || exit 1
 # The single-run lock: this worktree is shared and a concurrent run would be
 # mutating and restoring the same RTL. Inherited from run_all.sh when this is one
 # of its children, so the harnesses do not deadlock their own parent.
@@ -224,6 +239,59 @@ sr-q-mask|sr04_range|the high byte's six-bit mask missing bit 3, so the 8000 us 
 sr-term-shift|sr04_range|the small term shifted by five instead of six, so floor(11r/64) doubles -- and reads zero at r = 0
 sr-trig-count|sr04_range|the +5 after 4*SR_TRIG_LEN turned back into a +4: a 600-clock, 10.000 us trigger
 CASES_EOF
+
+# ---- THE CASE LIST MUST DESCRIBE THE DISPATCH TABLE, IN BOTH DIRECTIONS ----
+# THE DEFECT THIS EXISTS FOR (2026-09-26), and it was found sideways: two
+# people counting the same list got two different numbers and neither was
+# wrong. fm-per-base was declared TWICE as a `case` arm in run_one, with an
+# IDENTICAL mutation, and bash takes the first match -- so the second was dead
+# code that read exactly like a second test. Nothing compared the two lists, so
+# the suite reported a case count nobody could reproduce: 61 case lines, 62
+# distinct arm labels, 63 arm labels in total. A number that three people quote
+# three ways is a number nobody can check, and the mutation count is a CLAIM
+# ABOUT COVERAGE, so an unreproducible one is worse than a slightly wrong one.
+#
+# WHY NOT "ASSERT THE CASE NAMES ARE DISTINCT", which is the obvious check and
+# the one this was first asked to add: the case names were, and still are,
+# distinct. Not one of the three counts above would have failed it. What was
+# wrong is the CORRESPONDENCE between the list and the table, so the
+# correspondence is what gets checked -- and it runs BEFORE the cases, because
+# a check that fires after twenty minutes of simulation has already spent the
+# time it was supposed to protect.
+_chip_arms=$(awk '/^run_one\(\) \{/,/^\}/' "$SELF" | grep -oE '^    [a-z][a-z0-9]*-[a-z0-9-]+\)' | tr -d ' )')
+_chip_lines=$(grep '|' "$CASES" | cut -d'|' -f1 | tr -d ' ')
+n_case_lines=$(grep -c '|' "$CASES")
+n_case_ids=$(printf '%s\n' "$_chip_lines" | sort -u | wc -l)
+n_arm_ids=$(printf '%s\n' "$_chip_arms" | sort -u | wc -l)
+n_arm_labels=$(printf '%s\n' "$_chip_arms" | grep -c .)
+dup_lines=$(printf '%s\n' "$_chip_lines" | sort | uniq -d | tr '\n' ' ')
+dup_arms=$(printf '%s\n' "$_chip_arms" | sort | uniq -d | tr '\n' ' ')
+no_arm=$(comm -23 <(printf '%s\n' "$_chip_lines" | sort -u) <(printf '%s\n' "$_chip_arms" | sort -u) | tr '\n' ' ')
+if [ "$n_case_lines" -ne "$n_case_ids" ] || [ -n "$dup_lines" ]; then
+  echo "FATAL: the case list names a case twice: ${dup_lines:-count mismatch}"
+  exit 2
+fi
+if [ "$n_arm_labels" -ne "$n_arm_ids" ] || [ -n "$dup_arms" ]; then
+  echo "FATAL: run_one declares the same case arm twice: ${dup_arms:-count mismatch}"
+  echo "       bash takes the FIRST match, so the second arm can never run, and"
+  echo "       the dead arm reads like a second test. This is the 2026-09-26 defect."
+  exit 2
+fi
+if [ -n "$no_arm" ]; then
+  echo "FATAL: declared case(s) with no arm in run_one: $no_arm"
+  echo "       run_one would return 2 for them -- but only after the whole suite ran."
+  exit 2
+fi
+echo "case list: $n_case_lines declared, $n_case_ids distinct, $n_arm_ids arms, $n_arm_labels arm labels -- every declared case has exactly one arm"
+# THE FOURTH DIRECTION IS REPORTED AND NOT FAILED, and the reason is a routing
+# decision rather than a convenience. An arm with no case line is unreachable,
+# so it costs nothing at run time: sv-idle-level has been in that state since
+# before this check existed. Adding it is the servo act owner's call, because it
+# MOVES THE CASE COUNT and could redden the gate on a case nobody has ever run.
+# So the check names it out loud and leaves the verdict where it was put.
+no_line=$(comm -13 <(printf '%s\n' "$_chip_lines" | sort -u) <(printf '%s\n' "$_chip_arms" | sort -u) | tr '\n' ' ')
+[ -n "$no_line" ] && \
+  echo "  note: arm(s) with no case line, unreachable and free: $no_line (routed, deliberately not failed on)"
 
 # The counts come from the $results file, not from four shell variables set
 # here: the cases run in parallel subshells, so a variable set in one of them
@@ -619,10 +687,13 @@ run_one() {
       repl="        LDI   A, FM_IN
         STM   4, A             ; MUTANT: the fitted constant is overridden" ;;
     fm-per-base)
-      # The other constant. On a SIXTEEN-BYTE machine a shifted slot base
-      # overlaps the working counters rather than running off the end of
-      # memory, so this does not read as an addressing bug: the periods land
-      # on the high times and vice versa, and both still look like numbers.
+      # The other counted constant, and the other half of the map. A shifted
+      # slot base on a SIXTEEN-BYTE machine does not run off the end of
+      # memory, it overlaps the working counters -- so the mutant reads as
+      # plausible numbers rather than as an addressing fault. This arm was
+      # declared TWICE until 2026-09-26, identically, and bash takes the first
+      # match, so the second could never run; see the correspondence check
+      # below the case list, which is what now makes that impossible to miss.
       extra='--const FM_PER_BASE=10'
       anchor='        LDI   A, FM_PER_BASE'
       repl='        LDI   A, FM_PER_BASE     ; MUTANT: the fitted constant is overridden' ;;
@@ -688,14 +759,6 @@ run_one() {
         INCX
         LDM   A, 2
         STS   [X], A" ;;
-    fm-per-base)
-      # The other counted constant, and the other half of the map. A shifted
-      # slot base on a SIXTEEN-BYTE machine does not run off the end of
-      # memory, it overlaps the working counters -- so the mutant reads as
-      # plausible numbers rather than as an addressing fault.
-      extra='--const FM_PER_BASE=10'
-      anchor='        LDI   A, FM_PER_BASE'
-      repl='        LDI   A, FM_PER_BASE     ; MUTANT: the fitted constant is overridden' ;;
     ow-presence-edge)
       anchor='ph1b:   IN    A, PIN
         AND   A, OW_DATA
