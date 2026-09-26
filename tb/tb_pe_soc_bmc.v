@@ -15,11 +15,23 @@
 //   * a '0' HAS a transition at the end, in both encodings;
 //   * FM0 adds a transition at the START of the interval for a '1'; FM1 does
 //     not -- which is the ONLY difference between the two encodings.
-// CONSEQUENCE ONE: a run of ONES in FM1 is a constant level with no
-// transitions at all, so it is not a decodable frame. That is why the first
-// check below is a stream that cannot be decoded, and why the firmware's
-// answer to it must be a DECLARED FAILURE rather than a byte it invented: a
-// decoder that cannot fail is not a decoder.
+// CONSEQUENCE ONE, and it is the best check in the file: EVERY bit of a
+// well-formed frame carries a transition in its middle, because "bi-phase"
+// means the level changes WITHIN the interval. So a line held CONSTANT --
+// which is what a disconnected, shorted or dead sensor looks like on the
+// wire -- has no transitions at all and carries no clock, and a receiver that
+// locks on to it has locked on to nothing. THAT is the stream the last check
+// presents, and the firmware's answer to it must be a DECLARED FAILURE rather
+// than a byte it invented: a decoder that cannot fail is not a decoder.
+//
+// (THE FIRST VERSION OF THIS FILE CLAIMED THAT A RUN OF ONES IN FM1 WAS THAT
+// STREAM. IT IS NOT. A run of ones is a clean square wave -- one transition
+// per bit, in the middle -- and the decoder recovers its clock from exactly
+// those transitions. The claim was in this header, in the encoder below and in
+// two WORKLOG lines, and it was wrong in all four. It was the instrument that
+// was wrong, which is the pattern this whole block exists to demonstrate, and
+// the reason the act was written with two decoders from the wire rules rather
+// than one decoder and one encoder that agree by construction.)
 //
 // CONSEQUENCE TWO, which is why the bit period is a whole number of
 // microseconds: the receiver timestamps the level on the 1 us counter and
@@ -130,16 +142,25 @@ module tb_pe_soc_bmc;
     enc_bitval = (b == 0) ? 1'b0 : 1'b1;              // LSB first
   endfunction
 
-  // The level after the given half-interval of the given bit.
+  // The level in the given half-interval of the given bit, from the wire
+  // rules at the top of this file.
+  //
+  // "BI-PHASE" MEANS THE LEVEL CHANGES WITHIN THE BIT INTERVAL. The first
+  // half is the COMPLEMENT of the data and the second half is the data, so
+  // every bit carries a transition in its middle; a '0' then carries a
+  // second one at the bit boundary, and a '1' does not. FM0's extra
+  // transition is at the START of a '1', and that is the only difference
+  // between the two encodings.
+  //
+  // THE PARENTHESES ARE NOT DECORATION: `return a ? b : c` parses as
+  // `return (a) ? b : c` and Icarus will not have it.
   function automatic bit enc_level(input integer b, input integer half, input integer fm0);
     bit data_one;
     data_one = enc_bitval(b);
     if (half == 0) begin
-      // first half: FM0 starts a '1' with a transition, FM1 does not
-      return fm0 ? data_one : 1'b1;
+      return (data_one ? 1'b0 : 1'b1);   // the complement of the data
     end else begin
-      // second half: a '0' has a transition at the end
-      return data_one ? 1'b1 : 1'b0;
+      return data_one;                  // the data itself
     end
   endfunction
 
@@ -315,13 +336,19 @@ module tb_pe_soc_bmc;
           $sformatf("the firmware declared FM1 (dmem[%0d] = %02h) -- the testbench sent FM1",
                     F_FLAG, dut.dmem[F_FLAG]));
 
-    // THE STREAM THAT CANNOT BE DECODED. A run of ones in FM1 is a constant
-    // level with no transitions at all, so a receiver that locks on and
-    // produces three bytes has invented them. This is the check that makes
-    // the other two mean something, and it is the reason a decoder that
-    // cannot fail is not a decoder.
+    // THE STREAM THAT CANNOT BE DECODED: a line held CONSTANT. Every bit of a
+    // well-formed frame transitions in its middle, so a level that never moves
+    // carries no clock at all, and a receiver that locks on to it has locked
+    // on to nothing -- which is what a disconnected, shorted or dead sensor
+    // looks like on the wire. The receiver must DECLARE that rather than bank
+    // three bytes, and this is the check that makes the other two mean
+    // something: a decoder that cannot fail is not a decoder. (The first
+    // version of this check presented a frame of all ones in FM1, on the
+    // belief that a run of ones is a constant level. It is not: it is a clean
+    // square wave. The claim was wrong in the header, in the encoder and in
+    // two WORKLOG lines.)
     check(dut.dmem[F_FLAG] != 8'hFF,
-          $sformatf("a frame of all ones in FM1 is a CONSTANT LEVEL with no transitions, and the receiver DECLARED that rather than banking bytes (dmem[%0d] = %02h)",
+          $sformatf("a line held CONSTANT carries no clock at all, and the receiver DECLARED that rather than banking bytes (dmem[%0d] = %02h)",
                     F_FLAG, dut.dmem[F_FLAG]));
 
     $display("");
