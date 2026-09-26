@@ -54,8 +54,15 @@ MAX_WAIT_WORDS = 15          # the chip's worst-case wait words
 PING = (P.OP_PING, 7, P.TARGET_HOST, b"")
 
 
-def _words_bytes(words) -> bytes:
-    return b"".join(int(w).to_bytes(2, "big") for w in words)
+def _words_bytes(words: tuple[int, ...]) -> bytes:
+    """Pack the fuzzer's literal 16-bit words, without coercing.
+
+    No `int()` on purpose: every caller passes literals, and a coercion that
+    can raise on a value this never receives is a call the reader has to reason
+    about for nothing. A word out of the 16-bit range raises OverflowError, which
+    is the honest answer from a wire encoder.
+    """
+    return b"".join(word.to_bytes(2, "big") for word in words)
 
 
 READ_IMEM = (P.OP_READ_IMEM, 3, P.TARGET_HOST, _words_bytes((1, 2)))
@@ -133,7 +140,7 @@ def _check_decoder(raw: bytes, label, report, iteration, expect_decode=None):
                     f"{name}/{label}-misdecode",
                     "decoded frame does not re-encode to the input bytes",
                     report.seed, iteration, raw.hex()))
-        if expect_decode is True and decoded is None:
+        if expect_decode and decoded is None:
             report.findings.append(Finding(
                 f"{name}/{label}-unexpected-reject",
                 "a valid frame was rejected",
@@ -303,7 +310,11 @@ def run(seed: int = DEFAULT_SEED, iterations: int = DEFAULT_ITERATIONS,
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    # `__doc__` is only None if the module docstring is stripped (e.g. by a
+    # docstring-stripping loader), which would make the usage line below
+    # AttributeError on None rather than on a missing docstring.
+    doc = __doc__ or "bounded protocol fuzz campaign"
+    parser = argparse.ArgumentParser(description=doc.split("\n")[0])
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("-n", "--iterations", type=int,
                         default=DEFAULT_ITERATIONS)

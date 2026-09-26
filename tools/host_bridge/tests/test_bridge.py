@@ -25,7 +25,11 @@ WORDS = (0x0041, 0x1001, 0x4002)
 PROJECT = "tt_um_protocol_emulator"
 
 
-def make_bridge(*, irq_supported=False, project=PROJECT, max_line=65536):
+def make_bridge(*, irq_supported=False, project: str | None = PROJECT,
+                max_line=65536):
+    # `project` is genuinely optional on the bridge (`PicoBridge(project=None)`
+    # is a supported configuration - a board with no project selection), so the
+    # helper says so rather than letting the default's type hide it.
     pe = F.FakePE()
     adapter = FakeTTAdapter(pe, irq_supported=irq_supported)
     bridge = M.PicoBridge(adapter, project=project, sleep=lambda _seconds: None,
@@ -117,6 +121,109 @@ class TestPeFrameGoldenVectors(unittest.TestCase):
 
     def test_words_helpers_round_trip(self):
         self.assertEqual(PF.bytes_to_words(PF.words_to_bytes(WORDS)), WORDS)
+
+
+class TestTrailingIdleWordsAreDiscarded(unittest.TestCase):
+    """Only the length field can say where a reply ends, and nothing else can.
+
+    The bridge budgets the chip's 15 worst-case wait words for EVERY opcode
+    (`_response_words` = 6 + data + MAX_WAIT_WORDS), because a bounded read may
+    be preceded by 0xFFFF fillers. The R3 debug ops answer ready-immediate with
+    ZERO wait words, so for every fixed-size op those 15 extra words are read
+    off a RELEASED pad: `pe_ctrl` asserts `miso_oe` only while a response
+    shifts (`tt_um`: `uio_oe[6] = ctrl_miso_oe`), so on hardware they are
+    whatever the idle pad reads as — not something the RTL decides.
+
+    The reader skipped only LEADING fillers and handed the decoder everything to
+    the end of the buffer, while `decode_frame` demands the word count match the
+    length field exactly. The over-read words are TRAILING, so the leading-only
+    skip cannot reach them whatever they contain: every fixed-size op — PING
+    included — was rejected with "length field does not match the frame" the
+    moment the host read past the reply. It is not conditional on the pad level
+    (I first assumed it was, and was wrong: a 0xFFFF idle level fails the same
+    way, because only LEADING words are skipped). The pad level only decides
+    which error you get, and a released pad is not a thing the RTL can promise
+    anyway.
+
+    Nothing caught it because the test adapter returned EXACTLY the response and
+    ignored `read_words`: every host test, the acceptance run and both fuzz
+    campaigns only ever handed the decoder a perfectly framed buffer. The fake
+    was more forgiving than the read path, which is the lesson as much as the
+    bug.
+    """
+
+    @staticmethod
+    def status_frame(sequence=7):
+        return PF.encode_frame(P.OP_STATUS, sequence, P.TARGET_HOST, b"")
+
+    def test_trailing_idle_words_do_not_reach_the_decoder(self):
+        frame = self.status_frame()
+        for idle in (0x0000, 0xFFFF, 0xA55A, 0x1234):
+            with self.subTest(idle=hex(idle)):
+                padded = frame + idle.to_bytes(2, "big") * 15
+                self.assertEqual(PF.strip_wait_words(padded), frame)
+
+    def test_a_fixed_size_reply_survives_the_bridge_read_path(self):
+        """The end-to-end shape: the host budgets 15 words, the pad answers 6.
+
+        PING is the cheapest probe because its reply is the shortest fixed-size
+        one; if this passes with an idle-low pad, every fixed-size op does.
+        """
+        for idle in (0x0000, 0xFFFF):
+            with self.subTest(idle=hex(idle)):
+                bridge, adapter, _ = make_bridge()
+                adapter.idle_words = 15
+                adapter.idle_value = idle
+                result, _ = call(bridge, 1, "ping")
+                self.assertTrue(result["ok"], result)
+                self.assertEqual(result["result"]["status"], P.STATUS_OK)
+
+    def test_a_bounded_read_survives_both_shapes(self):
+        """A read may emit fillers AND have idle words past its frame."""
+        for wait, idle in ((0, 0x0000), (3, 0x0000), (15, 0xA55A), (0, 0xFFFF)):
+            with self.subTest(wait=wait, idle=hex(idle)):
+                bridge, adapter, _ = make_bridge()
+                adapter.wait_words = wait
+                adapter.idle_words = 15
+                adapter.idle_value = idle
+                result, _ = call(bridge, 1, "read_imem",
+                                 {"address": 0, "count": 2})
+                self.assertTrue(result["ok"], result)
+                self.assertEqual(len(result["result"]["words"]), 2)
+
+    def test_a_leading_filler_is_still_skipped(self):
+        """The R2 wait-word contract, unchanged: the skip stays leading-only."""
+        frame = self.status_frame()
+        for wait in (0, 1, 3, PF.MAX_WAIT_WORDS):
+            with self.subTest(wait=wait):
+                stripped = PF.strip_wait_words(b"\xff\xff" * wait + frame)
+                self.assertEqual(PF.decode_frame(stripped).sequence, 7)
+
+    def test_a_ffff_payload_word_is_still_data(self):
+        """Trimming to the length field must not eat payload data."""
+        response = PF.encode_frame(
+            P.OP_READ_IMEM | P.RESPONSE_BIT, 1, P.TARGET_HOST,
+            PF.words_to_bytes((P.STATUS_OK, 0xFFFF, 0x0041)))
+        # ...even when a 0xFFFF data word is followed by more 0xFFFF padding,
+        # which is the one case where "skip 0xFFFF" would have been wrong
+        padded = response + b"\xff\xff" * 4
+        self.assertEqual(PF.decode_frame(PF.strip_wait_words(padded)).payload,
+                         (P.STATUS_OK, 0xFFFF, 0x0041))
+
+    def test_an_all_filler_stream_is_still_a_timeout(self):
+        self.assertRaises(PF.FrameError, PF.strip_wait_words,
+                          b"\xff\xff" * 20)
+
+    def test_a_truncated_frame_is_rejected_not_padded(self):
+        """Strictness preserved: short is an error, never a zero-filled frame.
+
+        Trimming must not become "tolerate": if the buffer ends before the
+        length field says the frame does, that is a timeout or a short read and
+        has to say so.
+        """
+        frame = self.status_frame()
+        with self.assertRaises(PF.FrameError):
+            PF.decode_frame(PF.strip_wait_words(frame[:-2]))
 
 
 class TestHelloPrepare(unittest.TestCase):
