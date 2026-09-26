@@ -492,3 +492,60 @@ this act were found that way and **none of them by reading the diff** -- and
 the two above are the first two that the diff would have shown, which is
 worth noticing, because it means the method is not a substitute for review so
 much as a substitute for *hunting*.
+
+---
+
+## UPDATE 6: THE ONE-ANSWER DESIGN GIVES AN EXACT ANSWER
+
+Rewritten from the tree's file by the procedure that works -- every site
+replaced from the assembler's listing, the label line kept -- with the
+three temporaries at **{6, 7, 11}** and the bank storing **low byte first**:
+
+    measurement 0: echo 1160 us -> firmware 1160 us, answer 199 mm (expected 199 mm)
+
+**199 mm, exact, and the WIDTH reads 1160 rather than 0**, which is the part
+that matters: US now survives the conversion, because nothing writes dmem[2]
+or dmem[3] while a chain runs, and the answer is not byte-swapped because the
+bank stores the low byte first. 387 words.
+
+Measurement 1 reading X and the width reading 1160 again is **EXPECTED for
+this design and not a fault**: the program measures ONE distance per run and
+parks, so the testbench's second-measurement expectations are stale by
+construction. That is the change the last three updates prescribed, working.
+
+### Two defects remain in the mechanism, both found by the checks I added
+
+1. **CHECK 1 reported 0/4 with "first difference at index 2" -- and CHECK 1 is
+   wrong, not the blocks.** The block I emit contains comment-only lines, the
+   listing does not, and so every index after the first comment is shifted by
+   one. That is the SIXTH placement error in this act, the first one in a
+   CHECK rather than in an edit, and it is the reason a check that reports
+   "wrong" must be confirmed by reading what it printed before anything is
+   changed.
+2. **THREE STRAY INSTRUCTIONS survive in the leftover acc_x11_h block** --
+   LDM A,2 and LDM A,3 twice -- because a site's replacement range ends at
+   the NEXT LABEL, and the old block's <lab>_h label and its high-byte add
+   sit AFTER the JZ, so they were never inside the range. The rule that
+   catches this is the one the run printed: **no instruction outside the
+   latches and the Q setup may touch dmem[2] or dmem[3]**. That should be a
+   permanent check on this act, because those two bytes ARE the width, and
+   the width is what the whole act measures.
+
+### What is left on this act, and it is now testbench work
+
+* fix the three stray reads (extend the replacement range past the <lab>_h
+  block, or delete the old tail);
+* **restructure tb_pe_soc_sr04.v to run the firmware TWICE**, resetting
+  between, once per distance, and check **each answer as it is banked**
+  rather than all of them at the end -- the change this act's own instruments
+  have now demanded three times, in three different files;
+* add the "no instruction outside the latches touches the width bytes" check
+  to the act's own gate;
+* the two cheap items: peasm's 4*149+4 against the 601 clocks the hardware
+  measures, and the inter-measurement check's t_trig_in[1] guard, which may
+  simply delete itself once the testbench runs one distance per firmware run.
+
+**The arithmetic has been settled for four attempts running** -- exact for all
+65,536 pairs in two forms, and now an exact 199 mm in the machine. What is
+left is allocation, ordering and the instrument, which is where this act has
+always been hardest and has never once been about the maths.
