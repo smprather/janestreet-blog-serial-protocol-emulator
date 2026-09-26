@@ -1,0 +1,171 @@
+@startuml
+title Framed SPI host link - request/response word layout and the WAIT-WORD contract
+top to bottom direction
+skinparam componentStyle rectangle
+skinparam defaultFontName Monospaced
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam legendBackgroundColor #f8f8f8
+skinparam legendBorderColor #666666
+hide stereotype
+
+skinparam component {
+  BackgroundColor<<frame>> #dbe5f1
+  BorderColor<<frame>> #6c8ebf
+  FontColor<<frame>> #1f3864
+  BackgroundColor<<ctl>> #e5d8f7
+  BorderColor<<ctl>> #9673a6
+  FontColor<<ctl>> #4a235a
+  BackgroundColor<<data>> #d5e8d4
+  BorderColor<<data>> #82b366
+  FontColor<<data>> #1d4620
+  BackgroundColor<<integ>> #ffe6cc
+  BorderColor<<integ>> #d79b00
+  FontColor<<integ>> #7f4b00
+  BackgroundColor<<wait>> #f8cecc
+  BorderColor<<wait>> #b85450
+  FontColor<<wait>> #7b1c18
+}
+
+package "CS_N low spans ONE transaction: request frame then response frame" {
+  component "SPI mode 0, MSB-first\n16-bit words\nCS_N low across BOTH frames" as link <<frame>>
+
+  package "REQUEST frame - host drives, words leave on MOSI" {
+    component "w0  SYNC\n16'hA55A" as r0 <<frame>>
+    component "w1  OPCODE/TARGET\nb15..b12 = version (1)\nb11..b4  = opcode[7:0]\nb3..b0   = target[3:0]" as r1 <<ctl>>
+    component "w2  SEQUENCE\nechoed by the response" as r2 <<ctl>>
+    component "w3  LENGTH\npayload length in 16-BIT WORDS\nNOT bytes, NOT the frame length" as r3 <<ctl>>
+    component "w4..wN  PAYLOAD\n0 words for PING / CLEAR_FAULT /\nTARGET / DEBUG_STEP / BP_CLR / DEBUG_STATUS" as r4 <<data>>
+    component "wN+1  CRC-16/CCITT-FALSE\nover EVERY preceding word,\nsync included" as r5 <<integ>>
+  }
+  link --> r0
+  r0 --> r1
+  r1 --> r2
+  r2 --> r3
+  r3 --> r4
+  r4 --> r5
+}
+
+package "RESPONSE frame - chip drives, words leave on MISO" {
+  component "w0  SYNC\n16'hA55A" as s0 <<frame>>
+  component "w1  OPCODE/TARGET\nopcode bit 7 SET = response\nb11..b4 = opcode | 0x80\nb3..b0  = target, ECHOED" as s1 <<ctl>>
+  component "w2  SEQUENCE\nECHOED from the request" as s2 <<ctl>>
+  component "w3  LENGTH\npayload words" as s3 <<ctl>>
+  component "w4  STATUS CODE\n0 OK      1 BUSY\n2 BAD_FRAME  3 RANGE\n4 FAULT   5 UNSUPPORTED\n6 NOT_READY" as s4 <<ctl>>
+  component "w5..wM  PAYLOAD\nbuf 0..15: 16 slots, and slot 0 is\nthe status word, so 15 carry data" as s5 <<data>>
+  component "wM+1  CRC-16/CCITT-FALSE\nover EVERY preceding word,\nsync included" as s6 <<integ>>
+  component "REJECTIONS CHANGE NO STATE\nbad CRC / length / header -> BAD_FRAME\n+ FAULT_CRC / FAULT_PROTOCOL, no step\nand no arming\nsequencing refusal -> NOT_READY, no fault" as s7 <<wait>>
+}
+link --> s0
+s0 --> s1
+s1 --> s2
+s2 --> s3
+s3 --> s4
+s4 --> s5
+s5 --> s6
+s6 --> s7
+
+package "CRC-16/CCITT-FALSE - the whole frame, sync word first" {
+  component "poly    16'h1021\ninit    16'hFFFF\nreflect IN  : no\nreflect OUT : no\nfinal XOR   : 0x0000" as c0 <<integ>>
+  component "COVERS\nw0 sync .. wN payload\nthe CRC word itself is excluded" as c1 <<integ>>
+  component "The constants are catalogue-checked\nby tools/gen/crc_config.py - do not retype them." as c2 <<integ>>
+}
+c0 --> c1
+c1 --> c2
+
+package "THE WAIT-WORD CONTRACT - why a bounded read cannot answer inside the request" {
+  component "A bounded read cannot answer inside\nthe request's own bit times:\nthe chip must FETCH first, and each\nfetched word is a round trip." as why <<wait>>
+
+  component "MISO WORD STREAM\n\nFFFF  FFFF  FFFF      <= leading filler\nA55A                   <= frame starts here\nA2..  <seq>  <len>      <= response header\n0000  <payload...>\nxxxx  <crc>" as stream <<wait>>
+
+  component "CHIP SIDE\nDrives 0xFFFF on MISO during\nthe fetch - the pad is OE-ON and\nDRIVEN, not floated, so the level\nis deterministic on silicon." as chip <<wait>>
+
+  component "HOST SIDE\nSkip LEADING 0xFFFF words, then\nvalidate the frame exactly as in R1\n(sync, sequence, target, CRC)." as host <<wait>>
+
+  component "WHY A FILLER CAN NEVER BE A HEADER\n1. every response sets opcode bit 7\n2. version and target are bounded\nso NO header word is all ones" as why1 <<wait>>
+
+  component "WHY THE SKIP IS LEADING-ONLY\nso a 0xFFFF INSIDE a payload is data,\nnot a filler" as why2 <<wait>>
+
+  component "WORST CASE: <= 15 FILLER WORDS\na read returns at most 15 words\n(16 payload slots minus the status word),\none round trip each" as why3 <<wait>>
+
+  component "BACKWARD COMPATIBLE\nR1 answers in the request's own CRC\ncycle, so it carries ZERO wait words\nand an unchanged R1 host needs no change.\nThe response BYTES are unchanged; wait\nwords are transport-level only." as why4 <<wait>>
+}
+why --> chip
+chip --> stream
+stream --> host
+host --> why1
+why1 --> why2
+why2 --> why3
+why3 --> why4
+
+note bottom of r1
+  THE RESPONSE BIT IS WHAT MAKES THE TWO
+  DIRECTIONS ASYMMETRIC ON THE WIRE. A host
+  request never has opcode bit 7 set, so a
+  response is distinguishable from a request by
+  that bit alone: 0x01 PING asks, 0x81 PING
+  answers. A request with bit 7 already set is
+  not a request at all - it answers
+  UNSUPPORTED, with no fault.
+end note
+
+note bottom of r3
+  LENGTH COUNTS WORDS, AND "len must be 0"
+  IS A REAL CONSTRAINT, NOT A CONVENTION.
+  DEBUG_STEP, DEBUG_BP_CLR and DEBUG_STATUS
+  all take len 0; DEBUG_BP_SET takes exactly
+  one word (the breakpoint address). The wrong
+  length is a BAD_FRAME, so a rejected op has
+  no side effect - which is what makes S5
+  ("rejected ops change nothing") hold.
+end note
+
+note bottom of s5
+  THE 16-SLOT BUFFER IS WHERE THE 15 COMES FROM.
+  R2 grew the response buffer from 8 to 16 slots
+  to hold the 11-word header, and the slot count
+  is the ceiling on a single read: 16 slots minus
+  the status word is 15 data words (30 bytes for
+  READ_DMEM). A larger count is answered RANGE so
+  the host splits the transfer - it is never
+  silently truncated.
+end note
+
+note bottom of why
+  THE RULE IS SCOPED TO THE BOUNDED READS. 0x13
+  READ_IMEM and 0x14 READ_DMEM are the ops that
+  must fetch, and they are the only ops that emit
+  filler. READ_CPU (0x12) and all four debug ops
+  (0x21-0x24) answer from registers in the
+  request's own CRC cycle, so they emit ZERO
+  filler words. A host must therefore tolerate
+  fillers without assuming every op has them.
+end note
+
+note bottom of c2
+  A filler word cannot be a header, so the host's
+  skip never has to guess: it stops at the first
+  word that could be a header, and everything after
+  that is validated normally. The bad-CRC case is
+  answered BAD_FRAME, which is a header too - so a
+  corrupt frame is still found, not skipped past.
+end note
+
+' LAYOUT ONLY, no architecture. The three sections read in order - the frame,
+' then its integrity check, then the transport rule that lets a slow answer
+' start late - but as siblings they lay out as three columns and the diagram
+' went to 1.66 wide. This hidden chain stacks them, so each section adds
+' height rather than width, which is the squarer-aspect invariant in
+' diagrams/README.md. Safe to delete.
+s7 -[hidden]down-> c0
+
+legend left
+  |= Tone |= Word class |
+  | <#dbe5f1> | Frame sync - fixed, opens both directions |
+  | <#e5d8f7> | Control - opcode, target, sequence, length, status |
+  | <#d5e8d4> | Payload - opcode-defined, 0..15 data words |
+  | <#ffe6cc> | Integrity - the CRC word, always last |
+  | <#f8cecc> | Transport - wait words and the rules around them |
+endlegend
+
+@enduml
