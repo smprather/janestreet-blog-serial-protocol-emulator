@@ -509,7 +509,24 @@ fm1_half:
         ; entirely, and the block read
         ;     68  0000  LDI A, 0        <- data_zero
         ;     69  0000  LDI A, 0        <- resync
-        ; with no jump between it. Reading only the part I had changed would not
+        ; with no jump between it.
+        ;
+        ; *** AND THOSE TWO NUMBERS ARE A HISTORICAL QUOTATION, NOT A MAP, AND
+        ; THE DIFFERENCE IS WORTH A PARAGRAPH BECAUSE IT IS THE EXACT TRAP
+        ; THIS ACT KEEPS FALLING INTO. *** The block above no longer has that
+        ; shape at all: `first_half_low` is at 83, `data_zero` at 89, `resync` at
+        ; 91 and `bit_store` at 94 in the CURRENT listing, counted by
+        ; tb/probes/labels.py from the assembler's own output. So a reader who
+        ; took 68 and 69 out of here and put them in a probe would be probing
+        ; the wrong words, which is not a hypothetical: "this act lost six
+        ; placements to an edit that moved a label under a probe that had a
+        ; decimal written into it" is a sentence in this act's own history, and
+        ; the fix for it was to take addresses from the listing -- never from a
+        ; comment. A comment that quotes a listing is a copy that stops being
+        ; true the moment the program grows, and this program has grown in
+        ; every act: 289 words, then 321, then 323.
+        ;
+        ; Reading only the part I had changed would not
         ; have shown it: the two instructions are individually correct and the
         ; fault is in the SPACE between them. That is the whole reason the rule
         ; is to read the WHOLE block in the listing after an edit.

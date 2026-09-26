@@ -3272,3 +3272,47 @@ done in any reduced form:**
 saying otherwise would be pretending.** None of the three is worth doing in a
 way that cannot be verified, and step 3 in particular is a 17-path repoint whose
 only proof is a full gate run -- which is exactly what the window forbids.
+
+### ONE AUDIT THE QUIET WINDOW ALLOWS, AND IT FOUND A TRAP IN MY OWN HISTORY
+
+The frozen set is `regress/`, `rtl/`, `tb/` and one diag script, so **the
+firmware source is editable** -- and it is editable for a reason that is exactly
+this act's subject: **I added two NOPs to the encoder entry earlier today, which
+moved every address after it.** A comment that quotes an address is therefore a
+figure I may have invalidated myself.
+
+**AND THE AUDIT HAS TO BE HONEST ABOUT ITS OWN FALSE POSITIVES, because three of
+the five hits were rubbish.** Scanning comments for a decimal paired with a label
+name produced five candidates; reading them gave:
+
+* `dmem[15] = 2, UNKNOWN` (twice) and `dmem[11] WAS the MODE BYTE` -- **not
+  addresses at all.** A dmem index and a dmem value, with `resync`/`main` caught
+  nearby as ordinary words. **A regex that cannot tell a dmem index from a word
+  address is not an audit**, and reporting those three would have been the
+  repository's own lesson repeated: *"My first attempt asserted a floor of 100
+  words, which was FALSE and which this same gate rejected on its next run."*
+* **`68 ... <- data_zero` and `69 ... <- resync` -- genuine.**
+
+**AND THE GENUINE TWO ARE NOT A STALE CLAIM, THEY ARE A HISTORICAL QUOTATION.**
+The comment says "the block read", describing the defect that was fixed. So
+"correcting" 68 and 69 to 89 and 91 would have **falsified a record of a past
+fault**, which is worse than leaving it.
+
+**WHAT WAS ACTUALLY WRONG IS THE TRAP, NOT THE NUMBERS.** A reader taking 68
+from a comment and putting it in a probe probes the wrong words -- and that is
+not hypothetical in this act: *"this act lost six placements to an edit that
+moved a label under a probe that had a decimal written into it"* is in this
+log's own history, and the cure was to take addresses from the **listing**,
+never from a comment. A comment quoting a listing is a copy that stops being
+true the moment the program grows, **and this program has grown in every act:
+289 words, then 321, then 323.**
+
+So the quotation is kept, and annotated with where those labels live NOW --
+`first_half_low` 83, `data_zero` 89, `resync` 91, `bit_store` 94, counted by
+`tb/probes/labels.py` from the assembler's own output, not by a hand count.
+
+**VERIFIED WITHOUT RUNNING A SUITE, which is the only kind available here:** the
+edit is comment-only, and the proof is that the assembled image is
+**byte-identical** -- `peasm.py` to a temp file, `cmp` against the tracked hex.
+So nothing about the firmware's behaviour moved, and the figure a reader might
+have taken from it can no longer mislead them.
