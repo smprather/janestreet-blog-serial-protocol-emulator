@@ -77,22 +77,51 @@
 ;     2,3   US  the measured echo width, microseconds
 ;     4     PREV  the previous ECHO level (00 or 20)
 ;     5     STATE what the program is waiting for
-;     6,7   slot 0's answer, millimetres
-;     8,9   slot 1's answer
-;    10     N   how many measurements are banked
-;    11     DONE
+;     6,7   THE answer, millimetres, low byte first
+;     8,9   spare. They were slot 1's answer until the design change below,
+;            and a program that writes one answer has no reason to name a
+;            second slot in its own map.
+;    10     DONE the completion flag: 0 in the init, 1 at the bank. It was N,
+;            the number of measurements banked, and the two-measurement
+;            program needed both -- which is what let the init's zero be
+;            read as a bank.
+;    11     TICK the previous 1 us reading, seeded by the init. This was DONE
+;            in the first draft; the init's comment on it says why the
+;            answer moved here, and the reason is an alias, not a shortage.
 ;    12,13  Q   the multiplicand
 ;    14,15  ACC the small term (11r, then 11r/64)
 ; 
-; Two measurements per run, and not because the arithmetic is expensive: an
-; answer is two bytes and the machine has sixteen.
+; ONE measurement per run, and that is forced rather than chosen. The first
+; version of this program banked two answers, which an answer being two bytes
+; and the machine having sixteen makes look free -- and it does not work,
+; because the exact add needs four temporaries and sixteen bytes cannot hold
+; two banked answers and four temporaries DISJOINTLY. Three arrangements were
+; tried and each moved the failure rather than removing it: with the
+; temporaries in 6..9 they collided with the CURRENT slot's own answer; with
+; them in 2, 3 and 11 the main term's Q = us>>6 setup read a destroyed US and
+; multiplied zero; and the dead-byte budget during a chain turned out to be
+; dmem[11] alone. So the act measures one distance per run and parks, and
+; tb_pe_soc_sr04.v runs the program TWICE, once per distance, with a full
+; reset between. It is the frequency meter's shape, and the finding is that
+; this machine cannot hold two banked answers and a four-temporary exact
+; 16-bit add at the same time -- not that the arithmetic was wrong, which it
+; was never, for all 65,536 operand pairs in two forms.
 ; 
 ; THE TRIGGER PULSE is a COUNTED delay, not a wait on the tick, so its width
-; is exact in clocks: 4 * SR_TRIG + 4 clocks, and SR_TRIG = 149 makes that
-; exactly 600 clocks = 10.000 us. The value lives in peasm's CONSTS table
-; because a fitted instruction count cannot be reached by editing the source,
-; and a mutation gate that cannot perturb the number a protocol depends on is
-; not testing the protocol.
+; is exact in clocks: 4 * SR_TRIG_LEN + 5 clocks, and SR_TRIG_LEN = 149
+; makes that exactly 601 clocks = 10.017 us. SR_TRIG_LEN and not SR_TRIG,
+; which is 0x40, the PIN: loading the pin instead of the length makes a
+; 261-clock pulse, which is 4*64 + 5. The +5 and not the +4 this file used to
+; claim is the five instructions between the counter load and the pad's
+; release -- the OUT PINOE that claims the pad, the two-instruction counter
+; load, the four-clock loop iteration, the LDI that sets the ending level, and
+; the OUT TXPIN that drops it -- and it was COUNTED FROM THE ASSEMBLER'S
+; LISTING rather than asserted, after three attempts to derive it by eye
+; failed on my own pattern-matching. The testbench pins 601 as an equality for
+; the same reason it pins a number at all. The value lives in peasm's CONSTS
+; table because a fitted instruction count cannot be reached by editing the
+; source, and a mutation gate that cannot perturb the number a protocol
+; depends on is not testing the protocol.
 
         ; ---- init ------------------------------------------------------
 init:
@@ -204,7 +233,7 @@ the_pin:
         ; ---- The first version of this program claimed TRIG in the INIT and
         ; ---- released it at the end of the first pulse, so its trigger was a
         ; ---- side effect of the init and its pulse measured 627 clocks
-        ; ---- instead of the 600 the delay is fitted to.
+        ; ---- instead of the 601 the delay is fitted to.
 trig_go:
         LDI   A, SR_TRIG
         OUT   TXPIN, A
@@ -217,7 +246,7 @@ trig_wait:                    ; than SR_TRIG: those two constants are 149 and
                                ; version of this line used the pin. The pulse
                                ; came out 260 clocks = 4.3 us -- under the
                                ; device's 10 us minimum, and caught by the
-                               ; testbench's EQUALITY against 600 clocks, which
+                               ; testbench's EQUALITY against 601 clocks, which
                                ; is the whole reason that check is an equality
                                ; and not the datasheet's ">= 10 us". dmem[12] is
                                ; Q's low byte, dead until the conversion.
@@ -226,7 +255,7 @@ trig_wait:                    ; than SR_TRIG: those two constants are 149 and
         STM   12, A
         JNZ   trig_wait        ; 4 clocks per iteration
         LDI   A, 0
-        OUT   TXPIN, A         ; TRIG falls here: 4*149 + 4 = 600 clocks
+        OUT   TXPIN, A         ; TRIG falls here: 4*149 + 5 = 601 clocks
         OUT   PINOE, A         ; and BOTH pads are RELEASED on the very next
                                ; clock, with no LDI in between: A is already 0,
                                ; so the pad is never driven at a level for a

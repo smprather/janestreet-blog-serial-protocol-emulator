@@ -370,13 +370,23 @@ CONSTS: dict[str, int] = {
     #   SR_TRIG_LEN is a COUNTED delay in instructions, not microseconds, and
     #   it is 149 for a reason worth stating exactly: the loop is four clocks
     #   per iteration (LDM, SUB, STM, JNZ) and the pulse spans the counter
-    #   load, the loop and the release, so the width is 4*149 + 4 = 600 clocks
-    #   = 601 clocks = 10.017 us at 60 MHz, which clears the device's 10 us
-    # minimum by one clock. The +5 is the OUT PINOE that claims the pad, the
-    # two-instruction counter load, the loop, the LDI that sets the ending
-    # level, and the OUT TXPIN that drops it -- counted from the listing, and
-    # it was a +4 in an earlier draft of this comment, which the testbench's
-    # equality caught as a 600-clock pulse the hardware never produced.
+    #   load, the loop and the release, so the width is
+    #
+    #       4 * SR_TRIG_LEN + 5 = 4*149 + 5 = 601 clocks = 10.017 us
+    #
+    #   at 60 MHz, which clears the device's 10 us minimum by one clock. The
+    #   +5 is the OUT PINOE that claims the pad, the two-instruction counter
+    #   load, the LDI that sets the ending level, and the OUT TXPIN that drops
+    #   it -- counted from the listing, instruction by instruction, rather than
+    #   asserted. It was a +4 in an earlier draft of this comment, which the
+    #   testbench's equality caught as a 600-clock pulse the hardware never
+    #   produced; and an intermediate draft of THIS comment read "4*149 + 4 =
+    #   600 clocks = 601 clocks" in one sentence, which is two wrong numbers
+    #   and no way to tell which was meant. SR_TRIG_LEN and not SR_TRIG is the
+    #   constant in that expression: SR_TRIG is 0x40, the PIN, and a program
+    #   that loads the pin instead of the length produces a 261-clock pulse --
+    #   which is 4*64 + 5, and is the cheapest available proof that the two
+    #   constants are not interchangeable.
     "SR_TRIG": 0x40,
     "SR_ECHO": 0x20,
     "SR_TRIG_LEN": 149,
