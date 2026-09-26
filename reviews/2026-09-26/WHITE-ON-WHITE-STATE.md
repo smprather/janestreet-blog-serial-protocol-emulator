@@ -5,7 +5,7 @@ the next session continues from a record rather than from a memory.
 
 | what | first wrap | second | third |
 | --- | --- | --- | --- |
-| branch | `docs/diag-bus` (merged to main as `28b3dd0`) | `docs/diag-hexlint` off `28b3dd0` | same branch, at `76e5d81` |
+| branch | `docs/diag-bus` (merged to main as `28b3dd0`) | `docs/diag-hexlint` off `28b3dd0` | merged to main; `f84070f` still open |
 | corpus | 22 sources, 42 figures | 34 sources, 54 figures | 34 sources, 54 figures |
 | fatal white-on-white | 58 -> 0 | 22 findings in 10 figures, all in post-fix additions | **0, whole corpus** |
 | malformed 5-digit hex | 20 fixed, 0 remain | **22 more, live on main in 4 families** | **0, whole corpus** |
@@ -338,13 +338,16 @@ these 54, and it is the one thing a human eye is still better at than this check
    planting both rot modes into a real exempt file and getting them named.
 
    An exemption that cannot fail is a comment with a list in it.
-3. **No WCAG contrast measurement by this worker.** Another author measured their
-   five sets; ours were checked for the white class and read by eye, never
-   measured for contrast ratio. This is now the largest unmeasured claim in the
-   figures, and it applies to the 4 families just re-rendered. The measurement
-   method (geometric background attribution — PlantUML emits a shape and its
-   label as siblings, so containment, not ancestry) is handed to `diag-proto`,
-   who owns the sweep.
+3. ~~No WCAG contrast measurement.~~ **ANSWERED, by `diag-proto`, measured
+   across the whole corpus: 0 text elements under AA across all 54 figures,
+   worst-case contrast 7.22:1** (`df20d95`), and the 6.00:1 self-claim on the
+   five maps was corrected in the same pass. This worker never measured it — by
+   eye is not a measurement, and a 4.4:1 grey and a 4.6:1 grey look identical —
+   so the credit and the correction are theirs, and the geometry that makes the
+   number mean anything (a shape and its label are SIBLINGS in PlantUML output,
+   so the ground behind a `<text>` has to be found by CONTAINMENT, not ancestry)
+   is the method worth reusing. The 4 families re-rendered in this session are
+   inside that 0-under-AA result.
 4. **The self-test costs ~60 s** (was 40 s); six cases, ten extra `plantuml`
    renders. It is wired into `regress/run_all.sh`, so that is suite time, paid
    deliberately: the alternative is not gating the class that caused the outage.
