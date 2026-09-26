@@ -84,8 +84,8 @@
 ; program would not fit. As a loop it is 19 words. The price is a quantisation
 ; on the delay, which at the settings below is one step of the OUTER counter:
 ;
-;   pulses: n2 = 2, n3 = 152 -> one step is (4*152 + 11) = 619 clocks = 10.3 us
-;   gaps:   n2 = 11, n3 = 123 -> one step is 4655 clocks = 77.6 us
+;   pulses: n2 = 2, n3 = 152 -> one step is (4*152 + 7 + 10) = 625 clocks = 10.4 us
+;   gaps:   n2 = 11, n3 = 123 -> one step is (10 + 10*499) = 5000 clocks = 83.3 us
 ;
 ; HOW THE TABLES WERE BUILT. Not by trial and error on a bench, and not by
 ; eyeballing a scope. For a target T the routine reaches any value of the form
