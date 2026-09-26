@@ -47,79 +47,18 @@ PACKAGE_README = (
 # byte-identical" from an intention into a gate: new vectors are allowed, a
 # changed byte is not. Updating this table is a REVIEW decision (the chip has
 # to re-run and re-confirm), never a way to make a failing build green.
-CONFIRMED_STEP_BYTES = {
-    "read_imem_address_1_count_2": (
-        "a55a11300001000200010002b9cd",
-        "a55a193000010003000010014002ca95",
-    ),
-    "read_dmem_address_0_count_4": (
-        "a55a1140000100020000000445e0",
-        "a55a19400001000300000a0b0c0d7c84",
-    ),
-    "dump_core_header": (
-        "a55a1150000100009b96",
-        "a55a19500001000b0000000000000000012300450078009a000700000003e6c0",
-    ),
-    "status_header": (
-        "a55a111000020000d3ae",
-        "a55a19100002000b0000000000000000012300450078009a0007000000032139",
-    ),
-    "read_cpu_while_running": (
-        "a55a1120000100008610",
-        "a55a192000010007000003ff00ff00ff00ffffff0001d415",
-    ),
-    "read_cpu_full_width_regs": (
-        "a55a1120000100008610",
-        "a55a192000010007000003ff00ff00ff00ffffff0000c434",
-    ),
-    "read_imem_not_ready": ("a55a11300001000200000001be9e", "a55a1930000100010006dd58"),
-    "read_dmem_not_ready": ("a55a11400002000200000001cdc7", "a55a1940000200010006b7eb"),
-    "dump_core_not_ready": ("a55a115000030000f5f6", "a55a19500003000100062ac1"),
-    "read_imem_last_word": (
-        "a55a11300001000203ff0001ea21",
-        "a55a19300001000200000000e4f4",
-    ),
-    "read_imem_past_end_no_wrap": (
-        "a55a11300002000203ff000202c0",
-        "a55a1930000200010003632f",
-    ),
-    "read_dmem_past_end_no_wrap": (
-        "a55a114000030002000f000269f4",
-        "a55a19400003000100034d1f",
-    ),
-    "read_imem_at_ceiling_15": (
-        "a55a1130000100020000000f5f50",
-        "a55a19300001001000000041100140020000000000000000000000000000000000000000000000001b97",
-    ),
-    "read_imem_over_ceiling": (
-        "a55a11300002000200000010640c",
-        "a55a1930000200010003632f",
-    ),
-    "read_dmem_zero_count": ("a55a114000030002000000006587", "a55a19400003000100034d1f"),
-    "bad_read_answers_range": (
-        "a55a11300001000207d000018a27",
-        "a55a19300001000100038dfd",
-    ),
-    "status_shows_sticky_fault": (
-        "a55a111000020000d3ae",
-        "a55a19100002000b0000000000000000000000000000000000000004000323b2",
-    ),
-    "clear_fault_clears_the_bit": (
-        "a55a11600003000100044dd4",
-        "a55a196000030002000000008830",
-    ),
-}
+# The freeze and the held-step list live in the MODULE, beside the evidence
+# they are a statement about, because the flag-flip has to extend them
+# atomically with the flags (see r2_vectors.flip_held_steps). One source: a
+# table here and a table there would be two things to keep in step, and this
+# one has to survive a real flip.
+CONFIRMED_STEP_BYTES = V.CONFIRMED_STEP_BYTES
 
 # The held-core steps added after the R3 debug work, and the state each one
 # asserts. The chip has not re-run tb_pe_ctrl_r2 against them, so they ship
 # unconfirmed -- the names are pinned so a test can require every one of them
 # to still be named in the notice.
-HELD_STEPS = (
-    "status_reports_the_hold",
-    "dump_core_answers_the_same_header",
-    "status_reports_the_hit",
-    "dump_core_refused_the_strap_is_high",
-)
+HELD_STEPS = V.HELD_STEP_NAMES
 
 
 class TestR2VectorPackage(unittest.TestCase):
@@ -139,7 +78,7 @@ class TestR2VectorPackage(unittest.TestCase):
         confirmed = sum(
             1 for v in self.package["vectors"] for s in v["steps"] if s["chip_confirmed"]
         )
-        self.assertEqual(confirmed, 18)
+        self.assertEqual(confirmed, len(V.CONFIRMED_STEP_BYTES))
         self.assertFalse(self.package["chip_confirmed"])
         self.assertIn("chip-confirmed in simulation", self.package["notice"].lower())
         # the honest boundary: simulation confirmed, hardware not
@@ -169,7 +108,9 @@ class TestR2VectorPackage(unittest.TestCase):
                         )
                         self.assertIn("R2-READ-PATH-REVIEW", evidence["review"])
                         self.assertIn("tb_pe_ctrl_r2", evidence["testbench"])
-                        self.assertIn("18/18", evidence["conformance"])
+                        confirmed = len(V.CHIP_EVIDENCE["confirmed_steps"])
+                        self.assertIn(f"{confirmed}/{confirmed}",
+                                      evidence["conformance"])
                         self.assertIn("date", evidence)
                         # the citation must also say what it does NOT prove
                         self.assertIn("SIMULATION", evidence["scope"])
@@ -177,7 +118,7 @@ class TestR2VectorPackage(unittest.TestCase):
                     else:
                         self.assertIsNone(step.get("chip_evidence"))
         # all 18 golden steps are now chip-proven byte-exact
-        self.assertEqual(cited, 18)
+        self.assertEqual(cited, len(V.CONFIRMED_STEP_BYTES))
 
     def test_no_step_is_confirmed_without_being_in_the_evidence_map(self):
         mapped = V.CHIP_EVIDENCE["confirmed_steps"]
