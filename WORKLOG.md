@@ -2306,3 +2306,84 @@ that belongs in `bmc_model.py` beside the round trip, and it would have caught
 this at the moment it was written. That is the eighth check, and it is the first
 one that needs no firmware, no testbench and no probe at all: it is the wire
 rules, compared against the wire.
+
+## 2026-09-27 act (c): TASK-START -- THE BYTE DISPATCH HAS NO CASE FOR INDEX 0
+
+The swapped pair at half-intervals 14 and 15 is the two halves of the preamble's
+eighth and last ZERO bit, and the mask is constant across that byte, so the
+parity gate is not what differs. **The byte index at those half-intervals is
+ZERO**, and the dispatch I wrote has no case for zero:
+
+    LDI A, 1 / SUB A, X / JZ enc_byte_ones     <- index 1 is the preamble's ONES
+    DECX / DECX / LDS                          <- and EVERYTHING ELSE is the payload
+
+So index 0 — the preamble's eight zeros, the first sixteen half-intervals of
+every transmission — falls through to the payload route, `DECX` twice, and
+`LDS` reads **dmem[254]**, which on a sixteen-byte dmem is **dmem[14]**: the
+encoder is transmitting the eighth preamble bit out of whatever byte 14 happens
+to hold. For the first seven bits that byte's top bit read as a zero and the
+wire looked right; at the eighth it read as a one, and the two halves came out
+swapped.
+
+**So the two faults are one fault, and I recorded it once and did not finish
+fixing it.** Three entries ago: "the byte dispatch off by one byte — three
+labels that agreed with each other", and the fix I applied swapped which of
+indices 1 and 2 mapped to the ones and the payload. **The zero case was never
+there, and nothing said so** — a dispatch with no case for its own first value
+is not a fault any check can see, because the fall-through is a perfectly good
+instruction.
+
+The fix is a third case, and all three routes must be the same length, which is
+what the half-interval check is for.
+
+### THE MISSING CASE WAS A REAL FAULT, AND FIXING IT CHANGED NOTHING
+
+    PROBE(LVL): transmission 1 drove 80 levels
+    PROBE(LVL): pad    010101010101011010101010101010101001100101100110010110101010…
+                                       ^^  still there
+
+**The index-0 case is a genuine bug and it is now fixed** — the first sixteen
+half-intervals of every transmission were reading `dmem[254]`, which on a
+sixteen-byte dmem is `dmem[14]`, so the preamble's eight zeros were being
+transmitted out of whatever byte 14 held. And **the wire did not change by one
+character.** So that fault was real, serious, and *not* the one producing the
+swapped pair.
+
+**Which is the finding, and it is the one this act keeps paying for.** I had a
+hypothesis that fit — index 0 has no case, the anomaly is inside byte 0, index 0
+is what the anomaly's half-intervals use — I fixed it, I measured, and the
+measurement did not move. **A hypothesis that fits and a measurement that
+confirms are not the same act, and the second one is the one that costs the
+hour.** It is the second time in two entries that a fault I was sure of turned
+out to be somewhere else, and the discipline that catches it is the same one
+every time: fix it, measure, and *report the measurement* rather than the
+confidence.
+
+**SO WHAT IS LEFT, and it is now a much smaller space.** The two swapped levels
+are the two halves of ONE bit — the preamble's eighth zero — and the mask is
+constant across that byte (`0x80` at index 0, `0x01` at index 14, read off the
+listing), the byte is now provably `0x00`, and so the bit is a zero and the
+first half must be `0x00`. The pad wrote `0x40`. **The bit test and the gate
+both have to be wrong for exactly one bit in a byte, and the only thing that
+happens at that bit which does not happen at the other seven is the mask reaching
+`0x00` and being re-armed** — in the tail of half-interval 14, one instruction
+group after the level it affects.
+
+* **AND THE PRIME SUSPECT IS THE RE-ARM ITSELF, and it is checkable in the
+  listing without a probe:** the mask must be re-armed to `0x80` BEFORE the
+  level block of the next bit reads it, and the re-arm is in the tail of the
+  previous bit. If the re-arm is a `JMP` to a shared tail, the ordering is
+  visible; if the re-arm happens on the path that skips the tail, it does not
+  happen for that bit at all, and the next bit would go out with the mask still
+  at `0x00` — which is exactly a bit whose `AND A, 0x00` is zero, i.e. a bit
+  that reads as zero, i.e. the first half LOW. The pad wrote HIGH.
+* **OR THE PARITY GATE, which is four instructions whose whole job is to
+  complement the second half of every bit, and which is correct for seven bits
+  out of eight here.** `s = ((dmem[6] AND 1) + dmem[3]) AND 1` is zero at even
+  counts, and the test is `LDI A, 0 / SUB A, X / JZ keep` — so the keep case is
+  s = 0. At index 14 that is 0, and at index 15 it is 1, which is right, and the
+  pad is the other way round at both.
+
+**NEXT: read the two halves of half-interval 14 in the LISTING**, one group
+after the other, with the whole block rather than the part that changed — which
+is the rule this act has now broken and repaired three times.
