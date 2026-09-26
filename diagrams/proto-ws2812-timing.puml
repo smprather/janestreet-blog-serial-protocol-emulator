@@ -1,0 +1,166 @@
+@startuml proto-ws2812-timing
+' ===========================================================================
+' proto-ws2812-timing.puml - (c) WS2812 wire timing, in the numbers the
+' firmware actually produces.
+'
+' Every constant below is a real one, from firmware/ws2812.pe bitcell and the
+' CONSTS block in tools/fw/peasm.py, and the measured figures are the ones
+' tb_pe_soc_ws2812.v printed on real RTL (60 MHz, Icarus, the real SRAM macro):
+'
+'   reset before frame 1   60.85 us  (3 651 clocks)
+'   reset between frames   62.28 us  (3 737 clocks)
+'   10 one-cells at 48 clocks (800.0 ns), 14 zero-cells at 0
+'   frame 0 and frame 1 both decode 9c e0 8a
+'
+' The clock is 16.6667 ns, so a cell is 75 clocks with no remainder and the
+' whole claim is an integer equality rather than a tolerance.
+' ===========================================================================
+
+title WS2812 - wire timing at 800 kHz\n<font size=12>1 clock = 16.6667 ns; one cell = 75 clocks = 1.250 us exactly</font>
+
+hide stereotype
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #33555
+  LifeLineBorderColor #33555
+  LifeLineBackgroundColor #FAFAFA
+  ParticipantBorderColor #33555
+  ParticipantBackgroundColor #F4F7FB
+  ParticipantFontName monospaced
+  ActorFontName monospaced
+  NoteFontName monospaced
+  GroupFontName monospaced
+}
+
+participant "CPU\npe_cpu.v\nsingle-cycle:\n1 instr = 1 clock" as CPU
+participant "pad 6\nTXPIN / PINOE\npush-pull" as PAD
+participant "DIN wire\n+ strip pull-up" as WIRE
+participant "strip\nsamples at\n+42 clk" as STRIP
+
+== RESET (before frame 1) ==
+
+CPU -> PAD : PINOE = 0x00, release every pad
+CPU -> PAD : TXPIN = LED_DIN (0x40), TXPIN = LED_DIN, PINOE = 0x40
+note right of PAD
+  Claim exactly one pad, push-pull.
+  Open-drain is deliberately NOT set: a
+  released DIN floats to the pull-up and
+  reads as a run of 1s.
+end note
+PAD -> WIRE : line idles HIGH
+note over WIRE
+  <b>60.85 us of LOW</b>  (3 651 clocks measured;
+  3 631 = (10-1)*(4*99+7)+4 is what the code does)
+  datasheet floor: > 50 us
+end note
+
+== one frame: 24 cells, MSB first ==
+
+CPU -> PAD : dmem[6] = 0x9C, dmem[7] = 0, dmem[4] = 0x80
+CPU -> PAD : TXPIN = 0x00  (the line goes low)
+note over CPU, WIRE
+  dly1/dly2, then bitcell.
+  total = (n1-1)*(4*n2+7)+4 = 3 631 clocks = 60.52 us
+  dmem[11] is RELOADED from dmem[10] each outer pass
+end note
+
+group A 1-cell - 75 clocks, HIGH 48 / LOW 27 ==
+  CPU -> PAD : instr 1-9   A = dmem[6] AND dmem[4], pick the level
+  PAD -> WIRE : <b>instr 10  OUT TXPIN, A</b> - the cell starts on this edge
+  note over WIRE
+    HIGH 48 clocks = <b>800.0 ns</b>
+    the datasheet nominal tHIGH1,
+    hit to the clock because 75 = 48 + 27
+  end note
+  STRIP -> WIRE : sample at +42 clk (0.700 us)
+  note over STRIP
+    still HIGH -> this is a <b>1</b>
+    SAMPLE_CYC = 42, and CELL_HIGH = 48
+    so the 1 keeps 6 clocks = 100 ns of margin
+    past the sample point
+  end note
+  CPU -> PAD : instr 11-56  46 NOPs
+  CPU -> PAD : instr 57-58  OUT TXPIN, 0x00
+  note over WIRE
+    LOW 27 clocks = <b>450.0 ns</b> - the nominal
+    tLOW. Datasheet floor: 450 ns, so this is
+    AT the floor, not over it.
+  end note
+  CPU -> PAD : instr 59-61  dmem[4] >>= 1
+  CPU -> PAD : instr 62     JZ byteend
+end group
+
+group A 0-cell - 75 clocks, LOW throughout ==
+  CPU -> PAD : instr 1-9   the AND gives 0
+  PAD -> WIRE : instr 10   OUT TXPIN, 0x00
+  note over WIRE
+    LOW for the WHOLE 75 clocks = 1 250 ns.
+    A deliberate simplification: the strip
+    samples at 2/3 into the cell, so a line
+    low throughout is unambiguously a 0.
+  end note
+  STRIP -> WIRE : sample at +42 clk
+  note over STRIP
+    still LOW -> this is a <b>0</b>.
+    The margin is 42 clocks = 700 ns on the
+    far side, which is why the shaping can be
+    dropped at all.
+  end note
+  CPU -> PAD : instr 59-61  dmem[4] >>= 1
+  CPU -> PAD : instr 62     JZ byteend
+end group
+
+note over CPU, STRIP
+  ... 24 cells, each exactly 75 clocks ...
+  cell k begins at <b>t0 + 75k EXACTLY</b> - this equality, not a window,
+  is what the TB asserts. A 74-clock cell is still
+  1.23 us and clears every datasheet window in print.
+end note
+
+== byte boundary: cell 7, the path that could be longer ==
+
+CPU -> PAD : dmem[4] is 0, so JZ byteend is taken
+note over CPU
+  14 instructions of real work:
+  X = dmem[7]; if 2 - X == 0 the frame is done;
+  else dmem[7]++, dmem[6] = next byte, dmem[4] = 0x80.
+  The ordinary path pays <b>14 NOPs</b> for the same length.
+end note
+note over CPU
+  The boundary TEST is inside the taken path, so
+  the last byte of the frame does not load a fourth
+  "byte" out of dmem[3] - which is not data.
+end note
+
+== end of frame ==
+
+CPU -> PAD : dmem[7] == 2 -> back to the reset
+note over WIRE
+  24 x 75 = 1 800 clocks = <b>30.000 us</b> of frame,
+  then <b>62.28 us</b> of low before the next one.
+  The between-frame reset is the one that matters on
+  a strip that is already lit, which is why the frame
+  repeats rather than being sent once.
+end note
+
+== what the testbench measures, and what it refuses ==
+
+note over CPU, STRIP
+  <b>Measured on the PADS, in CLOCKS.</b>
+  ...
+  1. every cell on the 75-clock grid: the rising edge is at t0 + 75k EXACTLY
+  2. span == 24 * 75 clocks exactly
+  3. tHIGH1 == 48 clocks (800.0 ns), tLOW(1) >= 450 ns
+  4. every 1 still HIGH at the strip's sample point (+42 clocks)
+  5. reset > 50 us before frame 1 AND between frames
+  6. n_released == 0 - the line is never released
+  7. non-vacuity: cell 0 is a 1, the frame has both bit values, it repeats
+  ...
+  <b>Why equality and not a window:</b> 47 or 49 clocks is 783 or 817 ns and
+  clears every datasheet window. But a cell that is 74 clocks shifts every
+  sample in the frame, and a byte-boundary path one clock longer stretches
+  three cells in every frame - a frame 3/24 wrong, which no window check can
+  see and a strip absolutely can.
+end note
+
+@enduml
