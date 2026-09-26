@@ -330,16 +330,40 @@ acc_x4_e:
         STM   0, A
         JMP   acc_x5
 acc_x5:                         ; ACC += Q    ->  5r, a GENERAL add
-        LDM   X, 12
-        LDM   A, 0
-        ADD   A, X
-        STM   0, A
-        JNZ   acc_x5_h
-        LDM   A, 12            ; zero: carried, unless the addend was zero
-        JZ    acc_x5_h
-        LDM   A, 1
-        ADD   A, 1
-        STM   1, A
+LDM   A, 0
+MOV   Y, A            ; dst_lo: never re-read, so the store over
+                       ; it costs nothing
+LDM   X, 12
+ADD   A, X            ; sum
+STM   0, A
+STM   6, A             ; the sum, in the ANSWER SLOT: with ONE answer per run
+                       ; the slot is unwritten for the whole conversion, and
+                       ; dmem[2],dmem[3] (the width) and dmem[11] (the tick's
+                       ; previous reading) are the only other bytes nothing
+                       ; else reads while a chain runs
+MOV   A, Y
+AND   A, X            ; src & dst
+STM   7, A
+MOV   A, Y
+OR    A, X            ; src | dst
+STM   11, A
+LDM   X, 6
+LDI   A, 255
+SUB   A, X            ; ~sum
+LDM   X, 11
+AND   A, X            ; (src|dst) & ~sum
+STM   6, A             ; c2, written OVER the sum: the sum is finished with
+                       ; by now, and three temporaries is what fits in a map
+                       ; that also holds a banked answer
+LDM   A, 7             ; c1
+LDM   X, 6             ; c2
+OR    A, X            ; the carry is BIT 7 of that byte: a carry out of an
+                       ; add does NOT require a zero result
+AND   A, 0x80
+JZ    acc_x5_h
+LDM   A, 1
+ADD   A, 1
+STM   1, A
 acc_x5_h:
         LDM   X, 13
         LDM   A, 1
@@ -369,16 +393,40 @@ acc_x10_e:
         STM   0, A
         JMP   acc_x11
 acc_x11:                        ; ACC += Q    ->  11r
-        LDM   X, 12
-        LDM   A, 0
-        ADD   A, X
-        STM   0, A
-        JNZ   acc_x11_h
-        LDM   A, 12
-        JZ    acc_x11_h
-        LDM   A, 1
-        ADD   A, 1
-        STM   1, A
+LDM   A, 0
+MOV   Y, A            ; dst_lo: never re-read, so the store over
+                       ; it costs nothing
+LDM   X, 12
+ADD   A, X            ; sum
+STM   0, A
+STM   6, A             ; the sum, in the ANSWER SLOT: with ONE answer per run
+                       ; the slot is unwritten for the whole conversion, and
+                       ; dmem[2],dmem[3] (the width) and dmem[11] (the tick's
+                       ; previous reading) are the only other bytes nothing
+                       ; else reads while a chain runs
+MOV   A, Y
+AND   A, X            ; src & dst
+STM   7, A
+MOV   A, Y
+OR    A, X            ; src | dst
+STM   11, A
+LDM   X, 6
+LDI   A, 255
+SUB   A, X            ; ~sum
+LDM   X, 11
+AND   A, X            ; (src|dst) & ~sum
+STM   6, A             ; c2, written OVER the sum: the sum is finished with
+                       ; by now, and three temporaries is what fits in a map
+                       ; that also holds a banked answer
+LDM   A, 7             ; c1
+LDM   X, 6             ; c2
+OR    A, X            ; the carry is BIT 7 of that byte: a carry out of an
+                       ; add does NOT require a zero result
+AND   A, 0x80
+JZ    acc_x11_h
+LDM   A, 1
+ADD   A, 1
+STM   1, A
 acc_x11_h:
         LDM   X, 13
         LDM   A, 1
@@ -499,16 +547,40 @@ t_x4_e:
         STM   14, A
         JMP   t_x5
 t_x5:                            ; T += Q, a general add with the guard
-        LDM   X, 12
-        LDM   A, 14
-        ADD   A, X
-        STM   14, A
-        JNZ   t_x5_h
-        LDM   A, 12
-        JZ    t_x5_h
-        LDM   A, 15
-        ADD   A, 1
-        STM   15, A
+LDM   A, 14
+MOV   Y, A            ; dst_lo: never re-read, so the store over
+                       ; it costs nothing
+LDM   X, 12
+ADD   A, X            ; sum
+STM   14, A
+STM   6, A             ; the sum, in the ANSWER SLOT: with ONE answer per run
+                       ; the slot is unwritten for the whole conversion, and
+                       ; dmem[2],dmem[3] (the width) and dmem[11] (the tick's
+                       ; previous reading) are the only other bytes nothing
+                       ; else reads while a chain runs
+MOV   A, Y
+AND   A, X            ; src & dst
+STM   7, A
+MOV   A, Y
+OR    A, X            ; src | dst
+STM   11, A
+LDM   X, 6
+LDI   A, 255
+SUB   A, X            ; ~sum
+LDM   X, 11
+AND   A, X            ; (src|dst) & ~sum
+STM   6, A             ; c2, written OVER the sum: the sum is finished with
+                       ; by now, and three temporaries is what fits in a map
+                       ; that also holds a banked answer
+LDM   A, 7             ; c1
+LDM   X, 6             ; c2
+OR    A, X            ; the carry is BIT 7 of that byte: a carry out of an
+                       ; add does NOT require a zero result
+AND   A, 0x80
+JZ    t_x5_h
+LDM   A, 15
+ADD   A, 1
+STM   15, A
 t_x5_h:
         LDM   X, 13
         LDM   A, 15
@@ -538,16 +610,40 @@ t_x10_e:
         STM   14, A
         JMP   t_x11
 t_x11:
-        LDM   X, 12
-        LDM   A, 14
-        ADD   A, X
-        STM   14, A
-        JNZ   t_x11_h
-        LDM   A, 12
-        JZ    t_x11_h
-        LDM   A, 15
-        ADD   A, 1
-        STM   15, A
+LDM   A, 14
+MOV   Y, A            ; dst_lo: never re-read, so the store over
+                       ; it costs nothing
+LDM   X, 12
+ADD   A, X            ; sum
+STM   14, A
+STM   6, A             ; the sum, in the ANSWER SLOT: with ONE answer per run
+                       ; the slot is unwritten for the whole conversion, and
+                       ; dmem[2],dmem[3] (the width) and dmem[11] (the tick's
+                       ; previous reading) are the only other bytes nothing
+                       ; else reads while a chain runs
+MOV   A, Y
+AND   A, X            ; src & dst
+STM   7, A
+MOV   A, Y
+OR    A, X            ; src | dst
+STM   11, A
+LDM   X, 6
+LDI   A, 255
+SUB   A, X            ; ~sum
+LDM   X, 11
+AND   A, X            ; (src|dst) & ~sum
+STM   6, A             ; c2, written OVER the sum: the sum is finished with
+                       ; by now, and three temporaries is what fits in a map
+                       ; that also holds a banked answer
+LDM   A, 7             ; c1
+LDM   X, 6             ; c2
+OR    A, X            ; the carry is BIT 7 of that byte: a carry out of an
+                       ; add does NOT require a zero result
+AND   A, 0x80
+JZ    t_x11_h
+LDM   A, 15
+ADD   A, 1
+STM   15, A
 t_x11_h:
         LDM   X, 13
         LDM   A, 15
@@ -571,63 +667,18 @@ fin_hi:
         ADD   A, X
         STM   15, A
 
-        ; ---- bank, then either trigger again or finish -----------------
-        LDM   A, 10
-        MOV   X, A
-        ADD   A, X             ; 2 * N
-        MOV   X, A
-        ADD   A, 1
-        ADD   A, 1
-        ADD   A, 1
-        ADD   A, 1             ; 2*N + 4
-        ADD   A, 1
-        ADD   A, 1             ; 2*N + 6: slot N's low address (6, then 8)
-        MOV   X, A
+        ; ---- bank: ONE answer, low byte first, then park --------------------
+        ; The address is 6, not 6 + 2*N, because this program measures ONE
+        ; distance per run: that is what frees the answer slots for the whole
+        ; conversion. And LOW BYTE FIRST, which every other act in this block
+        ; does and this act's own earlier bank did: the first version of this
+        ; stored the high byte first, and the testbench -- which reads
+        ; little-endian -- reported 256 for an answer of 1.
         LDM   A, 14
-        STS   [X], A
-        INCX
+        STM   6, A
         LDM   A, 15
-        STS   [X], A
-        LDM   A, 10
-        ADD   A, 1
-        STM   10, A
-        LDI   A, 2
-        SUB   A, 1             ; one banked, or two?
-        JZ    park              ; two: the run is finished and the host reads
-        LDI   A, 0
-        OUT   PINOE, A         ; release BOTH pads while the sensor recovers
-        LDI   A, 0
-        STM   5, A             ; and STATE back to 0, for the same reason the
-                               ; machine whose states are never returned to
-                               ; their entry point is a state machine that
-                               ; runs once.
-        ; ---- the sensor's RECOVERY, before the next trigger -------------
-        ; This is a PROTOCOL requirement and not politeness. An HC-SR04 needs
-        ; tens of milliseconds after an echo before it will answer another
-        ; trigger, and a trigger inside that window is not answered AT ALL:
-        ; it is ignored, so the measurement that never comes back is silent.
-        ; The first version of this program re-triggered 7 us after banking,
-        ; which is inside the recovery of every real device and of the
-        ; testbench's model -- so the model's second trigger was never seen,
-        ; the second echo never came, and the run banked ONE answer and
-        ; stopped with no symptom beyond a missing one. 255 outer passes of
-        ; (4*SR_RECOV_LEN + 5) clocks = 120,615 clocks = 2010 us, which
-        ; clears the model's 2 ms by 10 us.
-        LDI   A, 255
-        STM   12, A            ; dmem[12..13] is Q, and Q is dead from here:
-recov_out:                    ; the conversion has already read it
-        LDI   A, SR_RECOV_LEN
-        STM   13, A
-recov_in:
-        LDM   A, 13
-        SUB   A, 1
-        STM   13, A
-        JNZ   recov_in         ; 4 clocks per inner pass
-        LDM   A, 12
-        SUB   A, 1
-        STM   12, A
-        JNZ   recov_out        ; 5 clocks per outer pass
-        JMP   main             ; echo's rising edge sets it to 2: a state
-        JMP   main
+        STM   7, A
+        LDI   A, 1
+        STM   10, A            ; DONE
 park:
         JMP   park
