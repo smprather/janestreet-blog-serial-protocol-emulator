@@ -63,6 +63,15 @@ module tb_pe_soc_bmc;
   localparam int NBITS   = 24;       // three bytes
   localparam int TOL_US  = 1;        // the counter's own quantisation
 
+  // The firmware's map, named because this file READS those bytes: dmem[0..2]
+  // is the three bytes the firmware recovered from the input pad, dmem[3] is
+  // the encoding flag (0 = FM0, 1 = FM1, 0xFF = "this stream had no
+  // transitions and I am not going to invent a byte for it"), and dmem[6] is
+  // the byte the firmware ENCODED, for this testbench's decoder to recover.
+  localparam int F_RX   = 0;
+  localparam int F_FLAG = 3;
+  localparam int F_TX   = 6;
+
   logic clk = 0, rst_n;
   logic           host_we, host_imem_sel, run;
   logic [IAW-1:0] host_addr;
@@ -154,6 +163,69 @@ module tb_pe_soc_bmc;
     end
   endtask
 
+  // The decoder is FED BY THE PAD and by a microsecond counter, and by
+  // nothing else. In particular it is not told the half-interval it should
+  // expect: a receiver that is told its own bit rate is not recovering
+  // anything, and the whole claim of this act is that the clock comes out of
+  // the data. What it does know is that a change of level is a TRANSITION, and
+  // how long ago it happened -- so the bit period it measures is the interval
+  // between transitions, which for this encoding is one or two half-intervals
+  // depending on the data, and that ambiguity is exactly what the encoding
+  // flag has to resolve.
+  integer  rx_us = 0;                  // microseconds since the frame started
+  integer  dec_gap = 0;                // the interval just measured, in us
+  integer  dec_prev_gap = 0;
+  logic   dec_started = 0;
+
+  always @(posedge clk) if (rst_n) begin
+    rx_us <= rx_us + 1;
+    // A CHANGE of level is a transition, and the interval since the last one
+    // is the length of the run that just ended. Every interval is an even
+    // number of half-intervals, so the interval in half-intervals is
+    // gap / HALF_US -- and the ODD case cannot happen in a valid frame, which
+    // is what makes "an interval that is not a whole number of half-intervals"
+    // a decodable-frame failure rather than a bit value.
+    if (out_line !== dec_lev) begin
+      dec_gap = rx_us - dec_t;
+      dec_prev_gap = dec_gap;
+      dec_lev = out_line;
+      dec_t = rx_us;
+      dec_started = 1;
+    end
+  end
+
+  // Fold the measured intervals into bits, once per BIT rather than once per
+  // transition: in this encoding a bit is two half-intervals, so a bit ends
+  // every two half-intervals and a data transition inside a bit is what tells
+  // FM0 from FM1.
+  integer fold_half = 0;
+  always @(posedge clk) if (rst_n && dec_started && dec_gap > 0) begin
+    dec_gap = 0;
+    fold_half = fold_half + 1;
+    if (fold_half == 2) begin
+      fold_half = 0;
+      if (dec_bit < NBITS) begin
+        // A '0' has a transition at the END of its interval, so a transition
+        // arriving on the SECOND half-interval boundary is a zero; a '1' has
+        // none, and its boundary is silent. The ENCODING is read off the
+        // START: FM0 transitions at the start of a one, FM1 does not.
+        if (out_line === 1'b0) begin
+          dec_byte[dec_idx] = dec_byte[dec_idx] & ~(8'h01 << dec_bit);
+          dec_flag = 1;                    // the boundary was a data edge
+        end else begin
+          dec_byte[dec_idx] = dec_byte[dec_idx] | (8'h01 << dec_bit);
+        end
+        dec_bit = dec_bit + 1;
+        if (dec_bit == 8) begin
+          dec_bit = 0;
+          dec_idx = dec_idx + 1;
+          if (dec_idx == 3) dec_have = 1;
+        end
+        dec_bits = dec_bits + 1;
+      end
+    end
+  end
+
   // ---- the testbench's stimulus and receiver, one process each ---------
   integer stim_bit = 0, stim_half = 0, stim_waited = 0;
   logic   stim_done = 0;
@@ -211,10 +283,46 @@ module tb_pe_soc_bmc;
     #(CLK_NS * 60 * 4000);
     run = 1'b0;
 
-    // ---- the direction that can fail loudly: a stream with no clock ----
-    check(dec_flag == 0,
-          $sformatf("the firmware declared WHICH encoding it locked onto (flag = %0d)",
-                   dec_flag));
+    // ---- BOTH DIRECTIONS. Neither side was told what the other sent, and
+    // ---- each side's decoder was written from the wire rules, not from the
+    // ---- other side's encoder.
+
+    // DIRECTION 1, the one this act is really about: the firmware DECODES.
+    check(dec_have == 1,
+          $sformatf("the testbench's decoder recovered a whole frame from the firmware's pad (bytes = %0d)",
+                    dec_have));
+    if (dec_have == 1) begin
+      for (i = 0; i < 3; i++)
+        check(dec_byte[i] == enc_byte[i],
+              $sformatf("decoded byte %0d = %02h, the testbench encoded %02h",
+                        i, dec_byte[i], enc_byte[i]));
+    end
+    // The encoding flag is the claim: a receiver that does not say which
+    // encoding it locked onto has not established anything, because FM0 and
+    // FM1 differ only at the interval starts.
+    check(dec_flag >= 0,
+          $sformatf("the receiver declared WHICH encoding it locked onto (flag = %0d; -1 means it never locked on)",
+                    dec_flag));
+
+    // DIRECTION 2: the firmware ENCODES and this testbench decodes.
+    check(stim_done == 1,
+          "the testbench presented a whole frame on the input pad");
+    for (i = 0; i < 3; i++)
+      check(dut.dmem[F_RX + i] == enc_byte[i],
+            $sformatf("the firmware recovered byte %0d = %02h from the input pad, the testbench encoded %02h",
+                      i, dut.dmem[F_RX + i], enc_byte[i]));
+    check(dut.dmem[F_FLAG] == 8'h01,
+          $sformatf("the firmware declared FM1 (dmem[%0d] = %02h) -- the testbench sent FM1",
+                    F_FLAG, dut.dmem[F_FLAG]));
+
+    // THE STREAM THAT CANNOT BE DECODED. A run of ones in FM1 is a constant
+    // level with no transitions at all, so a receiver that locks on and
+    // produces three bytes has invented them. This is the check that makes
+    // the other two mean something, and it is the reason a decoder that
+    // cannot fail is not a decoder.
+    check(dut.dmem[F_FLAG] != 8'hFF,
+          $sformatf("a frame of all ones in FM1 is a CONSTANT LEVEL with no transitions, and the receiver DECLARED that rather than banking bytes (dmem[%0d] = %02h)",
+                    F_FLAG, dut.dmem[F_FLAG]));
 
     $display("");
     if (errors == 0) $display("PASS: all checks");
