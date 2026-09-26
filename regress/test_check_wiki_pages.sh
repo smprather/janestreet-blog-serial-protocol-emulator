@@ -98,6 +98,15 @@ fresh_render() {
       [ -f "$r" ] && cp "$r" "$d/diagrams/"
     done
   done
+  # diagrams/TOOLCHAIN.md is an INPUT to the gate, not a diagram: it pins the
+  # renderer so a byte difference can be attributed to the toolchain rather than
+  # to a stale render. Without it in the fixture the gate correctly reports the
+  # toolchain as unknown and the "pinned and held green" case fails. This is the
+  # THIRD time this fixture has under-modelled the gate's real inputs - the first
+  # was not copying the gate at all, the second not copying the pin file - and
+  # the rule is the same each time: a fixture must model everything the thing
+  # under test READS, or the test is measuring the fixture.
+  [ -f diagrams/TOOLCHAIN.md ] && cp diagrams/TOOLCHAIN.md "$d/diagrams/"
   echo "$d"
 }
 
