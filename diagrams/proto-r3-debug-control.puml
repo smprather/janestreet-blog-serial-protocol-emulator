@@ -102,7 +102,7 @@ package "THE FOUR OPCODE FLOWS - TARGET_HOST only; the loopback target answers U
 }
 
 package "THE BRING-UP TRAP - once held, the run strap is ignored BOTH WAYS" {
-  component "THE GATE\ncpu_exec = dbg_step || (run && !dbg_hold)\n\nrun is MASKED BY THE HOLD - in BOTH directions." as g1 <<trap>>
+  component "THE GATE\ncpu_exec = (dbg_step === 1'b1)\n        || (run && !(dbg_hold === 1'b1))\n\nrun is MASKED BY THE HOLD - in BOTH directions." as g1 <<trap>>
 
   component "DROPPING run DOES NOT RESUME\nand RAISING run DOES NOT EITHER.\nA host that single-steps, or that stops on a\nbreakpoint, and then 're-asserts run=1 to carry\non' finds the core STILL HELD - with no fault\nand nothing in the response words to explain it." as g2 <<trap>>
 
@@ -189,6 +189,34 @@ note bottom of f_step
   has NO side effect - no step, no arming. A
   sequencing refusal answers NOT_READY with no
   fault, exactly like LOAD while running.
+end note
+
+note bottom of g1
+  WRITE THE GATE IN THE === FORM. The plain
+  expression (dbg_step || (run && !dbg_hold))
+  is the PRE-REPAIR form and it is NOT
+  equivalent in simulation: with a debug input
+  floating at x or z, !dbg_hold is x, so the
+  gate goes x and the core freezes. The === 1'b1
+  comparisons make an UNDRIVEN DEBUG INPUT READ
+  AS INACTIVE - the step term false, the hold
+  term inactive - so an unconnected port cannot
+  stop the core. Ground truth: pe_cpu.v:233.
+
+  The convention is enforced WHERE THE INPUT IS
+  CONSUMED, not at every call site, because that
+  is the only place a new call site cannot forget
+  it. In synthesis the two forms are identical (x
+  and z do not exist in hardware), so nothing
+  about the netlist changes.
+
+  This is not a theoretical concern. Leaving the
+  debug inputs undriven in testbenches that
+  instantiate pe_cpu/pe_soc directly took SIX ACTS
+  to their reset after the 5b4731f merge, and the
+  FULL SUITE caught it immediately - no unit TB
+  finds a port addition on its own. All 13 TBs now
+  tie the debug inputs low, with a comment.
 end note
 
 note bottom of g2

@@ -171,8 +171,8 @@ package "Host read path (R2) — landed 2026-09-25" {
 }
 
 package "R3 debug control — landed 2026-09-25" {
-  component "Debug control\n0x21 STEP / 0x22 BP_SET / 0x23 BP_CLR" as r3_ctr <<complete>>
-  component "bp comparator + debug mux\npe_ctrl / pe_cpu\ncpu_exec = dbg_step || (run && !dbg_hold)" as r3_rtl <<complete>>
+  component "Debug control\n0x21 STEP / 0x22 BP_SET / 0x23 BP_CLR /\n0x24 DEBUG_STATUS (10 words)" as r3_ctr <<complete>>
+  component "bp comparator + debug mux\npe_ctrl / pe_cpu\ncpu_exec = (dbg_step === 1'b1)\n || (run && !(dbg_hold === 1'b1))" as r3_rtl <<complete>>
   component "STOP-BEFORE\nan armed BP stops a LIVE core\nthe cycle its PC matches" as r3_sem <<complete>>
   component "R3 + R2 held-core steps\nstates 2/3 via the opcodes, 22/22" as r3_vec <<complete>>
   cpu --> r3_ctr
@@ -181,7 +181,7 @@ package "R3 debug control — landed 2026-09-25" {
   r3_rtl --> r3_vec
 }
 
-package "Protocol acts as firmware (fw-bus)\nsame CPU, pin matrix and 260-clock tick" {
+package "Protocol acts as firmware (fw-bus)\nsame CPU, pin matrix, and TWO tick counters" {
   component "I2C adv\nburst + stretch" as p_i2c <<complete>>
   component "SPI mode 3\n+ CRC-8" as p_spi <<complete>>
   component "UART\nRTS/CTS" as p_uart <<complete>>
@@ -195,18 +195,22 @@ package "Protocol acts as firmware (fw-bus)\nsame CPU, pin matrix and 260-clock 
   p_spi -[hidden]down-> p_uart
 }
 
-package "Timing acts as firmware (fw-timing)\nsame CPU, pin matrix and 260-clock tick" {
+package "Timing acts as firmware (fw-timing)\nsame CPU, pin matrix, and TWO tick counters" {
   component "MIDI 31.25k\n8N1" as p_midi <<complete>>
   component "DMX512-A 250k\n8N2" as p_dmx <<complete>>
   component "7 timing acts\n(fw-timing)" as p_time <<complete>>
+  component "HC-SR04 ranging\ntb NOT wired into run_all.sh;\n5 checks fail standalone" as p_sr04 <<open>>
   cpu --> p_midi
   cpu --> p_dmx
   cpu --> p_time
+  cpu --> p_sr04
   pinmux --> p_midi : pins
   pinmux --> p_dmx : pins
   pinmux --> p_time : pins
+  pinmux --> p_sr04 : pins
   p_midi -[hidden]down-> p_dmx
   p_dmx -[hidden]down-> p_time
+  p_time -[hidden]down-> p_sr04
 }
 
 ' LAYOUT, no architecture: the personas are siblings on one CPU and pin
@@ -221,21 +225,33 @@ package "Formal campaign" {
   component "Inductive IFG floor\nUNBOUNDED" as fv_ifg <<complete>>
   component "pe_cpu_debug_hold\nR3 hold PROVED inductively (S1-S4)" as fv_hold <<complete>>
   component "Mutant-kill gate\n14/14 caught" as fv_mut <<complete>>
+  component "SMT unlock — the 11th TARGET\nsmt_induct.sh + z3; proved the\npe_soc C2 guard independently" as fv_smt <<complete>>
   fv_tool --> fv_props
   fv_props --> fv_ifg
   fv_props --> fv_hold
   fv_mut --> fv_props : non-vacuity
+  fv_tool --> fv_smt : unlocks
 }
 
 package "Parallel worktree fleet" {
   component "fw-bus-protocols\n5 protocol acts" as wt_bus <<complete>>
   component "fw-timing-protocols\n7 timing acts" as wt_time <<complete>>
   component "host-controller-gui\nR2 read + R3 contract" as wt_host <<complete>>
+  component "docs/diag-bus · diag-timing\ndocs/diag-proto · wiki-features" as wt_docs <<complete>>
   component "Hardware acceptance\nTHE REMAINING RED" as wt_hw <<open>>
   wt_host --> wt_bus : host contract
   wt_bus --> wt_time : protocol acts
+  wt_docs --> wt_host : documents it
   wt_bus --> wt_hw : next
   wt_time --> wt_hw : next
+}
+
+package "Chip-host protocol figures — documentation" {
+  component "proto-spi-framing\nword/bit layout + WAIT-WORD" as doc_frame <<complete>>
+  component "proto-r2-read-path\n11-word header + count ceiling" as doc_read <<complete>>
+  component "proto-r3-debug-control\nstate machine + masked run strap" as doc_dbg <<complete>>
+  component "wiki/concepts/host-chip-protocol.md\nwiki/concepts/debug-control.md" as doc_wiki <<complete>>
+  doc_frame --> doc_read : doc_read --> doc_dbg : doc_dbg --> doc_wiki
 }
 
 ' LAYOUT ONLY. PlantUML places nodes at the SAME DEPTH from a parent side by
@@ -251,26 +267,89 @@ r3_vec -[hidden]down-> p_i2c
 p_uart -[hidden]down-> p_midi
 p_time -[hidden]down-> fv_tool
 fv_ifg -[hidden]down-> wt_host
+wt_docs -[hidden]down-> doc_frame
+
+note bottom of p_sr04
+  MEASURED, NOT INHERITED -- and the measurement CORRECTS the brief this map
+  was drawn from, which listed the FREQMETER testbench as the deliberate WIP.
+  Run standalone from tb/ on 2026-09-25:
+
+    tb_pe_soc_freqmeter   PASS: all checks -- 6 runs, 18 driven periods,
+                          12 banked points, 158 Hz to 10 kHz, every point
+                          inside spec (125 Hz/75 % to 12.5 kHz/15 %)
+    tb_pe_soc_sr04        FAIL: 5 checks -- measurement 1 reads 1160 us
+                          against a 5816 us echo, the trigger pulse is 601
+                          clocks where 600 is required, and the firmware
+                          banked only one of two measurements
+
+  The freqmeter is GREEN. The act that is genuinely WIP is HC-SR04, and it is
+  worse than red: tb_pe_soc_sr04.v is NOT wired into run_all.sh, so a green
+  suite is currently SILENT about it rather than reporting it.
+
+  Recorded rather than smoothed because the correction cuts against the
+  instruction: the project rule is that a local measurement is not a project
+  claim, and that cuts both ways -- a brief is not a measurement either. Both
+  numbers above are reproducible with one command. Flagged to the manager.
+
+  The first attempt at this measurement was a FALSE RED, and it is worth
+  naming: run from the repo ROOT the TB cannot open ../firmware/freqmeter.hex
+  and reports three failures and a watchdog. It must be run from tb/, which is
+  what run_all.sh does. Had that run been recorded, this note would have
+  shipped a fabricated red.
+end note
+
+note bottom of fv_smt
+  A COUNT IS AN ASSERTION, and these two numbers are different kinds of thing:
+    * 10 PROPERTIES / 5 MODULES is what formal/results/summary.txt records,
+      and it stays 10.
+    * 11 TARGETS is that 10 plus this unlock.
+  Never let the target count overwrite the property count. The unlock is the
+  record that the pe_soc C2 owner-set guard closes under a SECOND, independent
+  engine (write_smt2 + yosys-smtbmc/z3), where each register has one
+  next-value function instead of one per sampling domain.
+end note
+
+note bottom of wt_hw
+  THE REMAINING RED, and the only one on this map. Everything else is
+  simulated and mapped; the physical Pico/USB board acceptance needs the
+  board, a shuttle and a human. The host side is explicit that 22/22 is
+  chip-confirmed IN SIMULATION and hardware is NOT claimed.
+end note
 
 note bottom of p_midi
   Landed 2026-09-25 as BLOCK 3 of the firmware-protocols work. The cell is
-  built from COUNTED INSTRUCTIONS, not the shared tick: a 32 us bit is 7.38
-  ticks and 4.3333 us cannot express a fraction, so midi_xfer.pe uses the
-  timer zero times. Measured on the pin: 31,998.7 ns = 31,251 baud with a
-  spread of 0.0000 us over all 14 frames. Its receiver is a free-running
-  oversampling search that VERIFIES each frame's stop bit, because in a
+  built from COUNTED INSTRUCTIONS, not a tick: against the 260-CLOCK UART
+  half-bit tick a 32 us bit is 7.38 ticks and 4.3333 us cannot express a
+  fraction, so midi_xfer.pe uses the timer zero times. Measured on the pin:
+  31,998.7 ns = 31,251 baud with a spread of 0.0000 us over all 14 frames.
+  Its receiver is a free-running oversampling search that VERIFIES each frame's
+  stop bit, because in a
   back-to-back 8N1 stream a falling edge is not a start bit.
   Evidence: reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md.
 end note
 
 note bottom of p_dmx
   Landed 2026-09-25, the mirror image: a 4 us bit is 0.923 of a tick, so
-  DMX is the rate the tick cannot express AT ALL. Break 88.06 us (floor
+  DMX is the rate the 260-CLOCK TICK cannot express. Break 88.06 us (floor
   87.5), mark 12.38 us (floor 8.0), 513/513 slots with BOTH stop bits
   verified, cell 3,999.8 ns = 250,010 baud, spread 0.0000 us over 513 slots.
   The frame is 22.6 ms of simulated time (1.37M clocks), so the receiver
   samples only inside a slot rather than free-running a strobe across it.
   Evidence: reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md.
+
+  CORRECTION, and the correction is to the WORD 'tick', which was doing too
+  much work. "DMX is the rate the tick cannot express AT ALL" was true of the
+  260-CLOCK UART half-bit tick (port 7 STATUS, 4.33 us) and FALSE of the
+  other tick this SoC has: port 4 I2CTICK is a free-running 1 us counter built
+  from I2C_TICKS = CLK_HZ / 1_000_000 = 60 exactly (pe_soc.v:560), so it
+  carries 4.000 us with no rounding error at all. Read against THAT tick, the
+  sentence is simply wrong.
+
+  The measured numbers are unaffected -- the act counts instructions and
+  programs neither tick -- but the reasoning is now stated as a fact about the
+  260-clock tick specifically. An earlier version of this note also said 'not
+  the shared tick', implying one tick; there are two, and that is the sort of
+  thing a reader carries into their own act.
 end note
 
 note bottom of r3_ctr
@@ -294,9 +373,20 @@ note bottom of r3_ctr
   and the reason it is drawn with its own emphasis: ONCE HELD, THE run STRAP
   IS IGNORED -- BOTH WAYS. A hold is released only by DEBUG_BP_CLR or by
   reset. Dropping run does not resume and raising it does not either, because
-  cpu_exec = dbg_step || (run && !dbg_hold). A host that single-steps, stops
-  on a breakpoint, and then "re-asserts run=1 to carry on" finds the core STILL
-  HELD, with no fault and nothing to explain it.
+  cpu_exec = (dbg_step === 1'b1) || (run && !(dbg_hold === 1'b1))
+  (pe_cpu.v:233). A host that single-steps, stops on a breakpoint, and then
+  "re-asserts run=1 to carry on" finds the core STILL HELD, with no fault and
+  nothing to explain it.
+
+  WRITE THAT GATE IN THE === FORM. The plain !dbg_hold form is the
+  pre-repair form and is NOT equivalent in simulation: a floating debug input
+  makes !dbg_hold x, the gate goes x, and the core freezes. The === 1'b1
+  comparisons make an UNDRIVEN DEBUG INPUT READ AS INACTIVE, and the
+  convention is enforced where the input is consumed rather than at every call
+  site -- the only place a new call site cannot forget it. Synthesis is
+  unaffected (x and z do not exist in hardware). Leaving those inputs
+  undriven took six acts to their reset after the 5b4731f merge; all 13 TBs
+  now tie them low with a comment.
 end note
 
 note bottom of fv_mut
