@@ -91,7 +91,7 @@ def install_fake_sdk():
         response=b"",
         boom=False,
         cursor=0,
-        max_words=None,          # optional cap the bridge must respect
+        max_words=None,  # optional cap the bridge must respect
     )
 
     class Pin:
@@ -102,14 +102,23 @@ def install_fake_sdk():
     class SPI:
         def __init__(self, spi_id, baudrate, polarity, phase, sck, mosi, miso):
             state.spi_params = {
-                "spi_id": spi_id, "baudrate": baudrate, "polarity": polarity,
-                "phase": phase, "sck": sck, "mosi": mosi, "miso": miso,
+                "spi_id": spi_id,
+                "baudrate": baudrate,
+                "polarity": polarity,
+                "phase": phase,
+                "sck": sck,
+                "mosi": mosi,
+                "miso": miso,
             }
 
         def write_readinto(self, data, received):
             state.spi_calls.append(
-                {"cs_n": state.board.uio_out[A.PAD_CS_N], "tx": bytes(data),
-                 "cursor": state.cursor})
+                {
+                    "cs_n": state.board.uio_out[A.PAD_CS_N],
+                    "tx": bytes(data),
+                    "cursor": state.cursor,
+                }
+            )
             if state.boom:
                 raise OSError("spi down")
             # Stream out the next len(received) bytes of the response; past the
@@ -134,8 +143,12 @@ def install_fake_sdk():
     ttboard = _fake_module("ttboard", demoboard=demoboard, mode=mode)
     machine = _fake_module("machine", SPI=SPI, Pin=Pin)
 
-    modules = {"ttboard": ttboard, "ttboard.demoboard": demoboard,
-               "ttboard.mode": mode, "machine": machine}
+    modules = {
+        "ttboard": ttboard,
+        "ttboard.demoboard": demoboard,
+        "ttboard.mode": mode,
+        "machine": machine,
+    }
     return state, modules
 
 
@@ -149,8 +162,7 @@ class TestTTAdapter(unittest.TestCase):
             sys.modules[name] = module
 
     def tearDown(self):
-        for name in ("ttboard", "ttboard.demoboard", "ttboard.mode",
-                     "machine"):
+        for name in ("ttboard", "ttboard.demoboard", "ttboard.mode", "machine"):
             sys.modules.pop(name, None)
         sys.modules.update(self._saved)
 
@@ -163,20 +175,24 @@ class TestTTAdapter(unittest.TestCase):
         adapter.configure_host_spi(5_000_000)
 
         direction = board.uio_oe_pico.value
-        self.assertEqual(direction & 0b0000_0011, 0b0000_0011)   # uio[0:1]
+        self.assertEqual(direction & 0b0000_0011, 0b0000_0011)  # uio[0:1]
         self.assertEqual((direction >> A.PAD_CS_N) & 1, 1)
         self.assertEqual((direction >> A.PAD_MOSI) & 1, 1)
         self.assertEqual((direction >> A.PAD_SCK) & 1, 1)
-        self.assertEqual((direction >> A.PAD_MISO) & 1, 0)       # MISO input
-        self.assertEqual(board.uio_out[A.PAD_CS_N], 1)           # idles high
+        self.assertEqual((direction >> A.PAD_MISO) & 1, 0)  # MISO input
+        self.assertEqual(board.uio_out[A.PAD_CS_N], 1)  # idles high
         self.assertEqual(board.mode, "ASIC_RP_CONTROL")
         self.assertEqual(
-            {key: self.state.spi_params[key]
-             for key in ("spi_id", "baudrate", "polarity", "phase")},
-            {"spi_id": 0, "baudrate": 5_000_000, "polarity": 0, "phase": 0})
+            {
+                key: self.state.spi_params[key]
+                for key in ("spi_id", "baudrate", "polarity", "phase")
+            },
+            {"spi_id": 0, "baudrate": 5_000_000, "polarity": 0, "phase": 0},
+        )
         self.assertEqual(
-            [self.state.spi_params[key].gpio
-             for key in ("sck", "mosi", "miso")], [2, 3, 4])
+            [self.state.spi_params[key].gpio for key in ("sck", "mosi", "miso")],
+            [2, 3, 4],
+        )
         self.assertEqual(self.state.pin_calls, [2, 3, 4])
 
     def test_host_spi_transfer_holds_cs_low_and_releases(self):
@@ -186,10 +202,9 @@ class TestTTAdapter(unittest.TestCase):
         # A real framed reply (STATUS): sync, hdr, seq, len, CRC. The request
         # is 3 words; the reply is 6 words, so the adapter MUST keep clocking
         # past the request length to collect it (variable-length).
-        frame = bytes.fromhex("a55a1910000100010000" "1eed")
+        frame = bytes.fromhex("a55a19100001000100001eed")
         self.state.response = frame
-        received = adapter.host_spi_transfer(b"\x00" * 6,
-                                              read_words=6)
+        received = adapter.host_spi_transfer(b"\x00" * 6, read_words=6)
         self.assertEqual(received, frame)
         self.assertEqual(self.state.spi_calls[0]["cs_n"], 0)
         # more than one clocking call was needed (6 words in, 6 words out)
@@ -201,7 +216,7 @@ class TestTTAdapter(unittest.TestCase):
         # full by continuing to clock, not truncated to the request length.
         adapter = A.TTAdapter(pins=PINS)
         adapter.configure_host_spi(5_000_000)
-        frame = bytes.fromhex("a55a1910000100010000" "1eed")  # 6 words
+        frame = bytes.fromhex("a55a19100001000100001eed")  # 6 words
         self.state.response = frame
         received = adapter.host_spi_transfer(b"\x00" * 2, read_words=6)
         self.assertEqual(received, frame)
@@ -212,8 +227,8 @@ class TestTTAdapter(unittest.TestCase):
         # bridge's pe_frame.strip_wait_words (tested there) removes fillers.
         adapter = A.TTAdapter(pins=PINS)
         adapter.configure_host_spi(5_000_000)
-        frame = bytes.fromhex("a55a1910000100010000" "1eed")
-        self.state.response = b"\xff\xff" * 2 + frame   # 2 wait words
+        frame = bytes.fromhex("a55a19100001000100001eed")
+        self.state.response = b"\xff\xff" * 2 + frame  # 2 wait words
         received = adapter.host_spi_transfer(b"\x00" * 2, read_words=8)
         # the adapter hands the raw stream; the wait words are still there ...
         self.assertTrue(received.startswith(b"\xff\xff\xff\xff"))
@@ -240,18 +255,20 @@ class TestTTAdapter(unittest.TestCase):
         adapter = A.TTAdapter(pins=PINS)
         adapter.configure_host_spi(5_000_000)
         frame = PF.encode_frame(
-            PF.OP_PING | PF.RESPONSE_BIT, 1, PF.TARGET_HOST,
-            PF.words_to_bytes((PF.STATUS_OK,)))
+            PF.OP_PING | PF.RESPONSE_BIT,
+            1,
+            PF.TARGET_HOST,
+            PF.words_to_bytes((PF.STATUS_OK,)),
+        )
         words = len(frame) // 2
         self.state.response = frame
-        budget = words + PF.MAX_WAIT_WORDS     # what the bridge really asks for
-        received = adapter.host_spi_transfer(b"\x00" * (words * 2),
-                                            read_words=budget)
+        budget = words + PF.MAX_WAIT_WORDS  # what the bridge really asks for
+        received = adapter.host_spi_transfer(b"\x00" * (words * 2), read_words=budget)
 
         # the idle words ARE in the buffer - the adapter must not hide them ...
         self.assertEqual(len(received), budget * 2)
-        self.assertEqual(received[:len(frame)], frame)
-        self.assertEqual(received[len(frame):], b"\x00" * (budget - words) * 2)
+        self.assertEqual(received[: len(frame)], frame)
+        self.assertEqual(received[len(frame) :], b"\x00" * (budget - words) * 2)
         # ... and the reader must find the frame anyway
         decoded = PF.decode_frame(PF.strip_wait_words(received))
         self.assertEqual(decoded.sequence, 1)
@@ -270,8 +287,11 @@ class TestTTAdapter(unittest.TestCase):
         adapter = A.TTAdapter(pins=PINS)
         adapter.configure_host_spi(5_000_000)
         frame = PF.encode_frame(
-            PF.OP_PING | PF.RESPONSE_BIT, 1, PF.TARGET_HOST,
-            PF.words_to_bytes((PF.STATUS_OK,)))
+            PF.OP_PING | PF.RESPONSE_BIT,
+            1,
+            PF.TARGET_HOST,
+            PF.words_to_bytes((PF.STATUS_OK,)),
+        )
         self.state.response = frame
         received = adapter.host_spi_transfer(b"\x00\x00", read_words=3)
         self.assertEqual(len(received), 6, "the budget, not the request, governs")
@@ -291,8 +311,7 @@ class TestTTAdapter(unittest.TestCase):
         board = self.state.board
         adapter = A.TTAdapter(pins=PINS)
         adapter.enable_project("tt_um_protocol_emulator")
-        self.assertEqual(
-            board.shuttle.projects["tt_um_protocol_emulator"].enabled, 1)
+        self.assertEqual(board.shuttle.projects["tt_um_protocol_emulator"].enabled, 1)
         self.assertEqual(adapter.set_clock(60_000_000), 60_000_000)
         self.assertEqual(board.clock_calls, [60_000_000])
         adapter.reset(True)
