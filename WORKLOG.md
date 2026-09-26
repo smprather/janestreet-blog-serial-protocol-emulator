@@ -4127,3 +4127,44 @@ frees, the measurement is:
 nothing else can be writing.** And the question is still open: rc 0 would mean
 the gate's `FAILED` was simply wrong, and rc 1 would mean a real survivor this
 act has never seen.
+
+### THE ANSWER: EXIT 0, SO THE GATE'S `FAILED` WAS WRONG AND THE SUITE IS SOUND
+
+The recipe from the last entry, run exactly as written -- unique `mktemp` log,
+exit code read with no pipe, lock held, nothing else able to write the log:
+
+    LOG=$(mktemp /tmp/timing.XXXXXX.log)          ->  /tmp/timing.1Jf4qi.log
+    RLOG=/tmp/run_all.<md5 of repo root> regress/mutate_timing_tb.sh > "$LOG" 2>&1
+    echo $?                                       ->  0
+
+    firmware tree byte-identical after the run (cmp-verified, all 14 files)
+    timing-TB mutations: 58 cases, 58 detected, 0 survived, 0 harness errors
+    RESULT: PASS
+
+**SO: rc 0, not rc 1. There is no survivor, and there never was.** The gate's
+`timing TB mutations: FAILED` was a verdict read out of a file another worktree
+was writing, and the suite it described was passing the whole time. **44 of 44
+log paths are now per-worktree and that is the fix; this is the measurement that
+the fix addresses the thing it was aimed at.**
+
+**AND THE ONE TIMING LOG IN /tmp IS MINE, WHICH IS THE POINT.** `ls
+/tmp/timing.*.log` returns **1** -- the `mktemp` one -- where an hour ago the
+same directory held a fixed `timating_run.log` that two runs overwrote. The
+recipe and the harness now agree, and they agree because both are per-run.
+
+### WHAT THE THREE RUNS OF THIS QUESTION ACTUALLY ESTABLISHED
+
+| run | exit | table | what it added |
+| :--- | :--- | :--- | :--- |
+| in the full gate | (not read) | **PASS** | a gate saying FAILED over a suite saying PASS |
+| a tool call cut off at 2.5 s | **75** | **empty** | the refusal, its holder, and that a timed-out call is not a stopped job |
+| clean, alone, `mktemp` log | **0** | **PASS** | **the suite is sound and the gate was wrong** |
+
+**THE MIDDLE ONE IS WHY THE THIRD COULD BE TRUSTED.** A 75 with an empty table
+is a state a reader who only ever looks at tables cannot tell from a pass --
+"no rows, no red" looks like green. **The exit code is the only thing that
+separates them, and for the whole of this act the only readings of this suite
+that anyone made were of the table.** That is the same lesson as the model
+property that survived two faults aimed at its class, and the same lesson as
+`bmc_checks.py` printing counts and being read by hand: **a number you do not
+have cannot be a check, and a table is not a verdict.**
