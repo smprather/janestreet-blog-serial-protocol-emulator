@@ -3079,3 +3079,57 @@ message, and `.gitignore` now carries **`*.vcd`** — the class, which also
 retires the three named patterns instead of leaving them to rot. **A gate that
 runs is a gate that dirties the tree; what is swept in afterwards is a
 decision, and this time it was made by `git add -A` instead of by me.**
+
+## 2026-09-27 act (c): TASK-START -- RE-RUN THE GATE, TO PROVE THE FIX
+
+Last turn's own named limit: the wiki date was fixed and its gate re-verified in
+isolation, but **the full gate was never re-run**, so "my failure is gone" is a
+deduction about a 32-minute pipeline, and this act has been wrong about exactly
+that kind of deduction repeatedly.
+
+Two things are being separated by the run rather than argued about:
+1. does the failure this act caused still appear? (it must not)
+2. do the two failures that belong to other blocks still appear, unchanged? (they
+   should, and if either has moved, that is information nobody else has)
+
+### THE RE-RUN DID NOT HAPPEN, AND THE REASON IS A FINDING
+
+**The verification this entry set out to do was NOT completed, and saying so
+is the whole point of writing it down.** `regress/run_all.sh` refused to start:
+
+    run_all.sh: REFUSING TO START — another run already holds
+    /tmp/chip-run-all.2811a17f.lock.
+
+**AND THAT LOCK IS MINE, AND IT IS STALE.** `2811a17f` is this worktree's lock
+id — it is the id in the refusal I was given. After the probe interrupted my
+first attempt, the run died and left the lock behind:
+
+* **no process of this worktree is in a regress run** (`ps` over
+  `worktrees/fw-timing`: nothing);
+* **there is no `.owner` note** for it, so nothing anywhere declares it held;
+* the live `run_all.sh` on the machine belongs to **another block** —
+  `worktrees/eth-tx-line-driver`, 25 minutes in, under `verify_merge.sh`.
+
+**SO THE LOCK OUTLIVED ITS RUN, which is the same defect the gate reported an
+hour ago as `run-lock process tree: FAILED -- E: a cleanly finished run left
+its child running`.** That was filed as "not mine" and left alone; this is an
+**independent observation of the same class from the outside**, and it is worth
+more than the test result that produced it, because the test says a lock can
+outlive its run and this says one did. The file `/tmp/chip-run-all.2811a17f.owner`
+is the mechanism that would have made it self-describing, and the interrupted
+run did not get to write one.
+
+**I REMOVED ONLY MY OWN STALE LOCK.** The other nine `chip-run-all.*.lock`
+files belong to other blocks and were left exactly as they were; one of them
+(`352a21b1`) still has a live `.owner` note, so the mechanism works when a run
+gets far enough to use it.
+
+**WHAT IS AND IS NOT ESTABLISHED, STATED PLAINLY:**
+* the wiki-date fix is verified — `tools/diag/delay_lattice.py` re-run gives
+  `RESULT: PASS`, and that gate is the one this act reddened;
+* the act's own gates are green individually (42/42 firmware, 16/16 MUTABLE,
+  wiki pages OK, 58/58 mutations);
+* **the full gate has NOT been re-run since the fix, and the claim "my failure
+  is gone" therefore remains a deduction about a 32-minute pipeline.** It is a
+  deduction I have been wrong about repeatedly in this act, so it is left
+  standing as an open item rather than written down as a result.
