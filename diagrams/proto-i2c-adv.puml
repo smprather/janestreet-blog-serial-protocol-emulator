@@ -1,29 +1,53 @@
 @startuml
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
+skinparam sequence {
+  ArrowColor #335550
+  ArrowFontColor #1F2933
+  LifeLineBorderColor #8A94A6
+  LifeLineBackgroundColor #EDF1F7
+  ParticipantBorderColor #4A6FA5
+  ParticipantBackgroundColor #DCE9F8
+  ParticipantFontColor #16324F
+  GroupBorderColor #6B7686
+  GroupBackgroundColor #E3E9F2
+  SequenceBoxBackgroundColor #FFF3C4
+  SequenceBoxBorderColor #9A7B0A
+  SequenceGroupBorderColor #6B7686
+  SequenceGroupBackgroundColor #E3E9F2
+  SequenceLifeLineBackgroundColor #EDF1F7
+  SequenceLifeLineBorderColor #8A94A6
+  SequenceDividerColor #1F2933
+}
+skinparam state {
+  BackgroundColor #EEF3FB
+  BorderColor #4A6FA5
+  FontColor #16324F
+  ArrowColor #1F2933
+  ArrowFontColor #1F2933
+  BackgroundColor<<tx>>   #DCE9F8
+  BorderColor<<tx>>       #4A6FA5
+  FontColor<<tx>>         #16324F
+  BackgroundColor<<rx>>   #DCEEE0
+  BorderColor<<rx>>       #4A8A5C
+  FontColor<<rx>>         #17452A
+  BackgroundColor<<ack>>  #FFF3C4
+  BorderColor<<ack>>      #9A7B0A
+  FontColor<<ack>>        #3A2E00
+  BackgroundColor<<abort>> #F6D9D9
+  BorderColor<<abort>>    #B05050
+  FontColor<<abort>>      #6A2020
+  BackgroundColor<<box>>  #F0F3F7
+  BorderColor<<box>>      #6B7686
+  FontColor<<box>>        #1F2933
+}
 title I2C-advanced — the combined-format transaction engine
 ' Sources: firmware/i2c_adv.pe (dmem[10] state chain, send_byte / read_byte),
 '          tb/tb_pe_soc_i2c_adv.v (the independent slave model),
 '          tools/fw/peasm.py (T_LOW/T_HIGH/T_STA/T_STO/T_BUF, SDA/SCL)
 ' Program: START 0xA0 A 0x3C A 0x5A A  (repeated START) 0xA1 A  0x11 A 0x22 A 0x33 N  STOP
 skinparam defaultFontName Monospaced
-skinparam state {
-  FontSize 11
-  BackgroundColor<<tx>>   #dce9f8
-  BorderColor<<tx>>       #4a6fa5
-  FontColor<<tx>>         #16324f
-  BackgroundColor<<rx>>   #dceee0
-  BorderColor<<rx>>       #4a8a5c
-  FontColor<<rx>>         #17452a
-  BackgroundColor<<ack>>  #fbe9cf
-  BorderColor<<ack>>      #b8813a
-  FontColor<<ack>>        #5a3d12
-  BackgroundColor<<abort>> #f6d9d9
-  BorderColor<<abort>>    #b05050
-  FontColor<<abort>>      #6a2020
-  BackgroundColor<<box>>  #f2f2f2
-  BorderColor<<box>>      #808080
-  FontColor<<box>>        #303030
-}
-
 state "BUS FSM — dmem[10]\nmain: LDM A,10 then a cumulative SUB A,1 / JZ chain,\ntwo instructions per state" as bus <<box>>
 state "0\ndo_start" as s0
 state "1\nTX 0xA0\nACK -> dmem[1]" as s1 <<tx>>

@@ -1,4 +1,47 @@
 @startuml
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
+skinparam sequence {
+  ArrowColor #335550
+  ArrowFontColor #1F2933
+  LifeLineBorderColor #8A94A6
+  LifeLineBackgroundColor #EDF1F7
+  ParticipantBorderColor #4A6FA5
+  ParticipantBackgroundColor #DCE9F8
+  ParticipantFontColor #16324F
+  GroupBorderColor #6B7686
+  GroupBackgroundColor #E3E9F2
+  SequenceBoxBackgroundColor #FFF3C4
+  SequenceBoxBorderColor #9A7B0A
+  SequenceGroupBorderColor #6B7686
+  SequenceGroupBackgroundColor #E3E9F2
+  SequenceLifeLineBackgroundColor #EDF1F7
+  SequenceLifeLineBorderColor #8A94A6
+  SequenceDividerColor #1F2933
+}
+skinparam state {
+  BackgroundColor #EEF3FB
+  BorderColor #4A6FA5
+  FontColor #16324F
+  ArrowColor #1F2933
+  ArrowFontColor #1F2933
+  BackgroundColor<<tx>>   #DCE9F8
+  BorderColor<<tx>>       #4A6FA5
+  FontColor<<tx>>         #16324F
+  BackgroundColor<<rx>>   #DCEEE0
+  BorderColor<<rx>>       #4A8A5C
+  FontColor<<rx>>         #17452A
+  BackgroundColor<<ack>>  #FFF3C4
+  BorderColor<<ack>>      #9A7B0A
+  FontColor<<ack>>        #3A2E00
+  BackgroundColor<<abort>> #F6D9D9
+  BorderColor<<abort>>    #B05050
+  FontColor<<abort>>      #6A2020
+  BackgroundColor<<box>>  #F0F3F7
+  BorderColor<<box>>      #6B7686
+  FontColor<<box>>        #1F2933
+}
 title DMX512-A at 250 kbaud — the frame layer, and the one counted cell every byte uses
 ' Sources: firmware/dmx512.pe (break/mark loops, tx_byte's 11 cells, the page
 '          arithmetic), tb/tb_pe_soc_dmx512.v (the lean receiver, the two
@@ -7,22 +50,6 @@ title DMX512-A at 250 kbaud — the frame layer, and the one counted cell every 
 '          reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md (the measured numbers)
 ' Program: break 22 cells, mark 3 cells, START code 0x00, then 512 data slots
 skinparam defaultFontName Monospaced
-skinparam state {
-  FontSize 11
-  BackgroundColor<<brk>>  #f6d9d9
-  BorderColor<<brk>>      #b05050
-  FontColor<<brk>>        #6a2020
-  BackgroundColor<<slot>> #dce9f8
-  BorderColor<<slot>>     #4a6fa5
-  FontColor<<slot>>       #16324f
-  BackgroundColor<<fold>> #dceee0
-  BorderColor<<fold>>     #4a8a5c
-  FontColor<<fold>>       #17452a
-  BackgroundColor<<box>>  #f2f2f2
-  BorderColor<<box>>      #808080
-  FontColor<<box>>        #303030
-}
-
 state "FRAME LAYER — break, mark, start code, 512 slots" as fr <<box>> {
   state "THE BREAK\nLDI A,0 / OUT TXPIN  — the line going LOW IS the break\nLDI A,22 / STM 6,A\n117 iterations of a 2-instruction body plus\n236 clocks of delay = 240 clocks per iteration\n= 22 x 4.000 us = 88.000 us" as f1 <<brk>>
   state "THE MARK\nLDI A,1 / OUT TXPIN  — released ONCE, here, not in\nthe loop: an OUT inside it would make the mark\ndepend on which iteration it was\nLDI A,3 = 3 x 4.000 = 12.000 us" as f2 <<brk>>

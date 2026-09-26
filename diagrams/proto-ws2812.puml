@@ -1,4 +1,29 @@
 @startuml proto-ws2812
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
+skinparam state {
+  BackgroundColor #EEF3FB
+  BorderColor #4A6FA5
+  FontColor #16324F
+  ArrowColor #1F2933
+  ArrowFontColor #1F2933
+  BackgroundColor<<tx>>   #DCE9F8
+  BorderColor<<tx>>       #4A6FA5
+  FontColor<<tx>>         #16324F
+  BackgroundColor<<rx>>   #DCEEE0
+  BorderColor<<rx>>       #4A8A5C
+  FontColor<<rx>>         #17452A
+  BackgroundColor<<ack>>  #FFF3C4
+  BorderColor<<ack>>      #9A7B0A
+  FontColor<<ack>>        #3A2E00
+  BackgroundColor<<abort>> #F6D9D9
+  BorderColor<<abort>>    #B05050
+  FontColor<<abort>>      #6A2020
+  BackgroundColor<<box>>  #F0F3F7
+  BorderColor<<box>>      #6B7686
+  FontColor<<box>>        #1F2933
+}
 ' ===========================================================================
 ' proto-ws2812.puml - (a) the WS2812 protocol engine, as two state machines.
 '
@@ -29,18 +54,6 @@ title WS2812 - the protocol engine on both sides\n<font size=12>800 kHz single-w
 hide empty description
 hide stereotype
 skinparam shadowing false
-skinparam state {
-  BackgroundColor White
-  BorderColor #33555
-  FontName monospaced
-}
-skinparam note {
-  BackgroundColor #FFFBE6
-  BorderColor #C8B800
-  FontName monospaced
-  FontSize 11
-}
-
 ' ---------------------------------------------------------------- EMITTER --
 state "FIRMWARE SIDE - firmware/ws2812.pe" as EMIT {
 

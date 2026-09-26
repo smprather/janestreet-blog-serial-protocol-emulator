@@ -1,4 +1,25 @@
 @startuml proto-ds18b20-timing
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
+skinparam sequence {
+  ArrowColor #335550
+  ArrowFontColor #1F2933
+  LifeLineBorderColor #8A94A6
+  LifeLineBackgroundColor #EDF1F7
+  ParticipantBorderColor #4A6FA5
+  ParticipantBackgroundColor #DCE9F8
+  ParticipantFontColor #16324F
+  GroupBorderColor #6B7686
+  GroupBackgroundColor #E3E9F2
+  SequenceBoxBackgroundColor #FFF3C4
+  SequenceBoxBorderColor #9A7B0A
+  SequenceGroupBorderColor #6B7686
+  SequenceGroupBackgroundColor #E3E9F2
+  SequenceLifeLineBackgroundColor #EDF1F7
+  SequenceLifeLineBorderColor #8A94A6
+  SequenceDividerColor #1F2933
+}
 ' ===========================================================================
 ' proto-ds18b20-timing.puml - (c) 1-Wire slot timing, in the numbers both
 ' sides actually produce.
@@ -17,18 +38,6 @@ title DS18B20 - 1-Wire slot timing\n<font size=12>reset 485.7 us; presence 120.0
 
 hide stereotype
 skinparam shadowing false
-skinparam sequence {
-  ArrowColor #33555
-  LifeLineBorderColor #33555
-  LifeLineBackgroundColor #FAFAFA
-  ParticipantBorderColor #33555
-  ParticipantBackgroundColor #F4F7FB
-  ParticipantFontName monospaced
-  ActorFontName monospaced
-  NoteFontName monospaced
-  GroupFontName monospaced
-}
-
 participant "CPU\npe_cpu.v" as CPU
 participant "pad 6\nTXPIN / PINOE" as PAD
 participant "the wire\n+ pull-up" as WIRE
