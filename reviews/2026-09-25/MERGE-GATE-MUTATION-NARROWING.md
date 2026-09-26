@@ -192,27 +192,36 @@ then made to disagree on purpose and correctly refused with exit 3. The same
 session installed the harness-edit pre-flight and demonstrated it firing
 (exit 4) on a mid-run edit to a harness that was executing at the time.
 
-## 8. The one path the pre-flight does NOT yet cover: a STANDALONE suite run
+## 8. The STANDALONE suite path — now closed, and how
 
-Stated plainly because it is the same shape as the bug it fixes, and because
-nobody should have to find it by reading the diff. `regress/dep_guard.sh` is
-wired into `run_all.sh` — it stamps the whole `regress/` dependency set and
-re-checks it in the exit trap, and `run_mutation_suite` stamps and checks each
-suite **as run by the gate**. So every harness run *through* `run_all.sh` or
-`verify_merge.sh` is covered.
+This section was first written as a statement of residual risk: the pre-flight
+covered every harness run *through* `run_all.sh`, but a harness invoked directly —
+`regress/mutate_timing_tb.sh` on its own, which is how anyone debugging one suite
+works and **exactly how the original race happened** — was not covered. It is now
+covered, and the shape of the fix is the interesting part.
 
-A harness invoked directly — `regress/mutate_timing_tb.sh` on its own, which is
-how anyone debugging one suite works, and **exactly how the original race
-happened** (the cost campaign) — is not yet covered. It could not be covered from
-`run_lock.sh`, which is where the rest of it lives, because every harness sets its
-own `trap cleanup EXIT` *after* sourcing that file, and a second `trap … EXIT`
-replaces the first. Closing it means a shape-aware edit to all sixteen harnesses
-(stamp after the lock source, `exit 4` from `cleanup`), which changes sixteen exit
-paths in the harnesses that guard the project's mutation evidence.
+**Why it could not simply live in `run_lock.sh`, where the rest of the guard
+lives.** Every harness sources `run_lock.sh` and then sets its own
+`trap cleanup EXIT`; a second `trap … EXIT` **replaces** the first. So a check
+installed over there would be silently discarded, and the discard would be
+invisible — the suite would run, report its real verdict, and exit normally. The
+stamp, by contrast, can live in `chip_take_run_lock`, which all sixteen harnesses
+already call. So: stamp there, check in each harness's own exit path.
 
-That is deliberately **not** done unasked in the same turn as the re-measurement:
-the ordering that avoids recreating the race is the whole lesson of §5, and an
-edit to sixteen harnesses is a bigger claim on the tree than it looks. The
-honest statement of the residual risk: a standalone suite run can still report a
-verdict from a script that moved underneath it, and the person most likely to do
-that is the person debugging it.
+**And the trap rule bit me anyway, in the harness I hand-wired last.** For
+`mutate_timing_tb.sh` I first wrote `trap cleanup EXIT` followed by
+`trap _chip_dep_exit EXIT` — which would have stopped the snapshot from ever being
+removed, a far worse regression than the race being guarded, and one whose only
+symptom would be a `$SNAP` directory left behind. Caught by reading the two lines
+back rather than by any test. The wiring is **one** trap that calls `cleanup()`
+and then the check, in that order.
+
+Verified: all sixteen harnesses carry a check; `regress/check_shell_syntax.sh`
+parses 31 scripts one file at a time; the nine fast suites produce **byte-identical
+exit codes and verdicts** to a pre-wiring baseline (taken before any edit, which
+is the only way that comparison means anything); `mutate_timing_tb` — the rewired
+one — passes at 326 s with 58/58 detected, removes its snapshot, and leaves
+`rtl/` and `firmware/` clean. And the demonstration that matters: a **standalone**
+`mutate_i2c_tb.sh`, genuinely passing ("all mutations accounted for"), was
+appended-to mid-run and **exited 4** with `CHIP-DEP-CHANGED` rather than
+reporting the pass it had just earned.

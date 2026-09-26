@@ -56,8 +56,26 @@ if [ "${CHIP_RUN_SCRIPT%/*}" = "$CHIP_RUN_SCRIPT" ]; then
   case "$CHIP_RUN_SCRIPT" in
     */*) CHIP_RUN_SCRIPT="./$CHIP_RUN_SCRIPT" ;;
     *)   CHIP_RUN_SCRIPT="$(command -v "$CHIP_RUN_SCRIPT" 2>/dev/null || printf './%s' "$CHIP_RUN_SCRIPT")" ;;
+
   esac
 fi
+
+# The harness-edit pre-flight, sourced HERE (not inside the case above, where a
+# second insertion silently became a case arm) so every script that takes the run
+# lock gets it without editing itself: all sixteen mutation harnesses source this
+# file, and so does run_all.sh. Bash reads a script INCREMENTALLY, so a harness
+# edited while it runs can report a FALSE PASS as easily as a false failure — and a
+# false pass is believed, which is the worst thing a gate here can do. See
+# regress/dep_guard.sh, and regress/test_dep_guard.sh for the guard's own test
+# (which runs inside the full gate).
+# lock gets it without editing itself: all sixteen mutation harnesses source
+# this file, and so does run_all.sh. Bash reads a script INCREMENTALLY, so a
+# harness edited while it runs can report a FALSE PASS as easily as a false
+# failure — and a false pass is believed, which is the worst thing a gate here
+# can do. See regress/dep_guard.sh, and regress/test_dep_guard.sh for the
+# guard's own test (which runs inside the full gate).
+# shellcheck source=regress/dep_guard.sh
+. "$(dirname "${BASH_SOURCE[0]}")/dep_guard.sh"
 CHIP_RUN_SCRIPT_ARGS=("$@")
 
 # PER-WORKTREE by default (2026-09-25, parallel workers): concurrent runs in
@@ -230,6 +248,15 @@ chip_isolate_run_group() {
 
 chip_take_run_lock() {
   local who="${1:-$(basename "$0")}"
+
+  # THE STAMP, at the one place every mutation harness already passes through.
+  # $0 here is the RUNNING SCRIPT (this file is sourced, not executed), so the
+  # dependency set chip_dep_list builds is that harness plus this lock helper —
+  # which is precisely the set whose mid-run edit can invalidate its verdict.
+  # The CHECK is not here: each harness sets its own `trap cleanup EXIT` AFTER
+  # sourcing this file, and a second EXIT trap replaces the first, so the check
+  # has to live in the harness's own cleanup.
+  chip_dep_stamp "run_$who"
 
   # Already inside a run that holds the lock (run_all -> mutate_*.sh): pass
   # through. The lock FD is inherited, so the kernel view stays consistent, and

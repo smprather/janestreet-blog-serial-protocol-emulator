@@ -36,6 +36,15 @@ MUTABLE="rtl/pe_soc.v rtl/pe_eth_mac.v"
 PRISTINE=$(mktemp -d /tmp/pristine_eth_soc.XXXXXX)
 
 cleanup() {
+  # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). Stamped when this
+  # harness took the run lock; verified HERE, because this is the only place it
+  # can be: the harness sets its own `trap cleanup EXIT` after sourcing
+  # run_lock.sh, and a second EXIT trap replaces the first, so a check installed
+  # over there would be silently discarded. If this script — or the lock helper it
+  # sources — changed while we were running, bash's incremental read means our
+  # verdict is untrustworthy in EITHER direction, so exit 4 (INCONCLUSIVE) rather
+  # than report a possibly-false pass.
+  chip_dep_check "run_$(basename "$0")" || exit 4
   for f in $MUTABLE; do cp "$PRISTINE/$(basename "$f")" "$ROOT/$f" 2>/dev/null; done
   rm -f "$BAK"
   rm -rf "$PRISTINE"

@@ -169,4 +169,14 @@ echo "=== $pass detected, $survived survived, $fail harness errors ==="
 [ $survived -gt 0 ] && { echo "SURVIVORS: the TB does not test what it claims."; exit 1; }
 [ $fail -gt 0 ] && { echo "HARNESS ERRORS: fix the harness first."; exit 1; }
 echo "OK: every word-engine integration mutation is detected by tb_pe_soc_serdes."
+  # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). Stamped when this
+  # harness took the run lock; verified HERE, because this is the only place it
+  # can be: the harness sets its own `trap cleanup EXIT` after sourcing
+  # run_lock.sh, and a second EXIT trap replaces the first, so a check installed
+  # over there would be silently discarded. If this script — or the lock helper it
+  # sources — changed while we were running, bash's incremental read means our
+  # verdict is untrustworthy in EITHER direction, so exit 4 (INCONCLUSIVE) rather
+  # than report a possibly-false pass.
+  chip_dep_check "run_$(basename "$0")" || exit 4
+
 exit 0

@@ -68,6 +68,19 @@ cd "$(dirname "$0")/.."
 # shellcheck source=regress/run_lock.sh
 . "$(dirname "$0")/run_lock.sh"
 chip_take_run_lock "$(basename "$0")"
+
+# THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh), for the one harness with no
+# `trap ... EXIT` of its own. Installed right after the lock is taken (which is
+# where the stamp is), so it cannot be replaced, and it converts a changed
+# dependency into exit 4 (INCONCLUSIVE) instead of a verdict that a mid-run edit
+# could have made false in either direction.
+_chip_dep_exit() {
+  local rc=$?
+  chip_dep_check "run_$(basename "$0")" || rc=4
+  exit "$rc"
+}
+trap _chip_dep_exit EXIT
+
 ROOT="$PWD"
 TMP=$(mktemp -d /tmp/macro-flow-neg.XXXXXX)
 trap 'rm -rf "$TMP"' EXIT

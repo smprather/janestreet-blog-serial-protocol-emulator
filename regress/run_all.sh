@@ -483,6 +483,20 @@ else
   failed_names+=("param_guards")
 fi
 
+# Every regress/ script must PARSE, one file per bash -n. This is a gate
+# because the failure it prevents is invisible in the output: a broken lock
+# helper made all sixteen mutation suites run to completion, report their real
+# verdicts, and exit 4 — and `bash -n regress/*.sh` had said "all parse", because
+# bash -n over a glob parses the FIRST file and passes the rest as arguments.
+if "$REPO_ROOT/regress/check_shell_syntax.sh" > /tmp/check_shell_syntax.log 2>&1; then
+  echo "regress script syntax: OK ($(tail -1 /tmp/check_shell_syntax.log))"
+else
+  echo "regress script syntax: FAILED"
+  cat /tmp/check_shell_syntax.log
+  fail=$((fail+1))
+  failed_names+=("check_shell_syntax")
+fi
+
 # The mutation suites' MUTABLE lists decide which suites a NARROWED merge gate
 # has to run (regress/verify_merge.sh), so a list that stopped covering the
 # files its harness writes would make that gate skip a suite guarding a changed

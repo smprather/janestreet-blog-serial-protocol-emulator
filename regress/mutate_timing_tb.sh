@@ -76,7 +76,19 @@ for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter; do
   cp "$ROOT/firmware/$f.hex" "$SNAP/$f.hex"
 done
 cleanup() { rm -rf "$SNAP"; }
-trap cleanup EXIT
+# THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). ONE trap, not two: a
+# second `trap … EXIT` REPLACES the first, so `trap cleanup EXIT` followed by
+# `trap _chip_dep_exit EXIT` silently stops the snapshot from ever being removed
+# — a worse regression than the race being guarded, and one the first version of
+# this wiring introduced. So the handler calls cleanup() itself, in order, and
+# only then the check. Stamped when the lock was taken.
+_chip_dep_exit() {
+  local rc=$?
+  cleanup
+  chip_dep_check "run_$(basename "$0")" || rc=4
+  exit "$rc"
+}
+trap _chip_dep_exit EXIT
 
 # ---- one case, in its own directory ---------------------------------------
 # $1 name  $2 firmware stem  $3 TB  $4 -D macro name  $5 anchor  $6 replacement
