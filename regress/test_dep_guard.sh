@@ -147,6 +147,74 @@ else
   bad "a run with no stamp was trusted (exit $rc): $out"
 fi
 
+# --- the DUT dependency: the interference class of 2026-09-26 -----------------
+# On 2026-09-25 a mutation harness was live on rtl/pe_eth_mac.v and the file was
+# restored from OUTSIDE the harness mid-run, which risked a false survivor. The
+# guard could not see it: it stamped SCRIPTS only. A harness's MUTABLE list names
+# the exact files it mutates, so those are dependencies too.
+#
+# These cases reuse the SAME inline `bash -c` + positional-args shape as the
+# touch/vanish/no-stamp cases above, deliberately. A first attempt generated a
+# nested script with its own heredoc, and two things went wrong that a shell
+# self-test should not: the inner EOF terminated the OUTER heredoc, leaving the
+# file unparseable and running a chmod against /; and after that was repaired, the
+# body's target path was expanded by the PARENT when the unquoted heredoc was
+# written, so the child wrote to the wrong place. The pattern already passing 7/7
+# has neither problem, so the fixture was wrong and the guard was not.
+
+# 1. A CLEAN run: the harness mutates its target and RESTORES it, exactly as all
+#    sixteen real ones do. End state equals start state, so this must PASS - if it
+#    did not, the new dependency would be firing on normal behaviour.
+printf 'module dut; endmodule\n' > "$TMP/dut_clean.v"
+out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
+  set -u; . "$1"
+  chip_dep_stamp dut_clean "$2"
+  printf "module dut; // MUTANT\nendmodule\n" > "$2"
+  printf "module dut; endmodule\n" > "$2"
+  chip_dep_check dut_clean
+' _ "$GUARD" "$TMP/dut_clean.v" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q CHIP-DEP-CHANGED <<< "$out"; then
+  ok "a CLEAN run with a mutating target still reports its verdict"
+else
+  bad "a clean run was refused - the DUT dependency fires on normal behaviour (exit $rc): $out"
+fi
+
+# 2. An EXTERNAL edit lands on the target mid-run and is not put back: the shape a
+#    content check CAN see. Must be INCONCLUSIVE, never a verdict.
+printf 'module dut; endmodule\n' > "$TMP/dut_hit.v"
+out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
+  set -u; . "$1"
+  chip_dep_stamp dut_hit "$2"
+  printf "module dut; // EDITED BY SOMEBODY ELSE\nendmodule\n" > "$2"
+  chip_dep_check dut_hit
+' _ "$GUARD" "$TMP/dut_hit.v" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && grep -q CHIP-DEP-CHANGED <<< "$out"; then
+  ok "a mid-run change to a MUTABLE target is INCONCLUSIVE, never a verdict"
+else
+  bad "a mid-run target change was NOT caught (exit $rc): $out"
+fi
+
+# 3. THE LIMITATION, pinned as a case so it cannot be forgotten. An external actor
+#    who RESTORES the target to its starting content mid-run leaves the file
+#    exactly as a content check expects to find it - and that IS the real
+#    2026-09-25 incident. Until the sampler exists this case MUST pass, and that
+#    is the point: it documents the boundary of the content check rather than
+#    letting cases 1 and 2 read as coverage of the whole class.
+printf 'module dut; endmodule\n' > "$TMP/dut_restore.v"
+out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
+  set -u; . "$1"
+  chip_dep_stamp dut_restore "$2"
+  printf "module dut; // MUTANT\nendmodule\n" > "$2"
+  printf "module dut; endmodule\n" > "$2"
+  echo restored-mid-run
+  chip_dep_check dut_restore
+' _ "$GUARD" "$TMP/dut_restore.v" 2>&1); rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "KNOWN LIMITATION pinned: a mid-run RESTORE-to-original is invisible to a content check"
+else
+  ok "better than expected: a mid-run restore is caught by the content check too (exit $rc)"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "dep_guard self-test: $fail of $((pass+fail)) FAILED"
   exit 1
