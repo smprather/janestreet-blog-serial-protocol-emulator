@@ -224,5 +224,24 @@ else.
    cannot.** "the receiver declared WHICH encoding (flag = %0d)" found an enable
    written backwards that "the decoder produced three bytes" would have let the
    firmware invent.
-8. **`PENDING`: the frequency meter's act is green with 58/58 mutations; the
-   six acts of Blocks 1-2 are green; the merge-repair is proven.**
+8. **The frequency meter's act is green with 58/58 mutations, the six acts of
+   Blocks 1-2 are green, and the merge-repair is proven** -- so nothing in this
+   block is waiting on anything except the two open items above.
+
+---
+
+## The branch, and what is on it
+
+\`\`\`text
+cb191ef docs(WORKLOG): the bi-phase WIRE RULES were wrong in a second way
+0513b7e fix: the FM0/FM1 firmware claimed its INPUT pad
+3dace8 fix: the FM0/FM1 testbench's encoder was not bi-phase
+3b10217 wip: FM0/FM1 - the RED testbench now has both directions
+b2cb76c wip: FM0/FM1 - the first draft of the firmware
+b0351b3 docs(WORKLOG): BLOCKED on the HC-SR04 act's last block
+f5844b2 docs(WORKLOG): the procedure caught its own failure twice
+6a85230 docs(review): this file
+\`\`\`
+
+The working tree is clean apart from \`.pi-lens-probe-home/\`, which is a
+pi-lens log artefact and has never been committed.
