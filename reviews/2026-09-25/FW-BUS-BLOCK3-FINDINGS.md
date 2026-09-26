@@ -807,10 +807,23 @@ word list was what made the reversal visible.
    nested one `for` inside the other and I nearly shipped it.)
 2. `a65dee5` — a one-line sync of `main`'s stale R3 chip-confirmation status.
 3. `dcb27df` — the `servo_sweep` comment fix above.
+4. `2ca9b54` + `e3e467b` — `fw-bus-protocols` (now carrying `1798abf`,
+   `ca3e2bf`, `e8d9dc0`, `f475532`, `dc91e04`) merged **downward** into the prep
+   branch, so the spi3 comment fix and both documentation corrections travel with
+   the block. One conflict, `WORKLOG.md`, and it was the **rotation**: the branch
+   carries the pre-rotation log (415 lines) and the prep tree carries `main`'s
+   live CURRENT file (609 lines). Resolved to ours + the 4 new entries appended,
+   which drops nothing because the branch's older entries are already in
+   `logs/worklog/2026-09-25.md` (116 `fw-bus` entries). **Verified by count, not
+   by reading** — 609 + 4 = 613, 0 conflict markers, `main`'s last live entry
+   present — because a resolver I trusted once reduced a 233-line script to 3
+   lines. Comment-only re-proven *after* the merge: both firmwares reassemble
+   byte-identical to the committed images on the merged tree.
 
 Its suite: **EXIT=1** with **42/42 firmware, 48/48 testbenches, every mutation gate
 OK including fw-bus 21/21, and the R3 gate OK**. The only red is
-`run_lock` sub-check E.
+`run_lock` sub-check E. Re-verified on the merged tree after `2ca9b54`:
+firmware 42/42, spi3/midi/dmx512 all PASS, fw-bus mutations 21/21 in 3 m 47 s.
 
 **Open, all `main`-owned, all logged as QUESTIONs:**
 
@@ -826,6 +839,13 @@ OK including fw-bus 21/21, and the R3 gate OK**. The only red is
   overwrite each other's evidence; a run-lock result was unreadable for exactly
   this reason.
 - No gate covers `diagrams/` at all.
+- A **TB vcd escapes the ignore rules**: `tb_pe_ctrl_r3.vcd` sits untracked at
+  the **repo root** of the prep tree, and `.gitignore` covers only `tb/*.vcd`
+  and `sim/*.vcd`. `.gitignore`'s own comment (line 223) records that a 40 KB
+  `tb_pe_pinmux.vcd` was once *committed* for exactly this reason — the class of
+  accident the rules were written to stop, happening beside the rules. One line
+  fixes it, but `.gitignore` is shared and `main`-owned, so it is reported here
+  rather than folded into a Block 3 merge vehicle.
 
 ## What the block cost, honestly
 
