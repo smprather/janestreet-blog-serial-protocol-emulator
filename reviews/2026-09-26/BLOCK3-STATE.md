@@ -549,3 +549,64 @@ construction. That is the change the last three updates prescribed, working.
 65,536 pairs in two forms, and now an exact 199 mm in the machine. What is
 left is allocation, ordering and the instrument, which is where this act has
 always been hardest and has never once been about the maths.
+
+---
+
+## FINAL STATE AT THE HARD WRAP (2026-09-27 00:30)
+
+Everything below is COMMITTED and the working tree is clean.
+
+| act | state | last commit |
+|---|---|---|
+| (b) frequency + duty meter | **GREEN, in the regression**, 58/58 mutations | `d88e316` |
+| (a) HC-SR04 | firmware **exact at 199 mm**; testbench restructure outstanding | `7fc3dc8` |
+| (c) FM0/FM1 | RED testbench (7 correct checks), first-draft firmware, wire rules corrected | `cb191ef` |
+
+Plus the **merge-repair** of the six acts in main, `3657847`, proven on three
+throwaway exports of main: unpatched 6/6 FAIL, the RTL hunk alone 6/6 PASS,
+the TB hunks alone 6/6 PASS, both 6/6 PASS.
+
+### What is verified about (a) HC-SR04 right now, on real RTL
+
+* the conversion is **EXACT**: 1160 us -> 199 mm, against (1160*11)/64 = 199;
+* the trigger pulse is **601 clocks = 10.017 us**, an equality, and the
+  derivation in peasm's CONSTS is `4*SR_TRIG + 5`, counted from the listing;
+* the exact carry is verified for **all 65,536 (src, dst) pairs**, in two forms
+  (four temporaries and three), and the three-temporary form is what shipped;
+* one answer per run, temporaries at {6,7,11}, bank low byte first.
+
+### The three things still open on (a), in the order they should be done
+
+1. **Restructure tb_pe_soc_sr04.v into two runs** -- loop over the two
+   distances, reset between (rst_n low, reload, four stopped clocks then #1),
+   and **read the answer at the moment dmem[10] goes to 1**, not at the end of
+   the run. The end-reading is what reported a correct conversion as 222 mm.
+   The full recipe is in the WORKLOG at 23:45.
+2. **Three stray reads in the leftover acc_x11_h tail** (`LDM A,2` and
+   `LDM A,3` twice) -- a site's replacement range ends at the NEXT LABEL, and
+   the old block's `<lab>_h` label and high-byte add sit after the JZ. They are
+   reads, which is why the answer is still exact, but they are reachable.
+   **The rule that catches this, and it should become a permanent gate on this
+   act: no instruction outside init / echo_down / convert may touch dmem[2] or
+   dmem[3]** -- those two bytes ARE the width, and the width is the measurement.
+3. The width check reads dmem[2..3] AFTER the bank, which is legal only
+   because the conversion no longer writes those bytes. Say so in the file.
+
+### The finding that outlives all of it
+
+**EVERY HARD FAILURE IN THIS BLOCK WAS FOUND BY MAKING SOMETHING PROVE ITSELF,
+AND NOT ONE BY REASONING AHEAD.** A primitive verified exhaustively over 65,536
+operand pairs; a check run on a single known value; a one-line jump check
+written from the assembler's listing; a trace of the values a program actually
+left behind. The one mechanical check written from the listing has never been
+wrong. The SIX written by pattern have been wrong six times, and three of those
+were checks rather than edits -- a window placed by estimate, a window one
+instruction wide, a block reader that stopped at the first label when the
+trigger spans two. **The eye loses track of where a block starts and ends, and
+every one of those failures looked like a finding until it was read.**
+
+Also worth carrying: a carry out of a general 16-bit add does **not** require a
+zero result (0xE0+0x38 = 0x118 carries and leaves 0x18); this ISA has **no
+store-forward** (OP_LDS has no X destination); and **sixteen bytes cannot hold
+two banked answers and a four-temporary exact add at once**, which is why (a)
+measures one distance per run.
