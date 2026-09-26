@@ -209,12 +209,36 @@ if start_case normal 'exit 0'; then
   child=$(cat "$WORK/child.normal")
   wait "$RUNNER_PID" 2>/dev/null
   RUNNER_PID=""
-  sleep 0.4
-  case "$(heartbeat_state "$child")" in
-    growing) bad "E: a cleanly finished run left its child running" ;;
-    silent)  bad "E: the child never ran, so the case proves nothing" ;;
-    still)   ok "E: a clean exit leaves no strays" ;;
-  esac
+  # THE 0.4s SLEEP THIS REPLACED WAS A RACE, AND IT MADE THE GATE FLAKY. This
+  # child IGNORES TERM on purpose, so the run's cleanup cannot kill it politely:
+  # it dies to the TERM->KILL escalation, or to the watchdog, and either way its
+  # death lands a beat AFTER the holder is gone -- later still on a loaded box.
+  # A fixed sleep then sampled the heartbeat ACROSS that death, so the child's
+  # very last write counted as "growing" and the case reported a leak that had
+  # not happened. Measured, not inferred: 0 failed on an idle box, 1 failed
+  # inside the full suite, and on both failures the child was already dead with
+  # no strays and no holder note. A gate that is red sometimes and green other
+  # times cannot be trusted in EITHER direction, which is the one property
+  # dep_guard.sh exists to protect, so the case waits for the death the
+  # contract actually promises -- bounded, so a genuine leak still fails.
+  e_alive() {   # a zombie is dead: kill -0 still succeeds on one
+    kill -0 "$1" 2>/dev/null && [ "$(ps -o stat= -p "$1" 2>/dev/null)" != "Z"* ]
+  }
+  e_waited=0
+  while e_alive "$child" && [ "$e_waited" -lt 100 ]; do
+    sleep 0.1; e_waited=$((e_waited + 1))
+  done
+  if e_alive "$child"; then
+    bad "E: a cleanly finished run left its child running (alive after $((e_waited * 100))ms)"
+  elif [ ! -e "$WORK/heartbeat.$child" ]; then
+    bad "E: the child never ran, so the case proves nothing"
+  else
+    case "$(heartbeat_state "$child")" in
+      growing) bad "E: a cleanly finished run left its child running" ;;
+      silent)  bad "E: the child never ran, so the case proves nothing" ;;
+      still)   ok "E: a clean exit leaves no strays (child gone after $((e_waited * 100))ms)" ;;
+    esac
+  fi
   if lock_frees_within 3; then ok "E: the lock is free after a clean exit"
   else bad "E: the lock is still held after a clean exit"; fi
   if [ -e "$WORK/normal.owner" ]; then
