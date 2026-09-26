@@ -23,6 +23,27 @@ skinparam state {
   BackgroundColor<<box>>  #F0F3F7
   BorderColor<<box>>      #6B7686
   FontColor<<box>>        #1F2933
+  BackgroundColor<<brk>>   #FADBD8
+  BorderColor<<brk>>       #A93226
+  FontColor<<brk>>         #5B1610
+  BackgroundColor<<slot>>  #D6EAF8
+  BorderColor<<slot>>      #2E6DA4
+  FontColor<<slot>>        #16324F
+  BackgroundColor<<crc>>   #EDE0F5
+  BorderColor<<crc>>       #6B4E9B
+  FontColor<<crc>>         #3B2560
+  BackgroundColor<<data>>  #D5F0E0
+  BorderColor<<data>>      #2E7D4F
+  FontColor<<data>>        #12402A
+  BackgroundColor<<stat>>  #FDECC8
+  BorderColor<<stat>>      #A9741A
+  FontColor<<stat>>        #5A3D12
+  BackgroundColor<<hs>>    #FDF2E9
+  BorderColor<<hs>>        #A04000
+  FontColor<<hs>>          #5A2400
+  BackgroundColor<<wait>>  #D2E3F0
+  BorderColor<<wait>>      #24506E
+  FontColor<<wait>>        #12303F
 }
 ' ===========================================================================
 ' proto-dht11.puml - (a) the DHT11 protocol engine, both sides.
