@@ -820,6 +820,26 @@ else
   stale=1
 fi
 
+# The R2 golden package the conformance harness consumes: tb/r2-vectors/ is a
+# DERIVED SNAPSHOT of the host's package (reviews/2026-09-25/r2-hex), and this
+# gate is what stops it quietly becoming a second source of truth. The class
+# died twice on 2026-09-25/26 — the copy sat at 18 steps while the host was at
+# 22, the derived table never named three of its own steps, and the package
+# notice claimed "every golden step passes" while the same file's conformance
+# line said 15/15. Every existing gate compared the .hex BYTES and none looked
+# at the FLAGS. Unlike the R3 gate, manifest.json is NOT excluded here: this
+# snapshot is a byte copy, and the chip's evidence for each confirmation lives
+# in reviews/2026-09-25/R2-HELD-CORE-CHIP-SIDE.md rather than in an edited copy
+# of somebody else's file.
+if "$REPO_ROOT/regress/check_r2_package.sh" > /tmp/check_r2_package.log 2>&1; then
+  echo "R2 golden package: OK ($(tail -1 /tmp/check_r2_package.log))"
+else
+  echo "R2 golden package: FAILED (snapshot drift, or a claim that does not match its own flags)"
+  cat /tmp/check_r2_package.log
+  fail=$((fail+1))
+  failed_names+=("check_r2_package")
+fi
+
 # The R3 golden package the conformance harness consumes, in TWO places: the
 # review artifact and the TB's copy. A conformance gate is only worth the bytes
 # it compares, so the .hex streams must be byte-identical and the checked-in

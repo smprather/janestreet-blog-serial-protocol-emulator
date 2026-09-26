@@ -30,12 +30,18 @@ if __package__ in (None, ""):  # direct script run: put the repo root on path
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.host_gui import protocol as P
+from tools.host_gui import r2_vectors as R2V
 from tools.host_gui.fake_pe import FAULT_LOAD, FAULT_RANGE, IMEM_WORDS
 from tools.host_gui.image import ImageError, assemble_program
 from tools.host_gui.session import (
     ControllerSession,
     SessionError,
     SessionState,
+    # The refusal type specifically, not the SessionError base: the held-readback
+    # and fault-refusal beats assert that a state REFUSAL happened, and a
+    # transport failure reaching the same `except` would otherwise be reported
+    # as one. A refusal and a broken wire are different facts.
+    SessionStateError,
     TransportLike,
 )
 from tools.host_gui.transport import TransportError
@@ -168,6 +174,31 @@ def build_serial_link(device):
     return Link(transport=SerialTransport(port))
 
 
+def _r2_evidence_summary() -> str:
+    """The R2 package's confirmation state, READ from its evidence block.
+
+    Derived, never typed. This text appears in judge-facing output, and it went
+    stale the moment the four held-core steps were confirmed - the exact failure
+    the generated notice exists to prevent, reintroduced one layer up in a
+    string no gate could check. So the number comes from the evidence block that
+    the flag-flip maintains, and it is right in both states by construction.
+    """
+    evidence = R2V.CHIP_EVIDENCE
+    confirmed = len(evidence["confirmed_steps"])
+    pending = len(evidence["pending_steps"])
+    total = confirmed + pending
+    if pending:
+        return (
+            f"{confirmed}/{confirmed} read-path steps byte-exact; the "
+            f"package is {confirmed} of {total}, and the {pending} "
+            f"held-core steps are not yet re-run by the chip"
+        )
+    return (
+        f"{confirmed}/{total} golden steps byte-exact, the four held-core "
+        f"steps included (state 2 step-pause, state 3 live hit)"
+    )
+
+
 def _r2_detail(text: str) -> str:
     """Tag every R2 read-path line with its evidence status.
 
@@ -184,6 +215,20 @@ def _r2_detail(text: str) -> str:
     """
     return (f"{text} [chip-confirmed in simulation (tb_pe_ctrl_r2, 18/18 "
             f"byte-exact); hardware acceptance not yet run]")
+    Chip R2 is landed and every step in the package is chip-confirmed IN
+    SIMULATION (chip repo `tb_pe_ctrl_r2`, see `R2-READ-PATH-REVIEW.md` for the
+    read-path steps and `R2-HELD-CORE-CHIP-SIDE.md` for the four held-core ones
+    the chip re-ran on 2026-09-25). What the tag states is read from
+    `_r2_evidence_summary()`, so it is right in both states by construction
+    rather than by remembering which one shipped last. The hardware run — this
+    script against a real Pico and shuttle — is still unexecuted, so the tag
+    says exactly that.
+    """
+    return (
+        f"{text} [chip-confirmed in simulation for the R2 read-path steps "
+        f"(tb_pe_ctrl_r2: {_r2_evidence_summary()}); hardware "
+        f"acceptance not yet run]"
+    )
 
 
 def _r3_detail(text: str) -> str:
@@ -227,6 +272,48 @@ def _observe_heartbeat(session, pe, *, tries=3, sleep=time.sleep):
     return False, f"timer stuck at {before}"
 
 
+def await_breakpoint_hit(*, debug_state, advance=None, tries=200, sleep=time.sleep):
+    """Wait for the core to stop on the armed breakpoint. BOUNDED.
+
+    The demo act does not need to PUSH the core to the breakpoint, it needs to
+    WAIT for it to arrive - a real core advances on its own, and only the model
+    has to be clocked. So the advance is a hook: the fake path passes
+    `pe.advance_free_running`, a real link passes nothing, and the act runs on
+    both.
+
+    `tries` bounds the wait because an unbounded wait is a hang, and a hang
+    during a board run is the worst possible failure: the operator sees nothing
+    at all. Giving up reports the last state observed, so the beat says what the
+    core was actually doing.
+    """
+    state = 0
+    for attempt in range(tries):
+        state = debug_state()
+        if state == 3:  # BP_HIT
+            return {
+                "stopped": True,
+                "state": state,
+                "detail": (
+                    "the core reached the armed breakpoint on its own"
+                    if advance is None
+                    else "the core was clocked to the armed breakpoint by the "
+                    "model (FakePE does not self-advance)"
+                ),
+            }
+        if advance is not None:
+            advance()
+        if attempt + 1 < tries:
+            sleep(0.01)
+    return {
+        "stopped": False,
+        "state": state,
+        "detail": (
+            f"the core did not reach the breakpoint in {tries} polls "
+            f"(last state={state}, expected 3/BP_HIT)"
+        ),
+    }
+
+
 def run_acceptance(
     *,
     fake,
@@ -235,6 +322,7 @@ def run_acceptance(
     board=None,
     repo_root=REPO_ROOT,
     link_factory=None,
+    model_backed: bool = True,
 ):
     """Run the scripted acceptance; returns a report, never raises on FAIL."""
     report = AcceptanceReport(board=board or ("fake-adapter" if fake else "unknown"))
@@ -612,8 +700,10 @@ def run_acceptance(
     DEMO_BP = 2
 
     def demo_act(pe):
-        # `pe` arrives non-Optional: the caller narrows `first.pe` once, rather
-        # than re-reading the Optional inside this function.
+        # `pe` may be None: that is the BOARD shape, where there is no model to
+        # clock and the core advances on its own. Everything else in the act is
+        # identical, which is the point - the act was never about the model, it
+        # was about the host driving a real core to a breakpoint.
         # 1. arm the breakpoint over the host bus, core stopped
         armed = session.bp_set(DEMO_BP)
         demo(
@@ -624,15 +714,23 @@ def run_acceptance(
             f"armed), state={armed.state_name}",
         )
 
-        # 2. run, and let the core advance to the armed address
-        pe.set_run(True)
-        stopped = pe.advance_free_running()
+        # 2. run, and wait for the core to advance to the armed address
+        pe.set_run(True) if pe is not None else session.start()
+        hit = await_breakpoint_hit(
+            debug_state=lambda: session.debug_status().state,
+            advance=pe.advance_free_running if pe is not None else None,
+        )
         demo(
             "r3_demo_2_run_and_hit",
-            stopped,
+            hit["stopped"],
             "run strap high; the core advances until its LANDING address "
             "equals the armed one, then stops there (model-clocked: FakePE "
-            "does not self-advance, a real core does)",
+            "does not self-advance, a real core does)"
+            if pe is not None
+            else f"run strap high; the core advanced on its own until its "
+            f"LANDING address equalled the armed one, then stopped there "
+            f"({hit['detail']}) - no model on this link, so nothing was "
+            f"clocked",
         )
 
         # 3. the hit is visible and distinguishable: state 3 = BP_HIT
@@ -646,7 +744,47 @@ def run_acceptance(
             f"holds the core, it does not drop the run strap",
         )
 
-        # 4. inspect the registers two ways
+        # 3b. the R2 READBACK of the HELD core - the op the GUI actually polls.
+        #     Unnumbered on purpose: the walkthrough cites beats 1-7 by number,
+        #     and renumbering them would desynchronise the document from the
+        #     run. The evidence tail is written here rather than reusing
+        #     `_r3_detail`, because this beat straddles two claims: the
+        #     debug-hold STATE is covered by the R3 vectors, while the R2
+        #     readback of that state is exactly the surface the R3 review found
+        #     untested, and its four golden steps ship chip_confirmed=false.
+        #     Borrowing the R3 tag wholesale would be the F1 defect again.
+        held = session.status()
+        try:
+            session.dump_core()
+            dump_refusal = "DUMP_CORE ANSWERED (unexpected)"
+        except SessionStateError as exc:
+            dump_refusal = f"DUMP_CORE refused ({exc})"
+        cpu_held = session.read_cpu()
+        # `report.record` directly, NOT `demo()`: the shared helper appends the
+        # R3 package's tally, and this line is about the R2 readback, so the two
+        # packages' numbers would sit on one judge-facing line with nothing to
+        # say which covers which. The tail is written out instead.
+        report.record(
+            "r3_demo_held_readback",
+            held.state == 3
+            and held.run == 1
+            and session.state == SessionState.BP_HIT
+            and cpu_held.pc == DEMO_BP
+            and dump_refusal.startswith("DUMP_CORE refused"),
+            f"the R2 readback of a HELD core, which is the path the GUI polls: "
+            f"STATUS reports state={held.state} (BP_HIT) run={held.run} and the "
+            f"session reports {session.state} - a core parked on a breakpoint "
+            f'is not "stopped", it is BP_HIT, and run=1 is the strap still '
+            f"high; {dump_refusal}, because DUMP_CORE's gate is the run STRAP "
+            f"and the core answering NOT_READY (status 6) is the chip agreeing; "
+            f"READ_CPU still answers (pc={cpu_held.pc}) because it is the one "
+            f"NON-HALTING read. The debug-hold STATE is chip-confirmed in "
+            f"SIMULATION through the R3 vectors; the R2 READBACK of that state "
+            f"is {_r2_evidence_summary()} "
+            f"(reviews/2026-09-25/R2-HELD-STATUS-BYTES.md). Hardware "
+            f"acceptance NOT run]",
+        )
+
         cpu = session.read_cpu()
         demo(
             "r3_demo_4_inspect",
@@ -692,15 +830,17 @@ def run_acceptance(
             f"re-arm -> armed at {rearmed.bp_addr} and running. The recipe "
             f"exists because BP_CLR is the only release and it also disarms",
         )
-        pe.set_run(False)
+        pe.set_run(False) if pe is not None else session.stop()
 
-    if first.pe is not None:
-        try:
-            demo_act(first.pe)
-        except SessionError as exc:
-            demo("r3_demo_act", False, f"the act stopped early: {exc}")
-    else:
-        report.skip("r3_demo_act", "no FakePE to advance to the breakpoint")
+    # The act runs whenever there is a SESSION, model or not: a board has no
+    # model to clock, but it does have a core that advances on its own, and
+    # skipping the whole group there would mean the operator's run silently
+    # does not demonstrate the flagship act.
+    act_model = first.pe if model_backed else None
+    try:
+        demo_act(act_model)
+    except SessionError as exc:
+        demo("r3_demo_act", False, f"the act stopped early: {exc}")
 
     for name, case in (
         ("r3_debug_status", debug_status_case),
@@ -737,6 +877,47 @@ def run_acceptance(
             "fault",
             faulted.faults == FAULT_LOAD and session.state == SessionState.FAULTED,
             f"faults=0x{faulted.faults:04X} state={session.state}",
+        )
+        # What the host does with a faulted core, and the one read a fault does
+        # NOT close. Sits HERE, between fault and clear_fault, because that is
+        # the only point in the run where the fault is latched and the clear has
+        # not happened yet - the refusal cannot be demonstrated anywhere else,
+        # and nothing in the sequence is reordered.
+        #
+        # The line separates two claims, because they have different standing:
+        # the refusal is the HOST's own policy (the chip would execute the step
+        # quite happily - it has no such rule), while the dump is a chip
+        # behaviour, and it is the read whose header carries the sticky fault
+        # word an operator actually needs. The GUI used to hide that read under
+        # exactly this state.
+        try:
+            session.debug_step()
+            refusal = "the step was NOT refused (unexpected)"
+        except SessionStateError as exc:
+            refusal = f"DEBUG_STEP refused ({exc})"
+        try:
+            faulted_dump = session.dump_core()
+            dump_line = (
+                f"DUMP_CORE still answers: state={faulted_dump.state} "
+                f"faults=0x{faulted_dump.faults:04X} - the sticky fault word is "
+                f"header field 9, so this header IS the diagnostic"
+            )
+        except SessionStateError as exc:
+            faulted_dump = None
+            dump_line = f"DUMP_CORE was refused too ({exc})"
+        report.record(
+            "fault_refusals",
+            refusal.startswith("DEBUG_STEP refused")
+            and faulted_dump is not None
+            and faulted_dump.faults == FAULT_LOAD,
+            f"HOST POLICY, not a chip claim: with a fault latched the host "
+            f"refuses to drive the core - {refusal} - and it refuses a step "
+            f"before a load too, because there is nothing loaded to step. The "
+            f"chip has no such rule and would execute the step, so nothing here "
+            f"is chip-confirmed. What IS a chip claim: {dump_line} "
+            f"[chip-confirmed in simulation for the R2 read-path steps "
+            f"(tb_pe_ctrl_r2: {_r2_evidence_summary()}); hardware "
+            f"acceptance not yet run]",
         )
         try:
             faults = session.clear_fault(FAULT_LOAD)

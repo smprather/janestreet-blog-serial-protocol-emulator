@@ -178,8 +178,10 @@ whole byte. Two layers:
   a modulo — which is why `DECX` exists. The running-status count in `dmem[5]` is
   raised **here**, not in the transmitter: the transmitter cannot tell a status
   byte from a data byte and must not guess.
-- **The transmitter** is one loop over the ten bit cells, 32 instructions and
-  123 words total. One loop rather than a subroutine, because the ISA has no
+- **The transmitter** is one loop over the ten bit cells: **67 of the program's
+  123 words**, counted from the assembler's own listing (`--listing`, the
+  transmitter starts at word 56: 43 instructions + 24 NOPs). The message layer is
+  the other 56 words. One loop rather than a subroutine, because the ISA has no
   CALL/RET, so a shared cell routine would need a return address in a `dmem` slot
   and a dispatch to get back — more state, and one more thing to get wrong, in
   exchange for nothing. Ten cells in a loop is also how the wire is actually
@@ -188,6 +190,15 @@ whole byte. Two layers:
 The transmitter's return point is `dmem[13]`: 0 = next message, 1 = the note
 follows, 2 = the velocity. A shared transmitter gets an explicit continuation
 rather than being written out three times.
+
+The 24 NOPs counted above are the padding, and they account exactly: 3 in
+`sb_start`, 8 in `sb_stop` (3 before the `LDI`, 5 after the output) and 13 in
+`sb_hold` (2 before the loop count and 11 in the body). **11 NOPs plus `SUB` and
+`JNZ` is a 13-clock body**, which is what makes the `21 + 1 + 146 × 13 = 1920`
+arithmetic land on the clock. A note on the count itself: the first body NOP
+shares its line with the `sb_rem:` label, so a `grep -c '^\s*NOP'` undercounts
+this block by one and reports 23. The number above came from the listing, not
+from grepping.
 
 ## How the testbench proves it
 

@@ -103,14 +103,27 @@ MAX_WAIT_WORDS = 15  # the chip's worst-case wait-word count (R2 contract)
 
 
 def strip_wait_words(raw, max_wait=MAX_WAIT_WORDS):
-    """Return the real frame from a response that may lead with 0xFFFF words.
+    """Return the real FRAME from a read buffer that may lead with 0xFFFF words.
 
     A bounded read cannot answer inside the request's bit times, so the chip
     drives 0xFFFF filler words on MISO and the real frame begins at the first
     non-0xFFFF WORD (chip R2 wait-word contract; worst case 15). The skip is
-    leading-ONLY, so a 0xFFFF inside a payload is data. Raises FrameError if
-    the stream is exhausted without a real frame, so the caller reports a
-    timeout rather than decoding filler.
+    leading-ONLY, so a 0xFFFF inside a payload is data.
+
+    It also returns exactly the frame, trimmed to the LENGTH FIELD, because the
+    read buffer is LONGER than the reply: the host clocks out a fixed budget
+    (`_response_words` = 6 + data + MAX_WAIT_WORDS) for every opcode, because a
+    bounded read may need the fillers, so a ready-immediate reply is followed by
+    up to 15 words the chip never sent — whatever a RELEASED pad reads as
+    (`pe_ctrl` drives MISO only while a response shifts). Those words are
+    trailing, so the leading-only skip cannot reach them, and `decode_frame`
+    requires the word count to match the length field exactly: without this trim
+    every fixed-size op — PING included — was rejected with "length field does
+    not match the frame" the moment the host read past the reply.
+
+    Raises FrameError if no real frame follows (a timeout, not a bogus decode),
+    or if the buffer ends before the length field says the frame does — short is
+    an error, never a zero-filled frame.
     """
     if len(raw) < 4:
         raise FrameError("response too short to hold a frame")
@@ -120,7 +133,16 @@ def strip_wait_words(raw, max_wait=MAX_WAIT_WORDS):
         index += 1
     if index >= len(words) or words[index] == 0xFFFF:
         raise FrameError(f"no frame after {index} wait words (chip bound {max_wait})")
-    return words_to_bytes(words[index:])
+    remaining = words[index:]
+    if len(remaining) < MIN_FRAME_WORDS:
+        raise FrameError("response too short to hold a frame")
+    frame_words = HEADER_WORDS + remaining[HEADER_WORDS - 1] + TRAILER_WORDS
+    if len(remaining) < frame_words:
+        raise FrameError(
+            f"response truncated: {len(remaining)} words, the length field "
+            f"declares {frame_words}"
+        )
+    return words_to_bytes(remaining[:frame_words])
 
 
 def encode_frame(opcode, sequence, target, payload=b""):

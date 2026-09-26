@@ -136,6 +136,14 @@ every one of them makes some *other* cell the right size.
   after 10          255 clocks   240 plus the frame layer's inter-slot work
 ```
 
+Those fourteen NOPs are the whole of the transmitter's 14, counted from the
+listing: 3 in `sb_start`, 7 in `sb_stop` (5 + 2) and 4 in `sb_stop2`. The
+break and mark loops carry one NOP each as well, so a `grep` over the whole file
+finds **sixteen** — the header's "fifteen" counts neither exactly. That is a
+firmware-source discrepancy rather than a wire one; the measured cell is 240
+clocks either way, because the loops that use the padding are the ones the
+assertions measure.
+
 **512 slots in an 8-bit counter** is a real constraint: a single 8-bit counter
 cannot reach 512, and the obvious "count to 0xFF and stop" version would send 255
 slots. The frame layer counts a **slot counter within a page** (which wraps on
@@ -150,10 +158,12 @@ program counter and the `dmem` return slot that MIDI needs is not needed at all.
 
 - **The frame layer** runs break, mark, START code, then 512 slots across two
   pages, and `dmem[10] = 0xA5` when the frame is out.
-- **The transmitter** is one loop over the eleven bit cells, 126 words total. The
-  shift lives in the **data branch only**, never in the common tail — on a ramp
-  the LOW bits are the difference between a fixture that works and one that does
-  not.
+- **The transmitter** is one loop over the eleven bit cells: **61 of the
+  program's 126 words**, counted from the assembler's own listing (`--listing`,
+  the transmitter starts at word 65: 47 instructions + 14 NOPs). The frame layer
+  is the other 65 words. The shift lives in the **data branch only**, never in
+  the common tail — on a ramp the LOW bits are the difference between a fixture
+  that works and one that does not.
 - **One exit for all 513 slots**: `dmem[7]` ("this slot is a data slot") decides
   what leaving the transmitter means. The START code's exit starts the payload; a
   data slot's exit advances it.

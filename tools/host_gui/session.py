@@ -22,6 +22,7 @@ from __future__ import annotations
 import enum
 import functools
 import threading
+import warnings
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Protocol
@@ -476,6 +477,24 @@ class ControllerSession:
                     "event": "chip.irq",
                     "data": {"faults": snapshot.faults},
                 }
+        elif snapshot.state in (DEBUG_BP_HIT, DEBUG_HOLD):
+            # The chip says the core is HELD, and that outranks the run word.
+            # A live breakpoint hit arrives as state=3 WITH run=1 - the hold
+            # masks the strap, it does not drop it - so mapping the session on
+            # `run` alone reports a core parked on a breakpoint as RUNNING, and
+            # a step-pause (state=2, run=0) as a plain STOPPED. The strap is
+            # still taken from the run word and nothing is inferred here:
+            # STATUS reports the two as SEPARATE words, which is exactly what
+            # `_debug_state_from` cannot do for the debug prefix (that one
+            # carries no strap, so it must not guess one).
+            self._run = bool(snapshot.run)
+            if snapshot.run:
+                self._has_run = True
+            self.state = (
+                SessionState.BP_HIT
+                if snapshot.state == DEBUG_BP_HIT
+                else SessionState.DEBUG_HOLD
+            )
         elif snapshot.run:
             self._run = True
             self._has_run = True
@@ -608,6 +627,25 @@ class ControllerSession:
                 "a free-running core cannot be stepped; DEBUG_BP_CLR releases "
                 "the hold first (and disarms the breakpoint)"
             )
+        # A step is RUN-CONTROL, so it carries run-control's preconditions -
+        # `start` already refuses both of these cases ("start requires a
+        # successful load"; any state but LOADED/STOPPED). Nothing loaded is
+        # nothing to step: the core would retire whatever words happen to be in
+        # IMEM. A latched fault means the last frame the host sent was
+        # rejected, which is not a state to keep driving the core from.
+        #
+        # These are the HOST's rules, stated: the chip would execute the step,
+        # exactly as it accepts a LOAD under a debug hold - which the session
+        # also declines. The page's Step button mirrors them, and
+        # tests/test_gui_capabilities.py fails if the two sides disagree.
+        if not self._loaded:
+            raise SessionStateError(
+                "a step needs a loaded program; there is nothing to step"
+            )
+        if self.state == SessionState.FAULTED:
+            raise SessionStateError(
+                "a fault is latched; clear it before stepping the core"
+            )
         result = self._request("debug_step")
         prefix = _debug_prefix(result, "debug_step")
         _require_ok(prefix, "debug_step")
@@ -617,8 +655,46 @@ class ControllerSession:
 
     @_serialized
     def bp_set(self, address: int) -> DebugPrefix:
-        """Arm the one breakpoint. Allowed while running (it stops the core)."""
+        """Arm the one breakpoint. Allowed while running AND while held.
+
+        ARMING A HELD CORE IS LEGAL, BUT THE ARM IS STEP-ONLY, and saying so
+        is the whole job here. The free-running hit is gated on the hold being
+        clear (`pe_ctrl.v:692`: `bp_en && !dbg_hold_r && (run || dbg_step_r)
+        && dbg_next_pc == bp_addr`), so a core that is already held can never
+        RUN into an armed address. The STEP path is not gated that way
+        (`pe_ctrl.v:1067`: `bp_hit <= bp_en && (dbg_next_pc == bp_addr)`), so
+        stepping onto the address still latches the hit - state 2 becomes 3,
+        the stop-before the R2 held-core steps 21/22 exist to pin. `DEBUG_BP_SET`
+        itself clears `bp_en` and `bp_hit` and leaves `dbg_hold_r` alone
+        (`pe_ctrl.v:1086-1087`), which is why the arm survives the step.
+
+        The trap this warns about is the one that reads like success: run
+        instead of step, watch the breakpoint report ARMED, and wait for a hit
+        that the hold makes impossible. And the arm does not outlive a release
+        either - `DEBUG_BP_CLR` disarms as it releases - so the order that ends
+        armed is always step -> clear -> re-arm, which is what
+        `resume_with_breakpoint` does.
+
+        So this is a WARNING and not a refusal: the chip supports the arm, the
+        stop-before flow needs it, and the first version of this guard refused
+        it - which broke the acceptance run's own `r3_bp_set` and
+        `r3_bp_hit_stop_before` beats, the two that arm while held and step
+        onto the address. A guard that refuses a legal operation teaches the
+        operator to distrust the guard.
+        """
         self._require_connected()
+        if self.state in (SessionState.DEBUG_HOLD, SessionState.BP_HIT):
+            warnings.warn(
+                f"arming at {address} while the core is HELD: the breakpoint "
+                f"can only be hit by STEPPING onto that address, not by "
+                f"running into it - the free-running hit is gated on the hold "
+                f"being clear (pe_ctrl.v:692), while the step path is not "
+                f"(:1067). And DEBUG_BP_CLR disarms as it releases, so this "
+                f"arm does not survive a clear: use resume_with_breakpoint "
+                f"(step, clear, re-arm) to continue with it armed.",
+                UserWarning,
+                stacklevel=2,
+            )
         result = self._request("bp_set", {"address": _require_word(address, "address")})
         prefix = _debug_prefix(result, "bp_set")
         _require_ok(prefix, "bp_set")
