@@ -42,6 +42,35 @@
 # refuse to pass with a stale entry, so this is not optional bookkeeping.
 #
 # ---------------------------------------------------------------------------
+# ONE THING A PIN IN THIS FILE CANNOT DO, and why it matters to know.
+#
+# A pin is a statement about a page that EXISTS on the branch holding the pin.
+# So a pin cannot be written in advance for a page that only arrives at MERGE
+# TIME — from a sibling branch, say. Writing one anyway makes it STALE on the
+# branch that wrote it, because the page is not there and the violation does not
+# occur, and the bidirectional check above turns that into a red on the very
+# branch that was trying to be careful. This was hit for real on 2026-09-25:
+# the merge-time check predicted that `concepts/debug-control` (which lands with
+# `docs/diag-proto`) would trip `zero-outbound-links`, and pre-pinning it would
+# have made THIS branch red. The fix was to report the prediction to the page's
+# owner instead, which is the better outcome anyway: a pin exists for violations
+# nobody is going to fix — the plans/ corner below — and this one had an author
+# actively editing the file.
+#
+# So: a merge-time violation is PREDICTED AND REPORTED, not pre-pinned. If this
+# ever needs to express a forward expectation, it wants a third class with its
+# own rule (an entry whose page may be absent, but must be violating if the page
+# is present) — deliberately not built for a single case.
+# ---------------------------------------------------------------------------
+#
+# ---------------------------------------------------------------------------
+# RULE no-frontmatter: the page has no YAML frontmatter block at all.
+# RULE zero-outbound-links: fewer than two DISTINCT [[wikilink]] targets in the
+#   body. (Body = after the frontmatter, so a link inside `sources:` cannot
+#   satisfy it.)
+#
+# ---------------------------------------------------------------------------
+#
 # STATUS 2026-09-26: NO PINNED VIOLATIONS REMAIN. This file is now EMPTY of
 # entries, and both rules it was pinning are CLEAN across all 43 hand-written
 # pages:
@@ -60,6 +89,26 @@
 # a rule is currently not met, and the whole value of this file was that every
 # line in it was true. See regress/check_wiki_pages.sh for the rules themselves.
 
-# --- no-frontmatter (4) ------------------------------------------------------
-
-# --- zero-outbound-links (8) -------------------------------------------------
+# ---------------------------------------------------------------------------
+# STATUS 2026-09-26: NO PINNED VIOLATIONS REMAIN. Both rules this file was
+# pinning are CLEAN across all 43 hand-written pages:
+#
+#   no-frontmatter      0 of 43   was 4  (3 plans/ + 1 reference/)
+#   zero-outbound-links 0 of 43   was 8  (7 plans/ + 1 reference/)
+#
+# Collected 12-to-0, and the two halves were collected SEPARATELY on purpose: the
+# gate's STALE check is what forces a pin out, so deleting pins in the same change
+# that fixed the pages is the only way to keep the two from disagreeing. A page
+# fixed here with its pin left behind is a red that names the page and the rule.
+#
+# THE HEADER IS KEPT DELIBERATELY, not because there is anything left to pin but
+# because the mechanism has to be able to come BACK. Both directions are still
+# enforced: a new violation is NEW and red, and re-adding a line here for a
+# violation that no longer fails is STALE and red. An empty baseline that is
+# deleted cannot record that this corpus was once 12 red, and the next person to
+# break a rule would have no idea a file like this exists.
+#
+# IF YOU HAVE TO PIN SOMETHING AGAIN: fix the page first, and note the policy
+# above - a violation that only appears at MERGE time is PREDICTED AND REPORTED to
+# the page's owner, not pre-pinned, because a pin is a statement about a page on
+# the branch holding it. See regress/check_wiki_pages.sh for the rules themselves.

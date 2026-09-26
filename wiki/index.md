@@ -66,6 +66,15 @@ repo root, not a wiki page: it is the judge-facing act script.)
 - [[concepts/factored-hardware-blocks]] — the shared RTL primitives (CDR,
   SerDes, stuffing, CRC LFSR) and why no 8b/10b is needed.
 
+- [[concepts/isa-and-soc]] — the ISA as a design decision rather than a table:
+  the 16 opcodes, **why single-cycle**, and the instruction budget that choice
+  creates. It is the page to read before asking why there is no shift-left, no
+  call, and no multiply — each of those is a consequence of something.
+- [[concepts/soc-wiring-and-memory]] — how `pe_soc` is actually wired: the
+  port-numbering rule and why it exists, the port space and the pad map, the
+  SRAM macro against the flop fallback it replaced, the synthesis and timing
+  screens, and an explicit **Limits** section.
+
 ### Timing, clocks and the physical layer
 
 - [[concepts/tx-timing-generation]] — exact-integer protocol timing at 60 MHz
@@ -93,13 +102,13 @@ repo root, not a wiki page: it is the judge-facing act script.)
   previously-orphaned blocks become one signal path, and the
   preamble-is-not-an-octet trap.
 
-### The host bus and the debug contract
+### The host bus, the debug contract, and the host stack
 
-The two halves of the chip's conversation with a host, written as the contracts
-a host must code against rather than as a walkthrough of the RTL. Both take
-`rtl/pe_ctrl.v`'s header comment as their primary source and close with a
-section on **how each claim is proved** — the golden packages and the
-conformance runs, not an assertion.
+Three pages on the two halves of the chip's conversation with a host:
+the **contract** a host must code against, the **traps** in it, and the
+**stack** that implements it. The first two take `rtl/pe_ctrl.v`'s header
+comment as their primary source; all three close with a section on how each
+claim is proved.
 
 - [[concepts/host-chip-protocol]] — the framed bus: the frame layout, the
   wait-word rule and why it is safe, the opcode table, the 11-word core header
@@ -112,6 +121,28 @@ conformance runs, not an assertion.
   carry on" leaves the core stopped with no fault to explain it. It also says
   why a host's own model cannot show most of this — the same reasoning that
   keeps the model free to be wrong about what is legal.
+- [[concepts/host-stack]] — the host side end to end: the Pico bridge and the
+  wait words at the read boundary, the session's **nine states** and the rules
+  the host owns, what `FakePE` models **and where it cannot**, how the golden
+  packages stay byte-exact, the GUI's capability table and its two poll paths,
+  and the fuzzers and soak behind them. It closes with the board run and an
+  explicit list of what is *not* claimed, and with a section saying where each
+  number comes from — the numbers are machine-verified, and the page says which
+  machine.
+
+### Formal verification — what is proved, what is only tested
+
+- [[concepts/formal-verification]] — what is proved, what is only tested, and
+  how a reader tells the two apart: the proved claims with their proof shape,
+  the mutants that make each non-vacuous, and the findings that stayed open. It
+  keeps the denominators straight and says so — "10" counts *targets*, not
+  assertions, and `pe_ctrl` alone carries twelve claims.
+- [[concepts/protocol-formal-gaps]] — the honest other half: the four `pe_ctrl`
+  claims that are **depth-16 proven, not unbounded**, and the exact reason
+  k-induction cannot close them (it starts from an *arbitrary* state, so the
+  antecedent can be met with a value the design cannot reach). It carries the
+  reformulation attempts and their verdicts, the inductive IFG floor, and a
+  claim deleted for being vacuous. Read this one before quoting a proof.
 
 ### Protocol deep-dives
 
@@ -132,10 +163,49 @@ their own branches as the families are produced, so this section grows:
   because if the pulse width is a count of instructions then "the chip is
   cycle-accurate" is a property of the **program** and not of the gates — and
   anyone can read the numbers out of the source and check them with a scope.
-  *(from `docs/diag-timing`)*
+- [[concepts/protocol-dht11]] — a protocol where **the bit value is a width**:
+  a `0` is a long low, a `1` a short one, and the receiving side cannot know
+  which until it has measured. Its central decision is to *synchronise* rather
+  than count, which is the whole program in one choice.
+- [[concepts/protocol-ds18b20]] — 1-Wire, where **the device speaks first**
+  and the polarity flips between the two slot grammars — a read slot's polarity
+  is the opposite of a write slot's, which is the kind of detail that costs a
+  firmware author a day and that a page can save.
+- [[concepts/protocol-i2c-adv]] — I2C advanced: combined format, read burst and
+  clock stretching, with the timing constraints and tolerances stated and the
+  stretch handling covered.
+- [[concepts/protocol-spi3-crc]] — SPI mode 3 (what CPOL/CPHA=1 actually means
+  on the wire) with a per-word CRC-8 computed in an ISA that has **no XOR**.
+- [[concepts/protocol-uart-flow]] — UART with RTS/CTS hardware flow control,
+  and the invariant it rests on, stated as one.
+- [[concepts/protocol-midi]] — MIDI 1.0 at 31.25 kbaud, the rate a fractional
+  tick **cannot express**, which is why the timer is not used at all; and a
+  cell's length belongs to the path between two cells, not to a counter.
+- [[concepts/protocol-dmx512]] — DMX512-A at 250 kbaud, the rate a 1 µs tick
+  cannot express at all, and why 512 slots need two bytes of counter.
 
-*(Links to this family resolve as their branches merge; the rest of the family
-is in progress — see **In flight** below.)*
+- [[concepts/protocol-freqmeter]] — frequency and duty metering, the first
+  act that **listens**: why the low end is the whole point, the timebase and
+  the trap in it, what the ISA constraint cost, and the fact that the machine
+  has only sixteen bytes of data memory — so the testbench had to be told.
+- [[concepts/protocol-nec-ir]] — NEC infrared, the protocol with **no wire at
+  all**, and a carrier that cannot be late: it is fitted to the clock rather
+  than to microseconds. It also carries the five firmware defects that were
+  invisible from the waveform's shape — the best argument in the wiki for
+  measuring rather than eyeballing.
+- [[concepts/protocol-sr04]] — HC-SR04 ultrasonic ranging, recorded as a
+  **red act** and titled for what it does prove: the distance conversion,
+  exactly, on the one measurement that ran. What is open is stated exactly
+  rather than rounded up.
+- [[concepts/protocol-fm-biphase]] — FM0/FM1 bi-phase marking, "a receiver
+  judged on a receiver": the wire rules are the whole protocol, why a receiver
+  cannot skip one of them, and why the bit period being a whole number of
+  microseconds is not tidiness.
+
+*(The ws2812, servo, dht11 and ds18b20 entries are from `docs/diag-timing`; i2c-adv, spi3-crc, uart-flow, midi and dmx512 from `docs/diag-bus`; the four above from the pages that have since landed on `main`. The naming convention is `protocol-<name>`, so the family is greppable and a new persona has an obvious home. See **In flight** below.)*
+spi3-crc, uart-flow, midi and dmx512 from `docs/diag-bus`. The naming
+convention is `protocol-<name>`, so the family is greppable and a new persona
+has an obvious home. See **In flight** below for what is still to come.)*
 
 ---
 
@@ -173,16 +243,28 @@ Editable PlantUML sources with colocated `.png`/`.svg` renders, in `diagrams/`:
   goals.
 - `project-progress.puml` — implementation status by block; colour separates
   integrated, standalone and open work.
-- `proto-*.puml` — the per-protocol figure families (state machine, field
-  layout, timing).
-- `proto-spi-framing.puml` — **the framed SPI link**: the word and bit layout of
-  a request/response frame and where the `0xFFFF` wait words sit in it.
-- `proto-r2-read-path.puml` — **the R2 bounded-read path**: the four read
-  opcodes, the 11-word core header, and the count ceiling a host must respect.
-- `proto-r3-debug-control.puml` — **the R3 debug-control state machine**:
-  STOPPED/RUNNING/DEBUG_HOLD/BP_HIT, STOP-BEFORE, the opcode flows, and the
-  `BP_SET` subtlety. Read with [[concepts/debug-control]].
+- `proto-<name>.puml` — the per-protocol figure families. A family is usually
+  three sources: the state machine (`proto-ws2812`), the frame/field layout
+  (`proto-ws2812-frame`), and the timing (`proto-ws2812-timing`); the bus
+  families add a fifth for the testbench and mutation coverage.
+- `proto-spi-framing.puml`, `proto-r2-read-path.puml`,
+  `proto-r3-debug-control.puml` — the **host-bus** set: the request/response
+  word and bit layout with the `0xFFFF` wait words, the four read opcodes with
+  the 11-word header and the read-count ceiling, and the four-state debug
+  machine with STOP-BEFORE and the `BP_SET` two-path split. Read the first with
+  [[concepts/host-chip-protocol]] and the last with [[concepts/debug-control]].
+- `proto-i2c-adv`, `proto-spi3-crc`, `proto-uart-flow`, `proto-midi`,
+  `proto-dmx512` — the **bus** set, five panels each covering the wire format,
+  the implementation, the testbench evidence and the mutation coverage, in that
+  order, so a reader can check a claim against the panel that tests it.
 - `diagrams/README.md` — what each map is for and how to re-render it.
+
+**Renders are byte-reproducible and checked.** Both formats are regenerated from
+the `.puml` source with the command in that README and compared byte for byte;
+PlantUML's multi-panel sources produce numbered siblings (`proto-midi_001.png`
+… `_004.png`), so the check compares the whole set a source emits, not one file.
+The renders are *not* gated by the page-rules gate — see
+`regress/check_diagram_renders.sh` and the note beside it.
 
 ---
 
@@ -453,24 +535,29 @@ docs worker's call.
 
 ## In flight
 
-Documentation work currently landing on sibling branches, so a reader knows
-where the next pages come from and does not mistake their absence for a
-decision not to write them:
+Documentation work landing on sibling branches. Kept so a reader knows where the
+next pages come from, and — more usefully — so the absence of a page is visibly
+*not yet written* rather than *decided against*. Most of the families below have
+landed; what remains is named explicitly.
 
-- **protocol deep-dives** — one `wiki/concepts/protocol-*.md` per persona,
-  each with a `diagrams/proto-*.puml` figure set (state machine, field layout,
-  timing). **Landed:** `protocol-ws2812` and `protocol-servo`, both from
-  `docs/diag-timing`, both linked above. The rest of the family is in progress
-  and follows the same `protocol-<name>` naming convention.
-- **host bus and debug control** — **LANDED** on `docs/diag-proto`:
-  `concepts/host-chip-protocol` and `concepts/debug-control` are linked above,
-  and the three host-bus figure sets (`proto-spi-framing`, `proto-r2-read-path`,
-  `proto-r3-debug-control`) are named in the diagrams note. `debug-control.md`
-  had further uncommitted edits in flight at the time of reading, so the copy
-  linked here is the committed one.
-- **bus figures** — an I2C-advanced figure set from `docs/diag-bus`, following
-  the same `proto-*.puml` convention and belonging in the diagrams note rather
-  than in a page list.
+- **protocol deep-dives** — one `wiki/concepts/protocol-*.md` per persona, each
+  with a `diagrams/proto-*.puml` figure family. **Nine landed** and all nine
+  linked above: the two timing acts (`ws2812`, `servo`) and the two input-capture
+  acts (`dht11`, `ds18b20`) from `docs/diag-timing`, and the five bus protocols
+  (`i2c-adv`, `spi3-crc`, `uart-flow`, `midi`, `dmx512`) from `docs/diag-bus`.
+  The convention is `protocol-<name>`, so the family is greppable and a new
+  persona has an obvious home. **Still to come:** the remaining personas, which
+  are the ones with no page yet — and note that the gate, not a human, is what
+  finds them: it reported eight unwired pages at merge time, two of which no
+  dispatch had mentioned.
+- **host bus, debug control and formal verification** — **LANDED** on
+  `docs/diag-proto`: `concepts/host-chip-protocol`, `concepts/debug-control`,
+  `concepts/formal-verification` and `concepts/protocol-formal-gaps`, all linked
+  above, plus the three host-bus figure sets in the diagrams note.
+- **bus figures** — **LANDED** on `docs/diag-bus`: five five-panel sets
+  (`proto-i2c-adv`, `proto-spi3-crc`, `proto-uart-flow`, `proto-midi`,
+  `proto-dmx512`), named in the diagrams note rather than as pages, since they
+  are figures.
 - **project maps** — **LANDED and refreshed** on `docs/diag-proto`: the plan and
   progress maps in `diagrams/`, with the topology and the per-block
   verification state, named in the diagrams note above.
