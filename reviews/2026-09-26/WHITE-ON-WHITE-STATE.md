@@ -9,7 +9,7 @@ the next session continues from a record rather than from a memory.
 | corpus | 22 sources, 42 figures | 34 sources, 54 figures | 34 sources, 54 figures |
 | fatal white-on-white | 58 -> 0 | 22 findings in 10 figures, all in post-fix additions | **0, whole corpus** |
 | malformed 5-digit hex | 20 fixed, 0 remain | **22 more, live on main in 4 families** | **0, whole corpus** |
-| self-test | 12 of 12 | 15 of 15 | **18 of 18** |
+| self-test | 12 of 12 | 15 of 15 | **21 of 21** |
 | figures viewed | ~5 of 42 | 54 of 54 | 54 of 54, then 14 again after the re-render |
 | gate on the real tree | `diagrams: OK` | red (22 on main, 54 mid-session) | **`diagrams: OK`** |
 
@@ -55,7 +55,7 @@ white-on-white elements, from four independent mechanisms:
 | gate: malformed hex | **added this session**, cases (m) and (n) |
 | white check actually looks at every figure | **fixed this session**, case (l) |
 | white check: undrawn elements, translucent strokes | **fixed this session**, cases (o), (q), control (p) |
-| self-test | **18 of 18** |
+| self-test | **21 of 21** |
 | visual pass | **54 of 54 figures viewed** |
 | drift-exempt | 5 files, unchanged, and now also hex-checked and viewed |
 | the four post-fix families | **adopted the canonical palette, re-rendered, 302 -> 0 near-white strokes** |
@@ -310,22 +310,41 @@ these 54, and it is the one thing a human eye is still better at than this check
 
 1. ~~The four unowned families.~~ **DONE** — canonical palette adopted, 22
    literals fixed, 28 renders redone, `diagrams: OK`. See the CLOSED section.
-2. **The 5 drift-exempt files are unchanged** — `project-plan.puml`,
-   `project-progress.puml`, `proto-r2-read-path.puml`, `proto-r3-debug-control.puml`,
-   `proto-spi-framing.puml`. Same status as the first wrap, with three facts
-   added since: the malformed-hex lint **passes on all five** (check 1c has no
-   exemption list), all five were **viewed** in the visual pass and have nothing
-   invisible, and their palettes are unchanged so the exemption is still correct.
-   After this session they are the **only** sources in the tree not carrying the
-   canonical palette, which makes the exemption the single largest remaining
-   inconsistency in the corpus — worth either adopting the palette in them or
-   recording, in the script, why they are the exception. If any of them ever
-   adopts a palette block, add its digest to the canonical set or re-verify and
-   drop the exemption.
+2. **The 5 drift-exempt files — DECIDED, and the exemption is now audited.**
+   `project-plan.puml`, `project-progress.puml`, `proto-r2-read-path.puml`,
+   `proto-r3-debug-control.puml`, `proto-spi-framing.puml`. They keep their own
+   palette, and the reason is mechanical rather than a matter of taste: **the
+   canonical set is NOTE + SEQ + STATE and contains no `component` block, and
+   these four maps are the only files in the corpus that carry one.** Each such
+   block *is* that figure's entire colour vocabulary — twenty stereotypes
+   between them (`<<complete>> <<open>> <<standalone>>`, `<<ops>> <<hdr>>
+   <<live>> <<ceil>> <<refuse>>`, `<<free>> <<held>> <<hit>> <<enc>> <<trap>>`,
+   `<<frame>> <<ctl>> <<data>> <<integ>> <<wait>>`) that exists nowhere else.
+   Propagating would leave all twenty falling back to the base colour — the
+   lost-stereotype bug at four times the scale of the mistake this work already
+   made once — and two of those names **collide** with canonical stereotypes and
+   mean something different: `proto-spi-framing`'s `<<wait>>` is `#b85450`, a
+   red that marks a wait which can trap, where canonical `<<wait>>` is
+   `#24506E`, blue. Overwriting it would change what the figure says, silently.
+
+   So the reason is recorded **in the gate, next to the list**, and the
+   exemption is **audited rather than asserted**: for each of the five,
+   `exempt_audit` requires that it carries no block of a kind the fleet palette
+   *does* define (a `sequence`/`state` block in an exempt file is drift hidden
+   behind the name) and that every stereotype it uses is declared in one of its
+   own blocks (an undeclared one falls back to the base colour, and an exempt
+   file is the one place no other check looks). Cases (r), (s) and control (t)
+   pin it; 0 findings on the real tree, verified, and the wiring was proved by
+   planting both rot modes into a real exempt file and getting them named.
+
+   An exemption that cannot fail is a comment with a list in it.
 3. **No WCAG contrast measurement by this worker.** Another author measured their
    five sets; ours were checked for the white class and read by eye, never
    measured for contrast ratio. This is now the largest unmeasured claim in the
-   figures, and it applies to the 4 families just re-rendered.
+   figures, and it applies to the 4 families just re-rendered. The measurement
+   method (geometric background attribution — PlantUML emits a shape and its
+   label as siblings, so containment, not ancestry) is handed to `diag-proto`,
+   who owns the sweep.
 4. **The self-test costs ~60 s** (was 40 s); six cases, ten extra `plantuml`
    renders. It is wired into `regress/run_all.sh`, so that is suite time, paid
    deliberately: the alternative is not gating the class that caused the outage.
