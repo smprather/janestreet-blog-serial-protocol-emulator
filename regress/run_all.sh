@@ -258,6 +258,17 @@ CASES=(
   # as the instruction memory (ADR-003). Byte granularity comes from the
   # macro's bit-mask port and the read lane is a register -- two silent
   # failure modes, both mutation-tested.
+  # The HC-SR04 RANGING ACT — WIRED, AND KNOWN-RED ON PURPOSE (2026-09-26).
+  # It used to be absent from this list entirely, and that was the defect: a red
+  # act nobody can see is a claim hazard, because "46/46 PASS" then reads as
+  # "the ranging act is verified" when in fact nothing has ever run it. It is
+  # wired here behind a <<wip>> marking rather than left out, and the marking is
+  # SELF-EXPIRING: a <<wip>> case that PASSES is reported as a FAILURE telling
+  # you to remove the marking, so the exemption cannot outlive the act it covers.
+  # That is the same discipline as the wiki-pages gate's pinned baseline with its
+  # STALE check — an exemption that can silently outlive its defect is a
+  # checklist, not a gate.
+  "tb_pe_soc_sr04|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_sr04|<<wip>>"
   "tb_pe_fbuf|../rtl/pe_fbuf.v|tb_pe_fbuf"
 
   # 10BASE-T on the SoC: wire -> DRU -> Manchester -> MAC + CRC + frame
@@ -381,7 +392,7 @@ if [ -n "${FILTER_CASES:-}" ]; then
   CASES=("${_sel[@]}")
 fi
 
-pass=0; fail=0; failed_names=()
+pass=0; fail=0; failed_names=(); WIP_LIST=""
 
 if [ "$FAST" -eq 1 ]; then
   # ---- parallel path --------------------------------------------------------
@@ -417,27 +428,36 @@ if [ "$FAST" -eq 1 ]; then
   # directly would interleave, and a verdict could appear under another case's
   # name.
   for c in "${CASES[@]}"; do
-    IFS='|' read -r name rtl top <<< "$c"
-    result="$work/$top.result"
-    if [ ! -f "$result" ]; then
-      printf '%-18s NO-RESULT (worker died without writing one)\n' "$top"
-      fail=$((fail+1)); failed_names+=("$top(no-result)")
-      continue
-    fi
-    verdict=$(head -1 "$result")
-    if [ "$verdict" = "PASS" ]; then
-      printf '%-18s PASS\n' "$top"
-      pass=$((pass+1))
-    else
-      printf '%-18s %s\n' "$top" "$verdict"
-      tail -n +2 "$result" | sed 's/^/  /'
-      fail=$((fail+1)); failed_names+=("$top")
+        IFS='|' read -r name rtl top wip <<< "$c"
+        result="$work/$top.result"
+        if [ ! -f "$result" ]; then
+          printf '%-18s NO-RESULT (worker died without writing one)\n' "$top"
+          fail=$((fail+1)); failed_names+=("$top(no-result)")
+          continue
+        fi
+        verdict=$(head -1 "$result")
+        if [ "$verdict" = "PASS" ]; then
+          if [ "$wip" = "<<wip>>" ]; then
+            printf '%-18s WIP-NOW-PASSING (remove the <<wip>> marking)\n' "$top"
+            fail=$((fail+1)); failed_names+=("$top(wip-now-passing)")
+            continue
+          fi
+          printf '%-18s PASS\n' "$top"
+          pass=$((pass+1))
+        elif [ "$wip" = "<<wip>>" ]; then
+          printf '%-18s KNOWN-WIP (expected red; the act is not finished)\n' "$top"
+          tail -n +2 "$result" | sed 's/^/  /'
+          WIP_LIST="$WIP_LIST $top"
+        else
+          printf '%-18s %s\n' "$top" "$verdict"
+          tail -n +2 "$result" | sed 's/^/  /'
+          fail=$((fail+1)); failed_names+=("$top")
     fi
   done
 else
   # ---- serial path (default) ------------------------------------------------
 for c in "${CASES[@]}"; do
-  IFS='|' read -r name rtl top <<< "$c"
+  IFS='|' read -r name rtl top wip <<< "$c"
   tb="../tb/${name}.v"
   if ! iverilog -g2012 -s "$top" -o "/tmp/${top}.vvp" $rtl $SRAM_FLAGS "$tb" 2>"/tmp/${top}.err"; then
     printf '%-18s COMPILE-FAIL\n' "$top"
@@ -447,8 +467,17 @@ for c in "${CASES[@]}"; do
   fi
   out=$(vvp "/tmp/${top}.vvp" 2>&1)
   if grep -q '^PASS' <<< "$out"; then
+    if [ "$wip" = "<<wip>>" ]; then
+      printf '%-18s WIP-NOW-PASSING (remove the <<wip>> marking)\n' "$top"
+      fail=$((fail+1)); failed_names+=("$top(wip-now-passing)")
+      continue
+    fi
     printf '%-18s PASS\n' "$top"
     pass=$((pass+1))
+  elif [ "$wip" = "<<wip>>" ]; then
+    printf '%-18s KNOWN-WIP (expected red; the act is not finished)\n' "$top"
+    grep -E '^FAIL' <<< "$out" | head -5 | sed 's/^/  /'
+    WIP_LIST="$WIP_LIST $top"
   else
     printf '%-18s FAIL\n' "$top"
     grep -E '^FAIL' <<< "$out" | head -5
@@ -460,6 +489,13 @@ fi
 echo
 echo "========================================"
 echo "TOTAL: $((pass+fail))   PASS: $pass   FAIL: $fail"
+# The known-red acts are NAMED in the summary, every run, so a <<wip>> case can
+# never become invisible the way an unwired one was. An empty list prints
+# nothing rather than a reassuring dash, so "no WIP acts" is distinguishable
+# from "the summary was truncated".
+if [ -n "$WIP_LIST" ]; then
+  echo "KNOWN-WIP (ran, expected red, act unfinished):$WIP_LIST"
+fi
 if [ "$fw_rc" -ne 0 ]; then
   echo "firmware regression: FAILED (see above)"
   fail=$((fail+1))

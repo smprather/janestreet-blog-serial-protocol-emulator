@@ -33,7 +33,11 @@ work="$2"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mkdir -p "$work"
 
-IFS='|' read -r name rtl top <<< "$case_spec"
+# Four fields, not three, and that is not cosmetic: bash's `read` puts the
+# REMAINDER in the LAST variable, so a spec carrying a fourth field left `top`
+# holding "tb_pe_soc_sr04|<<wip>>" and every artefact was named after that
+# instead of after the top module. The fourth field is the <<wip>> marking.
+IFS='|' read -r name rtl top wip <<< "$case_spec"
 
 # The SRAM behavioural model, resolved per-worker. Cheap (a couple of stat
 # calls) and it keeps this script self-contained -- the alternative is threading
