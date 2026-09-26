@@ -1951,3 +1951,49 @@ what the act claims, so it is written down here rather than done quietly.
    this family: *a preamble made of a repeated identical byte cannot verify the
    bit order or the byte order.* The model can say that in one line, and the
    model is where this act's protocol claims live.
+
+### THE BIT STRING, AND IT IS ONE EXTRA BIT AND NOTHING ELSE
+
+`tb/probes/probe_bitstring.v`, and the probe's own first version was wrong in
+the way this act keeps finding instruments wrong: it triggered on `dec_mids > 0`,
+which is true on every clock after the first mid, so it appended once a CLOCK
+and printed twenty-four ones. **The trigger is the count CHANGING, not the count
+being non-zero** — an instrument that measures the clock instead of the event,
+which is this act's own subject one level down.
+
+    sent     10100101 00111100 10010110     a5 3c 96, high bit first
+    arrived  1|10100101 00111100 1001011|0
+
+**That is the whole fault: ONE EXTRA BIT AT THE FRONT, and it is a 1, and
+everything after it lines up for twenty-two bits.** So the receiver's payload
+starts one mid EARLY — it banks a bit that belongs to the preamble's tail — and
+then reads the frame perfectly.
+
+**AND THE EXTRA BIT IS A 1 BECAUSE a5's bit 7 IS A ONE, and because the
+preamble's last bit is one too, so the two are indistinguishable in the LEVELS
+and only the phase can tell them apart.** The boundary between the preamble's
+eighth one and `a5`'s bit 7 is a boundary between two EQUAL bits, so it carries
+NO transition: the wire runs nine one-bits together across the seam, and a
+receiver that starts the payload one transition early cannot tell which of the
+nine it is looking at.
+
+**SO THE QUESTION IS ONE MID, and it is the last mid of the preamble.** The
+firmware's mask returns to 0x80 at the byte boundary and reads `dmem[0]`, so
+the wire is right — the histogram and the model's 46/16 say so. The receiver
+completes the preamble byte one mid late, and everything after is correct.
+
+**WHICH MID, and there is exactly one candidate worth testing:** the receiver's
+byte completion is driven by `dec_bit` reaching 8, and `dec_bit` counts MIDS.
+Eight mids from the lock is the preamble's eight ones ✓. So either the lock
+emits a mid for a bit that is not one of the eight, or one of the eight is not
+counted, and the classify trace at the seam answers it: `probe_tb_classify.v`
+rows #25 to #28, which are the last mid of the preamble, the boundary after it,
+the mid that completes the byte, and the first mid of the payload.
+
+**AND THE PREAMBLE IS RIGHT TO BE CHALLENGED HERE, and this is now the second
+reason.** A run of eight identical bits cannot say where it ends: the seam
+between the preamble and a payload whose first bit is the same value is
+INVISIBLE in the levels, and the receiver has to get it right from its own bit
+count. The model can assert the property that matters in one line — *the
+preamble's last bit must differ from the payload's first bit, or the seam is
+silent* — and for `a5 3c 96` it does not, because both are one.
