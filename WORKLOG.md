@@ -3316,3 +3316,75 @@ edit is comment-only, and the proof is that the assembled image is
 **byte-identical** -- `peasm.py` to a temp file, `cmp` against the tracked hex.
 So nothing about the firmware's behaviour moved, and the figure a reader might
 have taken from it can no longer mislead them.
+
+## 2026-09-27 act (c): TASK-START -- THE SAME AUDIT, IN THE WIKI
+
+The frozen set is `regress/`, `rtl/`, `tb/` and one diag script. **The wiki is
+open, and the audit I just ran on the firmware applies to it with more force**:
+a documentation page that states a machine capability is the most load-bearing
+kind of stale figure there is, because a reader designs against it. This act
+spent a session on exactly that -- "the next reader will design the encoder
+around a limitation that does not exist, which is the most expensive kind of
+stale figure" -- and the fix was applied to the FIRMWARE's comments. **Nobody
+has checked whether the documentation still says the machine cannot shift
+right.**
+
+### THE WIKI AUDIT: FOUR ABSENCE CLAIMS, ALL TRUE (a clean negative)
+
+The frozen set does not include the wiki, and the audit that applies to the
+firmware's comments applies there with more force -- a documentation page that
+states a machine capability is the most load-bearing stale figure there is,
+because a reader *designs* against it. The act spent a session on exactly that
+("the next reader will design the encoder around a limitation that does not
+exist") and the cure was applied to the **firmware**. Nobody had checked the
+documentation.
+
+The real mnemonic table is 19 opcodes over 16 values, and the machine's only
+shift is `SHR` at `0xA`. Scanning the whole wiki for claims that some
+instruction does not exist, against a list of plausible mnemonics:
+
+| claim | verdict |
+| :--- | :--- |
+| "CRC-8 in an ISA with **no XOR**" (protocol-spi3-crc.md:137, index.md:178) | **TRUE** -- the table has no XOR |
+| "the ISA has **no CALL/RET**" (protocol-spi3-crc.md:219, protocol-uart-flow.md:125) | **TRUE** |
+| "why there is **no shift-left**" (index.md:71) | **TRUE** -- `0xA` is `SHR` |
+| "`0xA` is SHR" (log.md:2169) | **TRUE** -- `peasm.py:50` |
+
+**So the documentation is CORRECT and needs nothing.** That is a real result
+and worth having: the firmware's comments were wrong about this and the wiki
+was not, so the fix that mattered was applied in the right place. The negative
+result also means the audit found no work, which is the outcome this act should
+report rather than manufacture around.
+
+### THE MODEL IS COMPLETE, AND WHAT WAS ACTUALLY LEFT IN THE UNBLOCKED HALF
+
+`firmware/bmc_model.py` carries **18 self-check properties, all green**, and the
+one the act most depends on is among them: `iv0 == iv1` asserts the return
+leg's **interval sequence is identical in both polarities**, which is what makes
+the preamble's two-half gap land at the same point either way and lets ONE flag
+test serve both. Nothing to add.
+
+**The real gap in the unblocked half was one this act named and deferred:
+`firmware/bmc_models_agree.py`'s DISAGREE branch had never run.** It is the
+load-bearing branch of the check that makes the act's reference falsifiable,
+and it was unreachable by injection, because each model's own self-check fires
+first -- a live disagreement needs both to be internally consistent and one to
+misread the encoding.
+
+**AND THE SELF-TEST FOUND TWO BUGS IN ITSELF ON ITS FIRST RUN, which is the
+argument for having written it:**
+
+1. `"0" + base[1:]` **is `base`** -- the base string alternates and already
+   starts `'0'`, so the "flip one bit" case compared a string with ITSELF, and
+   the harness correctly reported a disagreement going unnoticed. The real
+   hazard: a test that cannot fail is a test that has passed.
+2. the harness called the comparison with `emit=False`, so the "a disagreement
+   must not be silent" requirement could **never** pass, and three cases were
+   reported as defects in the comparison when the fault was in the harness.
+   **A failing self-test names a LOCATION, not a CULPRIT** -- which is the one
+   thing this act has had to relearn about its own instruments, twice.
+
+Now 5 of 5, including the length-mismatch refusal, and the disagree path is
+demonstrated end to end: *"THE TWO MODELS DISAGREE at 1 of 80 half-intervals,
+first at 0"*, with both strings printed. **So the branch is no longer a claim
+that it would work.**

@@ -158,7 +158,107 @@ def verilog_model():
     return {0: levels[0], 1: levels[1]}
 
 
+def compare_one(py_s, v_s, name, emit=True):
+    """Compare one polarity's two eighty-level strings. Returns True if they
+    agree, and prints the disagreement -- where, how many, and both strings in
+    full -- when they do not.
+
+    EXTRACTED FROM main() SO THAT IT CAN BE EXERCISED WITHOUT A SIMULATION,
+    which is the whole point of the extraction. The disagreement branch was
+    written, printed a count, and had never been seen to fire: the two models
+    can only disagree if BOTH are internally consistent and one of them is
+    misreading the encoding, because each model's own self-check catches it
+    first. So a live disagreement needs a fault in the ENCODING, in a file, and
+    injecting one into either model just trips that model's own self-check
+    first -- the branch was unreachable by injection, and `self_test()` below
+    is how it gets coverage instead.
+    """
+    if py_s == v_s:
+        if emit:
+            print(
+                f"  {name}: bmc_model.py and tb_pe_soc_bmc.v agree on all "
+                f"{FRAME_LEVELS} levels"
+            )
+        return True
+    if len(py_s) != len(v_s):
+        raise SystemExit(
+            f"bmc_models_agree: the two {name} strings are different LENGTHS "
+            f"({len(py_s)} and {len(v_s)}), which is not a disagreement about "
+            f"levels but a disagreement about how many there are"
+        )
+    diff = [i for i, (a, b) in enumerate(zip(py_s, v_s)) if a != b]
+    if emit:
+        print(
+            f"  {name}: THE TWO MODELS DISAGREE at {len(diff)} of "
+            f"{FRAME_LEVELS} half-intervals, first at {diff[0]}"
+        )
+        for i in diff[:8]:
+            print(
+                f"      half-interval {i:2d}: python {py_s[i]} verilog {v_s[i]}"
+            )
+        print(f"      python : {py_s}")
+        print(f"      verilog: {v_s}")
+    return False
+
+
+def self_test():
+    """Prove the comparison, both ways, with no simulation and no models.
+
+    THIS IS THE PART THAT WAS MISSING. The check existed to catch two
+    implementations of one specification disagreeing, and the branch that does
+    the catching had never run, because reaching it needs a fault that is
+    invisible to both models' own self-checks. **A check that has never been
+    shown to fire is a comment**, and this one was the load-bearing one, so it
+    is exercised here against strings built to disagree on purpose.
+    """
+    ok = True
+    base = ("01" * 40)[:FRAME_LEVELS]
+
+    def case(what, py_s, v_s, want):
+        nonlocal ok
+        # emit=True into a buffer, NOT emit=False: the "a disagreement must not
+        # be silent" half of this harness is worth nothing if the comparison is
+        # called with its printing switched off. The first version did exactly
+        # that, so every disagreement case was reported as a defect in the
+        # COMPARISON when the fault was in the HARNESS -- which is a reminder
+        # that a failing self-test names a location, not a culprit.
+        quiet = io.StringIO()
+        with contextlib.redirect_stdout(quiet):
+            got = compare_one(py_s, v_s, "SELF-TEST", emit=True)
+        said = quiet.getvalue()
+        good = got is want
+        if not want and not said:
+            good = False  # a silent disagreement is this act's ninth instrument
+        print(
+            f"  {'ok  ' if good else 'FAIL'} {what}"
+            + ("" if good else f"  (returned {got}, said {said.strip()[:60]!r})")
+        )
+        ok = ok and good
+
+    # The base string ALTERNATES, so a "flip" has to go to the OTHER value:
+    # the first version of this case used "0" + base[1:], and base already
+    # starts with "0", so it compared a string with ITSELF and the harness
+    # correctly reported that a disagreement had gone unnoticed.
+    case("identical strings agree", base, base, True)
+    case("one flipped bit is caught", base, "1" + base[1:], False)
+    case("the LAST bit flipped is caught", base, base[:-1] + (
+        "1" if base[-1] == "0" else "0"), False)
+    case("a whole byte inverted is caught", base, "".join(
+        "1" if c == "0" else "0" for c in base[:8]) + base[8:], False)
+    try:
+        compare_one(base, base[:-1], "SELF-TEST", emit=False)
+        print("  FAIL  a length mismatch is refused rather than compared")
+        ok = False
+    except SystemExit:
+        print("  ok    a length mismatch is refused, not compared")
+
+    print("SELF-TEST: %s" % ("all comparison cases hold" if ok else "FAILED"))
+    return 0 if ok else 1
+
+
 def main():
+    if "--self-test" in sys.argv:
+        return self_test()
     py, _said = python_model_or_report()
 
     try:
@@ -166,27 +266,11 @@ def main():
     except subprocess.TimeoutExpired:
         raise SystemExit("bmc_models_agree: the testbench timed out")
 
-    bad = []
-    for flag, name in ((0, "FM0"), (1, "FM1")):
-        if py[flag] == v[flag]:
-            print(
-                f"  {name}: bmc_model.py and tb_pe_soc_bmc.v agree on all "
-                f"{FRAME_LEVELS} levels"
-            )
-        else:
-            bad.append(flag)
-            diff = [i for i, (a, b) in enumerate(zip(py[flag], v[flag])) if a != b]
-            print(
-                f"  {name}: THE TWO MODELS DISAGREE at {len(diff)} of "
-                f"{FRAME_LEVELS} half-intervals, first at {diff[0]}"
-            )
-            for i in diff[:8]:
-                print(
-                    f"      half-interval {i:2d}: python {py[flag][i]} "
-                    f"verilog {v[flag][i]}"
-                )
-            print(f"      python : {py[flag]}")
-            print(f"      verilog: {v[flag]}")
+    bad = [
+        flag
+        for flag, name in ((0, "FM0"), (1, "FM1"))
+        if not compare_one(py[flag], v[flag], name)
+    ]
 
     if bad:
         print(
