@@ -71,7 +71,7 @@ Architecture and the evidence around it:
 
 The host bus and its tooling:
 
-- host-controller, loader, boot, debug, gui, pico, firmware
+- host-controller, host, loader, boot, debug, gui, pico, firmware
 
 Housekeeping:
 
@@ -82,7 +82,10 @@ is the general claim that a protocol is a program:
 
 - ethernet, spi, usb, codec, serdes, tx, protocol-emulation
 
-That is 43 tags: the original 20 plus these 23.
+That is 44 tags: the original 20 plus these 24. The twenty-fourth is `host`,
+added the same way and for the same reason when `concepts/host-stack` landed
+with it: a tag in active use, obviously useful, and in the same family as
+`host-controller`, `gui` and `pico`.
 
 Rule: every tag on a page must appear in this taxonomy. Add new tags here
 first, then use them.

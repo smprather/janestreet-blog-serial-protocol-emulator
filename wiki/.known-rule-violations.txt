@@ -42,6 +42,28 @@
 # refuse to pass with a stale entry, so this is not optional bookkeeping.
 #
 # ---------------------------------------------------------------------------
+# ONE THING A PIN IN THIS FILE CANNOT DO, and why it matters to know.
+#
+# A pin is a statement about a page that EXISTS on the branch holding the pin.
+# So a pin cannot be written in advance for a page that only arrives at MERGE
+# TIME — from a sibling branch, say. Writing one anyway makes it STALE on the
+# branch that wrote it, because the page is not there and the violation does not
+# occur, and the bidirectional check above turns that into a red on the very
+# branch that was trying to be careful. This was hit for real on 2026-09-25:
+# the merge-time check predicted that `concepts/debug-control` (which lands with
+# `docs/diag-proto`) would trip `zero-outbound-links`, and pre-pinning it would
+# have made THIS branch red. The fix was to report the prediction to the page's
+# owner instead, which is the better outcome anyway: a pin exists for violations
+# nobody is going to fix — the plans/ corner below — and this one had an author
+# actively editing the file.
+#
+# So: a merge-time violation is PREDICTED AND REPORTED, not pre-pinned. If this
+# ever needs to express a forward expectation, it wants a third class with its
+# own rule (an entry whose page may be absent, but must be violating if the page
+# is present) — deliberately not built for a single case.
+# ---------------------------------------------------------------------------
+#
+# ---------------------------------------------------------------------------
 # RULE no-frontmatter: the page has no YAML frontmatter block at all.
 # RULE zero-outbound-links: fewer than two DISTINCT [[wikilink]] targets in the
 #   body. (Body = after the frontmatter, so a link inside `sources:` cannot
@@ -62,3 +84,13 @@ plans/pe-ctrl.md zero-outbound-links zero links; the R1 contract this page owns 
 plans/serdes-integration.md zero-outbound-links zero links; should cross-reference concepts/factored-hardware-blocks
 plans/spi-pads.md zero-outbound-links zero links; should cross-reference concepts/spi-as-firmware
 reference/simulator-bakeoff.md zero-outbound-links zero links; the measured bakeoff that justifies running iverilog rather than Verilator
+
+# --- 2026-09-25: pages that arrived on MAIN with the link rule unmet -----------
+# Unlike the plans/ corner above, these two are NOT deferred cleanup: they
+# arrived on main with one outbound wikilink each, so without a pin the gate is
+# red on main and blocks every merge behind it. That is a worse outcome than a
+# named, dated pin with a reason, and the STALE check makes the pin
+# self-clearing: the moment either author adds a second link, the checker turns
+# red and DEMANDS these lines come out. So the pin is not an excuse, it is a
+# receipt.
+concepts/host-stack.md zero-outbound-links arrived on main from the host-controller-gui merge with 1 link; same lineage as debug-control, same one-line fix
