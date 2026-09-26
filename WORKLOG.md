@@ -2949,3 +2949,71 @@ One observability note, named rather than left: on success that block does not
 `cat` its log, so the "58 dispatch arm(s), 58 case entry(ies)" line is not in
 the normal run's output. The exit code is wired, which is the part that
 matters; the line is for whoever runs the gate directly.
+
+## 2026-09-27 act (c): TASK-START -- TWO HANDOFF ITEMS, NEVER CLOSED
+
+**THE SHR FINDING WAS NEVER APPLIED TO THE COMMENTS, and the handoff said the
+error is load-bearing.** It claimed "this act's own comments are wrong about
+the ISA in three places -- the firmware header, the `NO DIVISION` block in the
+decoder, and the previous handoff -- **and THE CLAIM MUST BE CORRECTED IN THE
+FIRMWARE'S COMMENTS IN THE SAME STEP**, because the next reader will design the
+encoder around a limitation that does not exist, which is the most expensive
+kind of stale figure: one that is load-bearing."
+
+This machine HAS `SHR` (opcode 0xA, `a <= {1'b0, a[7:1]}`, no operand). If the
+firmware still says it does not, then the encoder I just finished was written
+by a reader -- me, last session -- who believed a false constraint, and the
+next one will too.
+
+**AND HANDOFF ITEM 5 IS ALSO UNCLOSED: "DO NOT LEAVE BOTH."** The encoder can
+be entered from `frame_done` or from main's `LDM A,11 / JNZ encoding` dispatch,
+and leaving both means one of them has no caller -- the same dead-entry fault
+as `sv-idle-level`, in the firmware rather than in a harness.
+
+Both are claims about the MACHINE and about the PROGRAM, so both are settled by
+counting, not by reading. The standing instruction for this act is exactly
+that: **count machine claims in the assembler.**
+
+### BOTH CLOSED, AND BOTH BY COUNTING
+
+**THE SHR FINDING WAS ALREADY APPLIED** -- and the important part is that I
+did not take the corrected comment's word for it either. The header, the
+decoder block and the encoder's peel note now say `SHR` EXISTS and there is
+still no shift-LEFT, so both halves were counted against the machine:
+
+| the comment's claim | counted | verdict |
+| :--- | :--- | :--- |
+| "THERE IS: SHR, opcode 0xA" | `tools/fw/peasm.py:50` `"SHR": (0xA, "none")`; `rtl/pe_cpu.v:148` `OP_SHR = 4'hA`; `:327` `a <= {1'b0, a[7:1]}` | **TRUE** |
+| "there is still NO shift-LEFT" | `SHL|SHLFT|ASL|SAL` in the assembler: **0**; in `pe_cpu.v`: **0** | **TRUE** |
+
+So the correction is not a rewording -- **the ISA claims are now true**, which
+is the only reason a reader should trust them, and the standing instruction for
+this act is exactly this: count machine claims in the assembler.
+
+**AND "DO NOT LEAVE BOTH" IS SATISFIED, and it was satisfied by DELETING the
+dispatch, which is the handoff's own second option.** There is no `encoding:`
+label, no `JNZ encoding`, and **`dmem[11]` is never set to 1** -- it is only
+ever written with the mask (0x80 at the entry, and the two re-arms). So main's
+mode dispatch does not exist and the encoder has exactly one entry.
+
+**AND THE RE-ENTRY FEAR IS STRUCTURALLY IMPOSSIBLE, which is worth stating as
+a counted fact rather than as reassurance:**
+
+* `frame_done` is word **162**, and **no branch anywhere targets it** -- the
+  only textual mention of the name outside its own definition is a *comment*
+  at source line 754, which says a `JZ frame_done` there "is CORRECT
+  ARITHMETIC AND NEVER FIRES";
+* the 28 branches that land inside the encoder are all **its own** control
+  flow -- the byte dispatch, the mask walk, the delay loops -- and every one
+  is a forward or intra-block branch within 162..319;
+* it is entered by **exactly one route**: word 160, `JZ frame_done`, which is
+  the decoder's `dmem[9] == 3` test for "preamble consumed, frame banked";
+* and after `enc_sent` (319) the program releases the pad and **`JMP park` at
+  320, then parks forever** -- 323 words, **0 dead**, and no path from `park`
+  back to the encoder.
+
+**So the failure the handoff warned about -- "main will re-enter it on the
+next poll and restart the transmission" -- cannot happen, because the poll
+loop has no branch to the encoder and the encoder never returns to the poll
+loop.** That is a proof from the listing, not from the intent, which is the
+only kind this act has been willing to accept.
