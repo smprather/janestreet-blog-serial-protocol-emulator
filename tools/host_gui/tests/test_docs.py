@@ -159,6 +159,19 @@ class TestDemoWalkthrough(unittest.TestCase):
         # the honest boundary: the four held-core steps are not yet chip-confirmed
         self.assertRegex(self.text, r"18 of 22|not yet re-run|not yet confirmed")
 
+    def test_the_pending_board_row_says_what_the_run_now_covers(self):
+        """The pending row is a claim about scope, and the scope just grew.
+
+        The board run used to skip the debug act. It no longer does, so a row
+        that says only "needs a board" understates what a board run would
+        demonstrate - and this row is the one a judge reads to decide what is
+        left.
+        """
+        row = next(line for line in self.text.splitlines()
+                   if "Board-in-the-loop acceptance" in line)
+        self.assertIn("debug act", row)
+        self.assertIn("pending", row.lower())
+
     def test_liveness_is_presented_as_a_chip_confirmed_capability(self):
         # P3 closed chip-side: STATUS carries pc/a/x/y/timer and READ_CPU is
         # non-halting, so the walkthrough may claim liveness - but only as
@@ -211,7 +224,34 @@ class TestBringupRunbook(unittest.TestCase):
         ]
         self.assertGreaterEqual(len(rows), 8)  # a real triage table
 
-    def test_the_triage_table_covers_the_read_length_failure(self):
+    def test_the_runbook_says_the_device_run_includes_the_debug_act(self):
+        """What the device run DOES, since the act stopped being skipped.
+
+        Section 4 enumerates the scripted sequence for `--device`. Before
+        bce4ee0 that list was complete, because the debug act was skipped
+        without a FakePE. Now the device run performs the whole `r3_demo` group
+        as well, so an operator reading an accurate-but-stale list would not
+        know to expect eight debug beats - and, worse, the "what a healthy run
+        looks like" sentence claimed EVERY step passes except `uart`, which on
+        an R1-only shuttle would be false the moment the act ran.
+        """
+        text = read(BRINGUP)
+        section = text[text.index("## 4. Run the real acceptance"):
+                       text.index("## 5. Failure triage")]
+        # The SEQUENCE LINE, not the section: a first version of this asserted
+        # the word "breakpoint" appeared somewhere below, which the explanatory
+        # paragraph satisfied on its own — so deleting the act from the list
+        # left the pin green. Asserting on a superset is how a pin rots.
+        sequence = next((line for line in section.splitlines()
+                         if "register dump" in line), "")
+        self.assertIn("debug act", sequence,
+                      "the device-run sequence omits the debug act")
+        # and the healthy-run claim has to name the precondition it depends on
+        self.assertRegex(section, r"R3|0x21",
+                         "the healthy-run claim must say the debug act needs R3")
+        self.assertNotIn("every step passes except `uart`", section)
+
+    def test_the_read_length_failure(self):
         """A defect I found on this host, reachable only on hardware.
 
         The bridge reads a fixed budget of wait words past every reply, so the
@@ -222,14 +262,18 @@ class TestBringupRunbook(unittest.TestCase):
         place to look, so the row has to exist and name the exact error text.
         """
         text = read(BRINGUP)
-        rows = [line for line in text.splitlines()
-                if "length field does not match the frame" in line]
+        rows = [
+            line
+            for line in text.splitlines()
+            if "length field does not match the frame" in line
+        ]
         # exactly one: a duplicated triage row is itself a doc smell, and two
         # would let them drift apart
         self.assertEqual(len(rows), 1, "the triage table needs one read-length row")
         row = rows[0]
-        self.assertIn("released", row.lower(),
-                      "the row must name the released pad as the cause")
+        self.assertIn(
+            "released", row.lower(), "the row must name the released pad as the cause"
+        )
         # and it must not blame the contract, which is what makes this failure
         # expensive to diagnose from the symptom alone
         self.assertIn("MISO", row)
@@ -241,8 +285,7 @@ class TestBringupRunbook(unittest.TestCase):
         so a stale count in it is a claim with a short half-life.
         """
         text = read(BRINGUP)
-        row = next(line for line in text.splitlines()
-                   if "r2_read_*" in line)
+        row = next(line for line in text.splitlines() if "r2_read_*" in line)
         self.assertNotIn("the 15 steps", row)
         self.assertIn("18 read-path steps", row)
 

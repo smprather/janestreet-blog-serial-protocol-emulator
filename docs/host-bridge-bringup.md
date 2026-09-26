@@ -81,13 +81,22 @@ python3 tools/host_bridge/acceptance.py --device /dev/ttyACM0 --board <revision>
 The runner opens the port, sends the same scripted sequence the `--fake` dry
 run performs (hello → project select → 60 MHz → reset → host SPI → assemble
 `firmware/uart_echo.pe` → load → readback → start → status/heartbeat → stop →
-register dump → IRQ/fault/clear → disconnect → reconnect) and prints
-per-step `PASS`/`FAIL`/`SKIP` plus a manifest (clock, SCLK cap, pads, image
-digest, word count). It exits non-zero if any step is `FAIL`.
+register dump → **debug act** → IRQ/fault/clear → disconnect → reconnect) and
+prints per-step `PASS`/`FAIL`/`SKIP` plus a manifest (clock, SCLK cap, pads,
+image digest, word count). It exits non-zero if any step is `FAIL`.
+
+The **debug act** is the R3 group — arm a breakpoint over the host bus, run
+into it, read the core back while it is held, step across, clear, resume. It
+runs on the board like every other step: the act waits for the core to reach
+the armed address (a real core advances on its own — only the `--fake` model
+has to be clocked), so expect roughly a dozen `r3_demo_*` and `r3_*` lines
+here. It needs **R3** (the debug opcodes `0x21`–`0x24`) on the shuttle; on an
+earlier one those lines report `UNSUPPORTED` and the panel says so.
 
 What a healthy run looks like: with R1 and R2 on the shuttle every step
-passes except `uart`, which is a standing SKIP (no bridge op reports UART
-bytes - dropped from this phase by ruling). Read the triage table before
+passes, plus the standing `uart` SKIP (no bridge op reports UART bytes -
+dropped from this phase by ruling). Add R3 and the debug-act lines pass too;
+without R3 they are the one group that will not. Read the triage table before
 assuming a problem.
 
 ## 5. Failure triage
