@@ -2325,3 +2325,27 @@ Appended rather than edited in place, per the append-only rule. Verified with
   `<style>` blocks, worst text-vs-container contrast 6.00:1 — and the one pair
   under 7:1 is `#7F4B00` on `#FFE6CC`. All five are green under the consolidated
   gate.
+
+### Fleet WCAG contrast sweep — 54 figures, and MY earlier 6.00:1 figure was WRONG
+
+A read-only sweep of all 54 committed SVGs, each `<text>` fill against the
+nearest **enclosing** filled rect, 7,389 text elements.
+
+- **Result: nothing fails. 0 figures under 4.5:1 (WCAG AA) and 0 under 3:1.**
+  The fleet floor is **7.22:1**, so there is no contrast fix to route — the
+  earlier red was a palette/render issue, not legibility.
+- **Correction to my own record.** I earlier reported my five sets' worst as
+  **6.00:1, `#7F4B00` on `#FFE6CC`**, and put that in a durable entry. It was
+  **wrong**: measured properly, every `#7F4B00` text element (78 of them) sits
+  on `#FFFFFF`, giving **7.22:1**. `#FFE6CC` is a real fill in those files but
+  no text rests on it. The cause was **my method** — I paired text with the
+  nearest *preceding* rect in document order, which misattributes a text drawn
+  outside any filled box. The tree-walk (nearest *enclosing* rect) is the
+  correct method; this is the second time a figure of mine was wrong because
+  the instrument was wrong, and the first time the error survived into a
+  durable record.
+- **Worst text colour, fleet-wide: `#7F4B00` at 7.22:1** (my `held`/`ceil`/`integ`
+  stereotype). The next floors are `#5A3D12` 9.95:1, `#17452A` 10.93:1,
+  `#6A2020` 11.41:1, `#143D1E` 12.24:1, `#16324F` 13.10:1, `#333` 12.63:1, and
+  `#000` 21.00:1. Every one clears AA with margin, so the palette needs no
+  change and none is routed to diag-bus.
