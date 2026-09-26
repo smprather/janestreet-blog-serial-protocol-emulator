@@ -93,10 +93,19 @@ check_index() { # dir index -> 0 clean, 1 dirty
 fail_msg() { echo "$1" >&2; }
 
 # ---- the negative control ---------------------------------------------------
+# THE SANDBOX PATH IS FILE-SCOPE, NOT local, and that is load-bearing. The
+# EXIT trap runs at SCRIPT exit — after self_test has already returned — so a
+# function-local `sb` is gone by then, ${_SB:?} fails, and the trap removes
+# nothing. The first version of this file had exactly that, and it is the worst
+# combination available: the self-test printed a bash error, still exited 0, and
+# LEAKED its sandbox on every run. A check that reports OK while quietly leaking
+# is the class this whole session has been about, found in the new gate by the
+# final sweep rather than by the self-test itself.
+_SB=""
 self_test() {
-  local sb results=0 caught=0
-  sb=$(mktemp -d /tmp/doc_index_selftest.XXXXXX) || return 1
-  trap 'rm -rf "${sb:?}"' EXIT
+  local results=0 caught=0
+  _SB=$(mktemp -d /tmp/doc_index_selftest.XXXXXX) || return 1
+  trap 'rm -rf "${_SB:?}"' EXIT
 
   build_fixture() { # a two-figure corpus whose index lists exactly one
     local d="$1"
@@ -116,16 +125,16 @@ self_test() {
   plant() { # name expect case
     local name="$1" expect="$2" case="$3"
     results=$((results + 1))
-    rm -rf "${sb:?}/${case:?}"; mkdir -p "$sb/$case"
-    build_fixture "$sb/$case/d"
+    rm -rf "${_SB:?}/${case:?}"; mkdir -p "$_SB/$case"
+    build_fixture "$_SB/$case/d"
     case "$case" in
       a_unlisted_render) : ;;                    # beta.png unlisted from the start
       b_listed_but_absent)
-        printf 'see [gamma](diagrams/gamma.png)\n' >> "$sb/$case/d/INDEX.md" ;;
+        printf 'see [gamma](diagrams/gamma.png)\n' >> "$_SB/$case/d/INDEX.md" ;;
       c_everything_listed)
-        printf 'see [beta](diagrams/beta.png)\n' >> "$sb/$case/d/INDEX.md" ;;
+        printf 'see [beta](diagrams/beta.png)\n' >> "$_SB/$case/d/INDEX.md" ;;
     esac
-    if check_index "$sb/$case/d" "$sb/$case/d/INDEX.md" >/dev/null 2>&1; then got=clean; else got=dirty; fi
+    if check_index "$_SB/$case/d" "$_SB/$case/d/INDEX.md" >/dev/null 2>&1; then got=clean; else got=dirty; fi
     if [ "$expect" = "$got" ]; then
       printf '  ok:   self-test — %-38s expected %-5s, checker said %s\n' "$name" "$expect" "$got"
       caught=$((caught + 1))
