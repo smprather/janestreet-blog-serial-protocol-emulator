@@ -170,11 +170,11 @@ package "Host read path (R2) — landed 2026-09-25" {
   r2_wait --> r2_vec : verified by
 }
 
-package "R3 debug control — contract FROZEN, RTL NOT landed" {
-  component "Debug contract FROZEN\nSTEP/BP_SET/BP_CLR/STATUS" as r3_ctr <<open>>
-  component "bp comparator + mux\nNOT IMPLEMENTED" as r3_rtl <<open>>
-  component "STOP-BEFORE\nsemantics" as r3_sem <<open>>
-  component "R3 vectors + chip TB\npending" as r3_vec <<open>>
+package "R3 debug control — landed 2026-09-25" {
+  component "Debug control\n0x21 STEP / 0x22 BP_SET / 0x23 BP_CLR" as r3_ctr <<complete>>
+  component "bp comparator + debug mux\npe_ctrl / pe_cpu\ncpu_exec = dbg_step || (run && !dbg_hold)" as r3_rtl <<complete>>
+  component "STOP-BEFORE\nan armed BP stops a LIVE core\nthe cycle its PC matches" as r3_sem <<complete>>
+  component "R3 + R2 held-core steps\nstates 2/3 via the opcodes, 22/22" as r3_vec <<complete>>
   cpu --> r3_ctr
   r3_ctr --> r3_rtl
   r3_ctr --> r3_sem
@@ -272,16 +272,29 @@ note bottom of p_dmx
 end note
 
 note bottom of r3_ctr
-  STATUS CORRECTION, and it is the one worth reading on this diagram. The
-  R3 debug-control contract is FROZEN (manager ruling 2026-09-25, "draft-for-
-  implementation") and the golden-vector package shape exists, but the RTL
-  does NOT: pe_ctrl.v and pe_cpu.v contain no bp_ or step signal at all, only
-  comments about what a debugger would need. So this section is AMBER/RED on
-  purpose. Drawing it green would be the exact class of error this block's own
-  findings file keeps documenting -- a confident claim nothing checked.
-  The two levers that will actually move it: the bp comparator and the debug
-  response mux, and the STOP-BEFORE semantics that make a breakpoint land
-  before the matched instruction rather than after it.
+  CORRECTION, and it is worth reading because the first version of this note
+  was confidently WRONG. It said the R3 RTL did not exist -- "no bp_ or step
+  signal in pe_ctrl.v or pe_cpu.v" -- which was measured correctly and in the
+  WRONG TREE: this branch is behind main, and main carries the landed R3
+  control (21 references in pe_ctrl.v, 8 in pe_cpu.v). Generalising a local
+  measurement into a project claim is the exact error this block's own
+  findings file keeps documenting, and it is the same one the same session had
+  already made about the eight missing personas. Checked against main, not
+  against the tree that happens to be checked out.
+
+  The landed contract: DEBUG_STEP executes EXACTLY ONE instruction and is
+  NOT_READY (no fault) while the core free-runs; BP_SET takes one address
+  word, answers RANGE and changes NOTHING if the address is >= IMEM_WORDS, and
+  may arm while running; BP_CLR disarms, clears the hit, releases the hold,
+  and is idempotent.
+
+  THE BRING-UP TRAP, which is the single most useful thing on this contract
+  and the reason it is drawn with its own emphasis: ONCE HELD, THE run STRAP
+  IS IGNORED -- BOTH WAYS. A hold is released only by DEBUG_BP_CLR or by
+  reset. Dropping run does not resume and raising it does not either, because
+  cpu_exec = dbg_step || (run && !dbg_hold). A host that single-steps, stops
+  on a breakpoint, and then "re-asserts run=1 to carry on" finds the core STILL
+  HELD, with no fault and nothing to explain it.
 end note
 
 note bottom of fv_mut

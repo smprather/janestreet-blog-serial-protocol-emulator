@@ -42,7 +42,7 @@
 - [[reference/clock-arithmetic]] — every protocol constant at the LOCKED 60 MHz operating point: what is integer-exact and what is an approximation. `CLK_HZ` is read from the RTL (generated).
 - [[reference/block-diagram]] — RTL block inventory: integrated blocks, standalone orphans, cell counts, and testbenches (generated and drift-checked).
 - `diagrams/project-plan.puml` — planned system topology: host/b board, the SoC, the R2 read path and wait-word contract, the R3 debug-control contract, the protocol and timing acts as firmware, the formal campaign, and the parallel worktree fleet (baseline and stretch protocol goals).
-- `diagrams/project-progress.puml` — implementation status by block; colors distinguish integrated, standalone, and open work. Note that the R3 debug section is deliberately red: the contract is frozen but the RTL is not implemented.
+- `diagrams/project-progress.puml` — implementation status by block; colors distinguish integrated, standalone, and open work. The R3 debug section is green: the control landed 2026-09-25 (0x21 STEP, 0x22 BP_SET, 0x23 BP_CLR), and the remaining RED is hardware board acceptance.
 - [[reference/simulator-bakeoff]] — Icarus vs Verilator, measured (speed, build cost, X)
 
 ## Comparisons

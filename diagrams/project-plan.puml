@@ -103,10 +103,10 @@ package "Host read path (R2) — committed baseline" {
   p_r2port --> p_r2wait : answer cannot beat the fetch
 }
 
-package "R3 debug control — contracted, RTL OPEN" {
-  component "Debug-control contract\nDEBUG_STEP / BP_SET / BP_CLR / DEBUG_STATUS" as p_r3ctr
-  component "bp comparator + debug mux\npe_ctrl / pe_cpu — not implemented" as p_r3rtl
-  component "STOP-BEFORE semantics" as p_r3sem
+package "R3 debug control — landed 2026-09-25" {
+  component "Debug-control contract\n0x21 STEP / 0x22 BP_SET / 0x23 BP_CLR" as p_r3ctr
+  component "bp comparator + debug mux\npe_ctrl / pe_cpu" as p_r3rtl
+  component "STOP-BEFORE semantics\n+ the bring-up trap" as p_r3sem
   p_r3ctr --> p_r3rtl
   p_r3ctr --> p_r3sem
 }
@@ -151,13 +151,19 @@ p_timing -[hidden]down-> p_fvtool
 p_fvifg -[hidden]down-> p_wbus
 
 note bottom of p_r3ctr
-  CONTRACT, NOT RTL. The R3 debug-control contract is frozen (manager ruling
-  2026-09-25, "draft-for-implementation") and the golden-vector package shape
-  exists, but pe_ctrl.v and pe_cpu.v contain no bp_ or step signal — only
-  comments about what a debugger would need. This section is red on purpose.
-  The two levers that move it: the bp comparator plus debug response mux, and
-  STOP-BEFORE semantics so a breakpoint lands before the matched instruction
-  rather than after it.
+  LANDED 2026-09-25, and this note corrects a first version that said
+  otherwise. That version claimed the RTL did not exist, measured in THIS
+  worktree -- which is behind main, where the landed control lives (21
+  references in pe_ctrl.v, 8 in pe_cpu.v). The lesson is the one this project
+  keeps paying for: a local measurement is not a project claim, and the eight
+  "missing" persona acts had already been caught the same way in the same
+  session.
+
+  THE BRING-UP TRAP is the part a host must design around: once the core is
+  HELD, the run strap is ignored BOTH WAYS. A hold is released only by
+  DEBUG_BP_CLR or by reset, because cpu_exec = dbg_step || (run && !dbg_hold).
+  A host that single-steps or hits a breakpoint and then re-asserts run=1 to
+  carry on finds the core STILL HELD, with no fault and nothing to explain it.
 end note
 
 note bottom of p_proto
