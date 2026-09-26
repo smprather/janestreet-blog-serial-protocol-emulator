@@ -112,6 +112,14 @@ conformance runs, not an assertion.
   carry on" leaves the core stopped with no fault to explain it. It also says
   why a host's own model cannot show most of this — the same reasoning that
   keeps the model free to be wrong about what is legal.
+- [[concepts/formal-verification]] — what is proved, what is only tested, and
+  how a reader tells the two apart: the proved claims with their proof shape,
+  the mutants that make each non-vacuous, and the findings that stayed open.
+  *(from `docs/diag-proto`; forward-linked ahead of the push so the page-rules
+  gate is not the thing that turns red at merge. At the time of writing this
+  page is untracked in that worktree and in no pushed ref, so the link does not
+  resolve yet — the one place in this index where that is true, and it is said
+  here rather than left to be discovered.)*
 
 ### Protocol deep-dives
 
