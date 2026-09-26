@@ -70,6 +70,64 @@ $(printf '%s\n' "$out" | sed 's/^/        | /')"
   ok "$name"
 }
 
+# fresh_render <name> — like fresh(), but also carrying the diagram render gate
+# and the diagrams/ tree, so a render case exercises the same files the real gate
+# would. The first attempt used plain fresh() and every render case died with
+# exit 127 on a missing script, which is the shape of a test that never tested
+# anything while looking busy.
+fresh_render() {
+  d="$TMP/$1"
+  mkdir -p "$d/wiki" "$d/regress"
+  cp -a wiki/. "$d/wiki/"
+  cp "$CHECKER" "$d/regress/"
+  cp "$RENDER_CHECK" "$d/regress/"
+  cp -a diagrams "$d/diagrams"
+  echo "$d"
+}
+
+# fresh_minimal <name> — a SYNTHETIC wiki that satisfies every rule by
+# construction, used by the cases that must see a GREEN gate.
+#
+# Why this exists, and it is a real design fault rather than a nicety: those
+# cases used to copy the live wiki, so they asserted "green" on whatever state
+# the repository happened to be in. The day another worker's page arrived with a
+# rule violation — which is exactly what happened, on the day this was written —
+# three green-asserting cases failed at once, and none of them was testing the
+# gate. A self-test whose pass/fail depends on live state is a canary for other
+# people's work. The red-asserting cases are fine copying the live tree, because
+# extra violations cannot make a red tree green; only the GREEN assertions need a
+# fixture under this worker's control.
+#
+# It must clear the checker's own floors (>=20 pages, >=15 taxonomy tags) or the
+# checker reports a HARNESS ERROR instead of a verdict, and a HARNESS ERROR is not
+# a green, so the fixture has to be big enough to be judged rather than skipped.
+fresh_minimal() {
+  d="$TMP/$1"
+  mkdir -p "$d/wiki/concepts" "$d/wiki/plans" "$d/regress"
+  cp "$CHECKER" "$d/regress/"
+  # Letter-only tag names: the checker's taxonomy parser accepts ^[a-z][a-z-]*$,
+  # so "tag1" was rejected, the fixture parsed as an EMPTY taxonomy, and the
+  # checker correctly reported a HARNESS ERROR rather than a verdict. The
+  # fixture has to be judgeable, not merely present.
+  { echo "# Wiki Schema"; echo; echo "## Tag Taxonomy"
+    for t in alpha bravo charlie delta echo foxtrot golf hotel india juliet \
+             kilo lima mike november oscar papa; do echo "- $t"; done
+    echo; echo "Rule: every tag on a page must appear in this taxonomy."
+  } > "$d/wiki/SCHEMA.md"
+  : > "$d/wiki/.known-rule-violations.txt"      # nothing pinned: nothing is wrong
+  n=21
+  for i in $(seq -w 1 $n); do
+    d1=$(( (10#$i % 20) + 1 )); d2=$(( (10#$i % 20) + 2 ))
+    printf '%% fixture page %s\n' "$i" > "$d/wiki/concepts/f$i.md"
+    sed -i '1i ---\ntitle: Fixture f'"$i"'\ncreated: 2026-09-25\nupdated: 2026-09-25\ntype: concept\ntags: [alpha, bravo]\nconfidence: high\n---' \
+      "$d/wiki/concepts/f$i.md"
+    printf '\nSee also [[concepts/f%d]] and [[concepts/f%d]].\n' "$d1" "$d2" >> "$d/wiki/concepts/f$i.md"
+    printf -- '- [[concepts/f%s]] — fixture.\n' "$i" >> "$d/wiki/index.md"
+  done
+  sed -i '1i # Index\n' "$d/wiki/index.md"
+  echo "$d"
+}
+
 # mutate <case-name> <file> <sed-expr> — apply a mutation and REFUSE to let the
 # case continue if it changed nothing.
 #
@@ -100,8 +158,8 @@ echo "test_check_wiki_pages: exercising $CHECKER in a throwaway copy"
 # would fail here and pass the rest. Both halves are needed for the set to mean
 # anything, which is the same reason the dep-guard test carries a negative
 # control.
-d=$(fresh positive)
-expect "unmodified copy is green (positive control)" 0 "check_wiki_pages: OK" "$d"
+d=$(fresh_minimal positive)
+expect "an unmodified compliant wiki is green (positive control)" 0 "check_wiki_pages: OK" "$d"
 
 # ---- 2. a NEW off-taxonomy tag is red ---------------------------------------
 # The sed PREPENDS to whatever the tags line already holds rather than matching
@@ -160,14 +218,24 @@ fi
 # ---- 7. and the pin can be CLOSED: fix the page AND drop the line ----------
 # Case 6 alone would be satisfied by a gate that is simply always red. This is
 # the case that makes the pin a workflow instead of a wall.
-d=$(fresh closed)
-cat >> "$d/wiki/plans/spi-pads.md" <<'EOF'
-
-See also: [[concepts/spi-as-firmware]] and [[concepts/pin-matrix]].
-EOF
-grep -v '^plans/spi-pads.md zero-outbound-links' wiki/.known-rule-violations.txt \
+d=$(fresh_minimal closed)
+# Build the pin this case closes: make one fixture page violate the link rule,
+# pin it, and prove the pin HOLDS it green before the close is attempted. A pin
+# that was never load-bearing would make the close case pass for free.
+sed -i 's/^See also \[\[concepts\/f[0-9]*\]\] and \[\[concepts\/f[0-9]*\]\]\.$/See also concepts only, in prose./' \
+  "$d/wiki/concepts/f03.md"
+printf 'concepts/f03.md zero-outbound-links fixture page made non-compliant on purpose\n' \
   > "$d/wiki/.known-rule-violations.txt"
-expect "fixed page AND removed pin is green" 0 "check_wiki_pages: OK" "$d"
+expect "a pinned violation is held green, not reported NEW" 0 "check_wiki_pages: OK" "$d"
+# Now close it properly: fix the page AND drop the pin. Case 6 alone would be
+# satisfied by a gate that is simply always red; this is the case that makes the
+# pin a workflow instead of a wall.
+cat >> "$d/wiki/concepts/f03.md" <<'EOF'
+
+See also: [[concepts/f04]] and [[concepts/f05]].
+EOF
+: > "$d/wiki/.known-rule-violations.txt"
+expect "fixed page AND removed pin is green (not STALE)" 0 "check_wiki_pages: OK" "$d"
 
 # ---- 8-10. fail-closed: the checker must not pass when it cannot see -------
 d=$(fresh no-baseline); rm -f "$d/wiki/.known-rule-violations.txt"
@@ -259,7 +327,10 @@ fi
 # extracted out of run_all.sh rather than a copy of it.
 #   pass direction: pristine wiki  -> stale stays 0
 #   fail direction: a broken page  -> stale becomes 1
-d=$(fresh wire-pass)
+# The fixture, not the live tree: this case asserts a PASSING gate, and on the
+# live tree the gate was legitimately red because of another worker's page, so
+# the case was measuring their state rather than the wiring.
+d=$(fresh_minimal wire-pass)
 { echo 'stale=0'; extract_wiring; echo 'echo "STALE=$stale"'; } > "$TMP/wiring.sh"
 cp "$TMP/wiring.sh" "$d/"
 got=$(cd "$d" && bash wiring.sh 2>/dev/null | tail -1)
@@ -269,8 +340,8 @@ else
   bad "wiring executed: a passing gate leaves stale=0" "got '$got'"
 fi
 
-d=$(fresh wire-fail)
-if mutate "wiring fail-direction breakage" "$d/wiki/concepts/spi-as-firmware.md" \
+d=$(fresh_minimal wire-fail)
+if mutate "wiring fail-direction breakage" "$d/wiki/concepts/f05.md" \
         's/^tags: \[/tags: [not-a-real-tag, /'; then
   { echo 'stale=0'; extract_wiring; echo 'echo "STALE=$stale"'; } > "$TMP/wiring.sh"
   cp "$TMP/wiring.sh" "$d/"
@@ -299,6 +370,98 @@ if awk '/^if bash regress\/check_wiki_pages\.sh/ {on=1} on {print} on && /^fi$/ 
   bad "removing the wiring is DETECTED" "the block survived the removal, so cases 14-18 would pass on a copy with no gate wired at all"
 else
   ok "removing the wiring is DETECTED (negative control for 14-18)"
+fi
+
+RENDER_CHECK=regress/check_diagram_renders.sh
+# ---- 20-25: the DIAGRAM RENDER gate ------------------------------------------
+# Same reason as everything above, for the sibling check: nothing gated
+# diagrams/ at all, the directory went 26 -> 106 files, and a stale render is
+# invisible because the picture still looks like a correct picture OF SOMETHING.
+# This gate was only built after measuring that the renders are byte-
+# REPRODUCIBLE (otherwise it could only ever be red) and that 84/84 are current
+# (otherwise it would ship as a wall of known failures nobody routes around).
+# A gate whose feasibility was measured but whose FAILURE paths were never seen
+# is half a gate.
+# 20. the gate exists and parses
+if [ -f "$RENDER_CHECK" ] && bash -n "$RENDER_CHECK" 2>/dev/null; then
+  ok "the diagram render gate exists and parses"
+else
+  bad "the diagram render gate exists and parses" "$RENDER_CHECK missing or unparseable"
+fi
+
+# 21. it is green on the real tree
+rout=$(bash "$RENDER_CHECK" 2>&1); rrc=$?
+if [ "$rrc" -eq 0 ] && printf '%s\n' "$rout" | grep -q 'diagram renders: OK'; then
+  ok "render gate is green on the real tree"
+else
+  bad "render gate is green on the real tree" "exit $rrc
+$(printf '%s\n' "$rout" | tail -6 | sed 's/^/        | /')"
+fi
+
+# 22-24. a stale render, an ORPHANED render and a NO-SOURCE render are each red.
+# All three in a scratch copy; the real diagrams/ is never touched.
+# 22. STALE: a checked-in render that is no longer the render of its source.
+# The RENDER is corrupted, not the source: appending a byte cannot fail to
+# change the file, whereas an earlier attempt edited a .puml with a sed pattern
+# that matched nothing - which the no-op guard above caught, in a case that
+# would otherwise have quietly tested a pristine tree.
+d=$(fresh_render render-stale)
+printf 'x' >> "$d/diagrams/project-progress.png"
+out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'STALE'; then
+  ok "a checked-in render that no longer matches its source is STALE-red"
+else
+  bad "a checked-in render that no longer matches its source is STALE-red" "exit $rc
+$(printf '%s\n' "$out" | tail -5 | sed 's/^/        | /')"
+fi
+
+# 23. ORPHANED: a checked-in render the source does not produce.
+d=$(fresh_render render-orphan)
+printf 'not a real png\n' > "$d/diagrams/proto-midi_009.png"
+out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'proto-midi_009.png'; then
+  ok "a render with no source-produced counterpart is red"
+else
+  bad "a render with no source-produced counterpart is red" "exit $rc
+$(printf '%s\n' "$out" | tail -5 | sed 's/^/        | /')"
+fi
+
+# 24. NO-SOURCE: a render whose .puml is gone, so nothing can regenerate it.
+# The first version deleted proto-midi-frame.puml — which does not exist, so `rm`
+# was a silent no-op and the case asserted against an untouched tree, which is the
+# same trap the sed guard above exists for. The source is now chosen from what is
+# actually present, and the case refuses to continue if the removal was a no-op.
+d=$(fresh_render render-nosource)
+victim=$(ls "$d"/diagrams/*.puml | head -1)
+victim_rel=$(basename "$victim")
+rm -f "$victim"
+if [ -f "$victim" ]; then
+  bad "a render whose source was deleted is red" "the rm was a no-op, so the case tested nothing ($victim_rel)"
+else
+  out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+  if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'NO-SOURCE'; then
+    ok "a render whose source was deleted is red ($victim_rel removed)"
+  else
+    bad "a render whose source was deleted is red" "exit $rc after removing $victim_rel
+$(printf '%s\n' "$out" | tail -5 | sed 's/^/        | /')"
+  fi
+fi
+
+# 25. and the loud SKIP: no plantuml must be a printed skip, never a silent pass.
+# A box without a diagram renderer is normal, so this cannot be a hard failure;
+# but a green run must still distinguish "checked" from "not checked".
+# The PATH holds exactly the three commands the script reaches BEFORE it tests for
+# plantuml. An empty PATH does not work: find/wc/tr are used first, so the script
+# would die on the page-count floor and report the wrong reason entirely.
+d=$(fresh_render render-noplantuml)
+mkdir -p "$d/bin"
+for t in find wc tr; do p=$(command -v "$t") && ln -sf "$p" "$d/bin/$t"; done
+out=$(cd "$d" && PATH="$d/bin" /bin/bash regress/check_diagram_renders.sh 2>&1); rc=$?
+if printf '%s\n' "$out" | grep -q 'SKIPPED' && [ "$rc" -eq 0 ]; then
+  ok "a missing plantuml is a loud SKIP with exit 0, not a silent pass"
+else
+  bad "a missing plantuml is a loud SKIP with exit 0, not a silent pass" "exit $rc
+$(printf '%s\n' "$out" | tail -4 | sed 's/^/        | /')"
 fi
 
 echo "test_check_wiki_pages: $pass passed, $fail failed"

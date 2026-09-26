@@ -84,3 +84,14 @@ plans/pe-ctrl.md zero-outbound-links zero links; the R1 contract this page owns 
 plans/serdes-integration.md zero-outbound-links zero links; should cross-reference concepts/factored-hardware-blocks
 plans/spi-pads.md zero-outbound-links zero links; should cross-reference concepts/spi-as-firmware
 reference/simulator-bakeoff.md zero-outbound-links zero links; the measured bakeoff that justifies running iverilog rather than Verilator
+
+# --- 2026-09-25: pages that arrived on MAIN with the link rule unmet -----------
+# Unlike the plans/ corner above, these two are NOT deferred cleanup: they
+# arrived on main with one outbound wikilink each, so without a pin the gate is
+# red on main and blocks every merge behind it. That is a worse outcome than a
+# named, dated pin with a reason, and the STALE check makes the pin
+# self-clearing: the moment either author adds a second link, the checker turns
+# red and DEMANDS these lines come out. So the pin is not an excuse, it is a
+# receipt.
+concepts/debug-control.md zero-outbound-links arrived on main from docs/diag-proto with 1 link; second wikilink DISPATCHED to the author 2026-09-25
+concepts/host-stack.md zero-outbound-links arrived on main from the host-controller-gui merge with 1 link; same lineage as debug-control, same one-line fix
