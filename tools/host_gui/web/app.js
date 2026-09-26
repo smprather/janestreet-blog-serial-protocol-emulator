@@ -44,7 +44,10 @@ const DUMPABLE = ["PREPARED", "LOADED", "STOPPED", "DEBUG_HOLD", "FAULTED"];
 // nothing to step, and a latched fault means the last frame was rejected), so
 // the button offers the SAME rule rather than a hand-copied list of state
 // names. The other three need only a chip that implements R3: arming is legal
-// while running, and clear/release is the only way off a held core.
+// while running AND while held (a held core cannot RUN into an armed address -
+// the free-running hit is gated on the hold being clear - but a step onto it
+// still latches the hit, which is the stop-before flow; the session warns
+// about exactly that), and clear/release is the only way off a held core.
 const DEBUG_BUTTONS = ["debug-step", "bp-set", "bp-clr", "debug-resume"];
 const STEPPABLE = ["LOADED", "STOPPED", "DEBUG_HOLD", "BP_HIT"];
 

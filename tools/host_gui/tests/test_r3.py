@@ -101,6 +101,56 @@ class TestDebugOps(unittest.TestCase):
         self.assertEqual(pe.bp_addr, 3)
         self.assertEqual(pe.faults, 0)  # R3 adds no fault class
 
+    def test_bp_set_does_not_release_a_hold_so_the_arm_is_step_only(self):
+        """Both halves of the trap at the model level, so neither is folklore.
+
+        The model deliberately does NOT release the hold on BP_SET, because the
+        chip does not (`pe_ctrl.v:1086-1087` writes bp_en and bp_hit only). So
+        what follows is reproducible here, and the two halves point opposite
+        ways — which is why the host WARNs about this case and does not refuse
+        it. (1) An arm made on a held core cannot be RUN into: the free-running
+        hit needs `!dbg_hold_r` (`pe_ctrl.v:692`) and the hold is asserted. The
+        chip still answers OK and the response reports the breakpoint ARMED, so
+        every field a reader can see says it worked. (2) The same arm DOES fire
+        on a step onto its address, because the step path has no such gate
+        (`pe_ctrl.v:1067`) — which is why refusing the arm would be wrong, and
+        is what the acceptance run's own arm-then-step beats rely on.
+        """
+        # ---- half one: armed, OK, and unreachable by running ----
+        pe = R.loaded(pc=2, bp_addr=2, bp_en=True, bp_hit=True, debug_hold=True)
+        payload = pe.request(P.OP_DEBUG_BP_SET, payload_words=(7,)).payload
+        # every field a reader would check says it worked
+        self.assertEqual(payload[0], P.STATUS_OK)
+        self.assertEqual(payload[3:], (7, 0b01))  # armed, at the new address
+        self.assertTrue(pe.debug_hold, "BP_SET must NOT release the hold")
+        self.assertEqual(pe.request(P.OP_DEBUG_STATUS).payload[1], F.DEBUG_HOLD)
+        # and it cannot be run into, because a hold stops the free-running core
+        pe.run = True
+        self.assertFalse(pe.advance_free_running(max_instructions=64))
+        self.assertFalse(pe.bp_hit)
+
+        # ---- half two: the step path has no such gate ----
+        pe.pc = 6  # one instruction from the armed address at 7
+        step = pe.request(P.OP_DEBUG_STEP).payload
+        self.assertEqual(step[0], P.STATUS_OK)
+        self.assertTrue(pe.bp_hit, "a step onto the armed address must latch")
+        self.assertEqual(pe.state, F.DEBUG_BP_HIT)
+
+        # ---- and a release disarms, so the arm does not survive it ----
+        pe2 = R.loaded(pc=1, run=True, bp_addr=1, bp_en=True, debug_hold=True)
+        pe2.request(P.OP_DEBUG_BP_SET, payload_words=(1,))
+        cleared = pe2.request(P.OP_DEBUG_BP_CLR).payload
+        self.assertEqual(cleared[0], P.STATUS_OK)
+        self.assertFalse(pe2.bp_en, "BP_CLR disarms as it releases")
+        self.assertFalse(pe2.debug_hold)
+        # so step -> clear -> re-arm is the only order that ends armed. Re-arm
+        # at 2 because that is where the instruction at 1 lands (the model
+        # image is imem[0] LDI, imem[1] OUT, imem[2] JMP 2).
+        pe2.request(P.OP_DEBUG_BP_SET, payload_words=(2,))
+        self.assertTrue(pe2.bp_en)
+        self.assertTrue(pe2.advance_free_running(max_instructions=64))
+        self.assertTrue(pe2.bp_hit)
+
     def test_bp_clr_releases_to_running_when_the_strap_is_high(self):
         pe = R.loaded(pc=2, run=True, bp_addr=2, bp_en=True, bp_hit=True, debug_hold=True)
         payload = pe.request(P.OP_DEBUG_BP_CLR).payload

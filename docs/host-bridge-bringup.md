@@ -122,6 +122,7 @@ assuming a problem.
 | `clear_fault` FAIL (faults still set) | `CLEAR_FAULT` did not clear the sticky register — the fault is STILL latched on the chip | a chip-level symptom, not a host one: the host sent the frame and read the register back. Note it before resetting, because a reset clears the register and the evidence with it |
 | `uart` SKIP | no bridge op reports UART bytes (dropped from this phase by ruling) | revisit at hardware bring-up; not a failure |
 | Chip is stopped and will NOT restart, and the run strap looks correct | **a debug hold is asserted** (an R3 breakpoint hit, or a single step paused it). While held, `cpu_exec = dbg_step \|\| (run && !dbg_hold)`, so the strap is ignored in BOTH directions | send `DEBUG_BP_CLR` — it is the **only** release. Pulling the run strap low will NOT recover the chip, and neither will `STOP`; the other escape is a hardware reset. See the note below |
+| A breakpoint reads ARMED and the core then never stops at it | the arm was made while the core was **already held**, and you then **ran** instead of stepping: the free-running hit is gated on the hold being clear (`pe_ctrl.v:692`) while the step path is not (`:1067`), so a held core can never run into an armed address — and the chip answered `OK` to the arm, so nothing on the wire says otherwise | **step** onto the armed address (that is what latches the hit — state 2 becomes 3), and remember `DEBUG_BP_CLR` disarms as it releases, so an arm does not survive a clear. To continue *with* the breakpoint armed, use the GUI's **Continue (keep bp)**; the session warns on this exact case |
 | A step hangs then times out | the Pico read loop is blocked and a request never got answered | Ctrl-C the runner; check the board REPL for a traceback; the host never fabricates a success on timeout |
 
 ### If the chip will not restart: the run strap is not the answer
@@ -144,6 +145,38 @@ This is not a corner case for us: the host's own acceptance demo
 (`r3_demo_6_clear_releases`) depends on exactly this release, and an operator
 whose GUI died mid-debug will come back to a chip that looks powered and
 configured but will not run until they clear the breakpoint.
+
+### The other half of the same trap: an arm made on a held core is step-only
+
+Clearing is the only *release*, and `DEBUG_BP_SET` is not one — it clears the
+armed and hit bits and leaves the hold asserted (`pe_ctrl.v:1086-1087`). The two
+hit paths then differ in a way that decides whether your breakpoint works:
+
+- **free-running** — `bp_en && !dbg_hold_r && (run || dbg_step_r) && dbg_next_pc
+  == bp_addr` (`pe_ctrl.v:692`). Gated on the hold being **clear**, so a core
+  that is already held can never run into an armed address.
+- **step** — `bp_hit <= bp_en && (dbg_next_pc == bp_addr)` (`pe_ctrl.v:1067`).
+  **Not** gated on the hold, so stepping onto an armed address from a held core
+  does latch the hit, taking state 2 to 3. This is the stop-before flow the R2
+  held-core steps 21/22 exist to pin, and the acceptance act uses it.
+
+So arming a held core is legal — but it is **step-only**. Arm it, then start or
+continue, and you get a breakpoint that reports ARMED and can never fire, with
+no error anywhere: the chip answered `OK` to the arm. Step onto the address
+instead. And an arm does not survive a release at all, because `DEBUG_BP_CLR`
+disarms as it releases, so the order that ends armed is always **step → clear →
+re-arm** — the GUI's **Continue (keep bp)** button and the session's
+`resume_with_breakpoint()` do exactly that.
+
+The host does not leave the trap silent: `session.bp_set()` raises a
+`UserWarning` naming the step-only rule and the recovery whenever the core is
+held, and the acceptance run's own arm-then-step beats are what proved the rule
+is a warning and not a refusal — a first attempt refused the arm outright and
+turned two PASSing acceptance beats red.
+
+The host runner **never reports a timed-out or unacknowledged operation as
+success** — a `FAIL` means the real thing failed, so read the `error` string
+in the report before retrying.
 
 ## 7. Running the host gate (and the optional MicroPython step)
 
