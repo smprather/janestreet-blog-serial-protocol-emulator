@@ -13,8 +13,8 @@ confidence: high
 R2 made "observe" real; R3 makes "debug" real. Four opcodes, one hardware
 breakpoint on PC, no new pads, no ISA change. The contract is the block in
 `rtl/pe_ctrl.v`'s header; the frozen document that specified it is
-`reviews/2026-09-25/R3-DEBUG-CONTROL-CONTRACT.md`. Frame and opcode details are
-in [[concepts/host-chip-protocol]]; drawn in
+[[../reviews/2026-09-25/R3-DEBUG-CONTROL-CONTRACT]]. Frame and opcode details
+are in [[concepts/host-chip-protocol]]; drawn in
 `diagrams/proto-r3-debug-control.puml`.
 
 ## The four states
