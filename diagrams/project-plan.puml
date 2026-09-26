@@ -6,7 +6,7 @@ skinparam defaultFontName Monospaced
 skinparam packageStyle rectangle
 
 package "Demo host / board" {
-  component "Linux PC\nDemo host GUI (planned)" as pc
+  component "Linux PC\nhost GUI built; board acceptance open" as pc
   component "Tiny Tapeout demo board\nRP2040 controller (Raspberry Pi Pico)" as board
   component "Protocol wires" as wires
 }
@@ -96,6 +96,91 @@ serdes --> tx_mux : tx_bit (default owner)
 tx_frame --> tx_mux : eth_tx_bit
 tx_mux --> codec_tx : owned tx_bit into shared codec
 tx_mux --> pads : uo_out[2] eth_tx (G6, behind pin_oe_bus[7])
+
+package "Host read path (R2) — committed baseline" {
+  component "Bounded read port\npe_soc dbg_rd_*" as p_r2port
+  component "Wait-word contract\n0xFFFF filler, leading-only skip" as p_r2wait
+  p_r2port --> p_r2wait : answer cannot beat the fetch
+}
+
+package "R3 debug control — landed 2026-09-25" {
+  component "Debug-control contract\n0x21 STEP / 0x22 BP_SET / 0x23 BP_CLR" as p_r3ctr
+  component "bp comparator + debug mux\npe_ctrl / pe_cpu" as p_r3rtl
+  component "STOP-BEFORE semantics\n+ the bring-up trap" as p_r3sem
+  p_r3ctr --> p_r3rtl
+  p_r3ctr --> p_r3sem
+}
+
+package "Protocol and timing acts as firmware\none CPU, one pin matrix, one 260-clock tick" {
+  component "Protocol acts\nI2C adv, SPI m3+CRC, UART RTS/CTS,\nMIDI 31.25k, DMX512-A 250k" as p_proto
+  component "Timing acts\nWS2812, servo, DHT11, DS18B20,\nNEC IR, stepper, freqmeter" as p_timing
+  cpu --> p_proto : programs
+  cpu --> p_timing : programs
+  pads --> p_proto : pins
+  pads --> p_timing : pins
+}
+
+package "Verification — formal campaign" {
+  component "SMT / BMC toolchain\nfv_run.sh + smt_induct.sh" as p_fvtool
+  component "10 properties / 5 modules\npinmux, eth_tx, pe_ctrl, pe_soc, pe_cpu" as p_fvprops
+  component "Inductive IFG floor\neth_tx 96-cell gap, unbounded" as p_fvifg
+  component "R3 debug hold\nproved inductively, S1-S4" as p_fvhold
+  component "Mutant-kill gate\n14/14 caught, 0 survived" as p_fvmut
+  p_fvtool --> p_fvprops
+  p_fvprops --> p_fvifg
+  p_fvprops --> p_fvhold
+  p_fvmut --> p_fvprops : non-vacuity
+}
+
+package "Delivery model — parallel worktree fleet" {
+  component "fw-bus-protocols" as p_wbus
+  component "fw-timing-protocols" as p_wtime
+  component "host-controller-gui" as p_whost
+  component "Hardware acceptance\nphysical board — OPEN" as p_whw
+  p_whost --> p_wbus : host contract
+  p_wbus --> p_wtime : protocol acts
+  p_wbus --> p_whw : next
+}
+
+' LAYOUT ONLY. Nodes at the same depth from a parent fan out horizontally, so
+' these five sections would land as one wide row and flatten the diagram. The
+' hidden chain stacks them instead, which is what the "squarer aspect"
+' invariant in diagrams/README.md requires. No architecture is implied.
+pads -[hidden]down-> p_r2port
+p_r2wait -[hidden]down-> p_r3ctr
+p_r3sem -[hidden]down-> p_proto
+p_timing -[hidden]down-> p_fvtool
+p_fvifg -[hidden]down-> p_wbus
+
+note bottom of p_r3ctr
+  LANDED 2026-09-25, and this note corrects a first version that said
+  otherwise. That version claimed the RTL did not exist, measured in THIS
+  worktree -- which is behind main, where the landed control lives (21
+  references in pe_ctrl.v, 8 in pe_cpu.v). The lesson is the one this project
+  keeps paying for: a local measurement is not a project claim, and the eight
+  "missing" persona acts had already been caught the same way in the same
+  session.
+
+  THE BRING-UP TRAP is the part a host must design around: once the core is
+  HELD, the run strap is ignored BOTH WAYS. A hold is released only by
+  DEBUG_BP_CLR or by reset, because cpu_exec = dbg_step || (run && !dbg_hold).
+  A host that single-steps or hits a breakpoint and then re-asserts run=1 to
+  carry on finds the core STILL HELD, with no fault and nothing to explain it.
+end note
+
+note bottom of p_proto
+  The architectural point of the whole firmware-protocols effort: these are not
+  peripherals. They are PROGRAMS on the same CPU, pin matrix and tick, which is
+  why a rate the tick cannot express (MIDI 31.25 kbaud, DMX 250 kbaud) is
+  still reachable — by counting instructions. Measured on the pin: MIDI
+  31,998.7 ns / 31,251 baud and DMX 3,999.8 ns / 250,010 baud, both with zero
+  spread across every frame.
+end note
+
+note bottom of p_whw
+  THE REMAINING RED. Everything above is simulated and mapped; the physical
+  Pico/USB board acceptance is the one item no simulation can close.
+end note
 
 note bottom of pads
   Baseline firmware personas: UART, SPI master, I2C master.

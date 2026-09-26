@@ -20,7 +20,7 @@ skinparam component {
 }
 
 package "Program load and execution" {
-  component "Linux PC demo GUI\nplanned; host link TBD" as gui <<open>>
+  component "Linux PC demo GUI\nhost link landed; board acceptance open" as gui <<complete>>
   component "SoC bring-up on Tiny Tapeout demo board\nRP2040 controller (Raspberry Pi Pico)" as board <<open>>
   component "Host SPI loader\npe_ctrl" as loader <<complete>>
   component "Instruction SRAM\n1024 × 16" as imem <<complete>>
@@ -68,8 +68,8 @@ package "Word engine integration — landed 2026-09-24, future consumers open" {
   component "SoC wire-loopback test\nplain + stuffed Manchester (0x07E0)" as loopback <<complete>>
   component "10BASE-T TX frame path\npe_eth_tx + 32-entry window + owner mux + G6 uo_out[2] pad" as eth_tx <<complete>>
   component "eth_tx loopback acceptance\ntb_pe_soc_eth_loop; FCS 9cc5cb34; IFG 102 cells" as eth_tx_loop <<complete>>
-  component "eth_tx mutation suites\nplan Task 6" as eth_tx_mut <<open>>
-  component "eth_tx STA + doc close-out\nplan Task 7" as eth_tx_sta <<open>>
+  component "eth_tx mutation suites\nregress/mutate_eth_tx_tb.sh" as eth_tx_mut <<complete>>
+  component "eth_tx STA + doc close-out\nreviews/2026-09-25/eth-tx-sta" as eth_tx_sta <<complete>>
   component "Low-speed USB persona" as usb <<open>>
   component "pe_ctrl framed host bus R1\nuio[4:7] CS_N/MOSI/MISO/SCK; IRQ_N uo_out[1]" as readback <<complete>>
 
@@ -158,6 +158,154 @@ note right of macrogate
   after independent manager verification (macro harness 26/26, full
   regression exit 0); R1/R4/R5 remain observations. Evidence:
   reviews/2026-09-23/PROJECT-REVIEW.md, "E2-6 resolution".
+end note
+
+package "Host read path (R2) — landed 2026-09-25" {
+  component "Bounded read port\npe_soc dbg_rd_*" as r2_port <<complete>>
+  component "Wait-word contract\n0xFFFF filler" as r2_wait <<complete>>
+  component "R2 vectors\n30 golden + hex" as r2_vec <<complete>>
+  loader --> r2_port : host read
+  cpu --> r2_port : CPU buses arbitrated
+  r2_port --> r2_wait : answer cannot beat the fetch
+  r2_wait --> r2_vec : verified by
+}
+
+package "R3 debug control — landed 2026-09-25" {
+  component "Debug control\n0x21 STEP / 0x22 BP_SET / 0x23 BP_CLR" as r3_ctr <<complete>>
+  component "bp comparator + debug mux\npe_ctrl / pe_cpu\ncpu_exec = dbg_step || (run && !dbg_hold)" as r3_rtl <<complete>>
+  component "STOP-BEFORE\nan armed BP stops a LIVE core\nthe cycle its PC matches" as r3_sem <<complete>>
+  component "R3 + R2 held-core steps\nstates 2/3 via the opcodes, 22/22" as r3_vec <<complete>>
+  cpu --> r3_ctr
+  r3_ctr --> r3_rtl
+  r3_ctr --> r3_sem
+  r3_rtl --> r3_vec
+}
+
+package "Protocol acts as firmware (fw-bus)\nsame CPU, pin matrix and 260-clock tick" {
+  component "I2C adv\nburst + stretch" as p_i2c <<complete>>
+  component "SPI mode 3\n+ CRC-8" as p_spi <<complete>>
+  component "UART\nRTS/CTS" as p_uart <<complete>>
+  cpu --> p_i2c
+  cpu --> p_spi
+  cpu --> p_uart
+  pinmux --> p_i2c : pins
+  pinmux --> p_spi : pins
+  pinmux --> p_uart : pins
+  p_i2c -[hidden]down-> p_spi
+  p_spi -[hidden]down-> p_uart
+}
+
+package "Timing acts as firmware (fw-timing)\nsame CPU, pin matrix and 260-clock tick" {
+  component "MIDI 31.25k\n8N1" as p_midi <<complete>>
+  component "DMX512-A 250k\n8N2" as p_dmx <<complete>>
+  component "7 timing acts\n(fw-timing)" as p_time <<complete>>
+  cpu --> p_midi
+  cpu --> p_dmx
+  cpu --> p_time
+  pinmux --> p_midi : pins
+  pinmux --> p_dmx : pins
+  pinmux --> p_time : pins
+  p_midi -[hidden]down-> p_dmx
+  p_dmx -[hidden]down-> p_time
+}
+
+' LAYOUT, no architecture: the personas are siblings on one CPU and pin
+' matrix, which in a top-to-bottom layout lays out as one wide row. Split by
+' workstream and stacked with hidden edges so the diagram keeps the SQUARER
+' aspect required by diagrams/README.md's Task-5a rules -- it was 2.43 wide
+' when all six were siblings. Safe to delete if the fan-out changes shape.
+
+package "Formal campaign" {
+  component "SMT/BMC toolchain\nfv_run.sh + smt_induct.sh" as fv_tool <<complete>>
+  component "10 properties / 5 modules\npinmux, eth_tx, pe_ctrl,\npe_soc, pe_cpu" as fv_props <<complete>>
+  component "Inductive IFG floor\nUNBOUNDED" as fv_ifg <<complete>>
+  component "pe_cpu_debug_hold\nR3 hold PROVED inductively (S1-S4)" as fv_hold <<complete>>
+  component "Mutant-kill gate\n14/14 caught" as fv_mut <<complete>>
+  fv_tool --> fv_props
+  fv_props --> fv_ifg
+  fv_props --> fv_hold
+  fv_mut --> fv_props : non-vacuity
+}
+
+package "Parallel worktree fleet" {
+  component "fw-bus-protocols\n5 protocol acts" as wt_bus <<complete>>
+  component "fw-timing-protocols\n7 timing acts" as wt_time <<complete>>
+  component "host-controller-gui\nR2 read + R3 contract" as wt_host <<complete>>
+  component "Hardware acceptance\nTHE REMAINING RED" as wt_hw <<open>>
+  wt_host --> wt_bus : host contract
+  wt_bus --> wt_time : protocol acts
+  wt_bus --> wt_hw : next
+  wt_time --> wt_hw : next
+}
+
+' LAYOUT ONLY. PlantUML places nodes at the SAME DEPTH from a parent side by
+' side, so five new packages all hanging off `cpu` fan out into one wide row
+' and the diagram went to 2.43 (from a 1.59 baseline). This hidden chain makes
+' them STACK instead, so the new sections add height rather than width, which
+' is what the "squarer aspect" invariant in diagrams/README.md actually
+' requires. It carries no architecture: the personas remain siblings, and the
+' sections are listed in the order they were built. Safe to delete.
+usb -[hidden]down-> r2_port
+r2_vec -[hidden]down-> r3_ctr
+r3_vec -[hidden]down-> p_i2c
+p_uart -[hidden]down-> p_midi
+p_time -[hidden]down-> fv_tool
+fv_ifg -[hidden]down-> wt_host
+
+note bottom of p_midi
+  Landed 2026-09-25 as BLOCK 3 of the firmware-protocols work. The cell is
+  built from COUNTED INSTRUCTIONS, not the shared tick: a 32 us bit is 7.38
+  ticks and 4.3333 us cannot express a fraction, so midi_xfer.pe uses the
+  timer zero times. Measured on the pin: 31,998.7 ns = 31,251 baud with a
+  spread of 0.0000 us over all 14 frames. Its receiver is a free-running
+  oversampling search that VERIFIES each frame's stop bit, because in a
+  back-to-back 8N1 stream a falling edge is not a start bit.
+  Evidence: reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md.
+end note
+
+note bottom of p_dmx
+  Landed 2026-09-25, the mirror image: a 4 us bit is 0.923 of a tick, so
+  DMX is the rate the tick cannot express AT ALL. Break 88.06 us (floor
+  87.5), mark 12.38 us (floor 8.0), 513/513 slots with BOTH stop bits
+  verified, cell 3,999.8 ns = 250,010 baud, spread 0.0000 us over 513 slots.
+  The frame is 22.6 ms of simulated time (1.37M clocks), so the receiver
+  samples only inside a slot rather than free-running a strobe across it.
+  Evidence: reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md.
+end note
+
+note bottom of r3_ctr
+  CORRECTION, and it is worth reading because the first version of this note
+  was confidently WRONG. It said the R3 RTL did not exist -- "no bp_ or step
+  signal in pe_ctrl.v or pe_cpu.v" -- which was measured correctly and in the
+  WRONG TREE: this branch is behind main, and main carries the landed R3
+  control (21 references in pe_ctrl.v, 8 in pe_cpu.v). Generalising a local
+  measurement into a project claim is the exact error this block's own
+  findings file keeps documenting, and it is the same one the same session had
+  already made about the eight missing personas. Checked against main, not
+  against the tree that happens to be checked out.
+
+  The landed contract: DEBUG_STEP executes EXACTLY ONE instruction and is
+  NOT_READY (no fault) while the core free-runs; BP_SET takes one address
+  word, answers RANGE and changes NOTHING if the address is >= IMEM_WORDS, and
+  may arm while running; BP_CLR disarms, clears the hit, releases the hold,
+  and is idempotent.
+
+  THE BRING-UP TRAP, which is the single most useful thing on this contract
+  and the reason it is drawn with its own emphasis: ONCE HELD, THE run STRAP
+  IS IGNORED -- BOTH WAYS. A hold is released only by DEBUG_BP_CLR or by
+  reset. Dropping run does not resume and raising it does not either, because
+  cpu_exec = dbg_step || (run && !dbg_hold). A host that single-steps, stops
+  on a breakpoint, and then "re-asserts run=1 to carry on" finds the core STILL
+  HELD, with no fault and nothing to explain it.
+end note
+
+note bottom of fv_mut
+  Non-vacuity, which is the reason the gate exists: a proof that does not kill
+  its mutant is not a proof. 14 caught / 0 survived, and one eth_tx
+  reachability claim is labelled VACUOUS at the gate depth rather than quietly
+  reported as a proof. ONE OF THE FOURTEEN IS R3's: pe_ctrl_bp_hit_no_hold
+  CAUGHT-no-closure, so the bring-up trap has both a proof (pe_cpu_debug_hold,
+  inductively, claims S1-S4) and a mutant that dies without it.
 end note
 
 legend left
