@@ -438,3 +438,57 @@ design change plus a testbench that matches it, not a hunt:
 * then the two cheap items already recorded: peasm's `4*149+4` derivation
   against the 601 clocks the hardware measures, and the inter-measureval
   check's `t_trig_in[1]` guard.
+
+---
+
+## UPDATE 5: THE TRACE NAMES BOTH REMAINING DEFECTS, WITH THE EVIDENCE
+
+One probe, the single bank, every value the conversion left behind:
+
+    [bank] DONE=1 | ACC=1 T(term)=1 | slot=0 | Q=0 0 | d2=0 d3=0
+
+### Defect 1: the bank stores its bytes in the WRONG ORDER, and that is the 256
+
+ACC = 1, so dmem[14] = 1 and dmem[15] = 0. The bank I wrote is
+
+    LDM   A, 15
+    STM   6, A
+    LDM   A, 14
+    STM   7, A
+
+-- the **high byte first**. The testbench reads the slot little-endian, so it
+computes (7 << 8) | 6 = **256**, which is exactly the number the testbench
+reported. The answer was never 256; it was 1, stored backwards. Every other
+act in this block writes its 16-bit values low byte first and the testbench
+reads them that way, and this act's own earlier bank did it correctly -- so
+this is a defect introduced by the design change twenty minutes ago, in the
+one line that change added, and it was found by a trace rather than by
+reading the diff.
+
+### Defect 2: US is being destroyed, so the main term multiplies zero
+
+`T(term) = 1` is CORRECT (r = 8, 11*8 >> 6 = 1) -- the small term is right.
+But `Q = 0 0` and `d2 = 0, d3 = 0`: US is **zero** by the time the main
+term's `Q = us>>6` setup runs, so the main term multiplies zero and
+`ACC = 0 + 1 = 1`. The temporaries were moved to {6, 7, 11} so that US would
+survive, and something is still writing dmem[2] or dmem[3] -- most likely a
+survivor of the sed that moved the slots, because the replacements were made
+by pattern and **the pattern edits are the thing this act has the most
+evidence about being wrong**.
+
+### What this means for the act
+
+**Both defects are in code written in the last hour, both are named, and
+neither is a design problem.** The one-answer design is sound: with the
+answer slots free for the conversion, the three temporaries at {6,7,11} do
+not collide with anything, and the exact carry has been verified twice. The
+remaining work is: swap the bank's two bytes, find and remove the last write
+to dmem[2..3], then the testbench restructure (two runs, one per distance,
+each answer read AS IT IS BANKED).
+
+**AND THE METHOD THAT FOUND ALL OF IT IS THE SAME ONE EVERY TIME:** a probe on
+a copy, printing the values, and reading them. Nine of the eleven defects in
+this act were found that way and **none of them by reading the diff** -- and
+the two above are the first two that the diff would have shown, which is
+worth noticing, because it means the method is not a substitute for review so
+much as a substitute for *hunting*.
