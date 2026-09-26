@@ -93,5 +93,4 @@ reference/simulator-bakeoff.md zero-outbound-links zero links; the measured bake
 # self-clearing: the moment either author adds a second link, the checker turns
 # red and DEMANDS these lines come out. So the pin is not an excuse, it is a
 # receipt.
-concepts/debug-control.md zero-outbound-links arrived on main from docs/diag-proto with 1 link; second wikilink DISPATCHED to the author 2026-09-25
 concepts/host-stack.md zero-outbound-links arrived on main from the host-controller-gui merge with 1 link; same lineage as debug-control, same one-line fix

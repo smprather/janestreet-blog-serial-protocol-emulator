@@ -66,6 +66,15 @@ repo root, not a wiki page: it is the judge-facing act script.)
 - [[concepts/factored-hardware-blocks]] — the shared RTL primitives (CDR,
   SerDes, stuffing, CRC LFSR) and why no 8b/10b is needed.
 
+- [[concepts/isa-and-soc]] — the ISA as a design decision rather than a table:
+  the 16 opcodes, **why single-cycle**, and the instruction budget that choice
+  creates. It is the page to read before asking why there is no shift-left, no
+  call, and no multiply — each of those is a consequence of something.
+- [[concepts/soc-wiring-and-memory]] — how `pe_soc` is actually wired: the
+  port-numbering rule and why it exists, the port space and the pad map, the
+  SRAM macro against the flop fallback it replaced, the synthesis and timing
+  screens, and an explicit **Limits** section.
+
 ### Timing, clocks and the physical layer
 
 - [[concepts/tx-timing-generation]] — exact-integer protocol timing at 60 MHz
@@ -175,7 +184,25 @@ their own branches as the families are produced, so this section grows:
 - [[concepts/protocol-dmx512]] — DMX512-A at 250 kbaud, the rate a 1 µs tick
   cannot express at all, and why 512 slots need two bytes of counter.
 
-*(The ws2812 and servo entries above are from `docs/diag-timing`; i2c-adv,
+- [[concepts/protocol-freqmeter]] — frequency and duty metering, the first
+  act that **listens**: why the low end is the whole point, the timebase and
+  the trap in it, what the ISA constraint cost, and the fact that the machine
+  has only sixteen bytes of data memory — so the testbench had to be told.
+- [[concepts/protocol-nec-ir]] — NEC infrared, the protocol with **no wire at
+  all**, and a carrier that cannot be late: it is fitted to the clock rather
+  than to microseconds. It also carries the five firmware defects that were
+  invisible from the waveform's shape — the best argument in the wiki for
+  measuring rather than eyeballing.
+- [[concepts/protocol-sr04]] — HC-SR04 ultrasonic ranging, recorded as a
+  **red act** and titled for what it does prove: the distance conversion,
+  exactly, on the one measurement that ran. What is open is stated exactly
+  rather than rounded up.
+- [[concepts/protocol-fm-biphase]] — FM0/FM1 bi-phase marking, "a receiver
+  judged on a receiver": the wire rules are the whole protocol, why a receiver
+  cannot skip one of them, and why the bit period being a whole number of
+  microseconds is not tidiness.
+
+*(The ws2812, servo, dht11 and ds18b20 entries are from `docs/diag-timing`; i2c-adv, spi3-crc, uart-flow, midi and dmx512 from `docs/diag-bus`; the four above from the pages that have since landed on `main`. The naming convention is `protocol-<name>`, so the family is greppable and a new persona has an obvious home. See **In flight** below.)*
 spi3-crc, uart-flow, midi and dmx512 from `docs/diag-bus`. The naming
 convention is `protocol-<name>`, so the family is greppable and a new persona
 has an obvious home. See **In flight** below for what is still to come.)*
