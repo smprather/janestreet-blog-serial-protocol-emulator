@@ -351,3 +351,50 @@ conversion overwrote, and the next session should make the testbench say so
 directly -- check each answer AS IT IS BANKED rather than all of them at the
 end, which is the same "read it in the wrong place" family as the two earlier
 instrument defects in this act.
+
+---
+
+## UPDATE 3: A SECOND INDEPENDENT ATTEMPT CONFIRMS THE CONSTRAINT
+
+The findings file's option "run the main term first, after which US is dead"
+was tried, in the three-temporary form: the exact carry needs only THREE slots
+if `c2` is written over `sum` (the sum is finished with by then), and the
+three candidates were dmem[2], dmem[3] and dmem[11] -- US and the tick's
+previous reading.
+
+**The three-slot sequence is EXACT for all 65,536 (src, dst) pairs.** The
+arithmetic is not the problem and has not been the problem for three attempts
+running.
+
+**The act got WORSE, and that is the finding: dmem[2] and dmem[3] are NOT
+dead.** The small term reads `us_lo` to form r, but the MAIN term's `Q = us>>6`
+setup reads BOTH bytes of US again -- and that setup runs *after* the small
+term's chain has already written its temporaries over 2 and 3. The measured
+width came back as **32896 us = 0x8080**, which is scratch, not a width.
+
+So the dead-byte budget during a chain is: **dmem[11] only** (the tick's
+previous reading), plus whichever answer slot has not been written yet -- and
+"whichever has not been written" depends on the bank count, which the four
+add sites cannot know without being parameterised per site.
+
+**That closes the question the last two updates opened.** There is no
+arrangement of the existing sixteen-byte map that gives the exact add its
+temporaries while two answers stay banked. The act's real constraint is not
+the arithmetic and not the scratch choice; it is that **this machine cannot
+hold two banked millimetre answers and a four-temporary exact 16-bit add at
+the same time**, and every attempt to make it fit has moved the failure rather
+than removed it.
+
+**SO THE ACT SHOULD BE BUILT AS ONE MEASUREMENT PER RUN** -- which is what the
+frequency meter does, and which makes the whole answer map available to the
+conversion so the temporaries can be the answer slots with no previous answer
+to destroy. The testbench then runs the firmware twice, once per distance, and
+checks each answer AS IT IS BANKED, so a destroyed answer is reported where it
+is destroyed rather than as a wrong number at the end.
+
+That is a design change to the act, not a repair, and it should be made
+deliberately rather than as a fifth attempt at the current shape. Everything
+needed for it is here: the exact carry (exhaustively verified, twice, in two
+and three-slot forms), the conversion's structure, the two measurements the
+act claims, and the testbench's checks, which are the right checks and need
+one change -- reading each answer when it is banked.
