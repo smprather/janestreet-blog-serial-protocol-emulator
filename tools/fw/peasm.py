@@ -386,6 +386,21 @@ CONSTS: dict[str, int] = {
     #   (4*SR_RECOV_LEN + 5) clocks = 120,615 clocks = 2010 us, which clears
     #   the model's 2 ms by 10 us.
     "SR_RECOV_LEN": 117,
+    #
+    # ---------------------------------------------------------------------
+    # FM0/FM1 BI-PHASE. The one act here whose claim is about a RECEIVER:
+    # the code lives in the TRANSITIONS, not in the levels, and the only
+    # clock is the one the receiver recovers from the data.
+    #   BMC_IN   bit 5: the testbench drives a bi-phase stream here
+    #   BMC_OUT  bit 6: this program encodes a byte here for the TB to decode
+    #   BMC_HALF the encoder's half-interval, COUNTED rather than waited on:
+    #             120 clocks = 2 us exactly, because the receiver timestamps
+    #             in whole microseconds and a period that is not a whole
+    #             number of them would make this act's own arithmetic the
+    #             least accurate thing in it.
+    "BMC_IN": 0x20,
+    "BMC_OUT": 0x40,
+    "BMC_HALF": 120,
 }
 
 
