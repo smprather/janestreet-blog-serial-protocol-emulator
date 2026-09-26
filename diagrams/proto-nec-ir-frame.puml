@@ -1,4 +1,7 @@
 @startuml proto-nec-ir-frame
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-nec-ir-frame.puml - (b) the NEC 32-bit frame, its repeat code, and what
 ' this act actually puts on the wire.
@@ -21,12 +24,13 @@
 ' ===========================================================================
 
 title NEC infrared - the frame grammar, the repeat code, and what this act sends\n<font size=12>the protocol's frame is 32 bits; this act sends the envelope around ONE byte</font>
+skinparam defaultFontName Monospaced
 
 hide empty description
 hide stereotype
 skinparam shadowing false
 skinparam rectangle {
-  BorderColor #33555
+  BorderColor #4A6FA5
   FontName monospaced
   FontSize 12
 }

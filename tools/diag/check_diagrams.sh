@@ -81,6 +81,28 @@
 #                  picture. Extremes print every run, so drift inside the band is
 #                  still visible to whoever reads the log.
 #
+#   5. THE COLOURS three classes, all of them added because a figure was
+#      (1c, 1d,     INVISIBLE, and none of them is a syntax error:
+#      3b)          * every hex literal is 3, 6 or 8 digits (1c) — `#12345` is
+#                     silently DROPPED by PlantUML, which then paints its default,
+#                     and for an arrow that default is white on a white page;
+#                  * every source carries the canonical palette verbatim (1b), by
+#                     digest, because a propagated definition needs a presence
+#                     check or the copies drift apart;
+#                  * no rendered SVG carries near-white text, near-white stroke,
+#                     or a near-white shape with no visible outline (3b).
+#                  This class is here because of a user-reported symptom — "white
+#                  lines in the SVGs are lost on a white background" — and the
+#                  audit behind it found 58 fatal elements from four independent
+#                  mechanisms. Fixing them was the easy half: TWO of the three
+#                  checks here shipped in a state where the gate reported the tree
+#                  clean. 3b was blind to 51 of 54 figures for one whole merge,
+#                  because its loop sat outside the per-source loop and ran on the
+#                  alphabetically last source only — and its own negative control
+#                  passed, because the planted file happened to sort last. A check
+#                  that only examines one file, or a control planted where the bug
+#                  is not, is worse than no check: it is a green light.
+#
 # USAGE
 #   tools/diag/check_diagrams.sh              check the real diagrams/
 #   tools/diag/check_diagrams.sh --self-test  prove the checker still fails
@@ -89,16 +111,25 @@
 # WHY THE SELF-TEST IS PART OF THE GATE rather than something run once. A checker
 # that stops detecting is worse than no checker: it reports OK on a broken tree
 # and the suite goes green on a claim nothing is testing. So the self-test is in
-# the suite, not merely available on request, and it plants seven defect classes
-# in a THROWAWAY SYNTHETIC fixture — a stale render, a hand-edited render, a
-# broken .puml, a committed error image, an unclaimed render, a missing block
-# render, and a source name containing spaces (that last one is a PASS case: it
-# fails if the checker gets NOISIER, not if it gets laxer). It requires the
-# checker to fail on every planted case and to pass an untouched copy, so a
+# the suite, not merely available on request, and it plants defect classes in a
+# THROWAWAY SYNTHETIC fixture — a stale render, a hand-edited render, a broken
+# .puml, a committed error image, an unclaimed render, a missing block render, a
+# source name containing spaces, a missing toolchain pin, a byte difference under
+# a differing toolchain, a white line, a white line in a source that does NOT sort
+# last, a drifted palette, a malformed hex, and a well-formed hex as the control.
+# Three of those are PASS cases — a spaced name, a well-formed hex, and the
+# untouched baseline — because they fail if the checker gets NOISIER, and a gate
+# that cries wolf on a corpus of 900 good literals gets switched off. It requires
+# the checker to fail on every planted case and to pass an untouched copy, so a
 # planted failure cannot be blamed on the fixture, and it verifies each planting
 # actually CHANGED something — or a no-op planting reports itself as a broken
 # checker, which is how two of the three bugs in this file's own history were
 # found in the first place.
+#
+# A CONTROL IS ONLY A CONTROL WHERE THE BUG IS. Case (j) planted a white line and
+# passed while the white check examined one source out of 54, because the planted
+# file sorted last. Case (l) is the same defect planted where the blind spot is
+# not, and it is the case that would have caught it.
 #
 # It never mutates the real diagrams/, so an interruption cannot leave the
 # checkout in a planted state — a lesson this repo has already paid for once. The
@@ -225,6 +256,56 @@ for m in re.finditer(r"^[ \t]*skinparam[ \t]+(?:sequence|state|component|package
 PYD
 }
 
+# ---- the hex literals, and the one that is not a syntax error -------------
+# `#12345` is FIVE hex digits. PlantUML does not reject it: it DROPS the setting
+# and paints its default, and for an arrow that default is WHITE -- on a white
+# page. A figure whose every arrow is invisible is a figure nobody reported as
+# broken, because there is nothing wrong with the file, the parse, or the exit
+# code. That is the class that actually made the figures invisible, twice: 20
+# such values in the timing family, and 22 more in four figure families added
+# AFTER the fix that removed them.
+#
+# WHICH LENGTHS ARE VALID WAS MEASURED, NOT ASSUMED, because the obvious answer
+# was wrong. On the pinned toolchain (PlantUML 1.2026.8), rendering an arrow in
+# each length and reading the stroke back out of the SVG:
+#
+#   #F #FF #FF00 #FF000 #FF00000 #FF0000444  ->  stroke:#FFF   DROPPED, white
+#   #F00 #FF0000                             ->  honoured
+#   #FF000044                                ->  honoured, EMITTED VERBATIM
+#
+# So the valid set is 3, 6 and 8, not 3 and 6: 8-digit #RRGGBBAA is honoured,
+# which is why 4 is not on the list even though it looks like a short 8. A rule
+# written as "3 or 6" would have flagged a legitimate literal, and a gate that
+# cries wolf on the corpus gets muted -- the failure mode of every gate in this
+# file's history.
+#
+# THE LOOKAHEAD IS NOT COSMETIC. `#` also introduces preprocessor directives in
+# embedded code, and `#define`/`#else`/`#endif` begin with hex-looking runs
+# (`def`, `e`) that would otherwise read as one- and three-digit colours. The
+# run is therefore required NOT to be followed by a letter, which skips every
+# one of those while still flagging `#12345` and `#12345#` (a gradient whose
+# second colour is malformed).
+#
+# A WHOLE-LINE COMMENT IS SKIPPED, because a comment is prose about a colour
+# rather than a colour. A trailing comment is NOT skipped, and that asymmetry is
+# deliberate: `ArrowColor #33555 ' too dark` is a real defect with a note
+# attached, and dropping it would be a fail-open.
+malformed_hex() {  # source_file -> "<line>: <finding>" per line on stdout
+  python3 - "$1" <<'PYH' 2>/dev/null
+import re, sys
+VALID = (3, 6, 8)   # measured on the pinned toolchain; see the comment above
+for n, line in enumerate(open(sys.argv[1]), 1):
+    if line.lstrip().startswith("'"):
+        continue
+    for m in re.finditer(r"#([0-9A-Fa-f]+)(?![0-9A-Za-z])", line):
+        if len(m.group(1)) not in VALID:
+            print("%d: '%s' is %d hex digits; PlantUML DROPS a malformed colour"
+                  " and paints its default, which for an arrow is white on a"
+                  " white page" % (n, m.group(0), len(m.group(1))))
+            break
+PYH
+}
+
 white_check_svg() {  # svg -> one finding per line on stdout
   python3 - "$1" <<'PYW' 2>/dev/null
 import re, sys
@@ -234,8 +315,19 @@ def lum(c):
         h = c[1:]
         if len(h) == 3:                      # PlantUML writes the SHORTHAND #FFF
             h = ''.join(ch * 2 for ch in h)  # normalise by expansion, NOT a
-        if len(h) != 6:                      # backreference regex: that form is
-            return None                      # fragile and was mangled twice here
+        if len(h) == 8:                      # backreference regex: that form is
+            # 8 digits is #RRGGBBAA, and ALPHA IS NOT DISCARDED. PlantUML
+            # honours it and emits it verbatim (measured: ArrowColor #FFFFFF4D
+            # comes out as stroke:#FFFFFF4D), so a 30%-opaque white stroke is a
+            # real, reachable value. Composited over the page -- which is white,
+            # the premise of this whole check -- it is PURE WHITE, i.e. exactly
+            # the thing being hunted. Before this, lum() returned None for 8
+            # digits and the value was skipped.
+            a = int(h[6:8], 16) / 255.0
+            h = ''.join('%02x' % int(int(h[i:i+2], 16) * a + (1 - a) * 255)
+                        for i in (0, 2, 4))
+        if len(h) != 6:
+            return None
         try:
             r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
         except ValueError:
@@ -259,9 +351,29 @@ out = []
 for m in re.finditer(r'<text[^>]*fill="([^"]+)"', s):
     if nw(m.group(1)):
         out.append('near-white text is invisible on a white page')
-for m in re.finditer(r'stroke[":=]*\s*(#[0-9A-Fa-f]{3,6})', s):
+# 3 TO 8 DIGITS, AND NO LONGER TRUNCATING. The old {3,6} matched the first SIX
+# characters of an 8-digit literal, so #FFFFFF4D was read as #FFFFFF -- correct
+# by accident, and only because the prefix happened to be the pale part. A
+# genuinely pale translucent colour that did not START with six pale digits
+# (#FFEEEE80 composites to 0.966) would have been read as opaque #FFEEEE and
+# missed. lum() now composites the alpha, so the full value is passed through.
+for m in re.finditer(r'stroke[":=]*\s*(#[0-9A-Fa-f]{3,8})', s):
     if nw(m.group(1)):
         out.append('near-white stroke is invisible on a white page')
+# AN ELEMENT THAT WAS ASKED FOR AND NOT DRAWN. `ArrowColor #FFFFFF00` is a
+# VALID 8-digit literal -- 8 is a length PlantUML honours, which is why the hex
+# lint accepts it -- but with zero alpha PlantUML's answer is not "white", it is
+# <line style="stroke:none">: the arrow is simply not on the page. The stroke
+# pattern above needs a `#`, so this passed the check clean. Scoped to line,
+# polyline, path and polygon, where a none-stroke means an undrawn element; the
+# 18 `stroke:none` rects in this corpus are all containers drawn fill-only, and
+# measured, not assumed: 0 lines/paths/polylines/polygons carry one.
+for m in re.finditer(r'<(line|polyline|path|polygon)\b[^>]*>', s):
+    t = m.group(0)
+    if re.search(r'stroke[":=]\s*none', t):
+        out.append('this %s is emitted with stroke:none -- PlantUML was told to '
+                   'draw it and drew nothing (a zero-alpha colour such as '
+                   '#FFFFFF00)' % m.group(1))
 for m in re.finditer(r'<(rect|ellipse|polygon|path)[^>]*>', s):
     t = m.group(0)
     f = re.search(r'\bfill="([^"]+)"', t)
@@ -564,6 +676,22 @@ EOF
     fi
   done
 
+  # ---- 1c. every hex literal is a length PlantUML actually honours ---------
+  local hex
+  for src in "$dir"/*.puml; do
+    [ -e "$src" ] || continue
+    hex=$(malformed_hex "$src")
+    if [ -n "$hex" ]; then
+      while IFS= read -r hx; do
+        [ -n "$hx" ] || continue
+        bad_total=$((bad_total + 1))
+        fail "MALFORMED HEX $(basename "$src"):$hx"
+      done <<EOF
+$hex
+EOF
+    fi
+  done
+
   # ---- 2a. every block has BOTH formats, colocated ------------------------
   for src in "$dir"/*.puml; do
     [ -e "$src" ] || continue
@@ -690,30 +818,55 @@ EOF
 
   # ---- 3b. white-on-white -------------------------------------------------
   local svg_findings white_bad=0
-  while IFS= read -r st; do
-    [ -n "$st" ] || continue
-    [ -f "${st}.svg" ] || continue
-    svg_findings=$(white_check_svg "${st}.svg")
-    if [ -n "$svg_findings" ]; then
-      while IFS= read -r wf; do
-        [ -n "$wf" ] || continue
-        white_bad=$((white_bad + 1))
-        # NOT guarded by quiet: this finding always names its file. Quiet mode
-        # exists to keep the self-test readable, and a self-test that cannot see
-        # WHY the gate went red cannot tell "caught the white line" from "caught
-        # the fixture breaking some other way" -- which is exactly how the two
-        # earlier faults in this check stayed hidden.
-        fail "WHITE-ON-WHITE $(basename "${st}.svg"): $wf"
-      done <<EOF
+  # ---- 3b. white-on-white -------------------------------------------------
+  # A LOOP OVER EVERY SOURCE. The word EVERY is the fix, and it is a fix to a bug
+  # that shipped in the class this check was written for.
+  #
+  # The block used to sit AFTER the `done` that closes the per-source loop, so it
+  # ran ONCE, on the leftovers of the last iteration: the ALPHABETICALLY LAST
+  # source. On the real tree that is proto-ws2812-timing -- THREE figures
+  # examined out of 54 -- and the gate printed "no white-on-white" for the other
+  # 51 without having looked at them. Twelve of them were carrying white arrows:
+  # 63 near-white strokes in proto-sr04-timing.svg alone. The class reported a
+  # clean tree over the exact defect it exists to catch, for one merge.
+  #
+  # WHY NOTHING CAUGHT IT, which is the part worth keeping. Case (j) of the
+  # self-test planted a white line and the gate caught it -- because the planted
+  # source was named fixture-white.puml and sorted LAST in its sandbox, so the
+  # blind spot was the one place the test happened not to look. A negative
+  # control placed where the bug is not is not a control. Case (l) now plants
+  # the same defect in a source named aaa-white-first.puml, so the last source is
+  # benign and only a check that looks at EVERY source can pass it.
+  for src in "$dir"/*.puml; do
+    [ -e "$src" ] || continue
+    base=$(basename "$src")
+    n=$(block_count "$src")
+    local svg_findings white_bad=0
+    while IFS= read -r st; do
+      [ -n "$st" ] || continue
+      [ -f "${st}.svg" ] || continue
+      svg_findings=$(white_check_svg "${st}.svg")
+      if [ -n "$svg_findings" ]; then
+        while IFS= read -r wf; do
+          [ -n "$wf" ] || continue
+          white_bad=$((white_bad + 1))
+          # NOT guarded by quiet: this finding always names its file. Quiet mode
+          # exists to keep the self-test readable, and a self-test that cannot see
+          # WHY the gate went red cannot tell "caught the white line" from "caught
+          # the fixture breaking some other way" -- which is exactly how the two
+          # earlier faults in this check stayed hidden.
+          fail "WHITE-ON-WHITE $(basename "${st}.svg"): $wf"
+        done <<EOF
 $svg_findings
 EOF
+      fi
+    done < <(expected_stems "$src" "$n")
+    if [ $white_bad -ne 0 ]; then
+      bad_total=$((bad_total + 1))
+    elif [ "$quiet" = "1" ]; then
+      ok "$base: no white-on-white - every text, stroke and shape reads on the page"
     fi
-  done < <(expected_stems "$src" "$n")
-  if [ $white_bad -ne 0 ]; then
-    bad_total=$((bad_total + 1))
-  elif [ "$quiet" = "1" ]; then
-    ok "$base: no white-on-white - every text, stroke and shape reads on the page"
-  fi
+  done
 
   # ---- 4. aspect ---------------------------------------------------------
   # ONE python process for the whole directory: 42 separate interpreter starts
@@ -1094,6 +1247,207 @@ PUJ
     printf '  FAIL: self-test — k: no fixture to drift\n'
     results=$((results + 1))
   fi
+
+  # (l) THE SAME WHITE LINE, IN A SOURCE THAT DOES NOT SORT LAST. This case does
+  #     not exist to test the white CLASS -- case (j) does that -- it exists to
+  #     test WHERE THE CLASS LOOKS. It was added because case (j) passed for the
+  #     wrong reason and the gate shipped blind:
+  #
+  #     the white-on-white loop sits AFTER the `done` that closes the per-source
+  #     loop, so it ran once, on the ALPHABETICALLY LAST source only. On the real
+  #     tree that is proto-ws2812-timing: THREE figures examined out of 54. Every
+  #     other figure was unchecked, and 12 of them turned out to carry white
+  #     arrows (63 near-white strokes in proto-sr04-timing.svg alone) -- the exact
+  #     outage the class was written for, shipping, reported clean.
+  #
+  #     The planted source is named aaa-white-first.puml so it sorts BEFORE the
+  #     fixture's own sources, which is the whole point: the last source is then
+  #     benign, and a check that only looks at the last source sees nothing.
+  #     Verified by hand on the real gate before this case existed: the identical
+  #     source named zz-white-last.puml was CAUGHT, and named aa-white-first.puml
+  #     was NOT.
+  fresh_case cl
+  cat > "$sandbox/cl/aaa-white-first.puml" <<'PUJ'
+@startuml
+title planted: the same white line, in a source that does not sort last
+skinparam sequence {
+  ArrowColor #FFFFFF
+}
+hide stereotype
+participant left
+participant right
+left -> right : this arrow is invisible
+@enduml
+PUJ
+  plantuml -tpng "$sandbox/cl/aaa-white-first.puml" -o "$sandbox/cl" >/dev/null 2>&1
+  plantuml -tsvg "$sandbox/cl/aaa-white-first.puml" -o "$sandbox/cl" >/dev/null 2>&1
+  results=$((results + 1))
+  out=$(check_dir "$sandbox/cl" "$sandbox/cl" 1 2>&1)
+  if printf '%s' "$out" | grep -q 'WHITE-ON-WHITE aaa-white-first'; then
+    printf '  ok:   self-test — %-42s planted:  CAUGHT\n' "l a white line in a NON-LAST source"
+    caught=$((caught + 1))
+  else
+    printf '  FAIL: self-test — l: a white line in a source that does not sort\n'
+    printf '        last was NOT caught, so the white class is looking at one\n'
+    printf '        source and calling it a clean tree\n'
+  fi
+
+  # (m) A MALFORMED HEX LITERAL: #12345, five digits. This is the class that
+  #     actually made figures invisible, twice: 20 such values in the timing
+  #     family at the time of the white-on-white fix, and 22 MORE in four later
+  #     figure families that arrived after it, which the then-current gate
+  #     reported clean. PlantUML does not reject the value, it DROPS it and
+  #     paints its default.
+  #
+  #     It is planted on FontColor rather than on an arrow ON PURPOSE. With the
+  #     arrow the case would also trip the white check and would prove nothing
+  #     about this lint; with FontColor the render is PERFECT -- the fallback
+  #     happens to be a legible black -- and the malformed literal is still in
+  #     the source. So the case shows the lint is a check of the SOURCE, not a
+  #     restatement of "the picture looks wrong", and it cannot be satisfied by
+  #     the white class. Case (n) is its control: the same source, the same
+  #     property, six digits, and the gate must be CLEAN.
+  fresh_case cm
+  cat > "$sandbox/cm/aaa-hex-bad.puml" <<'PUJ'
+@startuml
+title planted: a malformed hex literal, invisible in the render
+skinparam FontColor #12345
+hide stereotype
+participant left
+participant right
+left -> right : the arrow is fine; the LITERAL is not
+@enduml
+PUJ
+  plantuml -tpng "$sandbox/cm/aaa-hex-bad.puml" -o "$sandbox/cm" >/dev/null 2>&1
+  plantuml -tsvg "$sandbox/cm/aaa-hex-bad.puml" -o "$sandbox/cm" >/dev/null 2>&1
+  results=$((results + 1))
+  out=$(check_dir "$sandbox/cm" "$sandbox/cm" 1 2>&1)
+  if printf '%s' "$out" | grep -q 'MALFORMED HEX aaa-hex-bad.puml:[0-9]*: .#12345.'; then
+    printf '  ok:   self-test — %-42s planted:  CAUGHT\n' "m a malformed 5-digit hex literal"
+    caught=$((caught + 1))
+  else
+    printf '  FAIL: self-test — m: #12345 was not caught, so nothing prevents\n'
+    printf '        the literal that caused the outage from coming back\n'
+  fi
+
+  # (n) THE CONTROL FOR (m): the same source with a SIX-digit hex. A lint with no
+  #     control is a lint whose strictness nobody has measured -- and a gate that
+  #     cries wolf on 900 well-formed literals gets switched off, which is how the
+  #     blind white class survived. This case fails if the checker gets NOISIER.
+  fresh_case cn
+  cat > "$sandbox/cn/aaa-hex-ok.puml" <<'PUJ'
+@startuml
+title control: the same source with a well-formed hex literal
+skinparam FontColor #123456
+hide stereotype
+participant left
+participant right
+left -> right : well-formed
+@enduml
+PUJ
+  plantuml -tpng "$sandbox/cn/aaa-hex-ok.puml" -o "$sandbox/cn" >/dev/null 2>&1
+  plantuml -tsvg "$sandbox/cn/aaa-hex-ok.puml" -o "$sandbox/cn" >/dev/null 2>&1
+  plant "n a well-formed 6-digit hex literal" clean cn
+
+  # (o) AN ELEMENT PLANTUML WAS TOLD TO DRAW AND DID NOT DRAW. `ArrowColor
+  #     #FFFFFF00` is a valid 8-digit literal -- measured above as HONOURED, and
+  #     the hex lint accepts 8 -- but its alpha is zero, and PlantUML's response
+  #     is not "white", it is <line ... style="stroke:none">. The arrow is not
+  #     drawn. The white check's stroke pattern requires a `#`, so `stroke:none`
+  #     was not a colour to it and the figure passed clean: a missing line, the
+  #     reported symptom, arriving through a value the check believed it
+  #     understood.
+  #
+  #     Corpus-wide the false-positive surface is ZERO and was measured, not
+  #     assumed: `stroke:none` appears in 4 of the 54 figures, 18 times, and all
+  #     18 are on <rect> (containers PlantUML draws as fill-only). Not one <line>,
+  #     <path>, <polyline> or <polygon> in the tree carries it. So the rule is
+  #     scoped to those four elements, where a none-stroke means an undrawn
+  #     element rather than an unfilled box.
+  fresh_case co
+  cat > "$sandbox/co/aaa-alpha-white.puml" <<'PUJ'
+@startuml
+title planted: a zero-alpha arrow, which PlantUML declines to draw
+skinparam sequence {
+  ArrowColor #FFFFFF00
+}
+hide stereotype
+participant left
+participant right
+left -> right : this arrow is not there
+@enduml
+PUJ
+  plantuml -tpng "$sandbox/co/aaa-alpha-white.puml" -o "$sandbox/co" >/dev/null 2>&1
+  plantuml -tsvg "$sandbox/co/aaa-alpha-white.puml" -o "$sandbox/co" >/dev/null 2>&1
+  results=$((results + 1))
+  out=$(check_dir "$sandbox/co" "$sandbox/co" 1 2>&1)
+  if printf '%s' "$out" | grep -q 'WHITE-ON-WHITE aaa-alpha-white'; then
+    printf '  ok:   self-test — %-42s planted:  CAUGHT\n' "o an element drawn with no stroke at all"
+    caught=$((caught + 1))
+  elif grep -q 'stroke:none' "$sandbox/co/aaa-alpha-white.svg" 2>/dev/null; then
+    printf '  FAIL: self-test — o: PlantUML emitted stroke:none, the arrow is NOT\n'
+    printf '        on the page, and the check called the figure clean\n'
+  else
+    printf '  FAIL: self-test — o: neither stroke:none nor the 8-digit form was\n'
+    printf '        emitted, so this PlantUML cannot exercise the case at all\n'
+  fi
+
+  # (q) A TRANSLUCENT NEAR-WHITE STROKE, the OTHER half of the same hole, and a
+  #     SEPARATE test because a fix for (o) must not be able to pass this one.
+  #     #FFFFFF4D is emitted VERBATIM (measured), so it reaches the check as an
+  #     8-digit literal and lum() returned None for it -- skipped, while the
+  #     arrow composites to PURE WHITE over the page (alpha 0x4D on #FFFFFF).
+  #     The fix is to composite over the page rather than discard the alpha,
+  #     which is the whole premise of this check: the page is white.
+  fresh_case cq
+  cat > "$sandbox/cq/aaa-alpha-pale.puml" <<'PUJ'
+@startuml
+title planted: a 30 per cent white arrow, which composites to white
+skinparam sequence {
+  ArrowColor #FFFFFF4D
+}
+hide stereotype
+participant left
+participant right
+left -> right : this arrow is white
+@enduml
+PUJ
+  plantuml -tpng "$sandbox/cq/aaa-alpha-pale.puml" -o "$sandbox/cq" >/dev/null 2>&1
+  plantuml -tsvg "$sandbox/cq/aaa-alpha-pale.puml" -o "$sandbox/cq" >/dev/null 2>&1
+  results=$((results + 1))
+  out=$(check_dir "$sandbox/cq" "$sandbox/cq" 1 2>&1)
+  if printf '%s' "$out" | grep -q 'WHITE-ON-WHITE aaa-alpha-pale'; then
+    printf '  ok:   self-test — %-42s planted:  CAUGHT\n' "q a translucent near-white 8-digit stroke"
+    caught=$((caught + 1))
+  elif grep -q 'stroke:#FFFFFF4D' "$sandbox/cq/aaa-alpha-pale.svg" 2>/dev/null; then
+    printf '  FAIL: self-test — q: an 8-digit #FFFFFF4D stroke composites to pure\n'
+    printf '        white and was skipped: lum() discards the alpha instead of\n'
+    printf '        compositing it over the page\n'
+  else
+    printf '  FAIL: self-test — q: the 8-digit form was not emitted, so the\n'
+    printf '        compositing path cannot be exercised\n'
+  fi
+
+  # (p) THE CONTROL for both: a dark, fully opaque 8-digit literal. PlantUML
+  #     strips a fully opaque alpha on the way out, so this also documents that
+  #     8-digit sources are not a special case to be rejected -- the hex lint
+  #     measured 8 as VALID and this keeps the two checks from disagreeing.
+  fresh_case cp
+  cat > "$sandbox/cp/aaa-alpha-ok.puml" <<'PUJ'
+@startuml
+title control: a dark 8-digit literal, which is a valid colour
+skinparam sequence {
+  ArrowColor #203040FF
+}
+hide stereotype
+participant left
+participant right
+left -> right : dark and opaque
+@enduml
+PUJ
+  plantuml -tpng "$sandbox/cp/aaa-alpha-ok.puml" -o "$sandbox/cp" >/dev/null 2>&1
+  plantuml -tsvg "$sandbox/cp/aaa-alpha-ok.puml" -o "$sandbox/cp" >/dev/null 2>&1
+  plant "p a dark 8-digit hex literal" clean cp
 
   printf '  -- self-test: %d of %d cases behaved correctly\n' "$caught" "$results"
   rm -rf "${sandbox:?}"
