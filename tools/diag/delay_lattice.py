@@ -69,7 +69,31 @@ CLK_HZ = 60_000_000
 # reason and the WRONG one, and indistinguishable from a real missing file.
 # A gate that cannot tell those two apart will eventually be believed.
 _args = [a for a in sys.argv[1:] if not a.startswith("--")]
-ROOT = Path(_args[0]).resolve() if _args else Path(__file__).resolve().parents[2]
+
+
+def _default_root() -> Path:
+    """the repo root, without assuming how deep this file sits.
+
+    The obvious spelling is Path(__file__).resolve().parents[2], and it
+    CRASHES with IndexError when the script is run from a copy that is not at
+    that depth - a copy at /tmp, a symlink target, a vendored checkout. Found
+    by running the self-test from a copy of the file, which is the sort of
+    thing the self-test is for. A gate that tracebacks on a path it did not
+    expect reports nothing about anything, and the reader concludes the gate is
+    broken rather than that the numbers are unchecked.
+
+    So: walk up from here until the expected directories appear, and say so
+    plainly if they do not.
+    """
+    here = Path(__file__).resolve()
+    for cand in (here.parent, *here.parents):
+        if (cand / "tools" / "diag").is_dir() and (cand / "diagrams").is_dir():
+            return cand
+    print(f"note: no repo root above {here}; scanning {here.parent} instead")
+    return here.parent
+
+
+ROOT = Path(_args[0]).resolve() if _args else _default_root()
 
 # "1 250 clocks = 20.8 us", "60 004 clocks = 1 000.07 us", "69 clocks = 1.15 µs",
 # "a 69-clock (1.15 µs) step", "511 clocks, i.e. 8.52 us", "625 clocks - 10.42 us".
