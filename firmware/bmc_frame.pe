@@ -46,11 +46,28 @@
         ; ---- init ------------------------------------------------------
 init:
         LDI   A, 0
-        OUT   PINOE, A        ; release EVERY pad: the input is the device's
-        LDI   A, BMC_IN
-        OUT   PINOE, A        ; and the output is ours; PINOE is a whole
-        LDI   A, BMC_IN       ; register, so both bits are written every time
-        OUT   TXPIN, A
+        OUT   PINOE, A        ; RELEASE EVERY PAD, and in particular the
+                               ; INPUT. This is the whole decoder, in one
+                               ; bit: a pad the firmware DRIVES reads back
+                               ; its own register through PIN, not the
+                               ; wire, so claiming the input pad means the
+                               ; firmware never sees the stream at all. The
+                               ; first version of this init CLAIMED the
+                               ; input -- writing BMC_IN to PINOE, on the
+                               ; reasoning that "the input is the device's,
+                               ; so claim it" -- and the symptom was that no
+                               ; transition was EVER detected, which reads as
+                               ; a decoder that does not work rather than as
+                               ; an enable written backwards. It is the sixth
+                               ; time in this block that a level and an
+                               ; enable have been confused, and the only
+                               ; reason it was found at all is that the
+                               ; testbench's check names the flag and the
+                               ; flag was 0xFF.
+        LDI   A, 0
+        OUT   TXPIN, A        ; the level, which for a released pad is only
+                               ; a default the matrix will overwrite the
+                               ; moment the pad is claimed
         IN    A, I2CTICK
         STM   10, A           ; the previous 1 us reading, seeded from the
         LDI   A, BMC_IN       ; counter rather than from zero
