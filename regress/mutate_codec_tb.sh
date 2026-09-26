@@ -54,7 +54,7 @@ FILES=(rtl/pe_codec_mux.v rtl/pe_bitstuff.v rtl/pe_nrzi.v rtl/pe_manch.v)
 # NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
 # escalates to running every suite rather than guessing.
 MUTABLE="rtl/pe_codec_mux.v rtl/pe_bitstuff.v rtl/pe_nrzi.v rtl/pe_manch.v"
-LOG=/tmp/mutate_codec.log
+LOG="${RLOG:-/tmp}/mutate_codec.log"
 CCLOG=/tmp/mutate_codec_cc.log
 
 BAKDIR=$(mktemp -d /tmp/mutate_codec.XXXXXX)

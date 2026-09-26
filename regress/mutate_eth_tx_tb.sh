@@ -61,7 +61,7 @@ RTL="$ROOT/rtl/pe_eth_tx.v"
 # NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
 # escalates to running every suite rather than guessing.
 MUTABLE="rtl/pe_eth_tx.v"
-LOG=/tmp/mutate_eth_tx.log
+LOG="${RLOG:-/tmp}/mutate_eth_tx.log"
 CCLOG=/tmp/mutate_eth_tx_cc.log
 PRISTINE=$(mktemp -d /tmp/pristine_eth_tx_tb.XXXXXX)
 BAK=$(mktemp -d /tmp/backup_eth_tx_tb.XXXXXX)

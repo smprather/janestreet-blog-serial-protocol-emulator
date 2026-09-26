@@ -3935,3 +3935,67 @@ repointing them here alone would break the pair. They stay shared, and the
 comment says so, **because a half-fix that silently leaves nine shared paths is
 worse than a stated remainder** -- and the one that bit this act was precisely a
 silent remainder read as a fix.
+
+## 2026-09-27 act (c): TASK-START -- WHO READS THE NINE
+
+Seventeen are repointed and proven. The nine were left because a path is only
+safe to move if `run_all.sh` is the ONLY script that hard-codes it -- and for
+those nine another script names the literal too. **So the next question is the
+one that decides whether they can be moved: who is the other script, and is it
+the WRITER or the READER?**
+
+Those need different fixes. A reader can be told the path ($RLOG, which is now
+exported). A writer cannot -- it has to be *given* the path, or it has to be
+moved too.
+
+### THE NINE WERE THREE CLASSES, AND THE SURVEY ITSELF WAS THE BLIND SPOT
+
+The nine needed three different fixes, and the classification is the work:
+
+| class | who else names it | the fix |
+| :--- | :--- | :--- |
+| **A** — 7 mutation harnesses | the harness is the **WRITER** (`LOG=/tmp/x.log`) | `LOG="${RLOG:-/tmp}/x.log"` |
+| **B** — `tools/check_formal_ifdef.sh` | **writer AND reader**, self-contained | 4 references all move together |
+| **C** — `mutate_fwbus` | a **COMMENT** saying "run_all.sh captures this in `/tmp/mutate_fwbus.log`" | the comment is not a writer: repoint both it and `run_all.sh` |
+
+**AND CLASS C IS THE ONE THAT WAS NOT A PATH FAULT AT ALL.** My survey treated
+any second mention as disqualifying, and a *comment* is a mention. `mutate_fwbus`
+was never written by two scripts; it was described by one and written by the
+other, so it was safe all along and my rule was too blunt to see it.
+
+**THE FALLBACK IS THE PART THAT MAKES THIS SAFE, and it is verified both ways:**
+
+    RLOG set:      /tmp/run_all.ce9bd1b6b021/mutate_codec.log
+    RLOG unset:    /tmp/mutate_codec.log
+
+So a human running one harness on its own is **completely unaffected** -- the
+`${RLOG:-/tmp}` default is the old path -- and only a run under `run_all.sh`,
+which exports `RLOG`, moves. **`check_shell_syntax.sh` passes all 36 scripts.**
+
+### AND THE SURVEY WAS SCOPED TO A QUESTION THAT HID A WHOLE POPULATION
+
+**MY "17 SAFE / 9 UNSAFE" SURVEY ASKED "WHICH PATHS DOES run_all.sh NAME?" --
+AND THAT QUESTION CANNOT SEE A HARNESS'S OWN INTERNAL LOGS.** Counting what is
+actually left in the tree:
+
+    18 distinct fixed /tmp/*.log paths, ALL harness-internal:
+    mutate_codec_cc, mut_ctrl_tt, mutate_eth, mutate_eth_tx_cc,
+    mutate_eth_tx_loop_cc, mut_fwbus_case, mut_ctrl_cc, mut_ctrl_fw,
+    mut_ctrl_tt_cc, mut_ctrl_tt, mut_eth_cc, mutate_eth_soc_cc,
+    mut_eth_tx_loop_fw, mut_fwbus_asm, mut_fwbus_cc, mut_serdes_cc,
+    mut_soc_serdes_cc, mut_soc_serdes_fw
+
+**They collide exactly as badly as the 26 I just moved** -- `/tmp/mut_eth_cc.log`
+is a fixed name written by two worktrees running the same harness at once -- and
+**my survey reported "9 remaining" and stopped there, which read as a nearly
+finished job.**
+
+**That is this act's own shape one level up, and it is worth naming in the log
+rather than in the commit message:** a survey that answers its question exactly
+and is scoped to a population smaller than the real one. I counted carefully
+*within* the scope, which is what made the answer confident and the answer
+incomplete. **The check that catches it is the one I did not run: count what is
+LEFT in the tree, not what you set out to move.**
+
+So the honest state is: 26 of **44** fixed log paths are now per-worktree, the
+18 that remain are named above, and they are the same one-line change each.

@@ -37,7 +37,7 @@ RTL="$ROOT/rtl/pe_serdes.v"
 # NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
 # escalates to running every suite rather than guessing.
 MUTABLE="rtl/pe_serdes.v"
-LOG=/tmp/mutate_serdes.log
+LOG="${RLOG:-/tmp}/mutate_serdes.log"
 BAK=$(mktemp /tmp/pe_serdes.XXXXXX.v)
 
 cleanup() { cp "$BAK" "$RTL" 2>/dev/null; rm -f "$BAK"; }

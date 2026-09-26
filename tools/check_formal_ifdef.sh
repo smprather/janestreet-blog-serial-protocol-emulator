@@ -47,8 +47,8 @@ if yosys -p "
       hierarchy -top tt_um_protocol_emulator;
       proc; opt -fast;
       select -count w:fv_*;
-    " > /tmp/check_formal_ifdef.log 2>&1; then
-  count=$(grep -oE "^[0-9]+ objects" /tmp/check_formal_ifdef.log | tail -1 | awk '{print $1}')
+    " > ${RLOG:-/tmp}/check_formal_ifdef.log 2>&1; then
+  count=$(grep -oE "^[0-9]+ objects" ${RLOG:-/tmp}/check_formal_ifdef.log | tail -1 | awk '{print $1}')
   if [ "${count:-1}" = "0" ]; then
     echo "  OK   0 fv_* wires in a synthesis elaboration (taps compiled out)"
   else
@@ -56,8 +56,8 @@ if yosys -p "
     rc=1
   fi
 else
-  echo "FAIL: the synthesis elaboration did not complete (see /tmp/check_formal_ifdef.log)"
-  tail -5 /tmp/check_formal_ifdef.log | sed 's/^/    /'
+  echo "FAIL: the synthesis elaboration did not complete (see ${RLOG:-/tmp}/check_formal_ifdef.log)"
+  tail -5 ${RLOG:-/tmp}/check_formal_ifdef.log | sed 's/^/    /'
   rc=1
 fi
 

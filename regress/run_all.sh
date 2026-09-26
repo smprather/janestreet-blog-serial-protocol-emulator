@@ -933,11 +933,11 @@ fi
 # for formal targets 2 and 4) must never be live on a synthesis path. This
 # checks that no build script defines FORMAL, and that a real synthesis
 # elaboration contains no fv_* wire at all.
-if bash tools/check_formal_ifdef.sh > /tmp/check_formal_ifdef.log 2>&1; then
+if bash tools/check_formal_ifdef.sh > $RLOG/check_formal_ifdef.log 2>&1; then
   echo "formal-ifdef gate: OK (FORMAL never defined on a synthesis path; taps compile out)"
 else
-  echo "formal-ifdef gate: FAILED (see /tmp/check_formal_ifdef.log)"
-  tail -12 /tmp/check_formal_ifdef.log
+  echo "formal-ifdef gate: FAILED (see $RLOG/check_formal_ifdef.log)"
+  tail -12 $RLOG/check_formal_ifdef.log
   stale=1
 fi
 
@@ -1126,22 +1126,22 @@ fi
 
 # The SoC-level Ethernet TB is the only proof a PROGRAM can consume a frame,
 # so it gets the same treatment the block TBs get.
-if run_mutation_suite mutate_eth_soc_tb.sh ./regress/mutate_eth_soc_tb.sh > /tmp/mutate_eth_soc.log 2>&1; then
+if run_mutation_suite mutate_eth_soc_tb.sh ./regress/mutate_eth_soc_tb.sh > $RLOG/mutate_eth_soc.log 2>&1; then
   echo "eth_soc TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_soc TB mutations: FAILED"
-  tail -20 /tmp/mutate_eth_soc.log
+  tail -20 $RLOG/mutate_eth_soc.log
   stale=1
 fi
 
 # The loader is how a program reaches silicon; its TB gets the same gate. The
 # run-transition cases (run rising in W_IDLE, W_PULSE or W_DONE) are the ones
 # the independent review found missing.
-if run_mutation_suite mutate_ctrl_tb.sh ./regress/mutate_ctrl_tb.sh > /tmp/mutate_ctrl.log 2>&1; then
+if run_mutation_suite mutate_ctrl_tb.sh ./regress/mutate_ctrl_tb.sh > $RLOG/mutate_ctrl.log 2>&1; then
   echo "ctrl TB mutations: OK (no unexplained survivors)"
 else
   echo "ctrl TB mutations: FAILED"
-  tail -20 /tmp/mutate_ctrl.log
+  tail -20 $RLOG/mutate_ctrl.log
   stale=1
 fi
 
@@ -1159,22 +1159,22 @@ fi
 # The word engine's unit suite: the integration split bit_en into tx/rx
 # enables, and the TB's directed split case is what proves the sides are
 # independent.
-if run_mutation_suite mutate_serdes_tb.sh ./regress/mutate_serdes_tb.sh > /tmp/mutate_serdes.log 2>&1; then
+if run_mutation_suite mutate_serdes_tb.sh ./regress/mutate_serdes_tb.sh > $RLOG/mutate_serdes.log 2>&1; then
   echo "serdes TB mutations: OK (no unexplained survivors)"
 else
   echo "serdes TB mutations: FAILED"
-  tail -20 /tmp/mutate_serdes.log
+  tail -20 $RLOG/mutate_serdes.log
   stale=1
 fi
 
 # The word-engine integration: the plan's four required mutations (TX hold,
 # RX skip, doubled cell enable, strobe cross-wire) plus the two alignment
 # defects and the grid-aligned load. Each must fail tb_pe_soc_serdes.
-if run_mutation_suite mutate_soc_serdes_tb.sh ./regress/mutate_soc_serdes_tb.sh > /tmp/mutate_soc_serdes.log 2>&1; then
+if run_mutation_suite mutate_soc_serdes_tb.sh ./regress/mutate_soc_serdes_tb.sh > $RLOG/mutate_soc_serdes.log 2>&1; then
   echo "soc serdes TB mutations: OK (no unexplained survivors)"
 else
   echo "soc serdes TB mutations: FAILED"
-  tail -20 /tmp/mutate_soc_serdes.log
+  tail -20 $RLOG/mutate_soc_serdes.log
   stale=1
 fi
 
@@ -1183,11 +1183,11 @@ fi
 # preset 0x51, the ones-only cfg[7] rule and the cfg[6:4] run length, the
 # registered clr/rx_err contract (clr reaches every stage), and the pipeline
 # order / bypass subsets / half_phase. All 13 mutations must fail the TB.
-if run_mutation_suite mutate_codec_tb.sh ./regress/mutate_codec_tb.sh > /tmp/mutate_codec.log 2>&1; then
+if run_mutation_suite mutate_codec_tb.sh ./regress/mutate_codec_tb.sh > $RLOG/mutate_codec.log 2>&1; then
   echo "codec TB mutations: OK (no unexplained survivors)"
 else
   echo "codec TB mutations: FAILED"
-  tail -20 /tmp/mutate_codec.log
+  tail -20 $RLOG/mutate_codec.log
   stale=1
 fi
 
@@ -1205,11 +1205,11 @@ else
   stale=1
 fi
 
-if run_mutation_suite mutate_eth_tx_tb.sh ./regress/mutate_eth_tx_tb.sh > /tmp/mutate_eth_tx.log 2>&1; then
+if run_mutation_suite mutate_eth_tx_tb.sh ./regress/mutate_eth_tx_tb.sh > $RLOG/mutate_eth_tx.log 2>&1; then
   echo "eth_tx TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_tx TB mutations: FAILED"
-  tail -20 /tmp/mutate_eth_tx.log
+  tail -20 $RLOG/mutate_eth_tx.log
   stale=1
 fi
 
@@ -1219,11 +1219,11 @@ fi
 # convention and the window's push wrap. The pad mapping is only visible at
 # the PAD, so this harness runs BOTH tb_pe_soc_eth_loop and the pad-level
 # case in tb_tt_um_protocol_emulator.
-if run_mutation_suite mutate_eth_tx_loop_tb.sh ./regress/mutate_eth_tx_loop_tb.sh > /tmp/mutate_eth_tx_loop.log 2>&1; then
+if run_mutation_suite mutate_eth_tx_loop_tb.sh ./regress/mutate_eth_tx_loop_tb.sh > $RLOG/mutate_eth_tx_loop.log 2>&1; then
   echo "eth_tx loopback TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_tx loopback TB mutations: FAILED"
-  tail -20 /tmp/mutate_eth_tx_loop.log
+  tail -20 $RLOG/mutate_eth_tx_loop.log
   stale=1
 fi
 
@@ -1233,11 +1233,11 @@ fi
 # CRC's comparison, the CTS wait, the RTS assertion -- and each TB must catch
 # every one that applies to it. A survivor means the TB does not test what it
 # claims, which is the failure mode this project treats as worse than a red.
-if run_mutation_suite mutate_fwbus_tb.sh ./regress/mutate_fwbus_tb.sh > /tmp/mutate_fwbus.log 2>&1; then
+if run_mutation_suite mutate_fwbus_tb.sh ./regress/mutate_fwbus_tb.sh > $RLOG/mutate_fwbus.log 2>&1; then
   echo "fw-bus TB mutations: OK (no unexplained survivors)"
 else
   echo "fw-bus TB mutations: FAILED"
-  tail -20 /tmp/mutate_fwbus.log
+  tail -20 $RLOG/mutate_fwbus.log
   stale=1
 fi
 
