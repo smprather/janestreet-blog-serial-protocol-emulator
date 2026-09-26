@@ -123,12 +123,15 @@ package "Protocol and timing acts as firmware\none CPU, one pin matrix, TWO tick
   pads --> p_sr04 : pins
 }
 
-package "Chip-host protocol figures — the documented wire contract" {
+package "Chip-host protocol figures and concept pages — the documented wire contract" {
   component "proto-spi-framing\nthe request/response word and bit\nlayout, and the WAIT-WORD rule" as p_docframe
   component "proto-r2-read-path\nthe four read opcodes, the 11-word\nheader, the read-count ceiling" as p_docread
   component "proto-r3-debug-control\nthe four-state machine, STOP-BEFORE,\nthe masked run strap" as p_docdbg
-  component "wiki/concepts/host-chip-protocol.md\nwiki/concepts/debug-control.md" as p_docwiki
-  p_docframe --> p_docread : p_docread --> p_docdbg : p_docdbg --> p_docwiki
+  component "Protocol pages\nhost-chip-protocol\ndebug-control" as p_docproto
+  component "Formal pages\nformal-verification\nprotocol-formal-gaps" as p_docformal
+  component "Architecture pages\nisa-and-soc\nsoc-wiring-and-memory" as p_docarch
+  p_docframe --> p_docread : p_docread --> p_docdbg
+  p_docdbg --> p_docproto : p_docproto --> p_docformal : p_docformal --> p_docarch
 }
 
 package "Verification — formal campaign" {
@@ -165,7 +168,7 @@ pads -[hidden]down-> p_r2port
 p_r2wait -[hidden]down-> p_r3ctr
 p_r3sem -[hidden]down-> p_proto
 p_sr04 -[hidden]down-> p_docframe
-p_docwiki -[hidden]down-> p_fvtool
+p_docarch -[hidden]down-> p_fvtool
 p_fvsmt -[hidden]down-> p_wbus
 
 note bottom of p_r3ctr
@@ -239,8 +242,13 @@ note bottom of p_docframe
   equation, the hit latch and the execute gate. proto-spi-framing carries the
   word/bit layout and the WAIT-WORD rule; proto-r2-read-path the 11-word
   header field by field and the read-count ceiling; proto-r3-debug-control
-  the state machine, STOP-BEFORE and the masked run strap. The wiki pages
-  carry the prose and the citations.
+  the state machine, STOP-BEFORE and the masked run strap.
+
+  The six concept pages behind them are wiki/concepts/host-chip-protocol,
+  debug-control, formal-verification, protocol-formal-gaps, isa-and-soc and
+  soc-wiring-and-memory. The maps name all six so the documentation surface
+  is not understated: a page that exists but that no map points at is a page
+  the next reader will not find.
 end note
 
 note bottom of p_sr04
