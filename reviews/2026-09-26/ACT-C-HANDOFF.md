@@ -11,6 +11,119 @@ the repository for the same reason.
 
 ---
 
+## THE MANAGER'S RULING ON THE ENCODER SHAPE: LOOPBACK
+
+**The firmware's encoder sends THE THREE BANKED BYTES back -- dmem[0..2], the
+frame it just received -- re-encoded under the encoding it DETECTED, the one in
+dmem[3]. The testbench's decoder decodes three bytes and compares them against
+the frame that was sent. The same frame must come back byte-identical under
+either encoding.** That is the act's name -- bi-phase LOOPBACK -- and it is the
+right shape for a reason the ruling did not need to state: **it is the only
+shape in which the flag is load-bearing in BOTH directions.**
+
+### Why the ruling is sharp, and it is worth saying out loud
+
+Neither side is told the other's polarity. The testbench's decoder locks its
+own from the preamble's LEVELS, and the firmware's decoder locked its from the
+same. So a firmware that re-encoded under the WRONG flag would still put three
+recognisable bytes on the wire -- and the testbench's decoder would invert them
+with ITS OWN flag and hand back the complement. **A wrong encoder polarity is
+caught, and only because the receiver inverts with a polarity it measured
+itself.** The bytes come out right if and only if the two independent
+measurements agree. No other shape of this act tests that.
+
+### What the ruling implies, so the next session does not rederive it
+
+1. **THE RETURN LEG NEEDS A PREAMBLE, and it is the same preamble.** A
+   receiver has the same problem on the way back: the first transition of a
+   transmission is the one whose class depends on the polarity, and the
+   testbench's decoder will resync on it exactly as the firmware's did. So the
+   firmware must put eight zeros then eight ones on OUT_PAD, and the testbench's
+   decoder must do the SAME three-state phase lock the firmware now does --
+   skip one-half gaps while the phase is UNKNOWN, emit only on a two-half gap,
+   read the preamble's received byte as the flag, then invert the payload if
+   that flag says FM1. The two directions are the same protocol, and the
+   firmware is about to be the transmitter of it.
+2. **40 bits go out: 16 preamble + 24 payload**, which is 80 half-intervals =
+   160 us, and it starts after the 160 us of input frame plus the firmware's
+   own margins. The testbench's 1200 us per pass still covers both legs with
+   room to spare -- checked, not assumed.
+3. **THE BIT ORDER IS THE SAME high bit first**, because the decoder's
+   shift-in puts the first arrival in the high position and the return leg has
+   to be decoded by the same rule. The encoder must therefore take bit 7 first
+   from a byte it is consuming. **See the SHR finding below: it can, cheaply.**
+4. **`dmem[6]` IS FREE**, because the byte to send is no longer a "tx byte" --
+   it is dmem[0..2], which the decoder just banked. The encoder's half-interval
+   counter takes the byte the old tx-byte role used, and **dmem[13] stops being
+   shared**: the old stub counted half-intervals in dmem[13], which is the
+   DECODER's preamble-still-running byte. Nothing else in the map is safe: main
+   writes dmem[10] and dmem[14] on every poll, so neither can hold encoder state
+   across a delay loop, and dmem[14] being "written and never read" does not
+   make it free, because main writes it.
+5. **THE ENTRY POINT IS A DECISION, and the cheap reading is wrong.** Today
+   `frame_done` parks, and the encoder is reached from main's
+   `LDM A,11 / JNZ encoding` mode dispatch. Under loopback the natural handover
+   is at `frame_done`, because that is where the three bytes become available --
+   and if the encoder is entered from the poll loop instead, main will re-enter
+   it on the next poll and restart the transmission. So: either `frame_done`
+   sets dmem[11] = 1 and falls into the encoder, with the dispatch as the one
+   entry, or `frame_done` jumps straight in and the dispatch is deleted as a
+   second entry with no caller. **Do not leave both.**
+6. **`<<wip>>` until it is green.** It is not in the regression and it is not
+   claimed, and the two red checks are the honest end state until then.
+
+### THE SHR FINDING, made in the listing, because it changes the design
+
+**THIS ACT'S OWN COMMENTS ARE WRONG ABOUT THE ISA IN THREE PLACES, and the
+error is load-bearing for exactly the work that is left.** The firmware header,
+the `NO DIVISION` block in the decoder, and the previous handoff all say this
+machine has no shift-right. **It does.** Assembled and counted, not read:
+
+```text
+  0  D00C  LDM A, 12
+  1  A000  SHR          <- opcode 0xA, a <= {1'b0, a[7:1]}, NO OPERAND
+  2  0080  LDI A, 0x80
+  3  7A00  AND A, X
+  4  A000  SHR A        <- "SHR A" assembles the same; it is documentation
+```
+
+`tools/fw/peasm.py` lists `SHR` in its table and `rtl/pe_cpu.v` line 327 is
+`OP_SHR: a <= {1'b0, a[7:1];`. It shifts by exactly one, takes no operand, and
+**discards the bit it shifts out**, so the encoder tests the top bit first
+(`LDM X,12 / LDI A,0x80 / AND A,X`) and only then peels (`LDM A,12 / SHR`).
+
+What this changes: the "high bit first" wire order, which was adopted last
+session as the *only free* option, is free because the encoder could not cheaply
+do the other thing -- and now it can do this one too, so the order is chosen by
+the protocol and not by the ISA's gaps. **AND THE CLAIM MUST BE CORRECTED IN THE
+FIRMWARE'S COMMENTS IN THE SAME STEP**, because the next reader will design the
+encoder around a limitation that does not exist, which is the most expensive kind
+of stale figure: one that is load-bearing.
+
+**There is still no shift-LEFT**, so the decoder's shift-in stays a doubling
+(`A = A + A`, then the bit in at the low end) and everything already measured
+about it stands.
+
+### The order, which is the order that just worked here
+
+1. **Model the encoder's wire output in `bmc_model.py`**, half-interval by
+   half-interval, from the wire rules -- both polarities, and with the preamble,
+   so the model's transition times and interval histogram for the RETURN leg are
+   the thing the firmware is written against.
+2. **The firmware to the model**, and **count the 120-clock half_wait in the
+   listing before simulating it.** The stub's `half_wait` cannot terminate: it
+   loads dmem[13], sets it to 0xFF and spins on a byte nothing will ever clear.
+   A loop of `LDI A,1 / SUB A,X / JNZ` is 3 instructions per iteration, so 40
+   iterations is 120 clocks exactly -- and then count the instructions on the
+   path in and out, because the block is only 120 clocks if the whole path is.
+   The block's counted-delay-constant discipline, applied to a delay.
+3. **The testbench's decoder to the wire rules, NOT to the firmware**, and then
+   let the two argue. Its present shape folds two transitions per bit and
+   starts at the first change, which is the flaw this act was written to catch;
+   it needs the same three-state phase the firmware has.
+
+---
+
 ## WHAT IS MEASURED, AND IT IS THE HEADLINE OF THE ACT
 
     pass 0: sent FM0 -> the firmware banked a5 3c 96, dmem[3] = 00

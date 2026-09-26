@@ -1407,3 +1407,67 @@ copy goes non-zero while the real file stays clean:
 still the ten-word stub whose `half_wait` cannot terminate, and the testbench's
 decoder still folds two transitions per bit -- the same flaw this act was
 written to catch. Two checks are red for that reason and both name it.
+
+## 2026-09-27 act (c): the MANAGER RULES THE ENCODER SHAPE -- LOOPBACK
+
+**The encoder sends THE THREE BANKED BYTES back (dmem[0..2]), re-encoded under
+the encoding the decoder DETECTED, and the testbench's decoder decodes three
+bytes and compares them against the frame that was sent. The same frame must
+come back byte-identical under either encoding.** It is the act's name -- bi-
+phase LOOPBACK -- and it is the only shape in which the flag is load-bearing in
+BOTH directions.
+
+**Why the ruling is sharp, and it needed no argument:** neither side is told the
+other's polarity. The testbench's decoder locks its own from the preamble's
+levels. So a firmware that re-encoded under the WRONG flag would still put three
+recognisable bytes on the wire, and the testbench's decoder would invert them
+with ITS OWN flag and hand back the complement. A wrong encoder polarity is
+caught, and only because the receiver inverts with a polarity it measured
+itself.
+
+**Consequences, recorded so the next session does not rederive them.** The
+return leg needs the SAME preamble and the SAME three-state phase lock the
+decoder now has -- the first transition of a transmission is the one whose
+class depends on the polarity, and the testbench's decoder resyncs on it exactly
+as the firmware's did. 40 bits go out (16 preamble + 24 payload) = 160 us, which
+the 1200 us per pass still covers. `dmem[6]` is free because the byte to send is
+no longer a tx byte, and dmem[13] stops being shared: the stub counted
+half-intervals in the DECODER's preamble byte. Nothing else is safe -- main
+writes dmem[10] and dmem[14] on every poll, and "written and never read" is not
+the same as free.
+
+**AND THE ENTRY POINT IS A DECISION.** `frame_done` is where the three bytes
+become available; main's `LDM A,11 / JNZ encoding` is where the encoder is
+reached from today. Under loopback both cannot be the entry: an encoder entered
+from the poll loop is re-entered by the next poll and restarts the
+transmission. Either frame_done sets the mode byte and the dispatch is the one
+entry, or frame_done jumps in and the dispatch is deleted. Do not leave both.
+
+**`<<wip>>` until green.** Two red checks, both naming it.
+
+### THE SHR FINDING, and it is the most expensive kind of stale figure
+
+**This act's comments are wrong about the ISA in three places, and the error is
+load-bearing for exactly the work that is left.** The firmware header, the
+`NO DIVISION` block, and the previous handoff all say this machine has no
+shift-right. It does. Assembled and counted, not read:
+
+    0  D00C  LDM A, 12
+    1  A000  SHR          <- opcode 0xA, a <= {1'b0, a[7:1]}, no operand
+    4  A000  SHR A        <- "SHR A" is the same word; it is documentation
+
+It shifts by exactly one and DISCARDS the bit it shifts out, so the encoder
+tests the top bit first and only then peels. What this changes: the high-bit-
+first wire order, adopted last session as the only free option, is free because
+the encoder could not cheaply do the other thing -- and now it can do this one
+too. **The claim must be corrected in the firmware's comments in the same
+step**, because the next reader will design the encoder around a limitation
+that does not exist. There is still no shift-LEFT, so the decoder's shift-in
+stays a doubling and everything measured about it stands.
+
+**A stale figure that is LOAD-BEARING is a different animal from the five this
+block has already found.** Four of those were a number asserted in a second
+place; this one is a claim about the machine itself, and acting on it produces
+a design that cannot be built. The cure is the one that has worked every time
+in this block: go to the assembler and the RTL and COUNT, rather than believing
+the comment that explains the code.
