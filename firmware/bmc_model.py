@@ -537,9 +537,30 @@ for b in range(5):
             " ".join("%02x" % (0x80 >> i) for i in range(8)),
         )
     )
+#
+# *** AND THIS ONE USED TO BE THE ONLY PROPERTY THAT COULD NOT SEE ITS OWN
+# SUBJECT, WHICH IS WHY IT NOW RUNS THE TRANSMITTER LIKE THE FOUR ABOVE. ***
+# The condition was
+#     [(Tx(0).byte_at(b) >> (7 - b % 8)) & 1 for b in range(40)] == bits()
+# which is a COPY of `Tx.step`'s own bit extraction, written out again a few
+# lines below it. So it compared a copy with the frame definition and never
+# called the transmitter at all. MEASURED: a mutation that breaks the bit order
+# INSIDE `Tx.step` -- the act's first and most expensive finding, the wire low
+# bit first -- failed eleven of the eighteen properties and NOT this one, and
+# breaking the inline copy instead DID fail it. Proof from both sides that it
+# was watching a copy.
+#
+# So it reads `tx.wire`, the transmitter's actual output, exactly as the four
+# "the counter-driven transmitter agrees with the wire rules" properties above
+# do. With flag 0 the first half of each bit IS the data bit, so wire[2*b] is
+# bit b. **A property that names the transmitter now runs it**, which is the
+# difference between checking a thing and checking a sentence about it.
+_tx0 = Tx(0).run()
 chk(
-    [(Tx(0).byte_at(b) >> (7 - b % 8)) & 1 for b in range(40)] == bits(),
-    "the five dispatched bytes carry the 40 bits the input leg carried, bit for bit",
+    [_tx0.wire[2 * b] for b in range(40)] == bits(),
+    "the five dispatched bytes carry the 40 bits the input leg carried, bit "
+    "for bit -- read off the transmitter's OWN output, not off a copy of its "
+    "bit-extraction expression",
 )
 
 print()

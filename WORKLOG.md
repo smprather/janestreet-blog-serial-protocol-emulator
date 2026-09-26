@@ -3685,3 +3685,59 @@ checked because it never varies.
 **Two of eighteen are provably blind, and one of those two is blind while
 reading like a cross-implementation check.** A count of eighteen would have
 hidden both, and that is the sentence this act needed written down.
+
+## 2026-09-27 act (c): TASK-START -- MAKE THE BLIND PROPERTY SEE
+
+The profile named a one-line fix and did not make it. The dispatched-bytes
+property recomputes `Tx.step`'s bit extraction inline instead of calling it, so
+it cannot see a transmitter fault -- **and the four properties above it run the
+transmitter and compare its OUTPUT, which is the shape to copy.** So the fix is
+not new machinery, it is making one property look like its neighbours.
+
+### THE BLIND PROPERTY NOW SEES, MEASURED BEFORE AND AFTER
+
+The fix is one line and it copies the shape of the four properties above it:
+read the transmitter's **output** instead of a **copy of its expression**.
+
+    -  [(Tx(0).byte_at(b) >> (7 - b % 8)) & 1 for b in range(40)] == bits()
+    +  [tx0.wire[2 * b] for b in range(40)] == bits()          # tx0 = Tx(0).run()
+
+**MEASURED BOTH WAYS, which is the only reason to believe it:**
+
+| | M1: transmitter sends LOW bit first |
+| :--- | :--- |
+| before | **11 of 18** failed, and the dispatched-bytes property **survived** |
+| after | **12 of 18** failed, and the dispatched-bytes property **is among them** |
+
+**So the property went from watching a copy to running the thing, and the
+count rose by exactly the one it gained.** A property that names the
+transmitter now fails when the transmitter is wrong.
+
+Everything else re-verified after the edit: **MODEL SELF-CHECK all properties
+hold · 7 static checks PASS (323 words, 36 loop + 12 entry routes, all 120) ·
+model-agreement SELF-TEST all comparison cases hold.**
+
+### TWO THINGS THAT DID NOT GO WELL, BOTH RECORDED
+
+**1. `TONE.md` DOES NOT EXIST.** A pre-edit instruction referred me to it as
+"written to the repo". **It is not on disk** -- not in this worktree, not in any
+sibling worktree, not under `~/.pi`. So it could not be read and could not be
+followed, and the edit above was made under the discipline this act has used all
+session instead. **Naming that rather than quietly proceeding**, because an
+instruction that points at a file that is not there is a fault in whatever
+produced it, and a checklist nobody can read is the same class as a check nobody
+runs.
+
+**2. THE UP031 CONVERSION WAS ATTEMPTED A SECOND TIME AND FAILED AGAIN, AND
+THE FAILURE IS THE INFORMATIVE PART.** An AST-based converter rewrote the
+`%`-format expressions as f-strings and the model's output came back
+**byte-identical** -- so the conversion is again *provably behaviourally safe* --
+but the `UP031` count went **UP, 26 to 28**, not down. Whatever the converter
+did, it did not achieve its object. **Reverted**, and the `UP031` remainder
+stays a named follow-up with its verified recipe rather than a half-converted
+file.
+
+**The honest state: two lint attempts, both reverted, and the recipe is known
+and proven** -- capture the output, convert, `diff` byte-for-byte -- but the
+twenty-three hand conversions are still twenty-three hand conversions, and they
+want a session with room to do them properly rather than the end of this one.
