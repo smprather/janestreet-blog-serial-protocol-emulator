@@ -127,6 +127,25 @@ render and watching it exit 1. Wired into `run_all.sh` beside `check_diagrams.sh
 with its self-test, both red-capable. So both halves of this finding are now
 closed: the rows, and the thing that keeps them.
 
+**The overlap with `check_wiki_links.sh` is deliberate, and was ruled on.** The
+gate's second direction — "every render the index names exists" — duplicates
+what `check_wiki_links.sh` already asserts, since that gate scans `README.md` in
+its live surface and fails any link that points at nothing. Raised as a question
+(2026-09-26) and **RULED: KEEP BOTH DIRECTIONS.** `diagrams/ <-> the README
+index` is **one bidirectional invariant — a bijection** — and splitting it
+across two gates means *neither* owns the invariant. The neighbour's coverage of
+that direction is an artifact of which files it happens to scan, not a design
+that owns index-completeness. Deciding argument: a self-contained both-ways
+assertion **survives the neighbour's retirement**, and one duplicated direction
+is the accepted price of that.
+
+Recorded here because the "just deduplicate it" argument *will* be raised again:
+`a22783e` retired a different outbound-link check as subsumed, and that reasoning
+reads as if it applies here. It does not. That retirement removed a check whose
+only job another gate already did; this half is not doing another gate's job, it
+is the other side of an invariant `check_doc_index.sh` owns. Do not split it
+without ruling on the **invariant**, not on the overlap.
+
 ## 3. Two method notes, because both nearly produced a false finding
 
 - My first count said **"61 renders on disk are not listed"**, which reads as an

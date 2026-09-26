@@ -71,6 +71,25 @@ check_index() { # dir index -> 0 clean, 1 dirty
   # iterating a command substitution: `for x in $(grep ...)` word-splits on IFS,
   # so a filename containing a space would be checked as two nonexistent files
   # and the count would be quietly wrong.
+  #
+  # THIS SECOND DIRECTION LOOKS REDUNDANT AND IS NOT. It duplicates what
+  # regress/check_wiki_links.sh already asserts, because that gate scans
+  # README.md in its live surface and fails any link that points at nothing. It
+  # was raised as a question and RULED ON (2026-09-26): KEEP BOTH, because
+  # "diagrams/ <-> the README index" is ONE bidirectional invariant - a
+  # bijection - and splitting it across two gates means NEITHER owns the
+  # invariant. check_wiki_links' coverage of this direction is an artifact of
+  # which files it happens to scan, not a design that owns index-completeness.
+  # The deciding argument was survivability: a self-contained both-ways
+  # assertion is worth one duplicated direction because it still holds if the
+  # neighbouring gate is ever retired. The duplicate is the accepted cost.
+  #
+  # SO, SPECIFICALLY, IF YOU ARE READING THIS WHILE TRYING TO "DEDUPLICATE" IT:
+  # a22783e retired a DIFFERENT outbound-link check as subsumed, and the
+  # argument reads as if it applies here. It does not. That retirement removed a
+  # check whose only job another gate already did. This half is not doing another
+  # gate's job; it is the other side of an invariant this gate is the owner of.
+  # Do not split it without ruling on the INVARIANT, not on the overlap.
   local ref refs
   refs=$(mktemp "/tmp/doc_index_refs.${_wt:-shared}.XXXXXX") || return 1
   grep -oE '[A-Za-z0-9._-]+\.(png|svg)' "$index" 2>/dev/null | LC_ALL=C sort -u > "$refs"
@@ -134,6 +153,9 @@ self_test() {
       c_everything_listed)
         printf 'see [beta](diagrams/beta.png)\n' >> "$_SB/$case/d/INDEX.md" ;;
     esac
+    if ! planting_check "$case"; then
+      return
+    fi
     if check_index "$_SB/$case/d" "$_SB/$case/d/INDEX.md" >/dev/null 2>&1; then got=clean; else got=dirty; fi
     if [ "$expect" = "$got" ]; then
       printf '  ok:   self-test — %-38s expected %-5s, checker said %s\n' "$name" "$expect" "$got"
@@ -141,6 +163,32 @@ self_test() {
     else
       printf '  FAIL: self-test — %-38s expected %-5s, checker said %s\n' "$name" "$expect" "$got"
     fi
+  }
+
+  # THE PLANTING CHECK, and it is not optional — I learned this the hard way.
+  #
+  # With /tmp at 100% (a 16G tmpfs, measured), build_fixture could not write its
+  # files, so the "complete index" corpus was silently INCOMPLETE, the checker
+  # correctly answered "dirty", and this self-test reported that as a CHECKER
+  # FAILURE. The instrument looked broken when the ENVIRONMENT was at fault, and
+  # I spent a cycle hunting a regression in correct code before reading the whole
+  # output instead of the exit code. That is the most misleading reading
+  # available, and it is available precisely because a resource fault and a logic
+  # fault produce the same verdict.
+  #
+  # regress/check_diagrams.sh already writes this rule down — "a planting that
+  # silently did nothing must be reported as a PLANTING failure, not as a checker
+  # failure" — and I did not carry it across when I built this file. So: prove the
+  # fixture exists before believing any verdict, and name which half failed.
+  planting_check() { # case -> 0 planted, 1 not
+    local c="$1"
+    if [ ! -s "$_SB/$c/d/INDEX.md" ] || [ ! -f "$_SB/$c/d/beta.png" ] \
+       || [ ! -f "$_SB/$c/d/alpha.png" ]; then
+      printf '  FAIL: self-test — %s: the PLANTING produced no fixture, so this case\n' "$c"
+      printf '        says NOTHING about the checker. (Out of disk? No permission?)\n'
+      return 1
+    fi
+    return 0
   }
 
   echo "check_doc_index self-test:"

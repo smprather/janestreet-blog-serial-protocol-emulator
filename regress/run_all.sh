@@ -510,6 +510,37 @@ fi
 #
 # Invoked via REPO_ROOT captured at the top: this file cds into sim/ and back,
 # and $0 may be relative, so any later `dirname "$0"` resolves wrongly.
+# THE RUN ENVIRONMENT, CHECKED FIRST, BEFORE ANY GATE THAT WRITES SCRATCH.
+#
+# On 2026-09-26 /tmp (a 16G tmpfs) hit 100% and tools/diag/check_diagrams.sh went
+# red with an EMPTY log, then passed minutes later with no change to the tree.
+# A gate that is intermittently red for an environmental reason cannot be trusted
+# either way, and the natural reading of "diagrams: FAILED" with nothing under it
+# is that somebody broke a figure. So the precondition is named, separated, and
+# run first: "the host cannot support this run" and "the tree is wrong" have to
+# be different sentences.
+#
+# It reports rather than remediates on purpose. During the incident the largest
+# consumers in /tmp were other workers' LIVE worktrees, and deleting one to make
+# room is a far worse failure than the full disk.
+if bash "$REPO_ROOT/regress/check_run_environment.sh" > /tmp/check_run_environment.log 2>&1; then
+  echo "run environment: OK ($(awk '/scratch/ && /free/ {for(i=1;i<=NF;i++) if ($i ~ /KiB/) {printf "%s %s free on scratch", $(i-1), $i; exit}}' /tmp/check_run_environment.log))"
+else
+  echo "run environment: FAILED — this HOST cannot support a suite run (see /tmp/check_run_environment.log)"
+  sed -n '2,20p' /tmp/check_run_environment.log
+  fail=$((fail+1))
+  failed_names+=("check_run_environment")
+  echo "  NOTE: this is an ENVIRONMENT fault, not a tree fault. Every downstream gate"
+  echo "  result on this run should be read as UNKNOWN rather than as a verdict."
+fi
+if bash "$REPO_ROOT/regress/check_run_environment.sh" --self-test > /tmp/check_run_environment_selftest.log 2>&1; then
+  echo "run environment self-test: OK ($(grep -c 'ok:   self-test' /tmp/check_run_environment_selftest.log) of 2 cases behaved correctly)"
+else
+  echo "run environment self-test: FAILED (see /tmp/check_run_environment_selftest.log)"
+  cat /tmp/check_run_environment_selftest.log
+  fail=$((fail+1))
+  failed_names+=("check_run_environment_selftest")
+fi
 if "$REPO_ROOT/regress/param_guards.sh" > /tmp/param_guards.log 2>&1; then
   echo "param guards: OK"
 else
