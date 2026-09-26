@@ -104,7 +104,24 @@ module tb_pe_soc_bmc;
   logic [7:0] pin_in_bus;
 
   logic in_line = 1'b1;             // idle high
-  assign pin_in_bus = {1'b1, in_line, 1'b0, 5'b11111};
+  // THE STIMULUS GOES ON IN_BIT, AND IT IS PLACED THERE *BY* IN_BIT. It was
+  // not: the bus was built as {1'b1, in_line, 1'b0, 5'b11111}, which puts
+  // in_line on bit 6 and hardwires bit 5 to ZERO. Bit 5 is IN_BIT and
+  // BMC_IN, the bit firmware/bmc_frame.pe reads; bit 6 is OUT_BIT, the bit the
+  // firmware encodes onto. So the stream was being driven into the chip's own
+  // output pad while the firmware sampled a constant, and the firmware's
+  // correctly-written `AND A, BMC_IN` could never see a transition however the
+  // stimulus moved. IN_BIT was declared at the top of this file and used NOWHERE
+  // else, which is why nothing complained: a constant that is asserted in one
+  // place and consumed in another, and this block now has six of them.
+  //
+  // The base is 8'h9F: bit 7 high as before, bits 4..0 high, and BOTH bit 5 and
+  // bit 6 low so the stimulus cannot drive the pad the firmware drives. The
+  // stream is then OR'd in through IN_MASK, which is derived from IN_BIT, so
+  // the two cannot drift apart again -- the failure mode was a literal in a
+  // concatenation disagreeing with a constant three declarations away.
+  localparam logic [7:0] IN_MASK = 8'h01 << IN_BIT;
+  assign pin_in_bus = 8'h9F | (in_line ? IN_MASK : 8'h00);
 
   wire out_line = pin_out_bus[OUT_BIT];
   wire out_oe   = pin_oe_bus[OUT_BIT];
