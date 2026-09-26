@@ -639,17 +639,30 @@ run_mutation_suite() {
     return 0
   fi
   MUT_RAN=$((MUT_RAN + 1))
-  # THE SUITE'S OWN PRE-FLIGHT. This is the wrapper rather than 16 separate
-  # edits because it is the one place that knows which script each suite is —
-  # and because a harness's own `trap cleanup EXIT` would overwrite a trap
-  # installed inside it, so a per-harness EXIT trap cannot be made to work
-  # without editing all sixteen by hand. Stamped and checked around the
-  # invocation, the check covers the window where the race actually happens.
-  chip_dep_stamp "suite_$n" "$1"
+  # THE SUITE'S OWN PRE-FLIGHT, AND NOW ITS DUT TOO. This is the wrapper rather
+  # than 16 separate edits because it is the one place that knows which script
+  # each suite is — and because a harness's own `trap cleanup EXIT` would
+  # overwrite a trap installed inside it, so a per-harness EXIT trap cannot be
+  # made to work without editing all sixteen by hand.
+  #
+  # The MUTABLE targets are dependencies for the same reason the script is: a
+  # harness that mutates rtl/pe_soc.v is EXECUTING AGAINST that file, so an
+  # external edit to it is the same interference class as an edit to the script,
+  # and on 2026-09-25 that class produced a possible false survivor in
+  # mutate_eth_mac_tb.sh while the guard could not see it. The harness already
+  # publishes the exact file set it mutates, so the dependency list is already
+  # written down; it just was not being read as one.
+  _mut_deps=()
+  if [ -f "$1" ]; then
+    while IFS= read -r _md; do
+      [ -n "$_md" ] && _mut_deps+=("$REPO_ROOT/$_md")
+    done < <(grep -m1 '^MUTABLE=' "$1" | cut -d'"' -f2 | tr ' ' '\n')
+  fi
+  chip_dep_stamp "suite_$n" "$1" ${_mut_deps[@]+"${_mut_deps[@]}"}
   "$@"
   local rc=$?
   if ! chip_dep_check "suite_$n"; then
-    echo "mutation suite $n: INCONCLUSIVE — the harness script changed while it was running" >&2
+    echo "mutation suite $n: INCONCLUSIVE — the harness script or one of its MUTABLE targets changed while it was running" >&2
     return 4
   fi
   return $rc
