@@ -294,13 +294,13 @@ note bottom of p_sr04
   was drawn from, which listed the FREQMETER testbench as the deliberate WIP.
   Run standalone from tb/ on 2026-09-25:
 
-    tb_pe_soc_freqmeter   PASS: all checks -- 6 runs, 18 driven periods,
-                          12 banked points, 158 Hz to 10 kHz, every point
-                          inside spec (125 Hz/75 % to 12.5 kHz/15 %)
-    tb_pe_soc_sr04        FAIL: 5 checks -- measurement 1 reads 1160 us
-                          against a 5816 us echo, the trigger pulse is 601
-                          clocks where 600 is required, and the firmware
-                          banked only one of two measurements
+    tb_pe_soc_freqmeter   PASS: all checks -- every banked point inside spec
+                          (the sweep and its endpoints are the owning figure's
+                          to state: proto-freqmeter)
+    tb_pe_soc_sr04        FAIL: 5 checks -- the firmware banks only one of two
+                          measurements and the trigger pulse is one clock long
+                          (the readings are the owning figure's to state:
+                          proto-sr04)
 
   The freqmeter is GREEN. The act that is genuinely WIP is HC-SR04, and it is
   worse than red: tb_pe_soc_sr04.v is NOT wired into run_all.sh, so a green
@@ -340,22 +340,20 @@ note bottom of p_midi
   Landed 2026-09-25 as BLOCK 3 of the firmware-protocols work. The cell is
   built from COUNTED INSTRUCTIONS, not a tick: against the 260-CLOCK UART
   half-bit tick a 32 us bit is 7.38 ticks and 4.3333 us cannot express a
-  fraction, so midi_xfer.pe uses the timer zero times. Measured on the pin:
-  31,998.7 ns = 31,251 baud with a spread of 0.0000 us over all 14 frames.
-  Its receiver is a free-running oversampling search that VERIFIES each frame's
-  stop bit, because in a
-  back-to-back 8N1 stream a falling edge is not a start bit.
+  fraction, so midi_xfer.pe uses the timer zero times. What the act MEASURES
+  on the pin is the owning figure's to state -- see proto-midi. Its receiver is
+  a free-running oversampling search that VERIFIES each frame's stop bit,
+  because in a back-to-back 8N1 stream a falling edge is not a start bit.
   Evidence: reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md.
 end note
 
 note bottom of p_dmx
   Landed 2026-09-25, the mirror image: a 4 us bit is 0.923 of a tick, so
-  DMX is the rate the 260-CLOCK TICK cannot express. Break 88.06 us (floor
-  87.5), mark 12.38 us (floor 8.0), 513/513 slots with BOTH stop bits
-  verified, cell 3,999.8 ns = 250,010 baud, spread 0.0000 us over 513 slots.
-  The frame is 22.6 ms of simulated time (1.37M clocks), so the receiver
-  samples only inside a slot rather than free-running a strobe across it.
-  Evidence: reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md.
+  DMX is the rate the 260-CLOCK TICK cannot express. Every slot carries BOTH
+  stop bits verified, and the receiver samples only inside a slot rather than
+  free-running a strobe across one. What the act MEASURES on the pin is the
+  owning figure's to state -- see proto-dmx512. Evidence:
+  reviews/2026-09-25/FW-BUS-BLOCK3-FINDINGS.md.
 
   CORRECTION, and the correction is to the WORD 'tick', which was doing too
   much work. "DMX is the rate the tick cannot express AT ALL" was true of the
@@ -365,11 +363,10 @@ note bottom of p_dmx
   carries 4.000 us with no rounding error at all. Read against THAT tick, the
   sentence is simply wrong.
 
-  The measured numbers are unaffected -- the act counts instructions and
-  programs neither tick -- but the reasoning is now stated as a fact about the
-  260-clock tick specifically. An earlier version of this note also said 'not
-  the shared tick', implying one tick; there are two, and that is the sort of
-  thing a reader carries into their own act.
+  The reasoning is now stated as a fact about the 260-clock tick specifically.
+  An earlier version of this note also said 'not the shared tick', implying one
+  tick; there are two, and that is the sort of thing a reader carries into
+  their own act.
 end note
 
 note bottom of r3_ctr
