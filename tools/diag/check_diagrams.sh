@@ -315,8 +315,19 @@ def lum(c):
         h = c[1:]
         if len(h) == 3:                      # PlantUML writes the SHORTHAND #FFF
             h = ''.join(ch * 2 for ch in h)  # normalise by expansion, NOT a
-        if len(h) != 6:                      # backreference regex: that form is
-            return None                      # fragile and was mangled twice here
+        if len(h) == 8:                      # backreference regex: that form is
+            # 8 digits is #RRGGBBAA, and ALPHA IS NOT DISCARDED. PlantUML
+            # honours it and emits it verbatim (measured: ArrowColor #FFFFFF4D
+            # comes out as stroke:#FFFFFF4D), so a 30%-opaque white stroke is a
+            # real, reachable value. Composited over the page -- which is white,
+            # the premise of this whole check -- it is PURE WHITE, i.e. exactly
+            # the thing being hunted. Before this, lum() returned None for 8
+            # digits and the value was skipped.
+            a = int(h[6:8], 16) / 255.0
+            h = ''.join('%02x' % int(int(h[i:i+2], 16) * a + (1 - a) * 255)
+                        for i in (0, 2, 4))
+        if len(h) != 6:
+            return None
         try:
             r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
         except ValueError:
@@ -340,9 +351,29 @@ out = []
 for m in re.finditer(r'<text[^>]*fill="([^"]+)"', s):
     if nw(m.group(1)):
         out.append('near-white text is invisible on a white page')
-for m in re.finditer(r'stroke[":=]*\s*(#[0-9A-Fa-f]{3,6})', s):
+# 3 TO 8 DIGITS, AND NO LONGER TRUNCATING. The old {3,6} matched the first SIX
+# characters of an 8-digit literal, so #FFFFFF4D was read as #FFFFFF -- correct
+# by accident, and only because the prefix happened to be the pale part. A
+# genuinely pale translucent colour that did not START with six pale digits
+# (#FFEEEE80 composites to 0.966) would have been read as opaque #FFEEEE and
+# missed. lum() now composites the alpha, so the full value is passed through.
+for m in re.finditer(r'stroke[":=]*\s*(#[0-9A-Fa-f]{3,8})', s):
     if nw(m.group(1)):
         out.append('near-white stroke is invisible on a white page')
+# AN ELEMENT THAT WAS ASKED FOR AND NOT DRAWN. `ArrowColor #FFFFFF00` is a
+# VALID 8-digit literal -- 8 is a length PlantUML honours, which is why the hex
+# lint accepts it -- but with zero alpha PlantUML's answer is not "white", it is
+# <line style="stroke:none">: the arrow is simply not on the page. The stroke
+# pattern above needs a `#`, so this passed the check clean. Scoped to line,
+# polyline, path and polygon, where a none-stroke means an undrawn element; the
+# 18 `stroke:none` rects in this corpus are all containers drawn fill-only, and
+# measured, not assumed: 0 lines/paths/polylines/polygons carry one.
+for m in re.finditer(r'<(line|polyline|path|polygon)\b[^>]*>', s):
+    t = m.group(0)
+    if re.search(r'stroke[":=]\s*none', t):
+        out.append('this %s is emitted with stroke:none -- PlantUML was told to '
+                   'draw it and drew nothing (a zero-alpha colour such as '
+                   '#FFFFFF00)' % m.group(1))
 for m in re.finditer(r'<(rect|ellipse|polygon|path)[^>]*>', s):
     t = m.group(0)
     f = re.search(r'\bfill="([^"]+)"', t)
@@ -1317,6 +1348,106 @@ PUJ
   plantuml -tpng "$sandbox/cn/aaa-hex-ok.puml" -o "$sandbox/cn" >/dev/null 2>&1
   plantuml -tsvg "$sandbox/cn/aaa-hex-ok.puml" -o "$sandbox/cn" >/dev/null 2>&1
   plant "n a well-formed 6-digit hex literal" clean cn
+
+  # (o) AN ELEMENT PLANTUML WAS TOLD TO DRAW AND DID NOT DRAW. `ArrowColor
+  #     #FFFFFF00` is a valid 8-digit literal -- measured above as HONOURED, and
+  #     the hex lint accepts 8 -- but its alpha is zero, and PlantUML's response
+  #     is not "white", it is <line ... style="stroke:none">. The arrow is not
+  #     drawn. The white check's stroke pattern requires a `#`, so `stroke:none`
+  #     was not a colour to it and the figure passed clean: a missing line, the
+  #     reported symptom, arriving through a value the check believed it
+  #     understood.
+  #
+  #     Corpus-wide the false-positive surface is ZERO and was measured, not
+  #     assumed: `stroke:none` appears in 4 of the 54 figures, 18 times, and all
+  #     18 are on <rect> (containers PlantUML draws as fill-only). Not one <line>,
+  #     <path>, <polyline> or <polygon> in the tree carries it. So the rule is
+  #     scoped to those four elements, where a none-stroke means an undrawn
+  #     element rather than an unfilled box.
+  fresh_case co
+  cat > "$sandbox/co/aaa-alpha-white.puml" <<'PUJ'
+@startuml
+title planted: a zero-alpha arrow, which PlantUML declines to draw
+skinparam sequence {
+  ArrowColor #FFFFFF00
+}
+hide stereotype
+participant left
+participant right
+left -> right : this arrow is not there
+@enduml
+PUJ
+  plantuml -tpng "$sandbox/co/aaa-alpha-white.puml" -o "$sandbox/co" >/dev/null 2>&1
+  plantuml -tsvg "$sandbox/co/aaa-alpha-white.puml" -o "$sandbox/co" >/dev/null 2>&1
+  results=$((results + 1))
+  out=$(check_dir "$sandbox/co" "$sandbox/co" 1 2>&1)
+  if printf '%s' "$out" | grep -q 'WHITE-ON-WHITE aaa-alpha-white'; then
+    printf '  ok:   self-test — %-42s planted:  CAUGHT\n' "o an element drawn with no stroke at all"
+    caught=$((caught + 1))
+  elif grep -q 'stroke:none' "$sandbox/co/aaa-alpha-white.svg" 2>/dev/null; then
+    printf '  FAIL: self-test — o: PlantUML emitted stroke:none, the arrow is NOT\n'
+    printf '        on the page, and the check called the figure clean\n'
+  else
+    printf '  FAIL: self-test — o: neither stroke:none nor the 8-digit form was\n'
+    printf '        emitted, so this PlantUML cannot exercise the case at all\n'
+  fi
+
+  # (q) A TRANSLUCENT NEAR-WHITE STROKE, the OTHER half of the same hole, and a
+  #     SEPARATE test because a fix for (o) must not be able to pass this one.
+  #     #FFFFFF4D is emitted VERBATIM (measured), so it reaches the check as an
+  #     8-digit literal and lum() returned None for it -- skipped, while the
+  #     arrow composites to PURE WHITE over the page (alpha 0x4D on #FFFFFF).
+  #     The fix is to composite over the page rather than discard the alpha,
+  #     which is the whole premise of this check: the page is white.
+  fresh_case cq
+  cat > "$sandbox/cq/aaa-alpha-pale.puml" <<'PUJ'
+@startuml
+title planted: a 30 per cent white arrow, which composites to white
+skinparam sequence {
+  ArrowColor #FFFFFF4D
+}
+hide stereotype
+participant left
+participant right
+left -> right : this arrow is white
+@enduml
+PUJ
+  plantuml -tpng "$sandbox/cq/aaa-alpha-pale.puml" -o "$sandbox/cq" >/dev/null 2>&1
+  plantuml -tsvg "$sandbox/cq/aaa-alpha-pale.puml" -o "$sandbox/cq" >/dev/null 2>&1
+  results=$((results + 1))
+  out=$(check_dir "$sandbox/cq" "$sandbox/cq" 1 2>&1)
+  if printf '%s' "$out" | grep -q 'WHITE-ON-WHITE aaa-alpha-pale'; then
+    printf '  ok:   self-test — %-42s planted:  CAUGHT\n' "q a translucent near-white 8-digit stroke"
+    caught=$((caught + 1))
+  elif grep -q 'stroke:#FFFFFF4D' "$sandbox/cq/aaa-alpha-pale.svg" 2>/dev/null; then
+    printf '  FAIL: self-test — q: an 8-digit #FFFFFF4D stroke composites to pure\n'
+    printf '        white and was skipped: lum() discards the alpha instead of\n'
+    printf '        compositing it over the page\n'
+  else
+    printf '  FAIL: self-test — q: the 8-digit form was not emitted, so the\n'
+    printf '        compositing path cannot be exercised\n'
+  fi
+
+  # (p) THE CONTROL for both: a dark, fully opaque 8-digit literal. PlantUML
+  #     strips a fully opaque alpha on the way out, so this also documents that
+  #     8-digit sources are not a special case to be rejected -- the hex lint
+  #     measured 8 as VALID and this keeps the two checks from disagreeing.
+  fresh_case cp
+  cat > "$sandbox/cp/aaa-alpha-ok.puml" <<'PUJ'
+@startuml
+title control: a dark 8-digit literal, which is a valid colour
+skinparam sequence {
+  ArrowColor #203040FF
+}
+hide stereotype
+participant left
+participant right
+left -> right : dark and opaque
+@enduml
+PUJ
+  plantuml -tpng "$sandbox/cp/aaa-alpha-ok.puml" -o "$sandbox/cp" >/dev/null 2>&1
+  plantuml -tsvg "$sandbox/cp/aaa-alpha-ok.puml" -o "$sandbox/cp" >/dev/null 2>&1
+  plant "p a dark 8-digit hex literal" clean cp
 
   printf '  -- self-test: %d of %d cases behaved correctly\n' "$caught" "$results"
   rm -rf "${sandbox:?}"
