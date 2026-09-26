@@ -4053,3 +4053,77 @@ cause was the same: a correct answer to a question scoped smaller than the
 problem.** The fix that caught them was not a better survey -- it was **counting
 what is left in the tree**, which is the one number that cannot be scoped into
 looking complete.
+
+## 2026-09-27 act (c): TASK-START -- THE TIMING-SUITE EXIT CODE, ALONE
+
+The last open MEASUREMENT. A full gate run printed
+
+    timing TB mutations: FAILED
+    ... 58 case rows ...
+    timing-TB mutations: 58 cases, 58 detected, 0 survived, 0 errors
+    RESULT: PASS
+
+and the explanation offered -- a collision on a shared `/tmp` log -- is now
+**fixed**, so re-running the gate may or may not reproduce it, and **the point
+is the suite's own exit code, which has never been read on its own.** Every
+earlier reading of this suite was its TABLE, and the table said PASS.
+
+**CHECKPOINT 17:20 act (c)** — encoder: COMPLETE and green both directions (42/42
+firmware regression; pad carries the model's 80 levels level-for-level under
+both flags). Model: 18 properties hold, 2 proven blind and now annotated, the
+third made to see. Green: 7 static checks · 44/44 log paths per-worktree (both
+behaviours proven by running a harness) · UP031 0 · all 36 scripts parse. Red:
+none known. In flight: the timing suite's own exit code, read for the first
+time (detached, 6 min) — the gate once said FAILED over a table saying PASS.
+
+### THE EXIT CODE, READ FOR THE FIRST TIME: 75, AND IT IS A FOURTH OUTCOME
+
+I enumerated three -- rc 0 passes, rc 1 survivors, rc 2+ harness error -- and
+**the run answered with a fourth I had not listed:**
+
+    mutate_timing_tb.sh: REFUSING TO START — another run already holds
+    /tmp/chip-run-all.2811a17f.lock.
+      current holder: mutate_timing_tb.sh pid=1841096 started=17:14:30 CDT
+    EXIT CODE = 75
+
+**AND THE TABLE WAS EMPTY.** Not "the table said PASS", not "the table said
+FAILED" -- **there was no table at all**, because the suite never ran. **So
+"exit 75 with no output" is a fourth state, and it is the one that would have
+been invisible to every reading I had done of this suite**, all of which read
+the table: an empty table and a passing table are not distinguishable if you
+only ever look at the table.
+
+**THE HARNESS NAMES ITS HOLDER, WHICH IS THE PART THAT MAKES 75 USEFUL** --
+`pid=1841096 started=17:14:30 CDT` -- so a refusal says who to wait for instead
+of only saying no. And `pid 1841096` is **this act's own earlier run**: the
+`ctx_execute` call I gave a 2.5-second timeout instead of 2500 seconds was cut
+off, but **the process it started kept running**, holding the lock. The tool
+timeout killed my *call*, not the *work*, which is worth writing down because
+it means a timed-out tool call is not a stopped job.
+
+### AND I REPRODUCED THE FAULT I HAD JUST FIXED, BY HAND, IN MY OWN COMMAND
+
+I spent two entries moving **44 fixed `/tmp` log paths** out of the harnesses
+because two runs overwrite each other's result files. **Then my retry command
+was `> /tmp/timing_run.log` on a file the in-flight run was writing to** -- the
+redirect truncated the live run's output, which is the identical fault, in the
+identical form, introduced by hand in a shell command while the fix sat
+committed in the harness.
+
+**So the fix is not "move 44 paths". It is "no redirect to a path another run
+may be writing", and I cannot claim to have solved the second by solving the
+first.** The cheap guard for an ad-hoc run is a unique path per invocation --
+`mktemp`, or the `$RLOG` directory the harness now honours -- and that is what
+the recipe below says.
+
+**THE EXPERIMENT IS DEFERRED, NOT CLAIMED.** The suite is still running under
+pid 1841096; its log is truncated, so its result is not readable. When the lock
+frees, the measurement is:
+
+    RLOG=/tmp/run_all.<md5 of repo root> regress/mutate_timing_tb.sh \
+        > "$(mktemp /tmp/timing.XXXXXX.log)" 2>&1; echo "EXIT=$?"
+
+**with the exit code read from a no-pipe invocation and the log on a path
+nothing else can be writing.** And the question is still open: rc 0 would mean
+the gate's `FAILED` was simply wrong, and rc 1 would mean a real survivor this
+act has never seen.
