@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import unittest
+import warnings
 from pathlib import Path
 from typing import cast
 
@@ -246,6 +247,329 @@ class TestLoadStartStop(unittest.TestCase):
         session.connect()
         with self.assertRaises(S.SessionError):
             session.load(ECHO)
+        self.assertEqual(session.state, S.SessionState.FAULTED)
+
+
+class TestAStepNeedsACoreWorthStepping(unittest.TestCase):
+    """A single step is run-control, so it carries run-control's preconditions.
+
+    `start` already refuses a session with nothing loaded ("start requires a
+    successful load") and refuses every state but LOADED/STOPPED. A step is the
+    same class of action - it executes an instruction - so it inherits both
+    rules: there is nothing to step before a load, and a latched fault means
+    the last frame the host sent was rejected, which is not a state to keep
+    driving the core from. Both refusals are the HOST's policy, stated: the chip
+    would execute the step, exactly as it accepts a LOAD under a debug hold
+    (which the session also declines).
+
+    They are here because the page's debug panel refused both cases already, off
+    a hand-written list of state names, and the two sides disagreed. The rule
+    belongs to the session; the button now mirrors it, and
+    `tests/test_gui_capabilities.py` fails if either side moves.
+    """
+
+    def _loaded_session(self):
+        session, bridge, _, _ = make_stack()
+        session.connect()
+        session.load(ECHO)
+        return session, bridge
+
+    def test_a_step_before_a_load_is_refused(self):
+        session, bridge, _, _ = make_stack()
+        session.connect()
+        with self.assertRaises(S.SessionStateError) as caught:
+            session.debug_step()
+        self.assertIn("loaded", str(caught.exception))
+        # and nothing moved: the refusal happened before any frame went out
+        self.assertFalse(bridge.pe.debug_hold)
+        self.assertEqual(bridge.pe.pc, 0)
+
+    def test_a_step_while_faulted_is_refused(self):
+        session, bridge = self._loaded_session()
+        bridge.pe.faults = F.FAULT_PROTOCOL
+        session.status()
+        self.assertEqual(session.state, S.SessionState.FAULTED)
+        with self.assertRaises(S.SessionStateError) as caught:
+            session.debug_step()
+        self.assertIn("fault", str(caught.exception).lower())
+        self.assertFalse(bridge.pe.debug_hold)
+
+    def test_a_step_still_works_once_the_program_is_there(self):
+        session, bridge = self._loaded_session()
+        session.bp_set(3)
+        result = session.debug_step()
+        self.assertEqual(result.state, F.DEBUG_HOLD)
+        self.assertTrue(bridge.pe.debug_hold)
+
+    def test_clearing_the_fault_reopens_the_step(self):
+        """A refusal that only ever refuses is not a policy, it is a wall."""
+        session, bridge = self._loaded_session()
+        bridge.pe.faults = F.FAULT_PROTOCOL
+        session.status()
+        with self.assertRaises(S.SessionStateError):
+            session.debug_step()
+        session.clear_fault(F.FAULT_PROTOCOL)
+        self.assertEqual(session.state, S.SessionState.STOPPED)
+        self.assertEqual(session.debug_step().state, F.DEBUG_HOLD)
+
+
+class TestAnArmOnAHeldCoreWarns(unittest.TestCase):
+    """An arm made on a HELD core is legal, step-only, and easy to misread.
+
+    `DEBUG_BP_SET` clears `bp_en` and `bp_hit` but not `dbg_hold_r`
+    (`pe_ctrl.v:1086-1087`), and the two hit paths then differ: the
+    free-running one requires `!dbg_hold_r` (`:692`) so a held core can never
+    RUN into an armed address, while the step path does not (`:1067`) so
+    STEPPING onto it latches the hit. The chip answers `OK` either way.
+
+    So the session warns rather than refuses. It first refused, on the
+    chip-side record's phrasing ("a fresh hit cannot latch on a DUT that is
+    already held", `R2-HELD-CORE-CHIP-SIDE.md` §3), and that turned the
+    acceptance run's own `r3_bp_set` and `r3_bp_hit_stop_before` beats red -
+    the two that arm while held and step onto the address. The rule is a
+    warning because the chip supports the operation; a guard that refuses a
+    legal op only teaches the operator to distrust the guard.
+    """
+
+    def _held(self, *, hit: bool):
+        session, bridge, _, _ = make_stack()
+        session.connect()
+        session.load(ECHO)
+        if hit:
+            session.start()
+            session.bp_set(1)
+            bridge.pe.advance_free_running()
+            session.status()
+        else:
+            session.bp_set(3)
+            session.debug_step()
+        return session, bridge
+
+    def test_it_warns_in_both_held_states_and_says_why(self):
+        for hit in (False, True):
+            with self.subTest(hit=hit):
+                session, _bridge = self._held(hit=hit)
+                self.assertIn(str(session.state), ("DEBUG_HOLD", "BP_HIT"))
+                with self.assertWarns(UserWarning) as caught:
+                    armed = session.bp_set(5)
+                # the arm still HAPPENS - it is legal, and the stop-before flow
+                # needs it, so the warning must not have cost the operator it
+                self.assertTrue(armed.armed)
+                self.assertEqual(armed.bp_addr, 5)
+                message = str(caught.warning)
+                # the two halves an operator has to be told apart
+                self.assertIn("STEPPING", message)
+                self.assertIn("pe_ctrl.v:692", message)
+                # and the way out, not just the hazard
+                self.assertIn("resume_with_breakpoint", message)
+
+    def test_no_warning_when_the_core_is_not_held(self):
+        """A warning that fires everywhere is noise, and noise is ignored."""
+        for start in (False, True):
+            with self.subTest(running=start):
+                session, _bridge, _, _ = make_stack()
+                session.connect()
+                session.load(ECHO)
+                if start:
+                    session.start()
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    armed = session.bp_set(5)
+                self.assertEqual(
+                    [w for w in caught if w.category is UserWarning],
+                    [],
+                )
+                self.assertTrue(armed.armed)
+
+    def test_the_step_onto_a_held_arms_address_really_does_latch(self):
+        """The reason the arm is not refused: it works, by stepping."""
+        session, bridge = self._held(hit=False)
+        with self.assertWarns(UserWarning):
+            session.bp_set(2)
+        bridge.pe.pc = 1
+        session.state = S.SessionState.DEBUG_HOLD
+        step = session.debug_step()
+        self.assertTrue(step.hit, "stepping onto the armed address must latch")
+        self.assertEqual(session.state, S.SessionState.BP_HIT)
+
+    def test_the_warning_follows_the_session_state_with_no_model_in_the_loop(self):
+        """The load-bearing test, and it needs no `FakePE` at all.
+
+        The chip record's own words for this pitfall are that the host's model
+        cannot show it, because a model reaches a held state by fiat. The
+        warning does not depend on any model register either: it reads the
+        SESSION's state machine, which is built from the chip's state word. So
+        this drives that machine with canned bridge answers — connect, a
+        DEBUG_STATUS reporting state 2, then the arm — with no chip model in
+        the picture, and asserts both directions. A test that needed the model
+        would be pinning the model's idea of a hold; this one pins the host's
+        reaction to the chip's own word.
+        """
+
+        def held_session(state: int):
+            status_word = {
+                "status": P.STATUS_OK,
+                "state": state,
+                "pc": 2,
+                "bp_addr": 0,
+                "bp_flags": 0,
+                "run": 0,
+                "a": 0,
+                "x": 0,
+                "y": 0,
+                "insn": 0,
+            }
+            arm_word = {
+                "status": P.STATUS_OK,
+                "state": state,
+                "pc": 2,
+                "bp_addr": 5,
+                "bp_flags": 0b01,
+            }
+            stub = StubTransport(responses=[HELLO, PREPARE, status_word, arm_word])
+            session = S.ControllerSession(lambda: stub)
+            session.connect()
+            return session, stub, status_word
+
+        for state, expect_warning in ((F.DEBUG_HOLD, True), (F.DEBUG_BP_HIT, True)):
+            with self.subTest(state=state):
+                session, _stub, _word = held_session(state)
+                session.debug_status()  # the chip's own word drives the state
+                self.assertIn(str(session.state), ("DEBUG_HOLD", "BP_HIT"))
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    armed = session.bp_set(5)
+                warned = [w for w in caught if w.category is UserWarning]
+                self.assertEqual(bool(warned), expect_warning)
+                # and the arm happened either way - it is legal
+                self.assertTrue(armed.armed)
+                self.assertEqual(armed.bp_addr, 5)
+
+        # the same machine, a core that is NOT held: no warning, same arm. The
+        # settled state is PREPARED rather than STOPPED because nothing was
+        # loaded in this stub - what matters is that it is not a held state.
+        session, _stub, _word = held_session(F.DEBUG_STOPPED)
+        session.debug_status()
+        self.assertNotIn(str(session.state), ("DEBUG_HOLD", "BP_HIT"))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            armed = session.bp_set(5)
+        self.assertEqual([w for w in caught if w.category is UserWarning], [])
+        self.assertTrue(armed.armed)
+
+    def test_resume_with_breakpoint_ends_armed_and_released(self):
+        """The recovery path, from each held state, on the real stack."""
+        for hit in (False, True):
+            with self.subTest(hit=hit):
+                session, bridge = self._held(hit=hit)
+                session.resume_with_breakpoint(5)
+                snapshot = session.debug_status()
+                self.assertTrue(snapshot.armed)
+                self.assertEqual(snapshot.bp_addr, 5)
+                # released, so the arm is no longer step-only -- whether this
+                # particular program reaches address 5 is the model's business
+                # and is pinned in test_r3.py, not here
+                self.assertFalse(bridge.pe.debug_hold)
+                self.assertNotIn(str(session.state), ("DEBUG_HOLD", "BP_HIT"))
+
+
+class TestStatusReportsTheHeldState(unittest.TestCase):
+    """STATUS carries the chip's own state word; the session must use it.
+
+    R3 gave the chip two more ways to be stopped, and R2's STATUS reports both
+    of them in its own `state` word — so the op a host polls continuously is
+    the one that can tell it the core is parked on a breakpoint. It cannot,
+    today: `status()` maps the session state from the `run` word ALONE, so a
+    live hit (`state=3, run=1`, the state the golden R2 step
+    `status_reports_the_hit` now pins) reads as RUNNING, and a step-pause
+    (`state=2, run=0`) reads as a plain STOPPED. The debug ops get this right —
+    `_debug_state_from` maps 2/3 — which is why the gap is easy to miss: the
+    panel path is right and the poll path is wrong, and a host that only uses
+    the R2 readback never sees a hold at all.
+
+    Nothing here is inferred: STATUS reports the state word and the run strap
+    as SEPARATE words, so the session takes the debug state from the first and
+    the strap from the second. The same discipline `_debug_state_from` states
+    for the debug prefix, which does not carry the strap.
+    """
+
+    def _running_stack(self):
+        session, bridge, _, _ = make_stack()
+        session.connect()
+        session.load(ECHO)
+        session.start()
+        return session, bridge
+
+    def test_a_core_parked_on_a_breakpoint_is_not_reported_as_running(self):
+        session, bridge = self._running_stack()
+        pe = bridge.pe
+        pe.bp_addr, pe.bp_en = 1, True
+        pe.set_run(True)
+        self.assertTrue(pe.advance_free_running(), "the core must stop on the bp")
+        self.assertEqual(pe.state, F.DEBUG_BP_HIT)
+
+        snapshot = session.status()
+
+        # what the chip said, unchanged
+        self.assertEqual(snapshot.state, F.DEBUG_BP_HIT)
+        self.assertEqual(snapshot.run, 1, "a hit holds the core, not the strap")
+        # what the session made of it
+        self.assertEqual(session.state, S.SessionState.BP_HIT)
+
+    def test_a_step_pause_is_reported_as_the_hold_it_is(self):
+        session, bridge = self._running_stack()
+        pe = bridge.pe
+        pe.bp_addr, pe.bp_en = 2, True
+        pe.set_run(False)  # back to the boot stop
+        pe.debug_step_once()  # one instruction, then held
+        self.assertEqual(pe.state, F.DEBUG_HOLD)
+
+        snapshot = session.status()
+
+        self.assertEqual(snapshot.state, F.DEBUG_HOLD)
+        self.assertEqual(snapshot.run, 0)
+        self.assertEqual(session.state, S.SessionState.DEBUG_HOLD)
+
+    def test_the_strap_still_governs_the_stopped_only_reads(self):
+        """A GUARD, not the finding: knowing the core is HELD must not unlock it.
+
+        DUMP_CORE is gated on the run strap (the golden step
+        `dump_core_refused_the_strap_is_high` pins NOT_READY under a live hit),
+        so the session's stopped-only guard keeps following the strap: refused
+        under a live hit, answered under a step-pause. Learning the hold must
+        not move the host across that gate, and this is driven through the
+        session's own API so it cannot pass by accident.
+        """
+        session, bridge = self._running_stack()
+        session.bp_set(1)
+        bridge.pe.advance_free_running()  # the core stops on the breakpoint
+        with self.assertRaises(S.SessionStateError):
+            session.dump_core()  # strap high: refused, as the chip does
+
+        # a step-pause with the strap LOW, reached the way an operator reaches
+        # one: stop, arm FURTHER AHEAD, step. (Arming the next landing address
+        # would land the step ON the breakpoint and give a BP_HIT instead,
+        # which is a different state and already covered above.)
+        session.stop()
+        session.bp_set(3)
+        step = session.debug_step()
+        self.assertEqual(step.state, F.DEBUG_HOLD)
+        dump = session.dump_core()  # strap low: answered
+        self.assertEqual(dump.state, F.DEBUG_HOLD)
+        self.assertEqual(dump.run, 0)
+
+    def test_an_unheld_core_reads_exactly_as_before(self):
+        session, _ = self._running_stack()
+        self.assertEqual(session.status().state, F.DEBUG_RUNNING)
+        self.assertEqual(session.state, S.SessionState.RUNNING)
+        session.stop()
+        self.assertEqual(session.status().state, F.DEBUG_STOPPED)
+        self.assertEqual(session.state, S.SessionState.STOPPED)
+
+    def test_a_fault_still_outranks_the_held_state(self):
+        session, bridge = self._running_stack()
+        bridge.pe.faults = F.FAULT_PROTOCOL
+        session.status()
         self.assertEqual(session.state, S.SessionState.FAULTED)
 
 

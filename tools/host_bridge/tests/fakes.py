@@ -14,16 +14,23 @@ class FakeTTAdapter:
         self.calls: list[tuple] = []
         self.project_calls: list[str] = []
         self.clock_calls: list[int] = []
-        self.clock_stops = 0          # exists only to prove it is never called
+        self.clock_stops = 0  # exists only to prove it is never called
         self.reset_calls: list[bool] = []
         self.run_calls: list[bool] = []
         self.spi_rates: list[int] = []
         self.transfers: list[bytes] = []
         # Test hooks
-        self.fail_transfer = False    # raise OSError: simulate no MISO
+        self.fail_transfer = False  # raise OSError: simulate no MISO
         self.corrupt_responses = False
-        self.run_lock = False         # ignore set_run: simulate a stuck strap
-        self.wait_words = 0           # leading 0xFFFF filler before the frame
+        self.run_lock = False  # ignore set_run: simulate a stuck strap
+        self.wait_words = 0  # leading 0xFFFF filler before the frame
+        # Trailing words the host clocked out AFTER the response, i.e. the
+        # released pad's idle level. The real adapter always reads a fixed
+        # budget (`read_words`) and gets whatever the pad says once the chip
+        # stops driving it; modelling that is opt-in because the default here
+        # is the historically forgiving "exactly the response" shape.
+        self.idle_words = 0
+        self.idle_value = 0x0000
         self._irq = False if irq_supported else None
         self._irq_supported = irq_supported
 
@@ -43,7 +50,7 @@ class FakeTTAdapter:
         self.calls.append(("set_clock", hz))
         return hz
 
-    def stop_clock(self) -> None:       # not part of the HAL contract
+    def stop_clock(self) -> None:  # not part of the HAL contract
         self.clock_stops += 1
 
     def reset(self, active: bool) -> None:
@@ -74,6 +81,11 @@ class FakeTTAdapter:
         if self.wait_words:
             # The chip's bounded reads may emit leading 0xFFFF filler words.
             response = b"\xff\xff" * self.wait_words + response
+        if self.idle_words:
+            # The words the host clocked out past the response: the pad is
+            # RELEASED then (pe_ctrl asserts miso_oe only while a response
+            # shifts), so the host reads the idle level, not the chip.
+            response += self.idle_value.to_bytes(2, "big") * self.idle_words
         return response
 
     def irq_n(self):

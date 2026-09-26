@@ -28,6 +28,59 @@ function setMessage(text, isError = false) {
   el.classList.toggle("error", Boolean(isError));
 }
 
+// Which states each action is offered in. These are the session's rules, not
+// the page's: `tests/test_gui_capabilities.py` asks the real ControllerSession
+// what it accepts in each state and fails if the two disagree, so a policy
+// change on either side has to be made on both.
+const LOADABLE = ["PREPARED", "LOADED", "STOPPED"];
+// FAULTED is in DUMPABLE deliberately: the sticky fault word IS a header field,
+// so a faulted core is exactly the core whose header an operator needs to read.
+// A latched fault does not close the read path - it is the session that
+// refuses run-control, not reads (see STEPPABLE below).
+const DUMPABLE = ["PREPARED", "LOADED", "STOPPED", "DEBUG_HOLD", "FAULTED"];
+
+// The debug panel's four buttons. A single step needs a program to step and a
+// core that is not mid-error; the session refuses both cases (nothing loaded is
+// nothing to step, and a latched fault means the last frame was rejected), so
+// the button offers the SAME rule rather than a hand-copied list of state
+// names. The other three need only a chip that implements R3: arming is legal
+// while running AND while held (a held core cannot RUN into an armed address -
+// the free-running hit is gated on the hold being clear - but a step onto it
+// still latches the hit, which is the stop-before flow; the session warns
+// about exactly that), and clear/release is the only way off a held core.
+const DEBUG_BUTTONS = ["debug-step", "bp-set", "bp-clr", "debug-resume"];
+const STEPPABLE = ["LOADED", "STOPPED", "DEBUG_HOLD", "BP_HIT"];
+
+// The event stream's scheme follows the PAGE's scheme. A hard-coded ws:// is
+// unavailable in exactly the deployment where the event stream matters most -
+// the page served over TLS - and it fails silently: the socket simply never
+// opens and the page falls back to polling without saying why.
+//
+// A lint rule asks for wss unconditionally and reads the `ws:` below as a
+// finding. Suppressed deliberately, with the reason: a page served over plain
+// HTTP (the local dev server) cannot open wss:// at all, so an unconditional
+// wss:// would break the only environment this page is developed in. The
+// property that actually matters - "the socket is secure exactly when the page
+// is" - is pinned by tests/test_gui_capabilities.py, which drives this
+// function with both page schemes.
+function eventSocketUrl() {
+  const secure = location.protocol === "https:";
+  const scheme = secure ? "wss:" : "ws:";
+  // nosemgrep: javascript.lang.security.detect-insecure-websocket
+  return `${scheme}//${location.host}/api/events`;
+}
+
+function applyDebugAvailability(state, available = true) {
+  // `available` is the chip's R3 support, which the page discovers by asking:
+  // /api/debug answers UNSUPPORTED on a chip without it, and a button that
+  // invites an error the chip can only answer with UNSUPPORTED is worse than a
+  // greyed one.
+  $(DEBUG_BUTTONS[0]).disabled = !available || !STEPPABLE.includes(state);
+  for (const id of DEBUG_BUTTONS.slice(1)) {
+    $(id).disabled = !available || state === "DISCONNECTED";
+  }
+}
+
 function renderHealth(health) {
   $("connection-state").textContent = health.state;
   $("session-id").textContent = health.session_id || "—";
@@ -36,23 +89,74 @@ function renderHealth(health) {
     : "—";
   const connected = health.state !== "DISCONNECTED";
   $("connect").disabled = connected;
-  $("load").disabled = !["PREPARED", "LOADED", "STOPPED"].includes(health.state);
+  $("load").disabled = !LOADABLE.includes(health.state);
+  // START and STOP are absent from the two HELD states on purpose, not by
+  // oversight: while a debug hold is asserted the run strap is MASKED in BOTH
+  // directions (`cpu_exec = dbg_step || (run && !dbg_hold)`), so pulling it
+  // low neither stops nor starts the core - DEBUG_BP_CLR is the only release,
+  // and it also disarms. Offering a Start/Stop that provably does nothing is
+  // the same lie as mislabelling the state; see the debug panel's Clear.
   $("start").disabled = !["LOADED", "STOPPED"].includes(health.state);
   $("stop").disabled = health.state !== "RUNNING";
-  $("dump").disabled = !["PREPARED", "LOADED", "STOPPED"].includes(health.state);
-  setCpuPolling(health.state === "RUNNING");
+  // DUMP_CORE is gated on the run STRAP, so it answers in every state whose
+  // strap is low - which includes a step-pause (DEBUG_HOLD), where the core is
+  // held but the strap never went high. It is refused under BP_HIT because a
+  // live hit holds the core WITHOUT dropping the strap.
+  $("dump").disabled = !DUMPABLE.includes(health.state);
+  applyDebugAvailability(health.state);
+  // READ_CPU is the ONE non-halting read: the session answers it in every
+  // state, including a core parked on a breakpoint, which is exactly when the
+  // registers matter. Polling only while RUNNING froze the register view at
+  // the pre-hit values while the debug panel showed the post-hit PC.
+  setCpuPolling(connected);
   setStatusPolling(connected);
 }
 
+// The chip's own state encoding (rtl/pe_ctrl.v:
+//   dbg_state = dbg_hold_r ? (bp_hit ? 2'd3 : 2'd2) : (run ? 2'd1 : 2'd0)).
+// Four values, not two: R3's debug control made 2 and 3 reachable, and a core
+// parked on a breakpoint is 3 WITH the run strap still high. Collapsing that
+// to "STOPPED" is a lie the operator acts on - it is how a held core looks
+// like an idle one. Same vocabulary and same "(value)" form as the debug
+// panel's readout below, so the two rows of this page cannot disagree.
+const CHIP_STATE_NAMES = { 0: "STOPPED", 1: "RUNNING", 2: "DEBUG_HOLD",
+                           3: "BP_HIT" };
+
 function renderStatus(status) {
   if (!status) return;
-  $("chip-state").textContent = status.state === 1 ? "RUNNING" : "STOPPED";
+  const name = CHIP_STATE_NAMES[status.state];
+  // An unrecognised value is shown as itself, never as a definite state: a
+  // host talking to a newer chip must not read an unknown word as "STOPPED".
+  $("chip-state").textContent =
+    `${name || "UNKNOWN"} (${status.state})`;
   $("run-state").textContent = status.run ? "on" : "off";
   $("words-written").textContent = status.words_written;
   $("faults").textContent = status.faults
     ? `0x${status.faults.toString(16).padStart(4, "0")}`
     : "none";
   noteHeartbeat(status.timer, status.run);
+}
+
+function renderDebug(debug) {
+  // The chip's own state word drives the label; "armed" and "hit" come from
+  // bp_flags, never from the address -- a breakpoint at 0 is legal and is
+  // only distinguishable by bit0.
+  $("debug-state").textContent = `${debug.state_name} (${debug.state})`;
+  $("debug-pc").textContent = `0x${debug.pc.toString(16).padStart(3, "0")}`;
+  $("debug-bp").textContent = debug.armed
+    ? `armed at 0x${debug.bp_addr.toString(16).padStart(3, "0")}` : "disarmed";
+  $("debug-bp-flags").textContent =
+    `0x${debug.bp_flags.toString(16).padStart(2, "0")}` +
+    `${debug.hit ? " (hit latched)" : ""}`;
+  // A missing run word means the RESPONSE did not report the strap: the
+  // five-word debug prefix (DEBUG_BP_SET, DEBUG_STEP) has no such word. Say so,
+  // rather than defaulting to 0 and telling an operator who armed a breakpoint
+  // on a RUNNING core that the run strap is low - which is exactly the state
+  // where they are about to be stopped by their own breakpoint.
+  const run = debug.run;
+  let runText = "not reported";
+  if (run !== undefined && run !== null) runText = run ? "high" : "low";
+  $("debug-run").textContent = runText;
 }
 
 // Liveness (P3, host half): the chip's heartbeat is the STATUS timer. A
@@ -63,7 +167,6 @@ function renderStatus(status) {
 //   alive -> running and the timer advanced; stale -> running but the timer
 //   has not moved (the liveness gap). NOT chip-confirmed until a real run.
 let lastHeartbeat = null;
-let lastRun = 0;
 function setLiveness(state, label) {
   const el = $("liveness");
   if (!el) return;
@@ -71,7 +174,6 @@ function setLiveness(state, label) {
   el.textContent = `liveness: ${label}`;
 }
 function noteHeartbeat(timer, run) {
-  lastRun = run ? 1 : 0;
   if (!Number.isInteger(timer)) { setLiveness("unknown", "unknown"); return; }
   $("heartbeat").textContent = `0x${timer.toString(16).padStart(4, "0")}`;
   if (!run) { lastHeartbeat = null; setLiveness("idle", "idle (core stopped)"); return; }
@@ -112,7 +214,7 @@ function setCpuPolling(on) {
       try {
         renderCpu((await api("/api/read_cpu")).cpu);
         renderStatus((await api("/api/status")).status);
-      } catch (error) { /* running read */ }
+      } catch { /* running read */ }
     }, 1000);
   } else if (!on && cpuPoll) {
     clearInterval(cpuPoll);
@@ -181,19 +283,22 @@ async function refresh() {
     renderHealth(health);
     if (health.state !== "DISCONNECTED") {
       renderStatus((await api("/api/status")).status);
-      if (health.state === "RUNNING") {
-        renderCpu((await api("/api/read_cpu")).cpu);
-      }
+      // READ_CPU answers while stopped, held or running (it is the non-halting
+      // read), so the register view is fetched whenever the session is up. It
+      // used to be fetched only while RUNNING, which froze the registers at
+      // their pre-breakpoint values on a core that had just been stopped BY its
+      // breakpoint - while the debug panel, read a moment later, showed the
+      // post-hit PC. Two views of one register, disagreeing.
+      renderCpu((await api("/api/read_cpu")).cpu);
       try {
         renderDebug(await api("/api/debug"));
-      } catch (error) {
+      } catch {
         // A chip without R3 answers UNSUPPORTED; the panel says so instead of
         // leaving stale values on screen.
         $("debug-state").textContent = "not supported by this chip";
-        debugReady("DISCONNECTED");
+        applyDebugAvailability(health.state, false);
       }
     }
-    debugReady(health.state);
   } catch (error) {
     setMessage(error.message, true);
   }
@@ -258,33 +363,6 @@ async function main() {
   }
 
   // ---- R3 debug panel ----------------------------------------------------
-  const debugEls = ["debug-state", "debug-pc", "debug-bp", "debug-bp-flags",
-                     "debug-run"];
-  const debugButtons = ["debug-step", "bp-set", "bp-clr", "debug-resume"];
-
-  function renderDebug(debug) {
-    // The chip's own state word drives the label; "armed" and "hit" come from
-    // bp_flags, never from the address -- a breakpoint at 0 is legal and is
-    // only distinguishable by bit0.
-    $("debug-state").textContent = `${debug.state_name} (${debug.state})`;
-    $("debug-pc").textContent = `0x${debug.pc.toString(16).padStart(3, "0")}`;
-    $("debug-bp").textContent = debug.armed
-      ? `armed at 0x${debug.bp_addr.toString(16).padStart(3, "0")}` : "disarmed";
-    $("debug-bp-flags").textContent =
-      `0x${debug.bp_flags.toString(16).padStart(2, "0")}` +
-      `${debug.hit ? " (hit latched)" : ""}`;
-    $("debug-run").textContent = debug.run ? "high" : "low";
-  }
-
-  function debugReady(state) {
-    // Step is only legal when the core is held or stopped; a free-running core
-    // answers NOT_READY, so the button is disabled instead of inviting an
-    // error. Setting a breakpoint IS legal while running.
-    const held = state === "DEBUG_HOLD" || state === "BP_HIT" ||
-                 state === "STOPPED" || state === "LOADED";
-    $(debugButtons[0]).disabled = !held;
-    for (const id of debugButtons.slice(1)) $(id).disabled = state === "DISCONNECTED";
-  }
 
   async function debugCall(path, body) {
     try {
@@ -292,7 +370,10 @@ async function main() {
       const payload = result.debug || result.step || result.breakpoint;
       if (payload) renderDebug({ ...payload, state_name: result.state_name ||
         payload.state_name, armed: result.armed ?? Boolean(payload.bp_flags & 1),
-        hit: result.hit ?? Boolean(payload.bp_flags & 2), run: payload.run ?? 0 });
+        hit: result.hit ?? Boolean(payload.bp_flags & 2),
+        // left undefined when the response carries no run word, so the
+        // panel can say "not reported" instead of inventing "low"
+        run: payload.run });
       setDebugMessage(`${path} ok`);
       await refresh();
     } catch (error) {
@@ -313,13 +394,26 @@ async function main() {
   $("bp-clr").addEventListener("click", () => debugCall("/api/debug/bp_clr", {}));
   $("debug-resume").addEventListener("click", () => debugCall("/api/debug/resume", { address: bpAddress() }));
 
-  try {
-    const socket = new WebSocket(`ws://${location.host}/api/events`);
-    socket.addEventListener("message", (message) => pushEvent(JSON.parse(message.data)));
-  } catch (error) {
-    setInterval(async () => {
+  // The event stream, with a polling fallback for when there is no socket.
+  let eventPollFallback = null;
+  const startEventPolling = () => {
+    if (eventPollFallback) return;
+    eventPollFallback = setInterval(async () => {
       for (const event of (await api("/api/health")).events ?? []) pushEvent(event);
     }, 2000);
+  };
+  try {
+    const socket = new WebSocket(eventSocketUrl());
+    // A WebSocket to an endpoint that is not listening does NOT throw: it
+    // fires `error` and closes. A fallback hung only on `catch` therefore
+    // never engaged, and the event stream died silently - the same failure
+    // `eventSocketUrl` exists to prevent, one layer up. So the fallback hangs
+    // off the events, and `catch` is left for the synchronous throw (a bad URL).
+    socket.addEventListener("error", startEventPolling);
+    socket.addEventListener("close", startEventPolling);
+    socket.addEventListener("message", (message) => pushEvent(JSON.parse(message.data)));
+  } catch {
+    startEventPolling();
   }
 
   await refresh();

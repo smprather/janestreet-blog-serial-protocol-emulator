@@ -28,6 +28,7 @@ import argparse
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from tools.host_gui import fake_pe as F
 from tools.host_gui import protocol as P
@@ -47,6 +48,59 @@ CITATION_KEYS = ("review", "testbench", "conformance", "date", "scope")
 # The default image a phase's hex export preloads (the lowest image id), and
 # the words an image gets when the caller names none.
 DEFAULT_LOAD_WORDS = (0x0041, 0x1001, 0x4002)
+
+
+class UnconfirmedStepNotExplained(ValueError):
+    """A step is `chip_confirmed=false` and nothing says why."""
+
+
+class StaleUnconfirmedReason(ValueError):
+    """A "not confirmed" explanation outlived the flip that confirmed the step."""
+
+
+def not_confirmed_enumeration(steps, reasons) -> dict[str, str]:
+    """Every step the flags call unconfirmed, NAMED, each with a reason.
+
+    Prose staleness has bitten this package three times, and each instance had
+    one shape: the evidence block names the steps the chip HAS run, and says
+    nothing about the ones it has not. A notice generated from the confirmed set
+    then reads as a claim about the whole package, and a reader has no way to
+    tell a subset from a totality. The live instance is the chip repo's
+    `tb/r2-vectors/manifest.json` - 18 steps, 15 confirmed, the three
+    ceiling/zero-count steps named nowhere, notice saying "every golden step in
+    this package passes". That file is chip-side; the SHAPE that let it exist is
+    not, so the shape is fixed here.
+
+    Both directions are errors, and the second is the one a fix tends to forget:
+
+    * a false flag with no reason is the defect itself, and it is a BUILD error
+      rather than a review note - a package in that state can always be made to
+      say too much;
+    * a reason left behind for a step that is now confirmed is the mirror image,
+      because the package goes on explaining a step the chip has run, and the
+      next reader has to work out which of the two is out of date.
+    """
+    unconfirmed = {step["name"] for step in steps if not step.get("chip_confirmed")}
+    unexplained = sorted(
+        name for name in unconfirmed if not str(reasons.get(name, "")).strip()
+    )
+    if unexplained:
+        raise UnconfirmedStepNotExplained(
+            f"{len(unexplained)} step(s) are chip_confirmed=false and no reason "
+            f"is recorded for them in unconfirmed_reasons: "
+            f"{', '.join(unexplained)}. A step the chip has not run must be "
+            f"named AND explained, or the notice can present the confirmed "
+            f"subset as the whole package."
+        )
+    stale = sorted(name for name in reasons if name not in unconfirmed)
+    if stale:
+        raise StaleUnconfirmedReason(
+            f"unconfirmed_reasons explains step(s) that are not "
+            f"chip_confirmed=false: {', '.join(stale)}. Either the flip that "
+            f"confirmed them did not remove the explanation, or the name is a "
+            f"typo - both leave the package describing a step the chip has run."
+        )
+    return {name: str(reasons[name]) for name in sorted(unconfirmed)}
 
 
 @dataclass(frozen=True)
@@ -75,16 +129,30 @@ class Spec:
     load_words: tuple[int, ...] = DEFAULT_LOAD_WORDS
     schema: int | None = None
     hex_readme_extra_preload: str = ""
+    # Why each step the chip has NOT run is not yet confirmed, keyed by step
+    # name. Empty is the healthy state for a fully confirmed phase and is not
+    # the same as "unrecorded": `not_confirmed_enumeration` turns any step that
+    # is unconfirmed without an entry here into a build error.
+    unconfirmed_reasons: dict = field(default_factory=dict)
 
     @property
     def confirmed_steps(self) -> frozenset[str]:
         return frozenset(self.evidence.get("confirmed_steps", ()))
 
     def evidence_json(self) -> dict:
-        """The evidence block with the confirmed-step set as a sorted list."""
-        out = dict(self.evidence)
-        out["confirmed_steps"] = sorted(self.confirmed_steps)
-        return out
+        """The evidence block with every collection JSON-shaped.
+
+        The artifact is a JSON document and the drift gate compares the PARSED
+        document to a fresh build, so a `tuple` here makes the gate report
+        STALE immediately after `--write` -- with a message that points at the
+        wrong fix. `confirmed_steps` is a set and `pending_steps` a tuple in
+        Python (both are the right types to write down here), so the whole
+        block is normalised in one place rather than one field at a time;
+        `test_r2_vectors` pins the round trip.
+        """
+        return _json_shaped(
+            {**self.evidence, "confirmed_steps": sorted(self.confirmed_steps)}
+        )
 
     def evidence_for(self, step_name: str) -> dict | None:
         """Citation for a step, or None when the chip has not confirmed it."""
@@ -241,12 +309,22 @@ class Builder:
 
     def package(self, vectors: list) -> dict:
         """Assemble the phase's package dict from its vectors."""
+        # The enumeration is computed from the steps that were ACTUALLY built,
+        # not maintained by hand, so it cannot fall behind the flags: the one
+        # thing every F1 sighting had in common is an unconfirmed step that no
+        # key named. It is injected after `evidence_json()` because only here
+        # are the step flags known.
+        evidence = self.spec.evidence_json()
+        evidence["not_confirmed_steps"] = not_confirmed_enumeration(
+            [step for vector in vectors for step in vector["steps"]],
+            self.spec.unconfirmed_reasons,
+        )
         package = {
             "artifact": self.spec.title,
             "generated_by": self.spec.generated_by,
             "source_of_truth": list(self.spec.source_of_truth),
             "chip_confirmed": all(vector["chip_confirmed"] for vector in vectors),
-            "chip_evidence": self.spec.evidence_json(),
+            "chip_evidence": evidence,
             "notice": self.spec.notice,
             "rulings_applied": list(self.spec.rulings),
             "protocol": {
@@ -271,6 +349,20 @@ class Builder:
             package["schema"] = self.spec.schema
             package["phase"] = self.spec.phase
         return package
+
+
+def _json_shaped(value: Any) -> Any:
+    """The same structure with tuples rendered as lists (JSON has no tuple).
+
+    Applied at the one boundary where a Python-native value becomes part of a
+    published artifact, so "is this JSON-shaped?" is answered by construction
+    instead of by remembering which field is a set.
+    """
+    if isinstance(value, dict):
+        return {key: _json_shaped(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_shaped(item) for item in value]
+    return value
 
 
 def _debug_image(debug: dict) -> dict:
@@ -568,6 +660,19 @@ def check_hex_export(spec: Spec, build, directory: Path | None = None) -> int:
     if images != package["model_images"]:
         print("hex manifest images do not match a fresh build")
         return 1
+    # The hex manifest CARRIES the notice and the evidence block, and it is the
+    # file the chip copies into `tb/<phase>-vectors/manifest.json` - so a claim
+    # that drifts here is a claim the chip inherits. The gate compared the .hex
+    # bytes and the images but never these three fields, which is how the
+    # shipped hex manifest kept an evidence block with no
+    # `not_confirmed_steps` key while a fresh build had one, and the check
+    # still said "up to date".
+    for key in ("chip_evidence", "notice", "chip_confirmed"):
+        if manifest.get(key) != package.get(key):
+            print(
+                f"hex manifest {key} does not match a fresh build (regenerate with --hex)"
+            )
+            return 1
     return _check_image_files(directory, images, manifest.get("image_files", {}))
 
 

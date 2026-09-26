@@ -35,6 +35,41 @@ Log LINES are concise entries (≤ ~500 chars); full reports/evidence live in
 `reviews/` and interrupt files - link, do not inline. This rule exists because
 the log hit 58 MB and GitHub warned on every push.
 
+## DOCS AUTHORITY (manager ruling 2026-09-26): maps are the ARCHITECTURE
+## authority; figures cite the RTL, never a map
+`diagrams/project-plan.puml` and `diagrams/project-progress.puml` are the
+architecture authority and live on **main**. Two rules follow, and they exist
+because the branches began merging into each other and a figure drawn from a map
+that later moved becomes a stale claim wearing a figure's clothes:
+
+1. **A protocol figure must cite the RTL, the frozen contracts, or the frozen
+   reviews DIRECTLY — and must not restate a map claim as its source. A figure
+   quoting a map is a defect in the figure.** Maps may LINK figures; never the
+   reverse. So a figure's `Sources:` line points at `firmware/*.pe`, `rtl/*.v` or
+   a `reviews/` contract — never at `project-plan`/`project-progress`.
+2. **MAP-TRIGGER for the rolling docs review.** When the maps change on **main**,
+   re-grep the whole figure set for any claim that PARALLELS map content (the C1
+   class: a figure restating a number the map also states) and re-verify each
+   against the RTL. A map move then costs a re-grep instead of a rediscovery.
+
+The trigger baseline as of this ruling, so the next reviewer can tell in one
+command whether the trigger has fired:
+
+```sh
+git rev-parse --short main:diagrams/project-plan.puml      # was aa2554c
+git rev-parse --short main:diagrams/project-progress.puml  # was 42d4acc
+```
+
+Both were last moved by `3a2fd6a` ("refresh both maps to current reality, and
+take the three accuracy corrections"). Checked against this ruling at the time:
+**no figure on either docs branch cites a map as its source** — all five
+`proto-*.puml` source lines point at the firmware (`firmware/dmx512.pe`,
+`i2c_adv.pe`, `midi_xfer.pe`, `spi_mode3.pe`, `uart_flow.pe`), which is exactly
+the pattern the ruling wants. The single grep hit, `proto-freqmeter-timing.puml`
+saying "the map uses all sixteen bytes", is a MEMORY map and not `project-plan` —
+a false positive from the reviewer's own check, recorded because the next
+reviewer will hit it too.
+
 ## THE MERGE GATE (manager standing order, 2026-09-25). A merge is not pushed
 until `regress/verify_merge.sh` is green, and its output is quoted in the
 interrupt. This exists because 5b4731f was pushed with six RED timing acts and

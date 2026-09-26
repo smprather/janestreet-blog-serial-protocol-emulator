@@ -2127,3 +2127,27 @@
 - Wiki deep-reading pages for the same five acts (pw-diag-bus): `wiki/concepts/protocol-i2c-adv.md`, `protocol-spi3-crc.md`, `protocol-uart-flow.md`, `protocol-midi.md`, `protocol-dmx512.md` — what the protocol is, cell-level wire format, timing with tolerances, how the emulator implements it, how the TB proves it, and one line per mutation naming the assertion that fires (4 + 4 + 4 + 5 + 4 = **21 mutations, the whole `mutate_fwbus_tb.sh` set**). **MIDI active sensing is documented as NOT implemented**, with the arithmetic for why it cannot be here (300 ms = 18,000,000 clocks against a loop counter holding 255 — short by ~23,000×) rather than left implied by the act's coverage.
 - Correction pass on this worker's own delivery, after noticing **6 of the 25 figures had shipped without ever being looked at**: three were wrong and are fixed. `proto-uart-flow_001`'s title claimed "the ninth clock is the handshake" (it is not — the tenth cell is the stop bit and the handshake brackets the whole frame), its cells carried no bit values, and one arrow had **the receiver driving RTS, which it never does**; `proto-uart-flow_002` omitted the RTS assertion, which is the ordering that case exists to prove; `proto-dmx512_002` had its three START-code ranges buried in a wall of note rather than in the structure. **A count is an assertion, and two of my published counts were attributed to the wrong subject**: both pages gave a whole-program word count to a single block ("the transmitter … 123 words", "… 126 words"). Re-derived from `peasm --listing`, the transmitters are **67 of 123** (midi, 43 instructions + 24 NOPs, from word 56) and **61 of 126** (dmx, 47 + 14, from word 65). Two smaller traps recorded while counting: the first body NOP shares its line with the `sb_rem:` label, so `grep -c '^\s*NOP'` undercounts midi's padding by one; and `dmx512.pe`'s header says "fifteen NOPs" where the transmitter holds **14** (16 counting the break and mark loops' one each) — the measured cell is 240 clocks either way, so this is a source discrepancy rather than a wire one.
 - Source discrepancy found in Block 2 and **routed to `fw-bus` as firmware owner**: `firmware/spi_mode3.pe`'s header lists the three response bytes as `0x6B, 0x2C, 0xD9`, but the TB's `RESP_MASK = 0x7E5A` applied byte-wise gives `0x6F, 0x6C, 0x6D`, and those are what the wire carried in a local re-run. The documentation states the relation and the measured values rather than repeating the header's list.
+## [2026-09-25] docs | host stack concept page added
+
+- Added `wiki/concepts/host-stack.md`, the deep-reading page for the host side:
+  the Pico MicroPython bridge (framed SPI, and the wait-word trimming at the
+  read boundary that a ready-immediate op makes necessary), the
+  `ControllerSession` state machine and which refusals are the chip's versus
+  host policy, `FakePE` and the two places it cannot go, the golden packages
+  and why their conformance is byte-exact, the GUI's capability table and two
+  poll paths, the three fuzz/soak harnesses with their defaults, and the board
+  procedure. 197 lines.
+- Every number in it was measured against the tree and then re-verified
+  mechanically in one pass (29 claims, no mismatches): 413 host-GUI and 109
+  bridge tests, `acceptance.py --fake` 37 PASS / 0 FAIL / 1 SKIP over 38 beats,
+  R2 11 vectors / 22 steps / 22 confirmed, R3 14 / 26 / 25 with the one
+  unconfirmed step named, 18 bridge ops, 9 session states, 16 routes, polls at
+  1 000 ms and 2 000 ms, ≤ 15 wait words, 7 R2 and 20 R3 obligations, and the
+  fuzzer/soak defaults. The page carries a table saying which command produced
+  each one, so a later reader can re-derive rather than trust.
+- Two boundaries are kept distinct, which is the point of the page: the **two**
+  ruled spec-vs-RTL discrepancies (vectors 11 and 13) and the **one** step left
+  unconfirmed on both sides (`status_full_readback`'s `insn`, a freeze-snapshot
+  TB artefact). The page states plainly that no board has been run, and that
+  the only hardware-bound claim is the absence of one.
+- `wiki/index.md` deliberately untouched — the docs fleet wires the index.
