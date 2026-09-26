@@ -281,6 +281,27 @@ fi
 # mapper SKIP a suite, and it is silent in the worst direction: fewer checks, no
 # red, no output.
 
+# The wiring cases read regress/run_all.sh from the ambient working directory,
+# and the first version did that with NO assertion that the file is there. Run
+# from a tree that does not contain it -- a pushed-ref extract of wiki/ and
+# diagrams/ without regress/, which is exactly how I first ran this -- four cases
+# failed with "no invocation of regress/check_wiki_pages.sh", which reads as
+# "the gate is not wired" and is a FALSE ALARM about the project's wiring. Worse,
+# the negative control below PASSED in that state, because it passes whenever the
+# extraction comes back empty -- including when there was never a file to
+# extract. A case that passes for the wrong reason is the one failure mode this
+# project cannot afford, and it is exactly what the guard is for.
+RUN_ALL=regress/run_all.sh
+if [ ! -f "$RUN_ALL" ]; then
+  echo "  FAIL  run_all.sh is present to check the wiring against"
+  echo "        $RUN_ALL is absent from $(pwd), so the six wiring cases cannot" >&2
+  echo "        run. They are NOT reporting that the gate is unwired." >&2
+  fail=$((fail + 1))
+  echo "test_check_wiki_pages: $pass passed, $fail failed"
+  exit 1
+fi
+ok "run_all.sh is present to check the wiring against"
+
 # the wiring block, extracted from run_all.sh exactly as it stands
 extract_wiring() {
   awk '/^if bash regress\/check_wiki_pages\.sh/ {on=1} on {print} on && /^fi$/ {exit}' regress/run_all.sh
@@ -366,10 +387,14 @@ sed -e '/^  tail -20 \/tmp\/check_wiki_pages\.log$/d' -e '/^  stale=1$/d' \
             -e '^  echo "wiki page rules: OK' \
             -e '^  echo "wiki page rules: FAILED' \
   > "$TMP/run_all_rewired.sh"
-if awk '/^if bash regress\/check_wiki_pages\.sh/ {on=1} on {print} on && /^fi$/ {exit}' "$TMP/run_all_rewired.sh" | grep -q .; then
+# Prove the starting point really did contain the wiring, or this control is
+# vacuous: an empty extraction must mean "removed", never "was never there".
+if ! extract_wiring | grep -q 'regress/check_wiki_pages.sh'; then
+  bad "removing the wiring is DETECTED" "the control is vacuous: the wiring was already absent from $RUN_ALL before any removal, so an empty extraction proves nothing"
+elif awk '/^if bash regress\/check_wiki_pages\.sh/ {on=1} on {print} on && /^fi$/ {exit}' "$TMP/run_all_rewired.sh" | grep -q .; then
   bad "removing the wiring is DETECTED" "the block survived the removal, so cases 14-18 would pass on a copy with no gate wired at all"
 else
-  ok "removing the wiring is DETECTED (negative control for 14-18)"
+  ok "removing the wiring is DETECTED (negative control for 14-18, and it started from a wired file)"
 fi
 
 RENDER_CHECK=regress/check_diagram_renders.sh
