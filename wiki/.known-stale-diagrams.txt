@@ -1,4 +1,4 @@
-# .known-stale-renders.txt — the PINNED BASELINE for check_diagram_renders.sh
+# .known-stale-renders.txt — the PINNED BASELINE for check_diagrams.sh
 #
 # WHY THIS FILE EXISTS, and why it is the same shape as
 # wiki/.known-rule-violations.txt rather than something new. That file already

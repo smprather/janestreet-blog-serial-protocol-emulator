@@ -134,6 +134,85 @@ fail() { printf '  FAIL: %s\n' "$*"; FAILURES=$((FAILURES + 1)); }
 ok()   { printf '  ok:   %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# ---- the PINNED BASELINE -----------------------------------------------------
+# Folded in from the retired regress/check_diagram_renders.sh, which is where
+# this mechanism earned its place twice in the wild: once when an author fixed a
+# pinned page and the pin had to be collected by hand, and once when this file's
+# own author wrote four pins against a branch BEHIND main and the gate reported
+# all four as stale within one merge.
+#
+# A pin is a record that a rule is currently not met, and it exists so a gate
+# written today can be green against a corpus carrying defects OWNED BY OTHER
+# PEOPLE. The alternative is not "red" — it is a gate that eventually gets muted,
+# which protects nothing. The mechanism is only safe because it is enforced in
+# BOTH directions, and the second half is the half that matters:
+#   a stale render NOT listed         -> NEW              -> red
+#   a listed render no longer stale   -> STALE-PIN        -> red
+#   a listed render that is GONE      -> STALE-PIN-ABSENT -> red
+# Without the second half a pin outlives its defect: the owner re-renders, the
+# line stays, and the gate keeps reporting something it can no longer see, so the
+# log and the tree disagree with nothing to say which is true.
+PINFILE="$REPO/wiki/.known-stale-diagrams.txt"
+# Both lists carry a LEADING newline on purpose. The membership test matches
+# "<newline><item><newline>", so without it the FIRST element of the list could
+# never match itself - which is why a correctly pinned stale render was reported
+# as both a stale finding and a stale pin. A newline-delimited set needs its
+# delimiter on both sides of every element, including the ends.
+PIN_DECLARED=$'\n'  # one declared pin per line
+PIN_HITS=$'\n'      # one pin per line, but only those that ACTUALLY matched
+load_pins() {
+  # Fail closed. An absent pin file means no finding could be recognised as known;
+  # a malformed one means a pin has silently stopped being enforced, which is
+  # exactly what the anti-staleness direction exists to prevent.
+  [ -f "$PINFILE" ] || {
+    printf 'check_diagrams: HARNESS ERROR — %s is missing, so a known-stale render cannot be told from a new one\n' "$PINFILE"
+    exit 1
+  }
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    # shellcheck disable=SC2086  # word splitting is the point: $1=file $2..=reason
+    set -- $line
+    if [ "$#" -lt 2 ]; then
+      printf 'check_diagrams: HARNESS ERROR — malformed line in %s:\n  %s\n  expected: <render-file> <reason>\n' "$PINFILE" "$line"
+      exit 1
+    fi
+    PIN_DECLARED="${PIN_DECLARED}$1
+"
+  done < "$PINFILE"
+}
+_in_list() {  # _in_list <newline-terminated-list> <needle>
+  case "$1" in *"
+$2
+"*) return 0 ;; *) return 1 ;; esac
+}
+# A stale render whose name is pinned: reported, recorded as FIRED, not a failure.
+pin_note() {
+  _in_list "$PIN_DECLARED" "$1" || return 1
+  PIN_HITS="${PIN_HITS}$1
+"
+  printf '  note: %s is STALE but PINNED (known-stale, awaiting its owner-s re-render)\n' "$1"
+  return 0
+}
+# After the checks: EVERY declared pin must have fired. One that did not is the
+# anti-staleness finding, and the two ways it can happen are told apart because the
+# remedies differ — "the render was fixed, collect the pin" versus "the render is
+# gone, which is its own news".
+pin_audit() {
+  local rel why
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    _in_list "$PIN_HITS" "$rel" && continue
+    why=$(awk -v k="$rel" '$1==k { $1=""; sub(/^ /,""); print; exit }' "$PINFILE" 2>/dev/null)
+    if [ ! -e "$REPO/diagrams/$rel" ]; then
+      fail "STALE-PIN-ABSENT $rel — pinned as known-stale but the render is not in diagrams/ at all: collect the pin AND check the render was not lost (pinned reason: ${why:-none})"
+    else
+      fail "STALE-PIN $rel — pinned as known-stale but is no longer stale, so the pin has outlived its defect: DELETE this line from $PINFILE (pinned reason: ${why:-none})"
+    fi
+  done <<PINLIST
+$PIN_DECLARED
+PINLIST
+}
 # ---- the stems PlantUML produces for an N-block source ---------------------
 block_count() { grep -c '^[[:space:]]*@startuml' "$1" 2>/dev/null || echo 0; }
 
@@ -303,10 +382,18 @@ check_dir() {
         if [ ! -f "$rendered" ]; then
           bad=1; [ "$quiet" = "1" ] || fail "$(basename "$committed") is not produced by the current source at all"
         elif ! cmp -s "$committed" "$rendered"; then
-          bad=1
-          if [ "$stale" -eq 1 ]; then
+          # A PINNED stale render is reported and NOT counted. The pin has to be
+          # consulted BEFORE bad=1 is set, not after: setting bad first and
+          # suppressing only the message left the stem counted as a failing
+          # directory, so the gate printed no FAIL line and still exited 1 — a
+          # red that names nothing, which is the worst shape a gate can take.
+          if pin_note "$(basename "$committed")"; then
+            :
+          elif [ "$stale" -eq 1 ]; then
+            bad=1
             [ "$quiet" = "1" ] || fail "$(basename "$committed") differs from a fresh render AND is older than its source — re-render it"
           else
+            bad=1
             [ "$quiet" = "1" ] || fail "$(basename "$committed") differs from a fresh render of the current source"
           fi
         elif [ "$stale" -eq 1 ]; then
@@ -604,7 +691,11 @@ case "${1:-}" in
     printf '    multi-block convention: block 1 is <stem>, blocks 2..N are\n'
     printf '    <stem>_001..<stem>_(N-1), in BOTH .png and .svg, beside the source\n'
     FAILURES=0
+    load_pins
     check_dir "$REPO/diagrams" "diagrams/"
+    # The anti-staleness half, and it runs AFTER the checks because it can only be
+    # judged once we know which pins actually matched a finding.
+    pin_audit
     if [ "$FAILURES" -eq 0 ]; then
       printf '\ndiagrams: OK\n'; exit 0
     fi
