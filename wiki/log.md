@@ -2334,3 +2334,27 @@ Appended rather than edited in place, per the append-only rule. Verified with
 - **Findings for the manager (not fixed here):** (A) `regress/run_all.sh --fast` cannot exit non-zero. Its EXIT trap runs `rm -rf "$work"` before `_on_exit`, whose `local rc=$?` then reads `rm`'s 0, and `verify_merge.sh` forwards `--fast` and trusts that code. (B) `formal/mutants.sh` prints INCONCLUSIVE for a mutation whose anchor vanished but does not count it, so the gate says OK with a mutant missing. My first edit tripped it; fixed on the branch. (C) The R3 package README copies differ on `main`, so that gate is red today. Details and fixes: `reviews/2026-09-26/ETH-TX-LINE-DRIVER.md` §9.
 - **Palette propagation: 7 semantic stereotypes were lost, and the fix is a one-step job** (found by the visual pass, not by a check). The white-on-white fix authored ONE palette and wrote it verbatim into the 17 in-scope sources. It carries `<<tx>> <<rx>> <<ack>> <<abort>> <<box>>` — but the sources use **seven more**: `<<brk>>` (break), `<<slot>>` (slot), `<<crc>>` (CRC fold), `<<data>>` (data branch), `<<stat>>` (status byte), `<<hs>>` (handshake), `<<wait>>` (CTS wait). Those are exactly the timing family's own semantic colours, and they were not in the palette I authored, so every state using one **silently fell back to the default light blue**. Cause: I carried the stereotypes from my own bus figures and the maps' status palette, and repainted a family whose vocabulary I had not enumerated. Nothing is *invisible* — the figures still read, which is why the mechanical check passed and only looking caught it. To restore the coding, add to the canonical `skinparam state` block in all 17 sources (suggested values, each darker than the block it sits beside so the distinction survives at a glance): `<<brk>>` #FADBD8/#A93226 · `<<slot>>` #D6EAF8/#2E6DA4 · `<<crc>>` #EDE0F5/#6B4E9B · `<<data>>` #D5F0E0/#2E7D4F · `<<stat>>` #FDECC8/#A9741A · `<<hs>>` #FDF2E9/#A04000 · `<<wait>>` #D2E3F0/#24506E, then re-render all 42 figures. The durable lesson is the one this tree keeps teaching: **a propagated definition needs a presence check, and a check needs a negative control**, and until the palette-drift check lands the 17 copies are held together by nothing.
 
+
+### Fleet WCAG contrast sweep — 54 figures, and MY earlier 6.00:1 figure was WRONG
+
+A read-only sweep of all 54 committed SVGs, each `<text>` fill against the
+nearest **enclosing** filled rect, 7,389 text elements.
+
+- **Result: nothing fails. 0 figures under 4.5:1 (WCAG AA) and 0 under 3:1.**
+  The fleet floor is **7.22:1**, so there is no contrast fix to route — the
+  earlier red was a palette/render issue, not legibility.
+- **Correction to my own record.** I earlier reported my five sets' worst as
+  **6.00:1, `#7F4B00` on `#FFE6CC`**, and put that in a durable entry. It was
+  **wrong**: measured properly, every `#7F4B00` text element (78 of them) sits
+  on `#FFFFFF`, giving **7.22:1**. `#FFE6CC` is a real fill in those files but
+  no text rests on it. The cause was **my method** — I paired text with the
+  nearest *preceding* rect in document order, which misattributes a text drawn
+  outside any filled box. The tree-walk (nearest *enclosing* rect) is the
+  correct method; this is the second time a figure of mine was wrong because
+  the instrument was wrong, and the first time the error survived into a
+  durable record.
+- **Worst text colour, fleet-wide: `#7F4B00` at 7.22:1** (my `held`/`ceil`/`integ`
+  stereotype). The next floors are `#5A3D12` 9.95:1, `#17452A` 10.93:1,
+  `#6A2020` 11.41:1, `#143D1E` 12.24:1, `#16324F` 13.10:1, `#333` 12.63:1, and
+  `#000` 21.00:1. Every one clears AA with margin, so the palette needs no
+  change and none is routed to diag-bus.
