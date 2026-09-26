@@ -85,6 +85,25 @@ module tb_pe_soc_bmc;
                                      // so a 2 us half-interval is 120 clocks
   localparam real HALF_US = HALF_CLOCKS * CLK_NS / 1000.0;   // derived, not asserted
   localparam int NBITS   = 24;       // three bytes
+  // THE PREAMBLE GOES ON THE WIRE BEFORE THE FRAME, and it is EIGHT ZEROS
+  // THEN EIGHT ONES. It is not a courtesy: a bi-phase stream carries no
+  // polarity information, and the interval sequence of the two encodings of
+  // one frame is byte-for-byte IDENTICAL (property 4 of the self-check), so a
+  // receiver that has not been told the polarity decodes a well-formed frame
+  // into its complement. The preamble is the only thing on the wire that can
+  // tell it.
+  //
+  // WHY THIS SHAPE, and it is the run structure rather than the values:
+  // adjacent bits EQUAL means a boundary transition exists, so the intervals
+  // run 2 us, 2 us; adjacent bits DIFFER means no boundary, so there is one
+  // 4 us gap. Eight zeros then eight ones therefore puts EXACTLY ONE four-
+  // microsecond gap in the middle, with 2 us either side of it. That single
+  // gap is the phase, and the eighth recovered bit -- the first one of the
+  // second run -- is the polarity: the receiver assembles it as 0x80 under FM0
+  // and 0x00 under FM1.
+  localparam int PRE_BITS  = 16;
+  localparam int PRE_HALF  = 8;      // eight of each
+  localparam int TOT_BITS  = NBITS + PRE_BITS;
   localparam int TOL_US  = 1;        // the counter's own quantisation
 
   // The firmware's map, named because this file READS those bytes: dmem[0..2]
@@ -249,6 +268,23 @@ module tb_pe_soc_bmc;
     bi    = bitno % 8;
     d     = ((by == 0 ? fb0 : (by == 1 ? fb1 : fb2)) >> bi) & 1;
     enc_frame_lev = enc_level(d, k % 2, fm0);
+  endfunction
+
+  // THE LEVEL AT HALF-INDEX k OF THE WHOLE TRANSMISSION: the preamble first,
+  // then the frame. ONE function, so the preamble and the payload cannot be
+  // encoded by two different pieces of code that agree only by inspection.
+  function automatic bit enc_wire_lev(input integer k, input integer fm0,
+                                      input integer fb0, input integer fb1,
+                                      input integer fb2);
+    integer bitno;
+    bit d;
+    bitno = k / 2;
+    if (bitno < PRE_BITS)
+      d = (bitno < PRE_HALF) ? 1'b0 : 1'b1;          // eight 0s then eight 1s
+    else
+      d = ((((bitno - PRE_BITS) < 8 ? fb0 : ((bitno - PRE_BITS) < 16 ? fb1 : fb2))
+             >> ((bitno - PRE_BITS) % 8)) & 1) != 0;
+    enc_wire_lev = enc_level(d, k % 2, fm0);
   endfunction
   // ---- THE ENCODER CHECKS ITSELF AGAINST THE PROMISED PROPERTIES ----------
   //
@@ -569,16 +605,16 @@ module tb_pe_soc_bmc;
         // A ground-truth counter on the testbench's OWN output is what named
         // it, in the same minute, which is the argument for having one.
         if (stim_half == 0) begin
-          in_line = enc_frame_lev(stim_bit*2, enc_fm0, enc_byte[0], enc_byte[1], enc_byte[2]);
+          in_line = enc_wire_lev(stim_bit*2, enc_fm0, enc_byte[0], enc_byte[1], enc_byte[2]);
           stim_half = 1;
         end else begin
-          in_line = enc_frame_lev(stim_bit*2 + 1, enc_fm0, enc_byte[0], enc_byte[1], enc_byte[2]);
+          in_line = enc_wire_lev(stim_bit*2 + 1, enc_fm0, enc_byte[0], enc_byte[1], enc_byte[2]);
           stim_half = 0;
           // THE LAST BIT'S SECOND HALF IS HELD FOR ITS FULL HALF-INTERVAL,
           // and the idle level is applied one half-interval later, by the
           // branch below. Applying it here made the final half-interval a
           // zero-width pulse.
-          if (stim_bit >= NBITS - 1) begin
+          if (stim_bit >= TOT_BITS - 1) begin
             stim_done = 1;
             // THE IDLE LEVEL IS NOT APPLIED IN THE SAME INSTANT. It used to
             // be, and the last half-interval of the frame was therefore a

@@ -127,6 +127,30 @@ init:
                                ; cleared by a reset, so an unseeded byte is
                                ; whatever power-up left, and the first decision
                                ; the receiver makes is made from it.
+        ; dmem[13] is "THE PREAMBLE IS STILL BEING CONSUMED". It is the one
+        ; byte the preamble costs and it is the encoder's dead scratch, which
+        ; belongs to nothing today.
+        ;
+        ; IT IS SEEDED TO 1, and the first version seeded it to ZERO because
+        ; the `LDI A, 1` was left out and the preceding `LDI A, 0` was still in
+        ; scope. The comment said 1 and the instruction said 0, which is this
+        ; act's own recurring defect in its purest form: a comment that is
+        ; right and an instruction that is not, and the second is the one that
+        ; runs. Measured: every byte_done took the store path, so the preamble
+        ; was banked as payload -- four bytes banked, dmem[9] left at 4, and
+        ; dmem[3] never written, which is why the flag stayed 0xFF and the
+        ; receive bytes came out 1c 1c 1c.
+        ;
+        ; And the value has to be 1 because the FIRST thing on the wire is
+        ; supposed to be a preamble: a receiver that starts with this clear
+        ; banks the preamble as payload, which is what the act did for a whole
+        ; day. The alternative -- no flag, and a phase inferred from the byte
+        ; index -- is AMBIGUOUS, because the payload's own first byte reaches
+        ; dmem[9] = 1 with dmem[7] = 7 exactly as the preamble's second run
+        ; does, and the two cannot be told apart from the counters alone. That
+        ; ambiguity is the reason this byte exists.
+        LDI   A, 1
+        STM   13, A
         STM   5, A             ; THE TIMESTAMP OF THE LAST CHANGE, and the
                                ; init omitted this one too. the_pin READS
                                ; dmem[5] (LDM A,14 / SUB A,5) before it ever
@@ -349,6 +373,39 @@ bit_store:
         LDM   A, 7             ; are 0 or 1, so the sum never carries
         ADD   A, 1
         STM   7, A
+        ; ---- IS THE PREAMBLE OVER? --------------------------------------
+        ; SEVEN MORE BITS finish the preamble. Sixteen preamble bits go on the
+        ; wire and FIFTEEN arrive -- the first transition is taken by the
+        ; resync, and it is taken the SAME WAY under both polarities, so the
+        ; count is fifteen either way and not sixteen under one of them. Eight
+        ; of them came in as the first byte, which byte_done has just handled,
+        ; and these seven are the rest: preamble bits 9..15.
+        ;
+        ; And this state -- dmem[9] = 1 with dmem[7] = 7 -- is where the
+        ; preamble and the payload are INDISTINGUISHABLE from the counters
+        ; alone, because the payload's own first byte arrives in exactly the
+        ; same state. dmem[13] is what tells them apart, which is the whole
+        ; reason it is a byte and not a derivation, and the reason the polarity
+        ; check needed it too: without the flag, a payload byte of 0x80 would
+        ; have been read as an FM0 preamble and the flag would have been wrong
+        ; once in every eight frames, which is the kind of fault that looks
+        ; like a flaky wire.
+        LDM   A, 13
+        JZ    bit_counted       ; not the preamble: carry on into the payload
+        LDM   X, 7
+        LDI   A, 7
+        SUB   A, X             ; zero iff seven bits are in hand
+        JNZ   bit_counted
+        LDI   A, 0
+        STM   13, A            ; THE PREAMBLE IS OVER
+        STM   12, A            ; and its bits are thrown away, never banked
+        STM   7, A
+        STM   9, A             ; dmem[9] back to 0, so the payload's first
+        STM   0, A             ; byte lands in slot 0. dmem[0] is cleared as
+                               ; well: the one preamble byte that was assembled
+                               ; was never stored, so this is belt and braces
+                               ; against a later version that does store it.
+bit_counted:
         LDI   A, 8
         LDM   X, 7             ; THE SAME FAULT AS THE ONE EIGHT INSTRUCTIONS
                                ; ABOVE, IN THE SAME SHAPE: `LDI A, 8 / SUB A, 1`
@@ -368,6 +425,58 @@ bit_store:
 byte_done:
         LDI   A, 0
         STM   7, A             ; the bit counter starts again for the next byte
+        ; ---- IS THIS THE PREAMBLE'S FIRST BYTE? -------------------------
+        ; THE POLARITY IS HERE AND NOWHERE ELSE, and the recipe for this step
+        ; said it would be the LEVEL before the four-microsecond gap. It is
+        ; better here, for three reasons that all come from this machine:
+        ;
+        ;   1. THE ASSEMBLED BYTE IS 0x80 OR 0x00 AND NOTHING ELSE. The
+        ;      receiver loses the first transition to the resync, so what
+        ;      arrives first is preamble bits 1..8: bits 1..7 are zeros and
+        ;      bit 8 is the FIRST ONE of the second run. So the first byte
+        ;      assembled out of the preamble is exactly 0x80 if the sender
+        ;      marked a one HIGH (FM0) and exactly 0x00 if it marked a one LOW
+        ;      (FM1). A test for "is this byte 0x80" is one comparison against
+        ;      one constant.
+        ;   2. IT COSTS NO BYTE. The recipe's version needs a flag to say "I
+        ;      have seen the gap" and a counter to say which transition the
+        ;      gap was. This version needs neither: byte_done already exists
+        ;      and dmem[12] already holds the byte.
+        ;   3. IT NEEDS NO SHIFT-RIGHT, because this ISA has none. Reading ONE
+        ;      BIT out of a byte is the hard part of any polarity check on
+        ;      this machine, and a whole-byte comparison sidesteps it: the
+        ;      low seven bits of that byte are all zero by construction, so
+        ;      "bit 7 is set" and "the byte is 0x80" are the same test.
+        ;
+        ; AND IT CANNOT BE FOOLED BY PAYLOAD, because a payload byte is only
+        ; compared while dmem[13] says the preamble is still running, and the
+        ; flag is cleared before the payload's first bit is stored.
+        LDM   A, 13
+        JZ    store_dispatch    ; not the preamble: bank the byte as usual
+        LDM   X, 12
+        LDI   A, 0x80
+        SUB   A, X
+        JZ    locked_fm0        ; 1000_0000 -- the eighth bit was a ONE, so the
+                               ; sender marks a one HIGH. That is FM0.
+        LDI   A, 1
+        STM   3, A             ; 0000_0000 -- the eighth bit was a ZERO, so the
+        JMP   preamble_continue ; sender marks a one LOW. That is FM1, and it
+                               ; is the SAME three bytes with every bit
+                               ; inverted, which is the failure this act exists
+                               ; to be able to name rather than suffer.
+locked_fm0:
+        LDI   A, 0
+        STM   3, A             ; FM0, and dmem[3] is now MEASURED off the wire
+preamble_continue:
+        ; DO NOT BANK THE PREAMBLE. The byte just assembled is a preamble byte
+        ; and nothing else, and storing it would leave garbage in dmem[0] that
+        ; the payload would then have to overwrite -- which it does not, because
+        ; the payload's own three bytes go to dmem[0..2] and the preamble is
+        ; sixteen bits and one byte short of sixteen.
+        LDI   A, 1
+        STM   9, A             ; dmem[9] counts the preamble's SECOND run now
+        JMP   main
+store_dispatch:
         ; THE DISPATCH IS ON dmem[9] ALONE, and it was not. The first version
         ; computed `LDM A,12 / ADD A,X` and then tested the SUM for zero, then
         ; one, else two -- so it dispatched on `byte + index`, which is zero
