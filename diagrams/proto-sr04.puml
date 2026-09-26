@@ -133,13 +133,13 @@ note bottom of BNK
   mutant. That is also why the measured count is written down as 601 rather
   than as "10 us".
   ...
-  <b>AND WHAT IS STILL UNCOVERED:</b> two of 62 is thin for an act whose whole
-  claim is an equality. sr-trig-count exercises the TIMING; sr-q-mask exercises
-  the BIG TERM of the conversion. <b>Nothing yet perturbs the SMALL TERM</b>,
-  floor(11r/64) - and the mutant that would do it, forcing the small term to
-  zero, is invisible in exactly the run one might expect. That is the
-  tabulated blindness in the CON note above, and it is why "two cases" should
-  be read as a start rather than as coverage.
+<b>THE THREE CASES COVER EVERY WIDTH, AND THEY DO IT BY COMPLEMENTARITY</b>\n  rather than by volume.\n  ...
+  | case | the term it reaches | its own blind spot |
+  | <b>sr-trig-count</b> | the TIMING - 601 clocks | none, and only the equality catches it |
+  | <b>sr-q-mask</b> | the BIG TERM | r = 0 only, i.e. 8 000 us |
+  | <b>sr-term-shift</b> | the SMALL TERM floor(11r/64) | r != 0 only |
+  ...
+  sr-q-mask and sr-term-shift are COMPLEMENTS: between them they reach every width\n  in the set, and each is invisible to the other BY CONSTRUCTION. Three cases,\n  ONE PER FAILURE MODE, none covering another's blind spot - a better shape\n  than a larger set drawn from the same region.
 end note
 
 

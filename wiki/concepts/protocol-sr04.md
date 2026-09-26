@@ -205,9 +205,9 @@ truncation is a no-op.
 
 ## The mutation coverage that pins the testbench
 
-`regress/mutate_timing_tb.sh` carries **62** cases across the timing family, and **two
-of them are `sr04`**. An earlier revision of this page said it had none; that was true
-when written and is corrected here rather than quietly dropped.
+`regress/mutate_timing_tb.sh` carries **62 distinct cases** across the timing
+family (63 case *lines* - `fm-per-base` is listed twice, a defect in that
+harness, not here), and **three of them are `sr04`**.
 
 | case | the change | what catches it, and why it is worth a case |
 |---|---|---|
@@ -226,13 +226,26 @@ was run. It is a slip no reviewer would catch: one bit of one mask, invisible in
 of four runs, and the only thing that notices is the input whose high byte happens to
 have that bit set.
 
-**What is still not covered, and the direction matters.** Two cases out of 62 is thin
-for an act whose whole claim is an equality, and note which term each one exercises:
-`sr-trig-count` exercises the **timing**, `sr-q-mask` exercises the **big term** of
-the conversion. Nothing yet perturbs the **small** term, `floor(11r/64)`, and the
-mutant that would do it - forcing the small term to zero - is invisible in exactly the
-run one might expect it to be caught by. That is the tabulated blindness above, and it
-is why "two cases" should be read as a start rather than as coverage.
+**What is still uncovered, and the direction matters.** Note which term each case
+exercises: `sr-trig-count` exercises the **timing**, `sr-q-mask` exercises the **big
+term** of the conversion. Nothing *merged* perturbs the **small** term,
+`floor(11r/64)`, and the mutant that would do it - forcing the small term to zero - is
+invisible in exactly the run one might expect, which is the tabulated blindness above.
+
+**That gap is CLOSED, and the closure is a complementarity rather than a
+volume.** `sr-term-shift` (`e6ff51d`) is the complement of `sr-q-mask`: `sr-q-mask`
+reaches only the `r = 0` run and `sr-term-shift` only the `r != 0` ones, so between
+them the pair covers **every width in the set** — and each is invisible to the other by
+construction. Three cases, one per term of the conversion plus the timing:
+
+| case | what it reaches |
+|---|---|
+| `sr-trig-count` | the **timing** — 601 clocks, and only the equality catches it |
+| `sr-q-mask` | the **big term**, and only at `r = 0` (8 000 µs) |
+| `sr-term-shift` | the **small term** `floor(11r/64)`, and only at `r != 0` |
+
+Three cases, one per failure mode, none of them covering another's blind spot: that
+is a better shape than a larger set drawn from the same region.
 
 ## Limits, stated rather than implied
 
@@ -246,8 +259,8 @@ is why "two cases" should be read as a start rather than as coverage.
 - **The 11/64 constant is 0.22 % long.** The arithmetic is exact *for that constant*;
   the ranging inherits the constant's error, and the two claims are kept apart above
   rather than merged into one word.
-- **Two mutation cases out of 62, and neither perturbs the small term.** Stated
-  above, with what is covered and what is not.
+- **Two merged mutation cases; the small term's case is written but not
+  merged** (`sr-term-shift`, `e6ff51d`). Stated above, with the complementarity.
 
 ## What changed, and why this page says so
 
