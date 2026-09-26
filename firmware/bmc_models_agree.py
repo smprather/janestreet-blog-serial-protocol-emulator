@@ -258,8 +258,28 @@ def self_test():
     except SystemExit:
         print("  ok    a length mismatch is refused, not compared")
 
-    print("SELF-TEST: %s" % ("all comparison cases hold" if ok else "FAILED"))
-    return 0 if ok else 1
+    # THE VERDICT LINE MATCHES run_case's CONTRACT, and that is not a detail.
+    # regress/run_firmware_tests.sh decides on `grep -q '^PASS'`, so a self-test
+    # that prints "SELF-TEST: all comparison cases hold" and EXITS 0 is a RED
+    # case -- and that is exactly how this one arrived: wired in as a run_case
+    # during a full regression, 42 of 43 passing with the model-agreement
+    # self-test red, and the check itself green. The exit code was right, the
+    # printed verdict was in a shape no gate reads. **A check that cannot be
+    # read by the thing that runs it is a red case however correct it is.**
+    if ok:
+        print(
+            "PASS: the model-agreement COMPARISON, self-tested without a "
+            "simulation -- identical strings agree, a flipped bit at either "
+            "end is caught, a whole inverted byte is caught, and a length "
+            "mismatch is refused rather than compared"
+        )
+        return 0
+    print(
+        "FAIL: the model-agreement comparison does not do what it claims. It is "
+        "the branch that catches two implementations of one specification "
+        "disagreeing, and it has just been shown not to be that."
+    )
+    return 1
 
 
 def main():

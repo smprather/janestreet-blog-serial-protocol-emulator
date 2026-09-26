@@ -4229,3 +4229,45 @@ which is exactly the direction this act spent its whole session moving.
 **The act's name is bi-phase LOOPBACK and the loop is closed in both
 directions, by a decoder on each side that the other side's polarity cannot
 fool** -- which was the whole argument for choosing loopback over anything else.
+
+### AND THE CLOSING REGRESSION CAUGHT A GATE I HAD ADDED THAT WAS RED
+
+    FIRMWARE: 43   PASS: 42   FAIL: 1
+    failed: bi-phase: model-agree self-test
+
+**A gate I wired earlier this session, red, while the check behind it was
+green and exiting 0.** `regress/run_firmware_tests.sh` decides on
+`grep -q '^PASS'`, and the self-test printed
+
+    SELF-TEST: all comparison cases hold          exit 0
+
+**-- the right answer, in a shape no gate reads.** `run_case` saw no `PASS`
+line, so a case that exits 0 and passes every one of its five cases was
+recorded as a FAILURE.
+
+**THIS IS THE THIRD TIME IN THIS ACT THAT SOMETHING CORRECT WAS INVISIBLE
+BECAUSE OF THE SHAPE OF WHAT IT PRINTED**, and the three are the same fault at
+three scales:
+
+1. the timing suite's **table** said PASS while the **exit code** said
+   something else, and the gate reads the exit code;
+2. the model's `iv0 == iv1` property looked like a second witness and was a
+   restatement, because nobody asked what could make it fail;
+3. **this** -- a self-test that exits 0, passes all five cases, and is red
+   because its verdict line does not start with the word the runner greps for.
+
+**AND THE FIX IS THE SAME IN ALL THREE: A THING THAT CANNOT BE READ BY THE
+THING THAT RUNS IT IS NOT A RESULT.** Here it is one line and it is proven both
+ways -- `PASS:` on success, `FAIL:` on failure, and forcing `compare_one` to
+report a disagreement as an agreement makes the self-test exit 1 and say so:
+
+    FAIL: the model-agreement comparison does not do what it claims. It is
+    the branch that catches two implementations of one specification
+    disagreeing, and it has just been shown not to be that.
+    forced-bad self-test exit: 1 (want 1)
+
+    FIRMWARE: 43   PASS: 43   FAIL: 0
+
+**AND IT WAS FOUND BY RUNNING THE REGRESSION, which is the only thing that
+would have found it** -- the same session that added the gate could not, because
+adding it and having it run are different events.
