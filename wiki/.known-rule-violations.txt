@@ -87,4 +87,11 @@
 #
 # IF YOU HAVE TO PIN SOMETHING AGAIN: fix the page first. A pin is a record that
 # a rule is currently not met, and the whole value of this file was that every
-# line in it was true. See regress/check_wiki_pages.sh for the rules themselves.
+# ONE THING WORTH CARRYING FORWARD, from the pins that were here: a page can
+# carry TWO violations under two rules, and the baseline only ever named the one
+# that happened to be structural. `concepts/host-stack` arrived on main with one
+# outbound wikilink AND an off-taxonomy tag; the link got a pin, the tag was fixed
+# properly by extending the taxonomy (20 -> 44 over two rounds). So reading the
+# GATE-S OUTPUT is how you find out what a page is actually wrong about - the
+# baseline only records what someone thought to pin.
+

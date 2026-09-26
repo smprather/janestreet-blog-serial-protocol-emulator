@@ -236,6 +236,70 @@ fail() { printf '  FAIL: %s\n' "$*"; FAILURES=$((FAILURES + 1)); }
 ok()   { printf '  ok:   %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# ---- the PINNED BASELINE -----------------------------------------------------
+# A pin records that a rule is currently not met, so a gate written today can be
+# green against a corpus carrying defects OWNED BY OTHER PEOPLE. It is only safe
+# because it is enforced BOTH ways: a stale render not listed is NEW and red, and
+# a listed render that is no longer stale is STALE-PIN and red. Without the second
+# half a pin outlives its defect and the log and the tree disagree with nothing to
+# say which is true. It earned that in the wild: it caught four of its own
+# author's pins within one merge, written against a branch behind main.
+#
+# Both lists carry a LEADING newline on purpose - the membership test matches
+# "<nl>item<nl>", so without it the first element could never match itself.
+PINFILE="$REPO/wiki/.known-stale-diagrams.txt"
+PIN_DECLARED=$'\n'
+PIN_HITS=$'\n'
+load_pins() {
+  [ -f "$PINFILE" ] || {
+    printf 'check_diagrams: HARNESS ERROR - %s is missing, so a known-stale render cannot be told from a new one\n' "$PINFILE"
+    exit 1
+  }
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ''|'#'*) continue ;; esac
+    # shellcheck disable=SC2086  # word splitting is the point: $1=file, $2..=reason
+    set -- $line
+    if [ "$#" -lt 2 ]; then
+      printf 'check_diagrams: HARNESS ERROR - malformed line in %s:\n  %s\n  expected: <render-file> <reason>\n' "$PINFILE" "$line"
+      exit 1
+    fi
+    PIN_DECLARED="${PIN_DECLARED}$1
+"
+  done < "$PINFILE"
+}
+_in_list() {
+  case "$1" in *"
+$2
+"*) return 0 ;; *) return 1 ;; esac
+}
+# A stale render whose name is pinned: reported, recorded as FIRED, not counted.
+pin_note() {
+  _in_list "$PIN_DECLARED" "$1" || return 1
+  PIN_HITS="${PIN_HITS}$1
+"
+  printf '  note: %s is STALE but PINNED (known-stale, awaiting its owner-s re-render)\n' "$1"
+  return 0
+}
+# After the checks: EVERY declared pin must have fired. The two ways one can fail
+# to are told apart because the remedies differ - the render was fixed (collect
+# the pin) versus the render is gone (which is its own news).
+pin_audit() {
+  local rel why
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    _in_list "$PIN_HITS" "$rel" && continue
+    why=$(awk -v k="$rel" '$1==k { $1=""; sub(/^ /,""); print; exit }' "$PINFILE" 2>/dev/null)
+    if [ ! -e "$REPO/diagrams/$rel" ]; then
+      fail "STALE-PIN-ABSENT $rel - pinned as known-stale but the render is not in diagrams/ at all: collect the pin AND check the render was not lost (pinned reason: ${why:-none})"
+    else
+      fail "STALE-PIN $rel - pinned as known-stale but is no longer stale, so the pin has outlived its defect: DELETE this line from $PINFILE (pinned reason: ${why:-none})"
+    fi
+  done <<PINLIST
+$PIN_DECLARED
+PINLIST
+}
+
 # ---- the stems PlantUML produces for an N-block source ---------------------
 block_count() { grep -c '^[[:space:]]*@startuml' "$1" 2>/dev/null || echo 0; }
 
@@ -421,7 +485,13 @@ check_dir() {
           # Inconclusive while the toolchain differs: the bytes may simply be
           # another renderer's. A hard failure here is the red that no diagram
           # change can clear, which is the defect being fixed.
-          if [ "$tc_rc" -ne 0 ]; then
+          # A PINNED stale render is reported and NOT counted, and it is
+          # consulted BEFORE bad=1 is set: suppressing only the message left the
+          # stem counted as a failing directory, so the gate printed no FAIL line
+          # and still exited 1 - a red that names nothing.
+          if pin_note "$(basename "$committed")"; then
+            :
+          elif [ "$tc_rc" -ne 0 ]; then
             [ "$quiet" = "1" ] || printf '  inconclusive: %s differs from a fresh render, but the toolchain differs\n' "$(basename "$committed")"
           else
             bad=1
@@ -779,7 +849,10 @@ case "${1:-}" in
     printf '    multi-block convention: block 1 is <stem>, blocks 2..N are\n'
     printf '    <stem>_001..<stem>_(N-1), in BOTH .png and .svg, beside the source\n'
     FAILURES=0
+    load_pins
     check_dir "$REPO/diagrams" "diagrams/"
+    # the anti-staleness half, judged only once we know which pins actually fired
+    pin_audit
     if [ "$FAILURES" -eq 0 ]; then
       printf '\ndiagrams: OK\n'; exit 0
     fi

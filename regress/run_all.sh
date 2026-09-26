@@ -806,6 +806,25 @@ else
   tail -20 /tmp/check_wiki_pages.log
   stale=1
 fi
+# THE NEGATIVE CONTROL FOR BOTH GATES ABOVE, and this is the line whose absence
+# is the real lesson. The gates had been wired and green while nothing ever ran
+# the test that proves they can fail - so a future edit could break a case, or
+# break the wiring, and the full regression would be green and say nothing about
+# it. That is the same drift regress/check_harness_preflight.sh exists to stop for
+# the mutation harnesses, one level up: there, the wiring was correct on the day
+# it was written and nothing asserted it; here, the wiring was not even being
+# executed. Its own cases are built on synthetic fixtures rather than on corpus
+# pages, because a corpus page's state must never be a precondition for the test
+# that verifies the corpus - that coupling was found by another worker, in the
+# STALE case, after it had already been written that way.
+if bash regress/test_check_wiki_pages.sh > /tmp/test_check_wiki_pages.log 2>&1; then
+  echo "wiki gate negative control: OK ($(tail -1 /tmp/test_check_wiki_pages.log))"
+else
+  echo "wiki gate negative control: FAILED (see /tmp/test_check_wiki_pages.log)"
+  tail -25 /tmp/test_check_wiki_pages.log
+  stale=1
+fi
+
 # The DIAGRAMS, which until this gate existed had NO gate at all: 22 .puml
 # sources and 84 renders whose entire value is that they are correct pictures of
 # the code, with nothing in the suite that would have noticed one going stale,
@@ -828,6 +847,20 @@ fi
 # digest is the same one regress/mutate_fwbus_tb.sh adopted.
 _diag_wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
 [ -n "$_diag_wt" ] || _diag_wt=shared
+# The FILE-LINK gate. The gates above ask whether the wiki's own RULES hold; this
+# one asks the question a reader actually has — does this link go anywhere. It is
+# the check that would have caught the README gallery losing its `proto-` prefix,
+# which broke 37 links in one commit and was found by a person reading the
+# rendered page. Scoped to the LIVE surface (wiki/** minus raw/, README, docs/) by
+# ruling: reviews/ records are evidence, and a path in one that was true when
+# written must not be rewritten to follow a rename, nor flagged forever.
+if bash regress/check_wiki_links.sh > /tmp/check_wiki_links.log 2>&1; then
+  echo "document links: OK ($(grep -m1 'document(s) scanned' /tmp/check_wiki_links.log | sed 's/^ *//'))"
+else
+  echo "document links: FAILED (see /tmp/check_wiki_links.log)"
+  tail -20 /tmp/check_wiki_links.log
+  stale=1
+fi
 if bash tools/diag/check_diagrams.sh > "/tmp/check_diagrams.${_diag_wt}.log" 2>&1; then
   echo "diagrams: OK ($(grep -c '^  ok:' "/tmp/check_diagrams.${_diag_wt}.log") check(s) passed; see tools/diag/check_diagrams.sh)"
 else
