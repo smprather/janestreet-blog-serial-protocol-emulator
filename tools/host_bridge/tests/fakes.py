@@ -14,16 +14,16 @@ class FakeTTAdapter:
         self.calls: list[tuple] = []
         self.project_calls: list[str] = []
         self.clock_calls: list[int] = []
-        self.clock_stops = 0          # exists only to prove it is never called
+        self.clock_stops = 0  # exists only to prove it is never called
         self.reset_calls: list[bool] = []
         self.run_calls: list[bool] = []
         self.spi_rates: list[int] = []
         self.transfers: list[bytes] = []
         # Test hooks
-        self.fail_transfer = False    # raise OSError: simulate no MISO
+        self.fail_transfer = False  # raise OSError: simulate no MISO
         self.corrupt_responses = False
-        self.run_lock = False         # ignore set_run: simulate a stuck strap
-        self.wait_words = 0           # leading 0xFFFF filler before the frame
+        self.run_lock = False  # ignore set_run: simulate a stuck strap
+        self.wait_words = 0  # leading 0xFFFF filler before the frame
         # Trailing words the host clocked out AFTER the response, i.e. the
         # released pad's idle level. The real adapter always reads a fixed
         # budget (`read_words`) and gets whatever the pad says once the chip
@@ -50,7 +50,7 @@ class FakeTTAdapter:
         self.calls.append(("set_clock", hz))
         return hz
 
-    def stop_clock(self) -> None:       # not part of the HAL contract
+    def stop_clock(self) -> None:  # not part of the HAL contract
         self.clock_stops += 1
 
     def reset(self, active: bool) -> None:

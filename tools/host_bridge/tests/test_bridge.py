@@ -25,15 +25,15 @@ WORDS = (0x0041, 0x1001, 0x4002)
 PROJECT = "tt_um_protocol_emulator"
 
 
-def make_bridge(*, irq_supported=False, project: str | None = PROJECT,
-                max_line=65536):
+def make_bridge(*, irq_supported=False, project: str | None = PROJECT, max_line=65536):
     # `project` is genuinely optional on the bridge (`PicoBridge(project=None)`
     # is a supported configuration - a board with no project selection), so the
     # helper says so rather than letting the default's type hide it.
     pe = F.FakePE()
     adapter = FakeTTAdapter(pe, irq_supported=irq_supported)
-    bridge = M.PicoBridge(adapter, project=project, sleep=lambda _seconds: None,
-                          max_line=max_line)
+    bridge = M.PicoBridge(
+        adapter, project=project, sleep=lambda _seconds: None, max_line=max_line
+    )
     return bridge, adapter, pe
 
 
@@ -62,8 +62,9 @@ class TestPeFrameGoldenVectors(unittest.TestCase):
         for entry in self.golden["frames"]:
             with self.subTest(name=entry["name"]):
                 payload = bytes.fromhex(entry["payload_hex"])
-                raw = PF.encode_frame(entry["opcode"], entry["sequence"],
-                                      entry["target"], payload)
+                raw = PF.encode_frame(
+                    entry["opcode"], entry["sequence"], entry["target"], payload
+                )
                 self.assertEqual(raw.hex(), entry["frame_hex"])
                 frame = PF.decode_frame(raw)
                 self.assertEqual(frame.version, PF.VERSION)
@@ -77,12 +78,18 @@ class TestPeFrameGoldenVectors(unittest.TestCase):
             with self.subTest(name=entry["name"]):
                 payload = bytes.fromhex(entry["payload_hex"])
                 self.assertEqual(
-                    PF.encode_frame(entry["opcode"], entry["sequence"],
-                                    entry["target"], payload),
-                    P.encode_frame(entry["opcode"], entry["sequence"],
-                                   entry["target"], payload))
-                host = P.decode_frame(PF.encode_frame(
-                    entry["opcode"], entry["sequence"], entry["target"], payload))
+                    PF.encode_frame(
+                        entry["opcode"], entry["sequence"], entry["target"], payload
+                    ),
+                    P.encode_frame(
+                        entry["opcode"], entry["sequence"], entry["target"], payload
+                    ),
+                )
+                host = P.decode_frame(
+                    PF.encode_frame(
+                        entry["opcode"], entry["sequence"], entry["target"], payload
+                    )
+                )
                 self.assertEqual(host.payload_bytes, payload)
 
     def test_malformed_frames_are_rejected(self):
@@ -112,10 +119,16 @@ class TestPeFrameGoldenVectors(unittest.TestCase):
         self.assertEqual(PF.decode_frame(stripped).sequence, 7)
         # a 0xFFFF payload word is data, not a wait word (leading-only skip):
         # the frame starts at its A55A sync, so a 0xFFFF data word survives.
-        response = PF.encode_frame(P.OP_READ_IMEM | P.RESPONSE_BIT, 1, P.TARGET_HOST,
-                                   PF.words_to_bytes((P.STATUS_OK, 0xFFFF, 0x0041)))
-        self.assertEqual(PF.decode_frame(PF.strip_wait_words(response)).payload,
-                         (P.STATUS_OK, 0xFFFF, 0x0041))
+        response = PF.encode_frame(
+            P.OP_READ_IMEM | P.RESPONSE_BIT,
+            1,
+            P.TARGET_HOST,
+            PF.words_to_bytes((P.STATUS_OK, 0xFFFF, 0x0041)),
+        )
+        self.assertEqual(
+            PF.decode_frame(PF.strip_wait_words(response)).payload,
+            (P.STATUS_OK, 0xFFFF, 0x0041),
+        )
         # all-filler raises rather than decoding filler as a frame
         self.assertRaises(PF.FrameError, PF.strip_wait_words, b"\xff\xff" * 20)
 
@@ -186,8 +199,7 @@ class TestTrailingIdleWordsAreDiscarded(unittest.TestCase):
                 adapter.wait_words = wait
                 adapter.idle_words = 15
                 adapter.idle_value = idle
-                result, _ = call(bridge, 1, "read_imem",
-                                 {"address": 0, "count": 2})
+                result, _ = call(bridge, 1, "read_imem", {"address": 0, "count": 2})
                 self.assertTrue(result["ok"], result)
                 self.assertEqual(len(result["result"]["words"]), 2)
 
@@ -202,17 +214,21 @@ class TestTrailingIdleWordsAreDiscarded(unittest.TestCase):
     def test_a_ffff_payload_word_is_still_data(self):
         """Trimming to the length field must not eat payload data."""
         response = PF.encode_frame(
-            P.OP_READ_IMEM | P.RESPONSE_BIT, 1, P.TARGET_HOST,
-            PF.words_to_bytes((P.STATUS_OK, 0xFFFF, 0x0041)))
+            P.OP_READ_IMEM | P.RESPONSE_BIT,
+            1,
+            P.TARGET_HOST,
+            PF.words_to_bytes((P.STATUS_OK, 0xFFFF, 0x0041)),
+        )
         # ...even when a 0xFFFF data word is followed by more 0xFFFF padding,
         # which is the one case where "skip 0xFFFF" would have been wrong
         padded = response + b"\xff\xff" * 4
-        self.assertEqual(PF.decode_frame(PF.strip_wait_words(padded)).payload,
-                         (P.STATUS_OK, 0xFFFF, 0x0041))
+        self.assertEqual(
+            PF.decode_frame(PF.strip_wait_words(padded)).payload,
+            (P.STATUS_OK, 0xFFFF, 0x0041),
+        )
 
     def test_an_all_filler_stream_is_still_a_timeout(self):
-        self.assertRaises(PF.FrameError, PF.strip_wait_words,
-                          b"\xff\xff" * 20)
+        self.assertRaises(PF.FrameError, PF.strip_wait_words, b"\xff\xff" * 20)
 
     def test_a_truncated_frame_is_rejected_not_padded(self):
         """Strictness preserved: short is an error, never a zero-filled frame.
@@ -235,8 +251,7 @@ class TestHelloPrepare(unittest.TestCase):
         self.assertEqual(result["protocol_version"], 1)
         self.assertEqual(result["clock_hz"], 60_000_000)
         self.assertEqual(result["sclk_hz_max"], 5_000_000)
-        self.assertEqual(result["pads"],
-                         {"cs_n": 4, "mosi": 5, "miso": 6, "sck": 7})
+        self.assertEqual(result["pads"], {"cs_n": 4, "mosi": 5, "miso": 6, "sck": 7})
         self.assertEqual(adapter.project_calls, [PROJECT])
         self.assertEqual(adapter.clock_calls, [60_000_000])
         self.assertEqual(events, [])
@@ -294,10 +309,8 @@ class TestLoad(unittest.TestCase):
         self.assertFalse(pe.run)
         self.assertEqual(len(adapter.transfers), transfers + 1)
         calls = adapter.calls
-        last_run_false = max(i for i, c in enumerate(calls)
-                             if c == ("set_run", False))
-        last_transfer = max(i for i, c in enumerate(calls)
-                            if c[0] == "spi_transfer")
+        last_run_false = max(i for i, c in enumerate(calls) if c == ("set_run", False))
+        last_transfer = max(i for i, c in enumerate(calls) if c[0] == "spi_transfer")
         self.assertLess(last_run_false, last_transfer)
 
     def test_load_frame_is_the_planned_opcode_and_words(self):
@@ -349,7 +362,7 @@ class TestLoad(unittest.TestCase):
         bridge, adapter, pe = make_bridge()
         call(bridge, 1, "hello")
         call(bridge, 2, "prepare")
-        adapter.run_lock = True          # the strap cannot be dropped
+        adapter.run_lock = True  # the strap cannot be dropped
         pe.run = True
         response, _ = call(bridge, 3, "load", {"words": list(WORDS)})
         result = response["result"]
@@ -357,7 +370,7 @@ class TestLoad(unittest.TestCase):
         self.assertEqual(result["faults"], 0)
         self.assertTrue(pe.run)
         response, _ = call(bridge, 4, "start")
-        self.assertFalse(response["ok"])   # the rejected load did not mark loaded
+        self.assertFalse(response["ok"])  # the rejected load did not mark loaded
 
     def test_load_rejects_non_integer_words(self):
         bridge, adapter, _ = make_bridge()
@@ -380,8 +393,9 @@ class TestStartStop(unittest.TestCase):
         call(bridge, 1, "hello")
         call(bridge, 2, "prepare")
         call(bridge, 3, "load", {"words": list(WORDS)})
-        transfer_index = max(i for i, c in enumerate(adapter.calls)
-                             if c[0] == "spi_transfer")
+        transfer_index = max(
+            i for i, c in enumerate(adapter.calls) if c[0] == "spi_transfer"
+        )
         response, events = call(bridge, 4, "start")
         self.assertTrue(response["ok"])
         run_true_index = adapter.calls.index(("set_run", True))
@@ -425,25 +439,24 @@ class TestReads(unittest.TestCase):
 
     def test_read_imem_and_dmem_when_stopped(self):
         call(self.bridge, 3, "load", {"words": list(WORDS)})
-        response, _ = call(self.bridge, 4, "read_imem",
-                           {"address": 1, "count": 2})
+        response, _ = call(self.bridge, 4, "read_imem", {"address": 1, "count": 2})
         self.assertEqual(response["result"]["words"], [0x1001, 0x4002])
         self.pe.dmem[0:3] = b"\x0a\x0b\x0c"
-        response, _ = call(self.bridge, 5, "read_dmem",
-                           {"address": 0, "count": 3})
+        response, _ = call(self.bridge, 5, "read_dmem", {"address": 0, "count": 3})
         self.assertEqual(response["result"]["bytes"], [0x0A, 0x0B, 0x0C])
 
     def test_memory_and_dump_are_gated_while_running(self):
         call(self.bridge, 3, "load", {"words": list(WORDS)})
         call(self.bridge, 4, "start")
         transfers = len(self.adapter.transfers)
-        for op, args in (("read_imem", {"address": 0, "count": 1}),
-                         ("read_dmem", {"address": 0, "count": 1}),
-                         ("dump_core", {})):
+        for op, args in (
+            ("read_imem", {"address": 0, "count": 1}),
+            ("read_dmem", {"address": 0, "count": 1}),
+            ("dump_core", {}),
+        ):
             with self.subTest(op=op):
                 response, _ = call(self.bridge, 5, op, args)
-                self.assertEqual(response["result"]["status"],
-                                 P.STATUS_NOT_READY)
+                self.assertEqual(response["result"]["status"], P.STATUS_NOT_READY)
         self.assertEqual(len(self.adapter.transfers), transfers)
         self.assertTrue(self.pe.run)
         self.assertEqual(self.pe.faults, 0)
@@ -452,8 +465,18 @@ class TestReads(unittest.TestCase):
         call(self.bridge, 3, "load", {"words": list(WORDS)})
         response, _ = call(self.bridge, 4, "dump_core")
         result = response["result"]
-        for key in ("state", "run", "target", "pc", "a", "x", "y", "timer",
-                    "faults", "words_written"):
+        for key in (
+            "state",
+            "run",
+            "target",
+            "pc",
+            "a",
+            "x",
+            "y",
+            "timer",
+            "faults",
+            "words_written",
+        ):
             self.assertIn(key, result)
         self.assertEqual(result["words_written"], 3)
 
@@ -476,7 +499,7 @@ class TestReads(unittest.TestCase):
         call(bridge, 2, "prepare")
         call(bridge, 3, "load", {"words": list(WORDS)})
         pe.dmem[0:3] = b"\x0a\x0b\x0c"
-        adapter.wait_words = 15           # worst case
+        adapter.wait_words = 15  # worst case
         response, _ = call(bridge, 4, "read_dmem", {"address": 0, "count": 3})
         self.assertTrue(response["ok"], response.get("error"))
         self.assertEqual(response["result"]["bytes"], [0x0A, 0x0B, 0x0C])
@@ -512,8 +535,7 @@ class TestReads(unittest.TestCase):
         response, _ = call(self.bridge, 3, "status")
         self.assertEqual(response["result"]["faults"], F.FAULT_LOAD)
         self.assertEqual(self.pe.faults, F.FAULT_LOAD)
-        response, _ = call(self.bridge, 4, "clear_fault",
-                           {"mask": F.FAULT_LOAD})
+        response, _ = call(self.bridge, 4, "clear_fault", {"mask": F.FAULT_LOAD})
         self.assertEqual(response["result"]["faults"], 0)
         self.assertEqual(self.pe.faults, 0)
 
@@ -530,8 +552,8 @@ class TestIrq(unittest.TestCase):
         self.assertEqual(events[0]["data"]["faults"], F.FAULT_LOAD)
         self.assertEqual(events[0]["data"]["status"]["faults"], F.FAULT_LOAD)
         self.assertEqual(len(adapter.transfers), transfers + 1)  # STATUS read
-        self.assertEqual(bridge.poll_irq(), [])                  # one event only
-        self.assertEqual(pe.faults, F.FAULT_LOAD)                # not cleared
+        self.assertEqual(bridge.poll_irq(), [])  # one event only
+        self.assertEqual(pe.faults, F.FAULT_LOAD)  # not cleared
 
     def test_irq_absent_is_a_noop(self):
         bridge, adapter, _ = make_bridge(irq_supported=False)
@@ -588,8 +610,8 @@ class TestProtocolLines(unittest.TestCase):
                 response, _ = call(bridge, 1, op, args)
                 self.assertFalse(response["ok"])
                 self.assertIn("integer", response["error"])
-        self.assertEqual(adapter.transfers, [])      # nothing reached the wire
-        response, _ = call(bridge, 2, "ping")        # the bridge is still alive
+        self.assertEqual(adapter.transfers, [])  # nothing reached the wire
+        response, _ = call(bridge, 2, "ping")  # the bridge is still alive
         self.assertTrue(response["ok"])
 
     def test_oversized_line_is_rejected(self):
@@ -631,10 +653,12 @@ class TestProtocolLines(unittest.TestCase):
 
     def test_serve_io_loop_until_eof_emits_usb_disconnect(self):
         bridge, _, _ = make_bridge()
-        lines = deque([
-            json.dumps({"v": 1, "id": 1, "op": "hello", "args": {}}) + "\n",
-            json.dumps({"v": 1, "id": 2, "op": "ping", "args": {}}) + "\n",
-        ])
+        lines = deque(
+            [
+                json.dumps({"v": 1, "id": 1, "op": "hello", "args": {}}) + "\n",
+                json.dumps({"v": 1, "id": 2, "op": "ping", "args": {}}) + "\n",
+            ]
+        )
 
         def readline():
             return lines.popleft().encode("utf-8") if lines else b""
