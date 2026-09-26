@@ -350,7 +350,14 @@ COVERAGE_GLOBS = ("diagrams/proto-*.puml", "wiki/concepts/protocol-*.md")
 # glob that swept them in would make the gate fail on a sibling's figure, which
 # is a worse failure than not checking it.
 OWNED_PROTOCOLS = (
-    "ws2812", "servo", "dht11", "ds18b20", "nec-ir", "freqmeter", "sr04", "fm-biphase",
+    "ws2812",
+    "servo",
+    "dht11",
+    "ds18b20",
+    "nec-ir",
+    "freqmeter",
+    "sr04",
+    "fm-biphase",
 )
 
 
