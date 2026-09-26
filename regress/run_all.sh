@@ -46,8 +46,12 @@ JOBS=$(nproc 2>/dev/null || echo 4)
 while [ $# -gt 0 ]; do
   case "$1" in
     --fast)   FAST=1 ;;
-    --cases)  FILTER_CASES="${2:-}"; shift ;;
+    # Most specific first: `--cases=REGEX` before the bare `--cases REGEX`.
+    # They do not actually overlap (the bare pattern has no glob characters, so
+    # it matches only the literal string), but shellcheck reports the later one
+    # as unreachable and a reader has to stop and re-derive that.
     --cases=*) FILTER_CASES="${1#--cases=}" ;;
+    --cases)  FILTER_CASES="${2:-}"; shift ;;
     -j*)      JOBS="${1#-j}" ;;
     -j)       shift; JOBS="${1:-$JOBS}" ;;
     -h|--help)
@@ -318,7 +322,14 @@ if [ -n "${FILTER_CASES:-}" ]; then
   _sel=(); _skip=0
   for c in "${CASES[@]}"; do
     IFS='|' read -r _n _r _t <<< "$c"
-    if printf '%s\n' "$_n $_t" | grep -qE "${FILTER_CASES}"; then _sel+=("$c"); else _skip=$((_skip + 1)); fi
+    # NAME and TOP are matched as SEPARATE lines, not as one "$_n $_t" line.
+    # That matters: a caller who anchors its pattern (^(a|b)$, which is what
+    # regress/verify_merge.sh builds from the case table) can then never match
+    # a two-field line, and the filter silently selects nothing. That is not
+    # hypothetical — verify_merge.sh's own GREEN demonstration hit it, and the
+    # only reason it was caught rather than believed is that the gate refuses
+    # to report a pass it cannot count.
+    if printf '%s\n' "$_n" "$_t" | grep -qE "${FILTER_CASES}"; then _sel+=("$c"); else _skip=$((_skip + 1)); fi
   done
   echo "(--cases ${FILTER_CASES}: ${#_sel[@]} selected, ${_skip} skipped)"
   if [ "${#_sel[@]}" -eq 0 ]; then

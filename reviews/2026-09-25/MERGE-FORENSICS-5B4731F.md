@@ -138,3 +138,72 @@ of 47 (45 skipped); a non-matching filter printed
    in-test `$?` read `tail`'s status, so the real exit code is still unverified).
 5. Wire the gate into the docs as the manager process (COLD-START.md checkpoint
    and/or `docs/demo-walkthrough.md`), then commit + push.
+
+---
+
+## 6. CLOSED (2026-09-25, post-`/new` session) — the gate exists and is demonstrated
+
+`regress/verify_merge.sh` is written, self-tested (18 checks) and demonstrated
+RED and GREEN. Everything the list above asked for is done; the four items below
+are what changed my mind while doing it, and each was found by the work itself.
+
+### 6.1 The three demonstrations
+
+| demo | how | result |
+| --- | --- | --- |
+| **RED on the real merge** | a scratch worktree at `5b4731f` with the gate copied in; the only difference from that commit is the gate plus `run_all.sh`'s `--cases` filter (`git diff 5b4731f HEAD -- regress/` is exactly those 22 lines) | `TOTAL: 45  PASS: 39  FAIL: 6` → **MERGE GATE: RED**, naming all six: `tb_pe_soc_ws2812 tb_pe_soc_servo tb_pe_soc_dht11 tb_pe_soc_ds18b20 tb_pe_soc_ir_nec tb_pe_soc_stepper_ramp`, with the documented signature (`dmem[14] = xx`). ~4.5 min. |
+| **GREEN on a benign merge** | a scratch worktree at `6da4100` (the last green main) plus a branch that adds a **comment** to `rtl/pe_codec_mux.v` and one line to `docs/demo-walkthrough.md`, merged `--no-ff` | **14 of 39 cases selected**, no escalation, `MERGE GATE: GREEN`. The doc churn is treated as inert and does NOT widen the run — the point of the record/inert split. |
+| **no-match exit code** | `./regress/run_all.sh --cases zzz_no_such_case \| tail -2` | **exit 2**, read with `${PIPESTATUS[0]}` — `$?` would have read `tail`'s 0. The wrap-state note that this was unverified is now settled. |
+
+The RED run also produced two unplanned demonstrations, both of them real gate
+behaviour rather than staged results: an **exit 137** (OOM-killed mid-loop) that
+the first version of the gate reported as *"RED, the affected set failed"* with
+an **empty** failure list, and a **GATE ERROR** when `run_all.sh` rejected a
+filter the gate itself had built. Both are now their own outcomes.
+
+### 6.2 FINDING: a non-zero exit with nothing named is NOT a red — it is INCONCLUSIVE
+
+The first RED demonstration died at exit 137 and my gate printed `RED … Failing
+testbenches:` followed by nothing. The suite had not said one testbench failed;
+it had not finished. A gate that prints RED there is making a claim its log does
+not support, in the exact shape that lets a red merge through. So the gate now
+exits **4 = INCONCLUSIVE** when `run_all.sh` fails with no named failing case,
+prints the causes in the order they have actually happened here (137/143 killed,
+75 the single-run lock, FATAL a missing SRAM model), and says explicitly that
+nothing here says the RTL is broken. Named-failure RED stays exit 1.
+
+### 6.3 FINDING: the gate and `run_all.sh --cases` disagreed, and the disagreement was invisible
+
+The GREEN demonstration selected 20 cases and `run_all.sh` reported
+`0 selected … matched NO case`. The reason: `run_all.sh` matched with
+`printf '%s\n' "$_n $_t" | grep -qE "$FILTER"` — **one** line, `"name top"` — so
+the anchored regex the gate builds (`^(a|b|c)$`) could never match it. An
+unanchored filter like `tb_pe_ctrl_r3$|tb_pe_cpu$` (which is what the wrap-state
+test used) matched by luck, which is why the defect survived part 1.
+
+Fixed on the filter's side (name and top are now matched as separate lines) and
+**pinned on the gate's side**: `--self-test` now builds a regex the way the
+driver does and matches it the way `run_all.sh` does, and requires the same
+count. The bug was not in a rule but in the hand-off between two files, and a
+hand-off needs a test like any other contract.
+
+Also fixed, from the same demonstration: the mapper was being called as
+`printf … | map_changed`, and a function on the right of a pipe runs in a
+**subshell** — so every value it set was discarded and the gate selected nothing
+while printing an empty mapping. Called with a here-string now, and the
+self-test's own counter is guarded for the same reason (it counts the rules it
+actually exercised, and fails if that is not the number it claims).
+
+### 6.4 What the gate does NOT narrow, stated so nobody is surprised
+
+`run_all.sh`'s firmware, param-guard, lint, doc, formal and **mutation** gates
+are unconditional, so even a one-case merge pays for all of them; what the
+mapping narrows is the RTL simulation loop, which is where the six acts failed.
+Mapping each mutation suite onto the RTL it mutates is the obvious next
+improvement and is **not** done here. Reported rather than assumed: the gate's
+value is that it is automatic, prints the affected set with reasons, and cannot
+be forgotten — not that it is fast.
+
+`regress/verify_merge.sh --self-test` → 18/18. The mapper also flags
+`tb/tb_pe_soc_freqmeter.v` as **not in `run_all.sh`'s `CASES`** — a real
+same-list violation in the shared tree, found by the gate's own coverage rule.

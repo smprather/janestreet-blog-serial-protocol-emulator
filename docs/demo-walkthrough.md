@@ -307,6 +307,51 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
   Pico, owns reset, the 60 MHz project clock and the SPI pins, and was
   verified on a real MicroPython interpreter (not just by inspection).
 
+## The merge gate — a merge is never pushed without the tests its diff can break
+
+`regress/verify_merge.sh` is the gate. Before pushing a merge (or a branch that
+is about to be merged), run it:
+
+```sh
+./regress/verify_merge.sh                 # gate HEAD (the merge you are pushing)
+./regress/verify_merge.sh --list          # print the mapping, run nothing
+./regress/verify_merge.sh --fast -j8      # same gate, parallel
+./regress/verify_merge.sh --self-test     # the mapper's own 18 checks, no RTL
+```
+
+It maps the merge onto the testbenches that can be affected, using
+`regress/run_all.sh`'s **own** `CASES` table (parsed, not restated, so a case
+added to the suite cannot be invisible to the gate): a changed `rtl/foo.v`
+selects the cases that compile `foo.v`; a changed `tb/<case>.v` (or anything
+under `tb/<case>/`) selects that case; a changed `firmware/*` or `tools/fw/*`
+selects every case compiling `pe_cpu.v`/`pe_soc.v` — the cases whose DUT is
+partly firmware. It also maps what the *other* side gained while the branch was
+away (`merge-base..M^1`), which is the direction the actual 2026-09-25 failure
+came from. Anything it cannot map confidently is a **full** suite run, said out
+loud, never a quiet subset.
+
+Exit codes, and the reason each one exists:
+
+| code | meaning |
+| --- | --- |
+| 0 | the affected set is green |
+| 1 | red, **with a named failing case** |
+| 2 | usage / environment |
+| 3 | gate error — it could not confirm it ran the set it selected, or `run_all.sh` rejected its filter |
+| 4 | **inconclusive** — the run died (OOM, out of disk, the single-run lock) and named no failing case. Not a pass, not a red |
+
+**Why 4 exists.** The gate's own first run exited 137 with an empty failure
+list, and a gate that reports "RED, the affected set failed" for a run that never
+finished is claiming something its log does not support. Read 4 as "make the run
+finish", never as "the RTL is fine".
+
+**The 18-check self-test is not optional reading.** `--self-test` asserts the
+mapper's rules *and* the hand-off contract between the gate and `run_all.sh`'s
+`--cases` filter — the pair that disagreed during this gate's own development
+and made a filter select nothing while the gate still had a selection to show.
+
+Full evidence: `reviews/2026-09-25/MERGE-FORENSICS-5B4731F.md` §5-§6.
+
 ## What is proven, what is simulated, what is pending
 
 | Claim | Status | Evidence |
