@@ -137,8 +137,41 @@ for prog in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe eth_tx_o
     $PY tools/fw/peasm.py "firmware/$prog.pe" 2>&1 | head -3 | sed 's/^/    /'
     exit 1
   fi
-  printf '%-34s PASS (%s words)\n' "assemble $prog" \
-    "$(grep -c . "firmware/$prog.hex")"
+  # AN EMPTY IMAGE IS A FAILURE, NOT A PASS WITH A SMALL NUMBER. Found by
+  # having the accident this gate exists to prevent: a /tmp tmpfs filled up
+  # mid-run, three .pe files were left TRUNCATED TO ZERO by an interrupted
+  # write, and this loop reassembled each of them -- successfully, because
+  # assembling an empty file is not an error -- and printed
+  #     assemble i2c_adv    PASS (0 words)
+  # for a firmware that no longer existed. The three testbenches using those
+  # programs did fail, so the damage was caught, but by the INTEGRATION and
+  # not by the gate whose whole purpose is to catch it first. A stale image
+  # is a silent pass; a DELETED image was one too, and that is strictly
+  # worse, because there is nothing left to compare against.
+  #
+  # So emptiness is a CHECK rather than a label -- and the check is for ZERO,
+  # because that is the failure that actually happened and the only one
+  # distinguishable from a short program without a table of expected lengths.
+  # My first attempt at this asserted a floor of 100 words ("the shortest
+  # program in this repository is well over a hundred"), which was FALSE and
+  # which this same gate rejected on its next run by failing eth_tx_wrap_probe
+  # at 41 words. tick_count is 8. The claim was never measured; the gate
+  # measured it, in one run, which is the cheapest available way to be wrong.
+  #
+  # The SOURCE is checked as well as the image, and that is the half that
+  # catches a PARTIAL truncation: an interrupted write can leave a .pe that
+  # still assembles, so a non-empty image does not prove the source survived.
+  # Both checks are cheap and neither can false-fire, because no program in
+  # this repository is empty.
+  words=$(grep -c . "firmware/$prog.hex")
+  src=$(wc -c < "firmware/$prog.pe")
+  if [ "$src" -eq 0 ] || [ "$words" -eq 0 ]; then
+    echo "assemble $prog FAIL (source ${src}B, image ${words} words --"
+    echo "    the source was truncated to nothing, and an empty file assembles"
+    echo "    without error, so this is the check that has to notice)"
+    exit 1
+  fi
+  printf '%-34s PASS (%s words)\n' "assemble $prog" "$words"
   pass=$((pass+1))
 done
 
@@ -158,8 +191,41 @@ for prog in i2c_adv spi_mode3 uart_flow; do
     $PY tools/fw/peasm.py "firmware/$prog.pe" 2>&1 | head -3 | sed 's/^/    /'
     exit 1
   fi
-  printf '%-34s PASS (%s words)\n' "assemble $prog" \
-    "$(grep -c . "firmware/$prog.hex")"
+  # AN EMPTY IMAGE IS A FAILURE, NOT A PASS WITH A SMALL NUMBER. Found by
+  # having the accident this gate exists to prevent: a /tmp tmpfs filled up
+  # mid-run, three .pe files were left TRUNCATED TO ZERO by an interrupted
+  # write, and this loop reassembled each of them -- successfully, because
+  # assembling an empty file is not an error -- and printed
+  #     assemble i2c_adv    PASS (0 words)
+  # for a firmware that no longer existed. The three testbenches using those
+  # programs did fail, so the damage was caught, but by the INTEGRATION and
+  # not by the gate whose whole purpose is to catch it first. A stale image
+  # is a silent pass; a DELETED image was one too, and that is strictly
+  # worse, because there is nothing left to compare against.
+  #
+  # So emptiness is a CHECK rather than a label -- and the check is for ZERO,
+  # because that is the failure that actually happened and the only one
+  # distinguishable from a short program without a table of expected lengths.
+  # My first attempt at this asserted a floor of 100 words ("the shortest
+  # program in this repository is well over a hundred"), which was FALSE and
+  # which this same gate rejected on its next run by failing eth_tx_wrap_probe
+  # at 41 words. tick_count is 8. The claim was never measured; the gate
+  # measured it, in one run, which is the cheapest available way to be wrong.
+  #
+  # The SOURCE is checked as well as the image, and that is the half that
+  # catches a PARTIAL truncation: an interrupted write can leave a .pe that
+  # still assembles, so a non-empty image does not prove the source survived.
+  # Both checks are cheap and neither can false-fire, because no program in
+  # this repository is empty.
+  words=$(grep -c . "firmware/$prog.hex")
+  src=$(wc -c < "firmware/$prog.pe")
+  if [ "$src" -eq 0 ] || [ "$words" -eq 0 ]; then
+    echo "assemble $prog FAIL (source ${src}B, image ${words} words --"
+    echo "    the source was truncated to nothing, and an empty file assembles"
+    echo "    without error, so this is the check that has to notice)"
+    exit 1
+  fi
+  printf '%-34s PASS (%s words)\n' "assemble $prog" "$words"
   pass=$((pass+1))
 done
 
@@ -187,8 +253,41 @@ for prog in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter 
     $PY tools/fw/peasm.py "firmware/$prog.pe" 2>&1 | head -3 | sed 's/^/    /'
     exit 1
   fi
-  printf '%-34s PASS (%s words)\n' "assemble $prog" \
-    "$(grep -c . "firmware/$prog.hex")"
+  # AN EMPTY IMAGE IS A FAILURE, NOT A PASS WITH A SMALL NUMBER. Found by
+  # having the accident this gate exists to prevent: a /tmp tmpfs filled up
+  # mid-run, three .pe files were left TRUNCATED TO ZERO by an interrupted
+  # write, and this loop reassembled each of them -- successfully, because
+  # assembling an empty file is not an error -- and printed
+  #     assemble i2c_adv    PASS (0 words)
+  # for a firmware that no longer existed. The three testbenches using those
+  # programs did fail, so the damage was caught, but by the INTEGRATION and
+  # not by the gate whose whole purpose is to catch it first. A stale image
+  # is a silent pass; a DELETED image was one too, and that is strictly
+  # worse, because there is nothing left to compare against.
+  #
+  # So emptiness is a CHECK rather than a label -- and the check is for ZERO,
+  # because that is the failure that actually happened and the only one
+  # distinguishable from a short program without a table of expected lengths.
+  # My first attempt at this asserted a floor of 100 words ("the shortest
+  # program in this repository is well over a hundred"), which was FALSE and
+  # which this same gate rejected on its next run by failing eth_tx_wrap_probe
+  # at 41 words. tick_count is 8. The claim was never measured; the gate
+  # measured it, in one run, which is the cheapest available way to be wrong.
+  #
+  # The SOURCE is checked as well as the image, and that is the half that
+  # catches a PARTIAL truncation: an interrupted write can leave a .pe that
+  # still assembles, so a non-empty image does not prove the source survived.
+  # Both checks are cheap and neither can false-fire, because no program in
+  # this repository is empty.
+  words=$(grep -c . "firmware/$prog.hex")
+  src=$(wc -c < "firmware/$prog.pe")
+  if [ "$src" -eq 0 ] || [ "$words" -eq 0 ]; then
+    echo "assemble $prog FAIL (source ${src}B, image ${words} words --"
+    echo "    the source was truncated to nothing, and an empty file assembles"
+    echo "    without error, so this is the check that has to notice)"
+    exit 1
+  fi
+  printf '%-34s PASS (%s words)\n' "assemble $prog" "$words"
   pass=$((pass+1))
 done
 
