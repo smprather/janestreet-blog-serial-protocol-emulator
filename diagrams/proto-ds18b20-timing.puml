@@ -43,7 +43,7 @@ note over CPU
   one outer step = 10 + 3*167 = <b>511 clocks = 8.5 us</b>
 
   total = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4
-  (58-1)*511 + 4 = 29 172 clocks = <b>485.5 us</b>
+  (58-1)*511 + 4 = 29 131 clocks = <b>485.5 us</b>
 
   <b>AND THIS IS A COUNTED-DELAY CONSTANT, NOT A
   MICROSECOND.</b> Writing 480 straight into the outer

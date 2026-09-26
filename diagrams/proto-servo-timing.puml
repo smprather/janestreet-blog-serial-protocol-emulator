@@ -81,17 +81,27 @@ note over CPU
   dly1/dly2/dly3 on dmem[0] = 97, (n2,n3) = (2,152)
 
   total = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4
-  one outer step = 4*152 + 11 = 619 clocks = 10.3 us
+  one outer step = 10 + 1*(4*152 + 7) = 625 clocks = <b>10.4167 us</b>
+  96 * 625 + 4 = 60 004 clocks = 1 000.07 us
 
   The tables are FITTED by division and a small
   search, not by trial and error: for a chosen
   (n2,n3) the outer counter nearest the target is
   a division, and keeping every entry inside 255
   is the search.
+
+  <b>The step is 10 + (n2-1)*(4*n3+7), not 4*n3+11.</b>
+  The shorter form misses the outer loop's six
+  instructions and the four that return it: 619
+  clocks instead of 625, and a reader who
+  multiplies it out gets 990 us and concludes the
+  measured 1 000.15 us is a percent out.
 end note
 CPU -> PAD : TXPIN = 0x00 - the gap starts
 note over WIRE
   <b>GAP 0 = 19.000 ms</b>  (dmem[5] = 229, (11,123))
+  one outer step = 10 + 10*(4*123 + 7) = 5 000 clocks = 83.3333 us
+  228 * 5000 + 4 = 1 140 004 clocks = 19 000.07 us
   rise 0 -> rise 1 = <b>19 999.95 us = 50.000 Hz</b>
   this is the number the 50 Hz claim rests on
 end note

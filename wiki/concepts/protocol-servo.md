@@ -88,8 +88,25 @@ total(n1,n2,n3) = (n1-1) * (10 + (n2-1) * (4*n3 + 7)) + 4   clocks
 
 **Why three levels and not a NOP sled.** 19 ms as NOPs is 1.14 million words against
 a 1 024-word instruction memory — the program would not fit. As a loop it is 19
-words. The price is a quantisation equal to one step of the outer counter: 10.3 µs
-for the pulses (on the `(2,152)` pair) and 77.6 µs for the gaps (on `(11,123)`).
+words. The price is a quantisation equal to one step of the outer counter: **10.4167 µs**
+for the pulses (on the `(2,152)` pair) and **83.3333 µs** for the gaps (on
+`(11,123)`).
+
+**And the outer step is `10 + (n2-1)*(4*n3+7)` — not `4*n3+11`.** That distinction is
+not cosmetic, because the short form is the one a reader is likely to reconstruct:
+
+| pair | step, the right way | the short form |
+|---|---|---|
+| `(2,152)` — pulses | `10 + 1*(4*152+7)` = **625 clocks = 10.4167 µs** | `4*152+11` = 619 clocks |
+| `(11,123)` — gaps | `10 + 10*(4*123+7)` = **5 000 clocks = 83.3333 µs** | — |
+
+The short form misses the outer loop's own six instructions and the four that return
+it. Multiply 619 out by 96 and you get 990 µs, and a reader concludes the measured
+1 000.15 µs is a percent out — from a figure that is in fact exact to 0.0009 %. The
+same trap is live in `firmware/servo_sweep.pe`'s own header, which prints the 619 and
+the 4 655 forms; the code and the `total()` formula in the same header are right, and
+those two intermediate lines are not. This page and the three servo figures use the
+formula.
 
 **The reload lines are not optimisation.** Both inner counters are *destroyed* by
 their own loops — they arrive at zero — so the caller's count has to be copied into a
@@ -104,6 +121,24 @@ For a chosen `(n2,n3)` the routine reaches any value of the form
 *T* is a **division**, and choosing `(n2,n3)` to keep every table entry inside 255 is
 a small search. Both tables are the result of that, and every entry lands within
 0.25 µs of its target.
+
+### Reproducing the table, so the figures can be checked
+
+| what | arithmetic | clocks | µs |
+|---|---|---|---|
+| pulse 0, n1 = 97 on (2,152) | 96·625 + 4 | 60 004 | 1 000.07 |
+| pulse 1, n1 = 145 on (2,152) | 144·625 + 4 | 90 004 | 1 500.07 |
+| pulse 2, n1 = 169 on (2,152) | 168·625 + 4 | 105 004 | 1 750.07 |
+| pulse 3, n1 = 121 on (2,152) | 120·625 + 4 | 75 004 | 1 250.07 |
+| pulse 4, n1 = 193 on (2,152) | 192·625 + 4 | 120 004 | 2 000.07 |
+| gap 0, n1 = 229 on (11,123) | 228·5 000 + 4 | 1 140 004 | 19 000.07 |
+| gap 1, n1 = 223 on (11,123) | 222·5 000 + 4 | 1 110 004 | 18 500.07 |
+| gaps 2…4, n1 = 31 on (11,123) | 30·5 000 + 4 | 150 004 | 2 500.07 |
+
+Slot 0 is 60 004 + 1 140 004 = **1 200 008 clocks = 20 000.13 µs**. The testbench
+**measured 19 999.95 µs** on the wire — 0.0009 % apart, and arrived at from
+instruction counts rather than from a fitted constant. That agreement is the evidence
+that the derivation is the right model of the machine and not a fit to the answer.
 
 ## The measured result
 

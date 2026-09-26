@@ -145,7 +145,7 @@ margin at both ends.
 
 ### The reset is a counter, not a microsecond
 
-`OW_RST = 58` on the `(4,40)` pair: `(58-1)*511 + 4 = 29 172` clocks = 485.5 µs, and
+`OW_RST = 58` on the `(4,40)` pair: `(58-1)*511 + 4 = 29 131` clocks = 485.5 µs, and
 485.7 measured.
 
 Writing `480` straight into the outer counter comes out as **1 900 µs**, because 480

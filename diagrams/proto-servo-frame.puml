@@ -130,8 +130,8 @@ legend bottom
   that, not of trial and error.
 
   | pair | used for | one outer step | quantisation |
-  | (2, 152)  | pulses | (4*152 + 11) = 619 clocks = 10.3 us | 10.3 us |
-  | (11, 123) | gaps   | (10 + 10*499) = 4 655 clocks = 77.6 us | 77.6 us |
+  | (2, 152)  | pulses | 10 + 1*(4*152 + 7) = <b>625 clocks = 10.4167 us</b> | <b>10.4167 us</b> |
+  | (11, 123) | gaps   | 10 + 10*(4*123 + 7) = <b>5 000 clocks = 83.3333 us</b> | <b>83.3333 us</b> |
 
   <b>Why the numbers are this close is the point, and the accuracy is not.</b>
   A servo's 50 Hz is a nominal with a wide tolerance; the real requirement is
@@ -139,6 +139,29 @@ legend bottom
   INSTRUCTION COUNT, not a calibrated loop, so there is no oscillator to drift
   and no phase to lose. Change the clock and every number in the table scales
   with it, visibly, in the source.
+
+  <b>REPRODUCING THE TABLE, so a reader can check the
+  figures rather than take them.</b> With
+  total(n1,n2,n3) = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4:
+
+  | what | arithmetic | clocks | us |
+  | pulse 0, n1 = 97 on (2,152) | 96*625 + 4 | 60 004 | 1 000.07 |
+  | pulse 1, n1 = 145 on (2,152) | 144*625 + 4 | 90 004 | 1 500.07 |
+  | pulse 2, n1 = 169 on (2,152) | 168*625 + 4 | 105 004 | 1 750.07 |
+  | pulse 3, n1 = 121 on (2,152) | 120*625 + 4 | 75 004 | 1 250.07 |
+  | pulse 4, n1 = 193 on (2,152) | 192*625 + 4 | 120 004 | 2 000.07 |
+  | gap 0, n1 = 229 on (11,123) | 228*5000 + 4 | 1 140 004 | 19 000.07 |
+  | gap 1, n1 = 223 on (11,123) | 222*5000 + 4 | 1 110 004 | 18 500.07 |
+  | gaps 2..4, n1 = 31 on (11,123) | 30*5000 + 4 | 150 004 | 2 500.07 |
+
+  Slot 0 = 60 004 + 1 140 004 = 1 200 008 clocks = <b>20 000.13 us</b>, and the
+  testbench MEASURED 19 999.95 us on the wire: 0.0009 % apart, and arrived at
+  from instruction counts rather than from a fitted constant.
+
+  <b>The outer step is 10 + (n2-1)*(4*n3+7), not 4*n3 + 11.</b> The "+11" form
+  looks reasonable and is wrong: it gives 619 for the pulse pair and misses the
+  outer loop's own six instructions plus the four that return it, which is how a
+  reader ends up reproducing 990 us and concluding the figure is 1 % out.
 end legend
 
 @enduml

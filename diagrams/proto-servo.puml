@@ -39,16 +39,16 @@ state "FIRMWARE SIDE - firmware/servo_sweep.pe" as EMIT {
   IDLE : the servo's idle level is LOW, and it is\nset BEFORE the pin is claimed.\nAN IDLE LEVEL THAT IS ONE INSTRUCTION LATE\nIS PART OF THE PROTOCOL
 
   state "PULSE\nhold high" as PUL
-  PUL : Y = 0\nTXPIN = SRV_DATA (0x40)\nthen the delay on dmem[X + 0] with\n(n2,n3) = (2,152): one outer step is\n(4*152+11) = 619 clocks = 10.3 us
+  PUL : Y = 0\nTXPIN = SRV_DATA (0x40)\nthen the delay on dmem[X + 0] with\n(n2,n3) = (2,152): one outer step is\n10 + (4*152 + 7) = 625 clocks = 10.4167 us
 
   state "GAP\nhold low" as GAP
-  GAP : Y = 1\nTXPIN = 0x00\nthen the delay on dmem[X + 5] with\n(n2,n3) = (11,123): one outer step is\n4655 clocks = 77.6 us
+  GAP : Y = 1\nTXPIN = 0x00\nthen the delay on dmem[X + 5] with\n(n2,n3) = (11,123): one outer step is\n10 + 10*(4*123 + 7) = 5000 clocks = 83.3333 us
 
   state "NEXT\nadvance the index" as NXT
   NXT : X++\nif X == 5 the sweep is done: park\nelse back to PULSE\ndmem[10] IS THE PROGRAM'S OUTPUT:\n0 = never started, 2 = hung,\n5 = finished, and the TB reads it
 
   state "DLY1/DLY2/DLY3\nthe three-nested-counter delay" as DLY
-  DLY : total(n1,n2,n3) = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4 clocks\nBOTH INNER COUNTERS ARE RELOADED from their\ntargets (dmem[13], dmem[12]) at the top of\nevery pass. A version without the reloads\nreads zero, subtracts one, wraps to 255, and\nproduces hundreds of thousands of clocks where\nthousands were asked for - while looking\ncompletely correct. 19 ms as NOPs would be\n1.14 M words against 1 024 words of imem.
+  DLY : total(n1,n2,n3) = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4 clocks\nBOTH INNER COUNTERS ARE RELOADED from their\ntargets (dmem[13], dmem[12]) at the top of\nevery pass. A version without the reloads\nreads zero, subtracts one, wraps to 255, and\nproduces hundreds of thousands of clocks where\nthousands were asked for - while looking\ncompletely correct. 19 ms as NOPs would be\n1.14 M words against 1 024 words of imem.\n\nREPRODUCING THE TABLE FROM THE FORMULA:\n  n1 = 97,  (2,152)  ->  96 * 625  + 4 =    60 004 clocks =  1 000.07 us\n  n1 = 229, (11,123) -> 228 * 5000 + 4 = 1 140 004 clocks = 19 000.07 us\n  slot 0 = 20 000.13 us, against a MEASURED\n  19 999.95 us - 0.0009 % apart, and out of\n  counts rather than a fitted constant.\n\nTHE OUTER STEP IS NOT 4*n3 + 11. It is\n10 + (n2-1)*(4*n3 + 7), so the (2,152) step is\n625 clocks and the (11,123) step is 5000.
 
   TABLES --> IDLE
   IDLE --> PUL : a position is due
