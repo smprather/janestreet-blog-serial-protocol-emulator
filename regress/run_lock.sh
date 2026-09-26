@@ -102,19 +102,51 @@ chip_run_pgid() {
 }
 
 chip_run_tree_pids() {
-  local pgid me
+  local pgid me out rc
   me="${BASHPID:-$$}"
   pgid=$(chip_run_pgid)
   if [ -n "$pgid" ] && [ "$pgid" = "$me" ]; then
-    ps -eo pid=,pgid= 2>/dev/null | awk -v g="$pgid" '$2==g {print $1}'
+    # *** A FAILED SCAN IS NOT AN EMPTY TREE. *** This is the hole act (c)
+    # found on 2026-09-27, and it was load-dependent, so it passed every time
+    # the box was quiet and failed in the full gate. `ps` reads /proc, and a
+    # starved or racing /proc read can come back empty or non-zero; the caller
+    # cannot tell that from "the tree is gone", and it was reading it as
+    # "the tree is gone" -- so chip_signal_run_tree took its
+    # `[ $left -eq 0 ] && return 0` branch, reported SUCCESS, and SKIPPED THE
+    # KILL ESCALATION ENTIRELY. The run exited with its child still alive,
+    # which is the exact hazard this file exists to prevent, reached by the
+    # mechanism written to prevent it. A child that traps TERM (which the
+    # mutation heartbeat does) is unharmed by the polite signal, so the child
+    # outlived the run, kept mutating, and kept fd 9 -- the lock stayed held
+    # with no run left to explain it.
+    #
+    # The contract is therefore: the scan REPORTS whether it succeeded, and a
+    # caller may only conclude "nothing is left" from a scan that says it
+    # knows. Proven with a `ps` stub that exits 1: before, the escalation
+    # returned success with the child alive; after, it escalates to KILL.
+    out=$(ps -eo pid=,pgid= 2>/dev/null); rc=$?
+    if [ "$rc" -ne 0 ] || [ -z "$out" ]; then
+      CHIP_TREE_SCAN_OK=0
+      return 0
+    fi
+    CHIP_TREE_SCAN_OK=1
+    awk -v g="$pgid" '$2==g {print $1}' <<<"$out"
   else
+    CHIP_TREE_SCAN_OK=1
     _chip_descendants "$me"
   fi
 }
 
+# The descendant fallback has THE SAME HOLE, because it reads /proc the same
+# way, and it is the path a run takes when it is NOT a group leader. It only
+# ever CLEARS the flag -- it never sets it -- so a failure deep in the tree
+# cannot be masked by a shallower success, and the flag stays 0 for the whole
+# of the one scan that found the failure.
 _chip_descendants() {
-  local parent="$1" kid
-  for kid in $(ps -eo pid=,ppid= 2>/dev/null | awk -v p="$parent" '$2==p {print $1}'); do
+  local parent="$1" kid out rc
+  out=$(ps -eo pid=,ppid= 2>/dev/null); rc=$?
+  if [ "$rc" -ne 0 ] || [ -z "$out" ]; then CHIP_TREE_SCAN_OK=0; return 0; fi
+  for kid in $(awk -v p="$parent" '$2==p {print $1}' <<<"$out"); do
     printf '%s\n' "$kid"
     _chip_descendants "$kid"
   done
@@ -123,20 +155,40 @@ _chip_descendants() {
 # Signal everything the run owns, never this process, and escalate to KILL for
 # whatever ignores the polite signal (a wedged iverilog does).
 chip_signal_run_tree() {
-  local sig="$1" p me left waited
+  local sig="$1" p me left _waited reached=""
   me="${BASHPID:-$$}"
   for p in $(chip_run_tree_pids); do
     [ "$p" = "$me" ] && continue
+    reached="$reached $p"
     kill "-$sig" "$p" 2>/dev/null
   done
-  [ "$sig" = "KILL" ] && return 0
-  for waited in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  if [ "$sig" = "KILL" ]; then
+    # *** THE REMEMBERED LIST, AND IT IS NOT OPTIONAL. *** A process a
+    # previous, READABLE scan found and this one signalled politely must still
+    # get the KILL, because this scan may be the unreadable one and an
+    # unreadable scan finds nobody. Without this the fix in
+    # chip_run_tree_pids would only convert a false SUCCESS into a silent
+    # no-op: a child signalled politely and then forgotten. The exposure is
+    # the same one the scan already has -- pids are killed by number, and a
+    # recycled pid can be hit -- and this widens that window by the length of
+    # one polling loop, not by a new mechanism.
+    for p in $CHIP_TREE_REACHED; do
+      [ "$p" = "$me" ] && continue
+      kill -KILL "$p" 2>/dev/null
+    done
+    return 0
+  fi
+  CHIP_TREE_REACHED="$reached"
+  for _waited in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     left=0
     for p in $(chip_run_tree_pids); do
       [ "$p" = "$me" ] && continue
       left=1
     done
-    [ "$left" -eq 0 ] && return 0
+    # BOTH conditions, not one, and the second IS the fix: an empty scan says
+    # NOTHING about the tree, so it must not be allowed to end the wait early.
+    # The loop runs its course and the KILL below does the work.
+    if [ "$left" -eq 0 ] && [ "${CHIP_TREE_SCAN_OK:-0}" = "1" ]; then return 0; fi
     sleep 0.1
   done
   chip_signal_run_tree KILL
@@ -207,6 +259,10 @@ chip_start_lock_watchdog() {
     rm -f "$CHIP_RUN_OWNER_FILE" 2>/dev/null || true
   ) &
   CHIP_RUN_WATCHDOG_PID=$!
+  # Exported, because it is real information about this run: a child that
+  # inherits it can see the watchdog exists, and regress/test_run_lock.sh
+  # clears it so its own cases are not confused by the suite's watchdog.
+  export CHIP_RUN_WATCHDOG_PID
 }
 
 # Put the run in its own process group so "kill everything this run started"

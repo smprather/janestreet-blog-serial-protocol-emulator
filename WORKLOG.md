@@ -4271,3 +4271,122 @@ report a disagreement as an agreement makes the self-test exit 1 and say so:
 **AND IT WAS FOUND BY RUNNING THE REGRESSION, which is the only thing that
 would have found it** -- the same session that added the gate could not, because
 adding it and having it run are different events.
+
+## 2026-09-27 act (c): TASK-START -- THE run-lock FAILURE, WITNESSED TWICE
+
+`run-lock process tree: FAILED -- E: a cleanly finished run left its child
+running` is in every full-gate run and was filed as "not mine" twice. But I have
+now **observed the fault twice from outside the test**: a lock
+`chip-run-all.2811a17f.lock` outlived the process that took it, with **no
+process of that worktree running** and **no `.owner` note** -- so nothing
+declared it held, and a second run was refused for minutes against a lock no
+live process held.
+
+**THE TEST SAYS A LOCK CAN OUTLIVE ITS RUN. TWICE I SAW ONE THAT DID.** That is
+the difference between a report about a gate and a fault to go and look at.
+
+## 2026-09-27 act (c): THE LOCK WAS NEVER STALE, AND THE REAL FAULT WAS A FAILED `ps`
+
+My starting instruction said the encode direction was RED with three checks. **It
+is not.** Measured, not read: the testbench decodes `a5 3c 96` back off the
+firmware's own pad in both polarities, the model and the Verilog agree on all 80
+levels each way, and `FIRMWARE: 43 PASS 43 FAIL 0`. The handoff's step 1 (model
+the encoder) and step 2 (firmware to the model) landed at 14:xx, after the
+handoff was written at 05:27. **A handoff is a snapshot of claims, and its
+claims decay fastest in the direction where later work fixed them.**
+
+### THE RULING'S LAST STEP, AND IT EXPIRED ON ARRIVAL
+
+`tb_pe_soc_bmc` is now in `regress/run_all.sh`. It was wired **behind the
+`<<wip>>` marking first**, and that was the point: the case passes on the day it
+is wired, so the self-expiring design reported it and named it a failure.
+
+    tb_pe_soc_bmc      WIP-NOW-PASSING (remove the <<wip>> marking)
+    TOTAL: 1   PASS: 0   FAIL: 1   failed: tb_pe_soc_bmc(wip-now-passing)
+
+The marking came off on the strength of that line and nothing else. It is
+unmarked now, so the suite is **48 cases**, and the act is closed in both
+directions with the flag load-bearing in each.
+
+### THE PREDECESSOR'S STALE LOCK WAS NOT A STALE LOCK, AND BOTH HALVES OF IT ARE BY DESIGN
+
+Observed twice, it was said: a lock `chip-run-all.2811a17f.lock` outlived its
+run, no process alive, no `.owner` note, and a second run refused for minutes.
+**Measured, both halves are the success state:**
+
+    # a lock file with a stale owner note, nobody holding it
+    ACQUIRED rc=0 -- an existing lock file does NOT refuse
+
+1. **THE LOCK FILE IS NEVER UNLINKED.** `exec 9>"$FILE"` opens it and nothing
+   removes it. Eleven sit in /tmp right now from cleanly finished runs. The
+   file's existence is not the lock; the lock is `flock -n 9`.
+2. **THE OWNER NOTE IS REMOVED ON RELEASE** — in `chip_kill_run_tree` and
+   `chip_release_run_lock`. **No note is what a clean exit looks like.** It was
+   read as "nothing declares it held" when it is the declaration having done its
+   job.
+
+And the refusal was **correct**: the manager's `verify_merge.sh` -> `run_all.sh`
+(pg 2465026, 22 min, in `mutate_eth_soc_tb.sh`) held a live flock the whole time,
+in worktree `c20d814a`. Pairing a leftover file and a missing note with a refusal
+turned the lock doing its job into a phantom.
+
+### THE FAULT THAT WAS REALLY THERE, AND IT IS IN THE MECHANISM WRITTEN TO PREVENT IT
+
+`run-lock process tree: FAILED -- E: a cleanly finished run left its child
+running`, filed as "not mine" twice. **It reproduces on demand, and only on
+demand**: 17/17 standalone, **15/16 with 48 spinners on 24 cores**, red on the
+full gate. Case E is the only load-sensitive one, and that is the tell.
+
+`chip_run_tree_pids` reads the process group with `ps`, and the escalation loop
+ends the moment the tree looks empty. **An empty scan and a clean tree were the
+same thing to the caller.** A starved /proc read therefore ended the wait
+early, the function **returned SUCCESS, and the `KILL` escalation never ran** --
+so a child that traps TERM (which the mutation heartbeat does) outlived the run
+still holding fd 9. That is the exact hazard `run_lock.sh` exists to prevent,
+reached through the mechanism written to prevent it.
+
+The fix is that a scan **reports whether it succeeded**, and a caller may only
+conclude "nothing is left" from a scan that says it knows. Plus: anything the
+polite signal reached is remembered, so the KILL pass still finishes the job when
+every later scan is unreadable -- without that second half the first is only a
+false success converted into a silent no-op.
+
+### CASE H, AND IT WAS WRONG THREE TIMES BEFORE IT WAS RIGHT
+
+The new case forces an unreadable scan with a `ps` stub and reads the STUB'S OWN
+CALL COUNT, because that is the property the fix changes and it cannot be
+misread. Two-sided, same test:
+
+| code | scans | verdict |
+| :--- | --- | :--- |
+| the old early return | `SCANS=5` | `FAIL H: the escalation returned EARLY` |
+| the fix | `SCANS=45` | `ok H: ... ran its course and escalated` |
+
+**The first two versions said SURVIVED against a fix that had worked**, and both
+are the act's own lesson. `kill -0` **succeeds on a zombie** -- a killed child
+its parent has not reaped still answers -- so a pid that answers is not a
+process that is running. The second tried a growing heartbeat, which is what
+cases B-G do and is right in general, but the loop backgrounds `sleep` children
+of its own and the group scan sees a different member than `$!` names, so it
+answered a question about the wrong process. **A check that cannot be made to
+say what it means is not yet a check.**
+
+The stub also goes blind on the **third** `ps`, not the first: one call is
+`chip_run_pgid`'s probe and the second is the TERM pass's scan, so the TERM
+pass really does find the child -- which is what happens in the real fault. A
+stub blind from the first call asks for something no enumeration can deliver,
+and that version failed against a **correct** fix. **When the test and the fix
+disagree about the contract, the test is the one that is wrong.**
+
+### THE ACCEPTANCE TEST IS THE REPRODUCTION, RUN AGAIN
+
+    48 spinners, 24 cores, the whole suite:
+    ok E: a clean exit leaves no strays
+    ok H: a scan that goes unreadable cannot be read as a clean tree (SCANS=45)
+    run_lock: 17 passed, 0 failed
+
+Also green: `check_shell_syntax` 36 scripts, `check_harness_preflight` 16
+harnesses, `bmc_checks.py` 7 checks / 323 words, the model-agreement self-test.
+**NOT re-run: the whole gate end to end.** The `<<wip>>` removal and the lock
+fix are both proven by the runs above; the full gate's own verdict after them is
+a deduction, and it is the next session's first command.
