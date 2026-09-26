@@ -322,6 +322,58 @@ class TestBringupRunbook(unittest.TestCase):
         )
         self.assertNotIn("every step passes except `uart`", section)
 
+    def test_every_beat_with_its_own_failure_mode_has_a_triage_row(self):
+        """The beats whose failure means something SPECIFIC need a row.
+
+        Three beats are deliberately not listed, and the reason is part of the
+        pin so it cannot drift into "everything must have a row": `assemble` is
+        a host-side assembly error carrying its own message, and
+        `disconnect`/`reconnect` fail for reasons that already failed earlier in
+        the same run, so a row would only repeat one.
+
+        `heartbeat` is the one that matters most for a FIRST board run: in
+        `--fake` the model scripts the timer increment, so the beat cannot fail;
+        on hardware the chip's `dbg_timer` has to actually advance within 3
+        tries x 0.25 s. That is the beat most likely to surprise someone holding
+        a board, and it had no row at all.
+        """
+        text = read(BRINGUP)
+        start = text.index("| Symptom")
+        table = text[start:text.index("\n\n", start)]
+        rows = [line for line in table.splitlines()
+                if line.startswith("| ") and "---" not in line]
+        for beat in ("heartbeat", "readback", "clear_fault"):
+            with self.subTest(beat=beat):
+                self.assertTrue(
+                    any(beat in row.lower() for row in rows),
+                    f"the {beat} beat can fail for its own reason and the triage "
+                    f"table says nothing about it")
+
+    def test_the_heartbeat_row_names_the_hardware_window(self):
+        """An operator reading a `timer stuck` failure needs the window.
+
+        The beat polls three times at 0.25 s, so the honest statement is
+        "within about three quarters of a second", not "eventually" - and the
+        likely causes are a core that is not actually running, or a SoC tick
+        that never reaches `dbg_timer`. A row that only says "check the wiring"
+        makes the reader guess.
+        """
+        text = read(BRINGUP)
+        start = text.index("| Symptom")
+        table = text[start:text.index("\n\n", start)]
+        # a list, then index: `next(..., None)` leaves the type Optional and
+        # every assertion below would be reasoning about a value that may not
+        # be there. Requiring exactly one also stops two rows drifting apart.
+        matches = [line for line in table.splitlines()
+                   if "heartbeat" in line.lower()]
+        self.assertEqual(len(matches), 1,
+                         "the triage table needs exactly one heartbeat row")
+        row = matches[0]
+        self.assertRegex(row, r"0\.75|three quarters|0\.25",
+                         "the row should state the window the beat gives up in")
+        self.assertRegex(row, r"dbg_timer|tick|strap",
+                         "the row should name a candidate cause")
+
     def test_the_read_length_failure(self):
         """A defect I found on this host, reachable only on hardware.
 
