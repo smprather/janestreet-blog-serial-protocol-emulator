@@ -3195,3 +3195,59 @@ directories and logs, which is why it is the wrapper that has to change.
    non-zero, the fault is real and is in the suite this act edited;
 3. either way, make `run_all.sh`'s result paths per-worktree, and prove the
    change by running two gate runs at once and showing they no longer collide.
+
+## 2026-09-27 act (c): TASK-START -- THE TIMING SUITE, ALONE, EXIT CODE ONLY
+
+Step 1 of the three named last entry. **The precondition is the whole point:**
+the experiment is only evidence if nothing else is writing the tree or the
+shared /tmp paths, because a run beside four other gate runs is the exact
+condition that produced the contradiction being explained.
+
+### STEP 1 COULD NOT BE RUN, AND STEP 3 WAS NOT STARTED, AND HERE IS WHY
+
+**The machine is not quiet**: my own `run_all.sh` was 30 minutes in and a second
+gate run was active when I looked. So the timing suite cannot be re-run alone
+right now, and **running it anyway would manufacture the very ambiguity the
+experiment exists to resolve** — a second run under contention is not evidence
+about contention. So step 1 waits for a quiet window; it is one command and it
+belongs at the start of a session that has the machine to itself.
+
+**And I did not start step 3, because it cannot be verified in the state this
+machine is in.** A repoint of 17-30 paths is unverifiable without a full gate
+run, and this act's own precedent is the warning: *"My first attempt at this
+asserted a floor of 100 words, which was FALSE and which this same gate
+rejected on its next run."* Committing an unverified 30-path rewrite is the
+same error wearing a different hat.
+
+**WHAT I DID INSTEAD IS THE PART OF THE FIX THAT IS ACTUALLY HARD: WHICH
+PATHS ARE SAFE TO MOVE.** `regress/run_all.sh` names 26 distinct fixed `/tmp`
+log paths, and "make them per-worktree" is only safe for the ones `run_all.sh`
+both writes and is the only script to touch:
+
+| | count | what it means |
+| :--- | :--- | :--- |
+| **safe to repoint** | **17** | written by a redirect in `run_all.sh`, and **no other script hard-codes the literal** — `canvas_viewer`, `check_harness_preflight`, `check_mutation_lists`, `check_shell_syntax`, `check_wiki_pages`, `cross_wait_words`, `macro_flow`, `mutate_eth_mac`, `mutate_fbuf`, `mutate_macro_flow`, `mutate_spi`, **`mutate_timing`**, `param_guards`, `run_formal`, `run_formal_mutants`, `test_dep_guard`, `test_run_lock` |
+| **NOT safe to repoint blind** | **9** | another script hard-codes the same literal — `mutate_codec`, `mutate_ctrl`, `mutate_eth_soc`, `mutate_eth_tx`, `mutate_eth_tx_loop`, `mutate_fwbus`, `mutate_serdes`, `mutate_soc_serdes`, `check_formal_ifdef` |
+
+**AND THE SPLIT IS NOT ARBITRARY — it is the same 8-9 `mutate_*` suites that
+fanned out.** The nine unsafe paths are precisely the mutation-suite logs whose
+name is also referenced outside `run_all.sh` (the `run_mutation_suite` plumbing),
+which means **the fix is not one substitution but two halves**: a per-worktree
+log directory for the 17, and for the 9 a path that the writer and the reader
+agree on — which means touching the reader too, or passing the path in.
+
+**AND THE ONE PATH WITH EVIDENCE IS IN THE SAFE SET.** `/tmp/mutate_timing.log`
+is the file that produced this act's contradictory gate verdict, and it is
+written only by `run_all.sh`. So the single highest-value repoint — the one
+that would have made today's contradiction impossible — is also the cheapest
+and the safest, and it can be done and verified in one quiet session without
+touching the other nine.
+
+**SO THE NEXT SESSION HAS, IN ORDER:**
+1. re-run `regress/mutate_timing_tb.sh` alone, record its **exit code** (steps
+   1-2, unchanged, one command, needs a quiet machine);
+2. repoint the **17** safe paths to a per-worktree directory, and prove it by
+   two concurrent runs of `run_all.sh` no longer overwriting each other;
+3. leave the **9** alone until their reader is known, and say so in the file,
+   because a half-fix that silently leaves nine paths shared is worse than a
+   named remainder.
