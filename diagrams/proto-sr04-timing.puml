@@ -7,7 +7,7 @@
 '
 '   FAIL the firmware banked both measurements (dmem[10] = 01)
 '   FAIL the model saw exactly 2 triggers (1)
-'   FAIL the trigger is EXACTLY 600 clocks = 10000.000 us (measured 601)  [sic]
+'   FAIL the trigger is EXACTLY 600 clocks = 10.000 us (measured 601 = 10.017 us)
 '   FAIL measurement 1: 1160 us is outside 1 % of the model's 5816 us
 '   FAIL measurement 1: 1160 us is X mm, not 999 mm
 '
