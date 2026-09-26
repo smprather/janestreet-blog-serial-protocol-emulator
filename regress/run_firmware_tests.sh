@@ -291,6 +291,28 @@ for prog in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter 
   pass=$((pass+1))
 done
 
+# bmc_frame.pe is act (c)'s FM0/FM1 bi-phase program, and this assemble step
+# is the same kind of gate the others are: tb_pe_soc_bmc.v $readmemh's the hex
+# it produces (BMC_HEX), so a stale image is a silent pass.
+#
+# It is a STRONGER version of that gate than any of the others, for a reason
+# that belongs to this program alone: its delay constants are fitted
+# INSTRUCTION COUNTS, and act (c)'s sixth check counts every route between two
+# pad writes and fails if any is not exactly 120 clocks. So a re-assembly that
+# quietly moved a label -- two words added to a dispatch, which happened here
+# -- changes the wire by a clock per half-interval for eighty half-intervals,
+# and the resulting firmware still assembles, still runs, and still puts
+# eighty levels on the pad. Only the count catches it. That is why the bmc
+# checks are a run_case below and not a comment in the source.
+if ! $PY tools/fw/peasm.py firmware/bmc_frame.pe -o firmware/bmc_frame.hex >/dev/null 2>&1; then
+  echo "assemble bmc_frame                     FAIL"
+  $PY tools/fw/peasm.py firmware/bmc_frame.pe 2>&1 | head -3 | sed 's/^/    /'
+  exit 1
+fi
+printf '%-34s PASS (%s words)\n' "assemble bmc_frame" \
+  "$(grep -c . firmware/bmc_frame.hex)"
+pass=$((pass+1))
+
 # 2. single byte
 run_case "emulate: one byte" \
   $PY tools/fw/peemu.py firmware/uart_echo.hex --send 41 --max-cycles 900000
@@ -390,6 +412,33 @@ for period in (519, 520, 521):
 print('PASS: UART monitor periods' if ok else 'FAIL')
 sys.exit(0 if ok else 1)
 "
+
+# 4e. act (c): the FM0/FM1 bi-phase LOOPBACK, both directions, in one run. The
+#     testbench sends the same frame A5 3C 96 twice -- once FM0, once FM1 --
+#     and the firmware must (a) bank the same three bytes under both flags,
+#     with dmem[3] reading back 0 then 1, and (b) put the frame back on the
+#     pad, re-encoded under the flag it READ. Neither side is told the other's
+#     polarity, which is the whole point: the testbench's decoder and the
+#     firmware's both lock their own from the preamble's levels, so a wrong
+#     encoder polarity can only pass if the two independent measurements
+#     agree.
+#
+#     The level check inside the testbench is the one that cannot go stale: it
+#     watches out_oe, reconstructs the half-interval sequence from the pad's
+#     OWN changes (so a one-clock-per-half-interval drift cannot accumulate the
+#     way a fixed sampling grid did), and compares all eighty levels against
+#     the stimulus's own model of the wire, in both polarities, every pass.
+run_case "bi-phase loopback: FM0 + FM1" tb/probes/run.sh
+
+# 4f. The seven static checks on the same firmware, which is a DIFFERENT kind
+#     of gate and catches what the simulation cannot. The half-interval check
+#     is the reason this is not redundant: it counts every route between two
+#     pad writes in the LISTING, and the testbench's gap check exempts the
+#     first gap (a receiver has no previous transition to measure it from), so
+#     a first half-interval of the wrong length passes the simulation and
+#     fails here. It did: 122 where 120 was claimed, on an interval the wire
+#     showed as 117 and the model excluded.
+run_case "bi-phase: 7 static checks" $PY firmware/bmc_checks.py firmware/bmc_frame.pe
 
 # 5. the documented limitation: back-to-back bytes are LOST (half-duplex).
 #    Asserts the failure mode rather than hiding it -- if this ever starts

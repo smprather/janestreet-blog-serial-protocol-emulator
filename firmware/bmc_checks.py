@@ -2,15 +2,19 @@ import re
 import subprocess
 import sys
 
-# The two open()/subprocess calls below are deliberately NOT wrapped in
-# try/except, and a linter says so: this gate is run ON a file, and if the
-# file is missing or the assembler will not run, the right behaviour is to
-# stop with the reason on the screen. A gate that swallows its own failure and
-# prints a clean report is worse than no gate, which is this act's whole
-# subject.
+# The two file operations below are deliberately LOUD and deliberately NOT
+# silent-and-clean, and the explicit SystemExit is what keeps them that way: this
+# gate is run ON a file, and if the file is missing or the assembler will not
+# run, the right behaviour is to stop with the reason on the screen. A gate that
+# swallows its own failure and prints a clean report is worse than no gate,
+# which is this act's whole subject. The reason is now a MESSAGE rather than a
+# traceback, and it names the file, because "FileNotFoundError" does not.
 f = sys.argv[1] if len(sys.argv) > 1 else "firmware/bmc_frame.pe"
-with open(f) as _fh:
-    src = _fh.read().split("\n")
+try:
+    with open(f) as _fh:
+        src = _fh.read().split("\n")
+except OSError as _e:
+    raise SystemExit(f"bmc_checks: cannot read {f}: {_e}")
 addr = 0
 labels = {}
 mnem = {}
@@ -39,7 +43,14 @@ words = {}
 for l in lst.split("\n"):
     m = re.match(r"^\s*(\d+)\s+([0-9A-Fa-f]{4})\s", l)
     if m:
-        words[int(m.group(1))] = int(m.group(2), 16)
+        # The regex has already made both of these convertible, so a raise here
+        # would be a bug in the regex rather than in the listing -- and a bug
+        # that stopped the gate silently would be the worst kind, so it stops
+        # it LOUDLY and quotes the line that disagreed.
+        try:
+            words[int(m.group(1))] = int(m.group(2), 16)
+        except ValueError as _e:
+            raise SystemExit(f"bmc_checks: listing line {l.strip()!r}: {_e}")
 inv = {v: k for k, v in labels.items()}
 # *** THE TARGET FIELD IS TEN BITS, NOT EIGHT, AND THIS LINE WAS 0xFF FOR A
 # WHOLE SESSION. *** The check compares the label map with the ENCODED OPERAND,
@@ -93,8 +104,10 @@ for a in dead:
 # to happen, and it is how the data_zero/resync pair was missed.
 print("\nADJACENT LABEL CHECK (a label immediately after another can fall through):")
 labs = sorted(labels.items(), key=lambda x: x[1])
+adj = 0
 for i in range(len(labs) - 1):
     if labs[i][1] + 1 == labs[i + 1][1]:
+        adj += 1
         print(
             f"    {labs[i][0]} at {labs[i][1]} and {labs[i + 1][0]} at {labs[i + 1][1]} are ADJACENT"
         )
@@ -275,6 +288,11 @@ def step(state, a):
     return (A, X, None)
 
 
+# The most walk states `routes` may explore before it gives up and says so. -1
+# in ROUTE_STATES means the cap was HIT, which is a failure, not a pass.
+ROUTE_STATES = 400000
+
+
 def routes(start, stop, budget=20000):
     """Every route from `start` back to `stop`, as (clocks, the counted delay
     loop it went round).
@@ -290,7 +308,36 @@ def routes(start, stop, budget=20000):
     # and None propagates: a branch downstream of an unknown A is taken both
     # ways, which is the honest answer rather than a guess.
     stack: list = [(start, 0, 0, None, None, None)]
+    #
+    # *** AND THE WALK IS BOUNDED BY STATES EXPLORED, NOT ONLY BY THE TWO
+    # PER-PATH LIMITS ABOVE, BECAUSE A GATE THAT HANGS IS A GATE THAT IS NOT
+    # RUN. *** `cost > budget` and `depth > 2000` bound a single PATH. They do
+    # not bound the NUMBER of paths, and the number of paths is what grows: a
+    # branch the listing cannot resolve forks the walk, so a program with n such
+    # branches has up to 2**n routes through it.
+    #
+    # This is not hypothetical and it is not a theory. It hung twice in one
+    # session, on the SAME program, for the SAME reason and in two different
+    # ways: once because a bracket was taken from the wrong end of the
+    # instruction stream and the walk therefore crossed the whole decoder, and
+    # once because a fault injected to prove this very check fires -- a retargeted
+    # JMP that stopped the loop returning to its own OUT -- left a cycle the
+    # walker does not recognise as a counted delay loop. Both printed NOTHING
+    # AT ALL and both were found only because the command was TIMED OUT, which
+    # is not something a regression does: run_all.sh would sit there instead of
+    # reporting, and the failure would read as a slow machine.
+    #
+    # So the walk gives up and SAYS SO. The cap is 400000 states, which the real
+    # firmware uses about two thousand of: a whole order of magnitude of headroom
+    # for a program twice this size, and about a second of work to discover a
+    # pathology that used to be unbounded.
+    global ROUTE_STATES
+    states = 0
     while stack:
+        states += 1
+        if states > ROUTE_STATES:
+            ROUTE_STATES = -1
+            return out
         a, cost, depth, A, X, used = stack.pop()
         if cost > budget or depth > 2000:
             continue
@@ -340,6 +387,7 @@ def routes(start, stop, budget=20000):
 
 
 rs: list = []
+ent: list = []
 if len(OUTS) < 2:
     print(f"  only {len(OUTS)} OUT TXPIN in the program: nothing to bracket")
 else:
@@ -351,12 +399,56 @@ else:
     for c, loop in sorted(hist, key=lambda k: (k[1] is None, k[1] or 0, k[0])):
         flag = "" if c == 120 else "  *** NOT 120 ***"
         print(f"    {c:4d} clocks  x{hist[(c, loop)]}  (delay loop at {loop}){flag}")
-bad_iv = [c for c, _ in rs if c != 120]
+    # AND THE FIRST HALF-INTERVAL IS BRACKETED TOO, from the OUT that writes
+    # half-interval 0 to the first OUT in the loop. It is the one interval no
+    # receiver can measure -- the model excludes it from its own histogram,
+    # because a receiver has no previous transition to measure it from -- and
+    # that is precisely why it was 49 clocks long and nothing complained:
+    # a check that only walks the loop cannot see the gap between the frame's
+    # first level and the loop that sends the rest of it.
+    #
+    # *** AND OUTS[0] IS NOT THAT WRITE, WHICH IS WHY THIS HUNG FOR 120
+    # SECONDS INSTEAD OF PRINTING. *** The previous version of this line said
+    # "the first OUT TXPIN in the program is that write" and it is not: the
+    # program has THREE, and the first is at address 3, in the DECODER, four
+    # hundred words upstream of the encoder. So the walk went from the
+    # decoder's pad write to the encoder's loop -- across the whole decoder,
+    # whose every JZ/JNZ on an A the listing cannot fix forks the walk both
+    # ways, with three counted delay loops re-charged on every path through.
+    # The path SPACE, not the path length, is what is exponential, and the
+    # budget of 20000 clocks and 2000 of depth bounds neither: the check
+    # printed NOTHING AT ALL, which is the one failure mode a check cannot
+    # have. A check that hangs is a check that is not run, and the way it was
+    # found is that the RUN ITSELF TIMED OUT.
+    #
+    # So it is the SECOND-TO-LAST, counted from the end rather than the start:
+    # the encoder's first level write, and the last is the loop's edge, so the
+    # two are adjacent and the walk between them is the first half-interval and
+    # nothing else. Counting from the end is also the index that survives the
+    # next writer adding a pad write to the decoder.
+    if len(OUTS) < 3:
+        print(
+            "  fewer than three OUT TXPIN: there is no encoder first level to "
+            "bracket against the loop"
+        )
+        ent = []
+    else:
+        ent = routes(OUTS[-2], start)
+    hist2 = {}
+    for c, loop in ent:
+        hist2[(c, loop)] = hist2.get((c, loop), 0) + 1
+    for c, loop in sorted(hist2, key=lambda k: (k[1] is None, k[1] or 0, k[0])):
+        flag = "" if c == 120 else "  *** NOT 120 ***"
+        print(
+            f"    {c:4d} clocks  x{hist2[(c, loop)]}"
+            f"  THE FIRST HALF-INTERVAL, entry delay loop at {loop}{flag}"
+        )
+bad_iv = [c for c, _ in rs if c != 120] + [c for c, _ in ent if c != 120]
 if not rs:
     print("  NO ROUTE RETURNS to the OUT: the loop never drives a second edge")
 print(
-    f"  routes between two OUT TXPIN: {len(rs)}, and the ones that are "
-    f"not exactly 120 clocks: {len(bad_iv)}"
+    f"  routes between two OUT TXPIN: {len(rs)} in the loop and {len(ent)} into it, "
+    f"and the ones that are not exactly 120 clocks: {len(bad_iv)}"
     + ("" if rs and not bad_iv else "  *** SEE ABOVE ***")
 )
 # THE SEVENTH, AND IT IS THE ONE THAT COST THIS ACT AN HOUR, so it is written
@@ -385,6 +477,8 @@ print(
 # anything else is a peel, and a peel is a transmitter that sends the frame
 # backwards.
 print("\nBIT-ORDER CHECK (a SHR walks a MASK down, so its byte must reload 0x80):")
+
+
 def lit(ops):
     """the immediate an instruction carries, or None if it is not a number"""
     try:
@@ -395,11 +489,14 @@ def lit(ops):
 
 shifts, reloads, fed = [], {}, {}
 for a in sorted(mnem):
-    if mnem.get(a, ("", ""))[0] == "LDI" and lit(mnem[a][1]) == 0x80:
-        if mnem.get(a + 1, ("", ""))[0] == "STM":
-            b = lit(mnem[a + 1][1].split(",")[0])
-            if b is not None:
-                reloads.setdefault(b, []).append(a)
+    if (
+        mnem.get(a, ("", ""))[0] == "LDI"
+        and lit(mnem[a][1]) == 0x80
+        and mnem.get(a + 1, ("", ""))[0] == "STM"
+    ):
+        b = lit(mnem[a + 1][1].split(",")[0])
+        if b is not None:
+            reloads.setdefault(b, []).append(a)
     # an `LDS` whose result reaches an `STM n, A` within a few instructions is
     # the PAYLOAD FETCH landing in memory, and that is what makes a byte a data
     # byte rather than a mask
@@ -420,7 +517,17 @@ for a in sorted(mnem):
     src = None
     k = a - 1
     while k >= 0 and mnem.get(k, ("", ""))[0] not in (
-        "LDI", "LDM", "MOV", "SHR", "AND", "ADD", "SUB", "OR", "OUT", "IN", "LDS",
+        "LDI",
+        "LDM",
+        "MOV",
+        "SHR",
+        "AND",
+        "ADD",
+        "SUB",
+        "OR",
+        "OUT",
+        "IN",
+        "LDS",
     ):
         k -= 1
     if k >= 0 and mnem[k][0] == "LDM" and mnem[k][1].split(",")[0].strip() == "A":
@@ -461,3 +568,48 @@ for a, src in shifts:
 print(f"  shifts that are peels, or that cannot be shown to be masks: {bad_order}")
 
 print(f"\nwords={N}")
+
+# THE VERDICT, AND ITS ABSENCE IS WHY NONE OF THIS WAS IN THE REGRESSION.
+#
+# Every check above PRINTS a count and stops. That is a report, not a gate: a
+# gate is something that can fail, and a script whose last line is
+# `words=323` can only be read by a person who is already looking at it -- so
+# the seven checks ran by hand, forever, and the firmware's fitted delay
+# constants were only ever checked by whoever remembered. This file is in
+# regress/run_firmware_tests.sh now, and run_case there looks for a line
+# starting PASS, which this file did not have and would never have produced.
+#
+# The failure list is named rather than counted, because a gate that says "1
+# problem" sends the reader back up the output to find which, and the whole
+# point of the counts is that they are all zero.
+fails = []
+if bad:
+    fails.append(f"{bad} jump(s) whose target does not match the label map")
+if dead:
+    fails.append(f"{len(dead)} unreachable word(s)")
+if adj:
+    fails.append(f"{adj} adjacent label pair(s), each a fall-through waiting to happen")
+if bad_runs:
+    fails.append(f"{bad_runs} store run(s) split by a setter that CHANGED the value")
+if bad_br:
+    fails.append(f"{bad_br} branch(es) whose A did not come from a SUB or a tested load")
+if not rs:
+    fails.append("no route returns to the OUT: the loop never drives a second edge")
+if ROUTE_STATES < 0:
+    fails.append(
+        "the route walk hit its 400000-state cap, so the half-interval check "
+        "did NOT finish: a walk that cannot finish is a program this check "
+        "cannot measure, and reporting that is what it is for"
+    )
+if bad_iv:
+    fails.append(f"{len(bad_iv)} half-interval route(s) that are not exactly 120 clocks")
+if bad_order:
+    fails.append(f"{bad_order} SHR(s) that are peels, or cannot be shown to be masks")
+
+if fails:
+    print("FAIL: " + "; ".join(fails))
+    sys.exit(1)
+print(
+    f"PASS: 7 checks, 0 failures "
+    f"({N} words, {len(rs)} loop routes and {len(ent)} entry routes all 120 clocks)"
+)

@@ -653,58 +653,169 @@ module tb_pe_soc_bmc;
   // MEASURED. So the check is "the firmware re-encoded the frame it received,
   // under the flag it read, and the wire says so" -- which is the act's claim,
   // written as a comparison rather than as a decoder's opinion.
-  integer lvc_k = 0, lvc_t = 0, lvc_lv = 0, lvc_n = 0, lvc_armed = 0;
+  // THE SEQUENCE IS RECONSTRUCTED FROM THE PAD'S OWN CHANGES, and that is the
+  // whole design. A fixed 120-clock tick drifts one clock per half-interval
+  // against a wire whose half-interval is 120 clocks of INSTRUCTIONS and 121 of
+  // wall time -- the pad's register is written a clock after the instruction
+  // that writes it -- so a grid is eighty clocks out of phase by the eightieth
+  // and every sample is on a transition. Each gap below is measured from the
+  // PREVIOUS CHANGE, so no error accumulates: that is the property a grid does
+  // not have, and the previous version of this check had a comment claiming
+  // that a mid-interval sample was "immune to a few clocks of phase error",
+  // which is true and useless -- a few clocks per half-interval is eighty over
+  // a frame, and the measurement refuted the claim in one run.
+  integer lvc_n = 0, lvc_t = 0, lvc_armed = 0, lvc_have = 0, lvc_seen = 0;
+  integer lvc_ng = 0;
+  integer lvc_gap [0:99];       // the RAW clock gap at every change, so the
+                                // wire's own timing can be read without
+                                // trusting the reconstruction below
+  integer lvc_glev [0:99];      // and the level each change changed TO
+  logic   lvc_lev = 1'b0;
   reg     lvc_oe = 1'b0;
-  reg [8*90:1] lvc_str;
+  // *** ONE BIT PER HALF-INTERVAL, AND THAT IS THE FAULT THIS BLOCK HAD. ***
+  // The register was 8*90 bits wide and the levels were appended with a ONE-bit
+  // `(out_line) ? "1" : "0"`, so a string of eighty levels occupies the low
+  // EIGHTY BITS and the remaining 640 are permanent zero -- and the comparison
+  // read it at `lvc_str[8*(80-i)-1]`, one BYTE apart, so it compared sixty-four
+  // bits of padding against sixty-four bits of the model. MEASURED: the
+  // "recorded" string had runs of three and seven, which no bi-phase stream
+  // can have, and the wire's own transitions reconstructed perfectly while the
+  // recorded string disagreed with them. The tenth instrument in this act to
+  // disagree with the listing, and the first one to disagree with ITSELF.
+  // The layout is now one bit per level and the index is one bit per level, so
+  // a level is where the arithmetic that put it there says it is.
+  reg [95:0] lvc_str;
   always @(posedge clk) if (rst_n) begin
     if (out_oe && !lvc_oe) begin
-      // THE PAD HAS BEEN CLAIMED, ON THE RISING EDGE AND ONLY THE RISING
-      // EDGE. The first version armed on ANY change of out_oe, and the firmware
-      // RELEASES the pad when the transmission ends -- so the monitor cleared
-      // the eighty levels it had just recorded, one instruction group after the
-      // last one, and then reported "0 half-intervals sampled" while comparing
-      // against a string of zeroes. A monitor that resets when the thing it is
-      // measuring ENDS is a monitor that measures nothing, and it reported a
-      // difference count rather than an absence, which is the worst of both.
-      lvc_oe    <= out_oe;
+      // THE PAD HAS BEEN CLAIMED, ON THE RISING EDGE ONLY: the firmware
+      // RELEASES the pad when the transmission ends, and a monitor that resets
+      // then clears everything it recorded and reports an absence as a count.
+      lvc_oe    <= 1'b1;
       lvc_armed <= 1'b1;
-      lvc_k     <= 0;
-      lvc_t     <= 0;
       lvc_n     <= 0;
+      lvc_t     <= 0;
+      lvc_have  <= 1'b0;
+      lvc_seen  <= 1'b0;
+      lvc_ng    <= 0;
       lvc_str   <= 0;
-    end else begin
+    end else if (lvc_armed) begin
       lvc_oe <= out_oe;
-      if (lvc_armed) begin
-      lvc_t <= lvc_t + 1;
-      if (lvc_t == 60 && lvc_k < 80) begin
-        lvc_str = {lvc_str[8*89:1], (out_line) ? "1" : "0"};
-        lvc_n <= lvc_n + 1;
-        lvc_k <= lvc_k + 1;
-      end
-      if (lvc_t >= 120) lvc_t <= 0;   // and lvc_k advanced at the sample
+      if (!lvc_seen) begin
+        // the first observation: whatever the pad is holding IS the first
+        // half-interval's level, whatever its number
+        lvc_str <= {lvc_str[94:0], out_line};
+        lvc_n   <= 1;
+        lvc_seen <= 1'b1;
+        lvc_have <= 1'b1;
+        lvc_lev  <= out_line;
+      end else if (out_line !== lvc_lev) begin
+        if (lvc_ng < 100) begin
+          lvc_gap[lvc_ng] = lvc_t;
+          lvc_glev[lvc_ng] = out_line;
+          lvc_ng <= lvc_ng + 1;
+        end
+        // A CHANGE. The gap just measured is how many half-intervals the level
+        // it LEAVES occupied, and the level that arrives starts the next one.
+        //
+        // *** AND THE LEVEL THAT OCCUPIED TWO HALF-INTERVALS IS THE ONE
+        // LEAVING, NOT THE ONE ARRIVING. *** This block wrote the ARRIVING
+        // level twice -- out_line, twice -- and its own comment said the
+        // opposite one line above ("the level it leaves lasted the gap just
+        // measured"), which is the eleventh instrument in this act to say one
+        // thing and do another. And the correction is TWO entries and not
+        // three, because the level that leaves was ALREADY WRITTEN ONCE when
+        // it arrived: a two-half gap means the leaving level is written again
+        // and then the arriving one, so the count stays at eighty. Writing
+        // three put the level one half-interval early AND made the string
+        // ninety-four long, which is the check telling the truth about a
+        // reconstruction that is still wrong.
+        if (lvc_t > 180 && lvc_n < 94) begin
+          lvc_str <= {lvc_str[93:0], lvc_lev, out_line};
+          lvc_n   <= lvc_n + 2;
+        end else if (lvc_n < 96) begin
+          lvc_str <= {lvc_str[94:0], out_line};
+          lvc_n   <= lvc_n + 1;
+        end
+        lvc_t   <= 0;
+        lvc_lev <= out_line;
+      end else begin
+        lvc_t <= lvc_t + 1;
       end
     end
   end
 
   task automatic lvc_expect(input integer flag);
     // compare the recorded levels with the model's, and say where they differ
-    integer i, bad, d;
+    integer i, bad, d, odd;
+    reg [7:0] ch;
     begin
       bad = 0;
       for (i = 0; i < 80; i = i + 1) begin
-        d = (lvc_str[8*(80-i)-1] != enc_wire_lev(i, flag, enc_byte[0],
+        // BOTH STRINGS, ALWAYS, and not six lines of differences: a count says
+        // how many and a difference list says where, and NEITHER says what the
+        // pad actually held. Two strings of eighty levels side by side say
+        // everything at once, and this act has just spent a session on a probe
+        // that printed a number about a register twenty instructions
+        // downstream of the thing it was measuring.
+        d = (lvc_str[lvc_n-1-i] != enc_wire_lev(i, flag, enc_byte[0],
                                                 enc_byte[1], enc_byte[2]));
         if (d) begin
           bad = bad + 1;
           if (bad <= 6)
             $display("    half-interval %0d: the pad held %0s and the model's rule says %0s",
-                     i, (lvc_str[8*(80-i)-1] ? "1" : "0"),
+                     i, (lvc_str[lvc_n-1-i] ? "1" : "0"),
                      (enc_wire_lev(i, flag, enc_byte[0], enc_byte[1], enc_byte[2]) ? "1" : "0"));
         end
       end
+      // BOTH STRINGS, one level at a time, printed ALWAYS and not six lines of
+      // differences: a count says how many and a difference list says where,
+      // and NEITHER says what the pad actually held. Two strings of eighty
+      // levels side by side say everything at once.
+      $write("\n    the pad   (%0d levels): ", lvc_n);
+      for (i = 0; i < (lvc_n < 96 ? lvc_n : 96); i = i + 1) begin
+        ch = lvc_str[lvc_n-1-i] ? "1" : "0";
+        $write("%0s", ch);
+      end
+      $write("\n    the model : ");
+      for (i = 0; i < 80; i = i + 1) begin
+        ch = enc_wire_lev(i, flag, enc_byte[0], enc_byte[1], enc_byte[2]) ? "1" : "0";
+        $write("%0s", ch);
+      end
+      $write("\n");
+      // THE WIRE'S OWN TRANSITIONS: every change, the gap in clocks, and the
+      // level it changed to. This is here because the reconstructed string
+      // above is a DERIVATION -- a run length in it is a gap the monitor
+      // measured, written twice if the gap was over 180 clocks -- and a
+      // derivation that cannot be right (a bi-phase stream has no run of
+      // three) is a question about the instrument. The transitions are not a
+      // derivation: they are the pad.
+      $write("    %0d changes:", lvc_ng);
+      for (i = 0; i < (lvc_ng < 64 ? lvc_ng : 64); i = i + 1)
+        $write(" %0d%s", lvc_gap[i], (lvc_glev[i] != 0) ? "H" : "L");
+      $write("\n");
       check((lvc_n == 80) && (bad == 0),
             $sformatf("the pad carries the model's own %0d levels, level for level, under the flag the firmware read (%0d differ)",
                       80, bad));
+      // AND EVERY GAP BUT THE FIRST IS ONE OR TWO HALF-INTERVALS, which is
+      // the model's own rule and the one the levels above cannot see: a
+      // reconstruction that doubles a 168-clock gap and calls it a half-
+      // interval produces eighty well-formed levels and a wire that is 48
+      // clocks long where the model says 120. The FIRST gap is exempt and says
+      // why: it is the interval from claiming the pad to the first change, and
+      // the model excludes it for the same reason ("the interval before the
+      // FIRST transition is not in here and must not be: the receiver has no
+      // previous transition to measure from").
+      odd = 0;
+      for (i = 1; i < lvc_ng; i = i + 1)
+        if (lvc_gap[i] < 119 || lvc_gap[i] > 121)
+          if (lvc_gap[i] < 240 || lvc_gap[i] > 242) begin
+            odd = odd + 1;
+            if (odd <= 4)
+              $display("    gap %0d is %0d clocks, and a half-interval is 120", i, lvc_gap[i]);
+          end
+      check(odd == 0,
+            $sformatf("every gap on the wire but the first is ONE half-interval (120 clocks) or TWO (241) -- %0d of the %0d are neither, and a level check cannot see that",
+                      odd, lvc_ng - 1));
     end
   endtask
 

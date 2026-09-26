@@ -829,8 +829,13 @@ enc_level_first:               ; consecutive addresses are a fall-through
         OUT   TXPIN, A          ; waiting to happen, and the adjacent-label
         LDI   A, BMC_OUT        ; check is right to name them
         OUT   PINOE, A           ; claim the output pad; the input is released
-        LDI   A, 0
-        STM   6, A               ; dmem[6] = the half-interval counter
+        LDI   A, 1
+        STM   6, A               ; dmem[6] = 1, NOT 0, and the half-interval
+                               ; this block has just written is c = 0: the
+                               ; counter counts what is LEFT to send. It was
+                               ; seeded to 0, so the loop began by computing
+                               ; c = 0 AGAIN and drove the level of half-
+                               ; interval 0 a second time.
         LDI   A, 0x80
         STM   11, A              ; dmem[11] = THE MASK, at bit 7 -- and the
                                ; frame goes out HIGH BIT FIRST because the
@@ -838,6 +843,66 @@ enc_level_first:               ; consecutive addresses are a fall-through
                                ; puts the first arrival in the high position.
                                ; It was the byte here until this step, and a
                                ; byte peeled with SHR is low bit first.
+        ; ---- AND THEN THE FIRST HALF-INTERVAL IS WAITED FOR, LIKE ALL THE
+        ; ---- OTHERS, WHICH IS NOT A THING THIS BLOCK DID BEFORE -----------
+        ; The level for half-interval 0 has just gone out, and the loop's
+        ; first write is the level for half-interval 1 -- but the loop
+        ; REACHES that write in the length of the dispatch block, about fifty
+        ; clocks, so without this the first half-interval on the wire was 49
+        ; clocks long where every other one is 120. MEASURED: the wire's first
+        ; gap was 49 and the model's is 120, and no receiver can see the
+        ; difference -- the first interval is the one the model itself
+        ; EXCLUDES from its histogram, because a receiver has no previous
+        ; transition to measure it from -- which is exactly why it is safe to
+        ; leave wrong and invisible.
+        ;
+        ; It is waited for here rather than by starting the counter at 0,
+        ; which is the other way to make the first write be c = 0's: that
+        ; writes c = 0 a second time, 49 clocks after the first time, and
+        ; MEASURED the wire's first gap came out at 168 clocks -- a level held
+        ; for 1.4 half-intervals, and a level check that reconstructs from
+        ; gaps cannot tell 168 from 120 because both are "one half-interval"
+        ; to anything rounding to whole microseconds.
+        ;
+        ; 71 CLOCKS IS THE RESIDUE AND IT IS COUNTED, not chosen: the loop
+        ; body is four clocks a pass (DECX / LDI A,0 / SUB A,X / JNZ), and
+        ; 4 x 17 = 68 with the set-up's two and the jump's one is 71, and 71
+        ; is what 49 lacked. The sixth check brackets THIS interval too, from
+        ; the OUT above to the first OUT in the loop, so "the first half-
+        ; interval is a half-interval" is a counted claim and not a comment.
+        ;
+        ; *** AND THE COUNT SAYS 122, NOT 120, SO THE CLAIM ABOVE WAS WRONG BY
+        ; TWO AND THE COMMENT WAS WRONG WITH IT. *** The sixth check only ever
+        ; bracketed the LOOP, so the entry was outside it: the loop's three
+        ; fitted routes were all exactly 120 and the first half-interval was
+        ; never counted, which is the same blind spot the first half-interval
+        ; has everywhere else in this act. It is now counted, from this block's
+        ; OWN OUT to the loop's, and it came out at 122.
+        ;
+        ; WHY, AND IT IS NOT THE 71: 71 is the entry block ALONE, and the
+        ; thing it has to equal is not a number but the OTHER routes' set-up.
+        ; Both routes share everything from `enc_half` on -- 41 clocks, the
+        ; same for each -- so the entry has to match the loop's set-up and
+        ; delay TOGETHER: 79 clocks, counted as fifteen instructions and this
+        ; block's loop. And this block was 81, because 71 was fitted against
+        ; 49 and nothing ever compared it with the 79 it had to be equal to.
+        ;
+        ; SO THE TWO CLOCKS MOVE OUT OF THE LOOP CONSTANT AND INTO NOPs,
+        ; which is this block's own residue rule and not a new one: the loop
+        ; is four clocks a pass, so a residue of two is not a loop constant at
+        ; all, it is half a pass, and 17 passes charged 68 where 66 was wanted.
+        ; 16 passes and two NOPs is the same 79 in pieces the arithmetic can
+        ; actually reach.
+        LDI   A, 16
+        MOV   X, A
+        NOP
+        NOP                    ; two of them, and the sixth check below says
+                               ; the total is 120 like every other one
+enc_entry_loop:
+        DECX
+        LDI   A, 0
+        SUB   A, X
+        JNZ   enc_entry_loop
         JMP   enc_half
 
         ; ---- ONE HALF-INTERVAL -----------------------------------------
@@ -864,9 +929,37 @@ enc_half:
         ; arithmetic confirmed it from the peeled values 0xFF, 0x7F, 0x52,
         ; where 0x52 is 0xA5 shifted right.
         ;
-        ; WHICH BYTE: dmem[6] >> 4 is the index, and it is 1, 2, 3 or 4 here --
-        ; 1 is the preamble's eight ones, and 2 upward is dmem[index-2], which
-        ; is CONTIGUOUS, so LDS reaches all three payload bytes with no case.
+        ; WHICH BYTE: dmem[6] >> 4 is the index, and it is 0, 1, 2, 3 or 4 here.
+        ; 0 and 1 are the preamble's two bytes -- eight ZEROS and eight ONES --
+        ; and 2 upward is dmem[index-2], which is CONTIGUOUS, so LDS reaches all
+        ; three payload bytes with no case.
+        ;
+        ; *** AND THE i == 0 CASE WAS MISSING, AND AN `LDS` WITH A COMPUTED
+        ; INDEX IS WHAT IT FELL INTO. *** There was a case for i == 1 and none
+        ; for i == 0, so the index fell through to `DECX / DECX / LDS` as
+        ; 0 - 2 = 0xFE -- and dmem's address is FOUR bits (rtl/pe_soc.v, DAW =
+        ; $clog2(16)), so the first preamble byte was read from dmem[14], which
+        ; is main's elapsed-time scratch. The assembler range-checks every
+        ; ADDRESS it is given (peasm.py, check_range) and cannot check an index
+        ; that only exists at run time, so the read was silent and legal.
+        ;
+        ; MEASURED, on the pad and not by reading the block: dmem[14] held 0x01
+        ; at the moment the encoder started, so the preamble's first byte went
+        ; out as 0x01 instead of 0x00 and half-intervals 14 and 15 carried a
+        ; ONE where the model's wire carries a zero -- two half-intervals of
+        ; eighty, in BOTH polarities, at the same two indices. Every other
+        ; level, all seventy-eight of them, was already the model's own.
+        ;
+        ; The value of dmem[14] is not a constant, so this is not a fault that
+        ; was nearly right: a byte of scratch decides what the first eight bits
+        ; of the transmission are.
+        ;
+        ; AND THE THREE ROUTES ARE THE SAME LENGTH, which is not tidiness: a
+        ; half-interval is a fixed number of clocks (the sixth check counts
+        ; them, per route, from the listing), so a route that is one word
+        ; longer is a half-interval that is one clock longer, on the wire, for
+        ; the sixteen half-intervals that take it. The padding is the price of
+        ; the third case and it is counted, not asserted.
         LDM   A, 6
         SHR
         SHR
@@ -875,23 +968,32 @@ enc_half:
         MOV   X, A
         LDI   A, 1
         SUB   A, X
-        JZ    enc_byte_ones
+        JZ    enc_byte_ones    ; i == 1: the preamble's eight ONES
+        LDI   A, 0
+        SUB   A, X             ; A = 0 - i, and X IS STILL i because a SUB
+        JZ    enc_byte_zero    ; does not touch X: zero exactly when i == 0
         DECX
-        DECX                  ; X = 0, 1 or 2
+        DECX                  ; X = 0, 1 or 2 -- and NOT 0xFE any more
         LDS                   ; A = dmem[X]
         NOP
-        NOP
-        JMP   enc_have_byte     ; six clocks, like the route above
+        JMP   enc_have_byte     ; seventeen clocks, like the other two
 enc_byte_ones:
         LDI   A, 0xFF          ; the preamble's second byte: eight ONES
         NOP
         NOP
         NOP
         NOP
-        JMP   enc_have_byte     ; both routes six clocks, and they are equal
-                               ; because a half-interval is a fixed number of
-                               ; clocks and these two are not the same length
-                               ; without the padding
+        NOP
+        NOP
+        JMP   enc_have_byte     ; six NOPs, because this route is entered
+                               ; eight words earlier than the payload's and a
+                               ; half-interval is a fixed number of clocks
+enc_byte_zero:
+        LDI   A, 0             ; the preamble's FIRST byte: eight ZEROS, and
+        NOP                    ; a constant like any other -- the preamble is
+        NOP                    ; not in dmem and never was
+        NOP
+        JMP   enc_have_byte     ; three NOPs, for the same reason
 enc_have_byte:
         MOV   X, A             ; X = the byte
         LDM   A, 11            ; A = the MASK, at this bit's place
@@ -1042,15 +1144,19 @@ enc_wait_mid:
         NOP
         NOP
         NOP
-        NOP                   ; FOUR NOPS IN THE SET-UP, and this is where
-                               ; the routes that are not the same length are
-                               ; paid for: the three routes out of the tail
-                               ; differ, so their loops are fitted separately
-                               ; and the set-up absorbs the residue. The loop
-                               ; is four clocks a pass, so the residue is paid
-                               ; in NOPs of one and two rather than in a third
-                               ; number whose fraction is not an integer.
-        LDI   A, 14
+        NOP
+        NOP
+        NOP                   ; SIX NOPS IN THE SET-UP, two more than the
+                               ; four this block was fitted with, and the loop
+                               ; is one pass shorter: the byte dispatch grew
+                               ; by two words to carry the preamble's first
+                               ; byte, so every route out of here is two clocks
+                               ; long and the residue is paid HERE, in NOPs,
+                               ; rather than in a loop constant that would have
+                               ; to be a fraction. The loop is four clocks a
+                               ; pass, so four clocks is a whole pass and two
+                               ; clocks is not: one pass out, two NOPs in.
+        LDI   A, 13
         MOV   X, A             ; the set-up is TWO instructions now
 enc_wait_mid_loop:
         DECX
@@ -1059,8 +1165,10 @@ enc_wait_mid_loop:
         JNZ   enc_wait_mid_loop ; four clocks a pass
         JMP   enc_half
 enc_wait_first:
-        NOP                   ; one NOP of set-up, for the same reason
-        LDI   A, 13
+        NOP
+        NOP
+        NOP                   ; three NOPs of set-up, for the same reason
+        LDI   A, 12
         MOV   X, A
 enc_wait_first_loop:
         DECX
@@ -1070,8 +1178,10 @@ enc_wait_first_loop:
         JMP   enc_half
 enc_wait_next:
         NOP
-        NOP                   ; two more of the same, for the third route
-        LDI   A, 12
+        NOP
+        NOP
+        NOP                   ; four more of the same, for the third route
+        LDI   A, 11
         MOV   X, A
 enc_wait_next_loop:
         DECX

@@ -2576,3 +2576,102 @@ that is true is the interval's own middle, measured from the pad's own changes
 rather than from a fixed tick** — which means the check has to count the pad's
 transitions and compare the SEQUENCE, not sample on a grid. That is what the
 levels string was, and the string is what found this.
+
+## 2026-09-27 act (c): TASK-START -- SAMPLE FROM THE PAD'S OWN CHANGES
+
+The queue is the check's sampling, and the last entry named the fix: a fixed
+120-clock tick drifts one clock per half-interval against a wire whose half-
+interval is 120 clocks of INSTRUCTIONS and 121 of wall time, so it is eighty
+clocks out of phase by the eightieth and every sample is on a transition.
+
+**The pad's own transitions are the unambiguous instants.** A level is
+unambiguous for the whole of the half-interval it occupies, and the CHANGES
+mark where one ends. So the sequence is reconstructed from the changes and the
+gaps, which is drift-free by construction: each gap is measured from the
+previous change, so the error cannot accumulate.
+
+## 2026-09-27 act (c): THE ENTRY ROUTE WAS COUNTED, AND IT WAS TWO CLOCKS WRONG
+
+**Act (c) is GREEN IN BOTH DIRECTIONS, AND IT IS IN THE REGRESSION.** The
+return leg's pad now carries the model's own eighty levels, level for level,
+under both flags, and `regress/run_firmware_tests.sh` runs both the loopback
+and the seven static checks as gates: 41 of 41 pass.
+
+**AND THE FIRST THING THE INHERITED EDIT DID WAS HANG, which is the finding
+worth keeping, because it is the second time this check has done it.**
+
+`routes(OUTS[0], start)` was the entry bracket, and `OUTS[0]` is not the
+encoder's first level write. **The program has three `OUT TXPIN`, and the
+first is at address 3, in the DECODER**, four hundred words upstream. So the
+walk went from the decoder's pad write to the encoder's loop, across a decoder
+whose every `JZ`/`JNZ` on an A the listing cannot fix forks the walk both ways.
+The comment above it said "the first OUT TXPIN in the program is that write",
+which is a claim about a number that was not counted. Counting it: `[3, 178,
+258]`, and the encoder's is the second-to-last. **The check printed nothing at
+all and was found by the command timing out at 120 seconds** — the worst
+failure a gate can have, because the way it is found is that it was not run.
+
+**AND THE SAME CLASS OF FAULT HUNG IT AGAIN, WITHIN THE HOUR**, on a fault
+injected to prove the check fires: a retargeted `JMP` that stopped the loop
+returning to its own `OUT` left a cycle the walker does not recognise as a
+counted delay loop. `cost > budget` and `depth > 2000` bound a single **path**;
+nothing bounded the **number** of paths, and that is what grows, as 2**n.
+**So the walk is now capped at 400000 states and says so when it gives up** —
+`FAIL: the route walk hit its 400000-state cap` — and the real firmware uses
+about two thousand. A gate that hangs is a gate that is not run, and run_all.sh
+would sit there instead of reporting.
+
+### AND THEN THE CHECK THAT WAS BEING WRITTEN FOUND A REAL FAULT IN ONE RUN
+
+Fixed to the right bracket, the sixth check reported the first half-interval at
+**122 clocks**, against a claim in the source that it was 120.
+
+**THE 71 IN THE COMMENT WAS FITTED AGAINST 49 AND NEVER COMPARED WITH THE 79
+IT HAD TO EQUAL.** Both routes share everything from `enc_half` on — 41 clocks,
+the same for each — so the entry has to match the loop's set-up and delay
+*together*, 79 clocks, counted as fifteen instructions and the entry loop. It
+was 81, because 17 passes charged 68 where 66 was wanted, and the two spare
+clocks sat **inside the loop constant**, which is the one place this block's
+own residue rule forbids: the loop is four clocks a pass, so a residue of two
+is half a pass and not a loop constant at all. **16 passes and two NOPs is the
+same 79 in pieces the arithmetic can reach**, and all 48 routes are now 120.
+
+**AND THE SIMULATION COULD NOT HAVE CAUGHT IT, which is why it is a separate
+gate.** The testbench's gap check exempts the first gap — a receiver has no
+previous transition to measure it from, so the model excludes it too — and the
+wire showed 117 there, which is the pad register's one-clock write latency off
+a correct 120. The interval was wrong on the wire and invisible to the only
+instrument that looks at the wire.
+
+### WHY NONE OF THIS WAS EVER IN THE REGRESSION, AND IT IS NOW
+
+**`bmc_checks.py` HAD NO VERDICT.** Seven checks, each printing a count, and a
+last line of `words=323` — a report, not a gate, and `run_case` looks for a
+line starting `PASS`. It could only ever be read by a person who was already
+looking at it, which is exactly what happened for a whole act. It now names
+each failure rather than counting them, because a gate that says "1 problem"
+sends the reader back up the output to find which.
+
+**AND EVERY CHECK WAS THEN PROVEN TO FIRE, BY PUTTING THE FAULT BACK:**
+
+| check | the fault put back | what it said |
+| :--- | :--- | :--- |
+| half-interval | `LDI A, 17`, NOPs removed | 12 routes not 120 |
+| route cap | the retargeted `JMP` | hit the 400000-state cap (was a hang) |
+| adjacent label | a bare label after an instruction | 1 adjacent pair |
+| store-run | `LDI A, 1` mid-run in init, the handoff's verbatim | 2 runs split |
+| reachability | two NOPs past the last jump | 2 unreachable words |
+| branch operand | a `NOP` before a `JZ` | 1 branch whose A was not a SUB |
+| jump | — | the label map vs the ENCODED operand, and it has never been wrong; a retargeted `JMP` is not a fault here, because naming a label encodes it correctly |
+
+**AND ONE OF THE SEVEN DOES NOT FIRE, WHICH IS THE HONEST END OF THIS ENTRY.**
+Changing the mask reload from `LDI A, 0x80` to `LDI A, 0x40` — which puts the
+wire **low bit first**, the act's first and most expensive finding — **passes**.
+The `SHR` then classifies dmem[11] as "neither a mask nor fed by the payload:
+a counter or an index", and that bucket is explicitly excused. So the bit-order
+check proves a mask is a mask; it does **not** prove a mask is a mask *at bit
+7*, and the one fault that check exists for is the one it cannot see. Proving
+that needs the encoder's mask byte named rather than inferred, which is a
+change to what the check claims and not a change to this act. **Named, not
+fixed, and named here so the next session inherits the limit and not the
+confidence.**
