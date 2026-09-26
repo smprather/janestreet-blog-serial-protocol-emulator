@@ -73,10 +73,11 @@ engineering" goal is reachable on hardware this small. It is also the property
 R3's debug control consumes ([[concepts/debug-control]]).
 
 **The budget this creates, and the three styles it picks between.** A
-single-cycle core at 10BASE-T's rate gets **48 clocks per byte, so 48
-instructions per byte for everything** — framing, the whole path, and any CRC. A
-software CRC-32 costs ~240 per byte, **over budget by 5×**. So Ethernet's bits
-must be hardware and firmware may only *sequence* frames.
+single-cycle core at 10BASE-T's rate gets **6 clocks per bit = 48 clocks per
+byte**, and being single-cycle that is **48 instructions per byte** for
+everything — framing, the whole path, and any CRC. A software CRC-32 costs ~30
+instructions per bit = ~**240** per byte, **5.0× over budget**. So Ethernet's
+bits must be hardware and firmware may only *sequence* frames.
 
 That arithmetic is what chooses between the project's three implementation
 styles, which `concepts/overview.md` tabulates and this page does not repeat:
@@ -89,8 +90,14 @@ arithmetic rather than an independent taxonomy
 ([[concepts/ethernet-scope]]). The project's standing instruction is not to
 "unify" them.
 
-⚠ **A number still drifting.** That budget was 40 MHz once: 32 clocks/byte and
-**7.5×**. At 60 MHz it is 48 and **5×** (240/48 = 5 exactly). `rtl/pe_eth_mac.v`
-has the current 5×; `rtl/pe_crc.v` and `concepts/factored-hardware-blocks.md`
-still say 7.5× — both outside this worker's ownership, so recorded not fixed. A
-reader meeting both without this note will assume a contradiction.
+⚠ **A number that was wrong, and what it was wrong twice.** The budget was
+once stated as "4 clocks per bit … over budget by **7.5×**". That was wrong on
+both halves: 100 ns at 60 MHz is **6** clocks per bit, not 4, and 30
+instructions per *bit* is ~240 per *byte* against **48** clocks — so the overrun
+is **5.0×**, not 7.5×. The direction of the claim never changed (firmware still
+cannot do a 10BASE-T CRC), but a budget comment wrong by 50% teaches the next
+reader the wrong baseline to reason from. `rtl/pe_crc.v` and
+`concepts/factored-hardware-blocks.md` now both carry the corrected arithmetic
+and say why; **7.5× is the pre-turbo 40 MHz figure, not a second reading of the
+same one.** Both were fixed by their owners, not here — this note exists so a
+reader who meets the number in an older comment knows which is current.
