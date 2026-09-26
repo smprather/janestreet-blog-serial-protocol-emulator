@@ -1,0 +1,176 @@
+@startuml proto-servo-timing
+' ===========================================================================
+' proto-servo-timing.puml - (c) servo PWM wire timing, in real numbers.
+'
+' Measured by tb/tb_pe_soc_servo.v on real RTL (60 MHz, Icarus, the real SRAM
+' macro), firmware/servo_sweep.pe:
+'
+'   pulse 0:  1000.15 us   (+0.15 vs the 1000 us requested)
+'   pulse 1:  1500.13 us   (+0.13)
+'   pulse 2:  1750.12 us   (+0.12)
+'   pulse 3:  1250.13 us   (+0.13)
+'   pulse 4:  2000.10 us   (+0.10)
+'   frame period (1000 us -> 1500 us): 19999.95 us = 50.000 Hz
+'   dmem[10] (position index) = 5
+'
+' Every one of those five is +0.10 to +0.15 us LONG, and the direction is
+' systematic rather than noise: the delay routine's count is exact and the
+' residue is the table entry's fitting, which the firmware's own header states
+' is bounded at 0.25 us.
+' ===========================================================================
+
+title Servo PWM - wire timing\n<font size=12>measured: 1000.15 / 1500.13 / 1750.12 / 1250.13 / 2000.10 us, frame 19 999.95 us = 50.000 Hz</font>
+
+hide stereotype
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #33555
+  LifeLineBorderColor #33555
+  LifeLineBackgroundColor #FAFAFA
+  ParticipantBorderColor #33555
+  ParticipantBackgroundColor #F4F7FB
+  ParticipantFontName monospaced
+  ActorFontName monospaced
+  NoteFontName monospaced
+  GroupFontName monospaced
+}
+
+participant "CPU\npe_cpu.v\nsingle-cycle" as CPU
+participant "pad 6\nTXPIN / PINOE" as PAD
+participant "servo signal\nidle LOW" as WIRE
+
+== claiming the pin ==
+
+CPU -> PAD : PINOE = 0x00 (release every pad)
+CPU -> PAD : TXPIN = 0x00  (the LEVEL first...)
+note right of PAD
+  ...and the idle level is set BEFORE the
+  pin is claimed. A first version wrote
+  SRV_DATA here instead of 0, on the reasoning
+  that the pin was about to go high anyway.
+
+  The consequence: the line stayed RELEASED -
+  so pulled HIGH by the board's pull-up - from
+  reset until the first pulse, and the first
+  pulse therefore had <b>no rising edge at all</b>.
+  The TB saw four rises and five falls and
+  correctly refused to call it five pulses.
+
+  <b>The idle level of a timing protocol is part
+  of the protocol.</b>
+end note
+CPU -> PAD : PINOE = 0x40 (claim exactly one pad)
+PAD -> WIRE : the line is released, so it READS HIGH for a moment
+note over WIRE
+  This is the TB's "leading fall": the wire model
+  is a pull-up plus the pads, so a released pin
+  floats up. It is why the TB pairs each RISE with
+  the NEXT fall rather than with the j-th fall.
+end note
+PAD -> WIRE : the firmware drives it LOW: the servo idle
+
+== position 0: 1 000 us, then a FULL 20 ms slot ==
+
+CPU -> PAD : TXPIN = SRV_DATA (0x40) - the pulse starts
+note over WIRE
+  <b>PULSE 0 = 1 000.15 us high</b>
+  requested 1 000 us, <b>+0.15</b>
+  datasheet band: 1 000 .. 2 000 us
+end note
+note over CPU
+  dly1/dly2/dly3 on dmem[0] = 97, (n2,n3) = (2,152)
+
+  total = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4
+  one outer step = 4*152 + 11 = 619 clocks = 10.3 us
+
+  The tables are FITTED by division and a small
+  search, not by trial and error: for a chosen
+  (n2,n3) the outer counter nearest the target is
+  a division, and keeping every entry inside 255
+  is the search.
+end note
+CPU -> PAD : TXPIN = 0x00 - the gap starts
+note over WIRE
+  <b>GAP 0 = 19.000 ms</b>  (dmem[5] = 229, (11,123))
+  rise 0 -> rise 1 = <b>19 999.95 us = 50.000 Hz</b>
+  this is the number the 50 Hz claim rests on
+end note
+
+== position 1: 1 500 us, and the frame period is MEASURED here ==
+
+CPU -> PAD : TXPIN = SRV_DATA (0x40)
+note over WIRE
+  <b>PULSE 1 = 1 500.13 us high</b>
+  requested 1 500 us, <b>+0.13</b>
+end note
+CPU -> PAD : TXPIN = 0x00
+note over WIRE
+  <b>GAP 1 = 18.500 ms</b>  (dmem[6] = 223)
+
+  The frame period is measured across TWO
+  DIFFERENT pulse widths on purpose. A fixed gap
+  after each pulse would give 20.5 ms here and
+  21.0 ms at the next position - 49 Hz then
+  47.6 Hz - and every per-pulse WIDTH check would
+  still pass. This is the measurement that tells
+  a slot from a delay.
+end note
+
+== positions 2..4: the widths still have to be right ==
+
+group short sweep gaps - 2.5 ms each, not slots
+  CPU -> PAD : TXPIN = SRV_DATA / 0x00, 3 x (pulse, gap)
+  note over WIRE
+    <b>1750.12</b> (+0.12) then 4 250.58 us\n
+    <b>1250.13</b> (+0.13) then 3 750.60 us\n
+    <b>2000.10</b> (+0.10) then (short)\n
+    Each short gap still exceeds 1 000 us, and the
+    TB PRINTS them as "a short sweep gap, not a
+    frame" rather than reporting them as slots.
+  end note
+end group
+
+== done ==
+
+CPU -> PAD : dmem[10] = 5
+note over WIRE
+  The firmware parks with the line LOW, and the
+  TB asserts the LAST recorded edge is a fall.
+  A firmware that parked high would leave the
+  servo held at full travel forever.
+end note
+
+== the tolerances, and why they are the ones they are ==
+
+note over CPU, WIRE
+  <b>Bands the TB uses, and what each is protecting.</b>
+  ...
+  pulse width      1 000 .. 2 001 us   the servo would ignore or saturate outside
+  vs requested     +/- 30 us            the sweep would not be a sweep
+  frame period     19 900 .. 20 100 us  49.5 .. 50.25 Hz - the motor hums outside
+  short gap        > 1 000 us           a short gap is still a gap, not a second pulse
+  ...
+  <b>PULSE_MAX_US is 2000 + 1, and the 1 is stated rather than hidden:</b> a
+  firmware that produced exactly 2000.0 us would otherwise sit ON the datasheet
+  ceiling, and a ceiling a program can land on exactly is a ceiling a rounding
+  error can push it over.
+  ...
+  <b>Why the frame period is a band and the pulse widths are checked against
+  the REQUEST.</b> A frame period is two measured widths added together, so its
+  error is the sum of the two tables' fitting error - bounded at 0.25 us each by
+  the construction in the firmware header. A band is the honest shape of that
+  claim. The widths are compared against what the firmware was ASKED for, which
+  is a different and stronger statement: it pins the sweep, not just the band.
+end note
+
+note over CPU, WIRE
+  <b>The five measured widths are all 0.10 to 0.15 us LONG, and that direction is
+  systematic, not noise.</b> The delay routine's clock count is exact - the core
+  is single-cycle, so N instructions take exactly N clocks - and the residue is
+  the table entry's FITTING: the outer counter is a whole number of steps, so
+  each entry lands at or just above its target. A count that could land short as
+  easily as long would be a worse mechanism, because the datasheet's interesting
+  bound on this protocol is a MINIMUM.
+end note
+
+@enduml

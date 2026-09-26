@@ -117,7 +117,7 @@ frame 3/24 wrong. No window check can see it. A strip can.
 
 The cell is **straight-line code**, not a delay loop:
 
-```
+```text
   6  the cell's own work: mask the bit, drive the pin   <- the cell starts
  50  NOPs, padding the high period
   6  advance: the mask down one bit, the counter down one
@@ -125,7 +125,7 @@ The cell is **straight-line code**, not a delay loop:
  12  equalised branch: pad one way, do the boundary work the other
  ---
  75 clocks = 1.25 µs at 60 MHz
-```
+```text
 
 The core is single-cycle — one instruction, one clock, no stalls, no pipeline
 bubbles (`rtl/pe_cpu.v`) — so *N* instructions take exactly *N* clocks. The period is
@@ -172,14 +172,14 @@ produces an illegal WS2812 cell.
 
 The one delay that *is* a loop is the **reset**, and it is a counted one:
 
-```
+```text
 dly1: LDM A,9  / SUB A,1 / STM 9,A / JZ dly_done   4
       LDM A,10 / STM 11,A                          2   <- the RELOAD
 dly2: LDM A,11 / SUB A,1 / STM 11,A / JNZ dly2     4 per iteration
       JMP dly1                                     1
 
 total = (n1-1) * (4*n2 + 7) + 4   clocks, exactly, no phase residual
-```
+```text
 
 With `n1 = 10, n2 = 99`: `9 × 403 + 4 = 3631` clocks = 60.5 µs, and the pad
 measures 60.85 µs (3 651 clocks) — the difference is the entry and exit, not
@@ -242,7 +242,7 @@ resolution against a 16.667 ns clock to rediscover an integer that is already kn
 
 The recorded result:
 
-```
+```text
     7 frame starts found (anchored on the >50 us reset)
     reset before frame 1: 60.85 us (3651 clocks)
     reset between frames: 62.28 us (3737 clocks)
@@ -252,7 +252,7 @@ The recorded result:
       10 one-cells at 48 clocks (800.0 ns), 14 zero-cells at 0
 
 PASS: all checks
-```
+```text
 
 Ten one-cells and fourteen zero-cells in a 24-cell frame: 10 = popcount(0x9C) +
 popcount(0xE0) + popcount(0x8A) = 4 + 3 + 3. The count is a consequence of the

@@ -1,0 +1,144 @@
+@startuml proto-servo-frame
+' ===========================================================================
+' proto-servo-frame.puml - (b) the servo "frame": a pulse, a gap, and the table
+' that produces them.
+'
+' A servo frame is the simplest structure in this repository and the easiest to
+' get subtly wrong, because there is nothing to decode: no header, no length, no
+' checksum, no acknowledge. The only quantities are a high time and a low time,
+' and the ONLY relationship a real servo depends on is that their sum is
+' 20 ms.
+' ===========================================================================
+
+title Servo PWM - the frame and the two tables\n<font size=12>the frame is a SLOT: 20 ms minus the pulse, whatever the pulse is</font>
+
+left to right direction
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam rectangle {
+  BorderColor #33555
+  FontName monospaced
+  FontSize 12
+}
+skinparam rectangle<<pulse>> {
+  BackgroundColor #FFE9B0
+  BorderColor #C09000
+}
+skinparam rectangle<<gap>> {
+  BackgroundColor #DCE6F5
+  BorderColor #5577AA
+}
+skinparam rectangle<<one>> {
+  BackgroundColor #FFF4D6
+  BorderColor #C8B800
+}
+skinparam rectangle<<short>> {
+  BackgroundColor #E8F0E8
+  BorderColor #557755
+}
+
+rectangle "PULSE\n<b>1.000 ms</b>\n\nthe datasheet's\nMINIMUM position\n0 degrees\n\ndmem[0] = 97" as P0 <<pulse>>
+rectangle "GAP\n<b>19.000 ms</b>\n\nFULL 20 ms SLOT\nthe frame rate is\nmeasured here\n\ndmem[5] = 229" as G0 <<one>>
+rectangle "PULSE\n<b>1.500 ms</b>\n\ncentre\n\ndmem[1] = 145" as P1 <<pulse>>
+rectangle "GAP\n<b>18.500 ms</b>\n\nFULL 20 ms SLOT\nmeasured against G0:\n<b>19 999.95 us = 50.000 Hz</b>\n\ndmem[6] = 223" as G1 <<one>>
+rectangle "PULSE\n<b>1.750 ms</b>\n\ndmem[2] = 169" as P2 <<pulse>>
+rectangle "GAP\n<b>2.500 ms</b>\n\na SHORT sweep gap,\nnot a frame\n\ndmem[7] = 31" as G2 <<short>>
+rectangle "PULSE\n<b>1.250 ms</b>\n\ndmem[3] = 121" as P3 <<pulse>>
+rectangle "GAP\n<b>2.500 ms</b>\n\ndmem[8] = 31" as G3 <<short>>
+rectangle "PULSE\n<b>2.000 ms</b>\n\nthe datasheet's\nMAXIMUM position\nfull travel\n\ndmem[4] = 193" as P4 <<pulse>>
+rectangle "GAP\n<b>2.500 ms</b>\n\ndmem[9] = 31" as G4 <<short>>
+rectangle "dmem[10] = 5\n\nthe sweep is done.\nThe firmware parks with\nthe line LOW." as END
+
+P0 -[#3A7]-> G0 : rise 0
+G0 -[#3A7]-> P1 : rise 1, <b>19 999.95 us later</b>
+P1 -[#3A7]-> G1
+G1 -[#3A7]-> P2 : rise 2, the short gap begins
+P2 -[#3A7]-> G2
+G2 -[#3A7]-> P3 : rise 3
+P3 -[#3A7]-> G3
+G3 -[#3A7]-> P4 : rise 4
+P4 -[#3A7]-> G4
+G4 -[#3A7]-> END
+END -[#3A7,dashed]-> P0 : and the firmware loops
+
+note bottom of P0
+  <b>Why the order is 1.0, 1.5, 1.75, 1.25, 2.0 and not monotonic.</b>
+
+  A sweep that only grows can be satisfied by a
+  firmware that emits the right widths in the
+  wrong order, and a testbench that sorts its
+  measurements before checking them cannot tell
+  the difference. Emitting a NON-monotonic order
+  makes the order a checkable property: width i
+  is compared against position i, and the mutation
+  case sv-sweep-order swaps two entries to prove it.
+end note
+
+note top of G1
+  <b>Why the frame period is measured across two different pulse widths.</b>
+
+  1000 us then 1500 us, rise to rise. That is the
+  measurement that tells a SLOT from a DELAY: a
+  fixed gap after each pulse gives 20.5 ms here
+  and 21.0 ms at the next position, so both the
+  frame rate and the sweep would be wrong in ways
+  no per-pulse width check can see.
+
+  This is the act's only tolerance-shaped number
+  and it is the one that is stated as a band
+  (19 900 .. 20 100 us) rather than an equality,
+  because a frame period is two measured widths
+  added together and the program's is a counted
+  instruction count, not a calibrated one - the
+  error is in the two delay tables' fitting, which
+  is bounded at 0.25 us each by construction.
+end note
+
+note bottom of G2
+  <b>Why three of the five slots are short, and it is stated.</b>
+
+  Positions 0 and 1 are a full 20 ms apart so the
+  frame rate can be measured. Positions 2..4 use a
+  2.5 ms gap - a fifth - which saves 45 ms of
+  simulated time in the longest testbench in the
+  repository.
+
+  The trade costs nothing that is claimed: the
+  50 Hz claim rests on the measured frame period,
+  and the sweep claim rests on five measured
+  pulse WIDTHS, which is all a width check needs.
+  The TB still checks that each short gap exceeds
+  1 000 us, and it PRINTS them as "a short sweep
+  gap, not a frame" rather than reporting them as
+  slots.
+end note
+
+legend bottom
+  |= position |= pulse | gap | total slot | pulse n1 | gap n1 |=
+  | 0 - 0 degrees    | 1 000 us | 19 000 us | <b>20 000 us (full)</b> |  97 | 229 |
+  | 1 - centre        | 1 500 us | 18 500 us | <b>20 000 us (full)</b> | 145 | 223 |
+  | 2                 | 1 750 us |  2 500 us | 4 250 us (short) | 169 |  31 |
+  | 3                 | 1 250 us |  2 500 us | 3 750 us (short) | 121 |  31 |
+  | 4 - full travel   | 2 000 us |  2 500 us | 4 500 us (short) | 193 |  31 |
+
+  The n1 column is the OUTER counter of the delay
+  routine. For a chosen (n2,n3) the outer counter
+  that lands nearest a target is a DIVISION, and
+  choosing (n2,n3) to keep every entry inside 255
+  is a small search. Both tables are the result of
+  that, not of trial and error.
+
+  | pair | used for | one outer step | quantisation |
+  | (2, 152)  | pulses | (4*152 + 11) = 619 clocks = 10.3 us | 10.3 us |
+  | (11, 123) | gaps   | (10 + 10*499) = 4 655 clocks = 77.6 us | 77.6 us |
+
+  <b>Why the numbers are this close is the point, and the accuracy is not.</b>
+  A servo's 50 Hz is a nominal with a wide tolerance; the real requirement is
+  "not 45 Hz and not 58 Hz". The point is WHY: the delay is a DETERMINISTIC
+  INSTRUCTION COUNT, not a calibrated loop, so there is no oscillator to drift
+  and no phase to lose. Change the clock and every number in the table scales
+  with it, visibly, in the source.
+end legend
+
+@enduml
