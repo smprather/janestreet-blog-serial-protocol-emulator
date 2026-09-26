@@ -301,7 +301,6 @@ MEASURED_US = {
 }
 
 # The wrong claims the review pass caught, kept as negative controls.
-#
 # These are CLAIM shapes, not bare digits, and the distinction is not pedantry.
 # The servo page legitimately prints "619" while explaining why 4*n3+11 is the
 # wrong form of the outer step; a check that forbade the digit would forbid the
@@ -392,6 +391,95 @@ OWNED_PROTOCOLS = (
     "sr04",
     "fm-biphase",
 )
+
+# The pages whose `updated:` this gate also checks. Every protocol in the list
+# above has one page, so this is derived rather than hand-maintained -- a second
+# hand-maintained list in the same file is a second thing that can drift.
+OWNED_PAGES = tuple(f"wiki/concepts/protocol-{p}.md" for p in OWNED_PROTOCOLS)
+
+
+def _declared_updated(path: Path) -> str | None:
+    """the page's `updated:` field, or None if it has no readable one"""
+    for line in path.read_text().splitlines()[:20]:
+        if line.startswith("updated:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def _last_content_change(rel: str) -> str | None:
+    """when git last touched this file, as YYYY-MM-DD, or None if unknowable.
+
+    A checkout that is not a git working tree -- an exported tarball, or the
+    self-test's throwaway fixture -- has no history, and the honest answer there
+    is "cannot determine", not "passes". The caller reports that state loudly
+    instead of counting it as a check, because not stamping is a decision and a
+    reader should be able to see which pages were not stamped.
+
+    DELAY_LATTICE_UPDATED is a test seam, and the only reason one exists here: the
+    self-test's fixture has no git history, so without a seam the comparison could
+    not be exercised end to end at all.
+    """
+    seam = os.environ.get("DELAY_LATTICE_UPDATED", "")
+    if seam:
+        name, _, when = seam.rpartition("+")
+        if name == rel:
+            return when
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ROOT), "log", "-1", "--format=%ad", "--date=short", "--", rel],
+            capture_output=True, text=True, check=False,
+        )
+    except OSError:
+        return None
+    when = out.stdout.strip()
+    return when if out.returncode == 0 and when else None
+
+
+def check_updated_dates() -> int:
+    """assert each page's `updated:` is not older than its last content change.
+
+    wiki/SCHEMA.md says "When updating a page, always bump the `updated` date",
+    and check_wiki_pages.sh enforces four of the five SCHEMA rules. This is the
+    fifth, and it is the one about a page being HONEST about when it was last
+    checked -- which is the same species as every other gap this gate has closed:
+    a rule that is stated and not enforced is a rule that is a convention.
+    """
+    import re
+
+    stamped = unknown = 0
+    failures = 0
+    isodate = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    for rel in OWNED_PAGES:
+        path = ROOT / rel
+        if not path.exists():
+            print(f"FAIL  {rel}: absent, so its `updated` cannot be checked")
+            failures += 1
+            continue
+        declared = _declared_updated(path)
+        if declared is None:
+            print(f"FAIL  {rel}: no `updated:` field, so the page cannot say when "
+                  "it was last checked")
+            failures += 1
+            continue
+        if not isodate.match(declared):
+            print(f"FAIL  {rel}: `updated: {declared}` is not YYYY-MM-DD")
+            failures += 1
+            continue
+        changed = _last_content_change(rel)
+        if changed is None:
+            unknown += 1
+            print(f"note  {rel}: declared {declared}, last content change UNKNOWN "
+                  "(not a git working tree) - not counted as a check")
+            continue
+        if declared < changed:
+            print(f"FAIL  {rel}: `updated: {declared}` but the content last changed "
+                  f"{changed}. Bump the date or revert the change.")
+            failures += 1
+        else:
+            stamped += 1
+    print(f"ok    `updated` verified against git for {stamped} page(s)"
+          + (f"; {unknown} not determinable and NOT counted" if unknown else ""))
+    return failures
 
 
 def _owner_of(base: str) -> str | None:
@@ -586,6 +674,50 @@ def selftest() -> int:
         if not require("all planted errors removed", want_fail=False):
             return 1
 
+        # (7) THE `updated` FIELD, which SCHEMA states and nothing enforced. The
+        #     fixture is a copy of the FILES with no git history, so the clean
+        #     run reports every page as UNKNOWN and counts none of them - which is
+        #     the honest answer for a non-git checkout, and the reason the seam
+        #     exists at all. The two controls below are what make this a check
+        #     rather than a report: one plants a page whose content moved past the
+        #     date it declares, and the gate must fail on it.
+        env = dict(os.environ, DELAY_LATTICE_UPDATED=f"{OWNED_PAGES[0]}+2099-01-01")
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), str(fixture)],
+            capture_output=True, text=True, check=False, env=env,
+        )
+        if proc.returncode == 0:
+            good = False
+            print("FAIL  a stale `updated` was planted and the gate returned 0")
+        else:
+            print(f"ok    stale `updated` (content 2099-01-01, page declares less): "
+                  f"gate exit {proc.returncode}")
+
+        # and the SAME page with a date that covers its change must pass, so the
+        # control is not satisfied by a check that simply always fails
+        env = dict(os.environ, DELAY_LATTICE_UPDATED=f"{OWNED_PAGES[0]}+2000-01-01")
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), str(fixture)],
+            capture_output=True, text=True, check=False, env=env,
+        )
+        if proc.returncode != 0:
+            good = False
+            print("FAIL  a covered `updated` was planted and the gate failed; "
+                  "the control is satisfied by always-red")
+        else:
+            print(f"ok    `updated` covering its change: gate exit {proc.returncode}")
+
+        # and a page whose `updated` is not a date at all is caught, because
+        # "bump the date" is only checkable if the field is machine-readable
+        target = fixture / OWNED_PAGES[0]
+        keep = target.read_text()
+        target.write_text(keep.replace("updated: ", "updated: not-a-date ", 1))
+        good &= require("`updated` that is not YYYY-MM-DD", want_fail=True)
+        target.write_text(keep)
+
+        if not require("final green re-check", want_fail=False):
+            return 1
+
     if not good:
         print("SELFTEST: FAILED")
         return 1
@@ -660,6 +792,10 @@ def main() -> int:
     print()
     print("== the coverage list, asserted against the filesystem ==")
     fail += check_coverage()
+
+    print()
+    print("== the `updated` field, against git (SCHEMA's fifth rule) ==")
+    fail += check_updated_dates()
 
     print()
     # The checker must be capable of failing, and that has three halves. Each
