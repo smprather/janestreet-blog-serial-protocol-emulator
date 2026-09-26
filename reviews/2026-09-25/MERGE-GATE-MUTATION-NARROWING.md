@@ -156,6 +156,19 @@ everything, and a firmware merge keeps `mutate_timing_tb` (335 s) and
 `mutate_fwbus_tb` (65 s) while dropping the other 14. Total is a lower bound
 (parallel suites cost less concurrently; `run_all.sh` runs them in sequence).
 
+**The one hole in this evidence, and the one line that closes it.** The
+`mutate_timing_tb` figure is invalid (§5), so 1468 s is a lower bound for a
+second reason as well. Re-measure that suite alone when the worktree's run lock
+is free — it is the one command, and it needs the lock because it mutates the
+shared tree:
+
+```sh
+regress/mutate_timing_tb.sh          # ~335 s; expect exit 0 and "no unexplained survivors"
+```
+
+Do not run it concurrently with an edit to `regress/mutate_timing_tb.sh` — that
+is precisely what invalidated the number (§5).
+
 ## 7. What is verified, and what is not
 
 **Verified:** `--self-test` 27/27 (23 mapper rules including the mutation
