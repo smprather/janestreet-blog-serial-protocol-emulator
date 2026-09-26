@@ -67,7 +67,7 @@ load — no side channel, no simulation-only hook.
 Run it yourself, no board needed:
 
 ```
-python3 tools/host_bridge/acceptance.py --fake   # the 7 r3_demo_* beats
+python3 tools/host_bridge/acceptance.py --fake   # the 8 r3_demo_* beats
 ```
 
 1. **Arm.** `DEBUG_BP_SET(2)` over the host bus. The response's five-word
@@ -98,6 +98,32 @@ python3 tools/host_bridge/acceptance.py --fake   # the 7 r3_demo_* beats
 7. **Resume with the breakpoint still wanted.** Step off → clear → re-arm. The
    GUI offers this as one action precisely because the naive "clear to get
    going" silently drops your breakpoint.
+
+**Two beats that make the awkward part explicit.** The numbered story above is
+the happy path; the run also demonstrates the two facts a debugger has to code
+around, because both were the kind of thing a reader would otherwise assume:
+
+- **`r3_demo_held_readback`** — the R2 readback of a *held* core, taken at the
+  moment of the hit, over exactly the path the GUI polls. `STATUS` reports
+  `state=3` (**BP_HIT**) with `run=1`, and the session reports `BP_HIT` rather
+  than "stopped" — a core parked on a breakpoint is not stopped, it is held, and
+  the strap is still high. `DUMP_CORE` is then **refused**, because *its gate is
+  the run strap* and the core answering `NOT_READY` (status 6) is the chip
+  agreeing; `READ_CPU` still answers, because it is the one **non-halting** read.
+  So the working readback of a core parked on a breakpoint is `STATUS`, not
+  `DUMP_CORE`. Honest standing: the debug-hold *state* is chip-confirmed in
+  simulation through the R3 vectors, but this R2 readback of it is 4 golden
+  steps at **18 of 22** that the chip has **not yet** re-run
+  (`reviews/2026-09-25/R2-HELD-STATUS-BYTES.md`).
+- **`fault_refusals`** — the run's only demonstration of a *refusal*, and it
+  sits between the existing `fault` and `clear_fault` beats because that is the
+  only point where a fault is latched and not yet cleared. With a fault latched
+  the host refuses to drive the core (no step), and it refuses a step before a
+  load too, because there is nothing loaded to step. That is **the host's own
+  policy**, not a chip claim: the chip has no such rule and would execute the
+  step. What *is* a chip claim is on the same line — `DUMP_CORE` still answers a
+  faulted core, and its sticky fault word is header field 9, so that header *is*
+  the diagnostic.
 
 **One operational trap, worth knowing before you demo it.** Once the core is
 stopped on a breakpoint it is in a *debug hold*, and while held the run strap is
@@ -144,13 +170,13 @@ The GUI is not a mock: it speaks the real wire protocol to the real bridge.
 | UART / SPI / I2C / 10BASE-T personas run as firmware | **RTL-proven** | `tb_pe_soc_uart`, `tb_pe_soc_spi`, `tb_pe_soc_i2c*`, `tb_pe_soc_eth*`, `tb_pe_eth_tx` |
 | Full regression is green | **RTL-proven** | `./regress/run_all.sh --fast -j8` → exit 0 on a cold clone: **RTL 34/34, firmware 26/26, 12 mutation suites** (R2 and the wait-word gate are registered in `run_all`; see `docs/cold-clone-audit.md`) |
 | 60 MHz maps and routes | **RTL-proven (mapped, not routed)** | area + screen reports; physical flow intentionally out of scope |
-| Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, both fuzz campaigns, soak smoke, MicroPython conformance, acceptance `--fake` → 35 PASS, 0 FAIL, 1 SKIP) |
+| Host GUI + bridge against fakes | **host-proven** | one-command gate `tools/host_gui/run_host_tests.sh` (host tests, bridge tests, lint, both fuzz campaigns, soak smoke, MicroPython conformance, acceptance `--fake` → 37 PASS, 0 FAIL, 1 SKIP) |
 | Bridge on a real MicroPython | **measured** | built the MicroPython unix port and ran the deployed modules on it; found and fixed 5 deployment blockers (`reviews/2026-09-25/HOST-BRIDGE-MICROPYTHON.md`) |
 | Framed host bus (PING/LOAD/STATUS/CLEAR_FAULT/TARGET, target-1 loopback, sticky faults, `IRQ_N`) | **RTL-proven** | chip-side R1 landed and verified with mutation coverage; the host's bridge/acceptance drive the same contract |
 | Host protocol on real silicon (R1) | **LANDED + verified** | the chip team landed the framed bus, `IRQ_N` and target 1; the host stack speaks that exact contract today |
 | Memory/register readback (R2) | **chip-confirmed (simulation), 18 of 22 steps** | chip R2 landed and registered in `run_all`: `tb_pe_ctrl_r2` reports **18/18** golden steps PASS, byte-exact (CRC included) with the model image loaded per vector, the opening 3-word LOAD replayed as a real frame, and `pe_ctrl` STA-screened. The record lives in the **chip** repo (`reviews/2026-09-25/R2-READ-PATH-REVIEW.md`); this repo's package consumed those same steps as its acceptance spec (`reviews/2026-09-25/R2-READ-VERIFICATION.json`). **4 further steps are NOT confirmed**: the same readback while the core is **held** at a breakpoint — `state=2` (a step-pause) and `state=3` (a live hit, where the hit holds the core and *not* the run strap, so `DUMP_CORE` is still `NOT_READY`). They ship `chip_confirmed=false` until the chip re-runs them; bytes and pre-states in `reviews/2026-09-25/R2-HELD-STATUS-BYTES.md` |
 | Liveness is observable (P3) | **chip-confirmed (simulation)** | R2's STATUS is 11 words incl. `pc/a/x/y/timer` at native widths, and `READ_CPU` is the one **non-halting** read, so a host can watch a RUNNING program (chip P3 finding closed; host GUI surfacing is this branch) |
-| Debug control: arm / hit / inspect / step / clear / resume (R3) | **chip-confirmed (simulation), 25/26 steps** | chip R3 landed; the chip's own `tb_pe_ctrl_r3_conf` is **GREEN 26/26** against the contract, with a 7-mutant gate (all caught) and formal proofs for S1–S4. It covers **25 of the 26** steps in this repo's golden package byte-exactly, and those 25 now carry `chip_confirmed=true` with the chip's citations; the one exception is a step whose expected `insn` is not contract-determined for a free-running core (a freeze-snapshot TB model boundary), which **both sides leave unproven** rather than "fixing" to match a testbench. The host's GUI panel, session state machine and the 7-beat `r3_demo_*` acceptance act drive the same contract; see `reviews/2026-09-25/R3-DEBUG-VERIFICATION.json` and `R3-VECTOR-BYTES.md`. **Not** hardware-confirmed |
+| Debug control: arm / hit / inspect / step / clear / resume (R3) | **chip-confirmed (simulation), 25/26 steps** | chip R3 landed; the chip's own `tb_pe_ctrl_r3_conf` is **GREEN 26/26** against the contract, with a 7-mutant gate (all caught) and formal proofs for S1–S4. It covers **25 of the 26** steps in this repo's golden package byte-exactly, and those 25 now carry `chip_confirmed=true` with the chip's citations; the one exception is a step whose expected `insn` is not contract-determined for a free-running core (a freeze-snapshot TB model boundary), which **both sides leave unproven** rather than "fixing" to match a testbench. The host's GUI panel, session state machine and the 8-beat `r3_demo_*` acceptance act drive the same contract; see `reviews/2026-09-25/R3-DEBUG-VERIFICATION.json` and `R3-VECTOR-BYTES.md`. **Not** hardware-confirmed |
 | Board-in-the-loop acceptance | **pending** | runner + runbook exist (`docs/host-bridge-bringup.md`); needs a board. This is the one thing the demo table marks not-done |
 | Physical flow (DRC/LVS) | **out of scope by design** | deferred in the plan; no physical tools run |
 
@@ -181,8 +207,8 @@ If there is no board on the table, the whole story still runs, in order of
 1. **Show the GUI against the bridge on the same laptop.** Start the host
    stack; the acceptance runner's `--fake` mode is a complete, honest
    end-to-end run: real GUI/session/transport/bridge, a modelled chip.
-   `python3 tools/host_bridge/acceptance.py --fake` → 35 PASS, 0 FAIL, 1 SKIP
-   SKIP, and you can drive the same sequence from the browser.
+   `python3 tools/host_bridge/acceptance.py --fake` → 37 PASS, 0 FAIL, 1 SKIP,
+   and you can drive the same sequence from the browser.
 2. **Show the firmware on the emulator.** `python3 tools/fw/peemu.py
    firmware/uart_echo.hex --send "41 42"` — the exact words the hardware
    testbench checks, from the CPU model, in ~2 seconds.

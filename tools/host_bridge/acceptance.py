@@ -36,6 +36,11 @@ from tools.host_gui.session import (
     ControllerSession,
     SessionError,
     SessionState,
+    # The refusal type specifically, not the SessionError base: the held-readback
+    # and fault-refusal beats assert that a state REFUSAL happened, and a
+    # transport failure reaching the same `except` would otherwise be reported
+    # as one. A refusal and a broken wire are different facts.
+    SessionStateError,
     TransportLike,
 )
 from tools.host_gui.transport import TransportError
@@ -171,14 +176,19 @@ def build_serial_link(device):
 def _r2_detail(text: str) -> str:
     """Tag every R2 read-path line with its evidence status.
 
-    Chip R2 is landed and chip-confirmed IN SIMULATION (chip repo
-    `tb_pe_ctrl_r2`: all 15 golden steps byte-exact, see
-    `R2-READ-PATH-REVIEW.md`). The hardware run — this script against a real
-    Pico and shuttle — is still unexecuted, so the tag says exactly that.
+    Chip R2 is landed and the R2 READ-PATH steps are chip-confirmed IN
+    SIMULATION (chip repo `tb_pe_ctrl_r2`: 18 golden steps byte-exact, see
+    `R2-READ-PATH-REVIEW.md`). The package is PARTIAL: four held-core steps
+    added 2026-09-25 ship `chip_confirmed=false` until the chip re-runs them, so
+    this tag states 18 of 22 rather than a total that would be false. The
+    hardware run — this script against a real Pico and shuttle — is still
+    unexecuted, so the tag says exactly that.
     """
     return (
-        f"{text} [chip-confirmed in simulation (tb_pe_ctrl_r2, 15/15 "
-        f"byte-exact); hardware acceptance not yet run]"
+        f"{text} [chip-confirmed in simulation for the R2 read-path steps "
+        f"(tb_pe_ctrl_r2, 18/18 byte-exact; the package is 18 of 22, the four "
+        f"held-core steps are not yet re-run by the chip); hardware "
+        f"acceptance not yet run]"
     )
 
 
@@ -642,7 +652,46 @@ def run_acceptance(
             f"holds the core, it does not drop the run strap",
         )
 
-        # 4. inspect the registers two ways
+        # 3b. the R2 READBACK of the HELD core - the op the GUI actually polls.
+        #     Unnumbered on purpose: the walkthrough cites beats 1-7 by number,
+        #     and renumbering them would desynchronise the document from the
+        #     run. The evidence tail is written here rather than reusing
+        #     `_r3_detail`, because this beat straddles two claims: the
+        #     debug-hold STATE is covered by the R3 vectors, while the R2
+        #     readback of that state is exactly the surface the R3 review found
+        #     untested, and its four golden steps ship chip_confirmed=false.
+        #     Borrowing the R3 tag wholesale would be the F1 defect again.
+        held = session.status()
+        try:
+            session.dump_core()
+            dump_refusal = "DUMP_CORE ANSWERED (unexpected)"
+        except SessionStateError as exc:
+            dump_refusal = f"DUMP_CORE refused ({exc})"
+        cpu_held = session.read_cpu()
+        # `report.record` directly, NOT `demo()`: the shared helper appends the
+        # R3 package's tally, and this line is about the R2 readback, so the two
+        # packages' numbers would sit on one judge-facing line with nothing to
+        # say which covers which. The tail is written out instead.
+        report.record(
+            "r3_demo_held_readback",
+            held.state == 3 and held.run == 1
+            and session.state == SessionState.BP_HIT
+            and cpu_held.pc == DEMO_BP
+            and dump_refusal.startswith("DUMP_CORE refused"),
+            f"the R2 readback of a HELD core, which is the path the GUI polls: "
+            f"STATUS reports state={held.state} (BP_HIT) run={held.run} and the "
+            f"session reports {session.state} - a core parked on a breakpoint "
+            f"is not \"stopped\", it is BP_HIT, and run=1 is the strap still "
+            f"high; {dump_refusal}, because DUMP_CORE's gate is the run STRAP "
+            f"and the core answering NOT_READY (status 6) is the chip agreeing; "
+            f"READ_CPU still answers (pc={cpu_held.pc}) because it is the one "
+            f"NON-HALTING read. The debug-hold STATE is chip-confirmed in "
+            f"SIMULATION through the R3 vectors; the R2 READBACK of that state "
+            f"is 4 golden steps at 18 of 22, which the chip has not yet "
+            f"re-run (reviews/2026-09-25/R2-HELD-STATUS-BYTES.md) - "
+            f"unconfirmed, and the hardware run has not been executed]",
+        )
+
         cpu = session.read_cpu()
         demo(
             "r3_demo_4_inspect",
@@ -733,6 +782,48 @@ def run_acceptance(
             "fault",
             faulted.faults == FAULT_LOAD and session.state == SessionState.FAULTED,
             f"faults=0x{faulted.faults:04X} state={session.state}",
+        )
+        # What the host does with a faulted core, and the one read a fault does
+        # NOT close. Sits HERE, between fault and clear_fault, because that is
+        # the only point in the run where the fault is latched and the clear has
+        # not happened yet - the refusal cannot be demonstrated anywhere else,
+        # and nothing in the sequence is reordered.
+        #
+        # The line separates two claims, because they have different standing:
+        # the refusal is the HOST's own policy (the chip would execute the step
+        # quite happily - it has no such rule), while the dump is a chip
+        # behaviour, and it is the read whose header carries the sticky fault
+        # word an operator actually needs. The GUI used to hide that read under
+        # exactly this state.
+        try:
+            session.debug_step()
+            refusal = "the step was NOT refused (unexpected)"
+        except SessionStateError as exc:
+            refusal = f"DEBUG_STEP refused ({exc})"
+        try:
+            faulted_dump = session.dump_core()
+            dump_line = (
+                f"DUMP_CORE still answers: state={faulted_dump.state} "
+                f"faults=0x{faulted_dump.faults:04X} - the sticky fault word is "
+                f"header field 9, so this header IS the diagnostic"
+            )
+        except SessionStateError as exc:
+            faulted_dump = None
+            dump_line = f"DUMP_CORE was refused too ({exc})"
+        report.record(
+            "fault_refusals",
+            refusal.startswith("DEBUG_STEP refused")
+            and faulted_dump is not None
+            and faulted_dump.faults == FAULT_LOAD,
+            f"HOST POLICY, not a chip claim: with a fault latched the host "
+            f"refuses to drive the core - {refusal} - and it refuses a step "
+            f"before a load too, because there is nothing loaded to step. The "
+            f"chip has no such rule and would execute the step, so nothing here "
+            f"is chip-confirmed. What IS a chip claim: {dump_line} "
+            f"[chip-confirmed in simulation for the R2 read-path steps "
+            f"(tb_pe_ctrl_r2, 18/18 byte-exact; the package is 18 of 22, the "
+            f"four held-core steps are not yet re-run by the chip); hardware "
+            f"acceptance not yet run]",
         )
         try:
             faults = session.clear_fault(FAULT_LOAD)

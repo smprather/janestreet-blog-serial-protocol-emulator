@@ -15,6 +15,8 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from tools.host_bridge import acceptance as ACC
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DOCS = REPO_ROOT / "docs"
 WALKTHROUGH = DOCS / "demo-walkthrough.md"
@@ -122,6 +124,41 @@ class TestDemoWalkthrough(unittest.TestCase):
         # the unqualified "this row is wholly chip-confirmed" form is exactly
         # the claim that stopped being true when the held steps landed
         self.assertNotIn("| **chip-confirmed (simulation)** |", row)
+
+    def test_the_debug_act_documents_what_the_new_beats_prove(self):
+        """The walkthrough must describe the beats the run now performs.
+
+        Two beats were added to the judge-facing run: the held-state R2
+        readback, and the fault-state refusals. A document that lists the act
+        without them is not wrong exactly, but it leaves the reader with a
+        smaller story than the run tells - and the two facts that matter most
+        are the ones a reader would otherwise assume: the strap is what gates
+        DUMP_CORE, and the refusal rules are the HOST's, not the chip's.
+        """
+        # the act's own beat count, which the run produces
+        report = ACC.run_acceptance(fake=True)
+        demo_beats = [c.name for c in report.checks
+                      if c.name.startswith("r3_demo_")]
+        with self.subTest(beats=demo_beats):
+            self.assertIn(f"the {len(demo_beats)} r3_demo_* beats", self.text)
+        # ...and the run's total PASS count, for the same reason: a number in a
+        # judge-facing document that nobody re-derives is a number that rots
+        passes = sum(1 for c in report.checks if c.status == "PASS")
+        with self.subTest(passes=passes):
+            self.assertIn(f"{passes} PASS, 0 FAIL", self.text)
+        # the two new beats are named, so a reader can find them
+        self.assertIn("r3_demo_held_readback", self.text)
+        self.assertIn("fault_refusals", self.text)
+        # and what they prove, in the document's own words
+        self.assertIn("DUMP_CORE", self.text)
+        # whitespace-tolerant: prose wraps, and a pattern that only matches a
+        # single line is a pattern that fails on a rewrap rather than on a lie
+        self.assertRegex(
+            self.text,
+            r"gate[d]?\s+is\s+the\s+(run\s+)?strap|strap\s+is\s+what\s+gates")
+        self.assertRegex(self.text, r"host('s)?\s+own\s+policy|HOST's\s+rule")
+        # the honest boundary: the four held-core steps are not yet chip-confirmed
+        self.assertRegex(self.text, r"18 of 22|not yet re-run|not yet confirmed")
 
     def test_liveness_is_presented_as_a_chip_confirmed_capability(self):
         # P3 closed chip-side: STATUS carries pc/a/x/y/timer and READ_CPU is
