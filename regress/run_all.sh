@@ -497,6 +497,20 @@ else
   failed_names+=("check_shell_syntax")
 fi
 
+# Every mutation harness must be covered by the harness-edit pre-flight. The
+# wiring is correct today because of an edit, not because of a gate, and the next
+# harness added would take the lock, be stamped and never be checked - which is a
+# mid-run edit yielding a false pass with nothing saying so. Same drift class as
+# the MUTABLE check below, one layer over.
+if "$REPO_ROOT/regress/check_harness_preflight.sh" > /tmp/check_harness_preflight.log 2>&1; then
+  echo "harness pre-flight coverage: OK ($(tail -1 /tmp/check_harness_preflight.log))"
+else
+  echo "harness pre-flight coverage: FAILED"
+  cat /tmp/check_harness_preflight.log
+  fail=$((fail+1))
+  failed_names+=("check_harness_preflight")
+fi
+
 # The mutation suites' MUTABLE lists decide which suites a NARROWED merge gate
 # has to run (regress/verify_merge.sh), so a list that stopped covering the
 # files its harness writes would make that gate skip a suite guarding a changed
