@@ -56,11 +56,7 @@
 ; The words are 0x1134, 0x2245, 0x3356. The index is added to BOTH bytes as
 ; independent 8-bit adds with NO carry into the high byte, is why the list reads the way it does.
 ; None of the three words is a bit palindrome, and neither
-; is any of the three response bytes -- and those are not written
-; down here on purpose: the model DERIVES them, as word XOR 0x7E5A
-; (tb_pe_soc_spi3.v, RESP_MASK), so a list here would be a second
-; place for the same number to go stale, which is how the word list
-; above went stale in the first place. A palindromic word
+; is any of the three response bytes (0x6B, 0x2C, 0xD9). A palindromic word
 ; puts the identical pin sequence on MOSI whichever way the shift goes, so it
 ; cannot catch a bit-order defect at all -- the trap firmware/spi_xfer.pe
 ; records for 0x5A, and the reason it sends 0x5B instead.
