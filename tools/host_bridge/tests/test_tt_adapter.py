@@ -13,6 +13,7 @@ import sys
 import types
 import unittest
 
+from tools.host_bridge import pe_frame as PF
 from tools.host_bridge import tt_adapter as A
 
 PINS = {"sck": 2, "mosi": 3, "miso": 4}
@@ -57,6 +58,20 @@ class FakeDemoBoard:
 
     def reset_project(self, active):
         self.reset_calls.append(active)
+
+
+def _fake_module(name: str, **attrs) -> types.ModuleType:
+    """A fake module carrying the given attributes.
+
+    `setattr` rather than plain attribute assignment: `ModuleType` does not
+    declare the names a stub SDK is expected to carry, and a fake is allowed to
+    be more specific than the type of the object holding it. Doing it in one
+    place says so once instead of six times.
+    """
+    module = types.ModuleType(name)
+    for key, value in attrs.items():
+        setattr(module, key, value)
+    return module
 
 
 def install_fake_sdk():
@@ -114,16 +129,10 @@ def install_fake_sdk():
     class RPMode:
         ASIC_RP_CONTROL = "ASIC_RP_CONTROL"
 
-    demoboard = types.ModuleType("ttboard.demoboard")
-    demoboard.DemoBoard = DemoBoard
-    mode = types.ModuleType("ttboard.mode")
-    mode.RPMode = RPMode
-    ttboard = types.ModuleType("ttboard")
-    ttboard.demoboard = demoboard
-    ttboard.mode = mode
-    machine = types.ModuleType("machine")
-    machine.SPI = SPI
-    machine.Pin = Pin
+    demoboard = _fake_module("ttboard.demoboard", DemoBoard=DemoBoard)
+    mode = _fake_module("ttboard.mode", RPMode=RPMode)
+    ttboard = _fake_module("ttboard", demoboard=demoboard, mode=mode)
+    machine = _fake_module("machine", SPI=SPI, Pin=Pin)
 
     modules = {"ttboard": ttboard, "ttboard.demoboard": demoboard,
                "ttboard.mode": mode, "machine": machine}
@@ -210,6 +219,64 @@ class TestTTAdapter(unittest.TestCase):
         self.assertTrue(received.startswith(b"\xff\xff\xff\xff"))
         # ... and the real frame is present after them
         self.assertIn(frame, received)
+
+    def test_host_spi_transfer_reads_past_the_end_of_a_short_reply(self):
+        """The production read path, with the reply SHORTER than the budget.
+
+        Both tests above fill the read budget exactly - six words of response
+        for six words requested - so the case this file never exercised is the
+        one the bridge does on EVERY fixed-size op: `_response_words` budgets
+        the chip's 15 worst-case wait words for every opcode, so a six-word PING
+        reply is read with room for 15 more. Those words come off a RELEASED
+        pad (pe_ctrl drives MISO only while a response shifts), and this stub
+        models exactly that as zeros.
+
+        It is the case the read-length defect lived in, and it is why the
+        bridge-side tests are not enough on their own: they drive the FAKE
+        adapter, which returns the response and ignores `read_words` entirely.
+        Here the real clock-out loop and the real reader meet, which is the only
+        combination a board runs.
+        """
+        adapter = A.TTAdapter(pins=PINS)
+        adapter.configure_host_spi(5_000_000)
+        frame = PF.encode_frame(
+            PF.OP_PING | PF.RESPONSE_BIT, 1, PF.TARGET_HOST,
+            PF.words_to_bytes((PF.STATUS_OK,)))
+        words = len(frame) // 2
+        self.state.response = frame
+        budget = words + PF.MAX_WAIT_WORDS     # what the bridge really asks for
+        received = adapter.host_spi_transfer(b"\x00" * (words * 2),
+                                            read_words=budget)
+
+        # the idle words ARE in the buffer - the adapter must not hide them ...
+        self.assertEqual(len(received), budget * 2)
+        self.assertEqual(received[:len(frame)], frame)
+        self.assertEqual(received[len(frame):], b"\x00" * (budget - words) * 2)
+        # ... and the reader must find the frame anyway
+        decoded = PF.decode_frame(PF.strip_wait_words(received))
+        self.assertEqual(decoded.sequence, 1)
+        self.assertEqual(decoded.payload, (PF.STATUS_OK,))
+
+    def test_a_budget_too_small_for_the_reply_is_reported_not_truncated(self):
+        """The other direction: a budget too small must not yield a frame.
+
+        A silently short read is how a framing bug turns into a data bug, so
+        the reader has to refuse. The request is kept SHORTER than the budget
+        deliberately: the adapter never clocks out fewer words than the request
+        itself (the MISO stream starts during the request), so a long request
+        would mask a short budget entirely - which is itself worth knowing, and
+        is why the budget is always larger than the request in `_response_words`.
+        """
+        adapter = A.TTAdapter(pins=PINS)
+        adapter.configure_host_spi(5_000_000)
+        frame = PF.encode_frame(
+            PF.OP_PING | PF.RESPONSE_BIT, 1, PF.TARGET_HOST,
+            PF.words_to_bytes((PF.STATUS_OK,)))
+        self.state.response = frame
+        received = adapter.host_spi_transfer(b"\x00\x00", read_words=3)
+        self.assertEqual(len(received), 6, "the budget, not the request, governs")
+        with self.assertRaises(PF.FrameError):
+            PF.decode_frame(PF.strip_wait_words(received))
 
     def test_host_spi_transfer_releases_cs_on_error(self):
         board = self.state.board
