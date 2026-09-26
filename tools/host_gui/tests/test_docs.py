@@ -529,11 +529,13 @@ class TestThePageAndTheServerAgreeOnTheRoutes(unittest.TestCase):
     fails this test and has to be explained.
     """
 
-    PAGE_ONLY_ROUTES = frozenset({
-        "/api/assemble": "the page posts a source to /api/load, which "
-                         "assembles server-side; this route is for scripted "
-                         "and fuzz callers (fuzz_server.py drives it)",
-    })
+    PAGE_ONLY_ROUTES = frozenset(
+        {
+            "/api/assemble": "the page posts a source to /api/load, which "
+            "assembles server-side; this route is for scripted "
+            "and fuzz callers (fuzz_server.py drives it)",
+        }
+    )
 
     # The path pattern allows DIGITS. It did not at first: the class was
     # `[a-z_/]`, so a path like `/api/read_cpu_v2` matched nothing at all -
@@ -542,16 +544,18 @@ class TestThePageAndTheServerAgreeOnTheRoutes(unittest.TestCase):
     # and watching the pin stay green. `test_the_scanner_sees_digits` now pins
     # the scanner itself, so the hole cannot reopen quietly.
     PAGE_PATH = re.compile(r'"(/api/[A-Za-z0-9_/-]+)"')
-    BUILT_PATH = re.compile(r'\$\{location\.host\}(/api/[A-Za-z0-9_/-]+)')
+    BUILT_PATH = re.compile(r"\$\{location\.host\}(/api/[A-Za-z0-9_/-]+)")
     ROUTE = re.compile(r'@app\.\w+\("(/api/[A-Za-z0-9_/-]+)"\)')
 
     @classmethod
     def setUpClass(cls):
         root = Path(__file__).resolve().parents[3]
         cls.page = (root / "tools" / "host_gui" / "web" / "app.js").read_text(
-            encoding="utf-8")
+            encoding="utf-8"
+        )
         cls.server = (root / "tools" / "host_gui" / "server.py").read_text(
-            encoding="utf-8")
+            encoding="utf-8"
+        )
         # every quoted /api/... in the page, PLUS the ones it BUILDS: the
         # socket URL is a template over location.host, and a literal-only scan
         # misses it (the first version did, and reported a working endpoint as
@@ -572,10 +576,10 @@ class TestThePageAndTheServerAgreeOnTheRoutes(unittest.TestCase):
         """
         snippet = 'api("/api/read_cpu_v2")'
         self.assertEqual(self.PAGE_PATH.findall(snippet), ["/api/read_cpu_v2"])
+        self.assertEqual(self.ROUTE.findall('@app.get("/api/status2")'), ["/api/status2"])
         self.assertEqual(
-            self.ROUTE.findall('@app.get("/api/status2")'), ["/api/status2"])
-        self.assertEqual(self.BUILT_PATH.findall(
-            "${location.host}/api/events3"), ["/api/events3"])
+            self.BUILT_PATH.findall("${location.host}/api/events3"), ["/api/events3"]
+        )
 
     def test_the_comparison_saw_both_sides(self):
         """A comparison that matched nothing would pass every other test here."""
@@ -585,17 +589,24 @@ class TestThePageAndTheServerAgreeOnTheRoutes(unittest.TestCase):
         self.assertIn("/api/status", self.routes)
         # and the indirectly-built socket URL is in the page's calls
         self.assertIn("/api/events", self.page_calls)
+
     def test_every_page_call_is_a_registered_route(self):
         missing = sorted(self.page_calls - self.routes)
-        self.assertEqual(missing, [],
-                         f"the page calls routes the server does not register: "
-                         f"{missing} - a 404 on a board, in front of an operator")
+        self.assertEqual(
+            missing,
+            [],
+            f"the page calls routes the server does not register: "
+            f"{missing} - a 404 on a board, in front of an operator",
+        )
 
     def test_every_registered_route_is_called_or_explained(self):
         uncalled = sorted(self.routes - self.page_calls)
-        self.assertEqual(set(uncalled), set(self.PAGE_ONLY_ROUTES),
-                         f"routes the page never calls: {uncalled}. Name each "
-                         f"one in PAGE_ONLY_ROUTES with why, or call it.")
+        self.assertEqual(
+            set(uncalled),
+            set(self.PAGE_ONLY_ROUTES),
+            f"routes the page never calls: {uncalled}. Name each "
+            f"one in PAGE_ONLY_ROUTES with why, or call it.",
+        )
 
 
 if __name__ == "__main__":
