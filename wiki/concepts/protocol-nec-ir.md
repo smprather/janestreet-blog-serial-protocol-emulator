@@ -46,9 +46,9 @@ measurement discipline is the strictest in the block.
 A real NEC frame is **32 bits, LSB first**, in four bytes, each followed by its
 one's complement:
 
-```
+```text
 ADDRESS   ~ADDRESS   COMMAND   ~COMMAND
-```
+```text
 
 The inverses are NEC's *only* error detection — there is no checksum, no
 acknowledge and no retry. A receiver that gets the inverse wrong drops the frame.
@@ -92,11 +92,11 @@ cannot be a little bit late.
 **And the two halves are fitted separately, on different `(n2,n3)` pairs**, because
 the phase ladder costs 7 clocks more coming out of phase 1 than out of phase 0:
 
-```
+```text
 low  half = ladder 13 + 4 x 193 + 4 = 13 + 772 = 789 clocks   on (2,44)
 high half = ladder 20 + 5 x 153 + 4 = 20 + 769 = 789 clocks   on (2,34)
 carrier   = 1578 clocks = 26.3 us = 38.0228 kHz
-```
+```text
 
 The delay *alone* cannot make them equal, because the ladder cost is not a
 multiple of either step. The testbench measures both halves off the pin, so the
@@ -106,7 +106,7 @@ fitting the ladder and the delay together rather than tuning the delay alone.
 
 ## The measured result
 
-```
+```text
     carrier: LOW half 13.133-13.249 us (787.95-794.95 clocks), HIGH half 13.149 us (788.95 clocks)
     carrier frequency off the pin: 38049 Hz (nominal 38000, +0.128 %)
     half-period spread: 7.00 clocks LOW, 0.01 clocks HIGH, over 521 pulses
@@ -116,7 +116,7 @@ fitting the ladder and the delay together rather than tuning the delay alone.
     decoded off the pin: a5   firmware dmem[0]: a5
     stop burst: 552.0 us in 22 carrier cycles
     payload bit-transitions: 6 of 7
-```
+```text
 
 Four longs and four shorts, which is `0xA5` = `1010 0101` sent LSB first, and six
 transitions in seven inter-bit gaps — the count follows from the decode rather

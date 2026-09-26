@@ -66,7 +66,7 @@ does not have it, because it reads the **counter** and adds the **difference**:
 
 ```text
 elapsed = (now - previous) mod 256
-```
+```text
 
 exact for any loop up to 255 µs, and this loop is 1.3 µs — two hundred times
 inside it. Two properties follow from the same three instructions: there is no flag
