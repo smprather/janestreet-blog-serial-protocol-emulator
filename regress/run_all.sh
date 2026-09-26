@@ -258,17 +258,33 @@ CASES=(
   # as the instruction memory (ADR-003). Byte granularity comes from the
   # macro's bit-mask port and the read lane is a register -- two silent
   # failure modes, both mutation-tested.
-  # The HC-SR04 RANGING ACT — WIRED, AND KNOWN-RED ON PURPOSE (2026-09-26).
-  # It used to be absent from this list entirely, and that was the defect: a red
-  # act nobody can see is a claim hazard, because "46/46 PASS" then reads as
-  # "the ranging act is verified" when in fact nothing has ever run it. It is
-  # wired here behind a <<wip>> marking rather than left out, and the marking is
-  # SELF-EXPIRING: a <<wip>> case that PASSES is reported as a FAILURE telling
-  # you to remove the marking, so the exemption cannot outlive the act it covers.
-  # That is the same discipline as the wiki-pages gate's pinned baseline with its
-  # STALE check — an exemption that can silently outlive its defect is a
-  # checklist, not a gate.
-  "tb_pe_soc_sr04|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_sr04|<<wip>>"
+  # The HC-SR04 RANGING ACT (2026-09-26). Wired here behind a <<wip>> marking
+  # while it was red, and the marking is GONE now, which is the visible proof
+  # the self-expiring design works: a <<wip>> case that PASSES is reported as a
+  # FAILURE telling you to remove the marking, so an exemption cannot outlive
+  # the act it covers. It was wired rather than left out in the first place for
+  # the same reason -- a red act nobody can see is a claim hazard, because
+  # "46/46 PASS" then reads as "the ranging act is verified" when nothing has
+  # ever run it.
+  #
+  # The claim here is a NUMBER rather than a waveform, which is what makes this
+  # case different from every other one in this list: the device holds ECHO
+  # high for the round trip, so the pulse WIDTH is the distance and the
+  # firmware's job is to turn a width into millimetres. The conversion is
+  # checked as an EQUALITY against us*11/64 done independently in the
+  # testbench, not as a tolerance, because a window around it cannot tell a
+  # correct conversion from one that is 3 % out -- the size of error a
+  # plausible bug produces on this machine.
+  #
+  # The program measures ONE distance per run and parks, so the case is TWO
+  # RUNS, one per distance (1160 us and 5816 us), with a full reset between
+  # them, and each answer is read on the clock the completion flag RISES
+  # rather than at the end of the run. Both properties are forced, not chosen:
+  # sixteen bytes of data memory cannot hold two banked answers and a
+  # four-temporary exact 16-bit add disjointly, and an end-reading reports a
+  # destroyed answer as a wrong number with no way to say which measurement it
+  # belonged to. See firmware/sr04_range.pe's header.
+  "tb_pe_soc_sr04|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_sr04"
   "tb_pe_fbuf|../rtl/pe_fbuf.v|tb_pe_fbuf"
 
   # 10BASE-T on the SoC: wire -> DRU -> Manchester -> MAC + CRC + frame

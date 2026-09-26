@@ -163,15 +163,25 @@ for prog in i2c_adv spi_mode3 uart_flow; do
   pass=$((pass+1))
 done
 
-# The seven TIMING programs. Each of these is $readmemh'd by an RTL testbench
+# The eight TIMING programs. Each of these is $readmemh'd by an RTL testbench
 # (tb_pe_soc_ws2812 / tb_pe_soc_servo / tb_pe_soc_dht11 / tb_pe_soc_ds18b20 /
-# tb_pe_soc_ir_nec / tb_pe_soc_stepper_ramp / tb_pe_soc_freqmeter),
+# tb_pe_soc_ir_nec / tb_pe_soc_stepper_ramp / tb_pe_soc_freqmeter /
+# tb_pe_soc_sr04),
 # so a stale image would be a silent pass on the integration -- and these are
 # the only programs in the repository where a stale image cannot be caught by
 # any other test, because the thing under test IS the program. The delay
 # constants in them are fitted instruction counts (see the headers), so a
 # re-assembly that silently changed one would change a timing claim.
-for prog in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter; do
+#
+# sr04_range is in this list for a stronger version of that reason. Its
+# trigger pulse is not merely a fitted count, it is the number an EQUALITY
+# pins: the testbench checks the pulse is EXACTLY 4*SR_TRIG_LEN + 5 = 601
+# clocks, and SR_TRIG_LEN lives in peasm's CONSTS because a fitted instruction
+# count cannot be reached by editing the source. A hex assembled from a
+# different CONSTS table would still run and would still answer, so the
+# integration would pass on a program whose trigger is the wrong width -- and
+# the equality that exists precisely to catch that would never see it.
+for prog in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter sr04_range; do
   if ! $PY tools/fw/peasm.py "firmware/$prog.pe" -o "firmware/$prog.hex" >/dev/null 2>&1; then
     echo "assemble $prog FAIL"
     $PY tools/fw/peasm.py "firmware/$prog.pe" 2>&1 | head -3 | sed 's/^/    /'

@@ -7,11 +7,26 @@
 // round trip, so the pulse WIDTH is the distance, and the firmware's job is
 // to turn a width into millimetres. The claim is therefore the CONVERSION,
 // and it is checked as an EQUALITY against the same arithmetic done
-// independently here, not as a tolerance: mm = us * 11/64 is exact, and a
-// test that accepts a window around it cannot tell a correct conversion from
-// one that is 3 % out -- which is the size of error a plausible-looking
-// bug produces on this machine (see the header of firmware/sr04_range.pe for
-// why the conversion is mostly doublings).
+// independently here, not as a tolerance: the firmware computes
+// floor(us*11/64) and so does this file, and a window around that cannot tell
+// a correct conversion from one that is 3 % out -- which is the size of error
+// a plausible-looking bug produces on this machine (see the header of
+// firmware/sr04_range.pe for why the conversion is mostly doublings).
+//
+// WHAT THE ANSWER IS, precisely, because "us*11/64 is exact" is a sentence
+// this file used to print and it is FALSE. For the two distances in this
+// case: 1160*11/64 = 199.375 and 5816*11/64 = 999.625. The firmware banks
+// 199 and 999, and the difference is a FLOOR, not an error in the arithmetic.
+// The identity the conversion rests on is exact in the reals --
+// us*11/64 = 11q + 11r/64 with q = us>>6 and r = us&63, and 11q is an integer
+// -- and the result is required to be an integer, so the floor is part of the
+// specification rather than a rounding slop introduced on the way. TWO
+// approximations sit between this number and a real distance, and they are
+// different in kind: the CONSTANT 11/64 = 0.171875 is +0.22 % long against
+// the true 0.17150 mm/us, and the floor gives up up to 0.984 mm. Both belong
+// to the specification, so both are stated here rather than absorbed into the
+// implementation -- and neither is a reason to loosen the check, which pins
+// the ARITHMETIC and is an equality for exactly that reason.
 //
 // THE MODEL knows the table and nothing else. It watches the trigger pin --
 // the SoC's own output AND its own output enable, because a released pad is
@@ -108,7 +123,7 @@ module tb_pe_soc_sr04;
                                      // first -- one slot, because the program
                                      // banks one answer per run
 
-  localparam int N_MEAS = 2;          // TWO RUNS, and N_MEAS now counts runs
+  localparam int N_MEAS = 4;          // FOUR RUNS, and N_MEAS counts runs
   localparam int TRIG_CLOCKS = 601;   // 4*SR_TRIG_LEN + 5, counted in peasm's CONSTS
                                      // and from the listing. SR_TRIG_LEN, not
                                      // SR_TRIG: the pin constant is 0x40, and a
@@ -177,9 +192,62 @@ module tb_pe_soc_sr04;
 
   integer i;
   logic [15:0] prog [0:IMEM_WORDS-1];
+  // THE IMAGE LENGTH IS COUNTED, NOT ASSUMED. $readmemh into [0:1023] from a
+  // 387-word file leaves 637 words unwritten and says so in a WARNING that
+  // every run prints and nobody reads -- and it is unwritten rather than
+  // unknown, because the fill is 0xF000 and 0xF000 is a NOP (peasm's table:
+  // opcode 0xF, "none"), which is also the fill peasm itself uses when it
+  // pads. So the mismatch is harmless by construction and it is ALSO the house
+  // pattern: twelve other testbenches fill the same way.
+  //
+  // It is counted anyway, for the reason the warning is not enough. Reading
+  // the file's own length and asking $readmemh for exactly that many words
+  // turns a cosmetic warning into a CHECKED quantity: a truncated or
+  // half-written image now shows its true length in the log and fails a named
+  // check, instead of being papered over by a fill. The case this does NOT
+  // cover is a STALE image -- the right length, the wrong contents -- and that
+  // is the gap regress/run_firmware_tests.sh's assemble list exists to close,
+  // which is why sr04_range is in it.
+  integer img_words = 0;
+  reg [8*512-1:0] img_line;
+  task automatic count_image();
+    integer fd, n;
+    begin
+      img_words = 0;
+      fd = $fopen(`SR04_HEX, "r");
+      if (fd == 0) begin
+        $display("FAIL: cannot open the firmware image %0s", `SR04_HEX);
+        errors++;
+      end else begin
+        n = $fgets(img_line, fd);
+        while (n != 0) begin
+          // A line that is nothing but the newline is not a word. The
+          // assembler never writes one; this is so a hand-edited image cannot
+          // make the count and the load disagree.
+          if (img_line != "\n") img_words = img_words + 1;
+          n = $fgets(img_line, fd);
+        end
+        $fclose(fd);
+      end
+    end
+  endtask
+
   task automatic load_firmware();
-    for (i = 0; i < IMEM_WORDS; i++) prog[i] = 16'hF000;
-    $readmemh(`SR04_HEX, prog);
+    for (i = 0; i < IMEM_WORDS; i++) prog[i] = 16'hF000;   // NOP fill
+    count_image();
+    if (img_words == 0) begin
+      $display("FAIL: the firmware image %0s is EMPTY", `SR04_HEX);
+      errors++;
+    end else if (img_words > IMEM_WORDS) begin
+      $display("FAIL: the firmware image is %0d words and the machine has %0d",
+               img_words, IMEM_WORDS);
+      errors++;
+      img_words = IMEM_WORDS;
+    end
+    // Exactly the image's own length, which is what silences the
+    // "not enough words" warning and leaves the count above as the thing
+    // that is actually verified.
+    if (img_words > 0) $readmemh(`SR04_HEX, prog, 0, img_words-1);
     for (i = 0; i < IMEM_WORDS; i++) begin
       @(posedge clk); #1;
       host_we = 1'b1; host_imem_sel = 1'b1;
@@ -383,12 +451,33 @@ module tb_pe_soc_sr04;
     $dumpfile("tb_pe_soc_sr04.vcd");
     $dumpvars(0, echo, pin_in_bus, trig, pin_oe_bus, dbg_pc);
 
-    e_us[0] = 1160;    // 199.375 mm: the model's 200 mm target
-    e_us[1] = 5816;    // 999.625 mm, and 5816 > 255, so the capture's
+    // FOUR distances, and the point of the extra two is that two points do
+    // not pin a conversion. 1160 and 5816 are the act's original pair; 2000
+    // and 8000 were added to widen it, and 8000 in particular forces the
+    // 16-bit path (floor(8000*11/64) = 1375) rather than the 199..999 range
+    // the first two live in. Every one of the four is checked against
+    // floor(us*11/64) as an equality, and all four are whole millimetres.
+    e_us[0] = 1160;    // floor = 199 mm: the model's 200 mm target
+    e_us[1] = 5816;    // floor = 999 mm, and 5816 > 255, so the capture's
                        // sixteen-bit counter is what is under test
+    e_us[2] = 2000;    // floor = 343 mm -- 343.75 truncated, a second
+                       // distinct fractional part from the other three
+    e_us[3] = 8000;    // floor = 1375 mm -- the widest answer in the case,
+                       // and the only one needing the high byte
 
-    $display("\n=== HC-SR04 ranging: %0d runs, one distance each: %0d us and %0d us ===\n",
-             N_MEAS, e_us[0], e_us[1]);
+    // Counted HERE as well as inside load_firmware, because load_firmware runs
+    // inside the run loop and this display and check come before it. The count
+    // resets itself, so counting twice is harmless and counting once here
+    // would have left the check reading zero on a perfectly good image.
+    count_image();
+    $display("  image: %0d words loaded from %0s (%0d NOP-filled)",
+             img_words, `SR04_HEX, IMEM_WORDS - img_words);
+    check(img_words > 0 && img_words <= IMEM_WORDS,
+          $sformatf("the firmware image is %0d words, which fits the %0d-word machine -- a truncated or half-written image would otherwise be papered over by the NOP fill",
+                    img_words, IMEM_WORDS));
+
+    $display("\n=== HC-SR04 ranging: %0d runs, one distance each: %0d, %0d, %0d and %0d us ===\n",
+             N_MEAS, e_us[0], e_us[1], e_us[2], e_us[3]);
 
     wide_seen = 0;
     for (seg = 0; seg < N_MEAS; seg++) begin
@@ -475,7 +564,15 @@ module tb_pe_soc_sr04;
                       seg, trig_oe_lo));
 
       // ---- 2/3. the width and the conversion, AS THEY WERE BANKED ------
-      exp_mm = (e_us[seg] * 11) / 64;     // the specification, in integer mm
+      // THE CONVERSION IS AN EQUALITY AGAINST floor(us*11/64), computed here
+      // independently of the firmware. It is not a tolerance, and the reason
+      // is the header's: a window around the answer cannot tell a correct
+      // conversion from one that is 3 % out, which is the size of error a
+      // plausible bug produces on this machine. The floor is applied on BOTH
+      // sides -- this line and the firmware -- and the firmware's floor is
+      // exact rather than approximate, because 11*(us>>6) is an integer and
+      // only 11*(us&63)/64 needs one.
+      exp_mm = (e_us[seg] * 11) / 64;     // the specification, in whole mm
       $display("    run %0d: echo %0d us -> firmware %0d us, answer %0d mm (expected %0d mm)",
                seg, e_us[seg], bank_us, bank_mm, exp_mm);
       // AN UNKNOWN VALUE IS A FAILURE, and these two checks are here because
@@ -507,14 +604,14 @@ module tb_pe_soc_sr04;
       check(!(iabs(bank_us - e_us[seg]) > tol_us),
             $sformatf("run %0d: the measured width %0d us is outside 1 %% (floor 2 us) of the model's %0d us",
                       seg, bank_us, e_us[seg]));
-      // The conversion is EXACT for 11/64, so this is an equality. The
-      // tolerance that would matter is the constant's own +0.22 % against
-      // the speed of sound, and that is a property of the constant, not of
-      // the arithmetic, so it is reported in the header rather than
-      // smuggled in as slack here.
+      // The conversion is EXACT for the constant 11/64 -- there is no
+      // approximation in the ARITHMETIC, which is what makes an equality the
+      // right instrument here. The two approximations in the answer are the
+      // constant itself (+0.22 % against the speed of sound) and the floor,
+      // and the header says so rather than smuggling either in as slack.
       check(bank_mm == exp_mm,
-            $sformatf("run %0d: %0d us is %0d mm, not %0d mm -- us*11/64 is exact and this is an equality",
-                      seg, bank_us, bank_mm, exp_mm));
+            $sformatf("run %0d: %0d us is floor(%0d*11/64) = %0d mm, not %0d mm -- the conversion is an equality against the floor, and the floor is on both sides",
+                      seg, bank_us, bank_us, bank_mm, exp_mm));
       if (bank_us > 255) wide_seen = wide_seen + 1;
     end
 
