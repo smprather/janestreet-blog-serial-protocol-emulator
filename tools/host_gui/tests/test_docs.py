@@ -647,12 +647,17 @@ class TestTheJudgeFacingCountsAreCurrent(unittest.TestCase):
     """
 
     def test_the_scorecard_does_not_claim_the_whole_r2_contract_is_confirmed(self):
-        row = next(line for line in read(SCORECARD).splitlines()
-                   if "Host-controller story" in line)
+        row = next(
+            line
+            for line in read(SCORECARD).splitlines()
+            if "Host-controller story" in line
+        )
         self.assertNotIn(
-            "18/18 chip-confirmed", row,
+            "18/18 chip-confirmed",
+            row,
             "the scorecard presents 18/18 as the whole R2 contract; the package "
-            "is 18 of 22 with four held-core steps unconfirmed")
+            "is 18 of 22 with four held-core steps unconfirmed",
+        )
         # a regex, not a literal: the claim is "18 of 22", and insisting on the
         # exact words makes the pin fail on PHRASING ("18 of its 22") instead
         # of on the claim. Same lesson as the walkthrough's whitespace-tolerant
@@ -661,13 +666,19 @@ class TestTheJudgeFacingCountsAreCurrent(unittest.TestCase):
 
     def test_the_runbooks_opening_names_the_current_step_count(self):
         text = read(BRINGUP)
-        opening = text[:text.index("## 1.")]
-        self.assertNotIn("all 15 golden steps", opening,
-                         "the runbook's opening still says 15 golden steps")
+        opening = text[: text.index("## 1.")]
+        self.assertNotIn(
+            "all 15 golden steps",
+            opening,
+            "the runbook's opening still says 15 golden steps",
+        )
         self.assertIn("18", opening)
         # and it must not read as "the whole package is confirmed"
-        self.assertRegex(opening, r"read-path|of 22|22 steps",
-                         "the opening must scope its count to the read-path steps")
+        self.assertRegex(
+            opening,
+            r"read-path|of 22|22 steps",
+            "the opening must scope its count to the read-path steps",
+        )
 
 
 if __name__ == "__main__":
