@@ -1471,3 +1471,154 @@ place; this one is a claim about the machine itself, and acting on it produces
 a design that cannot be built. The cure is the one that has worked every time
 in this block: go to the assembler and the RTL and COUNT, rather than believing
 the comment that explains the code.
+
+## 2026-09-27 act (c): THE ENCODER TRANSMITS, AND THE DELAY LOOP WAS A RUNNING SUM
+
+**The ruling is implemented to the model, the SHR finding is corrected in all
+three places, and the encode direction is still red -- on the testbench's side,
+with the firmware's wire now measured and explained.** `e2b8e75`, 300 words,
+five checks green and a sixth added, four red checks where the handoff left
+two.
+
+**THE MODEL CAME FIRST, as the handoff ordered, and it is what the firmware was
+written against.** `firmware/bmc_model.py` grows a `Tx` that builds the return
+leg half-interval by half-interval from the wire rules in both polarities,
+checks it against the wire rules interval for interval (80 of 80 each), and runs
+the ROUND TRIP through its own receiver at three offsets and both idle levels.
+The model's receiver comes back with `a5 3c 96` and the right flag every time,
+so "the same frame byte-identical under either encoding" is a property of the
+model before it is a property of silicon. It exits non-zero on a failure, so
+the model is a gate and not a printout.
+
+**TWO THINGS THE MODEL SETTLED THAT THE HANDOFF HAD WRONG.** The return leg's
+idle level is LOW, not high -- the output latch is written to 0 by init -- so
+the frame-start asymmetry FLIPS sides between the two legs: FM0 gets no
+frame-start transition on the return leg and FM1 does, the opposite of the
+input leg. The lock holds either way, because it is made by the preamble's
+two-half gap and not by the level the line was resting at. And the encoder
+must send NOTHING when `dmem[3] = 0xFF`, which is now a rule in the model and a
+test in the firmware.
+
+### THE SHR FINDING, CORRECTED IN ALL THREE PLACES IN THE SAME STEP
+
+The header, the `NO DIVISION` block and the `LEFT SHIFT` comment now say what
+the assembler says. The encoder USES it: the byte is held with the bit now
+going at bit 7 and peeled one place per bit with SHR, so "which bit is this" is
+not a question the program asks, and no mask is dispatched per boundary. There
+is still no shift-LEFT, so the receiver's shift-in is still a doubling.
+
+### THE ENTRY POINT IS frame_done, AND THE POLL LOOP'S DISPATCH IS DELETED
+
+`LDM A,11 / JNZ encoding` is gone rather than left beside the new entry: two
+entries to one transmitter re-enters it on the next poll and restarts the
+transmission in the middle of it. `dmem[11]` was the mode byte and is now the
+encoder's byte; `dmem[6]` is the half-interval counter and `dmem[13]` is the
+decoder's alone, as ruled.
+
+### THE 120-CLOCK HALF-INTERVAL, AND THE HANDOFF'S OWN RECIPE WAS WRONG
+
+`firmware/bmc_checks.py` grows a **sixth check**: it walks every route from one
+`OUT TXPIN` to the next in the assembler's listing and counts clocks. Proven
+against three faults, each of which it caught:
+
+| fault put back | what it reports |
+| :--- | :--- |
+| a wrong fitted constant | 124 clocks |
+| a NOP pad removed | 119 clocks |
+| the running-sum loop | 455 clocks |
+
+**The handoff suggested `LDI A,1 / SUB A,X / JNZ` and "3 per iteration, so 40
+is 120 clocks". It is three instructions and it does not count.** SUB computes
+A - X and nothing puts A back, so A becomes `0 - (n + (n-1) + ...)` and the
+loop leaves when that RUNNING SUM is 0 mod 256 -- with `LDI A, 25` that is 49
+passes and 147 clocks. **MEASURED: 49 loop bodies between two OUT TXPIN, and a
+half-interval of 192 clocks on the wire where the listing said 120.** The
+`LDI A, 0` moved INSIDE the loop, so the fourth instruction makes the branch a
+comparison rather than an accumulation.
+
+**AND THE SIXTH CHECK SIMULATES THOSE LOOPS INSTEAD OF CHARGING THEM A FLAT
+RATE, because the version that assumed three clocks reported 120 for firmware
+transmitting 60% slow.** A check that shares the assumption it exists to test
+is a check that cannot fail, and this act has spent three sessions trying to
+earn the right to say that sentence.
+
+### FIVE MORE FAULTS IN THE ENCODER, ALL FOUND BY A PROBE PRINTING
+
+1. **`frame_done` was NEVER REACHED and no structural check could see it.** The
+   three-byte test compared 3 against a register loaded from `dmem[9]` BEFORE
+   the increment, so on the third byte it computed 3 - 2. The jump is
+   structurally perfect and the act's five checks all called it clean, while the
+   three bytes arrived with nothing noticing they had all arrived. MEASURED by
+   counting executions of the encoder's own `OUT`: **zero in a whole pass.**
+   This is the fault the handoff's `<<wip>>` wiring was invented to prevent, in
+   the place nobody was looking: not a red test but a green one over a branch
+   that never fires.
+2. **A masked value compared in the wrong domain.** The bit was extracted as
+   `0x80`/`0x00` and tested against 1, which is zero for neither.
+3. **A parity test that was not a parity test.** It asked whether the count was
+   ZERO where it meant to ask whether it was ODD, so the mid route was dead --
+   **0 entries in a pass** -- and a run of zeros reloaded its byte on every bit.
+4. **The byte-spent test asked whether `dmem[11]` was `0x80`**, which is where
+   the byte STARTS. It is 0 when the byte is spent, and a byte whose value is
+   `0x00` is zero from the moment it is loaded, so the preamble reloaded 1330
+   times in a pass for the five that belong there.
+5. **THE ONE THAT WAS WORTH THE SESSION: the branch that keeps the level left A
+   HOLDING THE TEST'S OWN RESULT.** `LDI A,0 / SUB A,X / JZ enc_keep_level`
+   arrives with A = 0, and the five instructions after it were NOPs, which of
+   course leave A alone -- so the pad was driven at `0x00` for every FIRST HALF
+   of a bit whose value was a one. **MEASURED: 144 intervals of 121 clocks and
+   not one of 241.** Invisible to every check here: the branch is taken, the
+   label is right, the route is the length it was fitted to, and A is a value
+   the block computed. What it needed was the level somewhere the branch could
+   not reach, which is what Y is for.
+
+**AND THE SIXTH FAULT IS ABOUT THE INSTRUMENT, NOT THE FIRMWARE.**
+`bmc_checks.py`'s jump check read the encoded operand as `word & 0xFF`. The
+target field is `arg[PCW-1:0]` and PCW is 10, so the check measured the wrong
+field -- right only while the program is shorter than 256 words, which it
+stopped being when the encoder landed. **It answered "13 mismatches" on a
+firmware that assembles, links and runs.** A check that has only ever agreed
+with a small program is a check that has never been asked a question.
+
+### THE TESTBENCH'S DECODER, TO THE WIRE RULES
+
+It folded two transitions per bit, which is the flaw this act was written to
+catch. It now has the three-state phase lock, the preamble skip, and the flag
+read off the preamble's levels as `0xFF` for FM0 and `0x00` for FM1. **It works
+in MICROSECONDS derived from the clock count**, which is the receiver's own
+timebase and the firmware's too: `I2CTICK` counts whole microseconds, so a
+121-clock interval is 2 us to both of them. It now locks, and it banks three
+bytes.
+
+### WHAT IS RED, AND IT IS THE HONEST END STATE
+
+The testbench's decoder recovers `80 00 80` for `a5 3c 96` and its flag is -1:
+it has locked the clock and not the polarity. **Two properties of the wire are
+unexplained and both are measured** -- the return leg carries 66 changes and
+SIX two-half gaps per pass where the model says 63 and SIXTEEN, and the
+preamble's assembled byte is neither `0xFF` nor `0x00`.
+
+**NEXT, IN THIS ORDER, AND NONE OF IT IS A GUESS:**
+
+1. `tb/probes/probe_tb_classify.v` -- the TB decoder's own classification
+   trace. It shows the lock landing **two half-intervals early**: the first
+   4 us gap emits a mid and so does the next one, which cannot happen inside
+   the preamble's eight zeros. Either the firmware's preamble has a gap it
+   should not have, or the TB is locking on the wrong transition, and the trace
+   says which.
+2. `tb/probes/probe_pad_intervals.v` -- where the three EXTRA changes per pass
+   are. 66 changes against the model's 63 and 6 two-half gaps against 16 is
+   three boundaries that transition where the rules say they do not.
+3. Only then the encoder, and only if (1) says the wire is wrong.
+
+**THE INSTRUMENTS ARE IN THE REPOSITORY** (`tb/probes/`, with `run.sh` and a
+`labels.py` that emits `L_<label>` defines from the assembler's own listing, so
+a probe can never again be pointed at a decimal). They are there because /tmp
+has been cleaned three times this block with an instrument in it, and every
+fault in this entry was found by one of them printing.
+
+**NOT WIRED INTO run_all.sh.** A `<<wip>>` case that PASSES is itself reported
+as a failure so it can be un-marked, and this one does not pass yet. The
+ruling's wiring step is the last thing left in this act, and it is the right
+order: the two legs argue first, and the regression hears about it when they
+agree.
