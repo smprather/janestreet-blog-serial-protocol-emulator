@@ -453,8 +453,15 @@ def _last_content_change(rel: str) -> str | None:
     return when if out.returncode == 0 and when else None
 
 
-WIKI_DIRS = ("concepts", "plans", "reference", "decisions", "entities",
-             "comparisons", "queries")
+WIKI_DIRS = (
+    "concepts",
+    "plans",
+    "reference",
+    "decisions",
+    "entities",
+    "comparisons",
+    "queries",
+)
 
 
 def resolve_link(target: str) -> str | None:
@@ -477,6 +484,66 @@ def resolve_link(target: str) -> str | None:
         if (ROOT / "wiki" / d / (t + ".md")).exists():
             return f"wiki/{d}/{t}.md"
     return None
+
+
+def check_file_paths() -> int:
+    """every backticked REPO path in my pages must exist in this tree.
+
+    The sibling of the outbound-link check, and it exists because a page in this
+    set shipped two paths that resolve to nothing: the FM0/FM1 page named
+    firmware/bmc_frame.pe and tb/tb_pe_soc_bmc.v as plainly as any other, and
+    both live only on fw-timing-protocols. The page was HONEST about it - the
+    next line said so - but a reader who scans the first mention gets a path
+    that does not open, on a page whose entire subject is being honest about
+    status. So the paths are now written branch-qualified, and this check is
+    what keeps them that way.
+
+    A path that names another branch explicitly (`branch:path`) is exempt: that
+    is the qualified form, and the exemption is a property of the TEXT rather
+    than a list of known-absent files, so a path that moves to another branch
+    later does not need this file edited.
+
+    A BARE FILENAME is a name, not a path, and is resolved by looking it up
+    ANYWHERE in the tree. The first version of this check required every match to
+    exist at the repo root, so `i2c_pins.pe` and `tb_pe_soc_sr04.v` - both of
+    which exist, in firmware/ and tb/ - were reported missing, the clean fixture
+    went red, and the two findings were the check's fault. A checker that invents
+    failures is the same defect as one that invents dead links, and the second
+    time this branch has walked into it for the same reason.
+    """
+    import re
+
+    path_re = re.compile(
+        r"`([A-Za-z0-9_][A-Za-z0-9_./-]*"
+        r"\.(?:md|puml|svg|png|pe|hex|v|sh|py|txt|json|yaml))`"
+    )
+    # every file in the tree, by basename, so a bare name can be resolved
+    by_name: set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d not in (".git", "node_modules", ".pi-lens-probe-home")]
+        by_name.update(filenames)
+    failures = 0
+    total = 0
+    for rel in OWNED_PAGES:
+        page = ROOT / rel
+        if not page.exists():
+            continue
+        for lineno, line in enumerate(page.read_text().splitlines(), 1):
+            for m in path_re.finditer(line):
+                target = m.group(1)
+                total += 1
+                if ":" in target:
+                    continue          # branch-qualified: exempt by construction
+                if "/" in target:
+                    ok = (ROOT / target).exists()
+                else:
+                    ok = target in by_name
+                if not ok:
+                    print(f"FAIL  {rel}:{lineno}: `{target}` is not in this tree - "
+                          "qualify it with its branch, or fix the path")
+                    failures += 1
+    print(f"ok    {total} repo path(s) across {len(OWNED_PAGES)} page(s) resolve")
+    return failures
 
 
 def check_updated_dates() -> int:
@@ -581,8 +648,11 @@ def check_outbound_links() -> int:
                 if resolve_link(target) is None:
                     print(f"FAIL  {rel}:{lineno}: [[{target}]] resolves to nothing")
                     failures += 1
-    print(f"ok    {total} outbound link(s) across {len(OWNED_PAGES)} page(s) resolve"
-          if not failures else "")
+    print(
+        f"ok    {total} outbound link(s) across {len(OWNED_PAGES)} page(s) resolve"
+        if not failures
+        else ""
+    )
     return failures
     """assert each page's `updated:` is not older than its last content change.
 
@@ -732,18 +802,39 @@ def selftest() -> int:
         # fixture. A control that starts red teaches you nothing, and the fix
         # is to make the fixture faithful rather than to relax the check.
         fixture = Path(td) / "repo"
-        (fixture / "wiki").mkdir(parents=True, exist_ok=True)
-        for src in (ROOT / "wiki").rglob("*"):
-            if src.is_file():
-                dst = fixture / src.relative_to(ROOT)
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                dst.write_text(src.read_text())
-        for rel in REQUIRED:
-            if not rel.startswith("diagrams/"):
+        # Every TEXT file in the tree, not just wiki/ and not just the pages
+        # under test. The pages under test name firmware/*.pe, tb/*.v, rtl/*.v
+        # and tools/*, and the path check resolves a bare filename by looking
+        # it up ANYWHERE - so a fixture holding only wiki/ makes every one of
+        # those unresolvable and the CLEAN FIXTURE FAILS. Twice now this has
+        # looked like a broken gate and been a broken fixture, and the second
+        # time the honest answer was again to fix the fixture rather than
+        # relax the check.
+        #
+        # Renders and wave dumps are skipped: they are large, binary, and no
+        # check in this file reads their contents - the RENDER gate does, and
+        # that is checked against the real tree, not a fixture.
+        skip_dirs = {".git", "node_modules", ".pi-lens-probe-home", "sim", "logs"}
+        skip_suffix = (".png", ".svg", ".vcd", ".pyc")
+        for src in ROOT.rglob("*"):
+            if not src.is_file():
                 continue
-            dst = fixture / rel
+            if any(part in skip_dirs for part in src.relative_to(ROOT).parts):
+                continue
+            if src.suffix in skip_suffix:
+                continue
+            dst = fixture / src.relative_to(ROOT)
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text((ROOT / rel).read_text())
+            try:
+                dst.write_text(src.read_text())
+            except UnicodeDecodeError:
+                # A file that is not valid UTF-8 is a binary - a firmware .hex,
+                # a VCD - and nothing in this gate reads its CONTENTS. What the
+                # checks need is that it EXISTS, so it is written as an empty
+                # placeholder: skipping it would make a bare filename that
+                # genuinely exists in the tree look dead, which is the same
+                # invented-failure defect as the bare-name bug above.
+                dst.write_bytes(b"")
 
         def run_gate() -> tuple[int, str]:
             proc = subprocess.run(
@@ -911,12 +1002,34 @@ def selftest() -> int:
         page.write_text(keep + "\nA link that resolves: [[concepts/pin-matrix]]\n")
         good &= require("planted a RESOLVING link (wiki-relative form)", want_fail=False)
         page.write_text(keep + "\nA link that resolves: [[pin-matrix]]\n")
-        good &= require("planted a RESOLVING link (BARE form - the convention "
-                        "a first-token resolver calls dead)", want_fail=False)
+        good &= require(
+            "planted a RESOLVING link (BARE form - the convention "
+            "a first-token resolver calls dead)",
+            want_fail=False,
+        )
         # body-only, matching the wiki gate's own rule: a dead link inside
         # `sources:` is a citation, not an outbound link, and must not fail here
         page.write_text(keep.replace("sources: [", "sources: [[concepts/ghost]], [", 1))
-        good &= require("dead link in `sources:` is NOT an outbound link", want_fail=False)
+        good &= require(
+            "dead link in `sources:` is NOT an outbound link", want_fail=False
+        )
+        page.write_text(keep)
+
+        page = fixture / OWNED_PAGES[0]
+        keep = page.read_text()
+        page.write_text(keep + "\nA path to nothing: `firmware/no_such_file.pe`\n")
+        good &= require("planted a MISSING repo path", want_fail=True)
+        page.write_text(keep + "\nA cross-branch path: `other-branch:firmware/x.pe`\n")
+        good &= require("branch-qualified path is exempt", want_fail=False)
+        page.write_text(keep + "\nA real path: `firmware/ws2812.pe`\n")
+        good &= require("planted a RESOLVING repo path", want_fail=False)
+        # a BARE FILENAME is a name, not a path: it must resolve if the file
+        # exists ANYWHERE, which is the false positive the first version had
+        page.write_text(keep + "\nA bare name that exists in firmware/: `i2c_pins.pe`\n")
+        good &= require("bare filename resolved by basename, not at the root",
+                        want_fail=False)
+        page.write_text(keep + "\nA bare name that exists nowhere: `no_such_file.v`\n")
+        good &= require("bare filename that exists nowhere", want_fail=True)
         page.write_text(keep)
 
         if not require("final green re-check", want_fail=False):
@@ -1000,6 +1113,10 @@ def main() -> int:
     print()
     print("== outbound links: every target must resolve to a file ==")
     fail += check_outbound_links()
+
+    print()
+    print("== repo paths named in my pages must exist in this tree ==")
+    fail += check_file_paths()
 
     print()
     print("== the `updated` field, against git (SCHEMA's fifth rule) ==")
