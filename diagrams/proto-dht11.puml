@@ -1,0 +1,148 @@
+@startuml proto-dht11
+' ===========================================================================
+' proto-dht11.puml - (a) the DHT11 protocol engine, both sides.
+'
+' A DHT11 has one wire, no clock, and no framing to speak of. What it has is a
+' handshake in which BOTH sides decide what a bit means by how long they hold
+' the line. There is no other content: the whole protocol is "be somewhere in
+' time".
+'
+' The single design decision the figures exist to show: the host SYNCHRONISES on
+' the line's edges rather than counting a fixed time per bit, because the
+' sensor's bit period is not fixed (a 0 is 76..78 us, a 1 is 120 us) and a host
+' that counted would drift. The 26-28 us and 70 us figures then enter the
+' firmware ONCE, as the 45 us sample instant, and the sensor's tolerance stops
+' being the firmware's problem.
+' ===========================================================================
+
+title DHT11 - the protocol engine on both sides\n<font size=12>start signal + acknowledge + 40 timed bits; the bit value IS the width</font>
+
+hide empty description
+hide stereotype
+skinparam shadowing false
+skinparam state {
+  BackgroundColor White
+  BorderColor #33555
+  FontName monospaced
+}
+skinparam note {
+  BackgroundColor #FFFBE6
+  BorderColor #C8B800
+  FontName monospaced
+  FontSize 11
+}
+
+' ---------------------------------------------------------------- EMITTER --
+state "FIRMWARE SIDE - firmware/dht11_read.pe" as EMIT {
+
+  [*] --> CLAIM
+  CLAIM : PINOE = 0x00 (release), TXPIN = DHT_DATA,\nPINOE = DHT_DATA (claim one pad, push-pull)\nthe idle state is the pull-up
+
+  state "START\nthe line goes low" as START
+  START : dmem[0..4] = 0, dmem[5] = 8, dmem[8] = 5,\ndmem[11] = 0 (the byte index), dmem[15] = 0\nTXPIN = 0x00, dmem[7] = 0 (the delay's\nreturn phase)\nLONG pair (6,255), n1 = 212: one outer step\nis 5145 clocks = 85.8 us\n18 ms = 1.08 M clocks, the longest single\ntimed interval in the project
+
+  state "PH0\nthe host's high window" as PH0
+  PH0 : TXPIN = DHT_DATA - pull HIGH, do not\nmerely release, and this step is not optional:\nthe sensor pulls the line LOW to answer, so\nthe host cannot just stop driving and let the\npull-up win. dmem[7] = 1\nFINE pair (2,6), n1 = 45: 30 us\nthe 20-40 us window, aimed at 30
+
+  state "PH1\nRELEASE" as PH1
+  PH1 : PINOE = 0x00 - the pull-up owns the line.\ndmem[7] = 2\nFINE pair, n1 = 250: a COARSE 170 us, not a\ndeadline. It only has to be late enough not\nto be fooled by the acknowledge's 80 us of\nhigh, and early enough to still be inside bit\n0's low prefix.\nThe edge waits below correct the rest
+
+  state "PH2\nthe acknowledge is in flight" as PH2
+  PH2 : dmem[7] = 3, then JMP ph3\nthe acknowledge is not timed, it is SKIPPED\nby falling into the same edge-wait loop: the\nfirst round waits out the 80/80 us ack and\nthe second one is bit 0
+
+  state "PH3\nsynchronise, then aim" as PH3
+  PH3 : w_lo: spin until the line is LOW\n      the next bit's 50 us prefix.\n      A 0 sampled late is already low and\n      passes through at once.\n\nw_hi: spin until the line is HIGH\n      the RELEASE - which is the bit's value\n      window: 26-28 us for a 0, 70 us for a 1.\n      THE HOST CANNOT SAMPLE INSIDE THE\n      RELEASE: 20 us in is both a 0 and a 1.\n\nthen 45 us (FINE, n1 = 67), dmem[7] = 4
+
+  state "PH4\nSAMPLE ONCE" as PH4
+  PH4 : IN A, PIN; AND A, DHT_DATA\nthe sample arrives in BIT 6 and a DHT11 byte\nis MSB first, so it must reach bit 7. There\nis no shift-left in this ISA:\n  MOV X,A / ADD A,X  =  0x00->0x00, 0x40->0x80\nexact for one bit because 0x40+0x40 = 0x80\ndoes not carry out of the byte.\n\nthen: acc = 2*acc (+1 if the sample was 1)\ndmem[5]-- ; eight times and the byte is banked\nat dmem[0..4] by STS [X], A\n\nX IS USED AS SCRATCH HERE, WHICH THE ISA'S OWN\nHEADER SAYS NOT TO DO - so the byte index\nlives in dmem[11] and is reloaded before every\nSTS. Keeping it in X silently banks every byte\nat the accumulator's own value: the frame comes\nout 00 02 00 00 08, which looks like a dead sensor.
+
+  state "DLY1/DLY2/DLY3\nthe delay" as DLY
+  DLY : total(n1,n2,n3) = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4 clocks\nBOTH inner counters are RELOADED from their\ntargets (dmem[12], dmem[14]) every pass. The\nroutine cannot RETURN to five addresses and\nthe ISA has no indirect jump, so dmem[7] is the\nphase and a subtract chain dispatches it.\n\nTWO (n2,n3) pairs, because the ratio between the\nshortest and longest delay here is 34 000 to 1:\n  long  (6,255)  one step 5145 clocks = 85.8 us\n  short (2,6)    one step   41 clocks =  0.68 us\nA single pair cannot do both: with the fine step\nthe 18 ms start needs an outer counter of 11 900,\nand with the coarse step the 30 us window could not\nbe AIMED at - 20.7 us would be inside the 20-40 us\nwindow and 34 us would be outside it.
+
+  state "PARK\ndone" as PARK
+  PARK : dmem[15] = 1 - all 40 bits are in. THE\nPROGRAM'S OBSERVABLE OUTPUT, so a testbench\ncan tell "hung mid-byte" (0) from "finished".\nTXPIN = 0x00, then JMP halt: the ISA has no HALT.
+
+  CLAIM --> START
+  START --> DLY
+  DLY --> PH0 : dmem[7] == 0
+  PH0 --> DLY
+  DLY --> PH1 : dmem[7] == 1
+  PH1 --> DLY
+  DLY --> PH2 : dmem[7] == 2
+  PH2 --> PH3
+  PH3 --> DLY : the release has been seen
+  DLY --> PH4 : dmem[7] == 4
+  PH4 --> PH3 : dmem[5] != 0
+  PH4 --> PH3 : the byte is banked, dmem[8]--, and if any are left there are eight more bits
+  PH4 --> PARK : dmem[8] == 0
+}
+
+' --------------------------------------------------------------- SENSOR/SRC --
+state "SENSOR SIDE - tb/tb_pe_soc_dht11.v" as SRC {
+
+  [*] --> ARM
+  ARM : the model waits for the start signal:\nlow > 18 ms, then the host's 20-40 us high\nby WATCHING pin_oe, not the line.\nthe release is unmeasurable on the line
+
+  state "ACK\n80 low, 80 high" as ACK
+  ACK : the sensor pulls the line low for 80 us\nand high for 80 us. The firmware never times\nthis - it is skipped by the edge-wait loop.
+
+  state "BITS\n40 of them" as BITS
+  BITS : per bit: 50 us low, then the release.\n0 = 28 us of high (the SHORT end of its own\n    26-28 us window - a sensor inside its\n    specification)\n1 = 70 us of high\nthen the bus hold, 50 us, after bit 39.
+
+  state "SAMPLE\nthe margin check" as SMP
+  SMP : for every one of the 40 bits: the host's\nsample must land AFTER the longest 0-release\nends and BEFORE the 1-release ends.\nmeasured margin: 17.0 us and 25.0 us
+
+  state "CHECK\nwhat is claimed" as CHK
+  CHK : 1. the start signal is > 18 000 us\n2. the host window is inside 20..40 us\n3. the host RELEASED - measured on pin_oe,\n   because the pull-up holds the line high\n   throughout and the release moves nothing\n4. dmem[15] == 1\n5. dmem[0..4] == 2c 01 aa 55 2c\n6. the checksum: (2c+01+aa+55) & 0xff == 2c\n7. every sample is inside its window\n8. >= 20 of the 39 bit-transitions are real
+
+  ARM --> ACK : the start signal is seen
+  ACK --> BITS
+  BITS --> SMP
+  SMP --> CHK
+  CHK --> ARM : the host starts again\n(the program reads once and parks)
+}
+
+EMIT -[#3A7,hidden]-> SRC : ONE wire, and the two sides\ndisagree about what a level means:\nthe host drives, then releases; the sensor\ndrives, then releases
+
+note bottom of EMIT
+  <b>Why the host synchronises instead of counting.</b>
+
+  A 0-bit is 50 + 26..28 = 76..78 us and a 1-bit
+  is 50 + 70 = 120 us. A host that waited a fixed
+  time per bit, computed from the previous bit's
+  value, would track the sensor exactly for a
+  while and then drift: at the 2 us spread of the
+  0-bit, twenty zero bits is 40 us of slip, which
+  is three times the margin.
+
+  That WAS this program's first design, and it
+  decoded the nominal frame perfectly while
+  failing as soon as the sensor was modelled at
+  the SHORT end of its own 0-bit window - a
+  sensor inside its specification and the
+  firmware outside its own.
+
+  <b>That is the whole difference between a
+  bit-banger that works on the bench and one that
+  works on a shelf.</b>
+end note
+
+note bottom of SMP
+  <b>Why 45 us and not 20 us.</b>
+
+  The host cannot sample inside the release: a
+  line high 20 us into the release is a 0 AND a 1.
+  The two differ only AFTERWARDS - a 0's release
+  ends at 28 us and the next bit pulls the line
+  low again, while a 1's runs to 70 us. So the
+  sample has to be in that gap, and 45 us is
+  aimed there: 17 us of margin on the 0 side and
+  25 us on the 1 side.
+
+  This is the ONE place in the program where a
+  timing number has to be AIMED rather than
+  merely satisfied. The 18 ms start and the 30 us
+  host window only have to be inside their windows.
+end note
+
+@enduml

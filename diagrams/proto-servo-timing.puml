@@ -164,8 +164,7 @@ note over CPU, WIRE
 end note
 
 note over CPU, WIRE
-  <b>The five measured widths are all 0.10 to 0.15 us LONG, and that direction is
-  systematic, not noise.</b> The delay routine's clock count is exact - the core
+  <b>The five measured widths are all 0.10 to 0.15 us LONG, and that is systematic.</b> The delay routine's clock count is exact - the core
   is single-cycle, so N instructions take exactly N clocks - and the residue is
   the table entry's FITTING: the outer counter is a whole number of steps, so
   each entry lands at or just above its target. A count that could land short as

@@ -1,0 +1,216 @@
+@startuml proto-dht11-timing
+' ===========================================================================
+' proto-dht11-timing.puml - (c) the DHT11 handshake, in the numbers both sides
+' actually produce.
+'
+' Measured by tb/tb_pe_soc_dht11.v on real RTL (60 MHz, Icarus, the real SRAM
+' macro) with firmware/dht11_read.pe:
+'
+'   start signal: line low for 18093.0 us          (floor 18 000 us)
+'   host-high window: 30.0 us, then released on pin_oe   (band 20..40 us)
+'   40 samples, 40 bits, bytes 2c 01 aa 55 2c
+'   sample margin: 17.0 us past the longest 0-release, 25.0 us before the 1 ends
+'   bit-transitions in the frame: 24 of 39
+' ===========================================================================
+
+title DHT11 - handshake timing\n<font size=12>18 093 us start; 30.0 us host window; sample 45 us into the release, margins 17.0 / 25.0 us</font>
+
+hide stereotype
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #33555
+  LifeLineBorderColor #33555
+  LifeLineBackgroundColor #FAFAFA
+  ParticipantBorderColor #33555
+  ParticipantBackgroundColor #F4F7FB
+  ParticipantFontName monospaced
+  ActorFontName monospaced
+  NoteFontName monospaced
+  GroupFontName monospaced
+}
+
+participant "CPU\npe_cpu.v" as CPU
+participant "pad 6\nTXPIN / PINOE" as PAD
+participant "the wire\n+ pull-up" as WIRE
+participant "DHT11 model\nworst case of\neach window" as SENSOR
+participant "the 45 us\nsample" as SMP
+
+== 1. the start signal: the host resets the sensor ==
+
+CPU -> PAD : PINOE = 0x00, TXPIN = DHT_DATA, PINOE = DHT_DATA
+note right of PAD
+  The idle state is the pull-up. Open-drain is
+  deliberately NOT set: the 30 us high below is a
+  DRIVEN high, not a release.
+end note
+CPU -> PAD : TXPIN = 0x00 - the line goes low
+note over CPU
+  LONG pair (n2,n3) = (6,255), n1 = 212
+  one outer step = 5 145 clocks = <b>85.8 us</b>
+
+  total = (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4
+
+  <b>18 ms = 1.08 million clocks</b> - the longest single
+  timed interval in the project, 6.4x the WS2812
+  reset and 900x the WS2812 bit cell. This is what
+  forces a three-level delay routine: as NOPs it
+  would not fit in 1 024 words of instruction memory.
+end note
+note over WIRE
+  <b>18 093.0 us of LOW</b>   (required: > 18 000 us)
+
+  0.5 % long, and that is the RIGHT DIRECTION for a
+  minimum: a start signal that is too short is a reset
+  the sensor ignores.
+end note
+SENSOR -> WIRE : the sensor sees the reset
+
+== 2. the host's high window: a driven high, then a RELEASE ==
+
+CPU -> PAD : TXPIN = DHT_DATA - pull HIGH
+note over CPU
+  FINE pair (n2,n3) = (2,6), n1 = 45
+  one outer step = 41 clocks = <b>0.68 us</b>
+end note
+note over WIRE
+  <b>30.0 us of HIGH</b>   (band: 20 .. 40 us)
+
+  This middle step is NOT OPTIONAL. The sensor pulls
+  its own line low to answer, so the host cannot just
+  stop driving and let the pull-up win - the sensor
+  would see a line that never went high and would not
+  start converting. Pulling it high for 30 us
+  guarantees a clean high-to-low transition to answer
+  with, and only then does the host become a reader.
+end note
+CPU -> PAD : PINOE = 0x00 - RELEASE
+note over PAD
+  <b>THE TB MEASURES THE RELEASE ON pin_oe, NOT ON THE LINE.</b>
+
+  The host drives high and then releases, and the
+  pull-up holds the line high throughout, so on the
+  WIRE the release moves nothing at all. A TB that
+  looks for a falling edge here waits forever or, if
+  it is looking for the wrong thing, measures the
+  window from a transition that is not one.
+end note
+note over WIRE
+  the line does NOT fall on the release -
+  the pull-up already holds it high
+end note
+
+== 3. the acknowledge: 80 low, 80 high, NEVER TIMED ==
+
+SENSOR -> WIRE : pull LOW for 80 us
+note over SENSOR
+  <b>80 us LOW</b>
+end note
+SENSOR -> WIRE : release, 80 us HIGH
+note over SENSOR
+  <b>80 us HIGH</b>
+end note
+note over CPU
+  The firmware does not time this. It falls into the
+  SAME edge-wait loop it uses for bits: the first round
+  waits out the acknowledge, the second one is bit 0.
+
+  Nothing on the wire announces when the acknowledge is
+  over, so timing it would be another delay constant to
+  fit and another place to be wrong. One loop, two uses.
+end note
+
+== 4. bit 0: the value IS the width ==
+
+group a 0-bit - 50 us low, 28 us release
+  SENSOR -> WIRE : pull LOW
+  note over WIRE
+    <b>50 us of LOW</b> - the bit's prefix. Every bit
+    has one, so the host cannot use it as the value.
+  end note
+  CPU -> SMP : w_lo: spin until the line is LOW
+  note over CPU
+    a spin loop on the pin, polling every three
+    instructions, so an edge is caught within 50 ns
+    against a 26 us window - four thousand times finer
+    than anything here needs.
+  end note
+  SENSOR -> WIRE : RELEASE
+  CPU -> SMP : w_hi: spin until the line is HIGH
+  note over WIRE
+    <b>28 us of HIGH</b> - the SHORT end of the
+    datasheet's 26-28 us window. A sensor inside its
+    own specification, and the TB drives this on
+    purpose so the margin is measured against the
+    worst legal sensor rather than the typical one.
+  end note
+  CPU -> PAD : FINE delay, n1 = 67 = 45 us
+  SMP -> WIRE : sample
+  note over SMP
+    <b>THE SAMPLE: 17.0 us of margin on the 0 side.</b>
+    The 0's release has already ENDED and the next bit
+    has pulled the line low again.
+
+    A sample at 20 us would be INSIDE the release, where
+    a 0 and a 1 are indistinguishable - the mutation
+    case dh-sample-instant moves it to 14 us and the
+    decode fails.
+  end note
+end group
+
+group a 1-bit - 50 us low, 70 us release
+  SENSOR -> WIRE : pull LOW, then RELEASE
+  note over WIRE
+    <b>50 us LOW</b> then <b>70 us HIGH</b>
+  end note
+  CPU -> SMP : the same two waits, then 45 us
+  SMP -> WIRE : sample
+  note over SMP
+    <b>25.0 us of margin on the 1 side.</b>
+    The 1's release is still running, so the line is
+    still high.
+  end note
+end group
+
+note over CPU, SENSOR
+  ... 40 bits. 24 of the 39 bit-transitions are real,
+  which is the TB's non-vacuity floor: a frame of
+  all-0s or all-1s would make a width-based decoder
+  trivially correct and the check would prove nothing.
+  ...
+  <b>Bytes: 2c 01 aa 55 2c</b>   (humidity int, humidity dec,
+  temperature int, temperature dec, checksum)
+  and 2c + 01 + aa + 55 = 0x12C, and 0x12C & 0xFF = <b>0x2C</b>
+  ...
+  then a <b>50 us bus hold</b> after the fortieth bit, the line released,
+  the sensor left alone, and the firmware parks with dmem[15] = 1.
+end note
+
+== the timing table, and what each window protects ==
+
+note over CPU, SENSOR
+  |= what |= required |= produced | which side | what it protects |=
+  | start signal | > 18 000 us | <b>18 093.0 us</b> | host | a reset the sensor ignores |
+  | host high window | 20 .. 40 us | <b>30.0 us</b> | host | a clean high-to-low for the sensor to answer |
+  | the release | - | measured on <b>pin_oe</b> | host | nothing to see on the line: the pull-up already holds it high |
+  | acknowledge | 80 / 80 us | <b>not timed</b> | sensor | skipped by the edge loop, not fitted |
+  | a 0's release | 26 .. 28 us | 28 us driven | sensor | the worst legal sensor, so the margin is real |
+  | a 1's release | ~70 us | 70 us driven | sensor | ditto |
+  | the sample | inside the gap | <b>+45 us</b> | host | <b>17.0 us</b> past the 0, <b>25.0 us</b> before the 1 ends |
+  ...
+  <b>Why the 45 us is AIMED and the other numbers are only SATISFIED.</b> The start signal
+  and the host window have bands, and landing anywhere inside them is correct. The
+  sample has no band: it has to be after the 0's release ENDS and before the 1's
+  release ENDS, because inside the release the line is high for both values. That is
+  the one number in this program that has a target rather than a range, and it is the
+  FINE pair that makes it aimable - with the coarse (6,255) step, 20.7 us would be
+  inside the host window and 34 us would be outside it, so neither could be aimed at
+  anything.
+  ...
+  <b>Why the margins are asymmetric, and why that is the sensor's doing.</b> 17 us on the
+  0 side, 25 us on the 1 side. The 0's release is 26-28 us and the 1's is ~70 us, so
+  a sample aimed at the MIDDLE of the gap would sit at 49 us - 21 us of margin on the
+  0 side and 21 on the 1. 45 us trades the 0's margin for the 1's, which is the right
+  trade: the 0's window is 14x tighter than the sample's precision, and the 1's is not.
+end note
+
+@enduml
