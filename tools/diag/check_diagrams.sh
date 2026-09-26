@@ -126,6 +126,102 @@ export JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=8192"
 ASPECT_MIN=0.25
 ASPECT_MAX=15.0
 
+# ---- white-on-white: the class a user reported ------------------------------
+# "White lines in the SVGs are lost on a white background." The audit found
+# FOUR mechanisms, and the obvious one was not the most damaging:
+#
+#   * a MALFORMED colour code. `ArrowColor #33555` is five hex digits; PlantUML
+#     does not reject it, it DROPS the setting and falls back to its default
+#     arrow colour, which is WHITE. 20 such values existed in the corpus.
+#   * the DEFAULT note background #FEFFDD, luminance 0.99 -- no source in the
+#     tree set NoteBackgroundColor, so every note was pale yellow on white.
+#   * near-white "unobtrusive" choices: #FAFAFA life lines, #FBFBFB groups.
+#   * the page is white, so anything painted on it must be a dark ink.
+#
+# THE RULE IS DELIBERATELY NARROW, so it does not fire on a legitimate light
+# background. A figure is a white page, so:
+#   * near-white TEXT is fatal -- there is no dark ground on the page.
+#   * near-white STROKE is fatal.
+#   * a near-white FILL is fatal ONLY when the shape's own outline is also
+#     near-white or absent, because then the shape itself is invisible. A
+#     near-white fill WITH a dark outline and dark text is a light background
+#     doing its job -- which is most of the corpus, and flagging it would be a
+#     false positive on every good figure.
+#
+# WHITE ON A DARK FILL IS CORRECT and is not flagged: that is the one place
+# white belongs, and the project maps use it.
+#
+# TWO FAULTS WERE FOUND IN THIS CHECKER BEFORE IT WORKED, both recorded here
+# because the shape of them is the reason a gate can go green while blind:
+#   1. the stroke pattern was `stroke="?(#...)`, which matches the ATTRIBUTE
+#      form but not `style="stroke:#FFF"` -- and PlantUML draws most lines in
+#      the style form, so every one of them was invisible to the check.
+#   2. PlantUML writes colours in 3-digit SHORTHAND (#FFF, not #FFFFFF), and
+#      lum() only understood 6 digits, so the single most common white in the
+#      corpus read as "not a colour" and was skipped. The shorthand is now
+#      normalised by STRING EXPANSION rather than by a backreference regex --
+#      the backreference form was mangled twice on its way through this work.
+# The negative control below plants a white arrow and requires this to fire.
+white_check_svg() {  # svg -> one finding per line on stdout
+  python3 - "$1" <<'PYW' 2>/dev/null
+import re, sys
+def lum(c):
+    c = (c or '').strip()
+    if c.startswith('#'):
+        h = c[1:]
+        if len(h) == 3:                      # PlantUML writes the SHORTHAND #FFF
+            h = ''.join(ch * 2 for ch in h)  # normalise by expansion, NOT a
+        if len(h) != 6:                      # backreference regex: that form is
+            return None                      # fragile and was mangled twice here
+        try:
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        except ValueError:
+            return None
+        return (0.2126*r + 0.7152*g + 0.0722*b) / 255.0
+    m = re.match(r'^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)', c)
+    if m:
+        return (0.2126*int(m.group(1)) + 0.7152*int(m.group(2)) + 0.0722*int(m.group(3))) / 255.0
+    return None
+def nw(v):
+    l = lum(v)
+    return l is not None and l >= 0.97
+s = open(sys.argv[1]).read()
+canvas = 0
+for m in re.finditer(r'<rect[^>]*>', s):
+    t = m.group(0)
+    w = re.search(r'\bwidth="([-\d.]+)"', t); h = re.search(r'\bheight="([-\d.]+)"', t)
+    if w and h:
+        canvas = max(canvas, float(w.group(1)) * float(h.group(1)))
+out = []
+for m in re.finditer(r'<text[^>]*fill="([^"]+)"', s):
+    if nw(m.group(1)):
+        out.append('near-white text is invisible on a white page')
+for m in re.finditer(r'stroke[":=]*\s*(#[0-9A-Fa-f]{3,6})', s):
+    if nw(m.group(1)):
+        out.append('near-white stroke is invisible on a white page')
+for m in re.finditer(r'<(rect|ellipse|polygon|path)[^>]*>', s):
+    t = m.group(0)
+    f = re.search(r'\bfill="([^"]+)"', t)
+    if not f or not nw(f.group(1)):
+        continue
+    x = re.search(r'\bx="([-\d.]+)"', t); y = re.search(r'\by="([-\d.]+)"', t)
+    w = re.search(r'\bwidth="([-\d.]+)"', t); h = re.search(r'\bheight="([-\d.]+)"', t)
+    if x and y and w and h and float(x.group(1)) <= 1 and float(y.group(1)) <= 1 \
+       and float(w.group(1)) * float(h.group(1)) >= canvas * 0.9:
+        continue
+    sm = re.search(r'\bstroke="([^"]+)"', t) or re.search(r'stroke:([^;"]+)', t)
+    sv = sm.group(1) if sm else None
+    if not (sv is not None and not nw(sv)):
+        out.append('invisible %s: near-white fill with no visible outline' % m.group(1))
+seen = []
+for o in out:
+    if o not in seen:
+        seen.append(o)
+for o in seen:
+    print(o)
+PYW
+}
+
 # ---- the toolchain pin, and why the byte comparison depends on it -----------
 #
 # The byte comparison below is the strongest staleness check there is, and it is
@@ -443,6 +539,33 @@ check_dir() {
     fi
   done
 
+  # ---- 3b. white-on-white -------------------------------------------------
+  local svg_findings white_bad=0
+  while IFS= read -r st; do
+    [ -n "$st" ] || continue
+    [ -f "${st}.svg" ] || continue
+    svg_findings=$(white_check_svg "${st}.svg")
+    if [ -n "$svg_findings" ]; then
+      while IFS= read -r wf; do
+        [ -n "$wf" ] || continue
+        white_bad=$((white_bad + 1))
+        # NOT guarded by quiet: this finding always names its file. Quiet mode
+        # exists to keep the self-test readable, and a self-test that cannot see
+        # WHY the gate went red cannot tell "caught the white line" from "caught
+        # the fixture breaking some other way" -- which is exactly how the two
+        # earlier faults in this check stayed hidden.
+        fail "WHITE-ON-WHITE $(basename "${st}.svg"): $wf"
+      done <<EOF
+$svg_findings
+EOF
+    fi
+  done < <(expected_stems "$src" "$n")
+  if [ $white_bad -ne 0 ]; then
+    bad_total=$((bad_total + 1))
+  elif [ "$quiet" = "1" ]; then
+    ok "$base: no white-on-white - every text, stroke and shape reads on the page"
+  fi
+
   # ---- 4. aspect ---------------------------------------------------------
   # ONE python process for the whole directory: 42 separate interpreter starts
   # cost more than the render comparison did, and a per-file loop that shells
@@ -749,6 +872,43 @@ self_test() {
   fresh_case c9
   rm -f "$sandbox/c9/$PIN_NAME"
   plant "i a missing toolchain pin" dirty c9
+
+  # (j) A WHITE LINE — the class the user actually reported. The planted block
+  #     asks for a white arrow, PlantUML obliges, and the rendered SVG carries
+  #     near-white strokes and invisible arrowheads on a white page. The gate
+  #     must FAIL and must NAME the file: a checker that notices white-on-white
+  #     without saying where is a step short of what a person acts on.
+  #
+  #     This case exists because the check went through TWO faults that each left
+  #     it green while blind — a stroke pattern that matched only the attribute
+  #     form, and a lum() that did not understand PlantUML's 3-digit shorthand.
+  #     A negative control is the only thing that catches "green and blind".
+  fresh_case cj
+  cat > "$sandbox/cj/fixture-white.puml" <<'PUJ'
+@startuml
+title planted: a white line on a white page
+skinparam sequence {
+  ArrowColor #FFFFFF
+}
+hide stereotype
+participant left
+participant right
+left -> right : this arrow is invisible
+@enduml
+PUJ
+  plantuml -tpng "$sandbox/cj/fixture-white.puml" -o "$sandbox/cj" >/dev/null 2>&1
+  plantuml -tsvg "$sandbox/cj/fixture-white.puml" -o "$sandbox/cj" >/dev/null 2>&1
+  results=$((results + 1))
+  out=$(check_dir "$sandbox/cj" "$sandbox/cj" 1 2>&1)
+  if printf '%s' "$out" | grep -q 'WHITE-ON-WHITE'; then
+    printf '  ok:   self-test — %-42s planted:  CAUGHT\n' "j a white line on a white page"
+    caught=$((caught + 1))
+  elif check_dir "$sandbox/cj" "$sandbox/cj" 1 >/dev/null 2>&1; then
+    printf '  FAIL: self-test — j: a WHITE LINE was not caught at all\n'
+  else
+    printf '  FAIL: self-test — j: red, but NOT with WHITE-ON-WHITE — it caught the\n'
+    printf '        fixture breaking some other way\n'
+  fi
 
   printf '  -- self-test: %d of %d cases behaved correctly\n' "$caught" "$results"
   rm -rf "${sandbox:?}"
