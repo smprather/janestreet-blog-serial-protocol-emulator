@@ -868,6 +868,28 @@ else
   tail -20 "/tmp/check_diagrams.${_diag_wt}.log"
   stale=1
 fi
+# The OTHER direction of the document index. check_wiki_links.sh proves every
+# link POINTS AT SOMETHING; nothing proved that every figure is LISTED, which is
+# the defect reviews/2026-09-26/DOCS-ACCURACY-REVIEW-PASS11.md F3 recorded (47 of
+# 54 renders, four act sets absent) and which the regenerated gallery closed
+# WITHOUT anything keeping it closed. An index that is complete by hand and
+# unchecked is a list that drifts the first time someone adds a figure. Its
+# self-test is wired with it rather than left on request, for the reason every
+# other gate's is: a checker that stops detecting reports OK on a broken tree.
+if bash regress/check_doc_index.sh > "/tmp/check_doc_index.${_diag_wt}.log" 2>&1; then
+  echo "document index: OK ($(grep -m1 'render(s) listed' "/tmp/check_doc_index.${_diag_wt}.log" | sed 's/^ *//'))"
+else
+  echo "document index: FAILED (see /tmp/check_doc_index.${_diag_wt}.log)"
+  tail -20 "/tmp/check_doc_index.${_diag_wt}.log"
+  stale=1
+fi
+if bash regress/check_doc_index.sh --self-test > "/tmp/check_doc_index_selftest.${_diag_wt}.log" 2>&1; then
+  echo "document index gate self-test: OK ($(grep -c 'ok:   self-test' "/tmp/check_doc_index_selftest.${_diag_wt}.log") of 3 cases behaved correctly)"
+else
+  echo "document index gate self-test: FAILED (see /tmp/check_doc_index_selftest.${_diag_wt}.log)"
+  tail -20 "/tmp/check_doc_index_selftest.${_diag_wt}.log"
+  stale=1
+fi
 # Its NEGATIVE CONTROL, in the suite and not merely available on request. A gate
 # that stops detecting is worse than no gate: it reports OK on a tree that is
 # broken, and the suite goes green on a claim nothing is testing. The self-test

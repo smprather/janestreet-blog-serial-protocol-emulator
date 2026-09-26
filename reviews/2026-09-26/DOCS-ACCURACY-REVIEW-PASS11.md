@@ -63,12 +63,13 @@ taken from a figure is a property of *that revision of that figure*, so it
 cannot be the test. Replaced with the `viewBox` values, which are the actual
 claim, and said plainly that the byte sizes are a snapshot.
 
-**F3 — README.md's figure table is behind, and nothing checks it (REPORTED, not
-fixed).** The table lists 47 of the 54 PNG renders. Missing: **12 renders = four
-whole act figure sets** — `proto-fm-biphase`, `proto-freqmeter`, `proto-nec-ir`,
-`proto-sr04`, each with its `-frame` and `-timing` siblings. All four acts *do*
-have concept pages (`wiki/concepts/protocol-*.md`, all present), so only the
-README index is behind, not the documentation layer.
+**F3 — README.md's figure table is behind, and nothing checks it (HALF-FIXED;
+the second half is STILL OPEN — see the resolution below).** The table listed 47
+of the 54 PNG renders. Missing: **12 renders = four whole act figure sets** —
+`proto-fm-biphase`, `proto-freqmeter`, `proto-nec-ir`, `proto-sr04`, each with
+its `-frame` and `-timing` siblings. All four acts *do* have concept pages
+(`wiki/concepts/protocol-*.md`, all present), so only the README index was
+behind, not the documentation layer.
 
 The part that matters more than the omission: **nothing checks that table.**
 `check_diagrams.sh` verifies every render against its source, and
@@ -84,6 +85,47 @@ curated is the owner's call, and picking one silently would be editing a
 judgement rather than a fact. Recommendation to the owner: if it is meant to be
 exhaustive, add the rows *and* assert the table against the filesystem both ways,
 in the same commit — otherwise soften the sentence that implies completeness.
+
+### F3 RESOLVED — the question is answered; ONE HALF OF THE FIX IS NOT
+
+This section is here because the paragraph above was written as an open question
+and stayed open after the owner answered it, which is the same defect this file's
+own §7 describes. Recording the answer so the next reader does not re-raise it.
+
+**The question — "exhaustive or curated?" — is settled: EXHAUSTIVE.** The manager
+regenerated the gallery (`32a7c18`, "README gallery one row per act"). Pass 12
+re-measured it at report time: 59 links, **0 broken**, **34 of 34** `.puml`
+sources with a listed render, **54 of 54** PNGs listed (was 47 of 54, 12 sources
+unlisted). F3's omission is closed.
+
+**The recommendation had two halves and only the first was taken.** It was: add
+the rows **and** assert the table against the filesystem *both ways*. Measured
+on current main:
+
+* *Every link resolves* — **COVERED.** `regress/check_wiki_links.sh` (added
+  `dc0e5a6`, wired at `run_all.sh:857`) scans `README.md` in its live surface and
+  fails a link that points at nothing.
+* *Every render is listed* — **NOT COVERED.** Measured by grepping every gate in
+  `regress/`, `tools/diag/` and `tools/checks/`: the only completeness checks
+  that exist are `check_diagrams.sh`'s orphan-render test (a render no SOURCE
+  claims) and this gate's stale-pin baseline, both on different relations.
+  Nothing compares `diagrams/*.png` against README's table.
+
+So the table is exhaustive **by hand**, with nothing keeping it that way. The
+moment someone adds a figure and does not update README, the list drifts again
+and no gate notices — which is the defect this finding was about, still open in
+the half that matters. It was deliberately **not** built on the spot: a gate
+wired in but not self-tested is worse than no gate, which is the same reasoning
+that stopped §3 from being built, and it is small enough to do properly rather
+than quickly. **Open item — NOW CLOSED.** `regress/check_doc_index.sh` was
+added: every render in `diagrams/` must be listed in the index, and every render
+the index names must exist, as one both-ways assertion. Self-test 3/3 (an
+unlisted render is caught, a listed-but-absent render is caught, and a complete
+index stays silent — the third is what stops a checker that always fails from
+satisfying the other two), verified end-to-end on the real tree by planting a
+render and watching it exit 1. Wired into `run_all.sh` beside `check_diagrams.sh`
+with its self-test, both red-capable. So both halves of this finding are now
+closed: the rows, and the thing that keeps them.
 
 ## 3. Two method notes, because both nearly produced a false finding
 

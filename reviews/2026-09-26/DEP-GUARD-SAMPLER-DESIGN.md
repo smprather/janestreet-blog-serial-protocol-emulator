@@ -1,18 +1,33 @@
 # The harness-edit pre-flight: where it stands, and the sampler design
 
-> **DO NOT BUILD §3 AS WRITTEN. IT HAS BEEN MEASURED AND IT IS WRONG.**
-> A fresh session on 2026-09-26 implemented §3's discriminator as a throwaway
-> probe, ran it against real mutation suites, and it reported INTERFERENCE on
-> clean runs — because §3's core premise ("a harness's own final restore is the
-> last thing it does") is false for **all sixteen** harnesses: they restore
-> *per case inside the mutation loop*, so "mutated → original → further mutation"
-> is the normal shape of every clean run, not a signature of interference. At the
-> designed 50 ms poll it fires ~120 times on one clean `mutate_i2c_tb.sh` run,
-> which would have made every mutation suite return exit 4 and every merge
-> INCONCLUSIVE. The measurements are in **§6**, the executable disproof is a case
-> in `regress/test_dep_guard.sh`, and the two sound options that replace it are
-> in **§7** for a manager ruling. Case 10 stays pinned as the open limitation,
-> which is the honest state.
+> **RESOLVED. §3 IS DISPROVED AND WAS NOT BUILT; ITS REPLACEMENT WAS RULED, BUILT
+> AND LANDED. START AT §8.**
+>
+> This file was written as an open design and it stayed open after the question
+> was answered, which is its own small lesson: prose that poses a question does
+> not update itself when someone answers it. **§8 records the ruling, the
+> mechanism that shipped, what was verified, and the coverage limit that comes
+> with it.** §§3–7 are the history of how the wrong design was caught and what
+> replaced it, and are kept because the disproof is the most useful thing in
+> here — but nothing below is a plan any more.
+>
+> The short version, for a reader in a hurry:
+> * **§3's discriminator is WRONG** and was never built. Its premise ("a
+>   harness's own final restore is the last thing it does") is false for **all
+>   sixteen** harnesses: they restore *per case inside the mutation loop*, so
+>   "mutated → original → further mutation" is the normal shape of every clean
+>   run. At the designed 50 ms poll it fired ~120 times on one clean
+>   `mutate_i2c_tb.sh` run, which would have made every mutation suite return
+>   exit 4 and every merge INCONCLUSIVE. Measurements in **§6**; the disproof is
+>   an executable case in `regress/test_dep_guard.sh`.
+> * The manager ruled **option (a), the declaration protocol**, and it is built,
+>   wired into `run_mutation_suite`, enforced by `check_harness_preflight`, and
+>   landed. All sixteen harnesses verified on real runs.
+> * **The mid-run restore is now CAUGHT**, proven on a real harness.
+> * **The honest limit:** detection requires the interference to persist
+>   **0.15 s** (`CHIP_DEP_SAMPLE_PERSIST`), so a suite whose cases are shorter
+>   than that — `mutate_serdes_tb.sh` runs 7 cases in 0.8 s, ~114 ms each — is
+>   protected in the no-false-positive direction ONLY.
 
 Date: 2026-09-26. Author: protocol-worker. Written at a hard wrap so a fresh
 session can build the sampler without re-deriving it. **Nothing here is
@@ -136,14 +151,25 @@ A guard that is wired in but not self-tested is worse than one that does not
 exist: it claims coverage it has not demonstrated. That is why this is written
 down as a design rather than half-built.
 
-## 4. Open items, in the order the manager set
+## 4. Open items, in the order the manager set — as they stood, now CLOSED
+
+> **Superseded by §8.** Of the four below, 1 and 2 are DONE, 4 was already closed,
+> and 3 is `tools/fw/peasm.py:200` (`# clocks (1.22 us)`, the D3 conversion error)
+> which is **fw-timing's file, still open, and deliberately not re-raised here** —
+> it was routed and re-raising it is noise. Kept verbatim because the queue this
+> session inherited is part of the record.
 
 1. **Build the sampler** per §3, starting from the stated edge cases. Then the
    diag-bus prose remainder.
+   **DONE, and not per §3** — §3 was disproved before it was built (§6) and the
+   manager ruled option (a) instead. See §8. The diag-bus prose remainder is
+   pass 11 and its addendum.
 2. **The diag-bus prose remainder** — the 39-commit branch, read single-tree:
    figure sets and their pages first, prose pages after. Six measured act results
    were confirmed gone from both maps (option (a) landed) and the formal
    denominators were confirmed correct.
+   **DONE** — `reviews/2026-09-26/DOCS-ACCURACY-REVIEW-PASS11.md`, re-measured
+   against main at report time.
 3. **`tools/fw/peasm.py:200`** carries `# clocks (1.22 us)` — the D3 conversion
    error, in the assembler, whose owner is not in the docs fleet. Flagged to the
    manager, still open.
@@ -239,7 +265,7 @@ any poll interval you would choose. Detecting this needs either write
 attribution (a kernel facility, not available here — `inotifywait` is ABSENT) or
 the harness saying what it is about to do.
 
-## 7. The two sound options, for a ruling
+## 7. The two sound options considered — DECIDED, see §8
 
 Neither is in the approved scope; both are small; the first is recommended.
 
@@ -274,3 +300,92 @@ quo. Given that asymmetry, a threshold is not worth shipping without a ruling.
 external edit that is not put back, and any failure to restore. It does not
 catch a mid-run restore. Case 10 of `regress/test_dep_guard.sh` pins that as a
 case, and the new case 11 records §6 as an executable disproof.
+
+---
+
+## 8. THE RULING, AND WHAT SHIPPED
+
+This section exists because §§1–7 were written as an open design and stayed open
+after the question was answered. A document that poses a question does not
+update itself when somebody answers it, and the failure mode is quiet: the next
+session reads "for a ruling", concludes nothing has been decided, and starts
+work that is already landed.
+
+### 8.1 The ruling
+
+The manager took the disproof as this cycle's deliverable and ruled **option
+(a), cooperation** — the declaration protocol. Option (b), write attribution via
+a `ctypes` inotify helper, was not taken. A duration heuristic was explicitly
+rejected, on the grounds already argued in §7: wrong in the quiet direction it is
+merely the status quo, wrong in the firing direction it is the ~120-HIT disaster
+of §6.4.
+
+### 8.2 The mechanism that shipped
+
+```sh
+chip_dep_sample_start <label> <target>...   # watch the MUTABLE targets, in the background
+chip_dep_expect pristine|mutated <file>...  # the HARNESS says what it just established
+chip_dep_sample_stop <label>                # non-zero if a target contradicted a declaration
+```
+
+The poller never looks for a pattern. It compares what it sees against what the
+harness **declared**, and a declaration is valid for an *interval*, so a slow
+poller can only ever **miss** a transition — it can never invent one. A missed
+detection is the status quo this file has always documented; an invented one is a
+false INCONCLUSIVE on a clean run, which is the failure that got §3 thrown out.
+
+A contradiction must hold for `CHIP_DEP_SAMPLE_PERSIST` (0.15 s) before it
+counts, because every real mutation is applied by python's `write_text`, which
+truncates and rewrites — the file is briefly neither the old content nor the new.
+An external restore lasts 976–6207 ms (measured on `mutate_i2c_tb.sh`), two
+orders of magnitude away.
+
+Fail-closed throughout: a sampler that was never started, a poller that did not
+run to completion, and any target the harness never declared all report
+INCONCLUSIVE rather than "clean".
+
+### 8.3 What was verified, and how
+
+* **All sixteen harnesses** run clean under the sampler — no false positives.
+* **The positive direction, on a real harness:** with a file copy standing in for
+  a manager's restore of `rtl/pe_eth_tx.v` mid-run, `mutate_eth_tx_tb.sh`
+  reports *"declared: mutated, observed: pristine, held for 0.165 s"*.
+* `regress/test_dep_guard.sh` is **13/13**. The limitation case flipped from
+  pinned to caught, and the negative control is a clean per-case run with
+  deliberately adversarial 100 ms truncate windows that must produce **zero**
+  false hits — the case §3's design failed.
+* `regress/check_harness_preflight.sh` requires a harness with a non-empty
+  `MUTABLE` to declare its baseline, with its own negative control proven.
+
+Five placement errors were found **only** by running the real harnesses, never by
+the self-test or by reading: `eth_soc` (whose `mutate()` takes anchor *strings*
+and always writes `$RTL`, so `pe_eth_mac.v` is in `MUTABLE` but never written),
+`spi` (a blanket declaration that landed inside `verify_restore()`'s loop),
+`fwbus` (`$fw` is a stem), `i2c` (a fifth hand-rolled case outside `run_case`),
+and `ctrl_r3` (a declaration placed after `return 0`, so dead code that never
+ran). The through-line: **a declaration is a claim, and only a real run shows
+whether a claim is true.**
+
+### 8.4 The limit, stated rather than tuned away
+
+**Detection requires the interference to persist at least 0.15 s.** A suite whose
+cases are shorter than that is protected in the no-false-positive direction only.
+Measured: `mutate_serdes_tb.sh` runs 7 cases in 0.8 s (~114 ms each), and an
+induced restore there is **missed**; `mutate_eth_tx_tb.sh`, whose cases are
+426–8491 ms, is **caught**.
+
+That trade is deliberate and should not be quietly reversed. Lowering the window
+to catch a 114 ms suite would put the false-positive class straight back, and a
+false INCONCLUSIVE on a clean run trains people to ignore INCONCLUSIVE — the
+outcome §6.4 exists to prevent. `CHIP_DEP_SAMPLE_PERSIST` is the single knob if
+that is ever worth revisiting, and the decision belongs to whoever owns the
+merge gate, not to the next person who trips over a missed detection.
+
+### 8.5 State of the tree
+
+Landed, not pending: the declaration protocol (`regress/dep_guard.sh`), the
+self-test, the `run_mutation_suite` bracket, the preflight rule, and the
+declarations in all sixteen harnesses. The self-expiring `<<wip>>` check on
+`tb_pe_soc_sr04` is proven in **both** directions and the marking correctly
+**stays** while that act is red; removing it belongs to the act's owner after
+their branch merges green, not to this file.
