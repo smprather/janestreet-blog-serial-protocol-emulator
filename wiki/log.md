@@ -1706,3 +1706,28 @@
   clause; other lower-priority coverage gaps are documented. No source/config
   fix or physical flow was run. Details:
   `reviews/2026-09-23/E1-E2-FOLLOWUP-REVIEW.md`.
+
+## [2026-09-25] docs | host stack concept page added
+
+- Added `wiki/concepts/host-stack.md`, the deep-reading page for the host side:
+  the Pico MicroPython bridge (framed SPI, and the wait-word trimming at the
+  read boundary that a ready-immediate op makes necessary), the
+  `ControllerSession` state machine and which refusals are the chip's versus
+  host policy, `FakePE` and the two places it cannot go, the golden packages
+  and why their conformance is byte-exact, the GUI's capability table and two
+  poll paths, the three fuzz/soak harnesses with their defaults, and the board
+  procedure. 197 lines.
+- Every number in it was measured against the tree and then re-verified
+  mechanically in one pass (29 claims, no mismatches): 413 host-GUI and 109
+  bridge tests, `acceptance.py --fake` 37 PASS / 0 FAIL / 1 SKIP over 38 beats,
+  R2 11 vectors / 22 steps / 22 confirmed, R3 14 / 26 / 25 with the one
+  unconfirmed step named, 18 bridge ops, 9 session states, 16 routes, polls at
+  1 000 ms and 2 000 ms, ≤ 15 wait words, 7 R2 and 20 R3 obligations, and the
+  fuzzer/soak defaults. The page carries a table saying which command produced
+  each one, so a later reader can re-derive rather than trust.
+- Two boundaries are kept distinct, which is the point of the page: the **two**
+  ruled spec-vs-RTL discrepancies (vectors 11 and 13) and the **one** step left
+  unconfirmed on both sides (`status_full_readback`'s `insn`, a freeze-snapshot
+  TB artefact). The page states plainly that no board has been run, and that
+  the only hardware-bound claim is the absence of one.
+- `wiki/index.md` deliberately untouched — the docs fleet wires the index.
