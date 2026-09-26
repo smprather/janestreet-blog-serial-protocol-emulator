@@ -35,16 +35,28 @@ sixth check, which SIMULATES its delay loops rather than charging them a flat
 rate, because the version that assumed three clocks a pass reported 120 for
 firmware transmitting 60% slow.
 
-## RED: THREE CHECKS, AND THE CAUSE IS ONE BIT
+## RED: THREE CHECKS, AND THE CAUSE IS ONE EXTRA BIT
 
-`dec_have` and the flag check pass. The three byte comparisons fail, and the
-arithmetic names the fault exactly — the decoded stream is the sent payload with
-**one bit prepended and the last one dropped**:
+`dec_have` and the flag check pass. The three byte comparisons fail, and
+`tb/probes/probe_bitstring.v` names the fault at bit resolution — the receiver's
+24 payload bits in ARRIVAL order, beside the sent 24:
 
-    sent     10100101 00111100 10010110
-    decoded  1|10100101 00111100 1001011|0
+    sent     10100101 00111100 10010110     a5 3c 96, high bit first
+    arrived  1|10100101 00111100 1001011|0
 
-So the receiver banked the preamble's ninth one as the payload's first bit.
+**ONE extra bit at the front, and then twenty-two bits line up exactly.** The
+receiver's payload starts one mid EARLY and then reads the frame perfectly.
+
+**The extra bit is a 1 because `a5`'s bit 7 is one AND the preamble's last bit
+is one**, so the two are indistinguishable in the levels: the seam is a boundary
+between two EQUAL bits, which carries no transition, and nine one-bits run
+together across it. Only the phase can tell them apart.
+
+**The wire is right** — 63 changes, 46 one-half and 16 two-half gaps per pass,
+which is the model's histogram exactly — so this is the receiver's mid count at
+the seam. `probe_tb_classify.v` rows #25 to #28 are the last mid of the preamble,
+the boundary after it, the mid that completes the byte, and the first mid of
+the payload.
 
 **The boundary between the preamble and the payload is a boundary like any
 other, and the phase already knows it:** after the preamble's last mid the phase
