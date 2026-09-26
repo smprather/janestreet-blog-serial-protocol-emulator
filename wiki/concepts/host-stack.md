@@ -3,7 +3,7 @@ title: Host Stack — the Pico bridge, the session, the model, the packages
 created: 2026-09-25
 updated: 2026-09-25
 type: concept
-tags: [host, verification, tooling, architecture]
+tags: [verification, tooling, architecture]
 sources: [tools/host_gui/session.py, tools/host_gui/protocol.py, tools/host_gui/fake_pe.py,
           tools/host_gui/r2_vectors.py, tools/host_gui/r3_vectors.py, tools/host_gui/web/app.js,
           tools/host_bridge/main.py, tools/host_bridge/pe_frame.py, tools/host_bridge/acceptance.py,
@@ -20,10 +20,13 @@ honest sentence about hardware is the last one. The rule the stack is built
 around is that **a model is evidence about a model** — a `chip_confirmed` flag
 names a citation to the chip's own run, and nothing here claims silicon.
 
-Layers, outermost first: the Pico bridge (USB CDC → framed SPI), the
-`ControllerSession` state machine, the `FakePE` model, the golden packages that
-make conformance byte-exact, the GUI, and the harness that drives it against a
-real board.
+The chip's host port is a **passive slave**
+([[decisions/adr-007-pe-ctrl-passive-slave]]), so a host has to exist to drive
+it: this stack is a consequence of that decision, not an optional extra. Layers,
+outermost first: the Pico bridge (USB CDC → framed SPI), the `ControllerSession`
+state machine, the `FakePE` model, the golden packages that make conformance
+byte-exact, the GUI, and the harness that drives it against a real board. The
+ordering and the definition of done live in [[plans/host-controller-gui]].
 
 ## The bridge: framed SPI, and the wait words at the read boundary
 
@@ -146,10 +149,10 @@ covers the frame codec and its wait-word trimming. `fuzz_server.py` — seed
 **20260926**, **200** iterations × **20** rounds, **8** threads, **60 s** —
 covers the API layer. `soak_host.py` — seed **20260926**, **20 min** default —
 samples every **100** operations / **2.0 s**, reconnects every **2 000**, and
-asserts **bounded growth** with ceilings of **8.0 MB** RSS and **50 000**
-objects, so a leak is a red gate rather than a slow death. The soak is only
-meaningful because the polls run everywhere: a liveness check that watches only
-a running core passes while an idle board is wedged.
+asserts **bounded growth** with ceilings of **8.0 MB** RSS and **50 000** objects,
+so a leak is a red gate rather than a slow death. The soak is only meaningful
+because the polls run everywhere: a liveness check that watches only a running
+core passes while an idle board is wedged.
 
 ## The board run, and what is not claimed
 
@@ -187,11 +190,10 @@ thing failed.
 | session states / server routes | 9 / 16 | `session.SessionState`, `server.py` |
 | polls | 1 000 ms CPU, 2 000 ms status | `tools/host_gui/web/app.js` |
 | wait words | ≤ 15, leading only, trimmed to length | `protocol.MAX_WAIT_WORDS` |
-| obligations and boundaries | 7 R2, 20 R3; 2 ruled discrepancies, 1 unconfirmed step | `r2_reads`, `r3_reads` |
 | fuzzer / soak defaults | 4 000 @ 20 s; 200 × 20 @ 8 threads, 60 s; 20 min | the harnesses' `DEFAULT_*` |
 
 Sited with `docs/host-bridge-bringup.md` (board procedure and triage table),
-`reviews/2026-09-25/HOST-GUI-R3-PREP.md`, `HOST-SOAK-API-FUZZ.md`, and the
-R2/R3 verification records whose counts are quoted above; the chip-side contract
-is `R3-DEBUG-CONTROL-CONTRACT.md` in the chip repo, and
+`reviews/2026-09-25/HOST-GUI-R3-PREP.md`, `HOST-SOAK-API-FUZZ.md` and the
+R2/R3 verification records whose counts are quoted above; the contract itself
+is the chip repo's `R3-DEBUG-CONTROL-CONTRACT.md`, and
 [[concepts/spi-as-firmware]] explains why that bus is a software loop.
