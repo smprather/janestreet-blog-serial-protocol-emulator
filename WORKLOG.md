@@ -2727,3 +2727,52 @@ different fault to find that out.
 now positively identified as a count (`reloaded 0x01`) rather than
 "unclassifiable", and dmem[11] as a mask at bit 7. The excuse for a counter
 survives; the excuse for a mis-placed mask does not.
+
+## 2026-09-27 act (c): TASK-START -- LET THE TWO MODELS ARGUE
+
+The level check compares the firmware's pad against `enc_wire_lev`, **which
+lives inside the testbench that runs the firmware.** So every level this act
+has ever reported was measured against a function with no witness but itself.
+A wrong model does not show up as a red pad; it shows up as a GREEN pad
+measured against the wrong thing, which is the most expensive shape a mistake
+can take here because it looks exactly like success.
+
+**MEASURED FIRST, BEFORE BUILDING ANYTHING: the two models agree.** Eighty
+levels in each of two polarities, `firmware/bmc_model.py` (Python, and the
+artefact the firmware was transcribed FROM) against `enc_wire_lev` (Verilog),
+byte for byte, both polarities, **identical**. Neither is told what the other
+says, neither imports the other, and a model told what the other model says is
+one model.
+
+**AND MAKING IT PERMANENT FOUND THE ACT'S OWN FAULT IN THE TENTH INSTRUMENT,
+WHICH IS THE ONE WRITTEN AT THE END TO CATCH THE OTHER NINE.**
+
+`bmc_model.py` ends with a MODEL SELF-CHECK that calls `sys.exit(1)` after
+printing which properties failed. The first version of the new check
+**swallowed that stdout and re-raised**, so a broken model made the check exit
+1 having printed **ABSOLUTELY NOTHING**. A gate that fails silently is
+indistinguishable from a gate that hung, which is the same blindness twice
+over -- and it is "a monitor that reports an absence as nothing", the fault
+this act has now found in nine instruments.
+
+Proven by injection, the act's own first fault: `(7 - b % 8)` changed to
+`(b % 8)`, so the Python model sends **low bit first**. Before the fix: exit 1,
+no output. After: it names the failure, says the comparison is NOT run, and
+quotes the model -- `whole stream, one for one: False <- the frame-start
+transition is...` -- which is the model telling on itself.
+
+**WHAT IT IS NOT, and the file says so in its own header: it says nothing
+about the firmware.** The pad could be wrong in eighty ways and both models
+would still agree, because neither of them is the hardware. What it bounds is
+the act's reference confirming itself.
+
+### AND THE LIMIT OF THE PROOF, WHICH IS A LIMIT OF THE PROOF AND NOT OF THE GATE
+
+**The disagreement branch could not be reached by injection.** Each model's own
+self-check fires first, so the two only ever get to disagree when BOTH are
+internally consistent and one of them is misreading the encoding -- which is
+the tail risk worth a gate, and is also the hardest to construct on purpose.
+So the two things that were proven are: the check passes when the models agree,
+and it reports a model's self-check failure with the model's own words instead
+of a bare exit code. The disagree-and-report path is correct by construction
+and untested by injection, and **it is named here rather than left implied**.

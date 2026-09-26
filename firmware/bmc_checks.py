@@ -510,10 +510,7 @@ for a in sorted(mnem):
     # can. 0 and 1 are counters and indices and are excused; a power of two
     # that is not 0x80 is a MASK AT THE WRONG BIT and is a failure, named with
     # the value so a reader can adjudicate rather than take it on trust.
-    if (
-        mnem.get(a, ("", ""))[0] == "LDI"
-        and mnem.get(a + 1, ("", ""))[0] == "STM"
-    ):
+    if mnem.get(a, ("", ""))[0] == "LDI" and mnem.get(a + 1, ("", ""))[0] == "STM":
         imm = lit(mnem[a][1])
         b = lit(mnem[a + 1][1].split(",")[0])
         if b is not None and imm is not None:
@@ -621,10 +618,13 @@ for a, src in shifts:
                 f"bit 7 (0x80) on EVERY reload: the first arrival lands in the "
                 f"high position, so the bit that goes out first has to be the one "
                 f"the mask sits on."
-                + (f" (the reload(s) at {ok} are correct, which is what made this "
-                   f"look fine: a mask re-armed at 0x80 in the middle of a frame "
-                   f"that started at 0x40 changes order half way through)"
-                   if ok else "")
+                + (
+                    f" (the reload(s) at {ok} are correct, which is what made this "
+                    f"look fine: a mask re-armed at 0x80 in the middle of a frame "
+                    f"that started at 0x40 changes order half way through)"
+                    if ok
+                    else ""
+                )
             )
         elif masks:
             print(

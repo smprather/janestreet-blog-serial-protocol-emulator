@@ -440,6 +440,23 @@ run_case "bi-phase loopback: FM0 + FM1" tb/probes/run.sh
 #     showed as 117 and the model excluded.
 run_case "bi-phase: 7 static checks" $PY firmware/bmc_checks.py firmware/bmc_frame.pe
 
+# 4g. The two models of the wire RULES must agree with each other. This is a
+#     different kind of gate from 4e and 4f, and it is the one that makes 4e's
+#     reference falsifiable: the eighty levels are compared against
+#     `enc_wire_lev`, which lives INSIDE the testbench that runs the firmware,
+#     so every level act (c) has reported was measured against a function with
+#     no witness but itself. `firmware/bmc_model.py` is a second, independent
+#     implementation of the same rules -- Python against Verilog, written from
+#     the prose of the encoding rather than from each other -- so the two can
+#     be compared. Neither is modified or imported into the other, because a
+#     model told what the other model says is one model.
+#
+#     It says nothing about the firmware, and the comment in the file says so:
+#     the pad could be wrong in eighty ways and both models would still agree.
+#     What it bounds is a different fault -- the act's reference confirming
+#     itself -- which is the one failure here that nothing else could detect.
+run_case "bi-phase: two models agree" $PY firmware/bmc_models_agree.py
+
 # 5. the documented limitation: back-to-back bytes are LOST (half-duplex).
 #    Asserts the failure mode rather than hiding it -- if this ever starts
 #    passing, the limitation has been fixed and the wiki page needs updating.
