@@ -53,10 +53,14 @@
 ; an integrity check is actually driven, and it gives the testbench a hard
 ; per-word frame boundary to count: exactly 40 SCLK rises per frame.
 ;
-; The words are 0x1134, 0x1245, 0x1356. None is a bit palindrome, and neither
-; is any of the three response bytes (0x6D, 0x6C, 0x6F -- the testbench
-; shifts 0x13, 0x12, 0x11 and RESP_MASK 16'h7E5A makes each wire byte that
-; value XOR 0x7E, so the pair is checkable from either end). A palindromic word
+; The words are 0x1134, 0x1245, 0x1356 (read off the arithmetic in state 0:
+; hi = 0x11 + i, lo = 0x34 + 17i, not trusted). None is a bit palindrome, and
+; neither is any of the three response bytes (0x1134 -> 0x6F, 0x1245 -> 0x6C,
+; 0x1356 -> 0x6D, in that order: tb_pe_soc_spi3.v shifts the high bytes 0x11,
+; 0x12, 0x13 -- its WORD_HI is {8'h13, 8'h12, 8'h11} and a concatenation is
+; MSB-first, so the LAST literal is index 0 and therefore the FIRST word on the
+; wire -- and RESP_MASK 16'h7E5A makes each wire byte the word's high byte XOR
+; 0x7E, so the pair is checkable from either end). A palindromic word
 ; puts the identical pin sequence on MOSI whichever way the shift goes, so it
 ; cannot catch a bit-order defect at all -- the trap firmware/spi_xfer.pe
 ; records for 0x5A, and the reason it sends 0x5B instead.
