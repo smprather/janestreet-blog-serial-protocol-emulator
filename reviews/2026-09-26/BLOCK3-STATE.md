@@ -245,3 +245,44 @@ f5844b2 docs(WORKLOG): the procedure caught its own failure twice
 
 The working tree is clean apart from \`.pi-lens-probe-home/\`, which is a
 pi-lens log artefact and has never been committed.
+
+---
+
+## UPDATE: the exact carry LANDS, and the first measurement regresses
+
+Run entirely on a copy in /tmp -- **the tree was never touched**, so a /new
+landing mid-run could not inherit a dirty tree or a half-edit.
+
+    CHECK 0  the address counter agrees with the assembler at all four sites
+    CHECK 1  all four blocks are byte-for-byte the verified block
+    jump check  every jump inside the conversion resolves inside it
+
+**MEASUREMENT 1 IS NOW EXACT: 999 mm**, against the specification's 999
+(it was 991). The exact carry is the fix, and it works for the value that
+needed it.
+
+**MEASUREMENT 0 REGRESSED: 222 mm**, where it was 199. This is the
+interesting half, because it CONTRADICTS a claim I had been making for six
+resumes: that the exact add and the flawed guard must AGREE whenever the low
+byte does not carry. For r = 8 the chain is 8 -> 16 -> 32 -> 40 -> 80 -> 88,
+nothing ever carries, and the two versions of the add should be
+indistinguishable. They are not: 222 - 198 = 24, and 24 is a SMALL-TERM
+value, so the term came out 24 where it should be 1.
+
+**What that says, and it is the next thing to look at.** The term is
+`(11r) >> 6`, and 24 is `1536 >> 6` while 1 is `88 >> 6`. So at the
+shift, the small term's accumulator held 1536 rather than 88 -- and 88 is
+0x0058, so a HIGH byte of 0x06 appeared in dmem[0..1] between the chain and
+the shift. The chain's high byte is the only place that can come from, and
+the carry test is what writes it. So the suspicion moves from the arithmetic
+(which is now provably right, twice) to **which slot the chain's high byte is
+in**: the scratch slots are dmem[6..9], the answer slots, and the second
+measurement's bank writes 8,9 -- so a value written to the accumulator's high
+byte before the shift, and read back after, would be a slot that the bank has
+since overwritten. That is a NAMED HYPOTHESIS with a line to read, not a
+conclusion, and the same discipline applies: measure it, do not reason it.
+
+**THE THREE COMMANDS OF THE LAST COMMITTION ARE CORRECT AND THEY WORK.** The
+first time the whole procedure has run end to end without a placement error.
+What is left is one arithmetic question that the checks have now narrowed to
+a single byte, and it is not a placement problem any more.
