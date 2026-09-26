@@ -61,7 +61,8 @@ class TestTheDistributionInstallsItsOwnExtra(unittest.TestCase):
         self.assertIsNotNone(
             setuptools,
             "without [tool.setuptools] the flat layout is ambiguous and the "
-            "install the runbook names fails before it resolves anything")
+            "install the runbook names fails before it resolves anything",
+        )
         # This distribution ships no importable package on purpose (the header
         # says so): the tools live in tools/ and are run from the clone. So the
         # declaration must be an explicit EMPTY one, not a guess.
