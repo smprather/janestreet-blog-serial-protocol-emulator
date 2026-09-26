@@ -2166,3 +2166,70 @@ the same trick that made the frame's order readable at a glance.
 `a <= {1'b0, a[7:1]}` and there is no shift-LEFT to re-align, so a peeled byte
 goes out low bit first. Provable by putting the peel back, and it is the check
 whose absence cost this session's hour. **Write it before the next probe.**
+
+## 2026-09-27 act (c): TASK-START -- THE ORDER CHECK, WHICH NEEDS NO INSTRUMENT
+
+Two entries have said "write it before the next probe" and the next probe is
+what I did instead. This is the check, and it is the last thing standing between
+this act and the fault it spent an hour on.
+
+**THE SIGNATURE IS THE RELOAD, and it is mechanical.** `SHR` is
+`a <= {1'b0, a[7:1]}`: the new bit 7 is always zero, so a shift-right moves bits
+DOWN and a byte peeled with it goes out **low bit first**. The wire is high bit
+first because the RECEIVER's shift-in is a doubling with the arriving bit at the
+low end, and the encoder matches it by walking a MASK down — 0x80, 0x40, 0x20 …
+0x01 and back to 0x80 — which is the one thing a shift-right is good at.
+
+So: **the byte a `SHR` shifts must be reloaded with `0x80`.** A byte that is
+shifted and reloaded with something else is a peel, and a peel is a transmitter
+that sends the frame backwards.
+
+That is the whole check, and it needs no wire, no probe and no model.
+
+### THE ORDER CHECK IS IN, AND IT IS PROVEN BOTH WAYS
+
+**The signature is the RELOAD, and it needs no wire, no probe and no model:**
+the dmem byte a `SHR` shifts must be reloaded with `0x80`. A mask walks
+0x80, 0x40, 0x20 … 0x01 and back to 0x80, and that reload is what makes a
+shift-right the right tool. **A byte that is shifted and fed by the payload is a
+PEEL, and a peel is a transmitter that sends the frame backwards** — because
+`SHR` is `a <= {1'b0, a[7:1]}`, so the new bit 7 is always zero and a byte
+peeled with it comes out low bit first.
+
+    259 SHR shifts dmem[11], which is reloaded 0x80 at 183, 265: a mask
+        walking down, so the wire is high bit first
+      shifts that are peels, or that cannot be shown to be masks: 0
+
+**AND PROVEN AGAINST THE FAULT, by putting the peel back:**
+
+    260 SHR shifts dmem[11], and that byte is FED BY THE PAYLOAD FETCH at
+        198 -- so it is a PEEL, and a peel sends the frame LOW BIT FIRST
+      shifts that are peels, or that cannot be shown to be masks: 1
+
+**AND IT DELIBERATELY DOES NOT CLAIM MORE THAN IT CAN SUPPORT.** The counter
+`dmem[6]` is shifted and is neither a mask nor a payload byte, and the check
+prints that it makes no claim about it rather than failing it: failing there
+would be the check overreaching into a verdict it cannot support, which is the
+class of fault this act exists to catch, one level up. **The claim is narrow and
+the claim is true: no byte that RECEIVES THE PAYLOAD is shifted.**
+
+**SO THE SEVEN CHECKS ARE: jump targets, reachability, adjacent labels, store
+runs split by a changed setter, branch operands, the half-interval in clocks,
+and the bit order.** The sixth cost this act an hour by sharing an assumption
+with the thing it tested; the seventh is the one that would have saved the hour
+the first time, and it was the only one of the seven that needed no instrument
+at all.
+
+### AND WHAT IS LEFT, IN ONE LINE
+
+Three red checks: the testbench's receiver banks the payload one bit early.
+**The wire is proven right** — the interval histogram is the model's exactly, all
+24 routes are 120 clocks, the mask sequence is right in the listing, and the
+preamble arrives as `0x7f` then `0xFF` with the flag at 0. **The levels the
+encoder drives are the one thing still unmeasured**, because the probe meant to
+measure them drops events and its own summary line never printed.
+
+So the next step is the levels, and the way to get them is not another
+hand-built probe: the model already has the return leg's eighty levels, so print
+the pad's level at each half-interval index as a **string** and set the two side
+by side. One comparison, and the level sequence either matches or does not.

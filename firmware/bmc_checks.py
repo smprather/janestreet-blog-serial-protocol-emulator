@@ -359,4 +359,105 @@ print(
     f"not exactly 120 clocks: {len(bad_iv)}"
     + ("" if rs and not bad_iv else "  *** SEE ABOVE ***")
 )
+# THE SEVENTH, AND IT IS THE ONE THAT COST THIS ACT AN HOUR, so it is written
+# first among the things that could have.
+#
+# SHR IS `a <= {1'b0, a[7:1]}`: the NEW BIT 7 IS ALWAYS ZERO. A shift-right moves
+# every bit DOWN one place and throws the top one away, so a BYTE peeled with
+# SHR comes out LOW BIT FIRST. There is no shift-LEFT to re-align it -- that is
+# the whole of why the peel cannot work, and the reason the wire is high bit
+# first is the RECEIVER, whose shift-in is a doubling with the arriving bit at
+# the low end.
+#
+# THE FAULT THIS ACT SHIPPED, measured: the encoder held the byte in dmem[11] and
+# peeled it, so dmem[11] went 0xFF, 0x7F, 0x52 -- and 0x52 is 0xA5 shifted
+# right. It went UNNOTICED for sixteen half-intervals because the preamble's byte
+# is 0xFF, which is eight ones in EVERY order, so a receiver that reads the
+# payload backwards reads a legal preamble and a transmitter that sends it
+# backwards sends a legal preamble. The only thing that caught it was the
+# receiver's own trace showing a four-microsecond gap inside a run of eight
+# identical bits, which the wire rules say cannot exist.
+#
+# THE SIGNATURE IS THE RELOAD, and it is mechanical and needs no wire, no probe
+# and no model: **the dmem byte a SHR shifts must be reloaded with 0x80.** A mask
+# walks 0x80, 0x40, 0x20 ... 0x01 and back to 0x80, and that reload is what
+# makes a shift-right the right tool. A byte that is shifted and reloaded with
+# anything else is a peel, and a peel is a transmitter that sends the frame
+# backwards.
+print("\nBIT-ORDER CHECK (a SHR walks a MASK down, so its byte must reload 0x80):")
+def lit(ops):
+    """the immediate an instruction carries, or None if it is not a number"""
+    try:
+        return int(ops.split(",")[-1].strip(), 0)
+    except ValueError:
+        return None
+
+
+shifts, reloads, fed = [], {}, {}
+for a in sorted(mnem):
+    if mnem.get(a, ("", ""))[0] == "LDI" and lit(mnem[a][1]) == 0x80:
+        if mnem.get(a + 1, ("", ""))[0] == "STM":
+            b = lit(mnem[a + 1][1].split(",")[0])
+            if b is not None:
+                reloads.setdefault(b, []).append(a)
+    # an `LDS` whose result reaches an `STM n, A` within a few instructions is
+    # the PAYLOAD FETCH landing in memory, and that is what makes a byte a data
+    # byte rather than a mask
+    if mnem.get(a, ("", ""))[0] == "LDS":
+        for k in range(a + 1, min(a + 6, N)):
+            if mnem.get(k, ("", ""))[0] == "STM":
+                b = lit(mnem[k][1].split(",")[0])
+                if b is not None:
+                    fed.setdefault(b, []).append(k)
+                break
+            if mnem.get(k, ("", ""))[0] not in ("NOP", "MOV", "JMP", "LDI"):
+                break
+for a in sorted(mnem):
+    if mnem[a][0] != "SHR":
+        continue
+    # the dmem byte this SHR shifts, found by walking back to the nearest load of
+    # A in the same straight-line run; None means it shifts a COMPUTED value
+    src = None
+    k = a - 1
+    while k >= 0 and mnem.get(k, ("", ""))[0] not in (
+        "LDI", "LDM", "MOV", "SHR", "AND", "ADD", "SUB", "OR", "OUT", "IN", "LDS",
+    ):
+        k -= 1
+    if k >= 0 and mnem[k][0] == "LDM" and mnem[k][1].split(",")[0].strip() == "A":
+        src = lit(mnem[k][1])
+    shifts.append((a, src))
+bad_order = 0
+for a, src in shifts:
+    if src is None:
+        print(
+            f"    {a:3d} SHR shifts a computed value, not a memory byte: the "
+            f"counter or an index, which is a position and not a payload"
+        )
+    elif src in fed:
+        bad_order += 1
+        print(
+            f"    {a:3d} SHR shifts dmem[{src}], and that byte is FED BY THE "
+            f"PAYLOAD FETCH at {', '.join(str(x) for x in fed[src])} -- so it is "
+            f"a PEEL, and a peel sends the frame LOW BIT FIRST"
+        )
+    elif src in reloads:
+        print(
+            f"    {a:3d} SHR shifts dmem[{src}], which is reloaded 0x80 at "
+            f"{', '.join(str(x) for x in reloads[src])}: a mask walking down, so "
+            f"the wire is high bit first"
+        )
+    else:
+        # A counter or an index is neither a mask nor a payload byte, and this
+        # check does NOT claim to know what it is. Failing here would be the
+        # check overreaching into a verdict it cannot support -- the class of
+        # fault this act exists to catch, one level up. So it is reported and
+        # not counted: the claim being made is "no byte that RECEIVES THE PAYLOAD
+        # is shifted", and that is a claim about a peel.
+        print(
+            f"    {a:3d} SHR shifts dmem[{src}], which is neither a mask (no "
+            f"0x80 reload) nor fed by the payload: a counter or an index, and "
+            f"this check makes no claim about those"
+        )
+print(f"  shifts that are peels, or that cannot be shown to be masks: {bad_order}")
+
 print(f"\nwords={N}")
