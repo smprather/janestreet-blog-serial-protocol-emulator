@@ -301,7 +301,6 @@ MEASURED_US = {
 }
 
 # The wrong claims the review pass caught, kept as negative controls.
-#
 # These are CLAIM shapes, not bare digits, and the distinction is not pedantry.
 # The servo page legitimately prints "619" while explaining why 4*n3+11 is the
 # wrong form of the outer step; a check that forbade the digit would forbid the
@@ -393,6 +392,321 @@ OWNED_PROTOCOLS = (
     "fm-biphase",
 )
 
+# The pages whose `updated:` this gate also checks. Every protocol in the list
+# above has one page, so this is derived rather than hand-maintained -- a second
+# hand-maintained list in the same file is a second thing that can drift.
+OWNED_PAGES = tuple(f"wiki/concepts/protocol-{p}.md" for p in OWNED_PROTOCOLS)
+
+# Links a page may use as a BARE name with no directory, because they sit at the
+# wiki root. The corpus already uses this form - [[STATUS]] appears 21 times -
+# so a resolver that only understood wiki-relative targets would call every one
+# of them dead.
+SHORT_NAMES = ("STATUS", "SCHEMA", "index", "log")
+
+
+def _declared_updated(path: Path) -> str | None:
+    """the page's `updated:` field, or None if it has no readable one"""
+    for line in path.read_text().splitlines()[:20]:
+        if line.startswith("updated:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def _last_content_change(rel: str) -> str | None:
+    """when git last touched this file, as YYYY-MM-DD, or None if unknowable.
+
+    A checkout that is not a git working tree -- an exported tarball, or the
+    self-test's throwaway fixture -- has no history, and the honest answer there
+    is "cannot determine", not "passes". The caller reports that state loudly
+    instead of counting it as a check, because not stamping is a decision and a
+    reader should be able to see which pages were not stamped.
+
+    DELAY_LATTICE_UPDATED is a test seam, and the only reason one exists here: the
+    self-test's fixture has no git history, so without a seam the comparison could
+    not be exercised end to end at all.
+    """
+    seam = os.environ.get("DELAY_LATTICE_UPDATED", "")
+    if seam:
+        name, _, when = seam.rpartition("+")
+        if name == rel:
+            return when
+    try:
+        out = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(ROOT),
+                "log",
+                "-1",
+                "--format=%ad",
+                "--date=short",
+                "--",
+                rel,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    when = out.stdout.strip()
+    return when if out.returncode == 0 and when else None
+
+
+WIKI_DIRS = (
+    "concepts",
+    "plans",
+    "reference",
+    "decisions",
+    "entities",
+    "comparisons",
+    "queries",
+)
+
+
+def resolve_link(target: str) -> str | None:
+    """resolve a wikilink target to a file, or None if it is dead.
+
+    THE CORPUS USES TWO CONVENTIONS and a resolver that knows only one invents
+    dead links: index.md and most pages write `[[concepts/ethernet-scope]]`
+    (wiki-relative), while a set of concept pages write `[[physical-layer-gpio]]`
+    (bare name). The first version of this check tried only the wiki-relative
+    form and reported 32 dead links across the eight pages - every one of them a
+    false alarm caused by the checker, which is worse than no checker because
+    it invites "fixing" links that are fine.
+    """
+    t = target.strip()
+    if not t:
+        return None
+    if (ROOT / "wiki" / (t + ".md")).exists():
+        return f"wiki/{t}.md"
+    for d in WIKI_DIRS:
+        if (ROOT / "wiki" / d / (t + ".md")).exists():
+            return f"wiki/{d}/{t}.md"
+    return None
+
+
+def check_file_paths() -> int:
+    """every backticked REPO path in my pages must exist in this tree.
+
+    The sibling of the outbound-link check, and it exists because a page in this
+    set shipped two paths that resolve to nothing: the FM0/FM1 page named
+    firmware/bmc_frame.pe and tb/tb_pe_soc_bmc.v as plainly as any other, and
+    both live only on fw-timing-protocols. The page was HONEST about it - the
+    next line said so - but a reader who scans the first mention gets a path
+    that does not open, on a page whose entire subject is being honest about
+    status. So the paths are now written branch-qualified, and this check is
+    what keeps them that way.
+
+    A path that names another branch explicitly (`branch:path`) is exempt: that
+    is the qualified form, and the exemption is a property of the TEXT rather
+    than a list of known-absent files, so a path that moves to another branch
+    later does not need this file edited.
+
+    A BARE FILENAME is a name, not a path, and is resolved by looking it up
+    ANYWHERE in the tree. The first version of this check required every match to
+    exist at the repo root, so `i2c_pins.pe` and `tb_pe_soc_sr04.v` - both of
+    which exist, in firmware/ and tb/ - were reported missing, the clean fixture
+    went red, and the two findings were the check's fault. A checker that invents
+    failures is the same defect as one that invents dead links, and the second
+    time this branch has walked into it for the same reason.
+    """
+    import re
+
+    path_re = re.compile(
+        r"`([A-Za-z0-9_][A-Za-z0-9_./-]*"
+        r"\.(?:md|puml|svg|png|pe|hex|v|sh|py|txt|json|yaml))`"
+    )
+    # every file in the tree, by basename, so a bare name can be resolved
+    by_name: set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d not in (".git", "node_modules", ".pi-lens-probe-home")]
+        by_name.update(filenames)
+    failures = 0
+    total = 0
+    for rel in OWNED_PAGES:
+        page = ROOT / rel
+        if not page.exists():
+            continue
+        for lineno, line in enumerate(page.read_text().splitlines(), 1):
+            for m in path_re.finditer(line):
+                target = m.group(1)
+                total += 1
+                if ":" in target:
+                    continue          # branch-qualified: exempt by construction
+                if "/" in target:
+                    ok = (ROOT / target).exists()
+                else:
+                    ok = target in by_name
+                if not ok:
+                    print(f"FAIL  {rel}:{lineno}: `{target}` is not in this tree - "
+                          "qualify it with its branch, or fix the path")
+                    failures += 1
+    print(f"ok    {total} repo path(s) across {len(OWNED_PAGES)} page(s) resolve")
+    return failures
+
+
+def check_updated_dates() -> int:
+    """assert each page's `updated:` is not older than its last content change.
+
+    wiki/SCHEMA.md says "When updating a page, always bump the `updated` date",
+    and check_wiki_pages.sh enforces four of the five SCHEMA rules. This is the
+    fifth, and it is the one about a page being HONEST about when it was last
+    checked -- which is the same species as every other gap this gate has closed:
+    a rule that is stated and not enforced is a rule that is a convention.
+    """
+    import re
+
+    stamped = unknown = 0
+    failures = 0
+    isodate = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    for rel in OWNED_PAGES:
+        path = ROOT / rel
+        if not path.exists():
+            print(f"FAIL  {rel}: absent, so its `updated` cannot be checked")
+            failures += 1
+            continue
+        declared = _declared_updated(path)
+        if declared is None:
+            print(
+                f"FAIL  {rel}: no `updated:` field, so the page cannot say when "
+                "it was last checked"
+            )
+            failures += 1
+            continue
+        if not isodate.match(declared):
+            print(f"FAIL  {rel}: `updated: {declared}` is not YYYY-MM-DD")
+            failures += 1
+            continue
+        changed = _last_content_change(rel)
+        if changed is None:
+            unknown += 1
+            print(
+                f"note  {rel}: declared {declared}, last content change UNKNOWN "
+                "(not a git working tree) - not counted as a check"
+            )
+            continue
+        if declared < changed:
+            print(
+                f"FAIL  {rel}: `updated: {declared}` but the content last changed "
+                f"{changed}. Bump the date or revert the change."
+            )
+            failures += 1
+        else:
+            stamped += 1
+    print(
+        f"ok    `updated` verified against git for {stamped} page(s)"
+        + (f"; {unknown} not determinable and NOT counted" if unknown else "")
+    )
+    return failures
+
+
+def check_outbound_links() -> int:
+    """every [[wikilink]] in my pages must resolve to a file that exists.
+
+    check_wiki_pages.sh counts DISTINCT outbound wikilinks and fails below two -
+    which is the rule, and it is a good one. It does NOT check that the targets
+    exist, so a page satisfies it with two links to pages that were never
+    written, or that have since been renamed. A count is not a check.
+
+    That is the same shape as every other gap this gate has closed, and the
+    interesting part is that the wiki gate could not have caught it: its rule is
+    "at least two", and a link to nothing is still a link.
+
+    Only the eight pages this branch owns are checked; the corpus-wide version
+    belongs to whoever owns regress/.
+    """
+    import re
+
+    link = re.compile(r"\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]")
+    failures = 0
+    total = 0
+    for rel in OWNED_PAGES:
+        path = ROOT / rel
+        if not path.exists():
+            continue
+        # BODY only, matching the wiki gate's own rule: a link inside
+        # `sources:` is a citation, not an outbound link, and must not be
+        # counted as one here either - or a page could pass this by listing
+        # itself in its own frontmatter.
+        body, in_fm = [], True
+        for i, line in enumerate(path.read_text().splitlines()):
+            if i == 0 and line == "---":
+                in_fm = True
+                continue
+            if in_fm and line == "---":
+                in_fm = False
+                continue
+            if not in_fm:
+                body.append((i + 1, line))
+        for lineno, line in body:
+            for m in link.finditer(line):
+                target = m.group(1).strip()
+                if target in SHORT_NAMES:
+                    continue
+                total += 1
+                if resolve_link(target) is None:
+                    print(f"FAIL  {rel}:{lineno}: [[{target}]] resolves to nothing")
+                    failures += 1
+    print(
+        f"ok    {total} outbound link(s) across {len(OWNED_PAGES)} page(s) resolve"
+        if not failures
+        else ""
+    )
+    return failures
+    """assert each page's `updated:` is not older than its last content change.
+
+    wiki/SCHEMA.md says "When updating a page, always bump the `updated` date",
+    and check_wiki_pages.sh enforces four of the five SCHEMA rules. This is the
+    fifth, and it is the one about a page being HONEST about when it was last
+    checked -- which is the same species as every other gap this gate has closed:
+    a rule that is stated and not enforced is a rule that is a convention.
+    """
+    import re
+
+    stamped = unknown = 0
+    failures = 0
+    isodate = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    for rel in OWNED_PAGES:
+        path = ROOT / rel
+        if not path.exists():
+            print(f"FAIL  {rel}: absent, so its `updated` cannot be checked")
+            failures += 1
+            continue
+        declared = _declared_updated(path)
+        if declared is None:
+            print(
+                f"FAIL  {rel}: no `updated:` field, so the page cannot say when "
+                "it was last checked"
+            )
+            failures += 1
+            continue
+        if not isodate.match(declared):
+            print(f"FAIL  {rel}: `updated: {declared}` is not YYYY-MM-DD")
+            failures += 1
+            continue
+        changed = _last_content_change(rel)
+        if changed is None:
+            unknown += 1
+            print(
+                f"note  {rel}: declared {declared}, last content change UNKNOWN "
+                "(not a git working tree) - not counted as a check"
+            )
+            continue
+        if declared < changed:
+            print(
+                f"FAIL  {rel}: `updated: {declared}` but the content last changed "
+                f"{changed}. Bump the date or revert the change."
+            )
+            failures += 1
+        else:
+            stamped += 1
+    print(
+        f"ok    `updated` verified against git for {stamped} page(s)"
+        + (f"; {unknown} not determinable and NOT counted" if unknown else "")
+    )
+    return failures
+
 
 def _owner_of(base: str) -> str | None:
     """which protocol owns a stem, or None if it is not ours.
@@ -476,13 +790,51 @@ def selftest() -> int:
         return 1
 
     with tempfile.TemporaryDirectory() as td:
-        # a fixture that is a real copy of the real files, not a toy: a toy
-        # would not contain the very lines the gate is supposed to be reading
+        # A fixture that is a real copy, not a toy: a toy would not contain the
+        # very lines the gate is supposed to be reading.
+        #
+        # The WHOLE wiki/ tree is copied, not just REQUIRED, and that is not
+        # tidiness. My pages link to concepts/i2c-on-the-matrix, concepts/
+        # pin-matrix and five others, and the outbound-link check resolves a
+        # target by looking for the file. Copying only the 8 pages under test
+        # therefore made every one of those links unresolvable and the CLEAN
+        # FIXTURE FAILED - which looked like a broken gate and was a broken
+        # fixture. A control that starts red teaches you nothing, and the fix
+        # is to make the fixture faithful rather than to relax the check.
         fixture = Path(td) / "repo"
-        for rel in REQUIRED:
-            dst = fixture / rel
+        # Every TEXT file in the tree, not just wiki/ and not just the pages
+        # under test. The pages under test name firmware/*.pe, tb/*.v, rtl/*.v
+        # and tools/*, and the path check resolves a bare filename by looking
+        # it up ANYWHERE - so a fixture holding only wiki/ makes every one of
+        # those unresolvable and the CLEAN FIXTURE FAILS. Twice now this has
+        # looked like a broken gate and been a broken fixture, and the second
+        # time the honest answer was again to fix the fixture rather than
+        # relax the check.
+        #
+        # Renders and wave dumps are skipped: they are large, binary, and no
+        # check in this file reads their contents - the RENDER gate does, and
+        # that is checked against the real tree, not a fixture.
+        skip_dirs = {".git", "node_modules", ".pi-lens-probe-home", "sim", "logs"}
+        skip_suffix = (".png", ".svg", ".vcd", ".pyc")
+        for src in ROOT.rglob("*"):
+            if not src.is_file():
+                continue
+            if any(part in skip_dirs for part in src.relative_to(ROOT).parts):
+                continue
+            if src.suffix in skip_suffix:
+                continue
+            dst = fixture / src.relative_to(ROOT)
             dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_text((ROOT / rel).read_text())
+            try:
+                dst.write_text(src.read_text())
+            except UnicodeDecodeError:
+                # A file that is not valid UTF-8 is a binary - a firmware .hex,
+                # a VCD - and nothing in this gate reads its CONTENTS. What the
+                # checks need is that it EXISTS, so it is written as an empty
+                # placeholder: skipping it would make a bare filename that
+                # genuinely exists in the tree look dead, which is the same
+                # invented-failure defect as the bare-name bug above.
+                dst.write_bytes(b"")
 
         def run_gate() -> tuple[int, str]:
             proc = subprocess.run(
@@ -586,6 +938,103 @@ def selftest() -> int:
         if not require("all planted errors removed", want_fail=False):
             return 1
 
+        # (7) THE `updated` FIELD, which SCHEMA states and nothing enforced. The
+        #     fixture is a copy of the FILES with no git history, so the clean
+        #     run reports every page as UNKNOWN and counts none of them - which is
+        #     the honest answer for a non-git checkout, and the reason the seam
+        #     exists at all. The two controls below are what make this a check
+        #     rather than a report: one plants a page whose content moved past the
+        #     date it declares, and the gate must fail on it.
+        env = dict(os.environ, DELAY_LATTICE_UPDATED=f"{OWNED_PAGES[0]}+2099-01-01")
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), str(fixture)],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        if proc.returncode == 0:
+            good = False
+            print("FAIL  a stale `updated` was planted and the gate returned 0")
+        else:
+            print(
+                f"ok    stale `updated` (content 2099-01-01, page declares less): "
+                f"gate exit {proc.returncode}"
+            )
+
+        # and the SAME page with a date that covers its change must pass, so the
+        # control is not satisfied by a check that simply always fails
+        env = dict(os.environ, DELAY_LATTICE_UPDATED=f"{OWNED_PAGES[0]}+2000-01-01")
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), str(fixture)],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        if proc.returncode != 0:
+            good = False
+            print(
+                "FAIL  a covered `updated` was planted and the gate failed; "
+                "the control is satisfied by always-red"
+            )
+        else:
+            print(f"ok    `updated` covering its change: gate exit {proc.returncode}")
+
+        # and a page whose `updated` is not a date at all is caught, because
+        # "bump the date" is only checkable if the field is machine-readable
+        target = fixture / OWNED_PAGES[0]
+        keep = target.read_text()
+        target.write_text(keep.replace("updated: ", "updated: not-a-date ", 1))
+        good &= require("`updated` that is not YYYY-MM-DD", want_fail=True)
+        target.write_text(keep)
+
+        # (8) OUTBOUND LINKS MUST RESOLVE, which check_wiki_pages.sh does not
+        #     do: its rule is "at least two links", and a link to a page that
+        #     was never written still counts. Three controls, and the MIDDLE
+        #     one is the one that matters, because it is exactly the bug this
+        #     check was born with - a resolver that only understood the
+        #     wiki-relative form reported all 32 of my links dead.
+        page = fixture / OWNED_PAGES[0]
+        keep = page.read_text()
+        page.write_text(keep + "\nA link to nothing: [[concepts/does-not-exist]]\n")
+        good &= require("planted a DEAD outbound link", want_fail=True)
+        page.write_text(keep + "\nA link that resolves: [[concepts/pin-matrix]]\n")
+        good &= require("planted a RESOLVING link (wiki-relative form)", want_fail=False)
+        page.write_text(keep + "\nA link that resolves: [[pin-matrix]]\n")
+        good &= require(
+            "planted a RESOLVING link (BARE form - the convention "
+            "a first-token resolver calls dead)",
+            want_fail=False,
+        )
+        # body-only, matching the wiki gate's own rule: a dead link inside
+        # `sources:` is a citation, not an outbound link, and must not fail here
+        page.write_text(keep.replace("sources: [", "sources: [[concepts/ghost]], [", 1))
+        good &= require(
+            "dead link in `sources:` is NOT an outbound link", want_fail=False
+        )
+        page.write_text(keep)
+
+        page = fixture / OWNED_PAGES[0]
+        keep = page.read_text()
+        page.write_text(keep + "\nA path to nothing: `firmware/no_such_file.pe`\n")
+        good &= require("planted a MISSING repo path", want_fail=True)
+        page.write_text(keep + "\nA cross-branch path: `other-branch:firmware/x.pe`\n")
+        good &= require("branch-qualified path is exempt", want_fail=False)
+        page.write_text(keep + "\nA real path: `firmware/ws2812.pe`\n")
+        good &= require("planted a RESOLVING repo path", want_fail=False)
+        # a BARE FILENAME is a name, not a path: it must resolve if the file
+        # exists ANYWHERE, which is the false positive the first version had
+        page.write_text(keep + "\nA bare name that exists in firmware/: `i2c_pins.pe`\n")
+        good &= require("bare filename resolved by basename, not at the root",
+                        want_fail=False)
+        page.write_text(keep + "\nA bare name that exists nowhere: `no_such_file.v`\n")
+        good &= require("bare filename that exists nowhere", want_fail=True)
+        page.write_text(keep)
+
+        if not require("final green re-check", want_fail=False):
+            return 1
+
     if not good:
         print("SELFTEST: FAILED")
         return 1
@@ -660,6 +1109,18 @@ def main() -> int:
     print()
     print("== the coverage list, asserted against the filesystem ==")
     fail += check_coverage()
+
+    print()
+    print("== outbound links: every target must resolve to a file ==")
+    fail += check_outbound_links()
+
+    print()
+    print("== repo paths named in my pages must exist in this tree ==")
+    fail += check_file_paths()
+
+    print()
+    print("== the `updated` field, against git (SCHEMA's fifth rule) ==")
+    fail += check_updated_dates()
 
     print()
     # The checker must be capable of failing, and that has three halves. Each

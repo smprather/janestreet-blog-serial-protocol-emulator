@@ -56,6 +56,8 @@ frame in the demos is checked against.
    wire bits). Firmware programs drive both (`eth_arp_echo`, `eth_tx_two`, a
    wrap probe and a busy probe).
 
+**Deep reading** — [`wiki/concepts/overview.md`](../wiki/concepts/overview.md) is the index. Per act: [UART RTS/CTS](../wiki/concepts/protocol-uart-flow.md) · [SPI mode 3 + per-word CRC](../wiki/concepts/protocol-spi3-crc.md) · [I2C read burst + clock stretching](../wiki/concepts/protocol-i2c-adv.md), plus the baseline pages [SPI as firmware](../wiki/concepts/spi-as-firmware.md) · [I2C on the matrix](../wiki/concepts/i2c-on-the-matrix.md) · [Ethernet receive path](../wiki/concepts/ethernet-receive-path.md). Figures: [uart-flow](../diagrams/proto-uart-flow.png) · [spi3-crc](../diagrams/proto-spi3-crc.png) · [i2c-adv](../diagrams/proto-i2c-adv.png)
+
 ## The debug act — arm a breakpoint, hit it, step across it, resume (R3)
 
 The four acts above are firmware personas. This one is the thing you cannot do
@@ -192,6 +194,8 @@ sides: **17.0 µs past the longest 0-release, 25.0 µs before the 1-release ends
 > That is the single most useful thing this act demonstrates, and it is a
 > firmware property, not a hardware one.
 
+**Deep reading** — [WS2812](../wiki/concepts/protocol-ws2812.md) · [servo PWM](../wiki/concepts/protocol-servo.md) · [DHT11](../wiki/concepts/protocol-dht11.md) — each page carries the measured pulse widths and the tolerances they have to clear. Figures: [ws2812](../diagrams/proto-ws2812.png) · [ws2812-timing](../diagrams/proto-ws2812-timing.png) · [servo](../diagrams/proto-servo.png) · [servo-timing](../diagrams/proto-servo-timing.png) · [dht11](../diagrams/proto-dht11.png) · [dht11-timing](../diagrams/proto-dht11-timing.png)
+
 ### What the three acts cost, and what they prove about the claim
 
 | | WS2812 | Servo | DHT11 |
@@ -287,6 +291,8 @@ next STEP edge so the driver is given its setup time.
 > other pin". The direction was cleared by the first step, then released during
 > every pulse, then released *at exactly the STEP edge where a driver decodes
 > it* — four writes, one cause, and the direction never once changed on the wire.
+
+**Deep reading** — [DS18B20](../wiki/concepts/protocol-ds18b20.md) and [DHT11](../wiki/concepts/protocol-dht11.md) — the pages give the reset/presence timings each device demands and the margin this firmware leaves. Figures: [ds18b20](../diagrams/proto-ds18b20.png) · [ds18b20-frame](../diagrams/proto-ds18b20-frame.png) · [ds18b20-timing](../diagrams/proto-ds18b20-timing.png)
 
 ### What the three input acts cost, and what they add
 

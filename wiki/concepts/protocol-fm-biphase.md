@@ -10,8 +10,10 @@ confidence: medium
 
 # FM0/FM1 bi-phase coding
 
-> **This act is a designed WIP and it is RED.** `firmware/bmc_frame.pe` and
-> `tb/tb_pe_soc_bmc.v` exist on branch `fw-timing-protocols` (commits `e708e69`
+> **This act is a designed WIP and it is RED.** The two files it names do not
+> exist in this tree: `fw-timing-protocols:firmware/bmc_frame.pe` and
+> `fw-timing-protocols:tb/tb_pe_soc_bmc.v` are on branch `fw-timing-protocols`
+> (commits `e708e69`
 > and `b2cb76c`) and are **not in `main`**. The testbench was written RED-first;
 > the first firmware draft assembles and runs, and **all seven of its checks
 > fail**. Nothing on this page is a measured result, and every figure says so.
@@ -20,8 +22,8 @@ confidence: medium
 protocol: the wire rules and the design are certain, the act's behaviour is not
 yet demonstrated by anything.
 
-- firmware: `firmware/bmc_frame.pe` (on `fw-timing-protocols`)
-- testbench: `tb/tb_pe_soc_bmc.v` (on `fw-timing-protocols`)
+- firmware: `fw-timing-protocols:firmware/bmc_frame.pe` (not in this tree)
+- testbench: `fw-timing-protocols:tb/tb_pe_soc_bmc.v` (not in this tree)
 - state machine: `diagrams/proto-fm-biphase.puml`
 - symbol rules and the map: `diagrams/proto-fm-biphase-frame.puml`
 - timing, as design constants: `diagrams/proto-fm-biphase-timing.puml`
@@ -122,7 +124,8 @@ That is the stream the last check presents, and the firmware's answer to it must
 
 ## The instrument was wrong first, and it is the most useful thing on this page
 
-The first version of `tb_pe_soc_bmc.v` claimed that **a run of ones in FM1 was the
+The first version of `fw-timing-protocols:tb/tb_pe_soc_bmc.v` claimed that **a run of
+ones in FM1 was the
 "no transitions" stream**, and therefore not a decodable frame.
 
 It is not. A run of ones is a **clean square wave** — one transition per bit, in the

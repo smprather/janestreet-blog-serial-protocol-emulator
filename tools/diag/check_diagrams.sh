@@ -125,6 +125,108 @@ export JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=8192"
 # a layout accident, not a style rule, and a gate that cries wolf gets disabled.
 ASPECT_MIN=0.25
 ASPECT_MAX=15.0
+
+# ---- the toolchain pin, and why the byte comparison depends on it -----------
+#
+# The byte comparison below is the strongest staleness check there is, and it is
+# only meaningful on a host whose renderer produces the same bytes as the host
+# that made the committed renders. Nothing pinned that, so a contributor with a
+# different PlantUML, Graphviz or JDK got a red gate on figures they had never
+# touched: a red that NO DIAGRAM CHANGE CAN CLEAR. That is worse than no gate --
+# it teaches people to ignore the gate, and the usual "fix" is to re-render, which
+# destroys the very staleness the gate exists to catch. A sibling worker reported
+# exactly this, with the signature "the two largest maps failed, thirty smaller
+# figures passed".
+#
+# The mechanism was then measured rather than assumed, and it is not the obvious
+# one. FONTS ARE NOT IT: PlantUML emits font-family="monospace" and
+# font-family="sans-serif" as GENERIC references and bakes its own textLength
+# estimates, so substituting the resolved font (verified with fc-match) leaves the
+# committed bytes identical. The LAYOUT ENGINE is it: dot produces the geometry
+# for every package/component figure, and forcing PlantUML's own engine moves the
+# coordinates and the viewBox. The largest dot figures have the most coordinates
+# to move, which is why the failure looked selective rather than uniform. See
+# diagrams/TOOLCHAIN.md for the measurement and the reasoning.
+#
+# So: read the pin, compare it with the host, and make the byte comparison
+# CONDITIONAL on them agreeing. When they disagree, say so loudly and treat
+# byte-differences as inconclusive instead of failures -- the environment-
+# independent checks (parses, both formats present, nothing unclaimed, aspect
+# sane) still run and still fail, because none of them depends on which renderer
+# produced the bytes. A missing pin is a FAILURE, not a fallback: without it the
+# byte comparison is unenforceable and silently skipping it would be fail-open.
+PIN_NAME=TOOLCHAIN.md
+
+# The version the host actually has, one per pin key.
+#
+# FILTER BEFORE `head`, NEVER AFTER. `plantuml` and `java` are JVMs, and a JVM
+# prints "Picked up JAVA_TOOL_OPTIONS: ..." to STDERR **whenever that variable is
+# set** — and this script exports it, because diagrams/README.md requires it for
+# the headless render. So `plantuml -version 2>&1 | head -1` captured the BANNER
+# rather than the version, the anchored sed matched nothing, and the gate reported
+# "plantuml(not detected on this host)" on every run. Two things make that
+# especially bad: it is invisible until you trace it, and it is a toolchain
+# MISMATCH report — the very thing this feature exists to make actionable.
+# `dot` and `fc-match` are not JVMs, which is exactly why only these two keys
+# failed and why the fault looked like a parsing bug rather than a banner.
+detect_toolchain() {
+  local v
+  v=$(plantuml -version 2>&1 | sed -n 's/^PlantUML version \([^ /]*\).*/\1/p' | head -1); echo "plantuml=${v:-unknown}"
+  v=$(dot -V 2>&1 | sed -n 's/^dot - graphviz version \([^ ]*\).*/\1/p' | head -1);       echo "graphviz=${v:-unknown}"
+  v=$(java -version 2>&1 | sed -n 's/.*version "\([^"]*\)".*/\1/p' | head -1);            echo "java=${v:-unknown}"
+  # fc-match prints:  NotoSansMono-Regular.ttf: "Noto Sans Mono" "Regular"
+  # The FAMILY is the FIRST quoted string. Anchoring on the colon after the
+  # filename is what makes this non-greedy: an earlier `s/.*"\(...\)".*/\1/p`
+  # was, and captured "Regular" -- the STYLE -- for every family.
+  v=$(fc-match monospace  2>/dev/null | sed -n 's/^[^:]*:[[:space:]]*"\([^"]*\)".*/\1/p'); echo "monospace=${v:-unknown}"
+  v=$(fc-match sans-serif 2>/dev/null | sed -n 's/^[^:]*:[[:space:]]*"\([^"]*\)".*/\1/p'); echo "sans-serif=${v:-unknown}"
+}
+
+# The pinned versions, from the machine-readable block in the pin file.
+#
+# PARSED BY KEY, NOT BY A SPACE-DELIMITED REGEX. A value like "Noto Sans Mono"
+# contains spaces, and a `\\([^[:space:]]*\\)` value pattern truncates it to
+# "Noto" -- which would compare "Noto" against "Noto Sans Mono" and report a
+# mismatch on a host that is in fact correct. That is the worst possible failure
+# for this feature: a toolchain check that cries wolf on the right host.
+pinned_toolchain() {
+  local pin="$1" key line value
+  [ -f "$pin" ] || return 0
+  for key in plantuml graphviz java monospace sans-serif; do
+    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$pin" 2>/dev/null | head -1)
+    [ -n "$line" ] || continue
+    value=${line#*=}
+    # trim leading and trailing whitespace without word-splitting the value
+    value=${value#"${value%%[![:space:]]*}"}
+    value=${value%"${value##*[![:space:]]}"}
+    [ -n "$value" ] && printf '%s=%s\n' "$key" "$value"
+  done
+}
+
+# 0 = every pinned line matches this host, 1 = at least one differs, 2 = no pin.
+compare_toolchain() {  # pin_file -> mismatches on stdout
+  local pin="$1"
+  [ -f "$pin" ] || return 2
+  local line key want got missing=""
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    key=${line%%=*}
+    want=${line#*=}
+    got=$(detect_toolchain | grep "^${key}=" | cut -d= -f2-)
+    if [ -z "$got" ] || [ "$got" = "unknown" ]; then
+      missing="${missing} ${key}(not detected on this host)"
+    elif [ "$got" != "$want" ]; then
+      missing="${missing} ${key}: pinned ${want}, host ${got}"
+    fi
+  done <<EOF
+$(pinned_toolchain "$pin")
+EOF
+  if [ -n "$missing" ]; then
+    printf '%s\n' "$missing"
+    return 1
+  fi
+  return 0
+}
 # Staleness tolerance, in seconds. See check 3: a fresh checkout writes every
 # file within milliseconds of one instant.
 MTIME_TOL=1
@@ -135,58 +237,43 @@ ok()   { printf '  ok:   %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # ---- the PINNED BASELINE -----------------------------------------------------
-# Folded in from the retired regress/check_diagram_renders.sh, which is where
-# this mechanism earned its place twice in the wild: once when an author fixed a
-# pinned page and the pin had to be collected by hand, and once when this file's
-# own author wrote four pins against a branch BEHIND main and the gate reported
-# all four as stale within one merge.
+# A pin records that a rule is currently not met, so a gate written today can be
+# green against a corpus carrying defects OWNED BY OTHER PEOPLE. It is only safe
+# because it is enforced BOTH ways: a stale render not listed is NEW and red, and
+# a listed render that is no longer stale is STALE-PIN and red. Without the second
+# half a pin outlives its defect and the log and the tree disagree with nothing to
+# say which is true. It earned that in the wild: it caught four of its own
+# author's pins within one merge, written against a branch behind main.
 #
-# A pin is a record that a rule is currently not met, and it exists so a gate
-# written today can be green against a corpus carrying defects OWNED BY OTHER
-# PEOPLE. The alternative is not "red" — it is a gate that eventually gets muted,
-# which protects nothing. The mechanism is only safe because it is enforced in
-# BOTH directions, and the second half is the half that matters:
-#   a stale render NOT listed         -> NEW              -> red
-#   a listed render no longer stale   -> STALE-PIN        -> red
-#   a listed render that is GONE      -> STALE-PIN-ABSENT -> red
-# Without the second half a pin outlives its defect: the owner re-renders, the
-# line stays, and the gate keeps reporting something it can no longer see, so the
-# log and the tree disagree with nothing to say which is true.
+# Both lists carry a LEADING newline on purpose - the membership test matches
+# "<nl>item<nl>", so without it the first element could never match itself.
 PINFILE="$REPO/wiki/.known-stale-diagrams.txt"
-# Both lists carry a LEADING newline on purpose. The membership test matches
-# "<newline><item><newline>", so without it the FIRST element of the list could
-# never match itself - which is why a correctly pinned stale render was reported
-# as both a stale finding and a stale pin. A newline-delimited set needs its
-# delimiter on both sides of every element, including the ends.
-PIN_DECLARED=$'\n'  # one declared pin per line
-PIN_HITS=$'\n'      # one pin per line, but only those that ACTUALLY matched
+PIN_DECLARED=$'\n'
+PIN_HITS=$'\n'
 load_pins() {
-  # Fail closed. An absent pin file means no finding could be recognised as known;
-  # a malformed one means a pin has silently stopped being enforced, which is
-  # exactly what the anti-staleness direction exists to prevent.
   [ -f "$PINFILE" ] || {
-    printf 'check_diagrams: HARNESS ERROR — %s is missing, so a known-stale render cannot be told from a new one\n' "$PINFILE"
+    printf 'check_diagrams: HARNESS ERROR - %s is missing, so a known-stale render cannot be told from a new one\n' "$PINFILE"
     exit 1
   }
   local line
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in ''|'#'*) continue ;; esac
-    # shellcheck disable=SC2086  # word splitting is the point: $1=file $2..=reason
+    # shellcheck disable=SC2086  # word splitting is the point: $1=file, $2..=reason
     set -- $line
     if [ "$#" -lt 2 ]; then
-      printf 'check_diagrams: HARNESS ERROR — malformed line in %s:\n  %s\n  expected: <render-file> <reason>\n' "$PINFILE" "$line"
+      printf 'check_diagrams: HARNESS ERROR - malformed line in %s:\n  %s\n  expected: <render-file> <reason>\n' "$PINFILE" "$line"
       exit 1
     fi
     PIN_DECLARED="${PIN_DECLARED}$1
 "
   done < "$PINFILE"
 }
-_in_list() {  # _in_list <newline-terminated-list> <needle>
+_in_list() {
   case "$1" in *"
 $2
 "*) return 0 ;; *) return 1 ;; esac
 }
-# A stale render whose name is pinned: reported, recorded as FIRED, not a failure.
+# A stale render whose name is pinned: reported, recorded as FIRED, not counted.
 pin_note() {
   _in_list "$PIN_DECLARED" "$1" || return 1
   PIN_HITS="${PIN_HITS}$1
@@ -194,10 +281,9 @@ pin_note() {
   printf '  note: %s is STALE but PINNED (known-stale, awaiting its owner-s re-render)\n' "$1"
   return 0
 }
-# After the checks: EVERY declared pin must have fired. One that did not is the
-# anti-staleness finding, and the two ways it can happen are told apart because the
-# remedies differ — "the render was fixed, collect the pin" versus "the render is
-# gone, which is its own news".
+# After the checks: EVERY declared pin must have fired. The two ways one can fail
+# to are told apart because the remedies differ - the render was fixed (collect
+# the pin) versus the render is gone (which is its own news).
 pin_audit() {
   local rel why
   while IFS= read -r rel; do
@@ -205,14 +291,15 @@ pin_audit() {
     _in_list "$PIN_HITS" "$rel" && continue
     why=$(awk -v k="$rel" '$1==k { $1=""; sub(/^ /,""); print; exit }' "$PINFILE" 2>/dev/null)
     if [ ! -e "$REPO/diagrams/$rel" ]; then
-      fail "STALE-PIN-ABSENT $rel — pinned as known-stale but the render is not in diagrams/ at all: collect the pin AND check the render was not lost (pinned reason: ${why:-none})"
+      fail "STALE-PIN-ABSENT $rel - pinned as known-stale but the render is not in diagrams/ at all: collect the pin AND check the render was not lost (pinned reason: ${why:-none})"
     else
-      fail "STALE-PIN $rel — pinned as known-stale but is no longer stale, so the pin has outlived its defect: DELETE this line from $PINFILE (pinned reason: ${why:-none})"
+      fail "STALE-PIN $rel - pinned as known-stale but is no longer stale, so the pin has outlived its defect: DELETE this line from $PINFILE (pinned reason: ${why:-none})"
     fi
   done <<PINLIST
 $PIN_DECLARED
 PINLIST
 }
+
 # ---- the stems PlantUML produces for an N-block source ---------------------
 block_count() { grep -c '^[[:space:]]*@startuml' "$1" 2>/dev/null || echo 0; }
 
@@ -360,7 +447,20 @@ check_dir() {
     [ -e "$src" ] || continue
     base=$(basename "$src")
     n=$(block_count "$src")
-    # THE BYTE COMPARISON IS THE TRUTH AND THE MTIME IS ONLY A HINT. An earlier
+    # ---- 0. the toolchain pin, which the byte comparison depends on --------
+  local pin="$dir/$PIN_NAME" tc_rc=0
+  compare_toolchain "$pin" > "$work/tc.txt" 2>/dev/null || tc_rc=$?
+  if [ "$tc_rc" -eq 2 ]; then
+    [ "$quiet" = "1" ] || fail "no toolchain pin at $pin -- the byte comparison would be unenforceable, so it is NOT silently skipped"
+    bad_total=$((bad_total + 1))
+    tc_rc=1
+  elif [ "$tc_rc" -eq 1 ]; then
+    while IFS= read -r mm; do [ -n "$mm" ] && printf '  TOOLCHAIN MISMATCH: %s\n' "$mm"; done < "$work/tc.txt"
+    printf '  note: byte-differences below are INCONCLUSIVE while the toolchain\n'
+    printf '        differs; see %s. Re-render, or pin what this host has.\n' "$pin"
+  fi
+
+  # THE BYTE COMPARISON IS THE TRUTH AND THE MTIME IS ONLY A HINT. An earlier
     # version failed on the mtime alone, and reported 64 failures on a tree where
     # every single figure was byte-identical to a fresh render — because
     # restoring, checking out or `cp`-ing a .puml updates its mtime without
@@ -382,19 +482,24 @@ check_dir() {
         if [ ! -f "$rendered" ]; then
           bad=1; [ "$quiet" = "1" ] || fail "$(basename "$committed") is not produced by the current source at all"
         elif ! cmp -s "$committed" "$rendered"; then
-          # A PINNED stale render is reported and NOT counted. The pin has to be
-          # consulted BEFORE bad=1 is set, not after: setting bad first and
-          # suppressing only the message left the stem counted as a failing
-          # directory, so the gate printed no FAIL line and still exited 1 — a
-          # red that names nothing, which is the worst shape a gate can take.
+          # Inconclusive while the toolchain differs: the bytes may simply be
+          # another renderer's. A hard failure here is the red that no diagram
+          # change can clear, which is the defect being fixed.
+          # A PINNED stale render is reported and NOT counted, and it is
+          # consulted BEFORE bad=1 is set: suppressing only the message left the
+          # stem counted as a failing directory, so the gate printed no FAIL line
+          # and still exited 1 - a red that names nothing.
           if pin_note "$(basename "$committed")"; then
             :
-          elif [ "$stale" -eq 1 ]; then
-            bad=1
-            [ "$quiet" = "1" ] || fail "$(basename "$committed") differs from a fresh render AND is older than its source — re-render it"
+          elif [ "$tc_rc" -ne 0 ]; then
+            [ "$quiet" = "1" ] || printf '  inconclusive: %s differs from a fresh render, but the toolchain differs\n' "$(basename "$committed")"
           else
             bad=1
-            [ "$quiet" = "1" ] || fail "$(basename "$committed") differs from a fresh render of the current source"
+            if [ "$stale" -eq 1 ]; then
+              [ "$quiet" = "1" ] || fail "$(basename "$committed") differs from a fresh render AND is older than its source — re-render it"
+            else
+              [ "$quiet" = "1" ] || fail "$(basename "$committed") differs from a fresh render of the current source"
+            fi
           fi
         elif [ "$stale" -eq 1 ]; then
           [ "$quiet" = "1" ] || printf '  note: %s is older than its source but byte-identical to a fresh render — up to date\n' "$(basename "$committed")"
@@ -499,6 +604,16 @@ D --> [*]
 PUML
   plantuml -tpng "$d"/*.puml -o "$d" >/dev/null 2>&1
   plantuml -tsvg "$d"/*.puml -o "$d" >/dev/null 2>&1
+  # A pin MATCHING this host, so the byte comparison is authoritative in the
+  # fixture and the planted cases below test the byte comparison rather than the
+  # toolchain check. Without it every byte case would be inconclusive and the
+  # self-test would pass for the wrong reason.
+  detect_toolchain > "$d/$PIN_NAME"
+}
+
+# A pin that deliberately disagrees with this host, for the environmental case.
+write_mismatched_pin() {  # dest
+  printf 'plantuml    = 0.0.0-not-a-real-release\ngraphviz    = 0.0.0\njava        = 0.0.0\n' > "$1/$PIN_NAME"
 }
 
 self_test() {
@@ -662,6 +777,49 @@ self_test() {
     results=$((results + 1))
   fi
 
+  # (h) THE ENVIRONMENTAL CASE: the renders are byte-INCONSISTENT with a fresh
+  #     render, but the pin disagrees with this host, so the difference cannot be
+  #     attributed to the figures. The gate must report a TOOLCHAIN MISMATCH and
+  #     treat the byte difference as inconclusive -- NOT as a stale render.
+  #
+  #     This is the case that was missing, and its absence is why the first
+  #     version of this gate shipped a red that no diagram change could clear: a
+  #     sibling worker hit exactly that on the two largest maps while thirty
+  #     smaller figures passed. Note the planted tree really is byte-inconsistent
+  #     (the render is genuinely different from a fresh render), so a gate that
+  #     ignores the pin would catch it -- and would be WRONG to, because on a host
+  #     with a different dot version the same red would be a false positive.
+  fresh_case c8
+  sed -i 's/^title fixture block one$/title PLANTED ENVIRONMENTAL/' "$sandbox/c8/fixture-multi.puml"
+  write_mismatched_pin "$sandbox/c8"
+  # Assert the tree really is byte-inconsistent, or the case proves nothing.
+  plantuml -tsvg "$sandbox/c8/fixture-multi.puml" -o "$sandbox/c8-ref" >/dev/null 2>&1
+  if ! cmp -s "$sandbox/c8/fixture-multi.svg" "$sandbox/c8-ref/fixture-multi.svg"; then
+    results=$((results + 1))
+    out=$(check_dir "$sandbox/c8" "$sandbox/c8" 1 2>&1)
+    if printf '%s' "$out" | grep -q 'TOOLCHAIN MISMATCH'; then
+      if printf '%s' "$out" | grep -q 'stale render\|differs from a fresh render of the current'; then
+        printf '  FAIL: self-test — h: reported a toolchain mismatch AND blamed the\n'
+        printf '        render, which is the false positive this case exists to stop\n'
+      else
+        printf '  ok:   self-test — %-42s planted:  CAUGHT\n' "h a byte difference under a differing toolchain"
+        caught=$((caught + 1))
+      fi
+    else
+      printf '  FAIL: self-test — h: no TOOLCHAIN MISMATCH reported, so a byte\n'
+      printf '        difference would be blamed on the figures\n'
+    fi
+  else
+    printf '  FAIL: self-test — h: the planted tree is not byte-inconsistent, so\n'
+    printf '        the case cannot exercise the toolchain path\n'
+  fi
+
+  # (i) A MISSING PIN must be a failure, not a silent skip: without a pin the
+  #     byte comparison is unenforceable, and skipping it would be fail-open.
+  fresh_case c9
+  rm -f "$sandbox/c9/$PIN_NAME"
+  plant "i a missing toolchain pin" dirty c9
+
   printf '  -- self-test: %d of %d cases behaved correctly\n' "$caught" "$results"
   rm -rf "${sandbox:?}"
   [ "$caught" -eq "$results" ]
@@ -693,8 +851,7 @@ case "${1:-}" in
     FAILURES=0
     load_pins
     check_dir "$REPO/diagrams" "diagrams/"
-    # The anti-staleness half, and it runs AFTER the checks because it can only be
-    # judged once we know which pins actually matched a finding.
+    # the anti-staleness half, judged only once we know which pins actually fired
     pin_audit
     if [ "$FAILURES" -eq 0 ]; then
       printf '\ndiagrams: OK\n'; exit 0
