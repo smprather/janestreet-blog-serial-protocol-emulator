@@ -440,6 +440,26 @@ run_case "bi-phase loopback: FM0 + FM1" tb/probes/run.sh
 #     showed as 117 and the model excluded.
 run_case "bi-phase: 7 static checks" $PY firmware/bmc_checks.py firmware/bmc_frame.pe
 
+# 4f2. THE SELF-TEST FOR THE MODEL-AGREEMENT CHECK, and this one is here
+#     because of what its absence cost. The check that compares the two
+#     independent models of the wire rules has a DISAGREE branch -- the branch
+#     that catches a misreading of the encoding, which is the fault the whole
+#     check exists for -- and that branch cannot be reached by injection, because
+#     each model's own self-check catches a fault first. So it was untested:
+#     a check whose whole point is to catch disagreement, with its
+#     disagreement path never once run. `--self-test` exercises the comparison
+#     with no simulation and no models at all, and it earned its place on its
+#     first run: it found that the "flip one bit" case compared a string with
+#     ITSELF (the base alternates and already starts '0'), and that the
+#     harness called the comparison with printing switched off, so the "a
+#     disagreement must not be silent" requirement could never pass.
+#
+#     IT IS A run_case RATHER THAN A FLAG SOMEONE REMEMBERS, which is the same
+#     lesson bmc_checks.py taught this act: seven checks, printed counts, and
+#     a whole session outside the regression because nothing ran them.
+run_case "bi-phase: model-agree self-test" \
+  $PY firmware/bmc_models_agree.py --self-test
+
 # 4g. The two models of the wire RULES must agree with each other. This is a
 #     different kind of gate from 4e and 4f, and it is the one that makes 4e's
 #     reference falsifiable: the eighty levels are compared against

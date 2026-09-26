@@ -3780,3 +3780,73 @@ next session gets, instead of my recipe:
 
 Reverted; tree verified byte-identical to `90ccc19`; model self-check, the seven
 static checks and the agreement self-test all green.
+
+## 2026-09-27 act (c): TASK-START -- THE HELD SET, IN THE ORDER IT WAS NAMED
+
+The quiet window has ended and the branch is merged, so the five held items are
+unblocked. In the order they were named, because the order was the argument:
+
+1. **the timing-suite exit-code experiment** -- the one open MEASUREMENT, and it
+   needed a suite run and a quiet machine, which is why it was never taken;
+2. **wire `--self-test` into the regression** -- one `run_case`, and the
+   smallest and highest-value item on the list, because a check that only runs
+   when somebody remembers it is the exact failure this act spent a session
+   repairing in `bmc_checks.py`;
+3. **the 17 safe `/tmp` log repoints** in `run_all.sh`, proved by two concurrent
+   runs;
+4. **the 9 unsafe ones**, which stay until their reader is known;
+5. the TB-side decoder work.
+
+### THE UP031 CONVERSION: DONE, AND FOUR ATTEMPTS FAILED FIRST
+
+**`UP031` is 28 -> 7, the output is byte-identical, and the 7 that remain are
+named lines.** Four attempts failed before this one, and the failures are the
+useful record, because each was invisible to the verification I had built:
+
+1. **`{:s}` for `%s`** (invalid for a non-string) and **literal braces never
+   escaped.** The script crashed on the first `%s`.
+2. **Fixed both, and the script still did nothing** -- output byte-identical,
+   count unchanged. `ast.get_source_segment` returns `None` for the compound
+   arguments these sites use, so the guard skipped everything. **A no-op and a
+   correct conversion print identical bytes**, which is the lesson, and it is
+   why the count check exists.
+3. **`KeyError: 'd'`** -- my conversion table had no `'d'` key and `%d` is the
+   most common conversion, so it died on its first hit, every time. The
+   traceback was being swallowed by output truncation and I read "no change"
+   four times instead of an exception.
+4. **Rewriting the span dropped the line's indentation**, leaving `print(` with
+   an unindented argument and an `IndentationError`.
+
+**WHAT ACTUALLY FIXED IT WAS DIAGNOSING INSTEAD OF GUESSING.** A fourth
+instrumented pass printed *why* each site was skipped -- 33 of 37 convertible,
+4 `left-not-literal` -- and that is what proved the converter was sound and the
+bug was a missing dict key.
+
+**AND THE CONVERTER THAT WORKED HAS ONE GUARD THAT MATTERS MORE THAN THE
+CONVERSION.** Rewriting a `%`-expression's span replaces the lines it covers, so
+a **single-line** `print("..." % (x,))` loses its `print(` and the output
+silently loses a line -- which the byte-diff caught, because a missing line is a
+byte difference even though nothing crashed. Sites with anything before the
+string on their line are now skipped rather than mangled.
+
+**THREE CHECKS, ALL THREE NEEDED, AND THEY CHECK DIFFERENT THINGS:**
+
+| check | what it alone would have missed |
+| :--- | :--- |
+| `ruff --select UP031` count before/after | a no-op converter -- 28 -> 28, output identical, nothing done |
+| `ast.parse` | a rewrite that leaves the file unparseable |
+| **`diff` of the model's 110 lines** | a rewrite that parses, runs, and **silently drops a `print`** |
+
+**The output diff is the only one that can see behaviour, the count is the only
+one that can see whether the work HAPPENED, and the parse is the only one that
+can see a file that will not load.** I had two of the three for four attempts
+and treated the byte-identical result as success each time.
+
+Verified after: **MODEL SELF-CHECK all properties hold · 7 static checks PASS
+(323 words, 36 loop + 12 entry routes, all 120) · model-agreement SELF-TEST all
+cases hold · and the two models still agree on all 80 levels in both
+polarities** (the end-to-end check, which needs the simulation, not just the
+unit path).
+
+**THE 7 THAT REMAIN, by line, for a hand edit: 204, 205, 213, 262, 329, 414,
+552.** Seven lines is a job with an end, which twenty-eight was not.

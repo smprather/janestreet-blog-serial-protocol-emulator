@@ -158,16 +158,7 @@ class Rx:
                 # is the polarity: eight ONES as levels = FM0, 0x00 = FM1
                 if self.idem == "trace":
                     print(
-                        "      byte_done: the preamble's byte assembled as "
-                        "0x%02x -> %s"
-                        % (
-                            d[12],
-                            "FM0"
-                            if d[12] == 0xFF
-                            else "FM1"
-                            if d[12] == 0
-                            else "NOT LOCKED",
-                        )
+                        f"      byte_done: the preamble's byte assembled as 0x{d[12]:02x} -> {'FM0' if d[12] == 255 else 'FM1' if d[12] == 0 else 'NOT LOCKED'}"
                     )
                 if d[12] == 0xFF:
                     d[3] = 0
@@ -196,16 +187,7 @@ def show(fm0):
     tr = transitions(fm0)
     ivs = [tr[i][0] - tr[i - 1][0] for i in range(1, len(tr))]
     print(
-        "  %s: %2d transitions over the WHOLE stream, first at t=%d us, "
-        "%2d intervals (%d x 2us, %d x 4us)"
-        % (
-            "FM0" if fm0 else "FM1",
-            len(tr),
-            tr[0][0],
-            len(ivs),
-            ivs.count(2),
-            ivs.count(4),
-        )
+        f"  {'FM0' if fm0 else 'FM1'}: {len(tr):2d} transitions over the WHOLE stream, first at t={tr[0][0]:d} us, {len(ivs):2d} intervals ({ivs.count(2):d} x 2us, {ivs.count(4):d} x 4us)"
     )
     return ivs
 
@@ -217,20 +199,12 @@ def emitted(fm0, idem, pre_first=0, pre_ones=8):
     pre = "".join(str(b) for k, b in rx.bits_emitted if k == "pre")
     pay = "".join(str(b) for k, b in rx.bits_emitted if k == "pay")
     print(
-        "  emitted: %d mids, %d boundaries, %d resyncs, %d skipped, "
-        "%d x 2us, %d x 4us, %d other"
-        % (rx.mids, rx.bnds, rx.resyncs, rx.skipped, rx.iv2, rx.iv4, rx.ivx)
+        f"  emitted: {rx.mids:d} mids, {rx.bnds:d} boundaries, {rx.resyncs:d} resyncs, {rx.skipped:d} skipped, {rx.iv2:d} x 2us, {rx.iv4:d} x 4us, {rx.ivx:d} other"
     )
     print("    preamble bits emitted: %2d  %s" % (len(pre), pre))
     print("    payload  bits emitted: %2d  %s" % (len(pay), pay))
     print(
-        "    bytes %02x %02x %02x   flag dmem[3] = %s"
-        % (
-            rx.d[0],
-            rx.d[1],
-            rx.d[2],
-            "FM0" if rx.d[3] == 0 else "FM1" if rx.d[3] == 1 else "NO LOCK",
-        )
+        f"    bytes {rx.d[0]:02x} {rx.d[1]:02x} {rx.d[2]:02x}   flag dmem[3] = {'FM0' if rx.d[3] == 0 else 'FM1' if rx.d[3] == 1 else 'NO LOCK'}"
     )
     return rx
 
@@ -238,8 +212,7 @@ def emitted(fm0, idem, pre_first=0, pre_ones=8):
 frame_bits = "".join(str(b) for b in bits()[16:])
 print("THE FRAME IN ARRIVAL ORDER: %s   (A5 3C 96, high bit first)" % frame_bits)
 print(
-    "the preamble is %d zeros then %d ones; the frame starts at tick %d"
-    % (PRE_ZEROS, PRE_ONES, FRAME_START_US)
+    f"the preamble is {PRE_ZEROS:d} zeros then {PRE_ONES:d} ones; the frame starts at tick {FRAME_START_US:d}"
 )
 print()
 print("THE INTERVAL SEQUENCE, WHICH IS THE ONLY TIMING INFORMATION ON THE WIRE:")
@@ -258,8 +231,7 @@ iv_b = [
     for i in range(1, len(pb))
 ]
 print(
-    "  they are equal interval for interval: %s (%d intervals, %d x 2us, %d x 4us)"
-    % (iv_a == iv_b, len(iv_a), iv_a.count(2), iv_a.count(4))
+    f"  they are equal interval for interval: {iv_a == iv_b} ({len(iv_a):d} intervals, {iv_a.count(2):d} x 2us, {iv_a.count(4):d} x 4us)"
 )
 print()
 print("THE ALGORITHM AS IT STANDS (the resync clears the history bit):")
@@ -280,21 +252,17 @@ pa, pb = transitions(1, 16, 40), transitions(0, 16, 40)
 iva = [pa[i][0] - pa[i - 1][0] for i in range(1, len(pa))]
 ivb = [pb[i][0] - pb[i - 1][0] for i in range(1, len(pb))]
 print(
-    "  payload only: %d intervals, %d of 2us, %d of 4us, and the two "
-    "polarities are interval for interval identical: %s"
-    % (len(iva), iva.count(2), iva.count(4), iva == ivb)
+    f"  payload only: {len(iva):d} intervals, {iva.count(2):d} of 2us, {iva.count(4):d} of 4us, and the two polarities are interval for interval identical: {iva == ivb}"
 )
 f = bits()[16:]
 eq = sum(1 for i in range(len(f) - 1) if f[i] == f[i + 1])
 print(
-    "  a bit boundary transitions iff two adjacent bits are EQUAL: "
-    "%d of the 23 adjacent pairs in the payload are equal" % eq
+    f"  a bit boundary transitions iff two adjacent bits are EQUAL: {eq:d} of the 23 adjacent pairs in the payload are equal"
 )
 print("  (so %d boundary transitions inside the payload, and %d mids)" % (eq, len(f)))
 wa, wb = show(1), show(0)
 print(
-    "  whole stream: %d + %d intervals, %d x 2us and %d x 4us"
-    % (len(wa), len(wb), wa.count(2) + wb.count(2), wa.count(4) + wb.count(4))
+    f"  whole stream: {len(wa):d} + {len(wb):d} intervals, {wa.count(2) + wb.count(2):d} x 2us and {wa.count(4) + wb.count(4):d} x 4us"
 )
 for f in (1, 0):
     tr = transitions(f)
@@ -304,9 +272,7 @@ for f in (1, 0):
         if tr[i][0] - tr[i - 1][0] == 4
     ]
     print(
-        "  %s: the FIRST 4us gap ends at t=%d us of the frame, and it comes "
-        "after t=%d us -- %d such gaps in the whole stream"
-        % ("FM0" if f else "FM1", first4[0][0], first4[0][1], len(first4))
+        f"  {'FM0' if f else 'FM1'}: the FIRST 4us gap ends at t={first4[0][0]:d} us of the frame, and it comes after t={first4[0][1]:d} us -- {len(first4):d} such gaps in the whole stream"
     )
 
 
@@ -435,8 +401,7 @@ print("=" * 70)
 print("THE ENCODER, MODELLED FROM THE WIRE RULES. THE RETURN LEG IS")
 print("dmem[0..2] RE-ENCODED UNDER dmem[3], SO IT CARRIES THE SAME 40 BITS")
 print(
-    "THE INPUT LEG DID: %d bits = %d half-intervals = %d us."
-    % (len(bits()), TX_HALF_TOTAL, TX_HALF_TOTAL * HALF_US)
+    f"THE INPUT LEG DID: {len(bits()):d} bits = {TX_HALF_TOTAL:d} half-intervals = {TX_HALF_TOTAL * HALF_US:d} us."
 )
 print("=" * 70)
 WIRES = {}
@@ -449,18 +414,15 @@ for fl in (0, 1):
     print("    first 8 half-intervals: %s" % "".join(str(x) for x in tx.wire[:8]))
     chk(
         tx.wire == want,
-        "the counter-driven transmitter agrees with the wire rules, "
-        "half-interval for half-interval (%d of %d)"
-        % (sum(1 for a, b in zip(tx.wire, want) if a == b), TX_HALF_TOTAL),
+        f"the counter-driven transmitter agrees with the wire rules, half-interval for half-interval ({sum((1 for a, b in zip(tx.wire, want) if a == b)):d} of {TX_HALF_TOTAL:d})"
     )
     chk(
         len(tx.wire) == TX_HALF_TOTAL,
-        "it drives exactly %d half-intervals and stops" % TX_HALF_TOTAL,
+        f"it drives exactly {TX_HALF_TOTAL:d} half-intervals and stops"
     )
 chk(
     all(WIRES[1][k] == 1 - WIRES[0][k] for k in range(TX_HALF_TOTAL)),
-    "the two encodings' output streams are the exact COMPLEMENT of one "
-    "another, all %d half-intervals" % TX_HALF_TOTAL,
+    f"the two encodings' output streams are the exact COMPLEMENT of one another, all {TX_HALF_TOTAL:d} half-intervals"
 )
 chk(
     WIRES[0] == [level(k, 1) for k in range(TX_HALF_TOTAL)],
@@ -473,12 +435,10 @@ print("WHAT THE FIRMWARE'S HALF-INTERVAL HAS TO BE, from the wire rules:")
 iv0, tr0 = tx_ivs(WIRES[0])
 iv1, tr1 = tx_ivs(WIRES[1])
 print(
-    "  FM0: %d transitions, %d intervals: %d of one half-interval and "
-    "%d of two" % (len(tr0), len(iv0), iv0.count(1), iv0.count(2))
+    f"  FM0: {len(tr0):d} transitions, {len(iv0):d} intervals: {iv0.count(1):d} of one half-interval and {iv0.count(2):d} of two"
 )
 print(
-    "  FM1: %d transitions, %d intervals: %d of one half-interval and "
-    "%d of two" % (len(tr1), len(iv1), iv1.count(1), iv1.count(2))
+    f"  FM1: {len(tr1):d} transitions, {len(iv1):d} intervals: {iv1.count(1):d} of one half-interval and {iv1.count(2):d} of two"
 )
 chk(
     set(iv0) == {1, 2} and set(iv1) == {1, 2},
@@ -513,29 +473,17 @@ chk(
 # ENCODING rather than about the complement, and nothing above asks it.
 chk(
     iv0 == iv1,
-    "and the interval SEQUENCE is the same for the two polarities (%d "
-    "intervals) -- DERIVED, not independent: it follows from the complement "
-    "above for any wire, so it cannot fail on its own; the conclusion is that "
-    "the return leg's TIMING says nothing about polarity" % len(iv0),
+    f"and the interval SEQUENCE is the same for the two polarities ({len(iv0):d} intervals) -- DERIVED, not independent: it follows from the complement above for any wire, so it cannot fail on its own; the conclusion is that the return leg's TIMING says nothing about polarity"
 )
 print(
-    "  a bit boundary transitions iff the two adjacent bits are EQUAL: "
-    "the return leg's payload has %d equal-adjacent pairs of 23"
-    % sum(1 for i in range(23) if bits()[16 + i] == bits()[17 + i])
+    f"  a bit boundary transitions iff the two adjacent bits are EQUAL: the return leg's payload has {sum((1 for i in range(23) if bits()[16 + i] == bits()[17 + i])):d} equal-adjacent pairs of 23"
 )
 print()
 print("THE FIVE BYTES THE ENCODER DISPATCHES ON, and the eight masks:")
 for b in range(5):
     byte = Tx(0).byte_at(b * 8)  # byte_at takes a BIT index: b*8 is the first
     print(
-        "  bit %2d..%2d -> byte %d = %02x   masks %s"
-        % (
-            b * 8,
-            b * 8 + 7,
-            b // 8,
-            byte,
-            " ".join("%02x" % (0x80 >> i) for i in range(8)),
-        )
+        f"  bit {b * 8:2d}..{b * 8 + 7:2d} -> byte {b // 8:d} = {byte:02x}   masks {' '.join(('%02x' % (128 >> i) for i in range(8)))}"
     )
 #
 # *** AND THIS ONE USED TO BE THE ONLY PROPERTY THAT COULD NOT SEE ITS OWN
@@ -572,8 +520,7 @@ for fl in (0, 1):
         ok = (rx.d[0], rx.d[1], rx.d[2], rx.d[3]) == (FRAME[0], FRAME[1], FRAME[2], fl)
         chk(
             ok,
-            "flag %d at t=%2d us: banked %02x %02x %02x, dmem[3] = %d"
-            % (fl, off, rx.d[0], rx.d[1], rx.d[2], rx.d[3]),
+            f"flag {fl:d} at t={off:2d} us: banked {rx.d[0]:02x} {rx.d[1]:02x} {rx.d[2]:02x}, dmem[3] = {rx.d[3]:d}"
         )
 print()
 print("  AND THE IDLE LEVEL IS NOT A DETAIL, which is why it is a parameter")
@@ -586,8 +533,7 @@ for fl in (0, 1):
     rx = rx_on(WIRES[fl], 20, IDLE, 20 + 2 * HALF_US * TX_HALF_TOTAL + 8)
     chk(
         (rx.d[0], rx.d[1], rx.d[2], rx.d[3]) == (FRAME[0], FRAME[1], FRAME[2], fl),
-        "  the same, with the return leg idling HIGH: banked %02x %02x %02x, "
-        "dmem[3] = %d" % (rx.d[0], rx.d[1], rx.d[2], rx.d[3]),
+        f"  the same, with the return leg idling HIGH: banked {rx.d[0]:02x} {rx.d[1]:02x} {rx.d[2]:02x}, dmem[3] = {rx.d[3]:d}"
     )
 
 print()
