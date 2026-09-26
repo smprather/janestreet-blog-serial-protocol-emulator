@@ -197,7 +197,7 @@ CONSTS: dict[str, int] = {
     # the host SAMPLES INSIDE the slot, and the bits are LSB first.
     #
     # THESE ARE COUNTERS, NOT MICROSECONDS. The delay routine's outer step is 69
-    # clocks (1.22 us) on the (2,13) pair, so a slot is aimed by division --
+    # clocks (1.15 us) on the (2,13) pair, so a slot is aimed by division --
     # and writing a duration in as a counter is the mistake this block exists to
     # prevent: 480 us straight into the outer counter comes out as 1900 us,
     # because 480 wraps to 224 and the routine counts passes, not us.
