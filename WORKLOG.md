@@ -2675,3 +2675,55 @@ that needs the encoder's mask byte named rather than inferred, which is a
 change to what the check claims and not a change to this act. **Named, not
 fixed, and named here so the next session inherits the limit and not the
 confidence.**
+
+## 2026-09-27 act (c): TASK-START -- MAKE THE BIT-ORDER CHECK FIRE
+
+The queue is the one check of the seven that was proven NOT to fire: the mask
+reload changed from `LDI A, 0x80` to `LDI A, 0x40`, which puts the wire **low
+bit first**, and `bmc_checks.py` passed it. The `SHR` classifies dmem[11] as
+"neither a mask nor fed by the payload: a counter or an index", and that bucket
+is explicitly excused, so the one fault the check exists for is the one it
+cannot see.
+
+**THE ESCAPE IS THE COUNTER, AND THE COUNTER IS DISTINGUISHABLE WITHOUT A
+NAME**, which is what makes this fixable rather than a special case: a byte
+loaded with 0 or 1 and moved by `ADD`/`INC` is a COUNT, and a byte loaded
+with a bit pattern and moved by `SHR` is a MASK. The check already separates
+"a mask" (there is a 0x80 reload) from "not a mask" and then gives up on the
+second. **What it does not ask is WHERE the mask starts.** A reload of 0x40 is
+not the absence of a mask, it is a mask at the wrong bit -- and the wire's bit
+order is precisely that bit.
+
+### AND IT FIRES, ON ALL EIGHT MUTATIONS, AT BOTH RELOAD SITES
+
+| the mask reload, changed to | at the SET-UP site | at the RE-ARM site |
+| :--- | :--- | :--- |
+| `0x40` (bit 6) | **FAIL** | **FAIL** |
+| `0x02` (bit 1) | **FAIL** | **FAIL** |
+| `0x01` (bit 0) | **FAIL** | **FAIL** |
+| `0x00` | **FAIL** | **FAIL** |
+| untouched | PASS | PASS |
+
+**AND THE INJECTION THAT WAS SUPPOSED TO BE EXCUSED IS THE ONE THAT FOUND THE
+LAST HOLE.** Reloading the mask to 1 passed everything, because 1 is in the
+counter's bucket and the counter is excused. But the SAME byte is reloaded
+0x80 elsewhere, so it is a count in one place and a bit position in another:
+**the first outbound bit is chosen by a mask of 1 and the remaining seven by a
+mask of 0x80, and the frame changes bit order ONE BIT IN.** A byte is never
+both, and dmem[6] is 0/1 at every reload while dmem[11] is a power of two at
+every reload, so the check can say that **without naming either** -- which is
+the only way it can be trusted on the next program.
+
+**AND THE SECOND VERSION OF THE FAULT ALMOST SHIPPED, which is the part worth
+keeping.** The first working test asked whether **any** of a byte's reloads was
+0x80. A mask is reloaded **twice** -- set up, then re-armed when the walk hits
+zero -- so changing only the SET-UP reload to 0x40 passed with the re-arm still
+at 0x80, and the frame would have gone out high bit first for its first bit and
+low bit first for the remaining seven. **A check that had been made to fire,
+and did not.** The claim is *every* reload, and it took an injection aimed at a
+different fault to find that out.
+
+**The check still says what it did before, for the right firmware:** dmem[6] is
+now positively identified as a count (`reloaded 0x01`) rather than
+"unclassifiable", and dmem[11] as a mask at bit 7. The excuse for a counter
+survives; the excuse for a mis-placed mask does not.

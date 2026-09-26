@@ -489,14 +489,35 @@ def lit(ops):
 
 shifts, reloads, fed = [], {}, {}
 for a in sorted(mnem):
+    # *** AND THE RELOAD IS RECORDED WITH ITS VALUE, BECAUSE WHERE THE MASK
+    # STARTS IS THE WHO OF THIS CHECK. *** The first version of this table kept
+    # only the addresses of `LDI A, 0x80` + `STM n, A` pairs, so a byte reloaded
+    # with 0x40 was indistinguishable from a byte never reloaded at all -- and
+    # both printed the same sentence, "neither a mask (no 0x80 reload) nor fed
+    # by the payload: a counter or an index, and this check makes no claim
+    # about those". That is the act's first and most expensive finding -- the
+    # WIRE IS HIGH BIT FIRST -- and the excuse was structurally guaranteed,
+    # because a mask at the WRONG bit is indistinguishable from a counter only
+    # if you never look at the number. Changing 0x80 to 0x40 puts the wire low
+    # bit first, sends the frame BACKWARDS, and passed.
+    #
+    # THE VALUE SEPARATES A MASK FROM A COUNTER WITHOUT NAMING EITHER, and the
+    # separation is not a convention: a bit-position mask is a power of two
+    # ABOVE 1, because a mask of 1 is bit 0 and `SHR` on it reaches zero in one
+    # step, which is not walking a mask down anywhere. The counter in this same
+    # program is reloaded with 1 and the mask with 0x80, and BOTH are walked
+    # with SHR, so the instruction cannot tell them apart and the immediate
+    # can. 0 and 1 are counters and indices and are excused; a power of two
+    # that is not 0x80 is a MASK AT THE WRONG BIT and is a failure, named with
+    # the value so a reader can adjudicate rather than take it on trust.
     if (
         mnem.get(a, ("", ""))[0] == "LDI"
-        and lit(mnem[a][1]) == 0x80
         and mnem.get(a + 1, ("", ""))[0] == "STM"
     ):
+        imm = lit(mnem[a][1])
         b = lit(mnem[a + 1][1].split(",")[0])
-        if b is not None:
-            reloads.setdefault(b, []).append(a)
+        if b is not None and imm is not None:
+            reloads.setdefault(b, []).append((a, imm))
     # an `LDS` whose result reaches an `STM n, A` within a few instructions is
     # the PAYLOAD FETCH landing in memory, and that is what makes a byte a data
     # byte rather than a mask
@@ -548,11 +569,76 @@ for a, src in shifts:
             f"a PEEL, and a peel sends the frame LOW BIT FIRST"
         )
     elif src in reloads:
-        print(
-            f"    {a:3d} SHR shifts dmem[{src}], which is reloaded 0x80 at "
-            f"{', '.join(str(x) for x in reloads[src])}: a mask walking down, so "
-            f"the wire is high bit first"
-        )
+        # a MASK, and WHERE IT STARTS IS THE CLAIM. Split by the value.
+        #
+        # *** AND IT IS *EVERY* RELOAD, NOT ANY OF THEM, WHICH IS THE SECOND
+        # VERSION OF THIS FAULT AND THE ONE THAT ALMOST SHIPPED. *** A mask
+        # byte is reloaded TWICE -- once when the transmission is set up and
+        # again when the walk reaches zero -- and the first version of this
+        # test asked only whether ANY of the reloads was 0x80. So changing the
+        # SET-UP reload to 0x40 passed, with the re-arm still at 0x80: the
+        # frame went out high bit first for its first byte and low bit first
+        # for the remaining seven, which is worse than either error alone
+        # because a check that had been made to fire did not.
+        masks = [(x, v) for x, v in reloads[src] if v > 1 and (v & (v - 1)) == 0]
+        counts = [(x, v) for x, v in reloads[src] if v in (0, 1)]
+        bad_masks = [(x, v) for x, v in masks if v != 0x80]
+        if masks and counts:
+            # THE LAST OF THIS HOLE, AND IT IS FOUND BY THE INJECTION THAT
+            # WAS SUPPOSED TO BE EXCUSED. Reloading the MASK byte to 1 passes
+            # every test above, because 1 is in the counter's bucket -- but the
+            # SAME byte is reloaded 0x80 elsewhere, so it is being used as a
+            # counter in one place and a bit position in another, and the first
+            # outbound bit is chosen by a mask of 1 while the remaining seven
+            # are chosen by a mask of 0x80. The frame changes bit order ONE
+            # BIT IN.
+            #
+            # A byte is never both. dmem[6] is 0/1 at every reload and dmem[11]
+            # is a power of two at every reload, and the check can say that
+            # without naming either, which is the only way it can be trusted
+            # on the next program.
+            bad_order += 1
+            print(
+                f"    {a:3d} SHR shifts dmem[{src}], which is reloaded BOTH as a "
+                f"bit mask ("
+                f"{', '.join(f'0x{v:02X} at {x}' for x, v in masks)}) and as a count "
+                f"({', '.join(f'0x{v:02X} at {x}' for x, v in counts)}) -- one byte "
+                f"cannot be both, and a mask of 1 selects bit 0 while a mask of "
+                f"0x80 selects bit 7, so the frame changes bit order one bit in"
+            )
+        elif bad_masks:
+            bad_order += 1
+            wrong = ", ".join(f"0x{v:02X} at {x}" for x, v in bad_masks)
+            ok = ", ".join(f"0x{v:02X} at {x}" for x, v in masks if v == 0x80)
+            # the bit is bound OUTSIDE the comprehension on purpose: a generator
+            # has its own scope in Python 3, so a `v` written inside one is
+            # not defined after it, and this was a NameError the first time.
+            bit = bad_masks[0][1].bit_length() - 1
+            print(
+                f"    {a:3d} SHR shifts dmem[{src}], whose bit mask is reloaded "
+                f"{wrong} -- and a mask that starts at bit {bit} walks the frame "
+                f"out LOW BIT FIRST, which sends it BACKWARDS. It must start at "
+                f"bit 7 (0x80) on EVERY reload: the first arrival lands in the "
+                f"high position, so the bit that goes out first has to be the one "
+                f"the mask sits on."
+                + (f" (the reload(s) at {ok} are correct, which is what made this "
+                   f"look fine: a mask re-armed at 0x80 in the middle of a frame "
+                   f"that started at 0x40 changes order half way through)"
+                   if ok else "")
+            )
+        elif masks:
+            print(
+                f"    {a:3d} SHR shifts dmem[{src}], which is reloaded 0x80 at "
+                f"{', '.join(str(x) for x, v in masks)}: a mask walking down, so "
+                f"the wire is high bit first"
+            )
+        else:
+            print(
+                f"    {a:3d} SHR shifts dmem[{src}], reloaded "
+                f"{', '.join(f'0x{v:02X} at {x}' for x, v in reloads[src])}: "
+                f"0 or 1, so a counter or an index, and this check makes no "
+                f"claim about those"
+            )
     else:
         # A counter or an index is neither a mask nor a payload byte, and this
         # check does NOT claim to know what it is. Failing here would be the
@@ -565,7 +651,7 @@ for a, src in shifts:
             f"0x80 reload) nor fed by the payload: a counter or an index, and "
             f"this check makes no claim about those"
         )
-print(f"  shifts that are peels, or that cannot be shown to be masks: {bad_order}")
+print(f"  shifts that are peels, or a mask not at bit 7, or neither: {bad_order}")
 
 print(f"\nwords={N}")
 
@@ -604,7 +690,10 @@ if ROUTE_STATES < 0:
 if bad_iv:
     fails.append(f"{len(bad_iv)} half-interval route(s) that are not exactly 120 clocks")
 if bad_order:
-    fails.append(f"{bad_order} SHR(s) that are peels, or cannot be shown to be masks")
+    fails.append(
+        f"{bad_order} SHR(s) that are peels, or a mask reloaded anywhere but "
+        f"bit 7 -- either one puts the frame on the wire the wrong way round"
+    )
 
 if fails:
     print("FAIL: " + "; ".join(fails))
