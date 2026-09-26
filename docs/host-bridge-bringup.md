@@ -146,11 +146,22 @@ in the report before retrying.
 
 `tools/host_gui/run_host_tests.sh` is the one-command host gate and needs
 nothing but `python3` (it skips cleanly when `ruff` or `micropython` are
-absent). Its MicroPython-conformance step only runs when a `micropython`
-binary is on `PATH`; to enable it, build the unix port from a MicroPython
-checkout (`git clone https://github.com/micropython/micropython && make -C
-ports/unix`) and put the binary on `PATH` — the gate then runs the deployed
-bridge modules on a real interpreter.
+absent). Its MicroPython-conformance step runs the deployed bridge modules on a
+real interpreter, which is worth doing before you trust the Pico firmware. To
+enable it, build the unix port from a MicroPython checkout (`git clone
+https://github.com/micropython/micropython && make -C ports/unix`) and then
+either put the binary on `PATH` or point the gate at it:
+
+```bash
+MICROPYTHON=/path/to/ports/unix/build-standard/micropython \
+    tools/host_gui/run_host_tests.sh
+```
+
+A build is a local artifact at an arbitrary path, so the variable is opt-in and
+the default is unchanged. Worth doing explicitly rather than relying on `PATH`:
+a step that only runs when someone happens to have the interpreter installed is
+a step that mostly does not run, and "skipped" reads the same as "passed" in a
+scroll-back.
 
 ## 8. After a green run
 
