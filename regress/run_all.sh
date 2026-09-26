@@ -546,6 +546,20 @@ else
   fail=$((fail+1))
   failed_names+=("check_harness_preflight")
 fi
+# Its NEGATIVE CONTROL, in the suite. All three of this gate's rules - including
+# the MUTABLE-baseline rule the declaration protocol added - are rules that PASS
+# by not noticing, so each is planted here and required to fire, plus the
+# EXEMPTION planted and required to stay quiet. Until this existed the sampler's
+# rule was proven exactly once, by a worker at a terminal, which is a memory and
+# not a check: a rule nobody re-runs is a rule that quietly stops being true.
+if bash "$REPO_ROOT/regress/check_harness_preflight.sh" --self-test > /tmp/check_harness_preflight_selftest.log 2>&1; then
+  echo "harness pre-flight self-test: OK ($(grep -c 'ok:   self-test' /tmp/check_harness_preflight_selftest.log) of 5 cases behaved correctly)"
+else
+  echo "harness pre-flight self-test: FAILED (see /tmp/check_harness_preflight_selftest.log)"
+  cat /tmp/check_harness_preflight_selftest.log
+  fail=$((fail+1))
+  failed_names+=("check_harness_preflight_selftest")
+fi
 
 # The mutation suites' MUTABLE lists decide which suites a NARROWED merge gate
 # has to run (regress/verify_merge.sh), so a list that stopped covering the

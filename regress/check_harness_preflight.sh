@@ -30,8 +30,99 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
+# The directory the harnesses are read from. A VARIABLE, not a literal, so the
+# negative control below can drive THIS SCRIPT'S OWN RULES against synthetic
+# harnesses in a sandbox. A self-test that re-implements the rules proves the
+# copy, not the checker -- the same reason the orphan/byte cases in
+# check_diagrams.sh run the real check_dir rather than a mock.
+HARNESS_DIR="${HARNESS_DIR:-regress}"
+
+self_test() {
+  local sb results=0 caught=0
+  sb=$(mktemp -d /tmp/hpf_selftest.XXXXXX) || return 1
+  # FILE-SCOPE cleanup path, not a function-local: an EXIT trap fires at SCRIPT
+  # exit, by which time a local is gone and the trap silently removes nothing.
+  _HPF_SB="$sb"
+  trap 'rm -rf "${_HPF_SB:?}"' EXIT
+
+  mk() { # file, then body on stdin
+    local f="$sb/$1"; shift
+    { printf '#!/usr/bin/env bash\n'; cat; } > "$f"
+    chmod +x "$f"
+  }
+
+  # (a) fully wired, non-empty MUTABLE, baseline declared -> must be CLEAN
+  mk mutate_a_good.sh <<'EOF'
+MUTABLE="rtl/pe_x.v"
+chip_take_run_lock "$(basename "$0")"
+chip_dep_expect pristine $MUTABLE
+cleanup() { chip_dep_check "run_$(basename "$0")" || exit 4; }
+EOF
+  # (b) never takes the lock -> CAUGHT
+  mk mutate_b_nolock.sh <<'EOF'
+MUTABLE="rtl/pe_x.v"
+chip_dep_expect pristine $MUTABLE
+chip_dep_check "run_$(basename "$0")"
+EOF
+  # (c) no chip_dep_check on its exit path -> CAUGHT (a FALSE PASS is what that
+  #     absence permits, so this is the rule the whole file exists for)
+  mk mutate_c_nocheck.sh <<'EOF'
+MUTABLE="rtl/pe_x.v"
+chip_take_run_lock "$(basename "$0")"
+chip_dep_expect pristine $MUTABLE
+EOF
+  # (d) THE RULE ADDED FOR THE SAMPLER: MUTABLE targets but no baseline
+  #     declaration. Without this case the sampler rule is unproven, and its only
+  #     proof would be a worker remembering to run a control by hand.
+  mk mutate_d_nobaseline.sh <<'EOF'
+MUTABLE="rtl/pe_x.v rtl/pe_y.v"
+chip_take_run_lock "$(basename "$0")"
+chip_dep_check "run_$(basename "$0")"
+EOF
+  # (e) the EXEMPTION: no MUTABLE targets means nothing to watch, so no
+  #     declaration is required. A rule that fired here would be wrong, and this
+  #     is the case that keeps the rule honest.
+  mk mutate_e_nomutable.sh <<'EOF'
+MUTABLE=""
+chip_take_run_lock "$(basename "$0")"
+chip_dep_check "run_$(basename "$0")"
+EOF
+  # (f) a second clean harness, so the corpus is the right shape for the count
+  mk mutate_f_good.sh <<'EOF'
+MUTABLE="rtl/pe_z.v"
+chip_take_run_lock "$(basename "$0")"
+chip_dep_expect pristine $MUTABLE
+chip_dep_check "run_$(basename "$0")"
+EOF
+
+  plant() { # name expect harness
+    local name="$1" expect="$2" only="$3"
+    results=$((results + 1))
+    if HARNESS_DIR="$sb" bash "${BASH_SOURCE[0]}" 2>/dev/null | grep -q "FAIL mutate_${only}"; then got=dirty; else got=clean; fi
+    if [ "$expect" = "$got" ]; then
+      printf '  ok:   self-test — %-44s expected %-5s, checker said %s\n' "$name" "$expect" "$got"
+      caught=$((caught + 1))
+    else
+      printf '  FAIL: self-test — %-44s expected %-5s, checker said %s\n' "$name" "$expect" "$got"
+    fi
+  }
+
+  echo "check_harness_preflight self-test:"
+  plant "(a) a fully wired harness is clean"        clean a_good
+  plant "(b) a harness that never takes the lock"    dirty b_nolock
+  plant "(c) a harness with no chip_dep_check"       dirty c_nocheck
+  plant "(d) MUTABLE targets but NO baseline"        dirty d_nobaseline
+  plant "(e) empty MUTABLE is exempt and clean"      clean e_nomutable
+  echo "check_harness_preflight self-test: $caught/$results cases behaved correctly"
+  [ "$caught" -eq "$results" ]
+}
+
+case "${1:-}" in
+  --self-test) self_test; exit $? ;;
+esac
+
 bad=0; n=0
-for f in regress/mutate_*.sh; do
+for f in "$HARNESS_DIR"/mutate_*.sh; do
   n=$((n + 1))
   h=$(basename "$f")
   if ! grep -q 'chip_take_run_lock' "$f"; then
