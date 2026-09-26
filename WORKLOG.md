@@ -4390,3 +4390,27 @@ harnesses, `bmc_checks.py` 7 checks / 323 words, the model-agreement self-test.
 **NOT re-run: the whole gate end to end.** The `<<wip>>` removal and the lock
 fix are both proven by the runs above; the full gate's own verdict after them is
 a deduction, and it is the next session's first command.
+
+## 2026-09-27 act (c): TASK-START -- THE WHOLE GATE, ONCE, WITH BOTH CHANGES IN
+
+The one thing the last entry did not measure, named there as the next session's
+first command and now the task: **`regress/run_all.sh` end to end**, after the
+`<<wip>>` removal and the run-lock fix. Both are proven by targeted runs and
+neither is proven by the gate, which is the only thing that reads them the way a
+merge will.
+
+What is being claimed going in, so the run can be held to it:
+
+| claim | proven by | status before this run |
+| :--- | :--- | :--- |
+| `tb_pe_soc_bmc` passes unmarked | a filtered gate run | deduction -- the filtered run EXITS at line 659 on a failure and never reaches the post-suite gates, so it has never seen a green row |
+| the suite is 48 cases | counting the CASES array | not run as a whole |
+| the run-lock fix holds in the gate | 17/17 standalone and under load | deduction -- the gate has only ever seen the old code go red |
+| `FIRMWARE: 43 PASS 43 FAIL 0` | direct run of the script | measured, and run_all runs it first, so the first thing to check |
+
+**THE INTERESTING PART IS NOT THE VERDICT, IT IS WHETHER `run-lock process
+tree` IS GREEN NOW IN THE GATE**, because that is the only one of the four that
+the box has to be busy for. If it is green here, the load was the whole story.
+If it is red on a quiet box, there is a second cause and the fix is incomplete --
+and "the fix is incomplete" is the outcome I would rather find now than have
+discovered from a merge.
