@@ -1872,3 +1872,82 @@ first survived as long as it did.**
    Provable by putting the peel back. It belongs beside the branch-operand and
    store-run checks, and it is the seventh stale-figure class in this act: a
    claim about the ISA, inside a correction of a claim about the ISA.
+
+## 2026-09-27 act (c): TASK-START -- THE PAYLOAD'S FIRST BIT
+
+The queue is one bit and it is in the RECEIVER: the decoded stream is the sent
+payload with one bit prepended and the last one dropped, so the receiver banked
+the preamble's ninth one as the payload's first bit. The histogram proves the
+wire (63 changes, 46 and 16 gaps, per pass, exactly the model's), so this is a
+receiver question and not a firmware one.
+
+**THE QUESTION IS ONE CLASSIFICATION**, and the phase already answers it: after
+the preamble's last mid the phase says "the last change was a mid", so a
+two-half gap there is a MID and a one-half gap is a boundary. Read off
+`probe_tb_classify.v`: what the receiver classified at the payload's first mid,
+and what the interval was.
+
+### IT IS NOT ONE BIT, AND THE PREAMBLE CANNOT SEE EITHER FAULT
+
+The trace, read with the phase AFTER each classification (phase 0 = a mid was
+emitted, phase 1 = a boundary, phase 2 = a skip or a resync):
+
+    #25  2us  MID      acc 7f  bit 7
+    #26  2us  boundary  acc 7f  bit 7
+    #27  2us  MID      acc 00  bit 0  flag 0     <- the preamble byte completed
+    #29  2us  MID      acc 01  bit 1           <- payload
+    #31  2us  MID      acc 03  bit 2
+    #32  4us  MID      acc 06  bit 3
+    #33  4us  MID      acc 0d  bit 4
+    #34  4us  MID      acc 1a  bit 5
+    #36  2us  MID      acc 34  bit 6
+    #37  4us  MID      acc 69  bit 7           <- dec_byte[0] = 0x69
+
+**The receiver is emitting exactly one mid per bit, with the right intervals,
+and banking 0x69 where the frame's first byte is 0xa5.** So the clock is
+recovered, the flag is right, and the DATA is in an order that is neither the
+sent order nor its plain reversal: the sent `a5 3c 96` reversed is `69 3c a5`
+and the run decoded `69 9e 4b`.
+
+**AND HERE IS THE PART THAT IS WORTH THE SESSION: 0x69 IS THE REVERSE OF 0x96,
+WHICH IS THE FRAME'S LAST BYTE.** So the payload is being read from the wrong
+END, and each byte from the wrong end. **Both faults are invisible to the
+preamble, and the preamble is what the flag is read from.**
+
+* the preamble's byte is `0xFF`, which is a **palindrome**: a receiver that
+  assembles low bit first and one that assembles high bit first both read
+  `0xFF`, so the flag is right either way and the flag check passes;
+* the preamble is `0xFF` in the payload's own right, so a receiver that starts
+  the payload at the wrong byte still reads a legal preamble.
+
+**So the act has now had the SAME fault on BOTH SIDES of the wire, hidden by
+the same thing: a preamble made of all-ones, which is order-free.** The
+encoder's peel read the byte low bit first and the preamble could not see it;
+the receiver is assembling the payload from the wrong end and the preamble
+cannot see that either.
+
+**WHAT THAT MEANS FOR THE PROTOCOL, and it is a design conclusion rather than a
+note:** the preamble's job is to establish the PHASE, and it does that
+perfectly -- fourteen skips and one two-half gap, every time, in both
+polarities. The bit order and the payload's start are established by the
+RECEIVER's shift-in and by the byte counter, and **the preamble cannot
+establish either, because a sequence of identical bits carries no order
+information at all.** If this act's preamble is ever asked to carry order as
+well, it has to stop being a run of identical bits -- and that is a change to
+what the act claims, so it is written down here rather than done quietly.
+
+### NEXT, AND IT IS ONE PROBE AND ONE LINE OF ITS OUTPUT
+
+1. Print the receiver's 24 payload bits **as a string** beside the sent 24
+   (`a5 3c 96`, high bit first) and find the offset. The trace has the bytes;
+   the string has the answer, because "which end" is not a question a byte can
+   answer.
+2. **The two suspects, and the string tells them apart in one look:** a LOW-FIRST
+   shift-in reverses each byte and leaves the byte order alone; a BACKWARDS byte
+   index reverses the byte order and leaves each byte alone. Both together give
+   the full reversal, which is `69 3c a5` and is NOT what came back -- so it is
+   neither one alone, and the offset is what is left to find.
+3. **Then the asymmetry is worth an assertion**, and it is the third member of
+   this family: *a preamble made of a repeated identical byte cannot verify the
+   bit order or the byte order.* The model can say that in one line, and the
+   model is where this act's protocol claims live.
