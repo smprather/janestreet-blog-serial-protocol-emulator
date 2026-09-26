@@ -205,9 +205,9 @@ truncation is a no-op.
 
 ## The mutation coverage that pins the testbench
 
-`regress/mutate_timing_tb.sh` carries **61 distinct cases** across the timing
-family (62 case *lines* - `fm-per-base` is listed twice, a defect in that
-harness, not here), and **two of them are `sr04`**.
+`regress/mutate_timing_tb.sh` carries **62 distinct cases** across the timing
+family (63 case *lines* - `fm-per-base` is listed twice, a defect in that
+harness, not here), and **three of them are `sr04`**.
 
 | case | the change | what catches it, and why it is worth a case |
 |---|---|---|
@@ -232,13 +232,20 @@ term** of the conversion. Nothing *merged* perturbs the **small** term,
 `floor(11r/64)`, and the mutant that would do it - forcing the small term to zero - is
 invisible in exactly the run one might expect, which is the tabulated blindness above.
 
-**That gap has a case written against it, and it is NOT yet merged.** `sr-term-shift`
-(`e6ff51d`, "the sr04 small term gets its mutant") exists and is the complement of
-`sr-q-mask`: `sr-q-mask` reaches only the `r = 0` run and `sr-term-shift` only the
-`r != 0` ones, so between them the two cover every width in the set. **It is not an
-ancestor of `main` and not in the tree this page was written against**, so that
-coverage is *pending*, not *held* - and the distinction is the whole point of writing
-it down rather than rounding it up.
+**That gap is CLOSED, and the closure is a complementarity rather than a
+volume.** `sr-term-shift` (`e6ff51d`) is the complement of `sr-q-mask`: `sr-q-mask`
+reaches only the `r = 0` run and `sr-term-shift` only the `r != 0` ones, so between
+them the pair covers **every width in the set** — and each is invisible to the other by
+construction. Three cases, one per term of the conversion plus the timing:
+
+| case | what it reaches |
+|---|---|
+| `sr-trig-count` | the **timing** — 601 clocks, and only the equality catches it |
+| `sr-q-mask` | the **big term**, and only at `r = 0` (8 000 µs) |
+| `sr-term-shift` | the **small term** `floor(11r/64)`, and only at `r != 0` |
+
+Three cases, one per failure mode, none of them covering another's blind spot: that
+is a better shape than a larger set drawn from the same region.
 
 ## Limits, stated rather than implied
 
