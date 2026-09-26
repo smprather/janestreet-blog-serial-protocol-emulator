@@ -33,8 +33,7 @@ def make_api(sources_dir: Path):
     port = LoopbackPort(bridge)
     transport = T.SerialTransport(port, clock=clock, sleep=clock.sleep)
     session = S.ControllerSession(lambda: transport, clock=clock)
-    config = SV.ServerConfig(repo_root=REPO_ROOT, sources_dir=sources_dir,
-                             web_dir=WEB)
+    config = SV.ServerConfig(repo_root=REPO_ROOT, sources_dir=sources_dir, web_dir=WEB)
     return SV.Api(session, config), session, bridge
 
 
@@ -85,21 +84,31 @@ class TestThePageAndTheApiAgreeOnResponseKeys(unittest.TestCase):
 
     def test_the_drive_reached_every_response_shape(self):
         """A drive that returned nothing would pass the test below."""
-        for key in ("status", "cpu", "dump", "debug", "step", "breakpoint",
-                    "manifest", "load", "sources", "state"):
+        for key in (
+            "status",
+            "cpu",
+            "dump",
+            "debug",
+            "step",
+            "breakpoint",
+            "manifest",
+            "load",
+            "sources",
+            "state",
+        ):
             with self.subTest(key=key):
                 self.assertIn(key, self.keys)
 
     def test_every_key_the_page_reads_is_one_the_api_sends(self):
         page = (REPO_ROOT / "tools" / "host_gui" / "web" / "app.js").read_text(
-            encoding="utf-8")
+            encoding="utf-8"
+        )
         read = set(re.findall(r"result\.([a-z_]+)", page))
-        self.assertGreaterEqual(len(read), 5,
-                                f"the page read almost nothing: {read}")
+        self.assertGreaterEqual(len(read), 5, f"the page read almost nothing: {read}")
         missing = sorted(read - self.keys)
         self.assertEqual(
-            missing, [],
-            f"the page reads {missing}, which no API response carries")
+            missing, [], f"the page reads {missing}, which no API response carries"
+        )
 
 
 class TestSourceResolution(unittest.TestCase):
@@ -175,7 +184,7 @@ class TestApi(unittest.TestCase):
         cpu = self.api.read_cpu()["cpu"]
         for field in ("pc", "a", "x", "y", "insn", "state"):
             self.assertIn(field, cpu)
-        self.assertEqual(cpu["state"], 1)          # running
+        self.assertEqual(cpu["state"], 1)  # running
         self.assertEqual(self.api.status()["status"]["run"], 1)
 
     def test_load_traversal_raises_before_any_io(self):
@@ -257,14 +266,17 @@ class TestOptionalDependencies(unittest.TestCase):
 
     @unittest.skipUnless(SV.HAVE_FASTAPI, "fastapi not installed")
     def test_fastapi_routes_when_installed(self):
-        TestClient = importlib.import_module(
-            "fastapi.testclient").TestClient
+        TestClient = importlib.import_module("fastapi.testclient").TestClient
         self.api, _, _ = make_api(FIXTURES)
         client = TestClient(SV.create_app(self.api, self.api.config))
         self.assertTrue(client.get("/api/health").json()["ok"])
         self.assertEqual(client.post("/api/connect").json()["state"], "PREPARED")
-        self.assertEqual(client.post("/api/load", json={"source": "echo.pe"})
-                         .json()["load"]["words_written"], 3)
+        self.assertEqual(
+            client.post("/api/load", json={"source": "echo.pe"}).json()["load"][
+                "words_written"
+            ],
+            3,
+        )
         client.post("/api/start")
         self.assertIn("insn", client.get("/api/read_cpu").json()["cpu"])
 
@@ -273,19 +285,25 @@ class TestHostGateHarness(unittest.TestCase):
     """The one-command host gate exists so a re-verify is one command, not a
     remembered list (a green run on the wrong tree proves nothing)."""
 
-    SCRIPT = Path(__file__).resolve().parents[3] / "tools" / "host_gui" / \
-        "run_host_tests.sh"
+    SCRIPT = (
+        Path(__file__).resolve().parents[3] / "tools" / "host_gui" / "run_host_tests.sh"
+    )
 
     def test_gate_script_exists_and_is_executable(self):
         self.assertTrue(self.SCRIPT.is_file(), f"missing {self.SCRIPT}")
-        self.assertTrue(os.access(self.SCRIPT, os.X_OK),
-                        f"{self.SCRIPT} is not executable")
+        self.assertTrue(
+            os.access(self.SCRIPT, os.X_OK), f"{self.SCRIPT} is not executable"
+        )
 
     def test_gate_script_covers_every_host_gate(self):
         text = self.SCRIPT.read_text(encoding="utf-8")
-        for gate in ("tools/host_gui/tests", "tools/host_bridge/tests",
-                     "ruff check tools/host_gui tools/host_bridge",
-                     "compileall", "acceptance.py --fake"):
+        for gate in (
+            "tools/host_gui/tests",
+            "tools/host_bridge/tests",
+            "ruff check tools/host_gui tools/host_bridge",
+            "compileall",
+            "acceptance.py --fake",
+        ):
             with self.subTest(gate=gate):
                 self.assertIn(gate, text)
 
