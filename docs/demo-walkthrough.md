@@ -338,7 +338,22 @@ Exit codes, and the reason each one exists:
 | 1 | red, **with a named failing case** |
 | 2 | usage / environment |
 | 3 | gate error — it could not confirm it ran the set it selected, or `run_all.sh` rejected its filter |
-| 4 | **inconclusive** — the run died (OOM, out of disk, the single-run lock) and named no failing case. Not a pass, not a red |
+| 4 | **inconclusive** — the run died (OOM, out of disk, the single-run lock) and named no failing case, **or a script it depends on changed while it was running**. Not a pass, not a red |
+
+**Why 4 exists, and the pre-flight that feeds it.** The gate's own first run
+exited 137 with an empty failure list, and a gate that reports "RED, the affected
+set failed" for a run that never finished is claiming something its log does not
+support. The same argument covers a worse case: bash reads a script
+*incrementally*, so editing a harness while it runs can make it report a **false
+PASS** — and a false pass is believed, which is the worst thing a gate here can
+do. `regress/dep_guard.sh` therefore stamps the **content** of the scripts a run
+executes and re-checks them on the way out; a change, or a vanished file, prints
+`CHIP-DEP-CHANGED` and the gate reports INCONCLUSIVE **even if the run exited 0**.
+It is checked over the whole `regress/` dependency set at the run's exit and again
+around each mutation suite, and `regress/test_dep_guard.sh` — a gate in its own
+right, inside the full suite — proves it fires on a real change, stays quiet on an
+unchanged run, ignores a content-preserving `touch`, and fails 3 of its 7 cases
+when its own comparison is disabled.
 
 **Why 4 exists.** The gate's own first run exited 137 with an empty failure
 list, and a gate that reports "RED, the affected set failed" for a run that never
