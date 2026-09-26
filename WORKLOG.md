@@ -1809,3 +1809,66 @@ is a one-line mechanical signature -- `SHR` applied to a byte the encoder is
 consuming is a low-bit-first transmitter, because `SHR` is `a <= {1'b0, a[7:1]}`
 -- it is provable by putting the peel back, and it belongs beside the
 branch-operand and store-run checks rather than in a handoff as advice.
+
+### THE MASK IS IN, AND THE WIRE NOW MATCHES THE MODEL EXACTLY
+
+`dmem[11]` holds the MASK, the byte is read into a register beside it, and the
+byte is not peeled. The check fits all **24 routes at exactly 120 clocks** --
+twice as many routes as before, because the byte dispatch inside the level block
+has three routes and each of them has to be the same length, which is what the
+two NOPs on the payload route are for.
+
+**AND THE HISTOGRAM IS NOW THE MODEL'S, WHICH IS THE PROOF THE FIX IS RIGHT:**
+
+| | model | measured, per pass |
+| :--- | :--- | :--- |
+| changes on the return leg | 63 | 63 |
+| one-half-interval gaps | 46 | **46** |
+| two-half-interval gaps | 16 | **16** |
+
+(121 and 242 clocks rather than 120 and 240 is the probe's own sampling race: it
+reads the pad at the same edge the pinmux writes it, so it sees every change one
+clock late. The check counts the INSTRUCTION spacing and says 120 exactly.)
+
+**TWO MORE FAULTS, BOTH IN THE TESTBENCH'S DECODER, and the second is why the
+first survived as long as it did.**
+
+* **The data bit was the level on the WRONG SIDE of the mid.** The data is the
+  level of the FIRST half and the mid is the edge that ends it, so the data is
+  the level on the OTHER side -- the complement of what the line is now. The
+  preamble banked `~out_line` and read 0xFF; the payload banked `out_line` and
+  read the complement of every bit. **Two halves of one receiver disagreeing
+  about which side of an edge the data is on, and the flag cannot see it,
+  because the flag is read off the preamble.**
+* **THE DECODE IS ONE BIT OFF AT THE PREAMBLE/PAYLOAD BOUNDARY, and the
+  arithmetic names it exactly.** The decoded stream, `d2 9e 4b`, is the sent
+  payload with **one bit prepended and the last one dropped**:
+
+      sent     10100101 00111100 10010110
+      decoded  1|10100101 00111100 1001011|0
+
+  So the receiver banked the preamble's ninth one as the payload's first bit.
+  The preamble's second byte is eight ones and `dmem[11]` is back at 0x80 by
+  then, so there is no ninth one on the wire -- which means the boundary
+  between the preamble's last one and `a5`'s bit 7 (both 1, so a SILENT
+  boundary, and a two-half gap) is being counted as a bit rather than as the
+  absence of one. `probe_tb_classify.v` will show it in one line: the
+  classification at the payload's first mid.
+
+### NEXT, AND IT IS ONE RECEIVER AND ONE CHECK
+
+1. The boundary between the preamble and the payload is a boundary like any
+   other, and the phase already knows it: after the preamble's last mid the
+   phase is "the last change was a mid", so a two-half gap there is a mid and a
+   one-half gap is a boundary. **The bit that is missing is the payload's first,
+   and the fix is in whichever term of that sentence is wrong** -- the wire is
+   proven correct by the histogram, so it is the receiver.
+2. Then the byte order: the model asserts high bit first, the firmware sends
+   it, and the testbench's shift-in puts the first arrival in the high position.
+   All three now agree, and the three byte comparisons are the only red checks.
+3. **The order check still to add**, and it is the one that would have caught
+   today's first hour: *in the encoder, the byte must not be peeled with SHR*,
+   because `SHR` is `a <= {1'b0, a[7:1]}` and a peeled byte is low bit first.
+   Provable by putting the peel back. It belongs beside the branch-operand and
+   store-run checks, and it is the seventh stale-figure class in this act: a
+   claim about the ISA, inside a correction of a claim about the ISA.

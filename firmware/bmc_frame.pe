@@ -831,30 +831,91 @@ enc_level_first:               ; consecutive addresses are a fall-through
         OUT   PINOE, A           ; claim the output pad; the input is released
         LDI   A, 0
         STM   6, A               ; dmem[6] = the half-interval counter
-        LDI   A, 0
-        STM   11, A              ; dmem[11] = the byte to send, bit 7 first:
-                               ; eight zeros, the preamble's first byte
+        LDI   A, 0x80
+        STM   11, A              ; dmem[11] = THE MASK, at bit 7 -- and the
+                               ; frame goes out HIGH BIT FIRST because the
+                               ; mask walks DOWN and the receiver's shift-in
+                               ; puts the first arrival in the high position.
+                               ; It was the byte here until this step, and a
+                               ; byte peeled with SHR is low bit first.
         JMP   enc_half
 
         ; ---- ONE HALF-INTERVAL -----------------------------------------
 enc_half:
-        ; THE LEVEL OF THIS HALF, AND IT TAKES NO INDEX AND NO MASK. dmem[11]
-        ; holds the byte with the bit being sent at bit 7, because SHR peels
-        ; it there once per bit -- so "which bit" is not a thing this program
-        ; has to know. It is a shift-right, the instruction this act's own
-        ; comments used to say the machine did not have.
-        LDM   A, 11
-        AND   A, 0x80            ; 0x80 if the bit is 1, else 0x00 -- and it
-        MOV   X, A               ; is tested against ZERO, not against one:
-        LDI   A, 0               ; a masked value belongs to the domain it was
-        SUB   A, X               ; produced in, and 1 is not in {0, 0x80}
-        JZ    enc_bit_zero        ; (this exact shape was a fault below)
+        ; ---- THE BYTE, AND dmem[11] IS THE MASK THAT SAYS WHICH BIT ----
+        ; *** THIS IS THE BIT-ORDER FIX, AND THE ONE-LINE REASON IS THAT SHR
+        ; IS `a <= {1'b0, a[7:1]}`: THE NEW BIT 7 IS ALWAYS ZERO. *** A
+        ; shift-right moves every bit DOWN one place and throws the top one
+        ; away, so a byte peeled with SHR comes out LOW BIT FIRST and there is
+        ; no shift-LEFT to bring the next bit back up to 7.
+        ;
+        ; A MASK CAN, because a mask IS 0x80, 0x40, 0x20 ... 0x01 and SHR takes
+        ; it down one place per bit, which is the one thing a shift-right is
+        ; good at. So dmem[11] holds the MASK, the byte is read into a register
+        ; here, and `AND A, X` is 0x80 exactly when the bit under the mask is
+        ; set. The mask returns to 0x80 when it reaches 0x00, in the tail.
+        ;
+        ; THE PREAMBLE HID THE FAULT FOR SIXTEEN HALF-INTERVALS, and that is
+        ; worth writing down: the preamble's byte is 0xFF, which is eight ones
+        ; in EVERY order, so an encoder that reverses the payload's bit order
+        ; is indistinguishable from a correct one until the payload starts. The
+        ; receiver's trace named it anyway -- a 4 us gap inside a run of eight
+        ; identical bits, which the wire rules say cannot exist -- and the
+        ; arithmetic confirmed it from the peeled values 0xFF, 0x7F, 0x52,
+        ; where 0x52 is 0xA5 shifted right.
+        ;
+        ; WHICH BYTE: dmem[6] >> 4 is the index, and it is 1, 2, 3 or 4 here --
+        ; 1 is the preamble's eight ones, and 2 upward is dmem[index-2], which
+        ; is CONTIGUOUS, so LDS reaches all three payload bytes with no case.
+        LDM   A, 6
+        SHR
+        SHR
+        SHR
+        SHR                   ; c >> 4: which of the FIVE bytes
+        MOV   X, A
+        LDI   A, 1
+        SUB   A, X
+        JZ    enc_byte_ones
+        DECX
+        DECX                  ; X = 0, 1 or 2
+        LDS                   ; A = dmem[X]
+        NOP
+        NOP
+        JMP   enc_have_byte     ; six clocks, like the route above
+enc_byte_ones:
+        LDI   A, 0xFF          ; the preamble's second byte: eight ONES
+        NOP
+        NOP
+        NOP
+        NOP
+        JMP   enc_have_byte     ; both routes six clocks, and they are equal
+                               ; because a half-interval is a fixed number of
+                               ; clocks and these two are not the same length
+                               ; without the padding
+enc_have_byte:
+        MOV   X, A             ; X = the byte
+        LDM   A, 11            ; A = the MASK, at this bit's place
+        AND   A, X             ; 0x80 if the bit is 1, else 0x00
+        MOV   Y, A
+        ; ---- AND THE LEVEL IS 0x00 OR BMC_OUT AND NOTHING ELSE ----------
+        ; A masked value belongs to the domain it was produced in, and the
+        ; domain here is {0x00, 0x80}: so the only constant that is IN it is
+        ; ZERO. The version before this one compared it against 1, which is
+        ; zero for neither, so every bit read as a one and the pad went out at
+        ; the wrong level.
+        MOV   A, Y
+        MOV   X, A
+        LDI   A, 0
+        SUB   A, X             ; zero EXACTLY when the bit is 0
+        JZ    enc_bit_zero
         LDI   A, BMC_OUT
+        NOP
         JMP   enc_have_level
 enc_bit_zero:
         LDI   A, 0
-        NOP                   ; one clock of pad, and the reason is the two
-                               ; routes above being five and four long
+        NOP
+        JMP   enc_have_level    ; three clocks each, for the reason above
+
 enc_have_level:
         ; ---- AND THE POLARITY, WHICH IS ONE COMPARISON -----------------
         ; s = dmem[3] XOR (c AND 1), and it is ONE quantity because FM1
@@ -956,122 +1017,32 @@ enc_drive:
         JZ    enc_wait_mid       ; an odd new count means the half just sent
                                 ; was the FIRST of a bit, so the next one is
                                 ; its mid and nothing is peeled
-enc_peel:
-        ; ---- so a bit just went out, and the byte loses its top bit -----
+enc_mask_down:
+        ; ---- A BIT WENT OUT, SO THE MASK MOVES DOWN ONE PLACE ----------
+        ; AND 0x00 IS THE BYTE BOUNDARY, because 0x80 shifted right eight
+        ; times is 0x00 and a byte is eight bits. The COUNT could say so too --
+        ; every sixteenth half-interval -- but the mask says it in the quantity
+        ; that is actually being walked, and one test is one fewer thing to be
+        ; off by one. The count's version of this test was asked whether the
+        ; byte had been PEELED TO NOTHING, which is zero from the moment a byte
+        ; of 0x00 is loaded, and the preamble reloaded 1330 times for the five
+        ; that belong there.
         LDM   A, 11
         SHR
         STM   11, A
-        ; ---- AND THE BYTE IS SPENT AT EVERY SIXTEENTH HALF-INTERVAL ----
-        ; NOT when dmem[11] reaches zero, which is what this line first said:
-        ; a byte whose value is 0x00 is zero from the moment it is loaded, so
-        ; that test fired on the FIRST bit of the preamble's eight zeros. A
-        ; byte is eight bits and a bit is two half-intervals, so the COUNT
-        ; says when a byte is spent and the byte's own value does not.
-        LDM   X, 6
-        LDI   A, 15
-        AND   A, X
-        MOV   X, A
+        LDM   X, 11
         LDI   A, 0
         SUB   A, X
-        JZ    enc_next_byte      ; zero iff the new count is a multiple of 16
-        JMP   enc_wait_first
-enc_next_byte:
-        ; ---- WHICH BYTE COMES NEXT -------------------------------------
-        ; dmem[6] >> 4 is the index of the byte that is STARTING, because the
-        ; count that got here is a multiple of 16 and c = 80 was taken by the
-        ; end test above. So it is 1, 2, 3 or 4 -- and 1 is the preamble's
-        ; EIGHT ONES, 2 is dmem[0], 3 is dmem[1] and 4 is dmem[2].
-        ;
-        ; *** AND EVERY ONE OF THOSE WAS OFF BY ONE IN THE FIRST VERSION, AND
-        ; THE LABEL NAMES ARE WHY. *** It dispatched 1 to `enc_load_zeros`
-        ; and 2 to `enc_load_ones`, so the preamble's eight ones were sent as
-        ; eight zeros, dmem[0] was sent as 0xFF, dmem[1] as dmem[0] and
-        ; dmem[2] as dmem[1] -- the whole frame, shifted by one byte and
-        ; complemented at the front. MEASURED: the wire carried a
-        ; hundred-and-forty-four 121-clock intervals and not ONE 241, and
-        ; dmem[11] was still 0x00 at half-interval 16 where the preamble's
-        ; ones should have started. A label that says `zeros` beside a
-        ; constant 0, tested against an index whose meaning is set three
-        ; instructions earlier, is a comment that agrees with itself.
-        ;
-        ; So there is ONE case now, not three: index 1 is the preamble's ones
-        ; and every index from 2 up is dmem[index - 2], which is CONTIGUOUS,
-        ; so LDS reaches it with no case at all. A three-way dispatch over
-        ; four values was three ways to be off by one.
-        LDM   A, 6
-        SHR
-        SHR
-        SHR
-        SHR
-        MOV   X, A
-        LDI   A, 1
-        SUB   A, X
-        JZ    enc_load_ones
-        DECX
-        DECX                  ; X = 0, 1 or 2
-        LDS                   ; A = dmem[X], and dmem[0..2] is contiguous
-        NOP
-        NOP
-        NOP
-        NOP
-        JMP   enc_have_next
-enc_load_ones:
-        LDI   A, 0xFF          ; the preamble's second byte: eight ones
-        NOP
-        NOP
-        NOP
-        NOP
-        NOP
-        NOP
-        JMP   enc_have_next     ; both routes EIGHT clocks, and they are NOPs
-                               ; because a half-interval is a fixed number of
-                               ; clocks and the two routes are not the same
-                               ; length without them
-enc_have_next:
-        STM   11, A              ; and the bit goes back to bit 7
+        JNZ   enc_wait_first     ; the mask is not spent yet
+        LDI   A, 0x80
+        STM   11, A              ; a new byte, and its bit 7 goes next
         JMP   enc_wait_next
 
-        ; ---- THE THREE HALF-INTERVAL DELAYS, AND WHY THERE ARE THREE ---
-        ; The two OUTs above bracket a half-interval, so everything between
-        ; two of them is TIMING, and the three routes out of the tail above
-        ; are not the same number of instructions long. So there are three
-        ; counted delay loops rather than one loop and a hope, and the
-        ;     120 = (the route's own instructions) + 2 (the loop's set-up)
-        ;          + 4 * (the iteration count)
-        ; with the route counted IN THE LISTING and not in this comment. The
-        ; rule that goes with them: touch anything between the two OUTs and
-        ; RE-COUNT BOTH SIDES, because a half-interval that is one clock long
-        ; is a two-microsecond interval that measures as 2.0167, and the
-        ; receiver's whole arithmetic is built on it being 2.
-        ;
-        ; *** AND THE LOOP IS FOUR CLOCKS AN ITERATION, NOT THREE, AND THE
-        ; THREE-CLOCK FORM IS A RUNNING SUM RATHER THAN A COUNTDOWN. *** The
-        ; recipe for this delay was `LDI A,1 / SUB A,X / JNZ` -- three
-        ; instructions, "and 40 is 120 clocks". It is three instructions, and
-        ; it does not count: SUB computes A - X and NOTHING PUTS A BACK, so
-        ; every pass subtracts the next X again and A becomes
-        ; 0 - (n + (n-1) + ...). The loop leaves when that RUNNING SUM is
-        ; congruent to zero mod 256, which for n = 25 is 49 passes and 147
-        ; clocks, and for most n is not reachable at all. MEASURED, on the
-        ; wire and not in the listing: 49 loop bodies between two OUT TXPIN
-        ; with `LDI A, 25` standing beside them, and a half-interval of 192
-        ; clocks where the listing said 120.
-        ;
-        ; SO THE `LDI A, 0` MOVED INSIDE THE LOOP. Four instructions, and the
-        ; fourth is the one that makes the branch a comparison instead of an
-        ; accumulation: DECX, put a zero back in A, SUB A,X is zero exactly
-        ; when X is, JNZ on that. Thirty passes is 120 clocks and the number
-        ; in the listing is the number on the machine.
-        ;
-        ; AND THE CHECK THAT COUNTS IT SIMULATES THESE LOOPS INSTEAD OF
-        ; CHARGING THEM THREE CLOCKS A PASS, because the version that assumed
-        ; three reported 120 for a loop that takes 49. A check that shares the
-        ; assumption it exists to test is a check that cannot fail, which is
-        ; the sentence this act has spent three sessions trying to earn.
 enc_wait_mid:
         NOP
         NOP
-        NOP                   ; THREE NOPS IN THE SET-UP, and this is where
+        NOP
+        NOP                   ; FOUR NOPS IN THE SET-UP, and this is where
                                ; the routes that are not the same length are
                                ; paid for: the three routes out of the tail
                                ; differ, so their loops are fitted separately
@@ -1079,7 +1050,7 @@ enc_wait_mid:
                                ; is four clocks a pass, so the residue is paid
                                ; in NOPs of one and two rather than in a third
                                ; number whose fraction is not an integer.
-        LDI   A, 19
+        LDI   A, 14
         MOV   X, A             ; the set-up is TWO instructions now
 enc_wait_mid_loop:
         DECX
@@ -1088,7 +1059,8 @@ enc_wait_mid_loop:
         JNZ   enc_wait_mid_loop ; four clocks a pass
         JMP   enc_half
 enc_wait_first:
-        LDI   A, 17
+        NOP                   ; one NOP of set-up, for the same reason
+        LDI   A, 13
         MOV   X, A
 enc_wait_first_loop:
         DECX

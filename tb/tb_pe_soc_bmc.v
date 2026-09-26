@@ -546,7 +546,17 @@ module tb_pe_soc_bmc;
           // that is neither did not come from this preamble
           dec_acc = {dec_acc[6:0], ~out_line};
         end else begin
-          dec_acc = {dec_acc[6:0], (dec_flag == 1) ? ~out_line : out_line};
+        // THE DATA IS THE LEVEL OF THE FIRST HALF, and the mid is the edge
+        // that ENDS that first half -- so the data is the level on the OTHER
+        // side of the mid, which is the complement of what the line is now.
+        // FM0 banks that level; FM1 inverts it. It was the other way round in
+        // the first version of this decoder, and the preamble is what caught
+        // it: the preamble banked ~out_line and read 0xFF, and the payload
+        // banked out_line and read the complement of every bit. Two halves of
+        // one receiver disagreeing about which side of an edge the data is on
+        // is the same fault twice, and it is invisible in the flag because
+        // the flag is read off the preamble.
+          dec_acc = {dec_acc[6:0], (dec_flag == 1) ? out_line : ~out_line};
         end
         dec_bits = dec_bits + 1;
         dec_bit  = dec_bit + 1;
@@ -586,7 +596,7 @@ module tb_pe_soc_bmc;
           dec_phase = 0;
           dec_mids  = dec_mids + 1;
           if (dec_pre) dec_acc = {dec_acc[6:0], ~out_line};
-          else         dec_acc = {dec_acc[6:0], (dec_flag == 1) ? ~out_line : out_line};
+          else         dec_acc = {dec_acc[6:0], (dec_flag == 1) ? out_line : ~out_line};
           dec_bits = dec_bits + 1;
           dec_bit  = dec_bit + 1;
           if (dec_bit == 8) begin
