@@ -224,11 +224,20 @@ comment carries the lesson: *a red act's output gets quoted verbatim — it is t
 thing a reader sees — so a unit error in a failure message is a defect in the report,
 not a cosmetic slip.*
 
-**An earlier revision of this page quoted the broken message and marked it `[sic]`.**
-Those markers are gone, and deliberately: `[sic]` is the exemption
-`delay_lattice.py` uses to skip a conversion it is asked to recompute, so a stale
-marker does not just make a page wrong, it **switches off the check on a line that is
-now correct**. A marker that outlives the thing it marked is worse than no marker.
+**An earlier revision of this page quoted the broken message and marked it as
+known-wrong.** Those markers are gone, and deliberately. The marker — `SIC` in
+`tools/diag/delay_lattice.py` — is the exemption the numbers gate uses to skip a
+conversion it is asked to recompute, so a stale marker does not merely make a page
+wrong, it **switches off a real check on a line that has become correct**. A marker
+that outlives the thing it marked is worse than no marker.
+
+The gate now refuses that outcome rather than trusting anyone to notice: a marked line
+is still recomputed, and the marker only earns its place if the conversion it marks is
+actually wrong. A marker on a *correct* conversion is itself reported, and so is a
+marker on a line with no conversion at all — which is why the prose above names the
+constant `SIC` instead of writing the marker literally, and why this paragraph had to
+be edited rather than left as it read. The gate caught its own author, which is the
+argument for having one.
 
 The act is still **RED**, with the same five checks, and the second measurement is
 still not reached. What changed here is only that the failure report now says what it
