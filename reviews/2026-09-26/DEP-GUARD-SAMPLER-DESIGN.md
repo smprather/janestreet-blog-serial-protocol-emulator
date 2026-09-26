@@ -1,5 +1,19 @@
 # The harness-edit pre-flight: where it stands, and the sampler design
 
+> **DO NOT BUILD §3 AS WRITTEN. IT HAS BEEN MEASURED AND IT IS WRONG.**
+> A fresh session on 2026-09-26 implemented §3's discriminator as a throwaway
+> probe, ran it against real mutation suites, and it reported INTERFERENCE on
+> clean runs — because §3's core premise ("a harness's own final restore is the
+> last thing it does") is false for **all sixteen** harnesses: they restore
+> *per case inside the mutation loop*, so "mutated → original → further mutation"
+> is the normal shape of every clean run, not a signature of interference. At the
+> designed 50 ms poll it fires ~120 times on one clean `mutate_i2c_tb.sh` run,
+> which would have made every mutation suite return exit 4 and every merge
+> INCONCLUSIVE. The measurements are in **§6**, the executable disproof is a case
+> in `regress/test_dep_guard.sh`, and the two sound options that replace it are
+> in **§7** for a manager ruling. Case 10 stays pinned as the open limitation,
+> which is the honest state.
+
 Date: 2026-09-26. Author: protocol-worker. Written at a hard wrap so a fresh
 session can build the sampler without re-deriving it. **Nothing here is
 speculative: every "is" below was measured, and every "is not" was measured
@@ -146,3 +160,117 @@ Clean apart from gate artefacts. `check_r2_package`, `check_wiki_pages`,
 the shared worktree** — always check `git status rtl/` and the process list
 before touching `rtl/`, and commit with explicit pathspecs so a live mutant is
 never swept into a commit.
+
+---
+
+## 6. §3 IS MEASURED WRONG — the disproof, with the numbers
+
+Fresh session, 2026-09-26. §3 was not built, because building it would have
+shipped a guard that fires on the project's own normal behaviour.
+
+### 6.1 The premise is false, and it is false for all sixteen harnesses
+
+§3 rests on: *"a harness's own final restore is the last thing it does,
+whereas an external restore leaves the harness running and it will mutate
+again."* The first clause is wrong. Every harness restores **per case, inside
+its mutation loop**, and then immediately applies the next case's mutant:
+
+* `mutate_i2c_tb.sh` — `run_case` ends `restore` (line 154) and is then called
+  again for the next mutation, so `rtl/pe_soc.v` goes
+  `M O M O M O …` with **O between every pair of mutants**.
+* `mutate_serdes_tb.sh` — `check_mutation` ends `restore; verify_restore`
+  (line 89) and is called 7 times.
+* The same shape holds in all sixteen: the only `restore` call sites are inside
+  the per-case function, plus one `restore_pristine` in the EXIT trap.
+
+So the sequence §3 calls interference is **the normal shape of a clean run**.
+Its "signal" is the dominant pattern, not the anomaly.
+
+### 6.2 Measured, on the project's own suites
+
+Content-class sequence of a real clean run (recorder at 2 ms, `O` = pristine,
+`M` = not pristine):
+
+| clean run | sequence | inter-case pristine windows | mutant windows |
+|---|---|---|---|
+| `mutate_serdes_tb.sh` / `pe_serdes.v` | `OMOMOMOMOMOMOMO` | 13–18 ms | 12–22 ms |
+| `mutate_i2c_tb.sh` / `pe_soc.v` | `OMOMOMO` | **60–62 ms** | 976–6207 ms |
+| `mutate_eth_tx_tb.sh` / `pe_eth_tx.v` | `OMOM…OMO` (17 windows) | 13–32 ms | 426–8491 ms |
+
+Then §3's discriminator, verbatim, at §3's own ~50 ms interval:
+
+* `mutate_i2c_tb.sh` — **HIT, about 120 times**, on a run whose own summary
+  reads *"6 detected, 1 survived, 0 inconclusive / no unexplained survivors"*.
+  Not a probability: the 60–62 ms windows are **longer than the 50 ms poll**, so
+  the poller is guaranteed to sample twice inside one.
+* `mutate_serdes_tb.sh` — HIT on one run, no hit on another, identical harness.
+  With 13–18 ms windows against a 50 ms poll the verdict is decided by **sampling
+  phase**, not by interference.
+
+### 6.3 A measurement of my own that was VACUOUS, and how it was caught
+
+The first probe run reported "no hit" on `mutate_i2c_tb.sh`, which contradicted
+§6.2. The probe was wrong: its multi-file version reset the `seen`/`back` state
+**inside the per-poll loop**, so it compared one sample against itself and could
+never fire. Caught by distrusting a result that disagreed with a measurement
+taken a minute earlier — the same "check the instrument" move that caught a
+vacuous font test earlier in this project's history. The single-file probe keeps
+state outside the poll loop and fires as §6.2 says. **A negative result from an
+instrument that has never been seen to fire is not evidence.**
+
+### 6.4 What shipping §3 would have cost
+
+Every mutation suite returns exit 4; `verify_merge.sh` turns `CHIP-DEP-CHANGED`
+into INCONCLUSIVE **even on exit 0**; so the merge gate is permanently
+INCONCLUSIVE. That is worse than the gap it closes in a specific way: an
+INCONCLUSIVE that always fires is one people learn to ignore, and this project's
+whole premise is that a gate nobody believes is worse than no gate. The guard
+would also have made its own case-8-style negative control fail — which is the
+only reason the self-test exists.
+
+### 6.5 The deeper reason it cannot be fixed by tuning
+
+The harness's own restore and an external restore are **the same content
+transition** — both write the pristine bytes the run started with. No amount of
+hashing, polling or interval tuning separates them, because the information is
+not in the file: it is in **who wrote it**. Sampling also cannot recover it,
+because a clean run's own pristine windows are the same order of magnitude as
+any poll interval you would choose. Detecting this needs either write
+attribution (a kernel facility, not available here — `inotifywait` is ABSENT) or
+the harness saying what it is about to do.
+
+## 7. The two sound options, for a ruling
+
+Neither is in the approved scope; both are small; the first is recommended.
+
+**(a) Cooperation — one line per harness (recommended).** Every harness already
+sources `dep_guard.sh` through `run_lock.sh`, so two functions are already in
+scope inside all sixteen. Have the harness **declare** the state it is about to
+establish (`chip_dep_expect_mutant` / `chip_dep_expect_pristine`, one line in
+each `restore` and each mutation step), and have the poller flag a target whose
+content **contradicts the current declaration**. A declaration is valid for a whole
+*interval*, so a slow poller can only ever *miss* a transition, never invent one
+— the failure direction that is safe. `regress/check_harness_preflight.sh`
+already enforces a per-harness dep-guard requirement, so the new requirement
+has an enforcement point and a self-test home. Cost: ~16 one-line edits plus
+preflight, and the guard becomes coupled to the harnesses — which is a real
+tradeoff, and the reason §3 called it "bigger".
+
+**(b) Write attribution via a new Python helper.** `inotifywait` is absent, but
+`ctypes` → `inotify_init1`/`inotify_add_watch` works (libc present), and an
+event stream has no sampling aliasing at all: a clean run writes each target
+strictly alternating `M O M O …`, so an external restore appears as a **second
+pristine write with no mutant write between it**, which the project's own EXIT
+trap (`restore_pristine` on every exit, `mutate_i2c_tb.sh:165-183`) cannot
+mimic because nothing follows it. Correct, but a new tool, a new language in a
+bash guard, and a second mechanism to keep alive.
+
+**Not recommended, and why:** a duration heuristic ("a pristine window longer
+than X means interference"). It is a per-suite fudge factor; wrong in the firing
+direction it is §6.4, and wrong in the quiet direction it is merely the status
+quo. Given that asymmetry, a threshold is not worth shipping without a ruling.
+
+**Meanwhile the honest state is unchanged and still true:** the guard catches an
+external edit that is not put back, and any failure to restore. It does not
+catch a mid-run restore. Case 10 of `regress/test_dep_guard.sh` pins that as a
+case, and the new case 11 records §6 as an executable disproof.

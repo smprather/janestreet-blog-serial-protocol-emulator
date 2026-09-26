@@ -43,10 +43,16 @@ The obvious suspect is fonts, and on this project it is **not** the driver:
 What does move the bytes is the **layout engine**:
 
 - `dot` produces the geometry for every `package`/`component` figure — five of
-  the twenty-two sources: `project-plan`, `project-progress`,
-  `proto-r2-read-path`, `proto-r3-debug-control`, `proto-spi-framing`.
+  them: `project-plan`, `project-progress`, `proto-r2-read-path`,
+  `proto-r3-debug-control`, `proto-spi-framing`. (Named rather than counted: an
+  earlier version of this line said "five of the twenty-two sources", and the
+  denominator was a snapshot of one revision — main carried 34 sources a few
+  commits later, so the count described the BRANCH, not the project.)
 - Forcing PlantUML's own engine (`-Playout=smetana`) changes
-  `project-plan.svg`'s coordinates and `viewBox` (112,288 B → 106,411 B).
+  `project-plan.svg`'s geometry: its `viewBox` goes `0 0 6155 5510` →
+  `0 0 5931 5104` and the file shrinks from 122,715 B to 116,223 B. The
+  *geometry* is the claim; the byte sizes are one figure's snapshot of it and
+  will move whenever that figure is edited, so do not treat them as the test.
 - Among the dot-rendered figures the **largest** are the most sensitive, because
   complex layouts have the most coordinates to move. That is why a font/dot
   mismatch shows up as "the two big maps failed and the thirty small figures

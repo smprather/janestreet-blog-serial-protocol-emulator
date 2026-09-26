@@ -215,6 +215,66 @@ else
   ok "better than expected: a mid-run restore is caught by the content check too (exit $rc)"
 fi
 
+# 4. THE DISPROOF, AS AN EXECUTABLE CASE, so the rejected design cannot be
+#    re-implemented by someone who trusts the prose.
+#
+#    reviews/2026-09-26/DEP-GUARD-SAMPLER-DESIGN.md §3 proposed a background
+#    poller whose discriminator was "a target seen MUTATED and then seen ORIGINAL
+#    again, while the run is live, followed by FURTHER MUTATION". Its stated
+#    reason was that a harness's own final restore is the last thing it does.
+#
+#    That reason is FALSE, and case 3 above is the evidence rather than the
+#    assertion: every harness restores PER CASE inside its mutation loop, so a
+#    clean run's own content sequence is M O M O M O -- the proposed signal is
+#    the dominant pattern of normal operation. Measured on the real suites, the
+#    design at its own 50ms poll reported INTERFERENCE on a clean
+#    mutate_i2c_tb.sh run (its pristine windows are 60-62ms, LONGER than the
+#    poll) about 120 times, and fired on mutate_serdes_tb.sh only depending on
+#    sampling phase.
+#
+#    So this case runs that exact discriminator over that exact clean sequence
+#    and asserts it FIRES. It is a test with a real assertion that can fail: if a
+#    future harness shape or a future discriminator stops reproducing the
+#    disproof, this goes red and says the disproof needs re-measuring, rather
+#    than leaving a stale "we checked" sitting in a design file.
+printf 'module dut; endmodule\n' > "$TMP/dut_loop.v"
+out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
+  set -u; . "$1"
+  f="$2"; d="$2.state"; mkdir -p "$d"; : > "$d/live"
+  orig=$(sha256sum -- "$f" | cut -d" " -f1)
+  (
+    seen=0; back=0; hits=0
+    while [ -f "$d/live" ]; do
+      cur=$(sha256sum -- "$f" | cut -d" " -f1)
+      if [ "$cur" = "$orig" ]; then
+        [ "$seen" = 1 ] && back=1
+      else
+        [ "$back" = 1 ] && hits=$((hits+1))
+        seen=1
+      fi
+      sleep 0.05
+    done
+    printf "%s\n" "$hits" > "$d/hits"
+  ) &
+  pid=$!
+  # A CLEAN harness, shaped like mutate_i2c_tb.sh: three cases, each applying a
+  # mutant and then restoring it, with a pristine window longer than the poll.
+  for n in 1 2 3; do
+    printf "module dut; // MUTANT %s\nendmodule\n" "$n" > "$f"
+    sleep 0.15
+    printf "module dut; endmodule\n" > "$f"
+    sleep 0.15
+  done
+  rm -f "$d/live"; wait "$pid"
+  cat "$d/hits"
+' _ "$GUARD" "$TMP/dut_loop.v" 2>&1); rc=$?
+hits=$(printf '%s' "$out" | grep -E '^[0-9]+$' | tail -1)
+if [ -n "$hits" ] && [ "$hits" -gt 0 ]; then
+  ok "the naive sampler discriminator FIRES on a clean per-case run ($hits false hits) - which is why it was rejected"
+else
+  bad "the disproof did not reproduce (hits=${hits:-none}, rc=$rc) - re-measure §6 before trusting it: $out"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "dep_guard self-test: $fail of $((pass+fail)) FAILED"
   exit 1

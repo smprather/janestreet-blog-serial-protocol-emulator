@@ -831,6 +831,34 @@ else
   tail -20 "/tmp/check_diagrams_selftest.${_diag_wt}.log"
   stale=1
 fi
+# THE NUMBERS GATE, and its self-test, in the suite at last. Nothing invoked
+# tools/diag/delay_lattice.py: run_all.sh referenced seventy tool and script
+# paths and this was not one of them, so a gate that recomputes every "N clocks
+# = X us" in the timing figures and pages was a CHECK NOBODY PERFORMED. That is
+# the same hole one level up as a testbench nothing runs -- the suite is green
+# on a claim nothing is testing, which is the failure this project keeps paying
+# for. Wiring it is not an endorsement of its scope: it checks the pages its
+# owner maintains, and it is deliberately not asked about the rest of the wiki.
+#
+# The self-test is wired BESIDE the gate rather than left available on request,
+# for the reason the diagram gate's is: a gate that stops detecting reports OK
+# on a broken tree. The step counts are read out of the log at run time instead
+# of being written into this line, because a hardcoded "13/13" is a number that
+# goes stale in a file nobody re-reads -- and the count has already moved once.
+if python3 tools/diag/delay_lattice.py > "/tmp/delay_lattice.${_diag_wt}.log" 2>&1; then
+  echo "delay-lattice numbers: OK ($(grep -m1 '^RESULT' "/tmp/delay_lattice.${_diag_wt}.log"))"
+else
+  echo "delay-lattice numbers: FAILED (see /tmp/delay_lattice.${_diag_wt}.log)"
+  grep -E '^(FAIL|RESULT)' "/tmp/delay_lattice.${_diag_wt}.log" | head -10 | sed 's/^/    /'
+  stale=1
+fi
+if python3 tools/diag/delay_lattice.py --selftest > "/tmp/delay_lattice_selftest.${_diag_wt}.log" 2>&1; then
+  echo "delay-lattice gate self-test: OK ($(grep -c '^ok' "/tmp/delay_lattice_selftest.${_diag_wt}.log") check(s) passed, $(grep -c '^FAIL' "/tmp/delay_lattice_selftest.${_diag_wt}.log") failed)"
+else
+  echo "delay-lattice gate self-test: FAILED (see /tmp/delay_lattice_selftest.${_diag_wt}.log)"
+  tail -20 "/tmp/delay_lattice_selftest.${_diag_wt}.log"
+  stale=1
+fi
 # The local presentation viewer's fit arithmetic has its own focused check.
 # This uses an embedded SVG fixture and does not consume the project diagrams,
 # which are maintained as PlantUML source in diagrams/.
