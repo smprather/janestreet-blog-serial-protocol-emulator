@@ -658,3 +658,49 @@ derivation lives in a testbench model, a comment naming bytes the model
 derives, and a comment belonging to a file that is not on my branch -- are the
 three that were wrong, and all three are wrong in the way a duplicate is wrong:
 they assert a number in a second place, and the second place is what goes stale.
+
+---
+
+## THE MANAGER'S FINAL HANDWRAP POINT (2026-09-27 03:05)
+
+Read this section first. It is the state at the cut.
+
+**Block 3**
+
+* **(b) frequency + duty meter -- GREEN, in the regression**, 58/58 mutations, twelve
+  banked points from 158 Hz to 10 kHz each checked against an independent
+  measurement of the pad. Done.
+* **(a) HC-SR04 -- the conversion is EXACT** (1160 us -> 199 mm), the trigger is
+  601 clocks as an equality against a derivation counted from the listing, and
+  the exact carry is verified for all 65,536 operand pairs. **ONE open item: the
+  testbench restructure** -- two runs, reset between, and read the answer at the
+  moment dmem[10] goes to 1 rather than at the end of the run. Recipe in the
+  WORKLOG at 23:45. Also three stray reads in a reachable tail, which the
+  width-byte rule catches.
+* **(c) FM0/FM1 -- RED testbench with seven correct checks**, a first-draft
+  firmware, and the wire rules corrected. Needs a PREAMBLE, because a bi-phase
+  stream carries no polarity information; the check that matters is that the
+  same frame sent both ways gives two different flags and the same three bytes.
+
+**The firmware comment batch -- done on my side, and the rest is not mine:**
+
+* mine, comment-only, image md5 proven unchanged: servo_sweep intermediates
+  (4355c29), peasm (2,13) conversion (cacaf23), spi_mode3 word list (4a7e172);
+* fw-bus already corrected dmx512.pe and the spi_mode3 response line in
+  `1798abf`, and I reverted my duplicate edit of that line (222f384) because
+  theirs derives the wire byte and mine only named the rule;
+* **the one item needing two workers: the corrected word list makes their
+  response figures wrong** (they state 0x6D, 0x6C, 0x6F from the OLD high bytes
+  0x11, 0x12, 0x13; the corrected words give 0x6F, 0x5C, 0x4D). Whichever
+  commit lands second recomputes them. It is arithmetic, not judgement.
+
+**Also delivered:** the merge-repair of the six acts in main (`3657847`), proven on
+three throwaway exports -- unpatched 6/6 FAIL, RTL hunk alone 6/6 PASS, TB hunks
+alone 6/6 PASS, both 6/6 PASS. The cause was R3's two new module inputs with no
+default, which every pre-R3 testbench leaves unconnected, so the core's execute
+gate is X and it never commits an instruction.
+
+**The finding, in one sentence:** five wrong figures, every one a derivation or a
+duplicate of one that nobody recomputed when an input moved -- and the three I
+could NOT check are the three that were wrong, all of them a number asserted in a
+second place.
