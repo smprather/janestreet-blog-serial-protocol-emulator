@@ -181,6 +181,39 @@ if start_case refuse 'sleep 30'; then
   sleep 0.5
 fi
 
+# ---- H: a STALE CHIP_RUN_LOCK_HELD is not a pass ticket -------------------
+# The variable is exported, so it outlives the run that set it into any later
+# shell, supervisor or worker that starts an INDEPENDENT gate. A gate that
+# believed it never reached the flock at all, so mutual exclusion was silently
+# absent and two runs mutated and restored the same RTL at once -- which is
+# what four concurrent gates did in this worktree on 2026-09-26, each reporting
+# the others' MUTABLE files changing under it while the lock reported nothing.
+#
+# This case is case A with EXACTLY ONE difference, so it pins this defect and
+# nothing else: the second taker is told it already holds the lock, and it must
+# still be refused. A real reentrant child inherits the lock DESCRIPTOR, which
+# is the evidence the fix now requires; this one inherits only the name, so
+# there is nothing behind it.
+if start_case staleheld 'sleep 30'; then
+  if CHIP_RUN_LOCK_FILE="$WORK/staleheld.lock" \
+     CHIP_RUN_OWNER_FILE="$WORK/staleheld.probe.owner" \
+     CHIP_RUN_WATCHDOG=0 \
+     CHIP_RUN_LOCK_HELD=1 \
+     bash -c ". '$HERE/run_lock.sh'; chip_take_run_lock stale" \
+       > "$WORK/staleheld.second.log" 2>&1; then
+    bad "H: a stale CHIP_RUN_LOCK_HELD let a second run start while the lock was held"
+  else
+    rc=$?
+    if [ "$rc" -eq 75 ] && grep -q "REFUSING TO START" "$WORK/staleheld.second.log"; then
+      ok "H: a stale CHIP_RUN_LOCK_HELD is refused, not honoured"
+    else
+      bad "H: refused with exit $rc, wanted 75"
+    fi
+  fi
+  stop_case
+  sleep 0.5
+fi
+
 # ---- B/C/D: a signal to the holder must take its child with it ------------
 for sig in INT TERM KILL; do
   if start_case "sig$sig" 'sleep 30'; then
@@ -222,7 +255,12 @@ if start_case normal 'exit 0'; then
   # dep_guard.sh exists to protect, so the case waits for the death the
   # contract actually promises -- bounded, so a genuine leak still fails.
   e_alive() {   # a zombie is dead: kill -0 still succeeds on one
-    kill -0 "$1" 2>/dev/null && [ "$(ps -o stat= -p "$1" 2>/dev/null)" != "Z"* ]
+    kill -0 "$1" 2>/dev/null || return 1
+    case "$(ps -o stat= -p "$1" 2>/dev/null)" in
+      Z*) return 1 ;;   # exited but not yet reaped: dead, and waiting longer
+                         # would only spin to the bound and then cry "leak"
+      *)  return 0 ;;
+    esac
   }
   e_waited=0
   while e_alive "$child" && [ "$e_waited" -lt 100 ]; do

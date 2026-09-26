@@ -262,7 +262,24 @@ chip_take_run_lock() {
   # through. The lock FD is inherited, so the kernel view stays consistent, and
   # the child must NOT install a second watchdog or a second kill trap -- it
   # would take the whole run down with it.
-  if [ -n "${CHIP_RUN_LOCK_HELD:-}" ]; then
+  #
+  # BUT THE VARIABLE ALONE IS NOT EVIDENCE, and trusting it alone had turned the
+  # lock into decoration. CHIP_RUN_LOCK_HELD is exported, so it outlives the run
+  # that set it into any later shell, supervisor or worker that starts an
+  # INDEPENDENT gate -- and a gate that believes it never reaches the flock
+  # below, so mutual exclusion is silently absent and two runs mutate and
+  # restore the same RTL at once. Measured, on a live holder: an intruder
+  # launched with CHIP_RUN_LOCK_HELD=1 walked straight past it, exit 0, no
+  # refusal; the same intruder with the variable unset was refused. That is
+  # how four concurrent gates ran in one worktree on 2026-09-26 and each
+  # reported the others' MUTABLE files changing under it.
+  #
+  # fd 9 is the evidence that matters, and this file already says so: the
+  # holder's descriptor is inherited, which is what makes a genuine reentrant
+  # child recognisable. A real child has it open; a leaked variable does not.
+  # So the fast path is taken only when BOTH the variable and the descriptor
+  # agree, and a false variable falls through to the real lock below.
+  if [ -n "${CHIP_RUN_LOCK_HELD:-}" ] && : >&9 2>/dev/null; then
     return 0
   fi
 
