@@ -70,6 +70,27 @@ saying "the map uses all sixteen bytes", is a MEMORY map and not `project-plan` 
 a false positive from the reviewer's own check, recorded because the next
 reviewer will hit it too.
 
+**THE TRIGGER HAS FIRED, and its semantics were SHARPENED at the same time
+(manager ruling, later on 2026-09-26) — the sharpened form is the one to use:**
+
+1. **A measured ACT result is the FIGURE's claim.** The map **LINKS the owning
+   figure and drops its own copy.** The six that triggered this: sr04's 5816 µs
+   and 1160 µs, DMX's 12.38 µs mark and 88.06 µs break, the freqmeter's 158 Hz
+   and 10 kHz endpoints. The map is architecture and indexes; it is not a second
+   data store.
+2. **Universal architecture constants MAY stay in the maps** — `I2CTICK` = 1 µs
+   and the 260-clock / 4.3333 µs UART half-bit. They are not act measurements,
+   and every act that uses or avoids that tick states it independently.
+3. **The trigger now checks FIGURES-against-RTL only.** A map-vs-figure overlap on
+   a *measured* number is a **DEFECT (a restatement)**, not a candidate to
+   triage — which is what pass 9's sweep had to treat as a candidate, by hand,
+   with a method it twice got wrong.
+
+The map edit is diag-proto's. The trigger's job on its next fire is therefore
+narrower and sharper: re-verify each act figure's measured numbers against the
+RTL and its testbench, and report any measured number that also appears in a map
+as a defect, with the figure named.
+
 ## THE MERGE GATE (manager standing order, 2026-09-25). A merge is not pushed
 until `regress/verify_merge.sh` is green, and its output is quoted in the
 interrupt. This exists because 5b4731f was pushed with six RED timing acts and
