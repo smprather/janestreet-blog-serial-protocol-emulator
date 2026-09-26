@@ -598,7 +598,6 @@ fin_hi:
         OUT   PINOE, A         ; release BOTH pads while the sensor recovers
         LDI   A, 0
         STM   5, A             ; and STATE back to 0, for the same reason the
-        JMP   main             ; echo's rising edge sets it to 2: a state
                                ; machine whose states are never returned to
                                ; their entry point is a state machine that
                                ; runs once.
@@ -628,6 +627,7 @@ recov_in:
         SUB   A, 1
         STM   12, A
         JNZ   recov_out        ; 5 clocks per outer pass
+        JMP   main             ; echo's rising edge sets it to 2: a state
         JMP   main
 park:
         JMP   park

@@ -68,7 +68,15 @@ module tb_pe_soc_sr04;
   localparam int N_MEAS = 2;
   localparam int TRIG_CLOCKS = 600;    // 10.000 us at 60 MHz: the equality below
   localparam int RESP_US = 300;        // the model's sensor response delay
-  localparam int RECOV_US = 2000;      // the model's recovery gap (see header)
+  localparam int RECOV_US = 1500;      // the model's own recovery, in us. The
+  // firmware waits SR_RECOV_LEN = 2019 us, so the model's window is SHORTER
+  // than the firmware's wait by 519 us. The first version had RECOV_US = 2000
+  // against a firmware wait of 2010 -- NINETEEN MICROSECONDS apart -- and which
+  // side heard the first trigger after a recovery was a RACE rather than a
+  // specification. Two independently fitted recovery constants must not sit
+  // within one tick of each other, and the reason has to be written down.
+  // The datasheet's own figure is 50 ms worst case; this is the testbench's
+  // timescale, and the header says so.
   localparam real TOL_PCT = 1.0;
   localparam real TOL_FLOOR_US = 1.5;
 
@@ -154,19 +162,38 @@ module tb_pe_soc_sr04;
   // One process for the whole model, so the edge ordering is not a race
   // between two always blocks on the same signal -- the defect the WS2812
   // testbench in this repository found twice.
+  //
+  // IT LISTENS FOR A TRIGGER CONTINUOUSLY, and that is the fix for the fault
+  // this act spent three commits on. The first version waited for a trigger,
+  // served it, slept out a recovery, and only THEN began listening again --
+  // so a trigger arriving inside the recovery was neither answered nor
+  // counted, the two sides never re-phased, and the run banked one answer and
+  // stopped. A real device ignores a trigger inside its recovery too, but it
+  // is still WATCHING: it answers the next one. So the model watches always,
+  // answers only what arrives outside the window, and counts only what it
+  // answered -- which is the difference between a model that is deaf for two
+  // milliseconds and one that is merely busy.
   integer meas_idx;
+  real    busy_until = 0.0;     // the model's own recovery window, in ns
+  real    t_echo_end = 0.0;     // when the last echo ended
+  real    t_trig_in [0:N_MEAS-1];
+  integer n_ignored = 0;        // triggers that arrived inside the recovery
   initial begin
     n_trig = 0; trig_clocks = 0; cur_clocks = 0;
     echo_high_clocks = 0; echo_rel_oe = 0; trig_oe_lo = 0; meas_idx = 0;
-    @(posedge trig);
     forever begin
-      if (n_trig < N_MEAS) begin
+      @(posedge trig);
+      if ($realtime < busy_until) begin
+        // Inside the recovery: IGNORED, exactly as a real device ignores it,
+        // and not counted. Counting it would report a measurement that was
+        // never made, which is how a model starts lying about its own DUT.
+        n_ignored = n_ignored + 1;
+      end else if (n_trig < N_MEAS) begin
         n_trig = n_trig + 1;
         meas_idx = n_trig - 1;
+        t_trig_in[meas_idx] = $realtime;
         fork
           begin
-            // measure the pulse on the pad, clock by clock, and check the
-            // enable of the OTHER pad on every clock of it
             // Count the clock edges across which TRIG is high, and nothing
             // else: the counter starts at zero and the loop is entered while
             // the pad is still high, so it counts 600 for a 600-clock pulse
@@ -183,8 +210,8 @@ module tb_pe_soc_sr04;
           end
           serve(e_us[meas_idx]);
         join
-        #(RECOV_US * 1000.0);
-        if (n_trig < N_MEAS) @(posedge trig);
+        t_echo_end = $realtime;
+        busy_until = t_echo_end + RECOV_US * 1000.0;
       end
     end
   end
@@ -249,6 +276,16 @@ module tb_pe_soc_sr04;
     check(n_trig == N_MEAS,
           $sformatf("the model saw exactly %0d triggers (%0d) -- a trigger that is driven rather than pulsed shows up here",
                     N_MEAS, n_trig));
+    // THE INTERVAL THE WHOLE ACT DEPENDS ON, asserted from the model's OWN
+    // instants rather than from the table. The firmware must not re-trigger
+    // inside the device's recovery: a real HC-SR04 ignores a trigger there,
+    // and the measurement that never comes back is SILENT. This check is the
+    // one the file was missing for three commits -- without it, a firmware
+    // that re-triggered 7 us after banking produced a run that banked one
+    // answer and stopped, with no failing property anywhere.
+    check(t_trig_in[1] - t_echo_end >= RECOV_US * 1000.0,
+          $sformatf("the second trigger is at least %0d us after the first echo ended (measured %0.0f us) -- a trigger inside the recovery is ignored by the device, and the measurement that never arrives is silent",
+                    RECOV_US, (t_trig_in[1] - t_echo_end)/1000.0));
 
     // ---- 1. the trigger pulse, as an EQUALITY ------------------------
     check(trig_clocks == TRIG_CLOCKS,
