@@ -97,15 +97,25 @@ repo root, not a wiki page: it is the judge-facing act script.)
 
 One page per protocol persona, written from the *measured* behaviour of the
 real RTL rather than from the datasheet, each with its own figure set in
-`diagrams/proto-*.puml`. They land on their own branches as the families are
-produced, so this section grows:
+`diagrams/proto-*.puml` (state machine, field layout, timing). They land on
+their own branches as the families are produced, so this section grows:
 
-- [[concepts/protocol-ws2812]] — the family's first member and the one that
-  made the design rules visible: 800 kHz one-wire with **no clock on the
+- [[concepts/protocol-ws2812]] — 800 kHz one-wire with **no clock on the
   wire**, where the value *is* a pulse width. The 48-clock high, the 75-cycle
   grid, and why a 74/76-clock cell passes every datasheet window in the world
-  and is still wrong. *(Landing from `docs/diag-timing`; the link resolves once
-  that branch merges. See **In flight** below.)*
+  and is still wrong. The family's first member, and the one that made the
+  design rules visible — read it first.
+  *(from `docs/diag-timing`)*
+- [[concepts/protocol-servo]] — servo PWM as *a protocol with nothing in it
+  but a number*: no clock, no framing, no ACK, no checksum, just a 1–2 ms
+  high once every 20 ms. The cleanest demonstration of the central claim,
+  because if the pulse width is a count of instructions then "the chip is
+  cycle-accurate" is a property of the **program** and not of the gates — and
+  anyone can read the numbers out of the source and check them with a scope.
+  *(from `docs/diag-timing`)*
+
+*(Links to this family resolve as their branches merge; the rest of the family
+is in progress — see **In flight** below.)*
 
 ---
 
@@ -374,10 +384,14 @@ decision not to write them:
 
 - **protocol deep-dives** — one `wiki/concepts/protocol-*.md` per persona,
   each with a `diagrams/proto-*.puml` figure set (state machine, field layout,
-  timing). The WS2812 page is above; the rest of the family is in progress.
+  timing). **Landed so far:** `protocol-ws2812` and `protocol-servo`, both from
+  `docs/diag-timing`, both linked above. The rest of the family is in progress
+  and follows the same `protocol-<name>` naming convention.
 - **host-bus figures** — the framed SPI link (word/bit layout and the
-  wait-word contract), the R2 bounded-read path, and the R3 debug-control
-  state machine, as figures rather than prose.
+  wait-word contract), the R2 bounded-read path, the R3 debug-control state
+  machine with STOP-BEFORE and the `BP_SET` subtlety, and an I2C-advanced set.
+  These are figures rather than prose pages, so they belong in the diagrams
+  note above rather than in a page list.
 - **project maps** — the plan and progress maps in `diagrams/`, with the
   topology and the per-block verification state.
 
