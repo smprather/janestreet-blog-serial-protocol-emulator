@@ -2057,3 +2057,52 @@ accumulator: `0x69`, which is the reverse of the frame's last byte.
    family as the two the receiver's own preamble hid, and it is the one that
    would have caught the encoder's fault at the point it was written rather
    than sixteen half-intervals later.
+
+### THE PROBE MISSES OUTs, SO THE LEVEL MEASUREMENT IS NOT YET ESTABLISHED
+
+Two instruments were wrong in this entry and both are worth more than the
+finding they spoiled.
+
+**THE ADDRESS WAS NOT THE PROBLEM, and I said it was before checking.** The
+`+605 clocks` and `+65431 clocks` in the previous rows looked exactly like the
+fifth placement error, so the probe was rewritten to use `L_enc_drive` — the
+label `labels.py` exists to provide, and which the probe had been ignoring.
+**The output is byte-for-byte identical**, so the address was right all along and
+the decimal had not gone stale. A hypothesis that fits and a measurement that
+confirms are not the same act, and I ran the second one.
+
+**WHAT IS ACTUALLY WRONG IS THAT THE PROBE MISSES OUTs.** The counter runs
+0,1,2,… and the gaps in the CLOCK column are 121 almost everywhere and 605 in
+two places — 605 = five half-intervals — so four `OUT TXPIN` executions in a row
+were not reported, and the second gap (65431) is the pass boundary rather than a
+half-interval at all. **A probe that drops four events in a row and still prints
+a plausible table is worse than no probe**, and every row it did print is a row
+whose neighbours are missing, so the LEVELS it reports cannot be read as a
+sequence.
+
+**SO I AM NOT CLAIMING THE FAULT I WAS ABOUT TO CLAIM.** The rows that are
+present all read `A = 40` — including both halves of bits whose mask says the
+bit is a one, which would mean the mid does not complement and the wire never
+goes low — and that contradicts the interval histogram, which is the model's
+exactly (46 one-half, 16 two-half). **Two instruments disagree, so the wire is
+not yet exonerated and the firmware is not yet accused.** The histogram says the
+levels change; the probe says they do not; the probe is the one that has just
+been shown to drop events.
+
+### NEXT, AND IT IS THE PROBE, IN THIS ORDER
+
+1. **Make the probe complete before it is trusted:** count every hit into a
+   counter and print the TOTAL, so a dropped event is visible as a count that
+   does not reach 80 rather than as a gap in a table nobody reads. The
+   histogram and the probe can then be compared on the same footing: 80 OUTs,
+   63 changes.
+2. **Then the levels**, which are the one thing still unmeasured end to end.
+   The mask is provably right from the listing — `0x80, 0x40, 0x20, 0x10, 0x08,
+   0x04, 0x02, 0x01` and back to `0x80` at the byte boundary — so if the probe
+   shows the level constant across a bit, the fault is the POLARITY GATE, and
+   the gate is four instructions whose whole job is to complement the second
+   half of every bit.
+3. **AND THE ORDER CHECK, which needs none of this:** in the encoder, the byte
+   must not be peeled with `SHR`. That is certain, it is independent of every
+   instrument in this act, and it is the check whose absence cost the hour that
+   produced this entry.
