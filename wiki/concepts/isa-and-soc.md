@@ -14,17 +14,11 @@ The thesis is one sentence, and it is the project's: **protocol logic belongs
 in software.** `pe_cpu` is the smallest thing that can run a protocol, so a
 protocol becomes a *program* — patchable, reloadable, shareable — instead of a
 state machine in gates. This page is the shape of that core and the rules the
-firmware is allowed to rely on; the wiring underneath it is
+firmware is allowed to rely on. For orientation, start at
+[[concepts/overview]]; the wiring underneath this core is
 [[concepts/soc-wiring-and-memory]], the framing the host sees is
 [[concepts/host-chip-protocol]], and the competition framing is
 [[concepts/competition-overview]].
-
-Two dispatch premises did not match the tree: there is **no
-`wiki/concepts/overview.md`** (closest: `competition-overview.md`), and there is
-**no documented "three implementation styles"** — bit-serial / parallel /
-hybrid — anywhere in the sources, the blog fulltext mentioning PIO/PRU only as
-inspiration. What *is* documented is the hardware/firmware split the
-instruction budget forces, below.
 
 ## The 16 opcodes
 
@@ -78,11 +72,22 @@ for stepping a core backwards, and why the blog's "hardware debugging and revers
 engineering" goal is reachable on hardware this small. It is also the property
 R3's debug control consumes ([[concepts/debug-control]]).
 
-**The budget this creates.** A single-cycle core at 10BASE-T's rate gets **48
-clocks per byte, so 48 instructions per byte for everything** — framing, the
-whole path, and any CRC. A software CRC-32 costs ~240 per byte, **over budget by
-5×**. So Ethernet's bits must be hardware (DRU + Manchester + SERDES + CRC LFSR)
-and firmware may only *sequence* frames ([[concepts/ethernet-scope]]).
+**The budget this creates, and the three styles it picks between.** A
+single-cycle core at 10BASE-T's rate gets **48 clocks per byte, so 48
+instructions per byte for everything** — framing, the whole path, and any CRC. A
+software CRC-32 costs ~240 per byte, **over budget by 5×**. So Ethernet's bits
+must be hardware and firmware may only *sequence* frames.
+
+That arithmetic is what chooses between the project's three implementation
+styles, which `concepts/overview.md` tabulates and this page does not repeat:
+**firmware bit-bang** where control flow is per-bit, a **word engine** where
+firmware cannot reach the rate but the line code can be a register, and
+**dedicated hardware** where the bit work provably exceeds the core's
+arithmetic — 10BASE-T being the third case. The instruction budget is the whole
+justification for the third, so the styles are *consequences* of this core's
+arithmetic rather than an independent taxonomy
+([[concepts/ethernet-scope]]). The project's standing instruction is not to
+"unify" them.
 
 ⚠ **A number still drifting.** That budget was 40 MHz once: 32 clocks/byte and
 **7.5×**. At 60 MHz it is 48 and **5×** (240/48 = 5 exactly). `rtl/pe_eth_mac.v`

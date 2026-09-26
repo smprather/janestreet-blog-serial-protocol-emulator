@@ -246,12 +246,15 @@ package "Parallel worktree fleet" {
   wt_time --> wt_hw : next
 }
 
-package "Chip-host protocol figures — documentation" {
+package "Chip-host protocol figures and concept pages — documentation" {
   component "proto-spi-framing\nword/bit layout + WAIT-WORD" as doc_frame <<complete>>
   component "proto-r2-read-path\n11-word header + count ceiling" as doc_read <<complete>>
   component "proto-r3-debug-control\nstate machine + masked run strap" as doc_dbg <<complete>>
-  component "wiki/concepts/host-chip-protocol.md\nwiki/concepts/debug-control.md" as doc_wiki <<complete>>
+  component "wiki/concepts\nhost-chip-protocol\ndebug-control" as doc_wiki <<complete>>
+  component "wiki/concepts\nformal-verification\nprotocol-formal-gaps" as doc_fv <<complete>>
+  component "wiki/concepts\nisa-and-soc\nsoc-wiring-and-memory" as doc_arch <<complete>>
   doc_frame --> doc_read : doc_read --> doc_dbg : doc_dbg --> doc_wiki
+  doc_wiki --> doc_fv : doc_fv --> doc_arch
 }
 
 ' LAYOUT ONLY. PlantUML places nodes at the SAME DEPTH from a parent side by
