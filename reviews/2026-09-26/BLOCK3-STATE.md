@@ -610,3 +610,51 @@ zero result (0xE0+0x38 = 0x118 carries and leaves 0x18); this ISA has **no
 store-forward** (OP_LDS has no X destination); and **sixteen bytes cannot hold
 two banked answers and a four-temporary exact add at once**, which is why (a)
 measures one distance per run.
+
+---
+
+## THE MERGE-ORDER DEPENDENCY THE NEXT CONTEXT MUST NOT MISS
+
+**fw-bus-protocols commit `1798abf` already corrects `firmware/dmx512.pe` AND
+`firmware/spi_mode3.pe`** ("docs(firmware): correct two header figures the wire
+contradicts"). The routed comment batch was already actioned by the worker who
+owns those files; neither needs doing again.
+
+Two things to know before that branch is merged:
+
+1. **My `spi_mode3.pe` word-list fix is a different line and does not conflict.**
+   Line 224 adds the word index (0, 17, 34) to BOTH bytes as independent 8-bit
+   adds, so the words are `0x1134, 0x2245, 0x3356` -- the comment said
+   `0x1134, 0x1245, 0x1356`, wrong for two of the three. I reverted my own
+   edit of the response line precisely BECAUSE `1798abf` edits that same line
+   better (it derives the wire byte as the high byte XOR 0x7E), so my branch
+   still carries the stale response list and theirs replaces it cleanly.
+
+2. **THE TWO FIXES INTERACT, AND `1798abf` FIGURES BECOME WRONG WITH MINE.**
+
+   | | high bytes | wire bytes |
+   |---|---|---|
+   | corrected words `0x1134, 0x2245, 0x3356` | `0x11, 0x22, 0x33` | **`0x6F, 0x5C, 0x4D`** |
+   | old list `0x1134, 0x1245, 0x1356` | `0x11, 0x12, 0x13` | `0x6D, 0x6C, 0x6F` <- what 1798abf states |
+
+   So `1798abf` is right for the words the comment used to claim and wrong for
+   the words the code builds. **Whichever commit lands second has to recompute
+   the response bytes from the corrected words.** That is the one thing in this
+   block that two workers have to agree on, and it is arithmetic rather than
+   judgement.
+
+## AND THE PATTERN ACROSS ALL FIVE
+
+Five wrong figures in this block, every one a derivation or a duplicate of a
+derivation that nobody recomputed when an input moved: the servo `4*152+11`,
+the trigger `4*149+4`, the `(2,13)` pair at 1.22 us, the SPI word list, and a
+response list that was correct only for a word list that was itself wrong.
+Three reached me as routed corrections and two I found by reading the code.
+
+**And the two I could check mechanically I did:** the trigger from the
+assembler listing (after three failures by eye) and the word list from the code
+that builds it. The three I could not check -- a comment claiming a value whose
+derivation lives in a testbench model, a comment naming bytes the model
+derives, and a comment belonging to a file that is not on my branch -- are the
+three that were wrong, and all three are wrong in the way a duplicate is wrong:
+they assert a number in a second place, and the second place is what goes stale.
