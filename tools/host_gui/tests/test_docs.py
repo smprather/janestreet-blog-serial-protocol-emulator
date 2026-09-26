@@ -167,8 +167,11 @@ class TestDemoWalkthrough(unittest.TestCase):
         demonstrate - and this row is the one a judge reads to decide what is
         left.
         """
-        row = next(line for line in self.text.splitlines()
-                   if "Board-in-the-loop acceptance" in line)
+        row = next(
+            line
+            for line in self.text.splitlines()
+            if "Board-in-the-loop acceptance" in line
+        )
         self.assertIn("debug act", row)
         self.assertIn("pending", row.lower())
 
@@ -236,19 +239,25 @@ class TestBringupRunbook(unittest.TestCase):
         an R1-only shuttle would be false the moment the act ran.
         """
         text = read(BRINGUP)
-        section = text[text.index("## 4. Run the real acceptance"):
-                       text.index("## 5. Failure triage")]
+        section = text[
+            text.index("## 4. Run the real acceptance") : text.index(
+                "## 5. Failure triage"
+            )
+        ]
         # The SEQUENCE LINE, not the section: a first version of this asserted
         # the word "breakpoint" appeared somewhere below, which the explanatory
         # paragraph satisfied on its own — so deleting the act from the list
         # left the pin green. Asserting on a superset is how a pin rots.
-        sequence = next((line for line in section.splitlines()
-                         if "register dump" in line), "")
-        self.assertIn("debug act", sequence,
-                      "the device-run sequence omits the debug act")
+        sequence = next(
+            (line for line in section.splitlines() if "register dump" in line), ""
+        )
+        self.assertIn(
+            "debug act", sequence, "the device-run sequence omits the debug act"
+        )
         # and the healthy-run claim has to name the precondition it depends on
-        self.assertRegex(section, r"R3|0x21",
-                         "the healthy-run claim must say the debug act needs R3")
+        self.assertRegex(
+            section, r"R3|0x21", "the healthy-run claim must say the debug act needs R3"
+        )
         self.assertNotIn("every step passes except `uart`", section)
 
     def test_the_read_length_failure(self):
