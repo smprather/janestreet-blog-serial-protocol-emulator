@@ -731,6 +731,45 @@ else
 $(printf '%s\n' "$out" | head -3 | sed 's/^/        | /')"
 fi
 
+# ---- every gate is CALLED, and can turn the run red --------------------------
+# These assertions existed once and were DELETED by my own later surgery to this
+# file, which is the whole argument for having them: a negative control that
+# asserts nothing about its own wiring will happily keep passing after the thing
+# it was written to check has stopped being called. Delete a gate's block from
+# run_all.sh and the suite goes green with the gate simply not running, and the
+# file that would have noticed is the very file whose wiring went unasserted.
+#
+# Two halves per gate, because they fail differently: a gate that is not called
+# at all, and a gate that is called but whose failure is swallowed (printed
+# FAILED, suite carries on green). The second is the quieter of the two.
+for s in check_wiki_pages check_wiki_links test_check_wiki_pages; do
+  if grep -qE "^if bash regress/${s}\\.sh" "$RUN_ALL"; then
+    ok "run_all.sh CALLS regress/$s.sh (not merely mentions it)"
+  else
+    bad "run_all.sh CALLS regress/$s.sh" "no '^if bash regress/$s.sh' in $RUN_ALL - a run can be green with it never executed"
+  fi
+done
+# the folded diagram gate, which lives in another owner's tool directory and is
+# called with and without --self-test
+if grep -qE '^if bash tools/diag/check_diagrams\.sh ' "$RUN_ALL"; then
+  ok "run_all.sh CALLS tools/diag/check_diagrams.sh"
+else
+  bad "run_all.sh CALLS tools/diag/check_diagrams.sh" "the diagram gate is not invoked from $RUN_ALL"
+fi
+
+# ... and each can turn the run red rather than only printing a line
+for spec in "regress/check_wiki_pages.sh" "regress/check_wiki_links.sh" "regress/test_check_wiki_pages.sh" "tools/diag/check_diagrams.sh"; do
+  s=${spec##*/}
+  blk=$(awk -v pat="^if bash $(printf '%s' "$spec" | sed 's/[.[\*^$]/\\&/g')( |\\|| )" \
+        '$0 ~ pat {on=1} on {print} on && /^fi$/ {exit}' "$RUN_ALL")
+  if [ -n "$blk" ] && printf '%s\n' "$blk" | grep -q 'stale=1'; then
+    ok "$s is wired so a failure turns the run red"
+  else
+    bad "$s is wired so a failure turns the run red" "the block does not set stale=1, so a failing gate would print FAILED and the suite would continue green:
+$(printf '%s\n' "$blk" | sed 's/^/        | /')"
+  fi
+done
+
 echo "test_check_wiki_pages: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
 exit 0
