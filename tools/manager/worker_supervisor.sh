@@ -170,7 +170,7 @@ while :; do
     # phrase may sit on any of its last few lines (reports interleave with
     # bookkeeping lines). Check the last 3 and both phrases.
     newest=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -3)
-    case "$newest" in *IDLE-QUEUE-EMPTY*|*standby*|*STANDBY*) continue;; esac
+    case "$newest" in *IDLE-QUEUE-EMPTY*|*standby*|*STANDBY*|*QUESTION*|*BLOCKED*) continue;; esac
     echo "$now" >"/tmp/pi-sup-last-${agent}"
     if [ "$ONCE" -eq 1 ]; then
       echo "WOULD-NUDGE $agent ($(date '+%T')) last-worklog: ${newest:-none}"
