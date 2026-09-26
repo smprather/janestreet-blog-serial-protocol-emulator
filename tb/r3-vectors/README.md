@@ -7,7 +7,7 @@ here is byte-identical to the JSON frame AND to the shipped model
 image, so a testbench can consume these files directly and there is
 no translation step.
 
-**Status: NOT chip-confirmed** - NOT CHIP-CONFIRMED. Reconciled against the implemented R3 contract (chip repo, 2026-09-25), but no step here has been run against the chip's tb_pe_ctrl_r3 yet, so every step is chip_confirmed=false. A passing step in this package is the gate the chip must meet, NOT evidence that it does. The real-board acceptance run has not been executed.
+**Status: NOT chip-confirmed** - 25 of 26 steps are CHIP-CONFIRMED IN SIMULATION: the chip's tb_pe_ctrl_r3_conf is GREEN, 26/26 steps byte-exact (CRC included), and 25 of them with no divergence. The 26th, status_full_readback, is deliberately NOT claimed by either side -- its expected insn is not contract-determined for a free-running core, and the conformance TB's freeze-snapshot pre-state is a state the chip cannot physically occupy; chip-side R3.1 hold-semantics polish is in flight and may change it. Citations are in chip_evidence; confirmation is a citation, never an assertion, and the confirmed set is an explicit list. NOT HARDWARE-CONFIRMED: the real-board acceptance run (Pico over USB, physical shuttle) has never been executed.
 
 ## Load procedure (Verilog)
 
