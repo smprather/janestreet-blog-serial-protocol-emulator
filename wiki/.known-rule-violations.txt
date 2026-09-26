@@ -86,11 +86,17 @@ plans/spi-pads.md zero-outbound-links zero links; should cross-reference concept
 reference/simulator-bakeoff.md zero-outbound-links zero links; the measured bakeoff that justifies running iverilog rather than Verilator
 
 # --- 2026-09-25: pages that arrived on MAIN with the link rule unmet -----------
-# Unlike the plans/ corner above, these two are NOT deferred cleanup: they
-# arrived on main with one outbound wikilink each, so without a pin the gate is
-# red on main and blocks every merge behind it. That is a worse outcome than a
-# named, dated pin with a reason, and the STALE check makes the pin
-# self-clearing: the moment either author adds a second link, the checker turns
-# red and DEMANDS these lines come out. So the pin is not an excuse, it is a
-# receipt.
-concepts/host-stack.md zero-outbound-links arrived on main from the host-controller-gui merge with 1 link; same lineage as debug-control, same one-line fix
+# BOTH of these have since been collected. They are kept as a section because the
+# record is worth having: two pages arrived on main with one outbound wikilink
+# each, each got a dated pin with a reason, each was fixed by its author within
+# the hour, and each pin then went STALE and had to be deleted by hand. The STALE
+# half is what makes a pin safe to write — without it a pin outlives its defect
+# and the log and the tree disagree with nothing to say which is true.
+#
+# `concepts/host-stack` also arrived carrying a SECOND violation, an
+# `off-taxonomy-tag` for the tag `host`. That one was never pinned: the manager's
+# ruling is that a tag in active use is a taxonomy defect, so `host` was ADDED to
+# the schema (43 -> 44) rather than excused here. A page can carry two
+# violations under two rules, and the baseline only ever named the one that
+# happened to be structural — which is an argument for reading the gate's output
+# rather than the baseline when triaging a page.
