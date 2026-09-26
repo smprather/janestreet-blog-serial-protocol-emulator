@@ -279,3 +279,6 @@ diagrams/.part-*
 
 # Manager/worker scratch state (the SDD task ledger; the durable record is WORKLOG.md)
 .superpowers/sdd/
+
+# pi-lens probe scratch (never content)
+.pi-lens-probe-home/
