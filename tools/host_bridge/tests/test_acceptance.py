@@ -260,7 +260,7 @@ class TestTheDemoActReachesTheBreakpointWithoutTheModel(unittest.TestCase):
 
     def test_the_wait_calls_the_injected_advance_until_the_hit(self):
         advance, calls = self._clocking_model()
-        states = [0, 0, 3]          # the core arrives on the third poll
+        states = [0, 0, 3]  # the core arrives on the third poll
 
         def read():
             return states.pop(0) if states else 3
@@ -272,8 +272,7 @@ class TestTheDemoActReachesTheBreakpointWithoutTheModel(unittest.TestCase):
     def test_the_wait_gives_up_instead_of_hanging(self):
         """Bounded, and it says what it saw - a hang is the failure mode here."""
         advance, calls = self._clocking_model()
-        hit = ACC.await_breakpoint_hit(debug_state=lambda: 1, advance=advance,
-                                       tries=3)
+        hit = ACC.await_breakpoint_hit(debug_state=lambda: 1, advance=advance, tries=3)
         self.assertFalse(hit["stopped"])
         self.assertEqual(len(calls), 3, "exactly `tries` polls, no more")
         self.assertIn("state=1", hit["detail"])
@@ -281,12 +280,16 @@ class TestTheDemoActReachesTheBreakpointWithoutTheModel(unittest.TestCase):
     def test_a_real_link_needs_no_advance_hook(self):
         """The board path: no model to clock, so the wait is pure polling."""
         states = iter([1, 1, 3])
-        hit = ACC.await_breakpoint_hit(debug_state=lambda: next(states),
-                                       advance=None, tries=5)
+        hit = ACC.await_breakpoint_hit(
+            debug_state=lambda: next(states), advance=None, tries=5
+        )
         self.assertTrue(hit["stopped"])
-        self.assertIn("on its own", hit["detail"],
-                      "the beat must say the core advanced by itself, not "
-                      "that the model clocked it")
+        self.assertIn(
+            "on its own",
+            hit["detail"],
+            "the beat must say the core advanced by itself, not "
+            "that the model clocked it",
+        )
 
     def test_the_fake_beat_output_is_unchanged(self):
         """The fake path must not move: its beats are pinned by the walkthrough.
@@ -299,10 +302,14 @@ class TestTheDemoActReachesTheBreakpointWithoutTheModel(unittest.TestCase):
         group = [c for c in report.checks if c.name.startswith("r3_demo_")]
         self.assertTrue(group, "the act must still run under --fake")
         self.assertTrue(all(c.status == "PASS" for c in group))
-        self.assertIn("model-clocked", next(
-            c for c in group if c.name == "r3_demo_2_run_and_hit").detail)
-        self.assertIn("a real core does", next(
-            c for c in group if c.name == "r3_demo_2_run_and_hit").detail)
+        self.assertIn(
+            "model-clocked",
+            next(c for c in group if c.name == "r3_demo_2_run_and_hit").detail,
+        )
+        self.assertIn(
+            "a real core does",
+            next(c for c in group if c.name == "r3_demo_2_run_and_hit").detail,
+        )
 
     def test_the_act_is_not_skipped_on_a_link_without_a_model(self):
         """The whole point: no FakePE must no longer mean no act.
@@ -310,8 +317,9 @@ class TestTheDemoActReachesTheBreakpointWithoutTheModel(unittest.TestCase):
         Driven with a link that has no model, which is the `--device` shape.
         """
         report = ACC.run_acceptance(fake=True, model_backed=False)
-        self.assertNotIn("r3_demo_act", [c.name for c in report.checks
-                                         if c.status == "SKIP"])
+        self.assertNotIn(
+            "r3_demo_act", [c.name for c in report.checks if c.status == "SKIP"]
+        )
         group = [c for c in report.checks if c.name.startswith("r3_demo_")]
         self.assertTrue(group, "the act must run without a model to clock")
 

@@ -250,7 +250,7 @@ def await_breakpoint_hit(*, debug_state, advance=None, tries=200, sleep=time.sle
     state = 0
     for attempt in range(tries):
         state = debug_state()
-        if state == 3:            # BP_HIT
+        if state == 3:  # BP_HIT
             return {
                 "stopped": True,
                 "state": state,
@@ -258,7 +258,7 @@ def await_breakpoint_hit(*, debug_state, advance=None, tries=200, sleep=time.sle
                     "the core reached the armed breakpoint on its own"
                     if advance is None
                     else "the core was clocked to the armed breakpoint by the "
-                         "model (FakePE does not self-advance)"
+                    "model (FakePE does not self-advance)"
                 ),
             }
         if advance is not None:
