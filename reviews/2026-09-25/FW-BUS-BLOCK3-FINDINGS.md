@@ -605,8 +605,27 @@ paths and not others, and a page counter compared against 2 counts pages.
 Every one of those was found by measuring the pin, and **not one of them would
 have been found by a testbench that compared the firmware's own arithmetic with
 the firmware's own arithmetic.** That closes the follow-up recorded in
-`wiki/plans/through-i2c.md` ("removing it needs a sub-tick delay, roughly 130
-clocks of counted NOPs") — 1898 clocks of them, for MIDI, and 219 for DMX.
+`wiki/plans/through-i2c.md` ("a sub-tick delay (a counted NOP loop, ~86 clocks
+at 40 MHz for half a tick) would remove it for both protocols") — 1898 clocks
+of them, for MIDI, and 219 for DMX.
+
+> **CORRECTION, found by grepping the source I was quoting.** An earlier version
+> of this sentence attributed *"roughly 130 clocks of counted NOPs"* to that
+> page. **The string `130 clocks` does not occur anywhere in `wiki/`.** The page
+> says 86, and the surrounding numbers belong to a 40 MHz plan: the page opens
+> with a reconciliation banner saying it "predates the 60 MHz lock" and naming
+> 40 MHz as stale. So the quotation was wrong *and* it imported a retired clock
+> figure without the banner that retires it.
+>
+> Worth more than the fix: **a quotation is a claim about another artifact, and
+> nothing checks it.** Every other number in this file was derived from a
+> measurement I took; this one was typed from memory into a citation, and the
+> block's own tooling — which will happily diff firmware against a hex image —
+> has no way to see a quote that the cited page does not contain. A reader who
+> greps for `130 clocks` finds nothing at all, so the failure is invisible to
+> inspection and only surfaces by opening the other file. That is the same shape
+> as the testbench's own unchecked claims, one level up the stack: the artifact
+> being checked is no longer the design but the report about it.
 
 The consequence worth carrying to the next bit-banged protocol: **build the
 delay, then measure it on the pin, then assert the measurement is inside a window
