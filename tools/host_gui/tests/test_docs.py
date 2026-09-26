@@ -527,6 +527,19 @@ class TestThePageAndTheServerAgreeOnTheRoutes(unittest.TestCase):
     scripted and fuzz use (fuzz_server.py drives it directly). It is named
     explicitly rather than excused by a prefix rule, so a NEW uncalled route
     fails this test and has to be explained.
+
+    KNOWN LIMIT, stated rather than left for a reader to discover: this
+    compares PATHS, not VERBS. A page that POSTed a path the server registers
+    GET-only would pass this test and fail at runtime with 405 Method Not
+    Allowed. The verbs were checked by reading every call site on 2026-09-25 and
+    are correct - `start`/`stop`/`dump` come off a table of `[id, path]` pairs
+    fed to `api(path, { method: "POST" })`; the four debug paths go through
+    `debugCall`, which hard-codes `method: "POST"`; `connect` and `load` name
+    the verb inline. Inferring that from the source needs a real JS parse,
+    because the verb sits at a distance from the path literal, and a REGEX that
+    guessed it would be a pin that fails open - the exact failure mode this
+    class was written to avoid. So the limit is written here instead: if you
+    ever see a 405 from the GUI, this is the check that did not catch it.
     """
 
     PAGE_ONLY_ROUTES = frozenset(
