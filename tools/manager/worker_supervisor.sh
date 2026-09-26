@@ -135,14 +135,14 @@ while :; do
     fi
 
     # ---- telemetry stall while working -------------------------------------
-    newest_ts=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1 | cut -c1-16)
+    newest_ts=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1 | cut -c1-16)
     newest_epoch=$(date -d "$newest_ts" +%s 2>/dev/null || echo 0)
     now=$(date +%s)
     if printf '%s' "$pane_live" | grep -qE '─ (⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏) (Working|Thinking)|^.*(Working|Thinking) ─+$'; then
       rm -f "/tmp/pi-sup-idle-since-${agent}"
       # A worker whose newest line is IDLE-QUEUE-EMPTY cannot be
       # 'silent while working' — stale spinner scrollback is not activity.
-      newest_line=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1)
+      newest_line=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1)
       case "$newest_line" in *IDLE-QUEUE-EMPTY*) continue;; esac
       # Marker lifecycle: cleared the moment the worker resumes logging,
       # so a gap can re-alert if it recurs (the 02:44 marker never cleared).
@@ -169,7 +169,7 @@ while :; do
     # A worker on approved standby logs IDLE-QUEUE-EMPTY / standby, but the
     # phrase may sit on any of its last few lines (reports interleave with
     # bookkeeping lines). Check the last 3 and both phrases.
-    newest=$(grep " | ${agent} | " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -3)
+    newest=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -3)
     case "$newest" in *IDLE-QUEUE-EMPTY*|*standby*|*STANDBY*) continue;; esac
     echo "$now" >"/tmp/pi-sup-last-${agent}"
     if [ "$ONCE" -eq 1 ]; then
