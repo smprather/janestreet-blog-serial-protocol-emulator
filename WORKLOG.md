@@ -3602,3 +3602,86 @@ comment wearing a costume.
 **No claim is made that the model is more thoroughly checked than it was.** The
 number that would be dishonest to report is "18 of 18 properties verified", and
 it is one of eighteen plus seventeen unclassified.
+
+## 2026-09-27 act (c): TASK-START -- THE STRENGTH PROFILE, DONE THIS TIME
+
+Last entry said so plainly: the entry for the profile went to the lint blocker
+instead. **One of eighteen is proven to be a restatement, seventeen are
+unclassified, and a number of properties is not a measure of their strength.**
+
+So: one fault per property class, and **what matters is not that the count falls
+but WHICH properties fall** -- a property that survives a fault aimed at its own
+class is a comment wearing a costume.
+
+### THE PROFILE, AND A PROPERTY THAT CANNOT SEE THE FAULT IT NAMES
+
+Four faults, one per class. What matters is not that counts fall but **which**.
+
+| fault | fell | notable survivors |
+| :--- | :--- | :--- |
+| **M1** transmitter sends LOW bit first | **11** of 18 | the interval properties, the complement, `iv0 == iv1` -- and **"the five dispatched bytes carry the 40 bits the input leg carried"** |
+| **M2** preamble is 7 ones, not 8 | **3** of 18 | **all eight round trips** |
+| **M3** the two polarities are not complements | **6** of 18 | **`iv0 == iv1` again** |
+| **M4** half-interval is 1 us, not 2 | **8** of 18 | the interval properties (they are in half-interval units, so a wrong `HALF_US` cannot touch them) |
+
+**AND THE FINDING IS M1'S SURVIVOR, WHICH IS THE WORST KIND OF SURVIVOR.**
+The property's condition is
+
+    [(Tx(0).byte_at(b) >> (7 - b % 8)) & 1 for b in range(40)] == bits()
+
+and `Tx.step` computes, one line above it in the same file,
+
+    d = (self.byte_at(b) >> (7 - b % 8)) & 1
+
+**The same expression, twice.** The property does not CALL `Tx.step` -- it
+recomputes the transmitter's bit extraction inline and compares that copy with
+the frame definition. **So a bit-order fault inside the transmitter is invisible
+to the one property whose text is about bit order**, and M1 proves it: eleven
+properties fell and this one did not.
+
+**PROVEN FROM BOTH SIDES, which is the part that makes it a finding and not an
+inference:** breaking the bit order in **`Tx.step`** leaves the property
+PASSING, and breaking the bit order in **the inline copy** makes it FAIL. The
+property is a real check of a real copy -- but the copy is not the transmitter,
+and its message says "the five dispatched bytes", which is the transmitter.
+
+**THE FIX IS ONE LINE AND IT CHANGES WHAT THE PROPERTY MEANS:** have it call
+`Tx(0).step()` and read `tx.wire` rather than recomputing the extraction, which
+is what the four "transmitter agrees with the wire rules" properties above it
+already do correctly. **Those four are the model of the right shape** -- they
+run the transmitter and compare its OUTPUT -- and this one, sitting among them,
+does something else while looking identical.
+
+**M3 IS THE SECOND CONFIRMATION of the earlier finding, and a better one.**
+Under "the two polarities are not complements" -- the fault that property above
+is aimed at -- `iv0 == iv1` **still passed**. Because with the polarity dropped
+`WIRES[0] == WIRES[1]` exactly, so the intervals match for a *third* reason.
+**It has now survived two independent faults aimed at its class.** A property
+that has survived its own class twice is not a weak check, it is a decoration.
+
+**AND M2 IS A WARNING NOBODY ASKED FOR: FIFTEEN OF EIGHTEEN PROPERTIES SURVIVE A
+MALFORMED PREAMBLE**, including all eight round trips. That is *arguably right* --
+the round trip is self-consistent when both legs get the same 7-one preamble,
+so "the same frame comes back" is a claim about the LOOP and not about the
+preamble's shape. **But the file's headline is about an eight-zeros-then-eight-
+ones preamble, and nothing in the eighteen checks that shape.** The preamble's
+width is assumed everywhere and verified nowhere, which is the same class of
+thing as the 28 UP031s: a figure that is constant, load-bearing, and never
+checked because it never varies.
+
+### THE HONEST SCORE, WHICH IS NOT 18 OF 18
+
+| | count |
+| :--- | :--- |
+| run the transmitter and compare its OUTPUT (strong) | 4 |
+| cross-check two independently-derived things | 1 |
+| the complement identity | 1 |
+| the round trip at three offsets x two polarities x two idle levels | 8 |
+| "not locked" refuses to transmit | 1 |
+| **survived a fault aimed at its own class (twice)** | **1** |
+| **compares a COPY of the code it names, not the code** | **1** |
+| interval-shape properties, correct but untouched by any timing fault | 2 |
+
+**Two of eighteen are provably blind, and one of those two is blind while
+reading like a cross-implementation check.** A count of eighteen would have
+hidden both, and that is the sentence this act needed written down.
