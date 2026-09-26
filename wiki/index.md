@@ -374,6 +374,54 @@ find yourself reasoning around a hole, that is the signal to write one.
   sources; split a page past ~200 lines; archive rather than delete a
   superseded page.
 
+### The five rules, and their measured state
+
+The rules above are written as a checklist. **Nothing in `regress/` enforces
+any of them.** The documentation gates in `run_all.sh` are all *generated-page
+drift* checks — they compare `wiki/reference/*` against `tools/gen/*` — so a
+hand-written page can drift out of compliance with no gate noticing, which is
+the same shape as every other unenforced contract this project has had to fix
+after the fact.
+
+Measured over the **43 hand-written pages** (`raw/` and the meta pages
+excluded), 2026-09-25:
+
+| rule | holds | fails |
+|---|---|---|
+| frontmatter present | 39/43 | 4 pages have none |
+| `type` inside the SCHEMA enum | 43/43 | none |
+| every tag inside the taxonomy | 34/43 | 9 pages, **22 tags** off-taxonomy |
+| at least 2 outbound wikilinks | 35/43 | 8 pages have **zero** |
+| listed in this index | 43/43 | none |
+
+**30 of 43 pages pass all five.** The failures are not scattered: **seven of
+the eight zero-link pages are `plans/` pages**, and the four pages with no
+frontmatter are the same kind of page — `plans/ethernet-soc`,
+`plans/i2c-transaction`, `plans/pe-ctrl`, `reference/simulator-bakeoff`. The
+plans directory is the least-maintained part of the wiki and the rules are
+most violated there, which is worth knowing before anyone reads a plan as
+current.
+
+The off-taxonomy tags are all descriptive and all obviously useful — `pads`,
+`spi`, `usb`, `debug`, `timing`, `firmware`, `host-controller`, `pico`,
+`serdes`, `boot`, `loader`, `ethernet`, `tx`, `integration`, `planning`,
+`floorplan`, `pinout`, `wrapper`, `status`, `gui`, `codec`, `observability`,
+`protocol-emulation`. The taxonomy is 20 entries and the wiki has outgrown
+it.
+
+**The honest caveat: a gate built on these five rules today would be RED on
+day one**, on 13 of 43 pages. So the gate is not a one-line addition — it
+needs a ruling on which way each violation goes: extend the taxonomy, fix the
+pages, or land the checker with a **pinned baseline** the way
+`tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt` pins a known divergence set, so it
+can only get better and a *new* violation is red. The pinned-baseline shape
+is the one that matches how this project already handles a known-bad
+artifact.
+
+Raised to the manager; not built here, because `regress/` is not a
+documentation file and landing a red gate on someone else's suite is not a
+docs worker's call.
+
 ---
 
 ## In flight
