@@ -1997,3 +1997,63 @@ INVISIBLE in the levels, and the receiver has to get it right from its own bit
 count. The model can assert the property that matters in one line — *the
 preamble's last bit must differ from the payload's first bit, or the seam is
 silent* — and for `a5 3c 96` it does not, because both are one.
+
+## 2026-09-27 act (c): TASK-START AND FINDING -- THE SEAM, AND A SUBTLETY IN THE PROBE
+
+`tb/probes/probe_seam.v` asks the one question that tells "the payload started
+one mid early" apart from "the preamble completed one mid late", and the answer
+is a single number: **the preamble's assembled byte.**
+
+    PROBE(SEAM): preamble byte = 7f after 7 mids, flag = 0
+    PROBE(SEAM): mids at the preamble's end = 7
+    PROBE(SEAM): arrived 01101001010011110010010100
+
+**`0x7f` after seven mids and the flag is 0**, so the eighth mid completed the
+byte as `0xFF` and set the flag to FM0 ✓. **The preamble took exactly eight
+mids, which is the eight ones it was sent.** So the preamble is not short and
+not long: the payload begins on the ninth mid, and the ninth mid is `a5`'s bit 7.
+
+**AND THE ARRIVED STRING IS NOT THE SENT STRING WITH ONE BIT IN FRONT — IT IS
+THE FRAME READ FROM THE OTHER END.** The first eight bits banked are
+`01101001` = `0x69`, and **`0x69` is the reverse of `0x96`, which is the frame's
+LAST byte.** The earlier bit string (`11010010 10011110 01001011`) is the same
+thing one bit later, because the two probes trigger on different edges of the
+byte boundary — which is the second half of this entry.
+
+**THE SUBTLETY, and it is worth more than the fault.** Both probes read
+`dec_pre`, `dec_bit`, `dec_acc` and `dec_mids` in an `always @(posedge clk)`
+block that sits AFTER the decoder's own block in the file, so they see the
+decoder's values **after** it has updated them in the same clock. A probe
+therefore never sees the state *before* a mid: at the clock where the eighth
+preamble bit arrives, the decoder has already set `dec_pre = 0` and reset
+`dec_acc`, so a probe that says "if `!dec_pre` then bank this bit" banks the
+eighth PREAMBLE bit as the payload's first. **That is the same class of fault as
+the check that charged a delay loop three clocks a pass: the instrument and the
+thing it measures disagreed about WHEN, and the disagreement looked like a
+finding about the firmware.**
+
+So the two bit strings differ by one bit *because of where the probe looks*, and
+neither of them can be trusted to say which end the receiver read from. What
+CAN be trusted is the byte the trace printed while the byte was still in the
+accumulator: `0x69`, which is the reverse of the frame's last byte.
+
+### NEXT, AND IT IS THE PROBE'S EDGE, NOT THE RECEIVER'S LOGIC
+
+1. **Sample the decoder's state one clock EARLIER** — capture on the clock
+   *before* the mid, or drive the probe from a register the decoder updates
+   non-blockingly — so the probe and the decoder agree about when. Until then
+   every bit string from this file is one bit late and none of them can be
+   compared with the sent string.
+2. **Then, and only then, the receiver's order.** `0x69` being the reverse of
+   the frame's last byte is a *hypothesis* from a trace row, not a measurement:
+   the trace prints the accumulator after each mid, and the row that shows
+   `acc 69 bit 7` is the eighth bit of the byte that the run then reported as
+   something else. Those two facts disagree, and the disagreement is the probe
+   edge, not the receiver.
+3. **AND THE ORDER CHECK, which is independent of all of this and is the one
+   thing here that is certain:** *in the encoder, the byte must not be peeled
+   with `SHR`*, because `SHR` is `a <= {1'b0, a[7:1]}` and a peeled byte goes
+   out low bit first. Provable by putting the peel back. It is in the same
+   family as the two the receiver's own preamble hid, and it is the one that
+   would have caught the encoder's fault at the point it was written rather
+   than sixteen half-intervals later.
