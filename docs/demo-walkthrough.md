@@ -380,13 +380,15 @@ of that suite's `MUTABLE` targets intersects the merge's changed set:
   RUN   mutate_macro_flow_config MUTABLE is empty: mutates nothing in the repo, never narrowed away
 ```
 
-Measured cost of the 16 suites, sequential (2026-09-25): **1468 s**, and the
+Measured cost of the 16 suites, sequential (2026-09-25): **1456 s**, and the
 distribution is lopsided — `mutate_eth_mac_tb` 378 s, `mutate_eth_tx_loop_tb`
-343 s, `mutate_timing_tb` 335 s against four suites under 5 s. One number in
-that table is **invalid and marked as such**: `mutate_timing_tb` reported FAILED
-because a file edit landed while bash was executing it (see
-`reviews/2026-09-25/MERGE-GATE-MUTATION-NARROWING.md` §5) — the harness is
-intact and its number needs re-measuring.
+343 s, `mutate_timing_tb` 335 s against four suites under 5 s. The one figure that had been voided is now re-measured and valid:
+`mutate_timing_tb` at **323 s** (58 cases, 58 detected, 0 survived), and
+the total is 1456 s. It had first reported FAILED because a file edit
+landed while bash was executing it — a read/write race, not a defect in
+the harness, which was intact throughout. That race is now closed for
+every run that goes through the gate: see the pre-flight below and
+`reviews/2026-09-25/MERGE-GATE-MUTATION-NARROWING.md` §5 and §8.
 
 Three properties keep the narrowing honest, and all three escalate to running
 *more*, never less: a harness with no `MUTABLE` line is unmappable and runs

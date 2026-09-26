@@ -142,12 +142,12 @@ matching '`). It reported **FAILED**.
 | --- | --- | --- | --- | --- |
 | `mutate_eth_mac_tb` | 378 | | `mutate_eth_tx_tb` | 17 |
 | `mutate_eth_tx_loop_tb` | 343 | | `mutate_ctrl_r3_tb` | 15 |
-| `mutate_timing_tb` | 335 **(INVALID, §5)** | | `mutate_i2c_tb` | 13 |
+| `mutate_timing_tb` | **323 s (re-measured, VALID)** | | `mutate_i2c_tb` | 13 |
 | `mutate_ctrl_tb` | 124 | | `mutate_spi_tb` | 3 |
 | `mutate_i2c_xfer_tb` | 87 | | `mutate_codec_tb` | 1 |
 | `mutate_eth_soc_tb` | 81 | | `mutate_soc_serdes_tb` | 1 |
 | `mutate_fwbus_tb` | 65 | | `mutate_fbuf_tb`, `mutate_serdes_tb` | 0 |
-| `mutate_macro_flow_config` | 5 | | **total** | **1468 s** |
+| `mutate_macro_flow_config` | 5 | | **total** | **1456 s** |
 
 The distribution is the useful part: **four suites cost 1076 s (73 %)** and four
 cost under 5 s. So a narrowed gate's saving is dominated by *which* suites it
@@ -156,18 +156,22 @@ everything, and a firmware merge keeps `mutate_timing_tb` (335 s) and
 `mutate_fwbus_tb` (65 s) while dropping the other 14. Total is a lower bound
 (parallel suites cost less concurrently; `run_all.sh` runs them in sequence).
 
-**The one hole in this evidence, and the one line that closes it.** The
-`mutate_timing_tb` figure is invalid (§5), so 1468 s is a lower bound for a
-second reason as well. Re-measure that suite alone when the worktree's run lock
-is free — it is the one command, and it needs the lock because it mutates the
-shared tree:
+**The invalid figure, now closed.** `mutate_timing_tb` first reported FAILED
+because a `MUTABLE` insertion landed in that file while bash was executing it
+(§5) — a read/write race, not a defect in the harness, which was intact
+throughout. Re-measured afterwards with nothing editing it: **323 s, 58 cases,
+58 detected, 0 survived, 0 harness errors, RESULT: PASS**, and the tree
+`git status`-clean afterwards. The number that replaces it is not strictly
+comparable with the other fifteen: the timing suite has since grown (it is 58
+cases now, and fw-bus has been adding acts), so its cost is measured against the
+suite as it stands today while the rest of the table is a snapshot from the
+original campaign. **Total 1456 s.** Treat the table as a snapshot with a
+per-row date, not as a current cost model.
 
-```sh
-regress/mutate_timing_tb.sh          # ~335 s; expect exit 0 and "no unexplained survivors"
-```
-
-Do not run it concurrently with an edit to `regress/mutate_timing_tb.sh` — that
-is precisely what invalidated the number (§5).
+**The hazard that voided it is now closed for the run_all path** —
+`regress/dep_guard.sh` stamps the content of the scripts a run executes and
+re-checks at exit, so the same race can no longer produce a verdict, in either
+direction. See §8 for the one path it does not yet cover.
 
 ## 7. What is verified, and what is not
 
@@ -180,9 +184,35 @@ with the excluded set printed. `bash -n` clean on `run_all.sh` and all 16
 harnesses. The `MUTATE_ONLY` pre-flight selects 2 of 16, 1 of 16, and **refuses**
 0 of 16 — tested in isolation, without the run lock.
 
-**NOT verified — no end-to-end gate run**, because the manager was holding the
-lock for the fw-repair merge and asked me not to take it. Specifically unproven:
-`run_all.sh`'s narrowed-suite summary line in a real run, and the gate's
-count cross-check against it. Both are the first things to run when the lock is
-free, and the count cross-check is deliberately set to fail loudly rather than
-openly if the two disagree.
+**NOT verified** at the time of writing: no end-to-end gate run, because the
+manager was holding the lock for the fw-repair merge. **Both were since run and
+passed** — the narrowed gate is GREEN end-to-end (21 cases, 4 of 16 suites, with
+the count cross-check satisfied against the real run), and the cross-check was
+then made to disagree on purpose and correctly refused with exit 3. The same
+session installed the harness-edit pre-flight and demonstrated it firing
+(exit 4) on a mid-run edit to a harness that was executing at the time.
+
+## 8. The one path the pre-flight does NOT yet cover: a STANDALONE suite run
+
+Stated plainly because it is the same shape as the bug it fixes, and because
+nobody should have to find it by reading the diff. `regress/dep_guard.sh` is
+wired into `run_all.sh` — it stamps the whole `regress/` dependency set and
+re-checks it in the exit trap, and `run_mutation_suite` stamps and checks each
+suite **as run by the gate**. So every harness run *through* `run_all.sh` or
+`verify_merge.sh` is covered.
+
+A harness invoked directly — `regress/mutate_timing_tb.sh` on its own, which is
+how anyone debugging one suite works, and **exactly how the original race
+happened** (the cost campaign) — is not yet covered. It could not be covered from
+`run_lock.sh`, which is where the rest of it lives, because every harness sets its
+own `trap cleanup EXIT` *after* sourcing that file, and a second `trap … EXIT`
+replaces the first. Closing it means a shape-aware edit to all sixteen harnesses
+(stamp after the lock source, `exit 4` from `cleanup`), which changes sixteen exit
+paths in the harnesses that guard the project's mutation evidence.
+
+That is deliberately **not** done unasked in the same turn as the re-measurement:
+the ordering that avoids recreating the race is the whole lesson of §5, and an
+edit to sixteen harnesses is a bigger claim on the tree than it looks. The
+honest statement of the residual risk: a standalone suite run can still report a
+verdict from a script that moved underneath it, and the person most likely to do
+that is the person debugging it.
