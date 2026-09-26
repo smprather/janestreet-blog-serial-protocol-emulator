@@ -520,7 +520,11 @@ def check_file_paths() -> int:
     # every file in the tree, by basename, so a bare name can be resolved
     by_name: set[str] = set()
     for dirpath, dirnames, filenames in os.walk(ROOT):
-        dirnames[:] = [d for d in dirnames if d not in (".git", "node_modules", ".pi-lens-probe-home")]
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if d not in (".git", "node_modules", ".pi-lens-probe-home")
+        ]
         by_name.update(filenames)
     failures = 0
     total = 0
@@ -533,14 +537,16 @@ def check_file_paths() -> int:
                 target = m.group(1)
                 total += 1
                 if ":" in target:
-                    continue          # branch-qualified: exempt by construction
+                    continue  # branch-qualified: exempt by construction
                 if "/" in target:
                     ok = (ROOT / target).exists()
                 else:
                     ok = target in by_name
                 if not ok:
-                    print(f"FAIL  {rel}:{lineno}: `{target}` is not in this tree - "
-                          "qualify it with its branch, or fix the path")
+                    print(
+                        f"FAIL  {rel}:{lineno}: `{target}` is not in this tree - "
+                        "qualify it with its branch, or fix the path"
+                    )
                     failures += 1
     print(f"ok    {total} repo path(s) across {len(OWNED_PAGES)} page(s) resolve")
     return failures
@@ -1026,8 +1032,9 @@ def selftest() -> int:
         # a BARE FILENAME is a name, not a path: it must resolve if the file
         # exists ANYWHERE, which is the false positive the first version had
         page.write_text(keep + "\nA bare name that exists in firmware/: `i2c_pins.pe`\n")
-        good &= require("bare filename resolved by basename, not at the root",
-                        want_fail=False)
+        good &= require(
+            "bare filename resolved by basename, not at the root", want_fail=False
+        )
         page.write_text(keep + "\nA bare name that exists nowhere: `no_such_file.v`\n")
         good &= require("bare filename that exists nowhere", want_fail=True)
         page.write_text(keep)

@@ -1,7 +1,7 @@
 ---
 title: FM0/FM1 bi-phase — a receiver judged on a receiver
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 type: concept
 tags: [protocol, verification, clocking, physical-layer, architecture]
 sources: []
