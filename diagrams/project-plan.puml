@@ -208,9 +208,10 @@ note bottom of p_proto
   The architectural point of the whole firmware-protocols effort: these are not
   peripherals. They are PROGRAMS on the same CPU, pin matrix and tick, which is
   why a rate the 260-CLOCK UART half-bit tick cannot express (MIDI 31.25 kbaud,
-  DMX 250 kbaud) is still reachable -- by counting instructions. Measured on
-  the pin: MIDI 31,998.7 ns / 31,251 baud and DMX 3,999.8 ns / 250,010 baud,
-  both with zero spread across every frame.
+  DMX 250 kbaud) is still reachable -- by counting instructions. What each act
+  MEASURES on the pin belongs to the act's own page, which carries the
+  measurement table and links its figure: wiki/concepts/protocol-midi.md and
+  wiki/concepts/protocol-dmx512.md.
 
   NAME THE TICK beside any conclusion drawn from it. This SoC has TWO tick
   counters and they are not the same size: port 7 (STATUS) is the UART

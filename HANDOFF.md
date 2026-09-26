@@ -1154,6 +1154,8 @@ order and stop→run prefetch, Ethernet padding, generated-document gates,
 `pe_eth_mac`/`pe_fbuf` and fails on ANY yosys `ERROR:`, because the old gate
 grepped for three known diagnostics and passed a file yosys could not parse.
 
+**Where the evidence is written up:** [`wiki/concepts/overview.md`](wiki/concepts/overview.md) indexes the concept pages; the per-protocol pages carry the wire format, the timing tolerances, how the emulator implements each act, how its testbench proves it and the mutation coverage that keeps the proof honest — [UART RTS/CTS](wiki/concepts/protocol-uart-flow.md) · [SPI mode 3 + CRC](wiki/concepts/protocol-spi3-crc.md) · [I2C advanced](wiki/concepts/protocol-i2c-adv.md) · [MIDI](wiki/concepts/protocol-midi.md) · [DMX512-A](wiki/concepts/protocol-dmx512.md) · [WS2812](wiki/concepts/protocol-ws2812.md) · [servo](wiki/concepts/protocol-servo.md) · [DHT11](wiki/concepts/protocol-dht11.md) · [DS18B20](wiki/concepts/protocol-ds18b20.md). The figures are listed in [README.md](README.md) and every one now has a gate behind it: `tools/diag/check_diagrams.sh` checks that each `.puml` parses, that every block has both formats colocated, and that every render is byte-identical to a fresh render of its source — with its own negative control, so a checker that stops detecting is caught too.
+
 ## Where the bodies are buried
 
 1. **A TB that "waits for" an event it may have missed tests nothing.** The UART
@@ -1236,6 +1238,8 @@ grepped for three known diagnostics and passed a file yosys could not parse.
    rather than a process; if you must match a process, bracket the pattern
    (`[o]penroad`) or exclude `$$`; and always cap the loop. Recorded globally as
    the `background-job-watchers` skill.
+
+**Where the evidence is written up:** The trap list above is the short version; each entry's long form is in the concept pages named in [What is verified right now](HANDOFF.md#what-is-verified-right-now), and the protocol-specific ones (the UART edge-latch, the I2C ninth-clock pin discipline, the SPI mode-3 idle level, the MIDI and DMX rate arithmetic) are in [wiki/concepts/protocol-uart-flow.md](wiki/concepts/protocol-uart-flow.md), [wiki/concepts/protocol-i2c-adv.md](wiki/concepts/protocol-i2c-adv.md), [wiki/concepts/protocol-spi3-crc.md](wiki/concepts/protocol-spi3-crc.md), [wiki/concepts/protocol-midi.md](wiki/concepts/protocol-midi.md) and [wiki/concepts/protocol-dmx512.md](wiki/concepts/protocol-dmx512.md).
 
 ## Current work list
 
