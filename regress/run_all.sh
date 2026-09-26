@@ -738,6 +738,41 @@ else
   tail -20 /tmp/check_wiki_pages.log
   stale=1
 fi
+# The diagram render freshness gate. Nothing in regress/ used to look at
+# diagrams/ at all: the directory went 26 -> 106 files with nothing gating it, and
+# a stale render is the worst kind of documentation defect to have ungated,
+# because the picture still looks like a correct picture OF SOMETHING - just not
+# of the source beside it, and a reader has no way to tell. It is a separate file
+# rather than a sixth rule in the page gate because it needs java and plantuml,
+# and the page gate's virtue is that it is a dependency-free always-runnable pass.
+# Byte comparison is only sound because reproducibility was MEASURED first: if
+# PlantUML embedded a timestamp, this could only ever be red and would be routed
+# around. It found its first real defect within a merge of landing.
+if bash regress/check_diagram_renders.sh > /tmp/check_diagram_renders.log 2>&1; then
+  echo "diagram renders: OK ($(grep -c . /tmp/check_diagram_renders.log) line(s); see regress/check_diagram_renders.sh)"
+else
+  echo "diagram renders: FAILED (see /tmp/check_diagram_renders.log)"
+  tail -20 /tmp/check_diagram_renders.log
+  stale=1
+fi
+# THE NEGATIVE CONTROL FOR BOTH GATES ABOVE, and this is the line whose absence
+# is the real lesson. Both gates had been wired and green while nothing ever ran
+# the test that proves they can fail - so a future edit could break a case, or
+# break the wiring, and the full regression would be green and say nothing about
+# it. That is the same drift regress/check_harness_preflight.sh exists to stop for
+# the mutation harnesses, one level up: there, the wiring was correct on the day
+# it was written and nothing asserted it; here, the wiring was not even being
+# executed. Its own cases are built on synthetic fixtures rather than on corpus
+# pages, because a corpus page's state must never be a precondition for the test
+# that verifies the corpus - that coupling was found by another worker, in the
+# STALE case, after it had already been written that way.
+if bash regress/test_check_wiki_pages.sh > /tmp/test_check_wiki_pages.log 2>&1; then
+  echo "wiki gate negative control: OK ($(tail -1 /tmp/test_check_wiki_pages.log))"
+else
+  echo "wiki gate negative control: FAILED (see /tmp/test_check_wiki_pages.log)"
+  tail -25 /tmp/test_check_wiki_pages.log
+  stale=1
+fi
 # The local presentation viewer's fit arithmetic has its own focused check.
 # This uses an embedded SVG fixture and does not consume the project diagrams,
 # which are maintained as PlantUML source in diagrams/.

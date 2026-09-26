@@ -71,17 +71,31 @@ $(printf '%s\n' "$out" | sed 's/^/        | /')"
 }
 
 # fresh_render <name> — like fresh(), but also carrying the diagram render gate
-# and the diagrams/ tree, so a render case exercises the same files the real gate
-# would. The first attempt used plain fresh() and every render case died with
-# exit 127 on a missing script, which is the shape of a test that never tested
-# anything while looking busy.
+# and a MINIMAL diagrams/ tree.
+#
+# Two lessons are baked in here. The first version used plain fresh() and every
+# render case died with exit 127 on a missing script, which is the shape of a test
+# that never tested anything while looking busy. The second copied the WHOLE
+# diagrams/ directory — 13 MB and 34 sources — into a throwaway tree for each of
+# five cases, so the suite spent ~20 of its 24 seconds copying and re-rendering
+# diagrams that the cases never look at. Each render case needs exactly ONE
+# source and its renders: a stale one, an extra panel, a deleted source. Realism
+# that costs 20 seconds and is never measured is not realism, it is latency.
 fresh_render() {
   d="$TMP/$1"
-  mkdir -p "$d/wiki" "$d/regress"
+  mkdir -p "$d/wiki" "$d/regress" "$d/diagrams"
   cp -a wiki/. "$d/wiki/"
   cp "$CHECKER" "$d/regress/"
   cp "$RENDER_CHECK" "$d/regress/"
-  cp -a diagrams "$d/diagrams"
+  # two sources, chosen for having the fewest files, plus every render either
+  # produces (including PlantUML's numbered _00N siblings)
+  for f in $(ls -S diagrams/*.puml | tail -2); do
+    b=$(basename "$f")
+    cp "diagrams/$b" "$d/diagrams/"
+    for r in diagrams/${b%.puml}*.png diagrams/${b%.puml}*.svg; do
+      [ -f "$r" ] && cp "$r" "$d/diagrams/"
+    done
+  done
   echo "$d"
 }
 
@@ -198,20 +212,38 @@ fi
 # ---- 6. THE STALE DIRECTION: a fixed page whose pin survives is red ---------
 # The case the whole baseline design turns on. Fix the page, leave the pin, and
 # the gate must refuse to pass — otherwise the pin outlives its defect and the
-# log and the tree disagree with nothing to say so.
-d=$(fresh stale)
-# plans/spi-pads.md is pinned for zero-outbound-links; give it two real links
-cat >> "$d/wiki/plans/spi-pads.md" <<'EOF'
+# log and the tree disagree with nothing to say which is true.
+#
+# IT USED TO BORROW A CORPUS PAGE — plans/spi-pads.md, adding two links to it and
+# expecting the pin to go stale. That is a latent coupling, and it was caught by
+# diag-timing rather than by me: the case only works while that page is BOTH
+# violating AND pinned, so the day someone fixed spi-pads and collected its pin —
+# the correct thing to do, and the thing this very gate demands — the case would
+# have broken. A corpus page's state is a precondition for the test that verifies
+# the corpus, which is the same trap as testing a checker against whatever
+# happened to be in the tree. So the fixture is BUILT here, from the compliant
+# synthetic wiki, and the pin is written by the test.
+d=$(fresh_minimal stale)
+# break one fixture page, then pin exactly that violation
+sed -i 's/^See also \[\[concepts\/f[0-9]*\]\] and \[\[concepts\/f[0-9]*\]\]\.$/See also concepts only, in prose./' \
+  "$d/wiki/concepts/f07.md"
+printf 'concepts/f07.md zero-outbound-links synthetic fixture, made non-compliant on purpose\n' \
+  > "$d/wiki/.known-rule-violations.txt"
+# first prove the pin is load-bearing: pinned and still violating must be GREEN,
+# or "STALE below" would be satisfied by a gate that reports everything
+expect "a pinned violation is held green, not reported NEW" 0 "check_wiki_pages: OK" "$d"
+# now fix the page and leave the pin: that is the STALE condition
+cat >> "$d/wiki/concepts/f07.md" <<'EOF'
 
-See also: [[concepts/spi-as-firmware]] and [[concepts/pin-matrix]].
+See also: [[concepts/f08]] and [[concepts/f09]].
 EOF
 expect "FIXED page with a surviving pin is STALE-red" 1 "STALE" "$d"
-# and it must name the page, not just the word STALE
+# and it must name the page and the rule, not just the word STALE
 out=$(cd "$d" && bash regress/check_wiki_pages.sh 2>&1)
-if printf '%s\n' "$out" | grep -qF "plans/spi-pads.md"; then
+if printf '%s\n' "$out" | grep -qF "concepts/f07.md  zero-outbound-links"; then
   ok "STALE report names the page and the rule"
 else
-  bad "STALE report names the page and the rule" "output did not name plans/spi-pads.md:
+  bad "STALE report names the page and the rule" "output did not name 'concepts/f07.md  zero-outbound-links':
 $(printf '%s\n' "$out" | sed 's/^/        | /')"
 fi
 
@@ -297,7 +329,7 @@ if [ ! -f "$RUN_ALL" ]; then
   echo "        $RUN_ALL is absent from $(pwd), so the six wiring cases cannot" >&2
   echo "        run. They are NOT reporting that the gate is unwired." >&2
   fail=$((fail + 1))
-  echo "test_check_wiki_pages: $pass passed, $fail failed"
+echo "test_check_wiki_pages: $pass passed, $fail failed"
   exit 1
 fi
 ok "run_all.sh is present to check the wiring against"
@@ -414,13 +446,57 @@ else
   bad "the diagram render gate exists and parses" "$RENDER_CHECK missing or unparseable"
 fi
 
-# 21. it is green on the real tree
-rout=$(bash "$RENDER_CHECK" 2>&1); rrc=$?
-if [ "$rrc" -eq 0 ] && printf '%s\n' "$rout" | grep -q 'diagram renders: OK'; then
-  ok "render gate is green on the real tree"
+# 21. it is green on a KNOWN-COMPLIANT diagram set.
+# It used to assert green on the REAL tree, which is the same latent coupling
+# diag-timing caught in the STALE case: the case then only passes while the whole
+# corpus happens to be clean, so a genuine defect anywhere in diagrams/ turns a
+# negative control red and the suite reports "the gate is broken" when the gate is
+# in fact working perfectly. It went red for real within a merge of landing,
+# because two project-map renders genuinely ARE stale. Corpus health is the GATE's
+# job — it is wired into run_all.sh and reports that defect by name — so a
+# self-test asserting it is measuring the wrong thing twice.
+#
+# So the fixture is built here: a couple of trivial sources, rendered in place with
+# the documented command, which makes them compliant by construction. This proves
+# the green path deterministically, whatever the repository holds.
+d=$(fresh_render render-green)
+rm -rf "$d/diagrams"; mkdir -p "$d/diagrams"
+cat > "$d/diagrams/fixture-a.puml" <<'PUML'
+@startuml
+rectangle "fixture A" as A
+A -> A : self loop
+@enduml
+PUML
+cat > "$d/diagrams/fixture-b.puml" <<'PUML'
+@startuml
+rectangle "fixture B" as B
+B -> B : also self
+@enduml
+PUML
+( cd "$d" && JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=8192" \
+    plantuml -tsvg diagrams/fixture-a.puml diagrams/fixture-b.puml >/dev/null 2>&1 \
+  && JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=8192" \
+    plantuml -tpng diagrams/fixture-a.puml diagrams/fixture-b.puml >/dev/null 2>&1 )
+out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'diagram renders: OK'; then
+  ok "render gate is green on a known-compliant diagram set"
 else
-  bad "render gate is green on the real tree" "exit $rrc
-$(printf '%s\n' "$rout" | tail -6 | sed 's/^/        | /')"
+  bad "render gate is green on a known-compliant diagram set" "exit $rc
+$(printf '%s\n' "$out" | tail -6 | sed 's/^/        | /')"
+fi
+
+# 21b. and the REAL tree, reported but not asserted. The corpus is currently
+# carrying two stale project-map renders (a .puml edited in 5c6db3d without a
+# re-render), which is the gate doing its job. Recording it here means a reader of
+# this file learns the state of the corpus without the suite going red over it —
+# and if the corpus is ever clean, this says so too.
+rout=$(bash "$RENDER_CHECK" 2>&1); rrc=$?
+if [ "$rrc" -eq 0 ]; then
+  ok "real-tree render state: CLEAN (no stale render in diagrams/)"
+else
+  n_stale=$(printf '%s\n' "$rout" | grep -c '^STALE ')
+  ok "real-tree render state: $n_stale stale render(s) reported by the gate (informational, not a failure here)"
+  printf '%s\n' "$rout" | grep '^STALE ' | sed 's/^/        | /'
 fi
 
 # 22-24. a stale render, an ORPHANED render and a NO-SOURCE render are each red.
@@ -431,20 +507,34 @@ fi
 # that matched nothing - which the no-op guard above caught, in a case that
 # would otherwise have quietly tested a pristine tree.
 d=$(fresh_render render-stale)
-printf 'x' >> "$d/diagrams/project-progress.png"
-out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
-if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'STALE'; then
-  ok "a checked-in render that no longer matches its source is STALE-red"
+# Derive the victim from the FIXTURE, do not name a corpus file. Naming
+# project-progress.png worked while fresh_render copied the whole diagrams tree
+# and broke the moment the fixture became minimal: the file was absent, so
+# `printf >>` CREATED it, the mutation "succeeded", and the case silently ended
+# up testing the no-source direction instead of the stale one. A mutation that
+# creates the thing it meant to corrupt is not a no-op, so the no-op guard could
+# not catch it — the guard for this is asserting the victim existed FIRST.
+victim=$(ls "$d"/diagrams/*.png 2>/dev/null | head -1)
+if [ -z "$victim" ]; then
+  bad "a checked-in render that no longer matches its source is STALE-red" "the fixture produced no .png to corrupt, so the case tested nothing"
 else
-  bad "a checked-in render that no longer matches its source is STALE-red" "exit $rc
+  printf 'x' >> "$victim"
+  out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
+  if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q "STALE.*$(basename "$victim")"; then
+    ok "a checked-in render that no longer matches its source is STALE-red"
+  else
+    bad "a checked-in render that no longer matches its source is STALE-red" "exit $rc, corrupting $(basename "$victim")
 $(printf '%s\n' "$out" | tail -5 | sed 's/^/        | /')"
+  fi
 fi
 
 # 23. ORPHANED: a checked-in render the source does not produce.
 d=$(fresh_render render-orphan)
-printf 'not a real png\n' > "$d/diagrams/proto-midi_009.png"
+# a render the fixture provably does not contain, again derived rather than named
+base=$(basename "$(ls "$d"/diagrams/*.puml 2>/dev/null | head -1)" .puml)
+printf 'not a real png\n' > "$d/diagrams/${base}_009.png"
 out=$(cd "$d" && bash "$RENDER_CHECK" 2>&1); rc=$?
-if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q 'proto-midi_009.png'; then
+if [ "$rc" -ne 0 ] && printf '%s\n' "$out" | grep -q "${base}_009.png"; then
   ok "a render with no source-produced counterpart is red"
 else
   bad "a render with no source-produced counterpart is red" "exit $rc
@@ -488,6 +578,35 @@ else
   bad "a missing plantuml is a loud SKIP with exit 0, not a silent pass" "exit $rc
 $(printf '%s\n' "$out" | tail -4 | sed 's/^/        | /')"
 fi
+
+# ---- 30-32: ALL THREE are CALLED, including this file -----------------------
+# Cases 14-19 already assert the page gate's wiring. They did NOT assert the
+# render gate's, or this file's own — and that is the same bug I had just fixed,
+# one level up. All three of these were written, all three had been run by hand,
+# and TWO of them were not executed by the full regression at all: a run could be
+# green with the render gate never invoked. A negative control that does not
+# assert its own wiring is the thing it exists to prevent.
+for s in check_wiki_pages check_diagram_renders test_check_wiki_pages; do
+  if grep -qE "^if bash regress/${s}\.sh" "$RUN_ALL"; then
+    ok "run_all.sh CALLS regress/$s.sh (not merely mentions it)"
+  else
+    bad "run_all.sh CALLS regress/$s.sh" "no '^if bash regress/$s.sh' in $RUN_ALL - a run can be green with it never executed, which is exactly how the render gate and this self-test both sat unwired"
+  fi
+done
+# And each of the three must be able to turn the run red, not merely print a
+# line. Checked by shape rather than by running the suite: the call must be a
+# guarded `if` whose else sets the accumulator that becomes the exit code.
+for s in check_diagram_renders test_check_wiki_pages; do
+  blk=$(awk -v pat="^if bash regress/${s}\\.sh" '$0 ~ pat {on=1} on {print} on && /^fi$/ {exit}' "$RUN_ALL")
+  if [ -n "$blk" ] && printf '%s\n' "$blk" | grep -q 'stale=1'; then
+    ok "$s is wired so a failure turns the run red"
+  else
+    bad "$s is wired so a failure turns the run red" "the block does not set stale=1, so a failing gate would print FAILED and the suite would continue green:
+$(printf '%s\n' "$blk" | sed 's/^/        | /')"
+  fi
+done
+
+
 
 echo "test_check_wiki_pages: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
