@@ -95,6 +95,7 @@ run_tb() {
 
 restore() {
   for f in "${FILES[@]}"; do cp "$BAKDIR/$(basename "$f")" "$ROOT/$f"; done
+chip_dep_expect pristine $MUTABLE
 }
 verify_restore() {
   for f in "${FILES[@]}"; do
@@ -121,6 +122,7 @@ check_mutation() {   # check_mutation <name> <file> <anchor> <replacement>
     echo "  [$name] HARNESS ERROR: anchor not found in $file"
     restore; verify_restore; fail=$((fail+1)); return
   fi
+    chip_dep_expect mutated $MUTABLE
   run_tb
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))

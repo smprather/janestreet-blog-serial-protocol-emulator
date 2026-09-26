@@ -69,7 +69,7 @@ verify_restore() {
 # Compile and run ONE configuration of the TB. $1 = label, rest = iverilog args.
 # Echoes the number of FAIL lines, or "BUILDFAIL".
 run_tb() {
-  local label="$1"; shift
+  shift                                # $1 is the caller's label; not used here
   local work; work=$(mktemp -d)
   local cc=0
   (cd sim && iverilog -g2012 -s tb_pe_fbuf -o "$work/tb.vvp" "$@") \
@@ -101,13 +101,14 @@ run_case() {
   local backup; backup=$(mktemp -d)
   cp rtl/pe_fbuf.v "$backup/"
 
-  restore() { cp "$backup/pe_fbuf.v" rtl/pe_fbuf.v; rm -rf "$backup"; }
+  restore() { cp "$backup/pe_fbuf.v" rtl/pe_fbuf.v; rm -rf "$backup"; chip_dep_expect pristine $MUTABLE; }
 
   if ! python3 "$script"; then
     echo "  MUTATION DID NOT APPLY -> INCONCLUSIVE"
     inconclusive=$((inconclusive+1))
     restore; verify_restore; echo; return
   fi
+    chip_dep_expect mutated $MUTABLE
 
   local macro flop
   # Paths are sim/-relative because run_tb compiles from inside sim/ -- the same
@@ -132,8 +133,6 @@ run_case() {
   # found (the live-lane mutation passed on both, because no check sampled
   # mid-cycle; the pipelined-read test now covers it).
   local caught=0
-  local touched_both=0
-  grep -q 'MUTANT' rtl/pe_fbuf.v && touched_both=1
   [ "$macro" -gt 0 ] && caught=1
   [ "$flop"  -gt 0 ] && caught=1
 
@@ -166,6 +165,7 @@ TMP=$(mktemp -d)
 restore_pristine() {
   [ -f "$PRISTINE" ] && cp "$PRISTINE" "$MUTABLE"
   return 0
+chip_dep_expect pristine $MUTABLE
 }
 cleanup() {
   # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). Stamped when this

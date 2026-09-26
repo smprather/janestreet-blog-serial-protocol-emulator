@@ -43,6 +43,35 @@ for f in regress/mutate_*.sh; do
     echo "     add it to the harness's own exit path (its cleanup(), or a chained EXIT trap)"
     bad=$((bad + 1))
   fi
+  # THE DECLARATION PROTOCOL. chip_dep_check compares a target's content at the
+  # START of a run with its content at the END, so it cannot see an external
+  # actor who RESTORES a target mid-run -- the 2026-09-25 incident. The sampler
+  # closes that, and the sampler works by COMPARING what it sees against what
+  # the harness DECLARED. A harness that never declares anything is therefore not
+  # "unprotected but fine", it is a harness whose targets are watched by nothing
+  # while the guard reports coverage it does not have: sample_stop names every
+  # undeclared target, so the omission is loud rather than silent, but the whole
+  # point of a pre-flight is to catch it BEFORE a run does.
+  #
+  # Only the BASELINE declaration is required here, and requiring nothing more is
+  # deliberate. A static rule that tried to prove each harness declares "mutated"
+  # at every write would have to guess which files a case touches, and a rule
+  # that guesses is how mutate_i2c_tb.sh briefly declared all five MUTABLE
+  # targets mutated when each of its cases changes exactly one. The baseline is
+  # checkable from the text; the rest is checkable only by RUNNING the harness,
+  # which is what the self-test in regress/test_dep_guard.sh and a real suite
+  # run do. A harness with no MUTABLE targets has nothing to watch, so the rule
+  # does not apply to it -- mutate_macro_flow_config.sh publishes MUTABLE="".
+  _mut=$(grep -m1 '^MUTABLE=' "$f" | cut -d'"' -f2)
+  if [ -n "$_mut" ]; then
+    if ! grep -q 'chip_dep_expect pristine' "$f"; then
+      echo "FAIL $h: has MUTABLE targets but never declares their baseline state"
+      echo "     add 'chip_dep_expect pristine \$MUTABLE' where the pristine snapshot is taken."
+      echo "     Without it the sampler watches files nobody has claimed, and sample_stop"
+      echo "     will report this harness's targets as never DECLARED."
+      bad=$((bad + 1))
+    fi
+  fi
 done
 
 # The shared end of the chain. Without these, every harness above is protected by

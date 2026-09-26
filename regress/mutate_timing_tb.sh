@@ -75,6 +75,15 @@ for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter; do
   cp "$ROOT/firmware/$f.pe"  "$SNAP/$f.pe"
   cp "$ROOT/firmware/$f.hex" "$SNAP/$f.hex"
 done
+# THE DECLARATION PROTOCOL (regress/dep_guard.sh). This harness does NOT mutate
+# the repo firmware: every case works on a private copy under /tmp, and the
+# snapshot above exists to PROVE that, which the loop at the end re-checks byte
+# for byte. So the honest declaration is a single "pristine" for the whole
+# MUTABLE set -- which is not a formality, it is exactly the property this
+# harness already asserts, and it hands the sampler something real to check:
+# if anything else writes these fourteen files while this suite runs, the run
+# stops being able to say it never touched them.
+chip_dep_expect pristine $MUTABLE
 cleanup() { rm -rf "$SNAP"; }
 # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). ONE trap, not two: a
 # second `trap … EXIT` REPLACES the first, so `trap cleanup EXIT` followed by

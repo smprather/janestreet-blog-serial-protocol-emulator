@@ -655,13 +655,32 @@ run_mutation_suite() {
   _mut_deps=()
   if [ -f "$1" ]; then
     while IFS= read -r _md; do
-      [ -n "$_md" ] && _mut_deps+=("$REPO_ROOT/$_md")
+      [ -n "$_md" ] && _mut_deps+=("$(chip_dep_abspath "$_md")")
     done < <(grep -m1 '^MUTABLE=' "$1" | cut -d'"' -f2 | tr ' ' '\n')
   fi
   chip_dep_stamp "suite_$n" "$1" ${_mut_deps[@]+"${_mut_deps[@]}"}
+  # ... AND THE SAMPLER, which is the only mechanism that can see an external
+  # actor RESTORING a target mid-run, because a restore leaves the end state
+  # exactly as chip_dep_check expects to find it. That was the real 2026-09-25
+  # incident. See regress/dep_guard.sh for why this is a declaration protocol
+  # and not the pattern-detector that was measured failing on clean runs.
+  #
+  # THE LABEL IS THE HARNESS'S OWN, derived the way the harness derives it inside
+  # chip_dep_expect, because that is where its declarations land. Deriving it
+  # here from the script path gives the same string, and if the two ever
+  # disagreed the failure would be visible rather than silent: sample_stop
+  # reports every target the harness never declared, and a disagreement means it
+  # declared none of them.
+  _sampler_label="run_$(basename "$1")"
+  chip_dep_sample_start "$_sampler_label" ${_mut_deps[@]+"${_mut_deps[@]}"}
   "$@"
   local rc=$?
-  if ! chip_dep_check "suite_$n"; then
+  # The sampler is stopped before the check so its verdict is in hand either way,
+  # and BOTH verdicts force the same INCONCLUSIVE: a suite whose DUT was
+  # interfered with has verified nothing, whichever check noticed.
+  local samp_rc=0
+  chip_dep_sample_stop "$_sampler_label" || samp_rc=1
+  if [ "$samp_rc" -ne 0 ] || ! chip_dep_check "suite_$n"; then
     echo "mutation suite $n: INCONCLUSIVE — the harness script or one of its MUTABLE targets changed while it was running" >&2
     return 4
   fi

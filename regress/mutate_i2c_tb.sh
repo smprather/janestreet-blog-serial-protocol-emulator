@@ -53,6 +53,14 @@ cp "$IMAGE" "$PRISTINE/"
 run_case() {
   local name="$1"; shift
   local script="$1"
+  # $3 names the files THIS case mutated. It is an argument rather than a blanket
+  # $MUTABLE because a blanket would be a FALSE claim: the other three targets
+  # are either untouched or merely rewritten-to-identical (peasm regenerates
+  # i2c_pins.hex from an unmutated i2c_pins.pe), so their content is still
+  # pristine. Declaring them "mutated" would make the sampler report this harness
+  # interfering with itself -- the exact failure that threw out the rejected
+  # design, arrived at from the other direction.
+  local mutated_by_this_case="$2"
 
   echo "=== mutation: $name ==="
 
@@ -64,6 +72,7 @@ run_case() {
     for f in $MUTABLE; do cp "$backup/$(basename "$f")" "$f"; done
     rm -rf "$backup"
     python3 tools/fw/peasm.py firmware/i2c_pins.pe -o firmware/i2c_pins.hex >/dev/null 2>&1
+    chip_dep_expect pristine $MUTABLE
   }
 
 
@@ -96,6 +105,12 @@ run_case() {
     echo
     return
   fi
+  # The state is now established, so declare it -- and never before: a
+  # declaration the harness has not yet earned is one the sampler could
+  # legitimately contradict. The peasm call below rewrites i2c_pins.hex from
+  # whichever .pe this case left behind, which is why the .hex belongs in the
+  # declared set only for the firmware cases and not for the RTL ones.
+  chip_dep_expect mutated $mutated_by_this_case
 
   python3 tools/fw/peasm.py firmware/i2c_pins.pe -o firmware/i2c_pins.hex >/dev/null 2>&1
 
@@ -167,6 +182,7 @@ restore_pristine() {
     [ -f "$PRISTINE/$(basename "$f")" ] && cp "$PRISTINE/$(basename "$f")" "$f"
   done
   [ -f "$PRISTINE/$(basename "$IMAGE")" ] && cp "$PRISTINE/$(basename "$IMAGE")" "$IMAGE"
+  chip_dep_expect pristine $MUTABLE
   return 0
 }
 cleanup() {
@@ -209,7 +225,11 @@ print(f"  pad_oe: {m.group(1).strip()!r} -> 'reg_oe' (od term removed)")
 t = t[:m.start()] + "assign pad_oe  = reg_oe;" + t[m.end():]
 p.write_text(t)
 PY
-run_case "pe_pinmux: OD gate ignores od (a pin could drive high)" "$TMP/m1.py"
+# THE BASELINE STATE, DECLARED ONCE. Every target starts pristine, and saying so
+# is what lets the sampler know it is watching rather than idle: without it the
+# first case would mutate a file nobody had made any claim about.
+chip_dep_expect pristine $MUTABLE
+run_case "pe_pinmux: OD gate ignores od (a pin could drive high)" "$TMP/m1.py" rtl/pe_pinmux.v
 
 # ---------------------------------------------------------------- mutation 2
 # Swap the port->register translation so PINOUT writes land in the OE register
@@ -227,7 +247,7 @@ new = """      4'h1:    begin pinmux_waddr = A_OE;  pinmux_we = io_we; end
 p.write_text(t.replace(old, new))
 print("  ports 1 and 2 swapped")
 PY
-run_case "pe_soc: PINOUT and PINOE writes swapped" "$TMP/m2.py"
+run_case "pe_soc: PINOUT and PINOE writes swapped" "$TMP/m2.py" rtl/pe_soc.v
 
 # ---------------------------------------------------------------- mutation 3
 # Break the read-back generalisation: use the OE REGISTER instead of the real
@@ -249,7 +269,7 @@ t = t[:m.start()] + ("assign pin_rd   = (pin_out & pinmux_rdata) | "
                      "(pin_in & ~pinmux_rdata);") + t[m.end():]
 p.write_text(t)
 PY
-run_case "pe_soc: pin_rd uses the OE register, not the OD gate (I2C TB; expected to survive, see note)" "$TMP/m3.py"
+run_case "pe_soc: pin_rd uses the OE register, not the OD gate (I2C TB; expected to survive, see note)" "$TMP/m3.py" rtl/pe_soc.v
 # ^ EXPECTED SURVIVOR, and it is counted as one: see mutation 3b below for why
 #   the I2C test cannot see this one and which test does.
 
@@ -283,6 +303,11 @@ echo "=== mutation: pin_rd (via the UART, which does read-modify-write) ==="
 backup=$(mktemp -d)
 cp rtl/pe_soc.v firmware/uart_echo.pe "$backup/"
 python3 "$TMP/m3b.py" >/dev/null
+# This case does NOT go through run_case -- it hand-rolls its own backup and
+# compile -- so it needs its own declarations. Found by running it: without
+# these the sampler correctly reported the harness contradicting itself, because
+# pe_soc.v really was mutated while the last declaration said pristine.
+chip_dep_expect mutated rtl/pe_soc.v
 work=$(mktemp -d)
 cc=0
 (cd sim && iverilog -g2012 -s tb_pe_soc_uart -o "$work/u.vvp" $SRAM_FLAGS \
@@ -306,6 +331,7 @@ rm -rf "$work"
 cp "$backup/pe_soc.v" rtl/; cp "$backup/uart_echo.pe" firmware/
 rm -rf "$backup"
 python3 tools/fw/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex >/dev/null 2>&1
+chip_dep_expect pristine $MUTABLE
 echo
 
 # ---------------------------------------------------------------- mutation 4
@@ -323,7 +349,7 @@ p.write_text(t.replace(old, """        LDI   A, 0x00              ; MUTATED: sta
         OUT   PINOD, A""", 1))
 print("  firmware no longer enters open-drain mode")
 PY
-run_case "firmware: never sets OD (stays push-pull)" "$TMP/m4.py"
+run_case "firmware: never sets OD (stays push-pull)" "$TMP/m4.py" "firmware/i2c_pins.pe firmware/i2c_pins.hex"
 
 # ---------------------------------------------------------------- mutation 5
 # Firmware: make the STOP drive SDA low while SCL is high (the spurious-START
@@ -357,7 +383,7 @@ new = """        LDI   A, SDA|SCL
 p.write_text(t.replace(old, new, 1))
 print("  extra START+STOP pair injected under SCL-high")
 PY
-run_case "firmware: spurious START before the STOP" "$TMP/m5.py"
+run_case "firmware: spurious START before the STOP" "$TMP/m5.py" "firmware/i2c_pins.pe firmware/i2c_pins.hex"
 
 # ---------------------------------------------------------------- mutation 6
 # Firmware: shorten the bit cell's low period below the tLOW floor. The RTL TB
@@ -373,7 +399,7 @@ if old not in t:
 p.write_text(t.replace(old, "        ADD   A, 2                 ; MUTATED: below the floor"))
 print("  tLOW shortened to 2 ticks")
 PY
-run_case "firmware: tLOW shortened below the spec floor" "$TMP/m6.py"
+run_case "firmware: tLOW shortened below the spec floor" "$TMP/m6.py" "firmware/i2c_pins.pe firmware/i2c_pins.hex"
 
 echo "========================================"
 echo "MUTATION TEST: $detected detected, $survived survived, $inconclusive inconclusive"

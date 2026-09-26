@@ -92,6 +92,7 @@ restore() {
     cp "$BAK/$f.pe" "$ROOT/firmware/$f.pe"
     cp "$BAK/$f.hex" "$ROOT/firmware/$f.hex"
   done
+chip_dep_expect pristine $MUTABLE
 }
 verify_restore() {
   for f in $FWS; do
@@ -134,6 +135,12 @@ check_mutation() {
     echo "  [$name] HARNESS ERROR: anchor not found in $fw.pe"
     restore; fail=$((fail+1)); return
   fi
+  # $fw is the firmware STEM this case changes, and the case also regenerates
+  # that stem's .hex from the mutated .pe. The other two stems in MUTABLE are
+  # untouched by this case, so declaring the whole list would claim files are
+  # mutated when they are pristine -- which is exactly the false positive the
+  # sampler reported here before this was narrowed.
+  chip_dep_expect mutated "firmware/$fw.pe" "firmware/$fw.hex"
   run_tb "$fw" "$tb"
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))

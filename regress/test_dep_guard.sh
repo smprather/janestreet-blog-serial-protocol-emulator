@@ -147,11 +147,22 @@ else
   bad "a run with no stamp was trusted (exit $rc): $out"
 fi
 
-# --- the DUT dependency: the interference class of 2026-09-26 -----------------
+# --- the DUT dependency and the sampler --------------------------------------
 # On 2026-09-25 a mutation harness was live on rtl/pe_eth_mac.v and the file was
 # restored from OUTSIDE the harness mid-run, which risked a false survivor. The
 # guard could not see it: it stamped SCRIPTS only. A harness's MUTABLE list names
 # the exact files it mutates, so those are dependencies too.
+#
+# THE SAMPLER, IN THREE LINES, because the shape of it is the whole point.
+#   chip_dep_sample_start <label> <target>...   start watching, in the background
+#   chip_dep_expect pristine|mutated <file>...  the HARNESS says what it just did
+#   chip_dep_sample_stop <label>                returns non-zero if it saw a lie
+# The poller does not look for a PATTERN, it compares what it sees against what
+# the harness DECLARED. That asymmetry is the whole design: a declaration is
+# valid for an INTERVAL, so a slow poller can only ever MISS a transition, never
+# invent one. The rejected design (design file §3, disproved in §6) watched for
+# M-O-M-O and fired ~120 times on a CLEAN run, because M-O-M-O is what every
+# harness does to itself between cases.
 #
 # These cases reuse the SAME inline `bash -c` + positional-args shape as the
 # touch/vanish/no-stamp cases above, deliberately. A first attempt generated a
@@ -161,22 +172,39 @@ fi
 # body's target path was expanded by the PARENT when the unquoted heredoc was
 # written, so the child wrote to the wrong place. The pattern already passing 7/7
 # has neither problem, so the fixture was wrong and the guard was not.
+#
+# The fixtures pass a SCRIPT NAME in the $0 slot (bash -c takes it there, and
+# discards it into nothing if you use `_`). chip_dep_expect derives its label
+# from $0 exactly as the real harnesses' own chip_dep_check does, so a
+# meaningless $0 would still be self-consistent -- but a real name means the case
+# exercises the same derivation the sixteen harnesses rely on.
 
 # 1. A CLEAN run: the harness mutates its target and RESTORES it, exactly as all
-#    sixteen real ones do. End state equals start state, so this must PASS - if it
-#    did not, the new dependency would be firing on normal behaviour.
+#    sixteen real ones do. End state equals start state, so the content check
+#    passes -- and the SAMPLER must stay quiet through declarations that are
+#    true, or the guard is firing on normal behaviour.
 printf 'module dut; endmodule\n' > "$TMP/dut_clean.v"
 out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
   set -u; . "$1"
+  command -v chip_dep_expect >/dev/null 2>&1 || { echo "NO SAMPLER IMPLEMENTED"; exit 9; }
+  lbl="run_$(basename "$0")"
   chip_dep_stamp dut_clean "$2"
+  chip_dep_sample_start "$lbl" "$2"
+  chip_dep_expect pristine "$2"
   printf "module dut; // MUTANT\nendmodule\n" > "$2"
+  chip_dep_expect mutated "$2"
+  sleep 0.3
   printf "module dut; endmodule\n" > "$2"
-  chip_dep_check dut_clean
-' _ "$GUARD" "$TMP/dut_clean.v" 2>&1); rc=$?
+  chip_dep_expect pristine "$2"
+  sleep 0.3
+  rc=0; chip_dep_sample_stop "$lbl" || rc=4
+  chip_dep_check dut_clean || rc=4
+  exit $rc
+' dut_clean.sh "$GUARD" "$TMP/dut_clean.v" 2>&1); rc=$?
 if [ "$rc" -eq 0 ] && ! grep -q CHIP-DEP-CHANGED <<< "$out"; then
   ok "a CLEAN run with a mutating target still reports its verdict"
 else
-  bad "a clean run was refused - the DUT dependency fires on normal behaviour (exit $rc): $out"
+  bad "a clean run was refused - the sampler contradicts the harness's own declarations (exit $rc): $out"
 fi
 
 # 2. An EXTERNAL edit lands on the target mid-run and is not put back: the shape a
@@ -184,95 +212,141 @@ fi
 printf 'module dut; endmodule\n' > "$TMP/dut_hit.v"
 out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
   set -u; . "$1"
+  command -v chip_dep_expect >/dev/null 2>&1 || { echo "NO SAMPLER IMPLEMENTED"; exit 9; }
+  lbl="run_$(basename "$0")"
   chip_dep_stamp dut_hit "$2"
+  chip_dep_sample_start "$lbl" "$2"
+  chip_dep_expect pristine "$2"
+  printf "module dut; // MUTANT\nendmodule\n" > "$2"
+  chip_dep_expect mutated "$2"
+  sleep 0.3
   printf "module dut; // EDITED BY SOMEBODY ELSE\nendmodule\n" > "$2"
-  chip_dep_check dut_hit
-' _ "$GUARD" "$TMP/dut_hit.v" 2>&1); rc=$?
+  sleep 0.3
+  rc=0; chip_dep_sample_stop "$lbl" || rc=4
+  chip_dep_check dut_hit || rc=4
+  exit $rc
+' dut_hit.sh "$GUARD" "$TMP/dut_hit.v" 2>&1); rc=$?
 if [ "$rc" -ne 0 ] && grep -q CHIP-DEP-CHANGED <<< "$out"; then
   ok "a mid-run change to a MUTABLE target is INCONCLUSIVE, never a verdict"
 else
   bad "a mid-run target change was NOT caught (exit $rc): $out"
 fi
 
-# 3. THE LIMITATION, pinned as a case so it cannot be forgotten. An external actor
-#    who RESTORES the target to its starting content mid-run leaves the file
-#    exactly as a content check expects to find it - and that IS the real
-#    2026-09-25 incident. Until the sampler exists this case MUST pass, and that
-#    is the point: it documents the boundary of the content check rather than
-#    letting cases 1 and 2 read as coverage of the whole class.
+# 3. THE INTERFERENCE ITSELF, and the case the whole sampler exists for. An
+#    external actor RESTORES the target to its starting content mid-run while the
+#    harness believes the mutant is still in place, and the harness carries on.
+#    This case WAS the pinned limitation ("a mid-run restore is invisible to a
+#    content check") and it FLIPS here. The sequence ends with the file back at
+#    its starting content, so chip_dep_check returns 0 and the ONLY thing that
+#    can fail this case is the sampler comparing what it sees against the
+#    harness's DECLARATION: the harness said "mutated", an external actor made it
+#    pristine, and the harness never told the guard it had changed its mind.
 printf 'module dut; endmodule\n' > "$TMP/dut_restore.v"
 out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
   set -u; . "$1"
+  command -v chip_dep_expect >/dev/null 2>&1 || { echo "NO SAMPLER IMPLEMENTED"; exit 9; }
+  lbl="run_$(basename "$0")"
   chip_dep_stamp dut_restore "$2"
-  printf "module dut; // MUTANT\nendmodule\n" > "$2"
-  printf "module dut; endmodule\n" > "$2"
-  echo restored-mid-run
-  chip_dep_check dut_restore
-' _ "$GUARD" "$TMP/dut_restore.v" 2>&1); rc=$?
-if [ "$rc" -eq 0 ]; then
-  ok "KNOWN LIMITATION pinned: a mid-run RESTORE-to-original is invisible to a content check"
+  chip_dep_sample_start "$lbl" "$2"
+  chip_dep_expect pristine "$2"
+  printf "module dut; // MUTANT 1\nendmodule\n" > "$2"
+  chip_dep_expect mutated "$2"
+  sleep 0.3
+  printf "module dut; endmodule\n" > "$2"    # an EXTERNAL restore; the harness is told nothing
+  sleep 0.3
+  printf "module dut; // MUTANT 2\nendmodule\n" > "$2"
+  chip_dep_expect mutated "$2"
+  sleep 0.3
+  printf "module dut; endmodule\n" > "$2"    # the harness own final restore
+  chip_dep_expect pristine "$2"
+  sleep 0.3
+  rc=0; chip_dep_sample_stop "$lbl" || rc=4
+  chip_dep_check dut_restore || rc=4
+  exit $rc
+' dut_restore.sh "$GUARD" "$TMP/dut_restore.v" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && grep -q CHIP-DEP-CHANGED <<< "$out"; then
+  ok "a mid-run RESTORE behind the harness back is INCONCLUSIVE (the 2026-09-25 shape, now caught)"
 else
-  ok "better than expected: a mid-run restore is caught by the content check too (exit $rc)"
+  bad "a mid-run restore went UNNOTICED - the sampler has stopped watching (exit $rc): $out"
 fi
 
-# 4. THE DISPROOF, AS AN EXECUTABLE CASE, so the rejected design cannot be
-#    re-implemented by someone who trusts the prose.
+# 4. THE NEGATIVE CONTROL, AND IT IS THE ONE THAT MATTERS. A clean per-case run,
+#    shaped like mutate_i2c_tb.sh (restore, then immediately mutate again), must
+#    produce ZERO hits. This is the case the rejected design FAILED: watching for
+#    M-O-M-O by itself fires ~120 times on exactly this sequence, which is the
+#    disproof recorded in design file section 6. Here the declarations are honest
+#    throughout, so nothing may fire.
 #
-#    reviews/2026-09-26/DEP-GUARD-SAMPLER-DESIGN.md §3 proposed a background
-#    poller whose discriminator was "a target seen MUTATED and then seen ORIGINAL
-#    again, while the run is live, followed by FURTHER MUTATION". Its stated
-#    reason was that a harness's own final restore is the last thing it does.
-#
-#    That reason is FALSE, and case 3 above is the evidence rather than the
-#    assertion: every harness restores PER CASE inside its mutation loop, so a
-#    clean run's own content sequence is M O M O M O -- the proposed signal is
-#    the dominant pattern of normal operation. Measured on the real suites, the
-#    design at its own 50ms poll reported INTERFERENCE on a clean
-#    mutate_i2c_tb.sh run (its pristine windows are 60-62ms, LONGER than the
-#    poll) about 120 times, and fired on mutate_serdes_tb.sh only depending on
-#    sampling phase.
-#
-#    So this case runs that exact discriminator over that exact clean sequence
-#    and asserts it FIRES. It is a test with a real assertion that can fail: if a
-#    future harness shape or a future discriminator stops reproducing the
-#    disproof, this goes red and says the disproof needs re-measuring, rather
-#    than leaving a stale "we checked" sitting in a design file.
+#    The truncate-then-write pauses are DELIBERATE and adversarial. Every real
+#    mutation is applied by python's write_text, which truncates and rewrites, so
+#    between the truncate and the write the file is briefly neither the old
+#    content nor the new. In practice that window is sub-millisecond; here it is
+#    held open for 100ms, roughly twice the persistence the guard requires, so
+#    the case proves the guard tolerates a SLOW legitimate writer rather than
+#    only a fast one. Without that, a sampler that fires on its own harnesses
+#    would still pass a naive version of this case.
 printf 'module dut; endmodule\n' > "$TMP/dut_loop.v"
 out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
   set -u; . "$1"
-  f="$2"; d="$2.state"; mkdir -p "$d"; : > "$d/live"
-  orig=$(sha256sum -- "$f" | cut -d" " -f1)
-  (
-    seen=0; back=0; hits=0
-    while [ -f "$d/live" ]; do
-      cur=$(sha256sum -- "$f" | cut -d" " -f1)
-      if [ "$cur" = "$orig" ]; then
-        [ "$seen" = 1 ] && back=1
-      else
-        [ "$back" = 1 ] && hits=$((hits+1))
-        seen=1
-      fi
-      sleep 0.05
-    done
-    printf "%s\n" "$hits" > "$d/hits"
-  ) &
-  pid=$!
-  # A CLEAN harness, shaped like mutate_i2c_tb.sh: three cases, each applying a
-  # mutant and then restoring it, with a pristine window longer than the poll.
+  command -v chip_dep_expect >/dev/null 2>&1 || { echo "NO SAMPLER IMPLEMENTED"; exit 9; }
+  lbl="run_$(basename "$0")"
+  chip_dep_stamp dut_loop "$2"
+  chip_dep_sample_start "$lbl" "$2"
+  chip_dep_expect pristine "$2"
   for n in 1 2 3; do
-    printf "module dut; // MUTANT %s\nendmodule\n" "$n" > "$f"
-    sleep 0.15
-    printf "module dut; endmodule\n" > "$f"
-    sleep 0.15
+    : > "$2"; sleep 0.1                      # a truncate held open, adversarially
+    printf "module dut; // MUTANT %s\nendmodule\n" "$n" > "$2"
+    chip_dep_expect mutated "$2"
+    sleep 0.2
+    : > "$2"; sleep 0.1                      # and again, on the restore
+    printf "module dut; endmodule\n" > "$2"
+    chip_dep_expect pristine "$2"
+    sleep 0.2
   done
-  rm -f "$d/live"; wait "$pid"
-  cat "$d/hits"
-' _ "$GUARD" "$TMP/dut_loop.v" 2>&1); rc=$?
-hits=$(printf '%s' "$out" | grep -E '^[0-9]+$' | tail -1)
-if [ -n "$hits" ] && [ "$hits" -gt 0 ]; then
-  ok "the naive sampler discriminator FIRES on a clean per-case run ($hits false hits) - which is why it was rejected"
+  rc=0; chip_dep_sample_stop "$lbl" || rc=4
+  chip_dep_check dut_loop || rc=4
+  exit $rc
+' dut_loop.sh "$GUARD" "$TMP/dut_loop.v" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q CHIP-DEP-CHANGED <<< "$out"; then
+  ok "a CLEAN per-case run with honest declarations produces ZERO false hits (the case the old design failed)"
 else
-  bad "the disproof did not reproduce (hits=${hits:-none}, rc=$rc) - re-measure §6 before trusting it: $out"
+  bad "a clean per-case run was flagged - the sampler still sees M-O-M-O (exit $rc): $out"
+fi
+
+# 5. THE INSTRUMENT MUST BE ACCOUNTED FOR, in both ways it can be silent. A
+#    sampler that was never started reports nothing, and a target the harness
+#    never declared a state for is never checked -- and both look exactly like a
+#    clean run. This is the "loop ran zero times" bug the no-stamp case above
+#    already exists for, one level down: without this case the sampler could be
+#    dead in production while every case above stayed green.
+out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
+  set -u; . "$1"
+  command -v chip_dep_sample_stop >/dev/null 2>&1 || { echo "NO SAMPLER IMPLEMENTED"; exit 9; }
+  chip_dep_sample_stop "run_never_started.sh"
+' x.sh "$GUARD" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && grep -q CHIP-DEP-CHANGED <<< "$out"; then
+  ok "a sampler that was never started is refused, not reported as clean"
+else
+  bad "a sampler that never ran was trusted (exit $rc): $out"
+fi
+
+# 5b. ... and the same question one level in: a sampler that IS running but whose
+#     target the harness never declared is a target nobody checked. Fail closed,
+#     because an unchecked target is the 2026-09-25 incident with the detector
+#     switched off, and it would otherwise be indistinguishable from coverage.
+printf 'module dut; endmodule\n' > "$TMP/dut_undecl.v"
+out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
+  set -u; . "$1"
+  command -v chip_dep_expect >/dev/null 2>&1 || { echo "NO SAMPLER IMPLEMENTED"; exit 9; }
+  lbl="run_$(basename "$0")"
+  chip_dep_sample_start "$lbl" "$2"
+  sleep 0.3
+  chip_dep_sample_stop "$lbl"
+' dut_undecl.sh "$GUARD" "$TMP/dut_undecl.v" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && grep -q CHIP-DEP-CHANGED <<< "$out"; then
+  ok "a target the harness never DECLARED is reported as unchecked, not as clean"
+else
+  bad "a target with no declaration was reported as covered (exit $rc): $out"
 fi
 
 if [ "$fail" -ne 0 ]; then

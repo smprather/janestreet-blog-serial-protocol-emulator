@@ -86,7 +86,7 @@ run_tb() {
   grep -qE "^PASS" "$LOG"
 }
 
-restore() { cp "$BAK/pe_eth_tx.v" "$RTL"; }
+restore() { cp "$BAK/pe_eth_tx.v" "$RTL"; chip_dep_expect pristine $MUTABLE; }
 verify_restore() {
   cmp -s "$PRISTINE/pe_eth_tx.v" "$RTL" || {
     echo "  FATAL: $RTL does not match the pristine snapshot after restore."; exit 3; }
@@ -109,6 +109,7 @@ check_mutation() {
   if ! mutate "$1" "$2"; then
     echo "  [$name] HARNESS ERROR: anchor not found/unique"; restore; fail=$((fail+1)); return
   fi
+    chip_dep_expect mutated $MUTABLE
   run_tb
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))

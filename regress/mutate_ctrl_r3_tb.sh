@@ -31,7 +31,7 @@ SRCS="$REPO/rtl/pe_ctrl.v $REPO/rtl/pe_cpu.v $REPO/tb/tb_pe_ctrl_r3.v"
 PRISTINE=$(mktemp -d)
 for f in $MUTABLE; do cp "$f" "$PRISTINE/$(basename "$f")"; done
 
-restore_pristine() { for f in $MUTABLE; do cp "$PRISTINE/$(basename "$f")" "$f"; done; return 0; }
+restore_pristine() { for f in $MUTABLE; do cp "$PRISTINE/$(basename "$f")" "$f"; done; chip_dep_expect pristine $MUTABLE; return 0; }
 cleanup() { restore_pristine; rm -rf "$PRISTINE" "$TMP"; chip_release_run_lock; }
 on_signal() { cleanup; trap - EXIT INT TERM; exit 143; }
 TMP=$(mktemp -d)
@@ -67,6 +67,7 @@ run_one() { # <name> <old> <new>
     echo "  MUTATION DID NOT APPLY -> INCONCLUSIVE"; inconclusive=$((inconclusive+1))
     restore_and_verify; return
   fi
+  chip_dep_expect mutated $MUTABLE
   local cc=0
   iverilog -g2012 -s tb_pe_ctrl_r3 -o "$TMP/mut.vvp" $SRCS >"$TMP/cc.log" 2>&1 || cc=$?
   if [ "$cc" -ne 0 ] || [ ! -s "$TMP/mut.vvp" ]; then

@@ -106,6 +106,7 @@ run_tb() {
 
 restore() {
   cp "$BAK" "$RTL"
+chip_dep_expect pristine $MUTABLE
 }
 
 # Prove the restore worked, every single time. Without this a stacked-mutation
@@ -137,6 +138,7 @@ check_mutation() {
     echo "  [$name] HARNESS ERROR: anchor not found"
     restore; fail=$((fail+1)); return
   fi
+    chip_dep_expect mutated $MUTABLE
   run_tb
   local rc=$?
   if [ $rc -eq 0 ]; then

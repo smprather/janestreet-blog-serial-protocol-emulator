@@ -87,8 +87,8 @@ run_wrapper_tb() {
   grep -qE "^PASS" "$WTB_LOG"
 }
 
-restore() { cp "$BAK" "$RTL"; }
-wrestore() { cp "$WBAK" "$WRTL"; }
+restore() { cp "$BAK" "$RTL"; chip_dep_expect pristine $MUTABLE; }
+wrestore() { cp "$WBAK" "$WRTL"; chip_dep_expect pristine $MUTABLE; }
 verify_restore() {
   cmp -s "$BAK" "$RTL" || { echo "  FATAL: $RTL does not match the snapshot after restore."; exit 3; }
 }
@@ -110,6 +110,7 @@ check_mutation() {
   if ! mutate "$1" "$2"; then
     echo "  [$name] HARNESS ERROR: anchor not found"; restore; fail=$((fail+1)); return
   fi
+    chip_dep_expect mutated rtl/pe_ctrl.v
   run_tb
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))
@@ -124,6 +125,7 @@ check_wrapper_mutation() {
   if ! mutate "$1" "$2" "$WRTL"; then
     echo "  [$name] HARNESS ERROR: anchor not found"; wrestore; fail=$((fail+1)); return
   fi
+  chip_dep_expect mutated rtl/tt_um_protocol_emulator.v
   run_wrapper_tb
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))

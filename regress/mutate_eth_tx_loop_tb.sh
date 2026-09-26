@@ -49,9 +49,6 @@ cd "$(dirname "$0")/.."
 . "$(dirname "$0")/run_lock.sh"
 chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
-SOC="$ROOT/rtl/pe_soc.v"
-MAC="$ROOT/rtl/pe_eth_mac.v"
-TOP="$ROOT/rtl/tt_um_protocol_emulator.v"
 LOG=/tmp/mutate_eth_tx_loop.log
 CCLOG=/tmp/mutate_eth_tx_loop_cc.log
 PRISTINE=$(mktemp -d /tmp/pristine_eth_tx_loop.XXXXXX)
@@ -118,7 +115,7 @@ run_tt_tb() {
   grep -qE "^PASS" "$LOG"
 }
 
-restore() { for f in $MUTABLE; do cp "$BAK/$(basename "$f")" "$ROOT/$f"; done; }
+restore() { for f in $MUTABLE; do cp "$BAK/$(basename "$f")" "$ROOT/$f"; done; chip_dep_expect pristine $MUTABLE; }
 verify_restore() {
   for f in $MUTABLE; do
     cmp -s "$PRISTINE/$(basename "$f")" "$ROOT/$f" || {
@@ -147,6 +144,7 @@ check_mutation() {
     echo "  [$name] HARNESS ERROR: anchor not found/unique in $rel"
     restore; fail=$((fail+1)); return
   fi
+    chip_dep_expect mutated "$rel"
   if [ "$tb" = loop ]; then run_loop_tb; else run_tt_tb; fi
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))

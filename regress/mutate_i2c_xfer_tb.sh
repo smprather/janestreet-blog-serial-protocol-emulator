@@ -61,7 +61,7 @@ run_tb() {
   grep -qE "^PASS" "$LOG"
 }
 
-restore() { cp "$BAK/i2c_xfer.pe" "$PE"; cp "$BAK/i2c_xfer.hex" "$HEX"; }
+restore() { cp "$BAK/i2c_xfer.pe" "$PE"; cp "$BAK/i2c_xfer.hex" "$HEX"; chip_dep_expect pristine $MUTABLE; }
 verify_restore() {
   if ! cmp -s "$BAK/i2c_xfer.pe" "$PE" || ! cmp -s "$BAK/i2c_xfer.hex" "$HEX"; then
     echo "  FATAL: the firmware snapshot was not restored"; exit 3
@@ -82,6 +82,7 @@ check_mutation() {
   if ! mutate "$1" "$2"; then
     echo "  [$name] HARNESS ERROR: anchor not found"; restore; fail=$((fail+1)); return
   fi
+    chip_dep_expect mutated $MUTABLE
   run_tb
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))

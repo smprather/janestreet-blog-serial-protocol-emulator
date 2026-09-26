@@ -86,6 +86,10 @@ run_tb() {
 restore() {
   for f in $MUTABLE; do cp "$PRISTINE/$(basename "$f")" "$ROOT/$f"; done
   cp "$BAK" "$RTL"
+  # Both targets are pristine after a restore: pe_soc.v because it is the only
+  # file this harness ever mutates, and pe_eth_mac.v because it is never written
+  # at all (it appears only in SRCS and in MUTABLE).
+  chip_dep_expect pristine $MUTABLE
 }
 
 verify_restore() {
@@ -117,6 +121,13 @@ check_mutation() {
     echo "  [$name] HARNESS ERROR: anchor not found"
     restore; fail=$((fail+1)); return
   fi
+  # $from and $to are the ANCHOR TEXT and its replacement, not file names:
+  # mutate() always writes $RTL, which is rtl/pe_soc.v. Reading them as paths is
+  # what made this declaration wrong twice -- a blanket $MUTABLE claimed
+  # pe_eth_mac.v was mutated when this harness has never written it, and
+  # declaring "$from" declared an anchor string as though it were a path. So the
+  # one file this harness actually changes is named literally.
+  chip_dep_expect mutated rtl/pe_soc.v
   run_tb
   local rc=$?
   if [ $rc -eq 0 ]; then
