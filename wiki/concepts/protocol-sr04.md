@@ -110,7 +110,7 @@ about the case that could overflow.
 ```text
 FAIL: the firmware banked both measurements (dmem[10] = 01)
 FAIL: the model saw exactly 2 triggers (1) -- a trigger that is driven rather than pulsed shows up here
-FAIL: the trigger pulse is EXACTLY 600 clocks = 10000.000 us (measured 601 = 10016.667 us), and the device asks for 10 us minimum [sic]
+FAIL: the trigger pulse is EXACTLY 600 clocks = 10.000 us (measured 601 = 10.017 us), and the device asks for 10 us minimum
 FAIL: measurement 1: the measured width 1160 us is outside 1 % (floor 2 us) of the model's 5816 us
 FAIL: measurement 1: 1160 us is X mm, not 999 mm -- us*11/64 is exact and this is an equality
 ```text
@@ -196,24 +196,40 @@ cell clears every window in print.
 The testbench's failing check prints:
 
 ```text
-FAIL: the trigger pulse is EXACTLY 600 clocks = 10000.000 us (measured 601 = 10016.667 us)  [sic]
+FAIL: the trigger pulse is EXACTLY 600 clocks = 10.000 us (measured 601 = 10.017 us), and the device asks for 10 us minimum
 ```
 
-**That message is out by a factor of 1000.** 600 clocks at 60 MHz is **10.000 µs**,
-and 601 clocks is **10.0167 µs** — not 10 000 µs and 10 016.667 µs. The
-*clock counts* in the message are right; the *conversions* are wrong.
+**The clock counts are right and the microsecond conversions are now right too.** That
+was not always so, and the history is worth keeping because it is a small instance of
+a class this branch spent a lot of effort on.
 
-It is quoted here verbatim, and marked `[sic]`, because a page that quietly
-"corrects" the message it is reporting on is misreporting it. The figures and the
-table above carry the corrected values.
+The message used to report `600 clocks` as `10000.000 us` — **out by a factor of
+1000**.
+600 clocks at 60 MHz is 10.000 µs. The clock count was right; the conversion was
+folded the wrong way, because `CLK_NS` is nanoseconds and the check reports in
+microseconds, and folding one into the other is not a rounding detail.
 
-This is a defect in `tb/tb_pe_soc_sr04.v`, which is not this page's to change, and
-it is worth flagging for its owner: **a failing message that is wrong in its units
-is worse than no message**, because the first thing a reader does with a red act's
-output is quote it.
+It was found by `tools/diag/delay_lattice.py` — the numbers gate this branch added —
+on its first full run over all thirty-two files, as the **fourth** instance of the
+same class: a clock count and a microsecond conversion printed side by side, with
+only one of them derived. That is the same class as the three the gate was built to
+catch, and it was in a file written minutes earlier, quoted from a testbench message
+that had the same error in it. **The instrument's output was wrong and the figure
+faithfully reproduced it**, which is the worst shape for a documentation page: it is
+exactly right about what the testbench said.
 
-It is also the fourth instance of the same class this page's figures had — a clock
-count and a microsecond conversion printed side by side, with only one of them
-derived — and it was caught by `tools/diag/delay_lattice.py`, not by reading. That is
-the argument for the gate, and the fourth finding arrived on its first full run over
-all thirty-two files.
+It was fixed in `tb/tb_pe_soc_sr04.v` (f7ac41b, by its owner, not from this page),
+which added `CLK_US = CLK_NS / 1000.0` and changed the check to use it. The fix's own
+comment carries the lesson: *a red act's output gets quoted verbatim — it is the first
+thing a reader sees — so a unit error in a failure message is a defect in the report,
+not a cosmetic slip.*
+
+**An earlier revision of this page quoted the broken message and marked it `[sic]`.**
+Those markers are gone, and deliberately: `[sic]` is the exemption
+`delay_lattice.py` uses to skip a conversion it is asked to recompute, so a stale
+marker does not just make a page wrong, it **switches off the check on a line that is
+now correct**. A marker that outlives the thing it marked is worse than no marker.
+
+The act is still **RED**, with the same five checks, and the second measurement is
+still not reached. What changed here is only that the failure report now says what it
+means.
