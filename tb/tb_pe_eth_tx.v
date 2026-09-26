@@ -51,9 +51,44 @@
 //      ifg_active window (>= 96 cells), because the wire measure also
 //      contains the start-alignment cell and can hide a 95-cell engine IFG.
 //
+//
+// THE LINE DRIVER (wiki/plans/eth-tx-line-driver.md: the differential pair, the
+// start-of-idle delimiter and the link pulses). `line_drive` says when the
+// SoC must drive eth_tx_n as the complement of the wire; low means the pair
+// sits at 0 V. It is recorded per cell beside the wire, so every check below
+// is about CELLS on the wire, not about the FSM's own bookkeeping.
+//
+//  10. Every bit cell of every frame goes out with the pair DRIVEN, the drive
+//      moves only on cell boundaries, and a driven cell that carries no bit
+//      is always the POSITIVE level (802.3's TP_IDL and link pulses are both
+//      positive; a negative one reads as a swapped pair). Continuous.
+//  11. TP_IDL: after the last FCS cell the pair stays driven for exactly 3
+//      idle-high cells (300 ns; 802.3 wants >= 250 ns) and is then released.
+//      Also after an abort and after BOTH underruns (mid-DATA, and a bare
+//      preamble with no header byte -- case 8b, the only case that reaches
+//      that path): a truncated frame still ends with the delimiter. And a
+//      frame restarted INSIDE an abort's delimiter (case 7b) must cancel it,
+//      or the countdown releases the pair two cells into the new preamble.
+//      Missed if: only the normal end were checked.
+//  12. Link pulses (a second, fast instance: NLP_CELLS = 50): the first pulse
+//      is exactly 50 cell boundaries after enable, then every 50; each is one
+//      cell (6 clocks = 100 ns) wide and positive. The IFG and the frame do
+//      not count toward the period (first pulse exactly 50 boundaries after
+//      the engine returns to IDLE). Missed if: the period were measured from
+//      pulse to pulse only (an off-by-one on the first pulse survives).
+//  13. A start latched during a link pulse waits for the pulse's cell to end
+//      (the pulse is never cut), and a start latched in the cell BEFORE a
+//      pulse is due wins: the frame starts and no pulse is emitted. Dropping
+//      `enable` mid-pulse releases the pair on the next clock.
+//  14. The silicon constant: the default instance's first link pulse is
+//      exactly 160,000 boundaries (16.000 ms) after enable. Measured, not
+//      read from the parameter; the dump is paused for the 960k-clock wait.
+//
 // WHAT IT DOES NOT COVER (owned by later tasks): the pad-level uo_out mux
 // (Task 4), the loopback through the RX chain and the mutation suites
 // (Tasks 5-6), and the owner arbitration against the SERDES (Task 3's SoC TB).
+// The pair itself (eth_tx_n = wire XOR line_drive) is composed in pe_soc and
+// checked there and at the pads (tb_pe_soc_eth_tx, tb_tt_um_protocol_emulator).
 
 `timescale 1ns / 1ps
 
@@ -75,7 +110,14 @@ module tb_pe_eth_tx;
   logic [7:0]  push_byte;
   logic [11:0] frame_len;
   logic        push_ready, tx_busy, tx_done, tx_underrun, tx_overlong;
-  logic        ifg_active, tx_bit;
+  logic        ifg_active, tx_bit, line_drive;
+
+  // The fast-link-pulse instance: same cadence, its own controls, so its
+  // pulses can be timed without disturbing the frame cases on `dut`.
+  localparam int NLP_FAST = 50;
+  logic        enable_f, push_f, start_f, abort_f;
+  logic        push_ready_f, busy_f, done_f, underrun_f, overlong_f;
+  logic        ifg_f, tx_bit_f, line_drive_f;
 
   // ---------------- the TB's divider: EXACTLY pe_soc's DIV=6 ----------------
   // cell_div = 6: the registered `cell_en` is the shared codec's committing
@@ -108,7 +150,17 @@ module tb_pe_eth_tx;
     .frame_len(frame_len), .start(start), .frame_abort(abort),
     .tx_busy(tx_busy), .tx_done(tx_done), .tx_underrun(tx_underrun),
     .tx_overlong(tx_overlong), .ifg_active(ifg_active),
-    .tx_bit(tx_bit)
+    .tx_bit(tx_bit), .line_drive(line_drive)
+  );
+
+  pe_eth_tx #(.MAX_STORED(1514), .NLP_CELLS(NLP_FAST)) dut_f (
+    .clk(clk), .rst_n(rst_n),
+    .enable(enable_f), .cell_start(cell_start), .half_phase(half_phase),
+    .push(push_f), .push_byte(push_byte), .push_ready(push_ready_f),
+    .frame_len(frame_len), .start(start_f), .frame_abort(abort_f),
+    .tx_busy(busy_f), .tx_done(done_f), .tx_underrun(underrun_f),
+    .tx_overlong(overlong_f), .ifg_active(ifg_f),
+    .tx_bit(tx_bit_f), .line_drive(line_drive_f)
   );
 
   // ---------------- wire decode ----------------
@@ -121,8 +173,10 @@ module tb_pe_eth_tx;
 
   localparam int MAXCELLS = 16384;
   logic [1:0] cellrec [0:MAXCELLS-1];   // {is_bit, decoded_bit}; 2'b00 = idle
+  logic [1:0] lrec    [0:MAXCELLS-1];   // line_drive at the {first, second} half
+  logic       lvlrec  [0:MAXCELLS-1];   // wire level of an idle cell
   int         ncells, done_count;
-  logic       mh1, mh2;
+  logic       mh1, mh2, lh1, lh2;
   bit         saw_done, saw_underrun, saw_overlong;
 
   // The engine's OWN inter-frame gap, counted at the cell boundary while
@@ -136,6 +190,7 @@ module tb_pe_eth_tx;
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       ncells <= 0; done_count <= 0; mh1 <= 1'b0; mh2 <= 1'b0;
+      lh1 <= 1'b0; lh2 <= 1'b0;
       saw_done <= 1'b0; saw_underrun <= 1'b0; saw_overlong <= 1'b0;
       ifg_cells <= 0; ifg_cells_at_done <= 0;
     end else begin
@@ -151,17 +206,102 @@ module tb_pe_eth_tx;
         // classify the cell that just ended from its ph2/ph5 samples
         if (mh1 === mh2) begin
           if (ncells < MAXCELLS) cellrec[ncells] <= 2'b00;   // idle (constant)
+          // Check 10: a driven cell with no bit in it is the POSITIVE level.
+          if (lh1 || lh2)
+            check(mh1 === 1'b1,
+                  "the pair was driven NEGATIVE outside a frame (TP_IDL/link pulse must be positive)");
         end else begin
           check(mh1 === ~mh2, "Manchester halves are not complementary");
           if (ncells < MAXCELLS) cellrec[ncells] <= {1'b1, mh2};
+          // Check 10: every bit on the wire goes out with the pair driven.
+          check(lh1 === 1'b1 && lh2 === 1'b1,
+                "a frame bit went out with the pair undriven (line_drive low)");
+        end
+        check(lh1 === lh2, "line_drive moved mid-cell (it may change only on a cell boundary)");
+        if (ncells < MAXCELLS) begin
+          lrec[ncells]   <= {lh1, lh2};
+          lvlrec[ncells] <= mh1;
         end
         if (ncells < MAXCELLS) ncells <= ncells + 1;
-        mh1 <= wire_bit;
+        mh1 <= wire_bit; lh1 <= line_drive;
       end else if (!half_phase) begin
-        mh1 <= wire_bit;
+        mh1 <= wire_bit; lh1 <= line_drive;
       end else begin
-        mh2 <= wire_bit;
+        mh2 <= wire_bit; lh2 <= line_drive;
       end
+    end
+  end
+
+  // ---------------- link-pulse monitors (checks 12-14) ----------------
+  // A free-running clock count and cell-boundary count; tests take DIFFERENCES,
+  // so neither needs a reset. An edge of line_drive is SEEN one clock after it
+  // happens (the DUT's register updates at the edge the monitor samples), and
+  // that offset cancels in every difference below.
+  //
+  // A link pulse is a rise of line_drive while the engine is NOT busy; a rise
+  // at a frame start happens together with tx_busy and is not counted. The
+  // matching fall is the next fall after an NLP rise.
+  localparam int MAXP = 16;
+  longint cyc = 0, cs_total = 0;
+  always @(posedge clk) begin
+    cyc <= cyc + 1;
+    if (cell_start) cs_total <= cs_total + 1;
+  end
+
+  wire    wire_f = half_phase ? tx_bit_f : ~tx_bit_f;
+  logic   ld_q, ld_f_q, busy_f_q, in_nlp, in_nlp_f;
+  int     nlp_n, nlp_f_n;
+  longint nlp_rise_cs  [0:MAXP-1], nlp_rise_cyc  [0:MAXP-1], nlp_fall_cyc  [0:MAXP-1];
+  longint nlpf_rise_cs [0:MAXP-1], nlpf_rise_cyc [0:MAXP-1], nlpf_fall_cyc [0:MAXP-1];
+  longint busyf_rise_cyc, busyf_rise_cs, busyf_fall_cs;
+  bit     neg_drive_f;   // dut_f drove the pair NEGATIVE outside a frame
+  bit     saw_done_f;
+
+  always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      ld_q <= 1'b0; ld_f_q <= 1'b0; busy_f_q <= 1'b0;
+      in_nlp <= 1'b0; in_nlp_f <= 1'b0;
+      nlp_n <= 0; nlp_f_n <= 0; neg_drive_f <= 1'b0; saw_done_f <= 1'b0;
+      busyf_rise_cyc <= -1; busyf_rise_cs <= -1; busyf_fall_cs <= -1;
+    end else begin
+      ld_q <= line_drive; ld_f_q <= line_drive_f; busy_f_q <= busy_f;
+
+      // ---- dut (the silicon default period) ----
+      if (line_drive && !ld_q && !tx_busy) begin
+        if (nlp_n < MAXP) begin
+          nlp_rise_cs[nlp_n]  <= cs_total;
+          nlp_rise_cyc[nlp_n] <= cyc;
+        end
+        in_nlp <= 1'b1;
+      end
+      if (!line_drive && ld_q && in_nlp) begin
+        if (nlp_n < MAXP) nlp_fall_cyc[nlp_n] <= cyc;
+        nlp_n  <= nlp_n + 1;
+        in_nlp <= 1'b0;
+      end
+
+      // ---- dut_f (NLP_FAST) ----
+      if (line_drive_f && !ld_f_q && !busy_f) begin
+        if (nlp_f_n < MAXP) begin
+          nlpf_rise_cs[nlp_f_n]  <= cs_total;
+          nlpf_rise_cyc[nlp_f_n] <= cyc;
+        end
+        in_nlp_f <= 1'b1;
+      end
+      // A pulse ends either by falling or by running straight into a frame
+      // (a start latched inside the pulse's cell); both close it.
+      if (in_nlp_f && (!line_drive_f || busy_f)) begin
+        if (nlp_f_n < MAXP) nlpf_fall_cyc[nlp_f_n] <= cyc;
+        nlp_f_n  <= nlp_f_n + 1;
+        in_nlp_f <= 1'b0;
+      end
+      if (done_f) saw_done_f <= 1'b1;
+      if (busy_f && !busy_f_q) begin busyf_rise_cyc <= cyc; busyf_rise_cs <= cs_total; end
+      if (!busy_f && busy_f_q) busyf_fall_cs <= cs_total;
+
+      // Check 10 on the fast instance, every clock: outside the frame states
+      // (IDLE or IFG) a driven pair must be the POSITIVE level.
+      if (line_drive_f && (!busy_f || ifg_f) && wire_f !== 1'b1) neg_drive_f <= 1'b1;
     end
   end
 
@@ -222,6 +362,7 @@ module tb_pe_eth_tx;
   task automatic reset_dut;
     rst_n = 1'b0; enable = 1'b0; push = 1'b0; push_byte = 8'h00;
     start = 1'b0; abort = 1'b0; frame_len = 12'd0;
+    enable_f = 1'b0; push_f = 1'b0; start_f = 1'b0; abort_f = 1'b0;
     repeat (4) @(posedge clk); #1;
     rst_n = 1'b1;
     repeat (4) @(posedge clk); #1;
@@ -304,6 +445,60 @@ module tb_pe_eth_tx;
     last_end = i0 + need;
   endtask
 
+  // ---------------- the fast instance's stimulus ----------------
+  task automatic push_wait_f(input logic [7:0] b);
+    int guard = 0;
+    while (!push_ready_f && guard < 500_000) begin @(posedge clk); guard++; end
+    check(push_ready_f, "fast instance: push_ready never asserted");
+    @(negedge clk); push_f = 1'b1; push_byte = b;
+    @(negedge clk); push_f = 1'b0;
+  endtask
+
+  task automatic pulse_start_f;
+    @(negedge clk); start_f = 1'b1;
+    @(negedge clk); start_f = 1'b0;
+  endtask
+
+  // Bounded waits on the fast instance's monitors.
+  task automatic wait_in_nlp_f(input string tag);
+    int guard = 0;
+    while (!in_nlp_f && guard < 20 * NLP_FAST) begin @(posedge clk); guard++; end
+    check(in_nlp_f, $sformatf("%s: no link pulse within %0d clocks", tag, 20 * NLP_FAST));
+  endtask
+
+  task automatic wait_nlp_f(input int n, input string tag);
+    int guard = 0;
+    while (nlp_f_n < n && guard < 6 * (n + 2) * NLP_FAST) begin @(posedge clk); guard++; end
+    check(nlp_f_n >= n, $sformatf("%s: only %0d of %0d link pulses came", tag, nlp_f_n, n));
+  endtask
+
+  task automatic wait_busy_f(input logic level, input string tag);
+    int guard = 0;
+    while (busy_f !== level && guard < 3_000_000) begin @(posedge clk); guard++; end
+    check(busy_f === level, $sformatf("%s: fast instance tx_busy never went %0b", tag, level));
+  endtask
+
+  // ---------------- line-drive helpers (checks 10-11) ----------------
+  // The start-of-idle delimiter: the TPIDL cells right after frame end `e`
+  // are driven, carry no bit, and sit at the positive level; the next is not.
+  localparam int TPIDL = 3;
+  task automatic check_tpidl(input int e, input string tag);
+    for (int k = e; k < e + TPIDL; k++)
+      check(k < ncells && lrec[k] === 2'b11 && cellrec[k] === 2'b00 && lvlrec[k] === 1'b1,
+            $sformatf("%s: TP_IDL cell +%0d is not a driven idle-high cell (drive=%b cell=%b lvl=%b)",
+                      tag, k - e, lrec[k], cellrec[k], lvlrec[k]));
+    check(e + TPIDL < ncells && lrec[e + TPIDL] === 2'b00,
+          $sformatf("%s: the pair is still driven %0d cells after the frame (TP_IDL is %0d)",
+                    tag, TPIDL + 1, TPIDL));
+  endtask
+
+  // Index one past the last bit cell recorded so far (-1 if none).
+  function automatic int end_of_last_bit;
+    for (int k = ncells - 1; k >= 0; k--)
+      if (cellrec[k][1] === 1'b1) return k + 1;
+    return -1;
+  endfunction
+
   // ---------------- the directed cases ----------------
 
   // Case 1: idle is a CONSTANT level for a long stretch (Review Focus 1).
@@ -318,6 +513,11 @@ module tb_pe_eth_tx;
     for (int k = base; k < ncells; k++)
       check(cellrec[k][1] === 1'b0,
             "idle wire has a mid-cell transition (square wave, not idle)");
+    // Check 10: an idle, enabled engine leaves the pair at 0 V (released)
+    // between link pulses -- none is due at the 16 ms default period.
+    for (int k = base; k < ncells; k++)
+      check(lrec[k] === 2'b00,
+            $sformatf("idle: the pair is driven in idle cell %0d (DC across the transformer)", k));
     check(tx_busy === 1'b0 && ifg_active === 1'b0,
           "idle: engine reports busy/ifg with no frame");
   endtask
@@ -341,6 +541,18 @@ module tb_pe_eth_tx;
     check(dut.u_tx_crc.crc_state === 32'h0000_0000,
           $sformatf("%s: FCS register did not drain to zero (complement inside the feedback?)",
                     tag));
+    // Checks 10-11: released before the frame, driven through every frame
+    // cell, then exactly TPIDL driven idle-high cells, then released.
+    for (int k = scan_start; k < last_i0; k++)
+      check(lrec[k] === 2'b00,
+            $sformatf("%s: the pair is driven in pre-frame idle cell %0d", tag, k));
+    for (int k = last_i0; k < last_end; k++)
+      if (lrec[k] !== 2'b11) begin
+        check(1'b0, $sformatf("%s: frame cell %0d went out with the pair undriven",
+                              tag, k - last_i0));
+        break;
+      end
+    check_tpidl(last_end, tag);
     $display("    %s: %0d stored bytes, %0d wire bits, FCS %08h",
              tag, total, need, fcs_want);
   endtask
@@ -363,6 +575,9 @@ module tb_pe_eth_tx;
     for (int k = base; k < ncells; k++)
       check(cellrec[k][1] === 1'b0,
             $sformatf("%s: a refused frame drove the wire", tag));
+    for (int k = base; k < ncells; k++)
+      check(lrec[k] === 2'b00,
+            $sformatf("%s: a refused frame drove the pair", tag));
   endtask
 
   // Case 7: abort mid-frame returns to idle with no tx_done.
@@ -394,6 +609,50 @@ module tb_pe_eth_tx;
     repeat (30) @(posedge clk);          // >= 2 cells to classify idle
     check(ncells > 0 && cellrec[ncells-1][1] === 1'b0,
           "abort: the line did not return to idle");
+    // Check 11: a cut frame still ends with the start-of-idle delimiter.
+    repeat (36) @(posedge clk);          // TPIDL + 1 cells, and then some
+    check_tpidl(end_of_last_bit(), "abort");
+  endtask
+
+  // Case 7b: a frame restarted INSIDE the delimiter of an aborted one. The
+  // abort starts a 3-cell TP_IDL; a start latched right away is applied at
+  // the next boundary, so the new frame begins while that countdown is still
+  // running. The frame start must cancel it: if it did not, the countdown
+  // would reach zero two cells into the new preamble and RELEASE the pair
+  // mid-frame -- check 10 catches that on the first undriven bit cell. The
+  // restarted frame is then decoded end to end.
+  task automatic test_restart_in_tpidl;
+    int total, need;
+    total = 60;
+    need  = 64 + 8*total + 32;
+    reset_dut();
+    enable = 1'b1;
+    frame_len = 12'd42;
+    for (int k = 0; k < 8; k++) push_wait(stored[k]);
+    pulse_start();
+    begin
+      int guard = 0;
+      while (ncells < 10 && guard < 100_000) begin @(posedge clk); guard++; end
+    end
+    pulse_abort();
+    begin
+      int guard = 0;
+      while (tx_busy && guard < 100_000) begin @(posedge clk); guard++; end
+    end
+    check(!tx_busy, "restart: the abort never returned the engine to IDLE");
+    // The monitor classifies a cell on the clock AFTER it ends, so the cut
+    // frame's last bit cell is still being recorded here; let it land before
+    // marking where the new frame's scan begins (still inside TP_IDL: that
+    // is 18 clocks, and the check below proves it).
+    repeat (3) @(posedge clk);
+    check(dut.tpidl_left != 2'd0,
+          "restart: TP_IDL was not running when the restart was issued (the case is vacuous)");
+    scan_start = ncells;
+    pulse_start();                       // lands inside the running TP_IDL
+    for (int k = 8; k < 42; k++) push_wait(stored[k]);
+    wait_done_idle(1, "restart");
+    analyze(scan_start, total, need, "restart");
+    check_tpidl(last_end, "restart");
   endtask
 
   // Case 8: FIFO underrun is a sticky, observable fault, never a silent gap.
@@ -419,6 +678,35 @@ module tb_pe_eth_tx;
     check(!saw_done, "underrun: tx_done pulsed on a truncated frame");
     check(ncells > base + 64,
           "underrun: the frame never reached the data phase");
+    // Check 11: the truncated frame still ends with the delimiter.
+    repeat (66) @(posedge clk);
+    check_tpidl(end_of_last_bit(), "underrun");
+  endtask
+
+  // Case 8b: the OTHER underrun -- the preamble ends with no header byte at
+  // all. Nothing else reaches this path, and the line driver adds a claim to
+  // it: the truncated frame (a bare preamble) still ends with TP_IDL.
+  task automatic test_underrun_preamble;
+    reset_dut();
+    enable = 1'b1;
+    frame_len = 12'd42;
+    pulse_start();                       // no byte was ever pushed
+    begin
+      int guard = 0;
+      while (!saw_underrun && guard < 100_000) begin @(posedge clk); guard++; end
+    end
+    check(saw_underrun, "preamble underrun: tx_underrun never pulsed");
+    check(!saw_done, "preamble underrun: tx_done pulsed with no data");
+    begin
+      int guard = 0;
+      while (tx_busy && guard < 100_000) begin @(posedge clk); guard++; end
+    end
+    check(!tx_busy, "preamble underrun: engine did not return to IDLE");
+    repeat (66) @(posedge clk);
+    check(end_of_last_bit() >= 64,
+          $sformatf("preamble underrun: only %0d bit cells before the fault, want the 64-bit prelude",
+                    end_of_last_bit()));
+    check_tpidl(end_of_last_bit(), "preamble underrun");
   endtask
 
   // Case 9: two frames, second preamble >= 96 idle cells after the first FCS.
@@ -438,6 +726,7 @@ module tb_pe_eth_tx;
     wait_done_idle(1, "two-frame #1");
     analyze(scan_start, 60, need, "two-frame #1");
     g1_end = last_end;
+    check_tpidl(g1_end, "two-frame #1");
 
     // frame 2, issued only after the IFG has elapsed (tx_busy low)
     fill_pattern(42, 8'h40);
@@ -467,6 +756,148 @@ module tb_pe_eth_tx;
     analyze(g2_first, 60, need, "two-frame #2");
   endtask
 
+  // ---------------- link pulses (checks 12-14) ----------------
+
+  // Case 12a: the period, the first pulse, the width, the polarity.
+  task automatic test_nlp_period;
+    longint base;
+    reset_dut();
+    @(negedge clk); base = cs_total; enable_f = 1'b1;
+    wait_nlp_f(3, "nlp period");
+    check(nlpf_rise_cs[0] - base == NLP_FAST,
+          $sformatf("nlp: first link pulse %0d cell boundaries after enable, want %0d",
+                    nlpf_rise_cs[0] - base, NLP_FAST));
+    for (int i = 1; i < 3; i++) begin
+      check(nlpf_rise_cs[i] - nlpf_rise_cs[i-1] == NLP_FAST,
+            $sformatf("nlp: pulses %0d and %0d are %0d boundaries apart, want %0d",
+                      i - 1, i, nlpf_rise_cs[i] - nlpf_rise_cs[i-1], NLP_FAST));
+      check(nlpf_rise_cyc[i] - nlpf_rise_cyc[i-1] == 6 * NLP_FAST,
+            $sformatf("nlp: pulses %0d and %0d are %0d clocks apart, want %0d",
+                      i - 1, i, nlpf_rise_cyc[i] - nlpf_rise_cyc[i-1], 6 * NLP_FAST));
+    end
+    for (int i = 0; i < 3; i++)
+      check(nlpf_fall_cyc[i] - nlpf_rise_cyc[i] == 6,
+            $sformatf("nlp: pulse %0d is %0d clocks wide, want 6 (one 100 ns cell)",
+                      i, nlpf_fall_cyc[i] - nlpf_rise_cyc[i]));
+    check(!neg_drive_f, "nlp: a link pulse was driven NEGATIVE");
+    check(busy_f === 1'b0, "nlp: link pulses made the engine report busy");
+    $display("    nlp: first pulse after %0d boundaries, period %0d cells, width %0d clocks",
+             nlpf_rise_cs[0] - base, nlpf_rise_cs[1] - nlpf_rise_cs[0],
+             nlpf_fall_cyc[0] - nlpf_rise_cyc[0]);
+  endtask
+
+  // Case 12b: the frame and its IFG do not count toward the period.
+  task automatic test_nlp_after_frame;
+    reset_dut();
+    fill_arp_stored;
+    frame_len = 12'd42;
+    @(negedge clk); enable_f = 1'b1;
+    for (int k = 0; k < 8; k++) push_wait_f(stored[k]);
+    pulse_start_f();
+    for (int k = 8; k < 42; k++) push_wait_f(stored[k]);
+    wait_busy_f(1'b1, "nlp after frame");
+    wait_busy_f(1'b0, "nlp after frame");
+    check(nlp_f_n == 0,
+          $sformatf("nlp after frame: %0d link pulse(s) fired around the frame", nlp_f_n));
+    wait_nlp_f(1, "nlp after frame");
+    check(nlpf_rise_cs[0] - busyf_fall_cs == NLP_FAST,
+          $sformatf("nlp after frame: first pulse %0d boundaries after the engine went IDLE, want %0d",
+                    nlpf_rise_cs[0] - busyf_fall_cs, NLP_FAST));
+    check(!neg_drive_f, "nlp after frame: the pair was driven NEGATIVE outside the frame");
+  endtask
+
+  // Case 13a: a start latched inside a link pulse waits for the pulse's cell.
+  task automatic test_nlp_defers_start;
+    reset_dut();
+    fill_arp_stored;
+    frame_len = 12'd42;
+    @(negedge clk); enable_f = 1'b1;
+    for (int k = 0; k < 8; k++) push_wait_f(stored[k]);
+    wait_in_nlp_f("defer");
+    pulse_start_f();                     // lands inside the pulse's cell
+    for (int k = 8; k < 42; k++) push_wait_f(stored[k]);
+    wait_busy_f(1'b1, "defer");
+    check(busyf_rise_cyc - nlpf_rise_cyc[0] == 6,
+          $sformatf("defer: the frame began %0d clocks after the link pulse, want 6 (the pulse was cut or the start lost)",
+                    busyf_rise_cyc - nlpf_rise_cyc[0]));
+    wait_busy_f(1'b0, "defer");
+    check(saw_done_f, "defer: the frame started after the pulse never completed");
+    check(!neg_drive_f, "defer: the pair was driven NEGATIVE outside the frame");
+  endtask
+
+  // Case 13b: a start latched in the cell BEFORE a pulse is due wins.
+  task automatic test_start_beats_nlp;
+    longint base;
+    reset_dut();
+    fill_arp_stored;
+    frame_len = 12'd42;
+    for (int k = 0; k < 8; k++) push_wait_f(stored[k]);   // FIFO fills while disabled
+    @(negedge clk); base = cs_total; enable_f = 1'b1;
+    while (cs_total - base < NLP_FAST - 1) @(posedge clk);
+    pulse_start_f();                     // latched before boundary NLP_FAST
+    for (int k = 8; k < 42; k++) push_wait_f(stored[k]);
+    wait_busy_f(1'b1, "start beats nlp");
+    check(busyf_rise_cs - base == NLP_FAST,
+          $sformatf("start beats nlp: the frame began at boundary %0d, want %0d (where the pulse was due)",
+                    busyf_rise_cs - base, NLP_FAST));
+    check(nlp_f_n == 0 && !in_nlp_f,
+          "start beats nlp: a link pulse fired although a start was pending");
+    wait_busy_f(1'b0, "start beats nlp");
+  endtask
+
+  // Case 13c: dropping enable mid-pulse releases the pair on the next clock,
+  // and re-enabling restarts the period from zero.
+  task automatic test_nlp_disable;
+    longint base;
+    int n0;
+    reset_dut();
+    @(negedge clk); enable_f = 1'b1;
+    wait_in_nlp_f("disable");
+    @(negedge clk); enable_f = 1'b0;
+    @(posedge clk); #1;
+    check(line_drive_f === 1'b0, "disable: dropping enable mid-pulse left the pair driven");
+    repeat (6 * NLP_FAST) @(posedge clk);
+    check(line_drive_f === 1'b0 && !in_nlp_f,
+          "disable: a disabled engine drove the pair");
+    // Disable again MID-COUNT (20 boundaries into a period, where the count
+    // is not already zero), then re-enable: the period restarts from zero, so
+    // the first pulse is NLP_FAST boundaries after the second enable. A
+    // disable that kept the count would pulse 20 boundaries early.
+    @(negedge clk); base = cs_total; enable_f = 1'b1;
+    while (cs_total - base < 20) @(posedge clk);
+    @(negedge clk); enable_f = 1'b0;
+    repeat (12) @(posedge clk);
+    n0 = nlp_f_n;
+    @(negedge clk); base = cs_total; enable_f = 1'b1;
+    wait_nlp_f(n0 + 1, "disable");
+    check(nlpf_rise_cs[n0] - base == NLP_FAST,
+          $sformatf("disable: after a mid-count disable the first pulse came at boundary %0d, want %0d",
+                    nlpf_rise_cs[n0] - base, NLP_FAST));
+  endtask
+
+  // Case 14: the silicon constant, measured on the default instance.
+  task automatic test_nlp_real_constant;
+    longint base;
+    int n0;
+    reset_dut();
+    n0 = nlp_n;
+    @(negedge clk); base = cs_total; enable = 1'b1;
+    $dumpoff;                            // 960k idle clocks: keep the VCD small
+    while (nlp_n == n0 && cs_total - base < 170_000) @(posedge clk);
+    $dumpon;
+    check(nlp_n == n0 + 1,
+          "nlp constant: the default instance sent no link pulse within 170,000 cells");
+    check(nlp_rise_cs[n0] - base == 160_000,
+          $sformatf("nlp constant: first link pulse %0d boundaries after enable, want 160000 (16.000 ms)",
+                    nlp_rise_cs[n0] - base));
+    check(nlp_fall_cyc[n0] - nlp_rise_cyc[n0] == 6,
+          $sformatf("nlp constant: pulse %0d clocks wide, want 6",
+                    nlp_fall_cyc[n0] - nlp_rise_cyc[n0]));
+    $display("    nlp constant: first pulse %0d boundaries (%0.3f ms) after enable, width %0d clocks",
+             nlp_rise_cs[n0] - base, (nlp_rise_cs[n0] - base) * 100.0e-6,
+             nlp_fall_cyc[n0] - nlp_rise_cyc[n0]);
+  endtask
+
   initial begin
     $dumpfile("tb_pe_eth_tx.vcd");
     $dumpvars(0, tb_pe_eth_tx);
@@ -476,6 +907,7 @@ module tb_pe_eth_tx;
     ncells = 0; scan_start = 0; last_i0 = 0; last_end = 0;
     rst_n = 1'b0; enable = 1'b0; push = 1'b0; push_byte = 8'h00;
     start = 1'b0; abort = 1'b0; frame_len = 12'd0;
+    enable_f = 1'b0; push_f = 1'b0; start_f = 1'b0; abort_f = 1'b0;
     repeat (4) @(posedge clk); #1;
 
     test_idle_constant;
@@ -502,10 +934,22 @@ module tb_pe_eth_tx;
     fill_pattern(42, 8'h30);
     test_abort;
 
+    fill_pattern(42, 8'h38);
+    test_restart_in_tpidl;
+
     fill_pattern(42, 8'h50);
     test_underrun;
 
+    test_underrun_preamble;
+
     test_two_frames;
+
+    test_nlp_period;
+    test_nlp_after_frame;
+    test_nlp_defers_start;
+    test_start_beats_nlp;
+    test_nlp_disable;
+    test_nlp_real_constant;
 
     if (errors == 0) $display("PASS: tb_pe_eth_tx");
     else             $display("FAILURES: %0d", errors);
@@ -513,7 +957,7 @@ module tb_pe_eth_tx;
   end
 
   initial begin
-    #40_000_000;
+    #100_000_000;                        // 100 ms: the 16 ms link-pulse wait included
     $display("FAIL: watchdog -- tb_pe_eth_tx did not finish");
     $display("  state=%0d ncells=%0d busy=%b done=%b", dut.state, ncells,
              tx_busy, tx_done);

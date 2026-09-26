@@ -30,6 +30,32 @@
 // idle. An engine that merely "stops driving" fails this and the unit TB
 // checks the wire for mid-cell transitions.
 //
+// THE LINE DRIVER (wiki/plans/eth-tx-line-driver.md). 10BASE-T is a
+// DIFFERENTIAL line with THREE states: +, - and 0 V. One single-ended pad has
+// only two, so the SoC builds a pair from the wire and `line_drive`:
+//
+//   eth_tx   = tx_wire                (uo_out[2], unchanged)
+//   eth_tx_n = tx_wire ^ line_drive   (uo_out[3])
+//
+// While line_drive is high the pair is the Manchester signal (+/-); while it
+// is low both pads sit at the idle-high level, so the pair is 0 V and no DC
+// flows through the transformer. line_drive is a REGISTER that moves only on
+// cell boundaries, so eth_tx_n cannot glitch against the wire. It is high:
+//
+//   * for every cell of a frame, preamble through FCS;
+//   * for TPIDL_CELLS (3 = 300 ns) cells after the last FCS cell, while the
+//     wire already sits at idle-high: 802.3's start-of-idle delimiter
+//     (TP_IDL), a POSITIVE level of at least 250 ns. A frame cut by an abort
+//     or an underrun ends with the same delimiter;
+//   * for one cell (100 ns, positive) every NLP_CELLS cells of quiet idle:
+//     the normal link pulse (16 ms at the default; 802.3 allows 8-24 ms). A
+//     link partner that hears no pulse for 50-150 ms declares link failure
+//     and disables its receiver, so without these no frame is ever accepted.
+//     The period counts only quiet IDLE cells: a frame, its IFG and any
+//     TP_IDL restart it. A pending start beats a due pulse, and a start that
+//     arrives during a pulse waits for that one cell. tx_busy is unchanged
+//     (pulses and a post-abort TP_IDL run with tx_busy low).
+//
 // THE FCS FIELD-MODE TRAP. pe_crc emits `R[0] ^ cfg_out_inv` and must shift
 // PURE (feedback from R[0], not from crc_bit) while `crc_field` is high, so
 // the register drains to zero and a receiver folding the same bits agrees.
@@ -83,7 +109,8 @@
 // caller that starts again immediately after an abort owns that choice.
 
 module pe_eth_tx #(
-  parameter int MAX_STORED = 1514
+  parameter int MAX_STORED = 1514,
+  parameter int NLP_CELLS  = 160_000     // link-pulse period in cells (16 ms)
 ) (
   input  logic        clk, rst_n,
 
@@ -108,7 +135,11 @@ module pe_eth_tx #(
   output logic        ifg_active,    // state == IFG (busy, but no frame on wire)
 
   // raw bit into u_tx_codec (Manchester, cfg = 0x04)
-  output logic        tx_bit
+  output logic        tx_bit,
+
+  // the differential pair's enable: while high the SoC drives eth_tx_n as the
+  // complement of the wire; while low the pair sits at 0 V (both pads equal)
+  output logic        line_drive
 `ifdef FORMAL
   // ---- FORMAL-ONLY OBSERVATION PORTS (manager ruling 2026-09-25) --------
   // Exposed so the IFG floor can be proved INDUCTIVELY, as the manager's 3b
@@ -192,6 +223,23 @@ module pe_eth_tx #(
 
   wire _unused = &{1'b0, crc_zero, crc_state, fifo_after[7:1]};
 
+  // ---- the line driver (see THE LINE DRIVER in the header) ---------------
+  // Elaboration guard: NLP_CELLS=1 would make every idle cell a pulse, which
+  // is a DC level on the pair rather than a link pulse (regress/param_guards.sh
+  // proves this fires, and that the boundary value 2 is accepted).
+  if (NLP_CELLS < 2) begin : g_nlp_guard
+    $error("pe_eth_tx: NLP_CELLS must be >= 2");
+  end
+  localparam int NLPW        = (NLP_CELLS <= 2) ? 1 : $clog2(NLP_CELLS);
+  localparam int TPIDL_CELLS = 3;        // 300 ns: 802.3 wants >= 250 ns positive
+
+  wire in_frame = (state == S_PREAMBLE) || (state == S_DATA)
+               || (state == S_PAD)      || (state == S_FCS);
+
+  logic [NLPW-1:0] nlp_cnt;     // quiet-idle cell boundaries since the last pulse
+  logic [1:0]      tpidl_left;  // start-of-idle cells still to drive
+  logic            nlp_cell;    // the current cell is a link pulse
+
   // ---- status and the wire bit ------------------------------------------
   assign tx_busy    = (state != S_IDLE);
   assign ifg_active = (state == S_IFG);
@@ -250,6 +298,10 @@ module pe_eth_tx #(
       tx_underrun    <= 1'b0;
       tx_overlong    <= 1'b0;
       crc_clr        <= 1'b0;
+      line_drive     <= 1'b0;
+      nlp_cnt        <= '0;
+      tpidl_left     <= 2'd0;
+      nlp_cell       <= 1'b0;
     end else begin
       // status pulses are one cycle wide unless set below
       tx_done     <= 1'b0;
@@ -296,13 +348,35 @@ module pe_eth_tx #(
       if (!enable) begin
         // Losing the path mid-frame abandons the frame without a fault: the
         // SoC refuses to clear tx_path while tx_busy, so this is a guard.
+        // The pair is released at once and the link-pulse period restarts.
         state      <= S_IDLE;
         start_pend <= 1'b0;
         abort_pend <= 1'b0;
+        line_drive <= 1'b0;
+        nlp_cnt    <= '0;
+        tpidl_left <= 2'd0;
+        nlp_cell   <= 1'b0;
       end else if (cell_start) begin
+        // ---- the line driver's own cadence (the FSM below overrides it) ----
+        // A link pulse lasts exactly one cell; the start-of-idle delimiter
+        // counts down TPIDL_CELLS cells. The period counter advances only in
+        // the quiet-IDLE branch and a frame start zeroes it, so a frame, its
+        // IFG and any TP_IDL restart the period.
+        if (nlp_cell) begin
+          nlp_cell   <= 1'b0;
+          line_drive <= 1'b0;
+        end
+        if (tpidl_left != 2'd0) begin
+          tpidl_left <= tpidl_left - 2'd1;
+          if (tpidl_left == 2'd1) line_drive <= 1'b0;
+        end
+
         if (abort_pend) begin
           abort_pend <= 1'b0;
           state      <= S_IDLE;
+          // A cut frame still ends with TP_IDL. The pair is already driven
+          // (every frame cell is), so only the countdown needs loading.
+          if (in_frame) tpidl_left <= 2'(TPIDL_CELLS);
         end else begin
           case (state)
             // ---- IDLE: wait for a start, applied on a cell boundary ----
@@ -316,6 +390,20 @@ module pe_eth_tx #(
                                                      // the start pulse (F1)
                 data_bits_left <= {pend_len, 3'b000};
                 crc_clr        <= 1'b1;              // prelude never folds
+                line_drive     <= 1'b1;              // the pair carries the frame
+                tpidl_left     <= 2'd0;              // a start ends any delimiter
+                nlp_cnt        <= '0;
+              end else if (tpidl_left == 2'd0) begin
+                // Quiet idle: count toward the next link pulse. A start that is
+                // already pending wins (the branch above), so a pulse never
+                // delays a frame by more than the one cell it occupies.
+                if (nlp_cnt == NLPW'(NLP_CELLS - 1)) begin
+                  nlp_cnt    <= '0;
+                  nlp_cell   <= 1'b1;
+                  line_drive <= 1'b1;                // one positive cell
+                end else begin
+                  nlp_cnt <= nlp_cnt + 1'b1;
+                end
               end
             end
 
@@ -325,6 +413,7 @@ module pe_eth_tx #(
                 if (fifo_cnt == 4'd0) begin
                   tx_underrun <= 1'b1;               // no header byte
                   state       <= S_IDLE;
+                  tpidl_left  <= 2'(TPIDL_CELLS);    // still end with TP_IDL
                 end else begin
                   state   <= S_DATA;
                   tx_reg  <= fifo_head[3'd0];
@@ -364,6 +453,7 @@ module pe_eth_tx #(
                   if (fifo_cnt <= 4'd1) begin
                     tx_underrun <= 1'b1;             // never a silent gap
                     state       <= S_IDLE;
+                    tpidl_left  <= 2'(TPIDL_CELLS);  // still end with TP_IDL
                   end else begin
                     tx_reg <= fifo_after[3'd0];
                   end
@@ -391,6 +481,7 @@ module pe_eth_tx #(
                 state   <= S_IFG;
                 ifg_cnt <= 7'd0;
                 tx_done <= 1'b1;
+                tpidl_left <= 2'(TPIDL_CELLS);       // start-of-idle delimiter
               end else begin
                 fcs_left <= fcs_left - 6'd1;
               end

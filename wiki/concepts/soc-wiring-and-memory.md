@@ -58,8 +58,9 @@ is the authoritative list, not `pe_soc`:
 | `ui_in[7:3]` | free |
 | `uo_out[0]` | UART TX / SPI SCLK (one persona at a time) |
 | `uo_out[1]` | IRQ_N — host fault, sticky, active low |
-| `uo_out[2]` | 10BASE-T TX (reclaims `dbg_pc[0]`; port bit 7) |
-| `uo_out[7:3]` | `dbg_pc[5:1]` — visible PC for bring-up |
+| `uo_out[2]` | 10BASE-T TX+ (reclaims `dbg_pc[0]`; port bit 7) |
+| `uo_out[3]` | 10BASE-T TX− `eth_tx_n` (reclaims `dbg_pc[1]`; [[plans/eth-tx-line-driver]], proposed) |
+| `uo_out[7:4]` | `dbg_pc[5:2]` — visible PC for bring-up |
 | `uio[0:1]` | I2C SDA / SCL, open-drain |
 | `uio[2:3]` | SPI MOSI / CS_N, push-pull |
 | `uio[4:7]` | framed host bus: CS_N, MOSI, MISO, SCK |

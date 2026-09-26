@@ -28,6 +28,18 @@
 // eng_tx_wire/dmem), so the RED run is the planned aliasing failure rather
 // than a compile error.
 //
+// THE PAIR (wiki/plans/eth-tx-line-driver.md). The SoC composes the second
+// leg, eth_tx_n = wire ^ line_drive, and says when the Ethernet line owns it
+// (eth_tx_n_en). Checked here at the SoC's pad-side ports, every cell:
+//   * eth_tx_n_en is exactly `tx_path && overlay on pin 7 && pin 7 driven`;
+//   * every frame cell has eth_tx_n = NOT eth_tx at both half samples;
+//   * after the frame: 3 cells of eth_tx=1/eth_tx_n=0 (TP_IDL, positive),
+//     then both legs idle high (0 V across the pair);
+//   * the firmware halts with the engine still enabled, so the SoC then
+//     sends a link pulse: eth_tx_n low for exactly 6 clocks with eth_tx
+//     high, exactly 160,000 cell boundaries (16 ms) after the engine went
+//     idle -- the silicon constant, measured at the SoC (dump paused).
+//
 // WHAT IT DOES NOT COVER: the wrapper's uo_out[2] pad mux and its reset
 // fallback (Task 4), the wire loopback through the RX chain (Task 5), and the
 // owner-arbitration directed cases (Task 6's integration mutations).
@@ -57,6 +69,7 @@ module tb_pe_soc_eth_tx;
   wire  [7:0] pin_out_bus, pin_oe_bus;
   logic [9:0] dbg_pc;   // R2: full PC width (pe_soc exposes PCW bits)
   logic [7:0] dbg_a, dbg_timer;
+  logic       eth_tx_n, eth_tx_n_en;   // the pair's second leg
 
   pe_soc #(
     .IMEM_WORDS(IMEM_WORDS), .DMEM_BYTES(DMEM_BYTES), .BAUD(BAUD)
@@ -70,6 +83,7 @@ module tb_pe_soc_eth_tx;
     .dbg_rd_req(1'b0), .dbg_rd_dmem(1'b0), .dbg_rd_addr(16'h0000),
     .dbg_rd_data(), .dbg_rd_valid(),
     .pin_in(pin_in_bus), .pin_out(pin_out_bus), .pin_oe(pin_oe_bus),
+    .eth_tx_n(eth_tx_n), .eth_tx_n_en(eth_tx_n_en),
     .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_timer(dbg_timer)
   );
 
@@ -103,18 +117,28 @@ module tb_pe_soc_eth_tx;
   // samples of the SoC's own divider, with the codec's Manchester mapping.
   localparam int MAXCELLS = 4096;
   logic [1:0] cellrec [0:MAXCELLS-1];   // {is_bit, decoded_bit}; 2'b00 = idle
+  logic [1:0] prec    [0:MAXCELLS-1];   // eth_tx   (pin_out[7]) at {h1, h2}
+  logic [1:0] nrec    [0:MAXCELLS-1];   // eth_tx_n              at {h1, h2}
   int         ncells;
-  logic       mh1, mh2;
+  logic       mh1, mh2, ph1, ph2, nh1, nh2;
+  bit         en_mismatch;
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       ncells <= 0; mh1 <= 1'b0; mh2 <= 1'b0;
+      ph1 <= 1'b0; ph2 <= 1'b0; nh1 <= 1'b0; nh2 <= 1'b0;
+      en_mismatch <= 1'b0;
     end else begin
       // The pad overlay is part of the integration: while the engine owns
       // pin 7 and the overlay is on, the matrix output must be the codec
       // output.
       if (dut.eng_ov_en[7] && dut.pin_oe[7] && (dut.pin_out[7] !== dut.eng_tx_wire))
         check(1'b0, "pad overlay: pin_out[7] is not the codec output");
+
+      // The pair's owner flag, every clock: the Ethernet line owns uo_out[3]
+      // exactly while it owns uo_out[2] AND the frame engine owns the codec.
+      if (eth_tx_n_en !== (dut.tx_path && dut.eng_ov_en[7] && dut.pin_oe[7]))
+        en_mismatch <= 1'b1;
 
       if (dut.cell_en && !dut.half_phase) begin
         if (mh1 === mh2) begin
@@ -123,13 +147,42 @@ module tb_pe_soc_eth_tx;
           check(mh1 === ~mh2, "Manchester halves are not complementary");
           if (ncells < MAXCELLS) cellrec[ncells] <= {1'b1, mh2};
         end
+        if (ncells < MAXCELLS) begin
+          prec[ncells] <= {ph1, ph2};
+          nrec[ncells] <= {nh1, nh2};
+        end
         if (ncells < MAXCELLS) ncells <= ncells + 1;
-        mh1 <= dut.eng_tx_wire;
+        mh1 <= dut.eng_tx_wire; ph1 <= pin_out_bus[7]; nh1 <= eth_tx_n;
       end else if (!dut.half_phase) begin
-        mh1 <= dut.eng_tx_wire;
+        mh1 <= dut.eng_tx_wire; ph1 <= pin_out_bus[7]; nh1 <= eth_tx_n;
       end else begin
-        mh2 <= dut.eng_tx_wire;
+        mh2 <= dut.eng_tx_wire; ph2 <= pin_out_bus[7]; nh2 <= eth_tx_n;
       end
+    end
+  end
+
+  // ---- a link pulse at the pads -------------------------------------------
+  // After the frame the engine idles with the pair owned; the first eth_tx_n
+  // fall while the engine is NOT busy is the link pulse (the TP_IDL low is in
+  // the IFG, while tx_busy is still high, so it is excluded). Differences of
+  // the free-running counts are exact; the one-clock detection lag cancels.
+  longint cyc = 0, cs_total = 0;
+  always @(posedge clk) begin
+    cyc <= cyc + 1;
+    if (dut.eth_cell_start) cs_total <= cs_total + 1;
+  end
+  logic   n_q = 1'b0, busy_q = 1'b0;
+  longint busy_fall_cs = -1, nlp_fall_cyc = -1, nlp_rise_cyc = -1, nlp_cs = -1;
+  bit     nlp_p_low = 1'b0;
+  always @(posedge clk) begin
+    n_q <= eth_tx_n; busy_q <= dut.eth_tx_busy;
+    if (busy_q && !dut.eth_tx_busy) busy_fall_cs <= cs_total;
+    if (eth_tx_n_en && n_q && !eth_tx_n && !dut.eth_tx_busy && nlp_fall_cyc < 0) begin
+      nlp_fall_cyc <= cyc; nlp_cs <= cs_total;
+    end
+    if (nlp_fall_cyc >= 0 && nlp_rise_cyc < 0) begin
+      if (eth_tx_n) nlp_rise_cyc <= cyc;
+      if (pin_out_bus[7] !== 1'b1) nlp_p_low <= 1'b1;   // must stay positive
     end
   end
 
@@ -206,9 +259,9 @@ module tb_pe_soc_eth_tx;
     run = 1'b1;
 
     wait_dmem(8, 8'hA5, "firmware never reported done");
-    // The done flag is written during the IFG; give the monitor two more
-    // cells to classify the last FCS cell before decoding.
-    repeat (24) @(posedge clk);
+    // The done flag is written during the IFG; give the monitor time to
+    // classify the last FCS cell, the 3 TP_IDL cells and one more.
+    repeat (60) @(posedge clk);
 
     // ---- window/length/control landed in the EXTENDED bank ----
     check(dut.eng_en === 1'b1, "engine was never enabled");
@@ -256,7 +309,45 @@ module tb_pe_soc_eth_tx;
                 $sformatf("FCS bit %0d=%b want %b", k,
                           got[64 + 480 + k], fcs_want[k]));
         $display("    decoded %0d wire bits, FCS %08h", NEED, fcs_want);
+
+        // ---- the pair: complement through the frame, TP_IDL, then 0 V ----
+        for (int k = 0; k < NEED; k++)
+          if (nrec[i0+k] !== ~prec[i0+k]) begin
+            check(1'b0, $sformatf("frame cell %0d: eth_tx_n=%b is not the complement of eth_tx=%b",
+                                  k, nrec[i0+k], prec[i0+k]));
+            break;
+          end
+        for (int k = 0; k < 3; k++)
+          check(prec[i0+NEED+k] === 2'b11 && nrec[i0+NEED+k] === 2'b00,
+                $sformatf("TP_IDL cell +%0d: eth_tx=%b eth_tx_n=%b, want 11/00 (positive)",
+                          k, prec[i0+NEED+k], nrec[i0+NEED+k]));
+        check(prec[i0+NEED+3] === 2'b11 && nrec[i0+NEED+3] === 2'b11,
+              $sformatf("after TP_IDL: eth_tx=%b eth_tx_n=%b, want 11/11 (0 V across the pair)",
+                        prec[i0+NEED+3], nrec[i0+NEED+3]));
       end
+    end
+    check(!en_mismatch,
+          "eth_tx_n_en is not exactly tx_path && overlay-on-pin-7 && pin 7 driven");
+
+    // ---- a link pulse at the pads, at the silicon period ----
+    $dumpoff;
+    begin
+      int guard;
+      guard = 0;
+      while (nlp_rise_cyc < 0 && guard < 1_100_000) begin @(posedge clk); guard++; end
+    end
+    $dumpon;
+    check(nlp_rise_cyc >= 0, "no link pulse reached the pads within 18 ms of the frame");
+    if (nlp_rise_cyc >= 0) begin
+      check(nlp_rise_cyc - nlp_fall_cyc == 6,
+            $sformatf("link pulse at the pads is %0d clocks wide, want 6 (100 ns)",
+                      nlp_rise_cyc - nlp_fall_cyc));
+      check(!nlp_p_low, "eth_tx went low during the link pulse (it must be positive: 1/0)");
+      check(nlp_cs - busy_fall_cs == 160_000,
+            $sformatf("link pulse %0d cell boundaries after the engine went idle, want 160000 (16 ms)",
+                      nlp_cs - busy_fall_cs));
+      $display("    link pulse at the pads: %0d clocks wide, %0.3f ms after the engine went idle",
+               nlp_rise_cyc - nlp_fall_cyc, (nlp_cs - busy_fall_cs) * 100.0e-6);
     end
 
     if (errors == 0) $display("PASS: tb_pe_soc_eth_tx");
@@ -265,7 +356,7 @@ module tb_pe_soc_eth_tx;
   end
 
   initial begin
-    #20_000_000;
+    #60_000_000;                         // 60 ms: the 16 ms link-pulse wait included
     $display("FAIL: watchdog -- tb_pe_soc_eth_tx did not finish");
     $display("  pc=%0d dmem8=%02h eng_en=%b ncells=%0d",
              dbg_pc, dut.dmem[8], dut.eng_en, ncells);

@@ -1,7 +1,7 @@
 ---
 title: Physical Layer via GPIO
 created: 2026-09-17
-updated: 2026-09-18
+updated: 2026-09-26
 type: concept
 tags: [physical-layer, gpio, protocol, constraint]
 sources: [raw/transcripts/gemini-asic-competition-discussion-2026-09.md]
@@ -24,5 +24,5 @@ covers all of them at once): [[reference/protocol-pin-budget]].
 ## Stretch goals need workarounds
 
 - Low-speed USB 1.1 (1.5 Mbps): 3.3 V levels match the IO rail. D+/D- are driven as two single-ended CMOS outputs (plus series resistors for impedance matching); single-ended states like SE0 are directly expressible.
-- 10BASE-T: true differential Manchester at ~+/-2.5 V into 100 ohms cannot come from a GPIO. Drive digital Manchester out to an external network (resistor ladder/transformer) or external PHY (ENC28J60/LAN8720-class). On receive, see [[concepts/cdr-oversampling]].
+- 10BASE-T: true differential Manchester at ~+/-2.5 V into 100 ohms cannot come from a GPIO, and the line has THREE states (+, -, 0 V) where a pad has two. So TX is a PAIR of pads (`eth_tx` on `uo_out[2]`, `eth_tx_n` on `uo_out[3]`) driving a line buffer and a pulse transformer, which lets the chip send the idle line, the positive link pulses and the start-of-idle delimiter; RX is magnetics plus a comparator into one input. See [[plans/eth-tx-line-driver]] (proposed on a branch) and, on receive, [[concepts/cdr-oversampling]]. An external PHY (ENC28J60/LAN8720-class) is NOT a drop-in alternative: it does its own Manchester, bypassing the chip's line layer.
 - GPIO rise/fall asymmetry at skewed corners thins these pulses; see [[concepts/gpio-signoff-corners]] for the FS/SF analysis plan.

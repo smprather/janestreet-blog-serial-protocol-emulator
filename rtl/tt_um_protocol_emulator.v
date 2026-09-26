@@ -50,8 +50,9 @@
 //
 //   uo_out[0]   UART TX / SPI SCLK  shared port bit 0, one persona at a time
 //   uo_out[1]   IRQ_N            host fault, active low (R1; sticky)
-//   uo_out[2]   eth_tx           10BASE-T TX (reclaims dbg_pc[0]: port bit 7)
-//   uo_out[7:3] dbg_pc[5:1]      visible program counter, for bring-up
+//   uo_out[2]   eth_tx           10BASE-T TX+ (reclaims dbg_pc[0]: port bit 7)
+//   uo_out[3]   eth_tx_n         10BASE-T TX- (reclaims dbg_pc[1]: the pair)
+//   uo_out[7:4] dbg_pc[5:2]      visible program counter, for bring-up
 //
 //   uio[0]      SDA              open-drain, for the I2C milestone
 //   uio[1]      SCL              open-drain, for the I2C milestone
@@ -69,10 +70,11 @@
 // A second SCLK pad would duplicate uo_out[0]; there is no input mux for a
 // dedicated MISO. See wiki/plans/spi-pads.md.
 //
-// WHY FIVE PADS STILL CARRY THE PROGRAM COUNTER (decision 2026-09-23, STATUS
-// item 4; amended by the eth-tx plan G6 adoption 2026-09-24). Not because pads
+// WHY FOUR PADS STILL CARRY THE PROGRAM COUNTER (decision 2026-09-23, STATUS
+// item 4; amended by the eth-tx plan G6 adoption 2026-09-24, and by the
+// eth-tx-line-driver proposal 2026-09-26, below). Not because pads
 // are free: the committed pinout uses 19 of 24 usable pads, and a literal "all
-// nine protocols at once" needs 22 disjoint wires (10 out, 5 in, 7 bidir). It
+// nine protocols at once" needs 23 disjoint wires (11 out, 5 in, 7 bidir). It
 // does NOT fit even if these five were reclaimed -- the direction-aware
 // arithmetic is generated from this wrapper and info.yaml into
 // wiki/reference/protocol-pin-budget.md. What the budget does not threaten is
@@ -84,10 +86,18 @@
 // 4's revisit trigger fired and the manager adopted G6: uo_out[2] (dbg_pc[0])
 // is reclaimed as the 10BASE-T `eth_tx` pad behind a bit-identical reset mux
 // (`pin_oe_bus[7] ? pin_out_bus[7] : dbg_pc[0]`; see the outputs below). The
-// remaining five debug pins stay dbg_pc[5:1] until a later protocol needs
+// remaining five debug pins stayed dbg_pc[5:1] until a later protocol needed
 // them; the free-uio alternative was voided by the R1 pad map (no uio is
 // free). The matrix can already drive the committed uio pads at runtime, so
 // this is a pinout choice, not a capability limit.
+//
+// 2026-09-26 (wiki/plans/eth-tx-line-driver.md): 10BASE-T needed one of them.
+// Its line has three states (+, - and 0 V), a single pad has two, so the idle
+// line, the positive link pulses and the start-of-idle delimiter cannot be
+// made from eth_tx alone. uo_out[3] (dbg_pc[1]) is reclaimed as eth_tx_n
+// behind the same kind of bit-identical mux; four debug pins remain,
+// dbg_pc[5:2]. PROPOSED on branch eth-tx-line-driver: a pinout change the
+// manager adopts or rejects (STATUS item 4 owns the dbg_pc pads).
 //
 // The two I2C uio pins are wired as a loopback-capable open-drain pair driven
 // from the SoC's pin today. That is enough to prove the oe path works in
@@ -136,8 +146,8 @@ module tt_um_protocol_emulator (
 
   // R2: the debug bus is FULL WIDTH at the SoC (dbg_pc is PCW bits, i.e. 10
   // in a 1,024-word machine). Declared before BOTH instances below (Icarus
-  // binds declaration before use). The pads still expose only dbg_pc[5:1] — a
-  // pad can carry 6 bits, and that limit is a pin budget fact, not a register
+  // binds declaration before use). The pads still expose only dbg_pc[5:2] — the
+  // pads can carry 4 bits, and that limit is a pin budget fact, not a register
   // truncation. The host read path sees the whole register.
   wire [9:0] dbg_pc;
   wire [7:0] dbg_a, dbg_x, dbg_y, dbg_timer;
@@ -178,6 +188,7 @@ module tt_um_protocol_emulator (
   wire [7:0] pin_in_bus;
   wire [7:0] pin_out_bus;
   wire [7:0] pin_oe_bus;
+  wire       eth_tx_n, eth_tx_n_en;   // the 10BASE-T pair's second leg
 
   // UART RX (bit 3) is a dedicated input pad. Bits 4/5 (SDA/SCL) come from
   // `uio_in` and are attached after the pads are declared -- see below.
@@ -206,6 +217,8 @@ module tt_um_protocol_emulator (
     .pin_in(pin_in_bus),
     .pin_out(pin_out_bus),
     .pin_oe(pin_oe_bus),
+    .eth_tx_n(eth_tx_n),
+    .eth_tx_n_en(eth_tx_n_en),
     .dbg_pc(dbg_pc),
     .dbg_a(dbg_a),
     .dbg_x(dbg_x),
@@ -223,10 +236,17 @@ module tt_um_protocol_emulator (
   // pad carries that bit; otherwise uo_out[7:2] is dbg_pc[5:0] EXACTLY as
   // before, which is the reset-bit-identical rule. The mux has no glitch to
   // worry about: both sources are levels and the select is a matrix register.
+  //
+  // uo_out[3] is the 10BASE-T pair's second leg, eth_tx_n
+  // (wiki/plans/eth-tx-line-driver.md): the SoC's complement of the wire while
+  // the Ethernet line owns the pair, dbg_pc[1] otherwise. Same bit-identical
+  // reset rule: eth_tx_n_en is low at reset and whenever port bit 7 is
+  // released, so uo_out[7:2] is dbg_pc[5:0] until the Ethernet persona runs.
   assign uo_out[0]   = pin_out_bus[0];    // UART TX / SPI SCLK, port bit 0
   assign uo_out[1]   = ctrl_irq_n;        // IRQ_N: active low, sticky faults
   assign uo_out[2]   = pin_oe_bus[7] ? pin_out_bus[7] : dbg_pc[0];
-  assign uo_out[7:3] = dbg_pc[5:1];
+  assign uo_out[3]   = eth_tx_n_en ? eth_tx_n : dbg_pc[1];
+  assign uo_out[7:4] = dbg_pc[5:2];
 
   // ---- bidirectional pins: driven by the pin matrix ----------------------
   // Port bits 4 and 5 are I2C SDA and SCL, and the matrix's per-pin enable

@@ -86,8 +86,8 @@ pinout:
 
   uo[0]: "UART TX / SPI SCLK (shared port bit 0; one persona at a time)"
   uo[1]: "IRQ_N (active low; sticky PE fault, released by CLEAR_FAULT)"
-  uo[2]: "eth_tx (10BASE-T TX; dbg_pc[0] when the persona is off)"
-  uo[3]: "dbg_pc[1]"
+  uo[2]: "eth_tx (10BASE-T TX+; dbg_pc[0] when the persona is off)"
+  uo[3]: "eth_tx_n (10BASE-T TX-, the pair's second leg; dbg_pc[1] when the persona is off)"
   uo[4]: "dbg_pc[2]"
   uo[5]: "dbg_pc[3]"
   uo[6]: "dbg_pc[4]"
@@ -104,6 +104,8 @@ pinout:
 
 documentation:
   # The board must supply what the pads cannot: I2C pull-ups today, and per
-  # wiki/reference/protocol-pin-budget.md a transceiver for CAN, a transformer
-  # for 10BASE-T and a pull-up for USB when those land.
+  # wiki/reference/protocol-pin-budget.md a transceiver for CAN, a line buffer
+  # + pulse transformer on the uo[2]/uo[3] TX pair and a comparator on ui[2]
+  # for 10BASE-T (wiki/plans/eth-tx-line-driver.md), and a pull-up for USB
+  # when those land.
   external_hw: "I2C pull-ups (4.7k) on uio[0] and uio[1] for the I2C milestone."

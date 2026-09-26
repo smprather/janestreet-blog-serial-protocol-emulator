@@ -205,6 +205,11 @@ module pe_soc #(
   output logic [7:0]  pin_out,
   output logic [7:0]  pin_oe,
 
+  // The 10BASE-T pair's second leg (uo_out[3] at the wrapper; pin_out[7] is
+  // the first). eth_tx_n_en is high only while the Ethernet TX owns that line.
+  output logic        eth_tx_n,
+  output logic        eth_tx_n_en,
+
   // Observability. R2: full native widths, no truncation. dbg_pc used to be
   // 8 bits wide, so a PC above 255 read back as zero in a 1,024-word machine;
   // the host read path must be able to report the real register. dbg_x,
@@ -868,6 +873,7 @@ module pe_soc #(
   wire        eth_tx_bit, eth_tx_busy, eth_tx_done, eth_tx_underrun,
               eth_tx_overlong, eth_ifg_active, eth_fifo_ready, eth_start;
   wire        eth_tx_owner;
+  wire        eth_line_drive;   // u_eth_tx: the pair is driven (frame/TP_IDL/NLP)
   wire        ser_tx, ser_tx_busy, ser_tx_done;   // declared with the owner wires:
                                                 // the TXCTRL guard reads ser_tx_busy
 
@@ -1125,7 +1131,8 @@ module pe_soc #(
     .tx_busy(eth_tx_busy), .tx_done(eth_tx_done),
     .tx_underrun(eth_tx_underrun), .tx_overlong(eth_tx_overlong),
     .ifg_active(eth_ifg_active),
-    .tx_bit(eth_tx_bit)
+    .tx_bit(eth_tx_bit),
+    .line_drive(eth_line_drive)
   );
 
   // One capture path: the EXISTING DRU (u_eth_dru) feeds this instance.
@@ -1205,6 +1212,18 @@ module pe_soc #(
   // is enabled; oe/od remain firmware's. All-zero when disabled -- which is
   // bit-identical to the matrix without an overlay (reset default).
   assign eng_ov_en = eng_en ? (eng_txsel ? 8'h01 : 8'h80) : 8'h00;
+
+  // The 10BASE-T pair's second leg (wiki/plans/eth-tx-line-driver.md). While
+  // the frame engine drives the pair (a frame, TP_IDL or a link pulse) it is
+  // the COMPLEMENT of the wire; otherwise it IS the wire, so an idle pair sits
+  // at 0 V with both legs high and no DC flows through the transformer. The
+  // XOR is against a register that moves only on cell boundaries, so the two
+  // legs switch on the same edge. It owns uo_out[3] exactly while the
+  // Ethernet line owns uo_out[2]: the overlay is on pin 7, firmware drives
+  // pin 7, and tx_path gives the codec to the frame engine. With tx_path low
+  // the SERDES may be on pin 7, and uo_out[3] stays the debug PC.
+  assign eth_tx_n    = eng_tx_wire ^ eth_line_drive;
+  assign eth_tx_n_en = tx_path && eng_ov_en[7] && pin_oe[7];
 
   // Unused-direction sinks: this repo accepts no lint waivers. cfg_w[3] is
   // deliberately overridden on BOTH instances (half_phase on TX, 0 on RX --

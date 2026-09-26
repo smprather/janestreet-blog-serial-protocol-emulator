@@ -87,7 +87,8 @@ outputs.
 | `uo_out[0]` | UART TX / SPI SCLK | shared port bit 0; one persona at a time |
 | `uo_out[1]` | `IRQ_N` | sticky fault, active low |
 | `uo_out[2]` | `eth_tx` | reclaimed from `dbg_pc[0]` behind a mux |
-| `uo_out[7:3]` | `dbg_pc[5:1]` | a visible program counter, for bring-up |
+| `uo_out[3]` | `eth_tx_n` | the pair's second leg, reclaimed from `dbg_pc[1]` ([[plans/eth-tx-line-driver]], proposed) |
+| `uo_out[7:4]` | `dbg_pc[5:2]` | a visible program counter, for bring-up |
 | `uio[0]` | SDA | open-drain |
 | `uio[1]` | SCL | open-drain |
 | `uio[2]` | SPI MOSI | |
