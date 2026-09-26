@@ -215,8 +215,11 @@ note bottom of g1
   instantiate pe_cpu/pe_soc directly took SIX ACTS
   to their reset after the 5b4731f merge, and the
   FULL SUITE caught it immediately - no unit TB
-  finds a port addition on its own. All 13 TBs now
-  tie the debug inputs low, with a comment.
+  finds a port addition on its own. The contract recorded 13 TBs tying
+  them low; that count is DATED - on today's tree 26 testbenches
+  reference pe_cpu/pe_soc and 21 of those tie the debug inputs low,
+  because the population has grown. Quote it as the contract's figure,
+  not as the current one.
 end note
 
 note bottom of g2

@@ -385,8 +385,11 @@ note bottom of r3_ctr
   convention is enforced where the input is consumed rather than at every call
   site -- the only place a new call site cannot forget it. Synthesis is
   unaffected (x and z do not exist in hardware). Leaving those inputs
-  undriven took six acts to their reset after the 5b4731f merge; all 13 TBs
-  now tie them low with a comment.
+  undriven took six acts to their reset after the 5b4731f merge. The
+  contract recorded 13 TBs then tying them low; that count is DATED -- on
+  today's tree 26 testbenches reference pe_cpu/pe_soc and 21 tie the debug
+  inputs low, the population having grown. Quote it as the contract's
+  figure, not the current one.
 end note
 
 note bottom of fv_mut
