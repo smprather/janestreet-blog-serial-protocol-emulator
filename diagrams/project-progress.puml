@@ -216,12 +216,14 @@ package "Timing acts as firmware (fw-timing)\nsame CPU, pin matrix and 260-clock
 ' when all six were siblings. Safe to delete if the fan-out changes shape.
 
 package "Formal campaign" {
-  component "SMT/BMC toolchain\nfv_run.sh" as fv_tool <<complete>>
-  component "9 properties across 4 modules\npinmux, eth_tx, pe_ctrl, pe_soc" as fv_props <<complete>>
+  component "SMT/BMC toolchain\nfv_run.sh + smt_induct.sh" as fv_tool <<complete>>
+  component "10 properties / 5 modules\npinmux, eth_tx, pe_ctrl,\npe_soc, pe_cpu" as fv_props <<complete>>
   component "Inductive IFG floor\nUNBOUNDED" as fv_ifg <<complete>>
-  component "Mutant-kill gate\n10/10 caught" as fv_mut <<complete>>
+  component "pe_cpu_debug_hold\nR3 hold PROVED inductively (S1-S4)" as fv_hold <<complete>>
+  component "Mutant-kill gate\n14/14 caught" as fv_mut <<complete>>
   fv_tool --> fv_props
   fv_props --> fv_ifg
+  fv_props --> fv_hold
   fv_mut --> fv_props : non-vacuity
 }
 
@@ -299,10 +301,11 @@ end note
 
 note bottom of fv_mut
   Non-vacuity, which is the reason the gate exists: a proof that does not kill
-  its mutant is not a proof. formal/mutants.sh reports 10 caught / 0 survived,
-  and one eth_tx reachability claim is labelled VACUOUS at the gate depth
-  rather than quietly reported as a proof. 9 properties, not 11 -- the summary
-  file is the authority.
+  its mutant is not a proof. 14 caught / 0 survived, and one eth_tx
+  reachability claim is labelled VACUOUS at the gate depth rather than quietly
+  reported as a proof. ONE OF THE FOURTEEN IS R3's: pe_ctrl_bp_hit_no_hold
+  CAUGHT-no-closure, so the bring-up trap has both a proof (pe_cpu_debug_hold,
+  inductively, claims S1-S4) and a mutant that dies without it.
 end note
 
 legend left

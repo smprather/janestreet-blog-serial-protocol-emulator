@@ -121,12 +121,14 @@ package "Protocol and timing acts as firmware\none CPU, one pin matrix, one 260-
 }
 
 package "Verification — formal campaign" {
-  component "SMT / BMC toolchain\nfv_run.sh, depth 16, memory-capped" as p_fvtool
-  component "9 properties / 4 modules\npinmux, eth_tx, pe_ctrl, pe_soc" as p_fvprops
+  component "SMT / BMC toolchain\nfv_run.sh + smt_induct.sh" as p_fvtool
+  component "10 properties / 5 modules\npinmux, eth_tx, pe_ctrl, pe_soc, pe_cpu" as p_fvprops
   component "Inductive IFG floor\neth_tx 96-cell gap, unbounded" as p_fvifg
-  component "Mutant-kill gate\n10/10 caught, 0 survived" as p_fvmut
+  component "R3 debug hold\nproved inductively, S1-S4" as p_fvhold
+  component "Mutant-kill gate\n14/14 caught, 0 survived" as p_fvmut
   p_fvtool --> p_fvprops
   p_fvprops --> p_fvifg
+  p_fvprops --> p_fvhold
   p_fvmut --> p_fvprops : non-vacuity
 }
 
