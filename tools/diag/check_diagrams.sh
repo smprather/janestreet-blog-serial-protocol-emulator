@@ -225,12 +225,47 @@ ASPECT_MAX=15.0
 # the self-test plants its cases in. The fixtures are not real figures and
 # deliberately contain non-canonical colour, which is what several of the cases
 # are about.
+#
+# THE FIVE ARE NOT EXEMPT BECAUSE NOBODY LOOKED AT THEM. They are exempt because
+# there is NOTHING CANONICAL FOR THEM TO ADOPT, which is a mechanical fact and
+# not a matter of taste: the canonical set is NOTE + SEQ + STATE and contains no
+# `component` block, and these four maps are the ONLY files in the corpus that
+# carry one. Each such block IS that figure's entire colour vocabulary --
+#
+#   project-progress      <<complete>> <<open>> <<standalone>>
+#   proto-r2-read-path    <<ops>> <<hdr>> <<live>> <<ceil>> <<refuse>>
+#   proto-r3-debug-control<<free>> <<held>> <<hit>> <<enc>> <<trap>>
+#   proto-spi-framing     <<frame>> <<ctl>> <<data>> <<integ>> <<wait>>
+#
+# -- twenty stereotypes of semantic vocabulary that exists nowhere else.
+# Propagating the palette would leave all twenty falling back to the base colour,
+# which is the lost-stereotype bug at four times the scale of the mistake this
+# work already made once. Worse, TWO of those names collide with canonical
+# stereotypes and carry a DIFFERENT meaning: proto-spi-framing's <<wait>> is
+# #b85450, a red that marks a wait which can trap, where canonical <<wait>> is
+# #24506E, blue. Overwriting it would change what the figure says, silently.
+# Adopting the palette here is a design decision about somebody else's
+# vocabulary, not a propagation, so it is not this check's to make.
+#
+# WHICH IS WHY THE EXEMPTION IS AUDITED RATHER THAN ASSERTED. An exemption that
+# cannot fail is a comment with a list in it, and an unverified exemption is the
+# same disease as an unverified palette copy -- which is the lesson of this whole
+# effort. `exempt_audit` below asserts, for each of the five, the two properties
+# that earn the exemption: it carries no block of a kind the fleet palette
+# DOES define (a `sequence` or `state` block in an exempt file is drift hidden
+# behind the name), and every stereotype it uses is declared in one of its own
+# blocks (an undeclared one falls back to the base colour, and an exempt file is
+# the one place no other check looks). Cases (r), (s) and control (t) pin it.
+# ONE list, in DRIFT_EXEMPT below, used by both checks: a second copy is a
+# second thing to forget to update, and an exemption nobody can find is an
+# exemption nobody audits.
+DRIFT_EXEMPT="project-plan.puml project-progress.puml proto-r2-read-path.puml proto-r3-debug-control.puml proto-spi-framing.puml"
+
 palette_drift() {  # source_file -> one line per drift finding on stdout
-  python3 - "$1" <<'PYD' 2>/dev/null
+  python3 - "$1" "$DRIFT_EXEMPT" <<'PYD' 2>/dev/null
 import re, sys, hashlib
 CANON = set(("6cef8ec7e7f7", "e6b4a55955c8", "4ae48999b2a9"))
-EXEMPT = set(("project-plan.puml", "project-progress.puml", "proto-r2-read-path.puml",
-              "proto-r3-debug-control.puml", "proto-spi-framing.puml"))
+EXEMPT = set(sys.argv[2].split())
 def dig(t):
     return hashlib.sha1(re.sub(r"\s+$", "", t, flags=re.M).encode()).hexdigest()[:12]
 path = sys.argv[1]
@@ -304,6 +339,39 @@ for n, line in enumerate(open(sys.argv[1]), 1):
                   " white page" % (n, m.group(0), len(m.group(1))))
             break
 PYH
+}
+
+exempt_audit() {  # source_file -> one finding per line on stdout
+  python3 - "$1" "$DRIFT_EXEMPT" <<'PYE' 2>/dev/null
+import re, sys
+# The block kinds the FLEET palette defines. `component` is deliberately NOT one
+# of them: there is no canonical component block anywhere in the corpus, which
+# is the whole reason the four maps are exempt. A `component` block in an exempt
+# file is that figure's own vocabulary and is allowed; a `sequence` or `state`
+# block is fleet palette, and its absence from an exempt file is drift the name
+# is hiding.
+FLEET_KINDS = ("sequence", "state")
+FLEET_STEREOTYPES = set(("tx", "rx", "ack", "abort", "box", "brk",
+                         "slot", "crc", "data", "stat", "hs", "wait"))
+path = sys.argv[1]
+if path.rsplit("/", 1)[-1] not in sys.argv[2].split():
+    raise SystemExit(0)                      # not exempt: nothing to audit
+s = open(path).read()
+declared = set()
+for m in re.finditer(r'^[ \t]*skinparam[ \t]+(\w+)[ \t]*(?:<<\w+>>[ \t]*)?\{'
+                     r'(.*?)^[ \t]*\}[ \t]*', s, re.M | re.S):
+    kind, body = m.group(1), m.group(2)
+    declared |= set(re.findall(r'<<(\w+)>>', body))
+    if kind in FLEET_KINDS:
+        print("exempt by name, but it carries a `skinparam %s` block and %s IS a "
+              "fleet palette kind: canonicalise it, or drop the exemption" % (kind, kind))
+for st in sorted(set(re.findall(r'<<(\w+)>>', s))):
+    if st in declared or st in FLEET_STEREOTYPES:
+        continue
+    print("<<%s>> is used but declared in no block of its own, so it falls back "
+          "to the base colour, and an exempt file is the one place no other "
+          "check looks" % st)
+PYE
 }
 
 white_check_svg() {  # svg -> one finding per line on stdout
@@ -688,6 +756,28 @@ EOF
         fail "MALFORMED HEX $(basename "$src"):$hx"
       done <<EOF
 $hex
+EOF
+    fi
+  done
+
+  # ---- 1c-ii. the five exemptions, AUDITED rather than asserted ------------
+  # Reached by NAME, and only for names on the list, so an ordinary source is
+  # never judged by these rules. Case (r) plants a `sequence` block into an
+  # exempt name; case (s) plants an undeclared stereotype; case (t) is the
+  # healthy control that keeps this from degenerating into flagging all five.
+  local ex
+  for src in "$dir"/*.puml; do
+    [ -e "$src" ] || continue
+    base=$(basename "$src")
+    case " $DRIFT_EXEMPT " in *" $base "*) ;; *) continue ;; esac
+    ex=$(exempt_audit "$src")
+    if [ -n "$ex" ]; then
+      while IFS= read -r xr; do
+        [ -n "$xr" ] || continue
+        bad_total=$((bad_total + 1))
+        fail "EXEMPTION $base: $xr"
+      done <<EOF
+$ex
 EOF
     fi
   done
@@ -1448,6 +1538,76 @@ PUJ
   plantuml -tpng "$sandbox/cp/aaa-alpha-ok.puml" -o "$sandbox/cp" >/dev/null 2>&1
   plantuml -tsvg "$sandbox/cp/aaa-alpha-ok.puml" -o "$sandbox/cp" >/dev/null 2>&1
   plant "p a dark 8-digit hex literal" clean cp
+
+  # (r) THE EXEMPTION, PLANTED WITH WHAT WOULD BREAK IT. The five drift-exempt
+  #     figures are exempt BY NAME, which means anything they contain is skipped
+  #     by the drift check -- including a palette-bearing block that IS drift by
+  #     every other definition, and a stereotype that nothing declares. Both are
+  #     real rot modes and both are invisible today only because the files are
+  #     healthy; an exemption that cannot fail is an assertion, not a check, and
+  #     an unverified exemption is the same disease as an unverified palette copy.
+  #
+  #     The planted files are named with exempt basenames on purpose: the audit is
+  #     reached by NAME, so a fixture with a different name would not exercise the
+  #     path that matters. (t) below is the control -- a healthy exempt file must
+  #     stay clean, so this check cannot be satisfied by flagging all five.
+  for spec in \
+    "r:project-plan.puml:palette-bearing block:@startuml
+skinparam state {
+  BackgroundColor #EEF3FB
+}
+@enduml
+" \
+    "s:proto-spi-framing.puml:an undeclared stereotype:@startuml
+rectangle \"the trap\" as t <<trap>>
+@enduml
+"
+  do
+    tag="${spec%%:*}"; rest="${spec#*:}"
+    fname="${rest%%:*}"; rest="${rest#*:}"
+    label="${rest%%:*}"; body="${rest#*:}"
+    ex_dir=$(mktemp -d "/tmp/diag_exempt.${_wt}.XXXXXX")
+    printf '%s' "$body" > "$ex_dir/$fname"
+    results=$((results + 1))
+    out=$(exempt_audit "$ex_dir/$fname")
+    rm -rf "$ex_dir"
+    if [ -n "$out" ]; then
+      printf '  ok:   self-test — %-42s planted:  CAUGHT\n' "$tag an exempt file with $label"
+      caught=$((caught + 1))
+    else
+      printf '  FAIL: self-test — %s: an exempt file carrying %s was reported\n' "$tag" "$label"
+      printf '        clean, so the exemption cannot fail and is an assertion\n'
+    fi
+  done
+
+  # (t) THE CONTROL for (r) and (s): a HEALTHY exempt file, which is what all
+  #     four maps actually look like -- a component block declaring every
+  #     stereotype the figure uses. Must be silent. A check with no control is a
+  #     check whose strictness nobody has measured, and this one has an obvious
+  #     degenerate solution: flag all five and be right by accident.
+  ex_dir=$(mktemp -d "/tmp/diag_exempt.${_wt}.XXXXXX")
+  cat > "$ex_dir/proto-spi-framing.puml" <<'PEX'
+@startuml
+skinparam component {
+  BackgroundColor<<frame>> #dbe5f1
+  BorderColor<<frame>> #6c8ebf
+  BackgroundColor<<data>> #d5e8d4
+  BorderColor<<data>> #82b366
+}
+rectangle "the frame" as f <<frame>>
+rectangle "the payload" as p <<data>>
+@enduml
+PEX
+  results=$((results + 1))
+  out=$(exempt_audit "$ex_dir/proto-spi-framing.puml")
+  rm -rf "$ex_dir"
+  if [ -z "$out" ]; then
+    printf '  ok:   self-test — %-42s untouched: PASSES\n' "t a healthy exempt file"
+    caught=$((caught + 1))
+  else
+    printf '  FAIL: self-test — t: a healthy exempt file was flagged, so the audit\n'
+    printf '        condemns the exemption rather than checking it\n'
+  fi
 
   printf '  -- self-test: %d of %d cases behaved correctly\n' "$caught" "$results"
   rm -rf "${sandbox:?}"
