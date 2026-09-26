@@ -31,6 +31,18 @@ host-gui = [
     "pyserial>=3.5",
 ]
 
+[tool.setuptools]
+# This distribution ships NO importable package, and saying so explicitly is
+# what makes `pip install .[host-gui]` work at all. Without this section,
+# setuptools' flat-layout auto-discovery finds tb/, sim/, rtl/, wiki/, flow/,
+# regress/, firmware/ and diagrams/, cannot choose, and FAILS WHILE BUILDING -
+# so the install step the runbook gives the operator never ran, and the error
+# points at packaging rather than at a missing dependency. The tools live in
+# tools/ and are run from the clone; the extra exists to bring in fastapi,
+# uvicorn and pyserial, and nothing else.
+packages = []
+py-modules = []
+
 [tool.ruff]
 line-length = 90
 target-version = "py312"

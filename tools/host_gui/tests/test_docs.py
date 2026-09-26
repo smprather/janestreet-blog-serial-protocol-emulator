@@ -27,7 +27,59 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-class TestDemoWalkthrough(unittest.TestCase):
+class TestTheDistributionInstallsItsOwnExtra(unittest.TestCase):
+    """`pip install .[host-gui]` is the runbook's first step. It has to work.
+
+    The operator's board run starts with installing the extra. That command
+    FAILED on a fresh clone: the `[project]` table declares the extra, but
+    nothing told setuptools what the distribution contains, so flat-layout
+    auto-discovery found `tb/`, `sim/`, `rtl/`, `wiki/`, `flow/`, `regress/`,
+    `firmware/` and `diagrams/` and refused to guess. The error arrives while
+    BUILDING, so it looks like a packaging problem rather than a missing
+    install step - and nobody noticed because nobody ran it, for the same
+    reason nobody ran the server: the extra was never installed here.
+
+    These tests pin the two halves that can be checked without a network: that
+    the packaging is DECLARED (so a future scaffold cannot silently re-break
+    it), and that the extra still names the three modules the host actually
+    imports. The effect itself is verified by
+    `python3 -m pip install --dry-run ".[host-gui]"`, which is a command, not a
+    test - a gate that shelled out to pip would be slow and would need a
+    network, which is a worse trade than a documented command.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import tomllib
+
+        REPO_ROOT = Path(__file__).resolve().parents[3]
+        cls.text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        cls.data = tomllib.loads(cls.text)
+
+    def test_the_packaging_is_declared_so_flat_layout_discovery_cannot_guess(self):
+        setuptools = self.data.get("tool", {}).get("setuptools")
+        self.assertIsNotNone(
+            setuptools,
+            "without [tool.setuptools] the flat layout is ambiguous and the "
+            "install the runbook names fails before it resolves anything")
+        # This distribution ships no importable package on purpose (the header
+        # says so): the tools live in tools/ and are run from the clone. So the
+        # declaration must be an explicit EMPTY one, not a guess.
+        self.assertEqual(setuptools.get("packages", []), [])
+        self.assertEqual(setuptools.get("py-modules", []), [])
+
+    def test_the_extra_still_names_what_the_host_imports(self):
+        extra = self.data["project"]["optional-dependencies"]["host-gui"]
+        names = " ".join(extra)
+        # server.py imports fastapi and uvicorn; the transport imports pyserial
+        # lazily behind open_serial. If a module is added to the runtime and
+        # not to the extra, the board run fails at import with no clue why.
+        for module in ("fastapi", "uvicorn", "pyserial"):
+            with self.subTest(module=module):
+                self.assertIn(module, names)
+
+
+class TestTheDemoWalkthrough(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.text = read(WALKTHROUGH)
