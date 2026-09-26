@@ -2280,3 +2280,48 @@ mandate, so the fix has a scope rather than a guess. **No diagram was edited.**
   lie this session, after the XML-BAD, a worker-count that read 0, a fence-count
   that counted closings, a zero-loss baseline that never changed, and a
   class/fill regex that reported inheritance where every fill was explicit.
+
+### Correction to the entry above — the "no toolchain or font pin" claim is WITHDRAWN
+
+Appended rather than edited in place, per the append-only rule. Verified with
+`ls` + `grep` before recording, so this is a measurement and not a relay.
+
+- **WITHDRAWN: "the byte-comparing gate has no toolchain or font pin anywhere in
+  the repo."** That was true when I measured it and it is **no longer true.**
+  `diagrams/TOOLCHAIN.md` landed in `6481fdb` — *"tools/diag: pin the toolchain,
+  so the byte comparison can be trusted"* — and pins all four:
+
+```text
+  plantuml    = 1.2026.8
+  graphviz    = 16.1.0
+  java        = 26.0.2
+  monospace   = Noto Sans Mono
+```
+
+- **The byte-compare IS pin-aware**, not merely mentioned. `check_diagrams.sh`
+  carries `PIN_NAME=TOOLCHAIN.md`, a `detect_toolchain()`, a `pinned_toolchain()`
+  and a `compare_toolchain()`, reports `TOOLCHAIN MISMATCH: ...` per
+  divergence, and has a **self-test that FAILS if the gate does not report a
+  mismatch** — so the pin is enforced in both directions, like the page baseline.
+  One number differs from the relay and the measured one is recorded: by my count
+  the script references the pin **86** times (`TOOLCHAIN|pin`, case-insensitive),
+  not 15.
+- **MY FONT SPECULATION IS ALSO WITHDRAWN, on the pin's own evidence.** I wrote
+  that "if the symptom is faint glyphs in the PNG path, the missing font pin is
+  the cause." `TOOLCHAIN.md` measures the opposite: PlantUML emits **generic**
+  family references (`font-family="monospace"`, `"sans-serif"`), so the *viewer's*
+  fontconfig picks glyphs at display time and **the committed file is unaffected
+  by which font is installed** — fonts are explicitly **not** the driver, and the
+  driver is the plantuml/graphviz version with complex layouts having the most
+  coordinates to move. That also explains the shape of the earlier red: exactly
+  the two largest maps, which is what a dot-version divergence produces.
+- **WHY MY CLAIM WENT STALE, since that is the transferable part.** I measured
+  the absence of a pin, then carried the claim into a durable record without
+  re-taking the measurement — the same shelf-life failure as the `index.md` note
+  I repeated through four reports. The instruments were fine; the *claim* was
+  not re-derived. A durable record is a snapshot, and a snapshot decays.
+- **WHAT STILL STANDS** from the entry above, re-checked and unaffected: my five
+  sets measured CLEAN — every text and rect carries an explicit fill, zero
+  `<style>` blocks, worst text-vs-container contrast 6.00:1 — and the one pair
+  under 7:1 is `#7F4B00` on `#FFE6CC`. All five are green under the consolidated
+  gate.
