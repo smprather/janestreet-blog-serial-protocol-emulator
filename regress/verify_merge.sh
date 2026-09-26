@@ -730,6 +730,23 @@ echo "(full log: $LOG)"
 RC=${PIPESTATUS[0]}
 
 TOTAL=$(grep -E '^TOTAL: [0-9]+' "$LOG" | tail -1 | awk '{print $2}')
+# The KNOWN-WIP cases are counted on NEITHER side, and that is a real asymmetry
+# rather than a rounding error. run_all.sh really does run them -- it NAMES them
+# every run, "KNOWN-WIP (ran, expected red, act unfinished)", precisely so a
+# <<wip>> case cannot go the way an unwired one did, quietly invisible -- but a
+# case that is EXPECTED red increments neither pass nor fail, so it sits outside
+# the TOTAL it prints. The mapping, meanwhile, counts TABLE ENTRIES, and
+# tb_pe_soc_sr04 is one of them. So a complete, clean, full-suite run reports a
+# TOTAL one lower than the selection that asked for it, and the cross-check
+# below read that as the mapping and the suite disagreeing: GATE ERROR, exit 3,
+# on a run in which every case ran and nothing failed. That is WORSE than a
+# flaky gate, because it is indistinguishable from a real failure and so
+# teaches its reader to ignore GATE ERROR -- the exact way a gate stops being
+# evidence. So the expected side takes the WIP cases back. Counted from what the
+# run actually reported, which also means a selection that EXCLUDES a WIP case
+# needs no back-count at all: it never ran, so it is not in the list.
+WIP_N=$(grep -E '^KNOWN-WIP \(ran, expected red, act unfinished\):' "$LOG" \
+        | tail -1 | sed 's/^.*): *//' | wc -w | tr -d ' ')
 SELECTED_BY_RUN=$(grep -oE '[-][-]cases [^:]*: [0-9]+ selected' "$LOG" | tail -1 | grep -oE '[0-9]+ selected' | grep -oE '[0-9]+')
 # The same discipline for the mutation narrowing. The ruling's own words: GREEN
 # must never claim more than it ran. So the number of suites run_all.sh reports
@@ -814,8 +831,11 @@ if [ -n "$SELECTED_BY_RUN" ] && [ "$SELECTED_BY_RUN" != "$WANT" ]; then
   echo "MERGE GATE: GATE ERROR — selected $WANT case(s), run_all.sh selected $SELECTED_BY_RUN." >&2
   rm -f "$LOG"; exit 3
 fi
-if [ "$TOTAL" != "$WANT" ]; then
-  echo "MERGE GATE: GATE ERROR — expected $WANT case(s) to run, TOTAL says $TOTAL." >&2
+WANT_RAN=$((TOTAL + WIP_N))
+if [ "$WANT_RAN" != "$WANT" ]; then
+  echo "MERGE GATE: GATE ERROR — expected $WANT case(s) to run, TOTAL says $TOTAL" >&2
+  [ "${WIP_N:-0}" -gt 0 ] && \
+    echo "  plus $WIP_N KNOWN-WIP case(s) the TOTAL deliberately excludes = $WANT_RAN." >&2
   echo "  The mapping and the suite disagree; treating that as a failure, not a pass." >&2
   rm -f "$LOG"; exit 3
 fi
