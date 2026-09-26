@@ -471,13 +471,27 @@ fi
 # The real tree, REPORTED but not asserted - the same demotion the page gate got.
 # A corpus defect is the GATE's finding to make, and a self-test that goes red
 # over it reports "the gate is broken" when the gate is working perfectly.
-rout=$(bash "$RENDER_CHECK" 2>&1); rrc=$?
-if [ "$rrc" -eq 0 ]; then
-  ok "real-tree diagram state: CLEAN"
+# OPT-IN, because it is the single most expensive thing in this file and it
+# asserts NOTHING. Measured, not guessed: the diagram gate takes 32.8s on the real
+# 34-source tree, so this one informational case was two thirds of the suite's
+# 48s - spent re-running a gate that regress/run_all.sh runs immediately before
+# this file anyway, purely to print a status line. That is the cost shape this
+# project has already objected to once ("moved the regression from about a minute
+# to about three"), so it is now opt-in:
+#     CHIP_WIKI_SELFTEST_REAL_TREE=1 regress/test_check_wiki_pages.sh
+# Default off, and the skip is REPORTED rather than silent - a suite that quietly
+# stopped checking something is the failure mode everything here guards against.
+if [ -n "${CHIP_WIKI_SELFTEST_REAL_TREE:-}" ]; then
+  rout=$(bash "$RENDER_CHECK" 2>&1); rrc=$?
+  if [ "$rrc" -eq 0 ]; then
+    ok "real-tree diagram state: CLEAN (opt-in)"
+  else
+    n_fail=$(printf '%s\n' "$rout" | grep -c '^  FAIL:')
+    ok "real-tree diagram state: $n_fail finding(s) reported by the gate (opt-in, informational)"
+    printf '%s\n' "$rout" | grep '^  FAIL:' | sed 's/^/        | /'
+  fi
 else
-  n_fail=$(printf '%s\n' "$rout" | grep -c '^  FAIL:')
-  ok "real-tree diagram state: $n_fail finding(s) reported by the gate (informational, not a failure here)"
-  printf '%s\n' "$rout" | grep '^  FAIL:' | sed 's/^/        | /'
+  ok "real-tree diagram state: not run (opt-in with CHIP_WIKI_SELFTEST_REAL_TREE=1; the gate itself runs in run_all.sh)"
 fi
 
 # ---- 33-37: the PINNED BASELINE now folded into the diagram gate ----------
