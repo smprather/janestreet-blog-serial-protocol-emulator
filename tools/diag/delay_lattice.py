@@ -54,6 +54,7 @@ THIS PROGRAM exit non-zero, then demands it goes green again once they are
 removed. It is the only control that tests the exit code rather than a function
 inside this file.
 """
+
 import os
 import re
 import subprocess
@@ -121,7 +122,7 @@ ROOT = Path(_args[0]).resolve() if _args else _default_root()
 # us", which is 1800 clocks and not 75. A gate that reports false findings gets
 # its tolerance loosened by the next reader, and then it reports nothing.
 CONV = re.compile(
-    r"(?<![\d.,])(?<!x )(?<!× )"      # never mid-number, never out of "24 x 75"
+    r"(?<![\d.,])(?<!x )(?<!× )"  # never mid-number, never out of "24 x 75"
     r"([\d][\d , ]*)\s*(?:clocks?|-clock)"
     r"\s*(?:=|is|of|:|,?\s*i\.e\.,?|-|–)?\s*\(?"
     # the VALUE may carry a space thousands separator too ("1 000.07 us")
@@ -151,7 +152,7 @@ def _tolerance_as_printed(value: str) -> float:
     place and a defect in another.
     """
     decimals = len(value.split(".")[1]) if "." in value else 0
-    return 0.5 * 10 ** -decimals * 1.0001
+    return 0.5 * 10**-decimals * 1.0001
 
 
 SIC = "[sic]"
@@ -178,12 +179,34 @@ def audit_conversions(path: Path) -> list[str]:
     trust: the self-test plants a wrong conversion, shows the gate failing,
     adds the marker, shows the gate passing, and removes it again. If the marker
     ever stops being what does the work, the self-test fails.
+
+    THE MARKER IS SELF-LIMITING, and that is the part this function used to be
+    missing. A [sic] used to skip its line FOREVER, which meant the moment the
+    defect it marked got fixed -- which is the entire expected life story of a
+    documented defect -- the marker started switching off a REAL CHECK on a line
+    that had become correct. Nothing noticed. That is the same shape as the wiki
+    baseline's STALE direction: a pin that stops failing must come out, and
+    I built that direction into somebody else's gate and not into my own.
+
+    So a marked line is still recomputed, and the marker's standing depends on the
+    answer:
+      * the conversion is WRONG  -> the marker is earning its place, suppress it
+      * the conversion is RIGHT  -> the marker is STALE, that IS the finding
+      * there is no conversion   -> the marker suppresses nothing, that is noise
+    The exemption can therefore only ever suppress a genuinely-wrong claim, never
+    a right one, and a marker cannot outlive its defect.
     """
     failures = []
     for lineno, line in enumerate(path.read_text().splitlines(), 1):
-        if SIC in line:
+        marked = SIC in line
+        found = list(CONV.finditer(line))
+        if marked and not found:
+            failures.append(
+                f"{path.name}:{lineno}: {SIC} marks a line with no conversion to exempt, "
+                "so it suppresses nothing - remove it"
+            )
             continue
-        for m in CONV.finditer(line):
+        for m in found:
             raw = m.group(1)
             printed = m.group(2)
             try:
@@ -194,13 +217,24 @@ def audit_conversions(path: Path) -> list[str]:
                 # which is the whole reason this branch exists at all.
                 claimed = float(printed.strip().replace("\u00a0", "_").replace(" ", "_"))
             except ValueError:
+                # An unparseable conversion is never exempt: a marker cannot make
+                # a claim the checker cannot read into a claim it can.
                 failures.append(
                     f"{path.name}:{lineno}: unparseable conversion "
                     f"{raw!r} clocks = {printed!r}"
                 )
                 continue
             got = us(clocks)
-            if abs(got - claimed) > _tolerance_as_printed(printed):
+            wrong = abs(got - claimed) > _tolerance_as_printed(printed)
+            if marked:
+                if not wrong:
+                    failures.append(
+                        f"{path.name}:{lineno}: STALE {SIC} - the conversion it marks is "
+                        f"CORRECT ({clocks} clocks = {got:.4f} us, printed {claimed} us), "
+                        "so the marker is switching off a real check. Remove it."
+                    )
+                continue
+            if wrong:
                 failures.append(
                     f"{path.name}:{lineno}: {clocks} clocks = {got:.4f} us, "
                     f"printed {claimed} us  (off by {claimed - got:+.4f})"
@@ -326,6 +360,98 @@ TARGETS = [
 # checker that stops checking without saying so.
 REQUIRED = TARGETS
 
+# THE COVERAGE LIST ITSELF IS A HAND-MAINTAINED LIST, and that is the last
+# drift hole in this file. The list above is complete today - verified, 24/24
+# figures and 8/8 pages - but nothing ENFORCES that. Add one figure or one page
+# tomorrow and the gate silently stops checking it: the file is simply absent
+# from the list, so there is no failure to observe and nothing to notice.
+#
+# That is regress/check_mutation_lists.sh's exact failure mode - a MISSING ENTRY
+# made a gate SKIP work it was supposed to do - and it is the same shape as the
+# four number errors this file exists for. A coverage list that can drift is a
+# coverage claim that is not checked.
+#
+# So the list is asserted against the filesystem, in both directions:
+#   * a listed file that does not exist      -> a checker that reads nothing
+#   * a file on disk that is NOT listed      -> a checker that quietly covers less
+# The second is the one that had no defence at all, and it is the one that would
+# have bitten: a new figure is the normal way this branch grows.
+COVERAGE_GLOBS = ("diagrams/proto-*.puml", "wiki/concepts/protocol-*.md")
+# proto-<x>.* where <x> is one of the seven protocols this branch owns. The
+# explicit set matters: a sibling worker owns diagrams/proto-bus-* and
+# diagrams/proto-proto-*, and those files are NOT mine and NOT this gate's. A
+# glob that swept them in would make the gate fail on a sibling's figure, which
+# is a worse failure than not checking it.
+OWNED_PROTOCOLS = (
+    "ws2812",
+    "servo",
+    "dht11",
+    "ds18b20",
+    "nec-ir",
+    "freqmeter",
+    "sr04",
+    "fm-biphase",
+)
+
+
+def _owner_of(base: str) -> str | None:
+    """which protocol owns a stem, or None if it is not ours.
+
+    A PREFIX test, longest name first, and NOT base.split("-")[0]. Two of the
+    seven protocol names contain a hyphen -- "fm-biphase" and "nec-ir" -- so a
+    first-token test silently drops them, and it drops them SILENTLY: the gate
+    reports a smaller count and the coverage check reads as having passed. That
+    is the under-counting failure written into a comment two functions above,
+    then reproduced by the code beside it.
+    """
+    for name in sorted(OWNED_PROTOCOLS, key=len, reverse=True):
+        if base == name or base.startswith(name + "-"):
+            return name
+    return None
+
+
+def discover() -> tuple[set[str], set[str]]:
+    """(files on disk this branch owns, files the list claims)"""
+    found: set[str] = set()
+    for pat in COVERAGE_GLOBS:
+        parent, _, star = pat.rpartition("/")
+        # Split the pattern at the WILDCARD, not at the first dash:
+        # "proto-*.puml" -> head "proto-", tail ".puml".  Splitting at the
+        # first dash instead makes the head "proto" and the tail "*.puml",
+        # which silently finds fewer files and reports the rest as absent.
+        head, _, tail = star.partition("*")
+        for f in sorted((ROOT / parent).glob(star)):
+            if not f.name.startswith(head) or not f.name.endswith(tail):
+                continue
+            base = f.name[len(head) : len(f.name) - len(tail)]
+            if _owner_of(base) is not None:
+                found.add(f.relative_to(ROOT).as_posix())
+    return found, set(REQUIRED)
+
+
+def check_coverage() -> int:
+    """assert the hand list and the filesystem agree. Returns a failure count."""
+    on_disk, listed = discover()
+    missing = sorted(on_disk - listed)
+    phantom = sorted(listed - on_disk)
+    if missing:
+        print(f"FAIL  {len(missing)} owned file(s) on disk are NOT in the coverage list,")
+        print("      so this gate is quietly checking less than it appears to:")
+        for p in missing:
+            print(f"      + {p}")
+        print("      Add each one to TARGETS above. A missing entry here is the")
+        print("      same defect as a missing MUTABLE line in a mutation harness.")
+    else:
+        print(f"ok    every one of the {len(on_disk)} owned file(s) on disk is listed")
+    if phantom:
+        print(f"FAIL  {len(phantom)} listed file(s) are not on disk,")
+        print("      so the scan would prove nothing about them:")
+        for p in phantom:
+            print(f"      - {p}")
+    else:
+        print(f"ok    all {len(listed)} listed file(s) exist")
+    return len(missing) + len(phantom)
+
 
 def selftest() -> int:
     """Prove the GATE fails, end to end, by running it as a subprocess.
@@ -361,7 +487,9 @@ def selftest() -> int:
         def run_gate() -> tuple[int, str]:
             proc = subprocess.run(
                 [sys.executable, str(Path(__file__).resolve()), str(fixture)],
-                capture_output=True, text=True, check=False,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             return proc.returncode, proc.stdout
 
@@ -369,7 +497,12 @@ def selftest() -> int:
             rc, out = run_gate()
             if want_fail and rc == 0:
                 print(f"FAIL  {label}: the gate returned 0 and should have failed")
-                print("      " + "\n      ".join(l for l in out.splitlines() if l.startswith("FAIL"))[:400])
+                print(
+                    "      "
+                    + "\n      ".join(
+                        l for l in out.splitlines() if l.startswith("FAIL")
+                    )[:400]
+                )
                 return False
             if not want_fail and rc != 0:
                 print(f"FAIL  {label}: the gate returned {rc} and should have passed")
@@ -407,15 +540,22 @@ def selftest() -> int:
         env = dict(os.environ, DELAY_LATTICE_MEASURED=f"{ENTRIES[0][1]}+500")
         proc = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), str(fixture)],
-            capture_output=True, text=True, check=False, env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
         )
         if proc.returncode == 0:
             good = False
-            print("FAIL  planted a wrong MEASURED_US: the gate returned 0 and "
-                  "should have failed")
+            print(
+                "FAIL  planted a wrong MEASURED_US: the gate returned 0 and "
+                "should have failed"
+            )
         else:
-            print(f"ok    planted a wrong MEASURED_US for {ENTRIES[0][1]!r}: "
-                  f"gate exit {proc.returncode}")
+            print(
+                f"ok    planted a wrong MEASURED_US for {ENTRIES[0][1]!r}: "
+                f"gate exit {proc.returncode}"
+            )
         target.write_text(original)
 
         # (4) THE EXEMPTION MUST BE THE ONLY THING THAT SUPPRESSES A FINDING.
@@ -427,7 +567,22 @@ def selftest() -> int:
         good &= require(f"same conversion marked {SIC!r}", want_fail=False)
         target.write_text(original)
 
-        # (5) and the gate must be green again once every planted error is gone
+        # (5) THE MARKER MUST NOT BE ABLE TO SURVIVE ITS DEFECT. This is the
+        #     other half of (4) and the half that used to be missing: a marker
+        #     on a conversion that is now CORRECT is a marker switching off a
+        #     real check, and the whole expected life of a documented defect is
+        #     that it gets fixed - at which point an unexamined exemption turns
+        #     itself off. So this must FAIL, in the gate's own exit code.
+        target.write_text(original + f"\n69 clocks = 1.15 \u00b5s  {SIC}\n")
+        good &= require(
+            f"STALE marker: a CORRECT conversion marked {SIC!r}", want_fail=True
+        )
+        # and a marker on a line with no conversion at all suppresses nothing
+        target.write_text(original + f"\nthis line carries a {SIC} and no conversion\n")
+        good &= require("marker with no conversion to exempt", want_fail=True)
+        target.write_text(original)
+
+        # (6) and the gate must be green again once every planted error is gone
         if not require("all planted errors removed", want_fail=False):
             return 1
 
@@ -503,6 +658,10 @@ def main() -> int:
     print(f"ok    {conversions} conversion(s) recomputed across {audited} files")
 
     print()
+    print("== the coverage list, asserted against the filesystem ==")
+    fail += check_coverage()
+
+    print()
     # The checker must be capable of failing, and that has three halves. Each
     # one exists because the absence of it is a way for this file to go green
     # while proving nothing.
@@ -535,8 +694,10 @@ def main() -> int:
         if not caught:
             print("FAIL  the negative control did not trip; the FORBIDDEN scan is inert")
             return 1
-        print(f"ok    negative control: a planted {planted!r} is caught in {caught[0]}, "
-              "so the FORBIDDEN scan really reads the files")
+        print(
+            f"ok    negative control: a planted {planted!r} is caught in {caught[0]}, "
+            "so the FORBIDDEN scan really reads the files"
+        )
 
         # (c) plant a wrong CONVERSION in the APPOSITIVE form the first version
         #     of this file could not see, with the MICRO SIGN unit, and require
@@ -549,12 +710,16 @@ def main() -> int:
         if not conv_caught:
             print("FAIL  the conversion audit did not trip; it is inert")
             return 1
-        print(f"ok    negative control: a planted '69-clock (1.22 \u00b5s) step' is caught "
-              f"({conv_caught[0].split(': ', 1)[1]}), so the audit reads the appositive "
-              "form and both unit spellings")
+        print(
+            f"ok    negative control: a planted '69-clock (1.22 \u00b5s) step' is caught "
+            f"({conv_caught[0].split(': ', 1)[1]}), so the audit reads the appositive "
+            "form and both unit spellings"
+        )
 
-    print(f"{len(present)} files scanned, {len(ENTRIES)} lattice entries derived, "
-          f"{conversions} conversions recomputed")
+    print(
+        f"{len(present)} files scanned, {len(ENTRIES)} lattice entries derived, "
+        f"{conversions} conversions recomputed"
+    )
     if fail:
         print(f"RESULT: FAILED ({fail} problem(s))")
         return 1

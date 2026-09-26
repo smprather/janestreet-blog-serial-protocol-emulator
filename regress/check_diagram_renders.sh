@@ -245,6 +245,16 @@ echo "  baseline: $n_pinned pinned known-stale render(s); $pinned_stale currentl
 if [ "$stale" -eq 0 ] && [ "$orphan" -eq 0 ] && [ "$unproduced" -eq 0 ] && [ "$n_stale_pins" -eq 0 ]; then
   echo "diagram renders: OK — every checked-in render matches its source, except" \
        "$pinned_stale pinned known-stale (listed in $BASELINE)"
+  # NAME them on the green path. A pin that is honoured but invisible is closer to
+  # a mute than to a receipt: the count tells you four things are wrong, and only
+  # the baseline says which, so the evidence a reader needs is one file away from
+  # the run that reported it. The whole point of pinning rather than switching the
+  # gate off is that the defect stays VISIBLE, and a count is not visible.
+  if [ "$pinned_stale" -gt 0 ] && [ -s "$TMP/findings.pinned" ]; then
+    cat "$TMP/findings.pinned"
+    echo "  ^ these are PINNED, not fixed: each needs its owner's re-render, and then"
+    echo "    its line deleted from $BASELINE (this gate will say so when it happens)."
+  fi
   exit 0
 fi
 echo "diagram renders: FAILED" >&2

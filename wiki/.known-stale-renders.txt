@@ -30,6 +30,24 @@
 # line. The checker refuses to pass with a pin that no longer bites, so this is
 # not optional bookkeeping.
 #
+# STATUS 2026-09-26: NO PINS REMAIN. All four lines below were written on
+# 2026-09-25 against a MID-STATE: this branch had merged 5c6db3d, which edited both
+# project-map .puml files without re-rendering them, and the renders on this branch
+# were correspondingly behind. Main then carried diag-proto's re-renders (74e3124,
+# 0512ec1), and after merging main every one of the four pins was FALSE. The gate
+# said so itself, as STALE-PIN, and named the lines to delete - which is the
+# anti-staleness half doing exactly its job on the author of the file, one merge
+# after writing it.
+#
+# The lesson is kept because the failure was mine and the mechanism caught it: a
+# measurement taken from a branch that is behind main describes the BRANCH, not the
+# project. Measure against main before reporting a gate red, and re-measure after
+# every merge - the corpus moves underneath a pin, and a pin that was true when
+# written is not thereby true later.
+#
+# The original finding, for the record: commit 5c6db3d edited both project-map
+# .puml files without re-rendering them. Main has since re-rendered both maps.
+#
 # FOUND 2026-09-25, the day the gate landed. Both project maps' .puml sources
 # were edited in commit 5c6db3d WITHOUT re-rendering them; the renders were last
 # refreshed together with their sources in 3a2fd6a. So this is not a rendering
@@ -44,7 +62,3 @@
 # edits diagrams/project-*.puml; this worker is explicitly barred from touching
 # diagram files, which is why the lines are here rather than fixed here.
 
-project-plan.svg edited .puml in 5c6db3d without a re-render; 112288 B checked in vs 115687 B fresh
-project-plan.png edited .puml in 5c6db3d without a re-render; 491261 B checked in vs 503389 B fresh
-project-progress.svg edited .puml in 5c6db3d without a re-render; 138424 B checked in vs 140966 B fresh
-project-progress.png edited .puml in 5c6db3d without a re-render; 1420139 B checked in vs 1435437 B fresh

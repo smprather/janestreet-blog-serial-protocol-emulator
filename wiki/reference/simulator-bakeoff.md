@@ -1,3 +1,13 @@
+---
+title: Simulator bake-off - Icarus vs Verilator
+created: 2026-09-22
+updated: 2026-09-26
+type: reference
+tags: [tooling, verification, status]
+sources: [regress/run_all.sh, tb/tb_pe_pinmux.v, tb/tb_pe_soc_i2c.v]
+confidence: high
+---
+
 # Simulator bake-off: Icarus vs Verilator
 
 Both simulate this design correctly. They are not interchangeable, and the
@@ -7,7 +17,7 @@ Measured 2026-09-22 on the competition machine (Ryzen 9 5900X, 24 threads,
 load average ~1.7). Same testbench file, same firmware hex, same SRAM
 behavioural model, same work in both cases — only the simulator differs.
 Both were verified to print `PASS: all checks` before being timed, and the
-I2C TB was checked the same way. Five runs each, median reported.
+I2C TB (see [[concepts/i2c-on-the-matrix]]) was checked the same way. Five runs each, median reported.
 
 ## Speed
 
@@ -108,7 +118,8 @@ converge after '--converge-limit' of 10000 tries
 ```
 
 That testbench models the bus at STRENGTH LEVELS — a pull-up versus strong 0/1 —
-because the `od` bit's whole purpose is making contention unreachable, so
+because the `od` bit's whole purpose (see [[concepts/pin-matrix]]) is making
+contention unreachable, so
 "contention never happened" is the property under test. Verilator's 2-state
 model cannot express weak/strong, and it aborts rather than degrading. This is
 the X problem again, in a form that stops the run instead of hiding in it.
@@ -134,7 +145,7 @@ fails both paths with identical diagnostics and exit code 1. A fast path that
 only agreed on the passing case would be worthless.
 
 The Verilator flow was proven end-to-end here: `--binary --timing` elaborates
-this design (with one ignorable `SPECIFYIGN` warning from the PDK SRAM model's
+this design (with one ignorable `SPECIFYIGN` warning from the [[concepts/pdk-toolchain|PDK]] SRAM model's
 `specify` block), and the `$dumpfile`/`$dumpvars` calls in the TB needed gating
 behind `+dump` because Verilator ignores them unless built with `--trace`.
 

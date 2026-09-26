@@ -68,35 +68,30 @@
 # RULE zero-outbound-links: fewer than two DISTINCT [[wikilink]] targets in the
 #   body. (Body = after the frontmatter, so a link inside `sources:` cannot
 #   satisfy it.)
-
-# --- no-frontmatter (4) ------------------------------------------------------
-plans/ethernet-soc.md no-frontmatter written before the schema was formalised; needs frontmatter plus a `updated` date
-plans/i2c-transaction.md no-frontmatter same vintage as ethernet-soc; part of the plans/ corner cleanup, not this gate
-plans/pe-ctrl.md no-frontmatter predates the phase split that gave it R1/R2/R3 content; its content is current, its metadata is not
-reference/simulator-bakeoff.md no-frontmatter a HAND-written reference page, not a generated one; only its frontmatter is missing
-
-# --- zero-outbound-links (8) -------------------------------------------------
-plans/ethernet-soc.md zero-outbound-links zero links of any kind; the plan names its neighbours in prose only
-plans/host-controller-gui.md zero-outbound-links zero links; notable because it is the plan that owns the bus every other plan defers to
-plans/i2c-transaction.md zero-outbound-links zero links; should cross-reference plans/through-i2c
-plans/pe-ctrl-readback.md zero-outbound-links zero links; its decision is recorded in adr-007 and the review, neither linked
-plans/pe-ctrl.md zero-outbound-links zero links; the R1 contract this page owns is cited by four other pages that link to none of them
-plans/serdes-integration.md zero-outbound-links zero links; should cross-reference concepts/factored-hardware-blocks
-plans/spi-pads.md zero-outbound-links zero links; should cross-reference concepts/spi-as-firmware
-reference/simulator-bakeoff.md zero-outbound-links zero links; the measured bakeoff that justifies running iverilog rather than Verilator
-
-# --- 2026-09-25: pages that arrived on MAIN with the link rule unmet -----------
-# BOTH of these have since been collected. They are kept as a section because the
-# record is worth having: two pages arrived on main with one outbound wikilink
-# each, each got a dated pin with a reason, each was fixed by its author within
-# the hour, and each pin then went STALE and had to be deleted by hand. The STALE
-# half is what makes a pin safe to write — without it a pin outlives its defect
-# and the log and the tree disagree with nothing to say which is true.
 #
-# `concepts/host-stack` also arrived carrying a SECOND violation, an
-# `off-taxonomy-tag` for the tag `host`. That one was never pinned: the manager's
-# ruling is that a tag in active use is a taxonomy defect, so `host` was ADDED to
-# the schema (43 -> 44) rather than excused here. A page can carry two
-# violations under two rules, and the baseline only ever named the one that
-# happened to be structural — which is an argument for reading the gate's output
-# rather than the baseline when triaging a page.
+# ---------------------------------------------------------------------------
+#
+# STATUS 2026-09-26: NO PINNED VIOLATIONS REMAIN. This file is now EMPTY of
+# entries, and both rules it was pinning are CLEAN across all 43 hand-written
+# pages:
+#
+#   no-frontmatter     0 of 43   was 4  (3 plans/ + 1 reference/)
+#   zero-outbound-links 0 of 43  was 8  (7 plans/ + 1 reference/)
+#
+# THE HEADER IS KEPT DELIBERATELY, not because there is anything left to pin but
+# because the mechanism has to be able to come BACK. Both directions are still
+# enforced: a new violation is NEW and red, and re-adding a line here for a
+# violation that no longer fails is STALE and red. An empty baseline that is
+# deleted cannot record that this corpus was once 12 red, and the next person to
+# break a rule would have no idea a file like this exists.
+#
+# IF YOU HAVE TO PIN SOMETHING AGAIN: fix the page first. A pin is a record that
+# a rule is currently not met, and the whole value of this file was that every
+# ONE THING WORTH CARRYING FORWARD, from the pins that were here: a page can
+# carry TWO violations under two rules, and the baseline only ever named the one
+# that happened to be structural. `concepts/host-stack` arrived on main with one
+# outbound wikilink AND an off-taxonomy tag; the link got a pin, the tag was fixed
+# properly by extending the taxonomy (20 -> 44 over two rounds). So reading the
+# GATE-S OUTPUT is how you find out what a page is actually wrong about - the
+# baseline only records what someone thought to pin.
+

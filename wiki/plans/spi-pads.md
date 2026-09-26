@@ -44,12 +44,12 @@ releases bits 1/2 releases the pads, exactly like the I2C pair on uio[0:1].
   contract change (MISO bit 3 -> 6) and re-verification of the emulator/TB.
   It also spends a scarce `uio` pad on an input when the dedicated `ui_in` bank
   has the pad already, against the direction-aware rule in
-  `wiki/reference/protocol-pin-budget.md`. Rejected: keep the shared bit 3.
+  [[reference/protocol-pin-budget]]. Rejected: keep the shared bit 3.
 
 ## Reset state
 
 The matrix reset marks bits 0-2 as outputs, so `uio[2]`/`uio[3]` are driven low
-out of reset (MOSI low, CS_N low) until the SPI firmware's first `OUT` raises
+out of reset (MOSI low, CS_N low) until the [[concepts/spi-as-firmware]] program's first `OUT` raises
 CS_N and states the idle pattern. This is the SoC's documented "outputs low"
 rule, not a new glitch; a mode-0 slave armed on a falling edge of CS_N sees no
 edge (the line starts low, exactly as `tb_pe_soc_spi.v` documents at the SoC

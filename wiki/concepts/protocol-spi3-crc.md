@@ -99,10 +99,40 @@ different pattern on MOSI. A palindromic word puts the identical pin sequence
 whichever way the shift goes and cannot catch a bit-order defect at all — the
 trap `spi_xfer.pe` records for `0x5A`, and the reason it sends `0x5B` instead.
 
-The slave's response is a **function** of the word it decoded
-(`resp = word XOR 0x7E5A`, applied byte-wise) rather than a played-back table.
-That is what makes a shifted word visible: a master that lost or gained a bit
-gets a different response, and the comparison fails with the word itself intact.
+The slave's response is a **function** of the word it decoded rather than a
+played-back table, and the rule is one line:
+
+> **`resp = word[15:8] XOR 0x7E`** — a single byte, the received word's high byte
+> against the mask's high byte.
+
+Deriving it rather than playing a table is what makes a shifted word visible: a
+master that lost or gained a bit gets a different response, and the comparison
+fails with the word itself intact.
+
+**The low half of the mask is dead, and this is worth stating because getting it
+wrong inverts the blame.** The testbench declares
+
+```verilog
+localparam logic [15:0] RESP_MASK = 16'h7E5A;
+logic [7:0] sl_resp, sl_crc_resp;
+...
+sl_resp = sl_word[15:8] ^ RESP_MASK[15:8];   // -> 0x6F, 0x6C, 0x6D
+```
+
+`sl_resp` is an **8-bit** register, so `word[7:0] XOR 0x5A` is never computed at
+all — the `0x5A` half of the constant is dead. Reading the rule as the 16-bit
+`word XOR 0x7E5A` gives `0x6F6E / 0x6C1F / 0x6D0C`, which is **not** what the wire
+carries and not what the testbench checks. The wire carries one byte per frame,
+`sl_resp[7:0]`, because the frame gives MISO eight cells (rises 24..31) and the
+firmware's receive state (5) is 8 bits wide with a one-byte CRC fold (state 6).
+
+The same distinction is why the testbench's own comparison reads
+`sl_miso_rx[15:8] == (sl_word[15:8] ^ RESP_MASK[15:8])` and not
+`sl_miso_rx == sl_word ^ RESP_MASK`: the right side is 16 bits and the left is 8,
+so Verilog's zero-extension would compare `0x006f` against `0x6f6e` and fail on
+the right answer. Its comment for that line describes the byte-wise masking
+correctly; its parenthetical about "the low byte is the response's CRC" is about
+`sl_miso_rx`'s low byte and reads as though it were about `sl_resp`'s.
 
 ## CRC-8 in an ISA with no XOR
 
