@@ -426,8 +426,20 @@ def _last_content_change(rel: str) -> str | None:
             return when
     try:
         out = subprocess.run(
-            ["git", "-C", str(ROOT), "log", "-1", "--format=%ad", "--date=short", "--", rel],
-            capture_output=True, text=True, check=False,
+            [
+                "git",
+                "-C",
+                str(ROOT),
+                "log",
+                "-1",
+                "--format=%ad",
+                "--date=short",
+                "--",
+                rel,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
     except OSError:
         return None
@@ -457,8 +469,10 @@ def check_updated_dates() -> int:
             continue
         declared = _declared_updated(path)
         if declared is None:
-            print(f"FAIL  {rel}: no `updated:` field, so the page cannot say when "
-                  "it was last checked")
+            print(
+                f"FAIL  {rel}: no `updated:` field, so the page cannot say when "
+                "it was last checked"
+            )
             failures += 1
             continue
         if not isodate.match(declared):
@@ -468,17 +482,23 @@ def check_updated_dates() -> int:
         changed = _last_content_change(rel)
         if changed is None:
             unknown += 1
-            print(f"note  {rel}: declared {declared}, last content change UNKNOWN "
-                  "(not a git working tree) - not counted as a check")
+            print(
+                f"note  {rel}: declared {declared}, last content change UNKNOWN "
+                "(not a git working tree) - not counted as a check"
+            )
             continue
         if declared < changed:
-            print(f"FAIL  {rel}: `updated: {declared}` but the content last changed "
-                  f"{changed}. Bump the date or revert the change.")
+            print(
+                f"FAIL  {rel}: `updated: {declared}` but the content last changed "
+                f"{changed}. Bump the date or revert the change."
+            )
             failures += 1
         else:
             stamped += 1
-    print(f"ok    `updated` verified against git for {stamped} page(s)"
-          + (f"; {unknown} not determinable and NOT counted" if unknown else ""))
+    print(
+        f"ok    `updated` verified against git for {stamped} page(s)"
+        + (f"; {unknown} not determinable and NOT counted" if unknown else "")
+    )
     return failures
 
 
@@ -684,26 +704,36 @@ def selftest() -> int:
         env = dict(os.environ, DELAY_LATTICE_UPDATED=f"{OWNED_PAGES[0]}+2099-01-01")
         proc = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), str(fixture)],
-            capture_output=True, text=True, check=False, env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
         )
         if proc.returncode == 0:
             good = False
             print("FAIL  a stale `updated` was planted and the gate returned 0")
         else:
-            print(f"ok    stale `updated` (content 2099-01-01, page declares less): "
-                  f"gate exit {proc.returncode}")
+            print(
+                f"ok    stale `updated` (content 2099-01-01, page declares less): "
+                f"gate exit {proc.returncode}"
+            )
 
         # and the SAME page with a date that covers its change must pass, so the
         # control is not satisfied by a check that simply always fails
         env = dict(os.environ, DELAY_LATTICE_UPDATED=f"{OWNED_PAGES[0]}+2000-01-01")
         proc = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), str(fixture)],
-            capture_output=True, text=True, check=False, env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
         )
         if proc.returncode != 0:
             good = False
-            print("FAIL  a covered `updated` was planted and the gate failed; "
-                  "the control is satisfied by always-red")
+            print(
+                "FAIL  a covered `updated` was planted and the gate failed; "
+                "the control is satisfied by always-red"
+            )
         else:
             print(f"ok    `updated` covering its change: gate exit {proc.returncode}")
 
