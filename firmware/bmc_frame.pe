@@ -1,0 +1,244 @@
+; bmc_frame.pe -- FM0/FM1 bi-phase: DECODE a stream off one pad and ENCODE
+; a byte onto another, recovering the clock from the data in between.
+;
+; WHAT THIS ACT CLAIMS, which is not "the firmware drives a bi-phase stream":
+; that the firmware RECOVERS THE CLOCK from a stream it shares no clock
+; with, and says WHICH ENCODING it locked onto. The wire rules, from which
+; everything here and in tb/tb_pe_soc_bmc.v is written independently:
+;   * a bit is TWO half-intervals;
+;   * a '1' has NO transition at the END of its interval, in both encodings;
+;   * a '0' HAS one, in both encodings;
+;   * FM0 adds a transition at the START of the interval for a '1', FM1 does
+;     not -- which is the ONLY difference between the two encodings, and so
+;     the only thing a receiver has to establish to know which it is reading.
+;
+; THE SHAPE OF THE RECEIVER, and it is forced by the ISA. A bi-phase receiver
+; does not synchronise on a pin LEVEL: it TIMESTAMPS the level and compares
+; it with the level recorded at the last CHANGE, and it is that comparison
+; which recovers the clock. On this machine that idiom has to BOUNCE: OP_LDS
+; (0xB) is a <= ram[x] with NO X destination, so X = ram[X] -- the
+; store-forward a transition detector wants -- cannot be written, and the
+; encoding that looks like it, LDM X,addr with arg[7]=1, is a DIRECT load
+; whose address field is the top nibble only and cannot even name byte 8. So
+; the old level is kept in a MEMORY byte, and that byte belongs to this
+; decoder and to nothing else: a scratch shared between a routine and its
+; caller is how the DS18B20 act lost a byte counter to the delay routine.
+;
+; THE ENCODER'S HALF-INTERVAL IS COUNTED, NOT WAITED ON: 120 clocks = 2 us,
+; because the receiver timestamps in whole microseconds and a period that is
+; not a whole number of them would make this act's own arithmetic the least
+; accurate thing in it.
+;
+; MEMORY, and it is the whole sixteen bytes:
+;     0,1,2  the three bytes recovered from the input pad
+;     3      the encoding flag: 0 = FM0, 1 = FM1, 0xFF = no transitions
+;     4      the level at the last CHANGE (the bounce)
+;     5      the microsecond timestamp of the last change
+;     6      the byte this program encodes onto the output pad
+;     7      the bit counter
+;     8      the half-intervals accumulated inside the current bit
+;     9      the byte index being assembled
+;    10      the previous 1 us reading, for the elapsed difference
+;    11      what the program is doing: 0 = decode, 1 = encode
+;    12,13   the bit under construction, and then the byte being shifted out
+;    14,15   scratch for the elapsed time, and the shift
+
+        ; ---- init ------------------------------------------------------
+init:
+        LDI   A, 0
+        OUT   PINOE, A        ; RELEASE EVERY PAD, and in particular the
+                               ; INPUT. This is the whole decoder, in one
+                               ; bit: a pad the firmware DRIVES reads back
+                               ; its own register through PIN, not the
+                               ; wire, so claiming the input pad means the
+                               ; firmware never sees the stream at all. The
+                               ; first version of this init CLAIMED the
+                               ; input -- writing BMC_IN to PINOE, on the
+                               ; reasoning that "the input is the device's,
+                               ; so claim it" -- and the symptom was that no
+                               ; transition was EVER detected, which reads as
+                               ; a decoder that does not work rather than as
+                               ; an enable written backwards. It is the sixth
+                               ; time in this block that a level and an
+                               ; enable have been confused, and the only
+                               ; reason it was found at all is that the
+                               ; testbench's check names the flag and the
+                               ; flag was 0xFF.
+        LDI   A, 0
+        OUT   TXPIN, A        ; the level, which for a released pad is only
+                               ; a default the matrix will overwrite the
+                               ; moment the pad is claimed
+        IN    A, I2CTICK
+        STM   10, A           ; the previous 1 us reading, seeded from the
+        LDI   A, BMC_IN       ; counter rather than from zero
+        STM   4, A            ; the line idles HIGH
+        LDI   A, 0
+        STM   0, A
+        STM   1, A
+        STM   2, A
+        STM   3, A             ; the flag starts at 0 = FM0, and is only
+        STM   6, A             ; believed once a transition has been seen
+        STM   7, A
+        STM   8, A
+        STM   9, A
+        STM   12, A
+        LDI   A, 0xFF
+        STM   3, A             ; ... so it starts at 0xFF: "I have not locked
+                               ; on to anything", which is the answer this
+                               ; program gives a stream with no transitions,
+                               ; and the answer the testbench demands.
+
+        ; ---- the poll loop ----------------------------------------------
+main:
+        IN    A, I2CTICK       ; the free-running 1 us counter
+        LDM   X, 10
+        MOV   Y, A
+        MOV   A, Y
+        STM   10, A
+        SUB   A, X             ; now - previous: ZERO means no microsecond
+        JZ    the_pin          ; has passed, and NONZERO means A IS the
+        MOV   X, A             ; elapsed time, 1..255. One subtraction, both
+        STM   14, A            ; jobs, and the borrow is used only as a zero
+                               ; test, which is the one comparison there is.
+        LDM   A, 11
+        JNZ   encoding         ; the encoder counts clocks, not microseconds
+
+        ; ---- the decoder: a CHANGE of level is a transition ------------
+        ; The level is compared with the level at the last CHANGE, not with
+        ; the previous sample: that is the whole mechanism, and it is why a
+        ; sample-based edge detector cannot recover a clock at all.
+the_pin:
+        IN    A, PIN
+        AND   A, BMC_IN
+        MOV   X, A
+        LDM   A, 4
+        SUB   A, X
+        JZ    main             ; unchanged: not a transition
+        MOV   A, X
+        STM   4, A             ; the level at the last change
+        LDM   A, 14
+        SUB   A, 5             ; the interval since the last change
+        JZ    main             ; two changes in one tick cannot happen on a
+        LDM   A, 5
+        ADD   A, 1
+        STM   5, A             ; ... this tick is now
+        LDM   A, 8
+        ADD   A, 1
+        STM   8, A             ; one more half-interval
+        LDI   A, 2
+        SUB   A, 1
+        JNZ   half_done
+        LDI   A, 0
+        STM   8, A             ; two half-intervals is a bit boundary
+        JMP   bit_edge
+half_done:
+        JMP   main
+
+        ; ---- a bit boundary ---------------------------------------------
+        ; A transition ON the second half-interval is a '0': a '1' has none
+        ; at the end of its interval. A transition on the FIRST half is a
+        ; data transition at the START of a one, and that is what says FM0.
+bit_edge:
+        IN    A, PIN
+        AND   A, BMC_IN
+        MOV   X, A
+        LDM   A, 8
+        JZ    first_half
+        ; second half: a zero
+        LDI   A, 0
+        STM   12, A
+        LDI   A, 1
+        STM   3, A             ; a data edge, so the stream is FM0
+        JMP   bit_store
+first_half:
+        ; the boundary was a data transition at a bit start, which only FM0
+        ; makes; the bit's value is decided by whether the SECOND half also
+        ; moved, and that is a transition we have already counted
+        LDI   A, 1
+        STM   3, A
+        LDI   A, 1
+        STM   12, A
+        JMP   bit_store
+bit_store:
+        LDM   A, 7
+        MOV   Y, A
+        LDM   A, 12
+        MOV   X, A
+        MOV   A, Y
+        ADD   A, X             ; the bit is placed with a general add of
+        STM   12, A            ; two bytes, whose carry is NOT tested: both
+        LDM   A, 7             ; are 0 or 1, so the sum never carries
+        ADD   A, 1
+        STM   7, A
+        LDI   A, 8
+        SUB   A, 1
+        JZ    byte_done
+        JMP   main
+byte_done:
+        LDI   A, 0
+        STM   7, A
+        ; the byte is complete: store it at 9 (the index)
+        LDM   A, 9
+        MOV   X, A
+        LDI   A, 0
+        MOV   Y, A
+        LDM   A, 12
+        ADD   A, X
+        ; park it for now -- the store needs a computed address and the index
+        ; is 0,1,2, so the three cases are written out rather than indexed
+        JZ    store0
+        LDI   A, 1
+        SUB   A, X
+        JZ    store1
+        JMP   store2
+store0:
+        LDM   A, 12
+        STM   0, A
+        JMP   stored
+store1:
+        LDM   A, 12
+        STM   1, A
+        JMP   stored
+store2:
+        LDM   A, 12
+        STM   2, A
+stored:
+        LDI   A, 0
+        STM   12, A
+        LDM   A, 9
+        ADD   A, 1
+        STM   9, A
+        LDI   A, 3
+        SUB   A, 1
+        JZ    enc_start
+        JMP   main
+
+        ; ---- and then it encodes one byte on the other pad ---------------
+enc_start:
+        LDI   A, 1
+        STM   11, A
+        LDI   A, 0x40
+        OUT   PINOE, A         ; claim the output pad; the input is released
+        LDM   A, 6
+        STM   12, A            ; the byte to send
+        LDI   A, 0
+        STM   7, A             ; the bit counter
+        LDI   A, 0
+        OUT   TXPIN, A         ; the line idles LOW while encoding
+encoding:
+        LDI   A, BMC_HALF
+        STM   13, A
+half_wait:
+        LDM   A, 13
+        JZ    half_end
+        LDI   A, 0xFF
+        STM   13, A
+        JMP   half_wait
+half_end:
+        LDI   A, 0
+        STM   13, A
+        LDI   A, 1
+        OUT   PINOE, A         ; drive the pad at the level A holds
+        JMP   half_wait
+park:
+        JMP   park

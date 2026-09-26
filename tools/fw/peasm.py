@@ -197,7 +197,7 @@ CONSTS: dict[str, int] = {
     # the host SAMPLES INSIDE the slot, and the bits are LSB first.
     #
     # THESE ARE COUNTERS, NOT MICROSECONDS. The delay routine's outer step is 69
-    # clocks (1.22 us) on the (2,13) pair, so a slot is aimed by division --
+    # clocks (1.15 us) on the (2,13) pair, so a slot is aimed by division --
     # and writing a duration in as a counter is the mistake this block exists to
     # prevent: 480 us straight into the outer counter comes out as 1900 us,
     # because 480 wraps to 224 and the routine counts passes, not us.
@@ -370,8 +370,23 @@ CONSTS: dict[str, int] = {
     #   SR_TRIG_LEN is a COUNTED delay in instructions, not microseconds, and
     #   it is 149 for a reason worth stating exactly: the loop is four clocks
     #   per iteration (LDM, SUB, STM, JNZ) and the pulse spans the counter
-    #   load, the loop and the release, so the width is 4*149 + 4 = 600 clocks
-    #   = exactly 10.000 us at 60 MHz. The device asks for 10 us minimum.
+    #   load, the loop and the release, so the width is
+    #
+    #       4 * SR_TRIG_LEN + 5 = 4*149 + 5 = 601 clocks = 10.017 us
+    #
+    #   at 60 MHz, which clears the device's 10 us minimum by one clock. The
+    #   +5 is the OUT PINOE that claims the pad, the two-instruction counter
+    #   load, the LDI that sets the ending level, and the OUT TXPIN that drops
+    #   it -- counted from the listing, instruction by instruction, rather than
+    #   asserted. It was a +4 in an earlier draft of this comment, which the
+    #   testbench's equality caught as a 600-clock pulse the hardware never
+    #   produced; and an intermediate draft of THIS comment read "4*149 + 4 =
+    #   600 clocks = 601 clocks" in one sentence, which is two wrong numbers
+    #   and no way to tell which was meant. SR_TRIG_LEN and not SR_TRIG is the
+    #   constant in that expression: SR_TRIG is 0x40, the PIN, and a program
+    #   that loads the pin instead of the length produces a 261-clock pulse --
+    #   which is 4*64 + 5, and is the cheapest available proof that the two
+    #   constants are not interchangeable.
     "SR_TRIG": 0x40,
     "SR_ECHO": 0x20,
     "SR_TRIG_LEN": 149,
@@ -386,6 +401,21 @@ CONSTS: dict[str, int] = {
     #   (4*SR_RECOV_LEN + 5) clocks = 120,615 clocks = 2010 us, which clears
     #   the model's 2 ms by 10 us.
     "SR_RECOV_LEN": 117,
+    #
+    # ---------------------------------------------------------------------
+    # FM0/FM1 BI-PHASE. The one act here whose claim is about a RECEIVER:
+    # the code lives in the TRANSITIONS, not in the levels, and the only
+    # clock is the one the receiver recovers from the data.
+    #   BMC_IN   bit 5: the testbench drives a bi-phase stream here
+    #   BMC_OUT  bit 6: this program encodes a byte here for the TB to decode
+    #   BMC_HALF the encoder's half-interval, COUNTED rather than waited on:
+    #             120 clocks = 2 us exactly, because the receiver timestamps
+    #             in whole microseconds and a period that is not a whole
+    #             number of them would make this act's own arithmetic the
+    #             least accurate thing in it.
+    "BMC_IN": 0x20,
+    "BMC_OUT": 0x40,
+    "BMC_HALF": 120,
 }
 
 

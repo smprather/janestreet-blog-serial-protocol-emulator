@@ -53,7 +53,10 @@
 ; an integrity check is actually driven, and it gives the testbench a hard
 ; per-word frame boundary to count: exactly 40 SCLK rises per frame.
 ;
-; The words are 0x1134, 0x1245, 0x1356. None is a bit palindrome, and neither
+; The words are 0x1134, 0x2245, 0x3356. The index is added to BOTH
+; bytes as independent 8-bit adds with no carry into the high byte, which
+; is why the list reads the way it does.
+; None of the three words is a bit palindrome, and neither
 ; is any of the three response bytes (0x6B, 0x2C, 0xD9). A palindromic word
 ; puts the identical pin sequence on MOSI whichever way the shift goes, so it
 ; cannot catch a bit-order defect at all -- the trap firmware/spi_xfer.pe
