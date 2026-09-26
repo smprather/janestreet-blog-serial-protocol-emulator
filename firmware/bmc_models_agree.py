@@ -176,11 +176,15 @@ def main():
         else:
             bad.append(flag)
             diff = [i for i, (a, b) in enumerate(zip(py[flag], v[flag])) if a != b]
-            print(f"  {name}: THE TWO MODELS DISAGREE at {len(diff)} of "
-                  f"{FRAME_LEVELS} half-intervals, first at {diff[0]}")
+            print(
+                f"  {name}: THE TWO MODELS DISAGREE at {len(diff)} of "
+                f"{FRAME_LEVELS} half-intervals, first at {diff[0]}"
+            )
             for i in diff[:8]:
-                print(f"      half-interval {i:2d}: python {py[flag][i]} "
-                      f"verilog {v[flag][i]}")
+                print(
+                    f"      half-interval {i:2d}: python {py[flag][i]} "
+                    f"verilog {v[flag][i]}"
+                )
             print(f"      python : {py[flag]}")
             print(f"      verilog: {v[flag]}")
 
