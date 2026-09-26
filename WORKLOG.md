@@ -2846,3 +2846,66 @@ check that has been *proven to fire* and I am at the wrap:
 3. and it is a static check on a harness's own self-consistency, which is why
    it belongs in that file rather than in a mutation suite that costs 66
    seconds a case to notice a missing line.
+
+## 2026-09-27 act (c): TASK-START -- GATE THE ARM/CASES MISMATCH
+
+The class the `sv-idle-level` removal exposed: nothing asserts that every `<id>)`
+arm in a harness's dispatch appears in its `CASES` list, so "a complete-looking
+arm that therefore never runs" is possible in any of the four id-dispatching
+harnesses and nothing says so.
+
+**SURVEY FIRST, THEN WRITE.** A gate that false-fires on a shape it did not
+anticipate is worse than no gate, and the precedent is this repository's own:
+`check_mutation_lists.sh`'s first version asserted a floor of 100 words and
+**that same gate rejected it on its next run**. So the parse is built against
+the four real shapes, and anything it cannot confidently read is REPORTED as
+skipped rather than silently passed -- which is what that file already does for
+its MUTABLE exclusions.
+
+### AND THE SCOPE CLAIM I MADE AN ENTRY AGO WAS WRONG, IN BOTH DIRECTIONS
+
+I wrote that the class was "possible in any of the four id-dispatching
+harnesses -- `run_one_tb.sh`, `run_all.sh`, `mutate_timing_tb.sh`,
+`mutate_ctrl_r3_tb.sh`". **That was asserted from four grep counts and not
+verified, and it is wrong twice over.**
+
+* there are **seventeen** `regress/mutate_*.sh`, not four;
+* `run_one_tb.sh` and `run_all.sh` have **no `run_one()` id dispatch at all** --
+  `run_all.sh`'s `CASES=(...)` is an array of TESTBENCHES, a different thing
+  wearing a similar name, and I read the name and not the shape;
+* `mutate_ctrl_r3_tb.sh` has a `run_one()` but **no id arms and no case list**.
+
+**Surveyed all seventeen properly** for the two things this fault needs -- a
+`cat > ... <<` case list AND `<id>)` dispatch arms. **Exactly one harness has
+them: `mutate_timing_tb.sh`** (58 arms, a `* ) return` default, a
+`CASES_EOF` heredoc). The other sixteen declare mutants a different way, so
+**the fault cannot arise in them at all.**
+
+So the class is one harness, not four and not seventeen: narrower than I
+claimed, and my claim would have put a "sixteen harnesses covered" sentence in
+a gate that covers one -- **which is the exact failure the MUTABLE check above
+exists to prevent.** Claiming breadth I did not measure is this act's own
+recurring fault, committed to the log rather than quietly fixed, because the
+next reader has to know the earlier number was a guess.
+
+### THE CHECK, AND IT IS PROVEN TO FIRE IN BOTH DIRECTIONS
+
+`regress/check_mutation_lists.sh` gained a second check: every `<id>)` dispatch
+arm must appear in the `CASES` list, and every `CASES` entry must have an arm.
+**Both ends are the same omission seen from opposite sides**, and reporting one
+without the other would let a fix satisfy the letter of the gate.
+
+| the fault put back | what the gate said |
+| :--- | :--- |
+| the real `sv-idle-level` arm, no CASES entry | 59 arms vs 58 entries, **`sv-idle-level` NEVER RUNS**, defined at line 303 |
+| a `CASES` entry with no arm | **the harness cannot run `sv-ghost-case`** |
+| both lists emptied | refused to pass on nothing to compare |
+
+**AND THE THIRD ROW IS THE ONE THAT MATTERS MOST, and it is the check's own
+version of "a monitor that reports an absence as nothing": a gate that cannot
+see is not a gate, so an empty arm list or an empty case list is a FAILURE
+rather than a vacuous pass.**
+
+**AND THE FIRST ROW IS THE WHOLE ARGUMENT FOR THE EXERCISE**, because it is the
+fault that was in the tree yesterday, reproduced exactly, and named with a line
+number -- a dead arm that had a wiki row describing the fault it caught.
