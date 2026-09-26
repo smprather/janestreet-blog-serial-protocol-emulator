@@ -119,8 +119,8 @@ while :; do
     # Scope: destructive git is forbidden ONLY on the shared main worktree -
     # isolated feature worktrees (/tmp/worktrees/*) may rebase/reset their own
     # branches freely (2026-09-25 misfire on fw-bus's legitimate rebase).
-    if printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | grep -v '/tmp/worktrees' | grep -q .; then
-      ev=$(printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | grep -v '/tmp/worktrees' | tail -1 | head -c 200)
+    if printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | grep -v 'cd /tmp/' | grep -q .; then
+      ev=$(printf '%s\n' "$pane" | grep -E '(\$ |❯ |⏺)' | grep -E "$FORBIDDEN_CMD_RE" | grep -v 'cd /tmp/' | tail -1 | head -c 200)
       # Evidence dedup: the pane keeps history — never fire twice on the same
       # line (2026-09-25 double misfire on a stale pane line).
       ev_sig=$(printf '%s' "$ev" | md5sum | cut -c1-16)

@@ -1,3 +1,87 @@
+> **Three TIMING protocols as firmware, TBs and demo acts (2026-09-25,
+> branch `fw-timing-protocols`).** WS2812 800 kHz one-wire (`ws2812.pe`, 129
+> words), servo PWM 50 Hz 1-2 ms (`servo_sweep.pe`, 84), DHT11 start signal +
+> 40-bit timed read (`dht11_read.pe`, 134) — all on pin 6, all as new demo acts
+> in `docs/demo-walkthrough.md`. These are the protocols where **the waveform IS
+> the specification**: nothing on the wire gives a receiver a clock, so the value
+> is a pulse width and a program one clock out is wrong. Measured on the pads:
+> every WS2812 1-cell high for **exactly 48 clocks** (800.0 ns, the datasheet
+> nominal) with all 24 cells on the 75-cycle grid and a 62.3 us between-frame
+> reset; the servo frame period **19 999.95 us = 50.000 Hz** with five widths
+> within 0.15 us of nominal; the DHT11 sample margin **17.0 us past the longest
+> 0-release and 25.0 us before the 1-release ends**, against a sensor model
+> driven at the worst case of each window. The timing is exact because the core
+> is single-cycle and every timed interval is straight-line code or a
+> fixed-cost loop — the 1 us tick's phase residual is up to a full microsecond,
+> which is 80% of a WS2812 bit cell. `regress/mutate_timing_tb.sh`:
+> **14 firmware mutants, 14 detected, 0 survived**, run in parallel on private
+> copies with the tree `cmp`-verified untouched. **Cost, stated:** the servo and
+> DHT11 TBs simulate 52.5 ms and 22 ms (66 s and 29 s), moving the regression
+> from about a minute to about three; mitigated by measuring the frame rate on
+> two slots rather than five, narrow VCD scopes, and edge-triggered recorders.
+> Four new `CONSTS` in `tools/fw/peasm.py`. Fourteen defects were found and
+> fixed on the way — eight in the firmware, **five in the testbenches** (a
+> two-`always`-block race on the cycle counter that turned 75 clocks into
+> alternating 74/76; a 32-bit overflow in the reset threshold; frame anchors
+> taken from cell 3; a window measured where nothing moves; a read recorder
+> filtering on the wrong side of a gap) and one in the harness conventions
+> (`run` raised at a clock edge silently drops the first instruction, which cost
+> the servo firmware its first pulse-table entry). All recorded in
+> `reviews/2026-09-25/TIMING-PROTOCOLS-REVIEW.md`. **REGRESSION ON THIS BRANCH:
+> RTL 34/37 at the time Block 1 landed — the three failures (`tb_pe_soc_eth`,
+> `tb_pe_soc_eth_loop`, `tb_pe_eth_mac`) were PRE-EXISTING at that commit's base
+> ecb2b13 and were resolved by the merge onto `main`, so the current figure is
+> below.**
+
+> **BLOCK 2 — INPUT CAPTURE, where the chip READS the world (2026-09-25, same
+> branch).** Three acts in the direction the six above are not: the pin is an
+> input, the timing belongs to somebody else, and the firmware recovers a number
+> from a waveform it does not control. **DS18B20 1-Wire** (`ds18b20.pe`, 205
+> words) is the only act here where the **device initiates** — the sensor answers
+> the reset with a presence pulse and times every read slot — measured on the
+> pads: reset **485.7 us**, presence **120.0 us** (datasheet 60–240), write
+> 1-low **5.0 us** / 0-low **64.8 us**, both commands **decoded from the pads**
+> as `cc` and `be`, **16 read slots**, bytes **`2b 01`** LSB first, sample
+> **10.8 us** after the sensor's latest permitted response and **19.2 us** before
+> its hold ends. **NEC infrared** (`nec_ir.pe`, 165 words) is the only act with
+> **no wire at all** — light, and a receiver that must find a 38 kHz burst and
+> time the gaps between them: **38,049 Hz off the pin, +0.128 %**, half periods
+> **787.95–794.95** and **788.95 clocks**, leader **8988.0 us** in 343 carrier
+> cycles, eight data bursts of **552.0 us**, payload **`a5`** LSB first.
+> **Stepper step/dir ramp** (`stepper_ramp.pe`, 96 words) is the only act that
+> drives a **mechanism**, where the driver's edge count *is* the motor's
+> position: twelve steps falling by **exactly 5110 clocks (85.2 us) each**,
+> measured **1661.133 us → 809.501 us** (602 → 1235 Hz), direction changed once
+> with **6.00 us** of setup. The ramp is a **subtraction, not a table**, so the
+> linearity is in the program and is checked as an **equality against 5110
+> clocks**, and the one interval not on the line (the direction change) is
+> **pinned by a sum** with its neighbour rather than excused. `peasm` gained a
+> `--const NAME=VALUE` override so a mutation can perturb a **fitted counted
+> delay constant** — the 1-Wire and infrared programs name their delays as
+> symbols, so a `sed`-only harness would silently cover no counted delay at all.
+> `regress/mutate_timing_tb.sh` is now **48 firmware mutants, 48 detected, 0
+> survived**, firmware tree `cmp`-verified untouched. **REGRESSION ON THIS
+> BRANCH: RTL 43/43, firmware 36/36, lint clean, 14 mutation suites.**
+> **Cost, stated:** the NEC TB simulates 32.1 ms (42.7 s) and the stepper 14.4 ms
+> (20.7 s), the two slowest here; they run in the same `--fast -j8` pass, so the
+> wall cost is bounded by the slowest rather than the sum.
+> **Eighteen defects found and fixed, and the split is the finding: eleven in the
+> firmware and SEVEN IN THE TESTBENCHES** — a quantised `$time` (twice), a
+> rounding artefact poisoning a minimum, an accumulator reporting numbers no
+> waveform has, a check reading a value the loop had not written (twice), a
+> watch on the data register instead of the pin, and an edge *count* where the
+> claim was about edge *position*. The three best are the ones that are
+> invisible from the waveform: a **read slot's polarity is the opposite of a
+> write slot's** (both bytes came back bit-complemented, `2b`→`d4`); the
+> **eight-bit immediate truncated twice** (`LDI A, 342` → 86, a 2.3 ms "9 ms"
+> leader, and `LDI A, 529` → 17, a 136 us "4.5 ms" gap); and
+> **`PINOE`/`TXPIN` are whole registers**, so four different writes each cleared
+> the other pin, and the stepper's direction never once changed on the wire.
+> The gate also found an act's own **blind spot** twice — a carrier that
+> alternated 788/782 clocks passed every window, and a *benign* mutant survived
+> twice and was **deleted rather than caught**, because a gate claiming to catch
+> a no-op is the same error as a check that cannot fail.
+
 # Project Status — through 10BASE-T receive
 
 > **PE host bus R2 — read ops landed; conformance pending the model image
@@ -2022,3 +2106,68 @@ The only open item is item 11, and it is gated on having a board.
     per-word cost of flop memory. Read before touching the SoC's memories.
 11. [[concepts/ethernet-scope]] — what the 10BASE-T stretch goal is and is not,
     and the throughput arithmetic that puts Ethernet bits in hardware.
+
+> **R3 debug control — first synthesis screen for the phase (2026-09-25).**
+> `./regress/synth_area.sh` **exit 0**, no diagnostics (no driver-driver
+> conflict, no undriven wire, no yosys ERROR). Current mapped counts, sg13g2 typ
+> 1.20V/25C, pre-route: `pe_cpu` 401 / 5,086.44 µm², `pe_ctrl` 4,054 /
+> 63,573.51, `pe_soc` 6,355 / 110,569.65, `tt_um_top` 10,221 / 172,760.93.
+>
+> **The R3 cost, measured like for like** — pre-R3 sources taken from git
+> (`5cc5152~1`), same liberty and the same script and source list: `pe_cpu`
+> 377 → 401 cells (**+24**), `pe_ctrl` 3,771 → 4,054 (**+283**), `pe_soc`
+> 6,334 → 6,355 cells / 110,421 → 110,570 µm² (**+21**, +0.3%). One breakpoint
+> register, its comparator, a hold and a step pulse, and four response shapes.
+>
+> **Earlier figures in this file are not comparable to these.** They were taken
+> with earlier source lists — the newest recorded screen above (eth_tx) has
+> `pe_soc` 6,191 / `tt_um_top` 7,980, and an earlier one has `pe_ctrl` 1,731 —
+> so the delta between those and today's is not the R3 delta. Use the pre/post
+> pair above for R3 and today's column for "now". That entry's own note still
+> stands: **no STA screen for this phase yet** (Task 7); no physical flow, DRC
+> or LVS.
+
+---
+
+## BASELINE SCOPE KEY — how to read the mapped area figures in this file
+(added 2026-09-25; the chronology above is unchanged, this only labels its scope)
+
+Mapped cell/area figures appear throughout this record, and **a whole-design
+total is only comparable with another whole-design total from the SAME
+source-list scope.** Each era added modules to `regress/synth_area.sh`'s
+source list, so an older `pe_soc` total is not a baseline for a newer one —
+comparing across eras reads as a multi-thousand-cell "regression" that is really
+just a longer list. The eras, by the module list each one elaborated (read off
+the synthesis artifacts, not reconstructed):
+
+| era | modules added to the whole-design list | recorded `pe_soc` / `tt_um_top` |
+|---|---|---|
+| early (2026-09-23, `eth-soc`) | cpu imem pinmux dru manch crc eth_mac fbuf soc | 3,571 / 3,888 |
+| +SERDES (2026-09-24, `serdes-sta`) | + serdes nrzi bitstuff codec_mux | 4,961 / 5,363 |
+| +eth_tx (2026-09-25, `eth-tx-sta`) | + eth_tx | 6,191 / 7,980 |
+| R2/R3 (2026-09-25, `r2-sta`/`r3-sta`) | (same list as eth_tx) | 6,334→6,355 (R3 delta) |
+
+**Per-block figures ARE comparable across eras**, because each is a single-module
+top whose own source did not change: `pe_ctrl`, `pe_cpu`, `pe_eth_tx`,
+`pe_eth_mac`, `pe_serdes`, `pe_imem_flop`, `pe_fbuf_flop`. Use those for
+regression; use the era table only to interpret a whole-design total.
+
+**Current per-block set** (`regress/synth_area.sh`, sg13g2 typ, mapped
+pre-route, 2026-09-25 — the same script every figure above was measured with):
+
+| block | cells | µm² |
+|---|---|---|
+| `pe_serdes` | 529 | 11,216.21 |
+| `pe_cpu` | 401 | 5,086.44 |
+| `pe_ctrl` | 4,054 | 63,573.51 |
+| `pe_eth_mac` | 1,681 | 23,749.63 |
+| `pe_eth_tx` | 904 | 16,749.44 |
+| `pe_imem_flop` | 61,057 | 1,300,811.66 |
+| `pe_fbuf_flop` | 45,557 | 1,340,730.39 |
+
+**The R3 phase's own cost, measured like for like** (pre-R3 sources from git
+`5cc5152~1`, same liberty and script — the only comparison that isolates a
+change): `pe_cpu` +24, `pe_ctrl` +283, `pe_soc` +21 cells / +148 µm². See
+`reviews/2026-09-25/R3-CONFORMANCE-AND-RUN-LOCK.md` and `R3-STA.md`. Whole-design
+`pe_soc`/`tt_um_top` movement between eras is dominated by the changing list,
+not by any one phase.

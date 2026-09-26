@@ -56,6 +56,14 @@ module pe_cpu #(
   input  logic             rst_n,
   input  logic             run,        // 1: execute. 0: held at PC=0 (boot)
 
+  // R3 debug control (manager dispatch 2026-09-25). `dbg_hold` MASKS the run
+  // strap: while high the core does not execute and PRESERVES its PC -- the
+  // dual of the boot stop above, which holds it at 0 for the loader. `dbg_step`
+  // is a one-cycle pulse that executes exactly one instruction. Both come from
+  // pe_ctrl (the host bus); no pad is added for either.
+  input  logic             dbg_hold,
+  input  logic             dbg_step,
+
   // Instruction memory (combinational read, registered writes by the loader).
   // The width expressions repeat the localparam definitions inline because
   // iverilog binds port dimensions before later localparams are visible.
@@ -95,7 +103,12 @@ module pe_cpu #(
   output logic [7:0]       dbg_a,
   output logic [7:0]       dbg_x,
   output logic [7:0]       dbg_y,
-  output logic [15:0]      dbg_insn
+  output logic [15:0]      dbg_insn,
+  // R3: the landing address of the step about to execute. pe_ctrl samples it
+  // in the dispatch cycle, so the DEBUG_STEP response can report where the core
+  // resumes even though the instruction commits at the following edge (the PC
+  // and the fetched instruction are frozen in between, by construction).
+  output logic [((IMEM_WORDS <= 2) ? 1 : ((IMEM_WORDS <= 256) ? 8 : $clog2(IMEM_WORDS)))-1:0] dbg_next_pc
 );
 
   localparam int IAW = (IMEM_WORDS <= 2) ? 1 : $clog2(IMEM_WORDS);
@@ -197,6 +210,29 @@ module pe_cpu #(
     $error("pe_cpu: PCW exceeds the 12-bit operand field; the ISA needs a second instruction word before the PC can widen further");
   end
 
+  // ---- R3 debug glue: execute, hold, step ---------------------------------
+  // `cpu_exec` is the single execute gate: the strap, masked by the debug hold,
+  // plus the step pulse. Everything that commits (the PC and every side effect)
+  // hangs off it, so a held core is inert by construction.
+  // THE DEFENSIVE DEFAULT, and it is load-bearing. dbg_hold and dbg_step are
+  // module INPUTS, and every instantiation that predates them leaves them
+  // unconnected: the port arrives as Z, `!dbg_hold` is X, and this gate is X,
+  // so the core never executes an instruction and every observable in the
+  // system stays at its reset value. That is not a hypothetical -- it is what
+  // happened to the six timing acts when R3 landed, and the symptom
+  // (dmem = xx, zero edges, a watchdog) looks like a firmware bug in six
+  // unrelated programs at once.
+  //
+  // Tested with CASE equality so that anything which is not a HARD one reads
+  // as "not held" / "no step": the debug interface is inactive unless
+  // something actively asserts it. In synthesis this is identical to the
+  // plain expression (x and z do not exist in hardware), so nothing about the
+  // netlist changes -- the convention is that a debug input defaults to
+  // inactive, and it is enforced where the input is consumed rather than at
+  // every call site, which is the only place a new call site cannot forget it.
+  wire cpu_exec = (dbg_step === 1'b1) || (run && !(dbg_hold === 1'b1));
+  assign dbg_next_pc = next_pc;
+
   // While !run the core holds pc at 0 (the boot loader owns the window), and
   // the ROM must be pre-loading imem[0] so the first instruction is ready the
   // moment run rises. The address is ZERO, not `pc`: pc becomes 0 at the first
@@ -205,7 +241,16 @@ module pe_cpu #(
   // a stale fetched word (measured: `LDI A,55; LDI A,AA; JMP 2`, stopped for
   // one clock, resumed at JMP 2 with A=AA instead of executing LDI A,55;
   // review 2 R2-4). Addressing zero immediately makes a one-clock stop safe.
-  assign imem_addr = run ? next_pc[IAW-1:0] : {IAW{1'b0}};
+  //
+  // R3 adds the same argument for the DEBUG HOLD: while held the address is
+  // `pc`, so the ROM keeps presenting imem[pc] and the instruction the host
+  // sees in dbg_insn is exactly the one a step will execute. During the step
+  // cycle the address switches to next_pc, refilling the fetch for the resumed
+  // PC -- the three modes (running / boot stop / debug hold) each keep the
+  // pipeline invariant `imem_rdata == imem[pc]`.
+  assign imem_addr = cpu_exec ? next_pc[IAW-1:0]
+                   : dbg_hold ? pc[IAW-1:0]
+                   : {IAW{1'b0}};
 
   // ---- address / data bus ----------------------------------------------
   // One write port, muxed: STS addresses through X, STM through an immediate.
@@ -213,12 +258,12 @@ module pe_cpu #(
                     : (op == OP_LDM) ? arg[DAW-1:0]
                     : x[DAW-1:0];
   assign dmem_wdata = a;
-  assign dmem_we    = run && ((op == OP_STS) || (op == OP_STM));
+  assign dmem_we    = cpu_exec && ((op == OP_STS) || (op == OP_STM));
 
   assign io_port  = arg[3:0];
   assign io_wdata = a;
-  assign io_we    = run && (op == OP_OUT);
-  assign io_re    = run && (op == OP_IN);
+  assign io_we    = cpu_exec && (op == OP_OUT);
+  assign io_re    = cpu_exec && (op == OP_IN);
 
   // ---- ALU --------------------------------------------------------------
   // The second operand is normally an immediate, but arg[9] selects X instead.
@@ -257,9 +302,10 @@ module pe_cpu #(
       a  <= 8'h00;
       y  <= 8'h00;
       x  <= 8'h00;
-    end else if (run) begin
+    end else if (cpu_exec) begin
       // next_pc is computed combinationally above (fetch-ahead) and the ROM
-      // address already follows it; commit it here.
+      // address already follows it; commit it here. This is the ONLY place the
+      // PC advances, so a step commits exactly one update.
       pc <= next_pc;
       case (op)
         OP_LDI:  a <= arg[7:0];
@@ -287,9 +333,10 @@ module pe_cpu #(
         OP_NOP:  ;
         default: ;
       endcase
-    end else begin
-      pc <= '0;                        // held by the boot loader
+    end else if (!dbg_hold) begin
+      pc <= '0;                        // boot stop: held by the loader
     end
+    // else: debug hold -- pc keeps its value (R3)
   end
 
 endmodule

@@ -28,6 +28,26 @@ and its evidence. Mid-task, write `QUESTION: <text>` there (and keep working)
 or `BLOCKED: <text>` (and stop at your prompt). The manager deletes the file
 before each dispatch and wakes on its appearance.
 
+**WORKLOG rotation + concision (manager ruling 2026-09-25):** the shared log
+rotates to `logs/worklog/YYYY-MM-DD[-NN].md` at ~10 MB or day boundaries (the
+manager rotates; archives are committed and greppable - the trail never dies).
+Log LINES are concise entries (≤ ~500 chars); full reports/evidence live in
+`reviews/` and interrupt files - link, do not inline. This rule exists because
+the log hit 58 MB and GitHub warned on every push.
+
+## THE MERGE GATE (manager standing order, 2026-09-25). A merge is not pushed
+until `regress/verify_merge.sh` is green, and its output is quoted in the
+interrupt. This exists because 5b4731f was pushed with six RED timing acts and
+every gate the project owns had been green a minute earlier: R3's new
+`dbg_hold`/`dbg_step` inputs never reached the fw branch's testbenches, so their
+ports floated to Z, the execute gate went X and six unrelated programs sat at
+reset. No gate could catch it — until the merge, the two states did not coexist.
+`./regress/verify_merge.sh --list` prints the affected set and runs nothing;
+`--self-test` runs the mapper's own 18 checks; exit 1 is red WITH a named case,
+3 is a gate error, and **4 is inconclusive (the run died) — which is not a pass
+and must not be reported as one**. Full evidence:
+`reviews/2026-09-25/MERGE-FORENSICS-5B4731F.md` §5-§6.
+
 ## Continuous work protocol (user standing order 2026-09-25: "I don't want
 to come back and find nobody working")
 

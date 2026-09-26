@@ -46,6 +46,12 @@ JOBS=$(nproc 2>/dev/null || echo 4)
 while [ $# -gt 0 ]; do
   case "$1" in
     --fast)   FAST=1 ;;
+    # Most specific first: `--cases=REGEX` before the bare `--cases REGEX`.
+    # They do not actually overlap (the bare pattern has no glob characters, so
+    # it matches only the literal string), but shellcheck reports the later one
+    # as unreachable and a reader has to stop and re-derive that.
+    --cases=*) FILTER_CASES="${1#--cases=}" ;;
+    --cases)  FILTER_CASES="${2:-}"; shift ;;
     -j*)      JOBS="${1#-j}" ;;
     -j)       shift; JOBS="${1:-$JOBS}" ;;
     -h|--help)
@@ -138,6 +144,77 @@ CASES=(
   # I2C on the pin matrix: the runtime direction file driven by firmware, and
   # the open-drain property checked on the RTL's own pin_oe output. This is the
   # test that makes "the matrix is enough to speak I2C" a measured claim.
+  # The three TIMING acts: protocols where the waveform IS the specification.
+  # What makes them different from every case above is that the DUT is partly the
+  # FIRMWARE -- a WS2812 cell, a servo pulse width and a DHT11 sample instant are
+  # instruction counts, and nothing in rtl/ knows what any of them is. Their
+  # regression cost is milliseconds of simulation (52.5 ms and 22 ms), which is
+  # two orders of magnitude more than any other TB here; that is the honest price
+  # of a protocol whose unit of correctness is the millisecond, and it is why the
+  # frame rate is measured on two slots rather than five. regress/mutate_timing_tb.sh
+  # proves each testbench fails when the firmware is broken.
+  "tb_pe_soc_ws2812|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_ws2812"
+  "tb_pe_soc_servo|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_servo"
+  "tb_pe_soc_dht11|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_dht11"
+  # 1-WIRE (Block 2 act a). The DHT11 act above is a sensor the host READS on
+  # a schedule it chooses; this one is the shape 1-Wire actually is. The DEVICE
+  # initiates: after the host's reset pulse the sensor drives a presence pulse
+  # back, and every read slot is answered by the sensor, so the firmware's
+  # edge-wait loops and the pin matrix's read-back are both load-bearing in a
+  # way nothing else here is. The claim is the whole slot, both directions:
+  # the commands are decoded FROM THE PADS (so a wrong command, a wrong bit
+  # order or a slot of the wrong length fails rather than agreeing with a
+  # model built from the same reading of it), and the sample instant is
+  # measured to sit inside the sensor's data window with margin at both ends.
+  # ~2.2 ms of 60 MHz: the reset, sixteen write slots, sixteen read slots.
+  "tb_pe_soc_ds18b20|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_ds18b20"
+  # 1-WIRE (Block 2 act a). The DHT11 act above is a sensor the host READS on
+  # a schedule it chooses; this one is the shape 1-Wire actually is. The DEVICE
+  # initiates: after the host's reset pulse the sensor drives a presence pulse
+  # back, and every read slot is answered by the sensor, so the firmware's
+  # edge-wait loops and the pin matrix's read-back are both load-bearing in a
+  # way nothing else here is. The claim is the whole slot, both directions:
+  # the commands are decoded FROM THE PADS (so a wrong command, a wrong bit
+  # order or a slot of the wrong length fails rather than agreeing with a
+  # model built from the same reading of it), and the sample instant is
+  # measured to sit inside the sensor's data window with margin at both ends.
+  # ~2.2 ms of 60 MHz: the reset, sixteen write slots, sixteen read slots.
+  # NEC INFRARED (Block 2 act b). The sharpest timing claim in the repository
+  # and the only one with NO WIRE: the only thing that leaves the pin is light,
+  # so a receiver has to find a 38 kHz burst and time the silences between
+  # bursts to know what was sent. Nothing resynchronises to anything -- the
+  # carrier is fitted to the CLOCK (789 clocks a half period, 38.049 kHz off the
+  # pin) and the two half periods are checked separately and for constancy to
+  # within a clock, because a carrier that alternates 37.9/38.1 is a program
+  # that is out by a fraction of a clock on every other edge. 32 ms of 60 MHz.
+  "tb_pe_soc_ir_nec|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_ir_nec"
+  # STEPPER STEP/DIR RAMP (Block 2 act c). The only act in this block that
+  # drives a MECHANISM: the driver chip counts STEP edges and the motor's
+  # position IS that count, so there is no acknowledgement, no status word and
+  # nothing at the far end to resynchronise to. The claim is therefore the
+  # sharpest and the simplest here -- every step period is an exact instruction
+  # count measured on the pin, and the ramp is exactly linear TO THE CLOCK:
+  # the firmware subtracts ten outer steps of the (4,40) pair, 5110 clocks, per
+  # step, so the constancy is in the program rather than assumed about a table.
+  # Checked as an EQUALITY against 5110, not a tolerance, and the one interval
+  # that is not on the line -- the direction change, which is the only thing
+  # in the program that is not a step -- is pinned by a SUM with its
+  # neighbour rather than excused. ~14 ms of 60 MHz, the sum of the periods.
+  "tb_pe_soc_stepper_ramp|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_stepper_ramp"
+  # The INPUT acts: the pin is an INPUT and the firmware recovers numbers from
+  # a waveform it does not control, so the number that is the claim is the
+  # ACCURACY OF A COUNT. Twelve banked points from 158 Hz to 10 kHz with a
+  # varying duty, each checked against a SECOND, independent measurement of the
+  # pad (the receiver in the TB) rather than against the generator's table --
+  # a generator that knew the answer would agree with a firmware that had the
+  # sweep wrong. The 100 Hz point is the point of the act: 10 000 us does not
+  # fit in a byte, and a firmware counting into one reports 16 us with no
+  # symptom at 10 kHz. The sweep is six runs of three periods because the
+  # MACHINE HAS SIXTEEN BYTES of data memory and a period plus a high time is
+  # four of them. ~43 ms of 60 MHz, the largest simulation in the repository;
+  # the generator is edge-driven with absolute delays rather than clocked,
+  # which is what keeps it inside ~55 s of wall.
+  "tb_pe_soc_freqmeter|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_freqmeter"
   "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
   # The I2C TRANSACTION layer on real RTL: firmware/i2c_xfer.pe against a
   # Verilog slave FSM that decodes the wire, with timing and grammar asserted
@@ -188,6 +265,22 @@ CASES=(
   # $readmemh (tb/r2-vectors/), the model image is loaded per vector, and the
   # response is compared byte-exactly -- CRC included, R2 wait words skipped.
   "tb_pe_ctrl_r2|../rtl/pe_ctrl.v|tb_pe_ctrl_r2"
+  # R3 debug control: the SAME pe_ctrl with a REAL pe_cpu and a registered
+  # imem model, wired as the SoC and the top route the three debug wires
+  # (dbg_hold/dbg_step/dbg_next_pc). Single-step, the PC breakpoint's
+  # stop-before semantics, the hit readback and the state encoding; contract:
+  # reviews/2026-09-25/R3-DEBUG-CONTROL-CONTRACT.md.
+  "tb_pe_ctrl_r3|../rtl/pe_ctrl.v ../rtl/pe_cpu.v|tb_pe_ctrl_r3"
+  # R3 CONFORMANCE: the SAME pe_ctrl, driven by the HOST's own bytes. Every
+  # request and response comes from the gui-worker's golden package via
+  # $readmemh (tb/r3-vectors/), the model image is preloaded per vector, and
+  # the response is compared byte-exactly -- CRC included. Seven words across
+  # three steps are pinned as KNOWN divergences in
+  # tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt (two are host-side vector defects
+  # where the chip is right, one is a TB model boundary); the lock compares the
+  # observed SET against that list, so a known divergence that changes, or any
+  # new one, turns this red.
+  "tb_pe_ctrl_r3_conf|../rtl/pe_ctrl.v ../rtl/pe_cpu.v|tb_pe_ctrl_r3_conf"
 
   # The 10BASE-T receive path, end to end on real RTL: raw Manchester
   # levels into pe_dru, through pe_manch and pe_crc, into pe_fbuf. Every
@@ -252,6 +345,33 @@ CASES=(
   #     free-running a strobe across the frame.
   "tb_pe_soc_dmx512|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_dmx512"
 )
+
+# ---- OPTIONAL case filter (OFF by default; the merge gate's driver) --------
+# `--cases REGEX` runs only the cases whose NAME or TOP matches. Unused, the
+# ordinary full gate is byte-for-byte unchanged. When it IS used it PRINTS the
+# selected and skipped counts, and the summary line says FILTERED, because a
+# gate that silently runs less than it claims is worse than no gate -- that is
+# precisely how a red merge gets pushed.
+if [ -n "${FILTER_CASES:-}" ]; then
+  _sel=(); _skip=0
+  for c in "${CASES[@]}"; do
+    IFS='|' read -r _n _r _t <<< "$c"
+    # NAME and TOP are matched as SEPARATE lines, not as one "$_n $_t" line.
+    # That matters: a caller who anchors its pattern (^(a|b)$, which is what
+    # regress/verify_merge.sh builds from the case table) can then never match
+    # a two-field line, and the filter silently selects nothing. That is not
+    # hypothetical — verify_merge.sh's own GREEN demonstration hit it, and the
+    # only reason it was caught rather than believed is that the gate refuses
+    # to report a pass it cannot count.
+    if printf '%s\n' "$_n" "$_t" | grep -qE "${FILTER_CASES}"; then _sel+=("$c"); else _skip=$((_skip + 1)); fi
+  done
+  echo "(--cases ${FILTER_CASES}: ${#_sel[@]} selected, ${_skip} skipped)"
+  if [ "${#_sel[@]}" -eq 0 ]; then
+    echo "run_all.sh: --cases '${FILTER_CASES}' matched NO case" >&2
+    exit 2
+  fi
+  CASES=("${_sel[@]}")
+fi
 
 pass=0; fail=0; failed_names=()
 
@@ -521,7 +641,7 @@ fi
 # that attacks its claim. Runs in its own proof shape per case (BMC or
 # induction) and takes the run lock reentrantly via CHIP_RUN_LOCK_HELD.
 if bash formal/mutants.sh > /tmp/run_formal_mutants.log 2>&1; then
-  echo "formal mutant checks: OK (10 caught, 0 survived; see formal/results/mutants.txt)"
+  echo "formal mutant checks: OK (see formal/results/mutants.txt for the per-mutant table)"
 else
   echo "formal mutant checks: FAILED (a mutant survived -- a claim is a blind spot)"
   tail -20 /tmp/run_formal_mutants.log
@@ -541,6 +661,53 @@ if python3 regress/cross_check_wait_words.py > /tmp/cross_wait_words.log 2>&1; t
 else
   echo "wait-word cross-check: FAILED"
   cat /tmp/cross_wait_words.log
+  stale=1
+fi
+
+# The RUN LOCK's process-tree contract. The lock is what keeps two mutation
+# harnesses off the same RTL, and its failure mode is quiet: flock releases when
+# the holder dies, but the holder's CHILDREN do not, so a killed run used to
+# leave a mutator running AND the lock held (a refusal "for a lock nobody is
+# holding"). This gate proves the fix on real process trees with real signals --
+# SIGINT, SIGTERM, SIGKILL (no trap can run, so the watchdog covers it), a clean
+# exit, a reentrant child, and a background subshell that must NOT fire the
+# kill trap. It uses a private lock file, so it never touches the worktree lock
+# and is safe to run beside a real run.
+if bash regress/test_run_lock.sh > /tmp/test_run_lock.log 2>&1; then
+  echo "run-lock process tree: OK (every signal reaps the run; no bystander killed)"
+else
+  echo "run-lock process tree: FAILED"
+  cat /tmp/test_run_lock.log
+  stale=1
+fi
+
+# The R3 golden package the conformance harness consumes, in TWO places: the
+# review artifact and the TB's copy. A conformance gate is only worth the bytes
+# it compares, so the .hex streams must be byte-identical and the checked-in
+# include must match what the generator derives from the manifest (which also
+# re-CRCs every request frame and re-checks every length field).
+#
+# manifest.json is EXCLUDED from the byte comparison, deliberately: it is the one
+# file the chip side annotates, because chip_confirmed is a claim about the chip
+# and the evidence behind it lives with the harness. That is the R2 precedent
+# exactly (the two R2 manifests differ, and the TB-side one carries the chip's
+# citations). reviews/2026-09-25/r3-hex/manifest.json stays the host's own byte
+# for byte. What is asserted INSTEAD is stronger than a byte diff of that file:
+# annotate_r3_confirmations.py --check re-derives the claim from the pinned
+# divergences and requires the vector/step structure, the file names and the byte
+# counts to still match the host's copy, so the harness can never end up
+# comparing the chip's own edits to itself.
+if diff -r --exclude='*.vh' --exclude='R3_KNOWN_DIVERGENCES.txt' \
+        --exclude='manifest.json' \
+        reviews/2026-09-25/r3-hex tb/r3-vectors \
+     > /tmp/r3_package_diff.log 2>&1 \
+   && python3 tools/gen/gen_r3_vectors.py --check >> /tmp/r3_package_diff.log 2>&1 \
+   && python3 tools/gen/annotate_r3_confirmations.py --check \
+        >> /tmp/r3_package_diff.log 2>&1; then
+  echo "R3 golden package: OK (tb copy byte-exact; include and confirmations current)"
+else
+  echo "R3 golden package: FAILED (package drift or a stale generated include)"
+  cat /tmp/r3_package_diff.log
   stale=1
 fi
 
@@ -583,6 +750,21 @@ fi
 # The SPI testbench's mutation suite. Same reasoning: SPI is a baseline protocol
 # and its TB makes a strong claim (the slave decodes the master's byte MSB-first
 # from the pins), so the claim is tested by making it false.
+# The three TIMING testbenches' suite. These are the only cases in the repository
+# whose DUT is partly firmware, so their mutations are firmware edits: a cell one
+# clock short, a pulse 0.75 ms wide, a bit order reversed, a start signal 70x too
+# short. It runs its 14 cases in parallel on PRIVATE COPIES of the firmware and
+# then cmp-verifies that the tree was never written to -- a stronger statement
+# than "restored correctly". It is the slowest suite here (the servo TB is 66 s
+# per case) and runs at MUTATE_TIMING_JOBS, default 6.
+if ./regress/mutate_timing_tb.sh > /tmp/mutate_timing.log 2>&1; then
+  echo "timing TB mutations: OK (no unexplained survivors)"
+else
+  echo "timing TB mutations: FAILED"
+  tail -20 /tmp/mutate_timing.log
+  stale=1
+fi
+
 if ./regress/mutate_spi_tb.sh > /tmp/mutate_spi.log 2>&1; then
   echo "spi TB mutations: OK (no unexplained survivors)"
 else
@@ -683,6 +865,14 @@ fi
 # and the done pulse. Two of them (pad-extra, ifg-95) SURVIVED the first
 # version of the suite and found two real gaps in tb_pe_eth_tx.v, which the
 # suite's own record carries.
+if ./regress/mutate_ctrl_r3_tb.sh > /tmp/mutate_ctrl_r3.log 2>&1; then
+  echo "ctrl R3 debug mutations: OK (no unexplained survivors)"
+else
+  echo "ctrl R3 debug mutations: FAILED"
+  tail -20 /tmp/mutate_ctrl_r3.log
+  stale=1
+fi
+
 if ./regress/mutate_eth_tx_tb.sh > /tmp/mutate_eth_tx.log 2>&1; then
   echo "eth_tx TB mutations: OK (no unexplained survivors)"
 else

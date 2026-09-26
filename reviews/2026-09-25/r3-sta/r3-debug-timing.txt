@@ -1,0 +1,68 @@
+== pe_soc/slow
+   R3-named nets appearing in this report: 2
+       dbg_hold
+       dbg_step
+   worst slack max 0.00
+   worst slack min -0.87
+== pe_soc/slow-board
+   R3-named nets appearing in this report: 2
+       dbg_hold
+       dbg_step
+   worst slack max 0.00
+   worst slack min -0.54
+== pe_soc/typ
+   R3-named nets appearing in this report: 2
+       dbg_hold
+       dbg_step
+   worst slack max 0.00
+   worst slack min -0.61
+== pe_soc/typ-board
+   R3-named nets appearing in this report: 2
+       dbg_hold
+       dbg_step
+   worst slack max 0.00
+   worst slack min -0.42
+== pe_soc/fast
+   R3-named nets appearing in this report: 6
+       dbg_hold
+       dbg_step
+     Endpoint: dbg_next_pc[1] (output port clocked by clk)
+        0.0000    3.1207 ^ dbg_next_pc[1] (out)
+     Endpoint: dbg_next_pc[2] (output port clocked by clk)
+        0.0000    3.0855 ^ dbg_next_pc[2] (out)
+   worst slack max 0.00
+   worst slack min -0.48
+== pe_soc/fast-board
+   R3-named nets appearing in this report: 6
+       dbg_hold
+       dbg_step
+     Endpoint: dbg_next_pc[1] (output port clocked by clk)
+        0.0000    3.1207 ^ dbg_next_pc[1] (out)
+     Endpoint: dbg_next_pc[2] (output port clocked by clk)
+        0.0000    3.0855 ^ dbg_next_pc[2] (out)
+   worst slack max 0.00
+   worst slack min -0.36
+== tt_um/slow
+   R3-named nets appearing in this report: 0
+   worst slack max 2.21
+   worst slack min -0.57
+== tt_um/slow-board
+   R3-named nets appearing in this report: 0
+   worst slack max 2.21
+   worst slack min -0.57
+== tt_um/typ
+   R3-named nets appearing in this report: 0
+   worst slack max 7.02
+   worst slack min -0.44
+== tt_um/typ-board
+   R3-named nets appearing in this report: 0
+   worst slack max 7.02
+   worst slack min -0.44
+== tt_um/fast
+   R3-named nets appearing in this report: 0
+   worst slack max 7.12
+   worst slack min -0.37
+== tt_um/fast-board
+   R3-named nets appearing in this report: 0
+   worst slack max 7.12
+   worst slack min -0.37

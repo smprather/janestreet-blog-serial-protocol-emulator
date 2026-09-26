@@ -84,6 +84,16 @@ worker; this file is the manager's restart prompt.
   AFTER the dispatch. The supervisor's nudge is a BACKSTOP for a slow
   manager, never the driver of next work. A worker waiting 60+ seconds for
   "what's next" is a process defect even if the interrupt woke correctly.
+- **WORKLOG rotation + concision (2026-09-25):** rotate the shared log to
+  `logs/worklog/YYYY-MM-DD[-NN].md` at ~10 MB or day boundaries; keep log
+  lines ≤ ~500 chars (reports link to reviews/, never inline). The 58 MB
+  GitHub-warning incident is why.
+- **Merge gate (2026-09-25, learned the hard way): NEVER push a branch merge
+  without running the affected TB set first.** The 5b4731f merge broke six
+  green timing acts via a union resolution and was pushed red. Use
+  `regress/verify_merge.sh` (affected-TB mapping, full-suite fallback) before
+  every merge push; a merge that turns the suite red is reverted or repaired
+  before anything else lands on top of it.
 - **RAM watchdog + OOM forensics (2026-09-25).** Two kernel OOM events —
   2026-09-24 14:33:40 and 18:43:28 (`journalctl -k`) — each killed a runaway
   `python3` at 22-23 GB anon RSS (+5 GB swapped) living in the wezterm

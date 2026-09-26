@@ -73,8 +73,11 @@ module formal_pe_ctrl #(
   input wire [7:0]  dbg_x,
   input wire [7:0]  dbg_y,
   input wire [15:0] dbg_insn,
-  input wire [7:0]  dbg_timer
+  input wire [7:0]  dbg_timer,
+  // R3: the core's landing PC in, and the hold/step controls out.
+  input wire [9:0]  dbg_next_pc
 );
+  wire dbg_hold, dbg_step;
   wire        spi_miso, miso_oe, irq_n, host_we, host_imem_sel;
   wire        load_active, load_error, dbg_rd_req, dbg_rd_dmem;
   wire [9:0]  host_addr;
@@ -87,6 +90,10 @@ module formal_pe_ctrl #(
   wire [2:0]  fv_rstate;
   wire [3:0]  fv_resp_bitpos;
   wire        fv_r_imm;
+  // R3 debug-control taps and the three debug wires
+  wire [1:0]  fv_dbg_state;
+  wire        fv_bp_en, fv_bp_hit, fv_dbg_hold;
+  wire [9:0]  fv_bp_addr;
 
   reg rd_valid_r;
   always @(posedge clk or negedge rst_n) begin
@@ -111,7 +118,10 @@ module formal_pe_ctrl #(
     .fv_resp_active(fv_resp_active), .fv_r_addr(fv_r_addr),
     .fv_r_left(fv_r_left), .fv_r_slot(fv_r_slot), .fv_r_dmem(fv_r_dmem),
     .fv_rstate(fv_rstate), .fv_faults(fv_faults), .fv_clr_mask(fv_clr_mask),
-    .fv_resp_bitpos(fv_resp_bitpos), .fv_r_imm(fv_r_imm)
+    .fv_resp_bitpos(fv_resp_bitpos), .fv_r_imm(fv_r_imm),
+    .fv_dbg_state(fv_dbg_state), .fv_bp_en(fv_bp_en), .fv_bp_hit(fv_bp_hit),
+    .fv_bp_addr(fv_bp_addr), .fv_dbg_hold(fv_dbg_hold),
+    .dbg_next_pc(dbg_next_pc), .dbg_hold(dbg_hold), .dbg_step(dbg_step)
   );
 
   // ---- reset discipline (fv_run.sh passes -set-assumes; without it this is
@@ -148,18 +158,27 @@ module formal_pe_ctrl #(
                                      : {1'b0, fv_r_left};
   // r_slot != 0 keeps the next write inside the buffer: with slots 1..15 in
   // use and the sum capped at 16, the write lands at r_slot <= 15.
-`ifndef FV_INDUCT
-  // ---- NOT INDUCTIVE ON THIS TOOLCHAIN: gate-depth BMC only -------------
-  // Kept in the file (and checked at the gate depth) but excluded from the
-  // induction target, because the induction step does not close on it: in an
-  // arbitrary pre-state the solver can pick r_slot=0 / an inconsistent pair and
-  // the claim is not derivable from one transition. The honest label is
-  // "PROVED at depth 16; not exercised on a live walk; induction open". The
-  // same applies to the three claims below (walksum, slotsum, idxadv).
+  // ---- P2a: no resp_buf slot overrun (REFORMULATED 2026-09-25, unbounded) ---
+  // OLD: `walking -> r_slot != 0`. It held in every reachable state, but it was
+  // NOT k=1-inductive: the induction step can begin from an ARBITRARY walking
+  // pre-state with r_slot=0, a state no accept can produce.
+  //
+  // NEW, and it is STRONGER, not weaker: the claim is anchored to the engine
+  // fact that actually constrains r_slot. An ACCEPTED read start loads r_slot<=1
+  // (pe_ctrl.v:994 and 1017), and R_REQ/R_WAIT are entered ONLY from R_START
+  // (pe_ctrl.v:1201/1205), so "an accepted R_START implies r_slot != 0" is a
+  // k=1 property of the RTL's own update equations -- an independent fact, not
+  // a restatement of the claim. `3'd1` is R_START.
+  //
+  // MUTANT-KILLED (the bar): it kills the OLD-scope mutants (the removed
+  // MAX_READ_WORDS guard and the broken 16-bit word end) AND two new self-scope
+  // mutants -- an accept that loads r_slot<=0, and an R_IDLE->R_REQ jump that
+  // reaches a request without passing an accepted R_START. Both are exactly the
+  // ways r_slot can go wrong in a walk, so a claim that survived them would be
+  // blind. Verified: clean PASSES (k=1, z3), all four mutants FAIL to prove.
   always @(*) begin
-    if (walking) assert (fv_r_slot != 16'd0);
+    if (fv_rstate == 3'd1 && !fv_r_imm) assert (fv_r_slot != 16'd0);
   end
-`endif
 
   // ---- P2a: the bound is ESTABLISHED at the accept and PRESERVED ---------
   // The bound alone is not inductive: in an arbitrary pre-state the solver can
@@ -281,6 +300,29 @@ module formal_pe_ctrl #(
     if (fv_resp_active && p_active && fv_resp_idx != p_resp_idx)
       assert (fv_resp_idx == 5'd0 || p_resp_bitpos == 4'd15);
   end
+  // ---- R3 debug-control claims ------------------------------------------
+  // H1/H2: a latched hit means the core is HELD, in the hit state -- the
+  // "hit implies stopped-with-hit-state" invariant the dispatch names. Both
+  // are set and cleared together by the hit logic (and by DEBUG_BP_CLR), so
+  // the coupling holds in every reachable state and is preserved by every
+  // transition: inductive in one step.
+  always @(*) begin
+    if (fv_bp_hit) assert (fv_dbg_hold);
+  end
+  always @(*) begin
+    if (fv_bp_hit) assert (fv_dbg_state == 2'd3);
+  end
+  // H3 was DROPPED, not weakened: "an armed address is inside instruction
+  // memory" (fv_bp_addr < WORDS) is VACUOUS at the shipping parameterisation --
+  // bp_addr is 10 bits and WORDS is 1024, so the claim is true by construction,
+  // and a mutant that removes the RANGE guard PROVED it (measured: the
+  // pe_ctrl_bp_set_no_range mutant SURVIVED). The real protection is that the
+  // FULL-WIDTH request word is refused, so a 1024..65535 request cannot
+  // truncate into a small address; that is a transition claim about pay0, which
+  // the TB owns (tb_pe_ctrl_r3 case C2) and the mutation gate enforces
+  // (regress/mutate_ctrl_r3_tb.sh `bp-set-no-range`). A vacuous claim in the
+  // proof would be worse than none: it would be trusted.
+
 endmodule
 
 `default_nettype wire

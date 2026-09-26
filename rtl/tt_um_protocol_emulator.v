@@ -143,6 +143,11 @@ module tt_um_protocol_emulator (
   wire [7:0] dbg_a, dbg_x, dbg_y, dbg_timer;
   wire [15:0] dbg_insn;
 
+  // R3 debug control: the host bus holds/steps the core and reads the landing
+  // PC. Declared before both instances (Icarus binds declaration before use).
+  wire        dbg_hold, dbg_step;
+  wire [9:0]  dbg_next_pc;
+
   pe_ctrl #(.WORDS(TT_IMEM_WORDS)) u_ctrl (
     .clk(clk), .rst_n(rst_n),
     .spi_sclk(uio_in[7]), .spi_mosi(uio_in[5]), .spi_cs_n(uio_in[4]),
@@ -156,7 +161,8 @@ module tt_um_protocol_emulator (
     .dbg_rd_addr(dbg_rd_addr), .dbg_rd_data(dbg_rd_data),
     .dbg_rd_valid(dbg_rd_valid),
     .dbg_pc(dbg_pc), .dbg_a(dbg_a), .dbg_x(dbg_x), .dbg_y(dbg_y),
-    .dbg_insn(dbg_insn), .dbg_timer(dbg_timer)
+    .dbg_insn(dbg_insn), .dbg_timer(dbg_timer),
+    .dbg_hold(dbg_hold), .dbg_step(dbg_step), .dbg_next_pc(dbg_next_pc)
   );
 
   wire       uart_rx = ui_in[0];
@@ -205,7 +211,10 @@ module tt_um_protocol_emulator (
     .dbg_x(dbg_x),
     .dbg_y(dbg_y),
     .dbg_insn(dbg_insn),
-    .dbg_timer(dbg_timer)
+    .dbg_timer(dbg_timer),
+    .dbg_hold(dbg_hold),
+    .dbg_step(dbg_step),
+    .dbg_next_pc(dbg_next_pc)
   );
 
   // ---- dedicated outputs -------------------------------------------------

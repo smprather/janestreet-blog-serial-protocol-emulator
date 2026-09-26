@@ -245,7 +245,8 @@ def _require_word(value, what: str) -> int:
     value = _require_int(value, what)
     if not 0 <= value <= 0xFFFF:
         raise SessionError(
-            f"{what} must fit one 16-bit frame word (0..0xFFFF), got {value}")
+            f"{what} must fit one 16-bit frame word (0..0xFFFF), got {value}"
+        )
     return value
 
 

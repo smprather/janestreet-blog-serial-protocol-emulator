@@ -1,0 +1,275 @@
+; servo_sweep.pe — a hobby servo, driven from the pin matrix, by a program.
+;
+; ---------------------------------------------------------------------------
+; WHY THIS PROTOCOL IS TIMING ALL THE WAY DOWN
+;
+; A servo has no clock, no framing, no acknowledgement and no checksum. The
+; entire protocol is: hold the line high for between 1.0 and 2.0 milliseconds,
+; once every 20 ms. There is nothing to decode and nothing to verify -- the only
+; question a servo asks of the wire is how long it was high, and the only way to
+; be wrong is to be wrong about time. (Some servos also drive a position pulse
+; back on the same wire, ~1 ms wide at 50 Hz; this program never samples the
+; line, so a servo expecting that back would not be served. See LIMITS.)
+;
+; It is therefore the cleanest possible demonstration of the project's claim. If
+; the pulse width is a count of instructions, then "the chip is cycle-accurate"
+; is not a property of the gates at all -- it is a property of the PROGRAM, and
+; anyone can read the numbers out of the source and check them with a scope.
+;
+; ---------------------------------------------------------------------------
+; THE FRAME IS A SLOT, NOT A DELAY, AND THAT IS THE PART PEOPLE GET WRONG
+;
+; The obvious implementation is "pulse for 1.5 ms, then wait 18.5 ms". That
+; works until the position changes: the frame becomes 1.0 + 19 = 20.0 ms at one
+; position and 2.0 + 18 = 20.0 ms at another only if the programmer recomputes
+; the gap every time, and a single forgotten subtraction turns a 50 Hz frame into
+; a 45 Hz one at one end of the travel and a 58 Hz one at the other. A servo
+; notices: the position jitters and the motor hums.
+;
+; So each position carries its OWN gap, chosen as (20 ms - its own pulse), and
+; the rise-to-rise interval is 20 ms whatever the pulse is. The gap is therefore
+; not "the rest of the frame" -- it is the frame, minus the pulse. The
+; testbench measures the rise-to-rise across two DIFFERENT pulse widths on
+; purpose, because that is the measurement that tells a slot from a delay.
+;
+; ---------------------------------------------------------------------------
+; THE SWEEP, AND WHY IT IS FIVE POSITIONS IN THIS ORDER
+;
+;   1000 us  0 degrees        the datasheet's minimum
+;   1500 us  centre           the datasheet's nominal
+;   1750 us
+;   1250 us
+;   2000 us  full travel      the datasheet's maximum
+;
+; The order is not monotonic, and that is deliberate. A sweep that only grows can
+; be satisfied by a firmware that emits the right widths in the wrong order, and
+; a testbench that sorts its measurements before checking them cannot tell the
+; difference. Emitting 1.0, 1.5, 1.75, 1.25, 2.0 makes the ORDER a checkable
+; property: measurement i is compared against position i.
+;
+; The first two positions are a full 20 ms apart so the frame rate can be
+; measured; the last three use a 2.5 ms gap, a fifth of that, which saves 45 ms
+; of simulated time. That trade is stated rather than hidden: the 50 Hz claim
+; rests on the measured frame period, and the sweep claim rests on five measured
+; pulse widths. Nothing about the pulse-width measurement is weakened by the
+; short gaps.
+;
+; ---------------------------------------------------------------------------
+; THE DELAY ROUTINE, AND HOW THE CONSTANTS WERE CHOSEN
+;
+; Three nested counters, because one 8-bit counter reaches 255 clocks (4.2 us)
+; and the longest delay here is 19 ms = 1.14 million clocks. Every loop is a
+; fixed instruction count:
+;
+;   dly1: LDM A,11 / SUB A,1 / STM 11,A / JZ dly_done     4
+;         LDM A,12 / STM 14,A                              2   reload the middle
+;   dly2: LDM A,14 / SUB A,1 / STM 14,A / JZ dly1          4   the middle counter
+;         LDM A,13 / STM 15,A                              2   reload the inner
+;   dly3: LDM A,15 / SUB A,1 / STM 15,A / JNZ dly3        4   the inner counter,
+;         JMP dly2                                          1   n3 times
+;   dly_done:
+;
+;   total(n1,n2,n3) = (n1-1) * (10 + (n2-1) * (4*n3 + 7)) + 4   clocks
+;
+; THE RELOAD LINES ARE NOT OPTIMISATION. Both inner counters are DESTROYED by
+; their own loops -- they arrive at zero -- so the caller's count has to be
+; copied into a working slot at the top of every pass. A version without them
+; reads zero, subtracts one, wraps to 255, and produces hundreds of thousands of
+; clocks where thousands were asked for, while looking completely correct. The
+; WS2812 firmware hit exactly that, and it is worth naming here: an 8-bit
+; machine with no reload idiom finds this shape by itself.
+;
+; WHY THREE LEVELS AND NOT A NOP SLED. 19 ms is 1.14 million clocks. As NOPs
+; that is 1.14 million words against a 1,024-word instruction memory: the
+; program would not fit. As a loop it is 19 words. The price is a quantisation
+; on the delay, which at the settings below is one step of the OUTER counter:
+;
+;   pulses: n2 = 2, n3 = 152 -> one step is (4*152 + 11) = 619 clocks = 10.3 us
+;   gaps:   n2 = 11, n3 = 123 -> one step is 4655 clocks = 77.6 us
+;
+; HOW THE TABLES WERE BUILT. Not by trial and error on a bench, and not by
+; eyeballing a scope. For a target T the routine reaches any value of the form
+; (n1-1)*(10 + (n2-1)*(4*n3+7)) + 4, so for a chosen (n2,n3) the outer counter
+; that lands nearest T is a division, and choosing (n2,n3) to keep every entry of
+; the table inside 255 is a small search. The two tables at the top of this file
+; are the result, and every entry lands within 0.25 us of its target:
+; 
+; position  pulse n1   width      gap n1    gap
+; 1000 us     97    1000.2 us     229     19000.2 us
+; 1500 us    145    1500.2 us     223     18500.2 us
+; 1750 us    169    1750.2 us      31      2500.2 us
+; 1250 us    121    1250.2 us      31      2500.2 us
+; 2000 us    193    2000.2 us      31      2500.2 us
+; 
+; and the two full slots come out at 20.0004 ms, i.e. 49.999 Hz.
+; 
+; The point of the numbers being this close is not the accuracy -- a servo
+; datasheet's 50 Hz is a nominal with a wide tolerance, and the real requirement
+; is "not 45 Hz and not 58 Hz". The point is WHY they are this close: the delay
+; is a DETERMINISTIC INSTRUCTION COUNT, not a calibrated loop, so there is no
+; oscillator to drift and no phase to lose. Change the clock and every number in
+; the table scales with it, visibly, in the source.
+;
+; ---------------------------------------------------------------------------
+; WHY THE PIN MATRIX IS ENOUGH FOR THIS
+;
+; One pin, push-pull, no read-back, no open-drain, no acknowledgement. The most
+; complicated thing this protocol needs is a counter, and the core has one (the
+; PC). Nothing in rtl/ knows what a servo is: a pulse is an OUT, a delay and
+; another OUT, which is the same three instructions as the I2C START.
+;
+; bit 6 is the signal pin -- bits 0-5 belong to the baseline protocols and bit 7
+; to the Ethernet DRU, so bit 6 is the first unclaimed pad. PINOE is written
+; directly with 0x40, which RELEASES the three pins the reset default had
+; enabled: a single-protocol program owns the whole port, and a program mixing
+; protocols would read-modify-write it instead (the idiom spi_xfer.pe uses).
+;
+; ---------------------------------------------------------------------------
+; DMEM LAYOUT
+;
+;   dmem[0..4]  the pulse table: the outer counter per position
+;   dmem[5..9]  the gap table: the outer counter per position
+;   dmem[10]    the position index, 0..4, and then 5 -- which is also the
+;               program's observable output. A firmware that hangs after two
+;               positions leaves 2 here, which a testbench can tell from a
+;               firmware that never started (0) and from one that finished (5).
+;   dmem[11]    the outer counter, burned down by the delay
+;   dmem[12]    the middle counter's TARGET (the caller's copy)
+;   dmem[14]    the middle counter, the loop's working copy
+;   dmem[13]    the inner counter's TARGET
+;   dmem[15]    the inner counter, the loop's working copy
+;
+; Y holds the phase (0 = a pulse just finished, 1 = a gap just finished) so that
+; ONE copy of the delay routine can serve both call sites: the ISA has no
+; subroutine call and no indirect jump, so a routine cannot return to two
+; addresses, and Y is the one register the delay does not touch.
+;
+; ---------------------------------------------------------------------------
+; LIMITS, STATED
+;
+;   * The position feedback pulse a hobby servo may drive back on the same wire
+;     is not read. That is a limitation of the program, not of the matrix, which
+;     can read the pin: the same `IN A, PIN` the I2C firmware uses for
+;     arbitration would see it.
+;   * A real servo needs a supply and a common ground. This is a signal-level
+;     demonstration on a pin matrix, not a board bring-up.
+;   * The 50 Hz claim rests on the two full slots; the last three positions are
+;     not in 20 ms slots (see above).
+
+; ---------------------------------------------------------------------------
+; THE TABLES, and the two (n2,n3) pairs they are decoded with.
+; ---------------------------------------------------------------------------
+        LDI   A, 97
+        STM   0, A              ; 1000 us, 0 degrees
+        LDI   A, 145
+        STM   1, A              ; 1500 us, centre
+        LDI   A, 169
+        STM   2, A              ; 1750 us
+        LDI   A, 121
+        STM   3, A              ; 1250 us
+        LDI   A, 193
+        STM   4, A              ; 2000 us, full travel
+        LDI   A, 229
+        STM   5, A              ; the 19.0 ms gap that completes a 20 ms slot
+        LDI   A, 223
+        STM   6, A              ; the 18.5 ms gap
+        LDI   A, 31
+        STM   7, A              ; the 2.5 ms sweep gaps
+        LDI   A, 31
+        STM   8, A
+        LDI   A, 31
+        STM   9, A
+        LDI   A, 0
+        STM   10, A             ; the position index
+
+; ---------------------------------------------------------------------------
+; CLAIM THE PIN: release first, then set the level, then enable. A servo's idle
+; level is LOW, and the pulse is a departure from it.
+;
+; THE IDLE LEVEL IS SET BEFORE THE PIN IS CLAIMED, and the first version of this
+; wrote SRV_DATA there instead of 0 -- on the reasoning that the pin was about to
+; go high anyway. The consequence is that the line is left RELEASED (and so
+; pulled HIGH by the servo board's pull-up) from the moment the CPU starts until
+; the first pulse, and the first pulse therefore has no rising edge at all: the
+; testbench saw four rises and five falls and correctly refused to call it five
+; pulses. The idle level of a timing protocol is part of the protocol.
+; ---------------------------------------------------------------------------
+        LDI   A, 0x00
+        OUT   PINOE, A          ; release every pin the reset had enabled
+        LDI   A, 0x00
+        OUT   TXPIN, A          ; the level: LOW, the servo's idle
+        LDI   A, SRV_DATA
+        OUT   PINOE, A          ; claim exactly one pin, push-pull, driving LOW
+
+; ===========================================================================
+; THE SWEEP
+; ===========================================================================
+main:                           ; ---- the pulse phase ----
+        LDM   A, 10
+        MOV   X, A              ; X = the position, so LDS reads dmem[0..4]
+        LDS   A                 ; a = this position's pulse counter
+        STM   11, A
+        LDI   A, 2
+        STM   12, A             ; the pulses share one (n2, n3)
+        LDI   A, 152
+        STM   13, A
+        LDI   A, SRV_DATA
+        OUT   TXPIN, A          ; the rise: the pulse starts on this edge
+        LDI   A, 0
+        MOV   Y, A              ; the phase: a pulse is about to finish
+        JMP   dly1
+
+; ---- the delay returns here after a PULSE ----
+ret_p: LDI   A, 0x00
+        OUT   TXPIN, A          ; the fall
+        LDM   A, 10
+        ADD   A, 5              ; the gap table is the pulse table plus 5
+        MOV   X, A
+        LDS   A                 ; a = this position's gap counter
+        STM   11, A
+        LDI   A, 11
+        STM   12, A             ; the gaps share their own (n2, n3)
+        LDI   A, 123
+        STM   13, A
+        LDI   A, 1
+        MOV   Y, A              ; the phase: a gap is about to finish
+        JMP   dly1
+
+; ---- the delay returns here after a GAP ----
+ret_g: LDM   A, 10
+        ADD   A, 1
+        STM   10, A             ; the next position
+        SUB   A, 5
+        JNZ   main              ; four more to go
+        JMP   park
+
+park:   LDI   A, 0x00
+        OUT   TXPIN, A          ; the line is already low; hold it there
+halt:   JMP   halt              ; the ISA has no HALT; the TB watches dmem[10]
+
+; ===========================================================================
+; THE DELAY -- three nested counters, exact, no phase residual. One copy, with
+; the return selected by the phase in Y. See the header for total() and for the
+; table this was fitted to.
+; ===========================================================================
+dly1:   LDM   A, 11             ;  1  the outer counter
+        SUB   A, 1              ;  2
+        STM   11, A             ;  3
+        JZ    dly_done          ;  4
+        LDM   A, 12             ;  5  the middle counter's target
+        STM   14, A             ;  6  into the loop's working copy
+dly2:   LDM   A, 14             ;  7  the middle counter
+        SUB   A, 1              ;  8
+        STM   14, A             ;  9
+        JZ    dly1              ; 10  exhausted -> the next outer pass
+        LDM   A, 13             ; 11  the inner counter's target
+        STM   15, A             ; 12  into the loop's working copy
+dly3:   LDM   A, 15             ; 13  the inner counter
+        SUB   A, 1              ; 14
+        STM   15, A             ; 15
+        JNZ   dly3              ; 16  n3 iterations
+        JMP   dly2              ; 17
+dly_done:
+        MOV   A, Y              ; the ISA cannot return to two addresses, so
+        JZ    ret_p             ; the phase in Y chooses where
+        JMP   ret_g
