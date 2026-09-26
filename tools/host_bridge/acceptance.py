@@ -233,6 +233,48 @@ def _observe_heartbeat(session, pe, *, tries=3, sleep=time.sleep):
     return False, f"timer stuck at {before}"
 
 
+def await_breakpoint_hit(*, debug_state, advance=None, tries=200, sleep=time.sleep):
+    """Wait for the core to stop on the armed breakpoint. BOUNDED.
+
+    The demo act does not need to PUSH the core to the breakpoint, it needs to
+    WAIT for it to arrive - a real core advances on its own, and only the model
+    has to be clocked. So the advance is a hook: the fake path passes
+    `pe.advance_free_running`, a real link passes nothing, and the act runs on
+    both.
+
+    `tries` bounds the wait because an unbounded wait is a hang, and a hang
+    during a board run is the worst possible failure: the operator sees nothing
+    at all. Giving up reports the last state observed, so the beat says what the
+    core was actually doing.
+    """
+    state = 0
+    for attempt in range(tries):
+        state = debug_state()
+        if state == 3:            # BP_HIT
+            return {
+                "stopped": True,
+                "state": state,
+                "detail": (
+                    "the core reached the armed breakpoint on its own"
+                    if advance is None
+                    else "the core was clocked to the armed breakpoint by the "
+                         "model (FakePE does not self-advance)"
+                ),
+            }
+        if advance is not None:
+            advance()
+        if attempt + 1 < tries:
+            sleep(0.01)
+    return {
+        "stopped": False,
+        "state": state,
+        "detail": (
+            f"the core did not reach the breakpoint in {tries} polls "
+            f"(last state={state}, expected 3/BP_HIT)"
+        ),
+    }
+
+
 def run_acceptance(
     *,
     fake,
@@ -241,6 +283,7 @@ def run_acceptance(
     board=None,
     repo_root=REPO_ROOT,
     link_factory=None,
+    model_backed: bool = True,
 ):
     """Run the scripted acceptance; returns a report, never raises on FAIL."""
     report = AcceptanceReport(board=board or ("fake-adapter" if fake else "unknown"))
@@ -618,8 +661,10 @@ def run_acceptance(
     DEMO_BP = 2
 
     def demo_act(pe):
-        # `pe` arrives non-Optional: the caller narrows `first.pe` once, rather
-        # than re-reading the Optional inside this function.
+        # `pe` may be None: that is the BOARD shape, where there is no model to
+        # clock and the core advances on its own. Everything else in the act is
+        # identical, which is the point - the act was never about the model, it
+        # was about the host driving a real core to a breakpoint.
         # 1. arm the breakpoint over the host bus, core stopped
         armed = session.bp_set(DEMO_BP)
         demo(
@@ -630,12 +675,15 @@ def run_acceptance(
             f"armed), state={armed.state_name}",
         )
 
-        # 2. run, and let the core advance to the armed address
-        pe.set_run(True)
-        stopped = pe.advance_free_running()
+        # 2. run, and wait for the core to advance to the armed address
+        pe.set_run(True) if pe is not None else session.start()
+        hit = await_breakpoint_hit(
+            debug_state=lambda: session.debug_status().state,
+            advance=pe.advance_free_running if pe is not None else None,
+        )
         demo(
             "r3_demo_2_run_and_hit",
-            stopped,
+            hit["stopped"],
             "run strap high; the core advances until its LANDING address "
             "equals the armed one, then stops there (model-clocked: FakePE "
             "does not self-advance, a real core does)",
@@ -738,15 +786,17 @@ def run_acceptance(
             f"re-arm -> armed at {rearmed.bp_addr} and running. The recipe "
             f"exists because BP_CLR is the only release and it also disarms",
         )
-        pe.set_run(False)
+        pe.set_run(False) if pe is not None else session.stop()
 
-    if first.pe is not None:
-        try:
-            demo_act(first.pe)
-        except SessionError as exc:
-            demo("r3_demo_act", False, f"the act stopped early: {exc}")
-    else:
-        report.skip("r3_demo_act", "no FakePE to advance to the breakpoint")
+    # The act runs whenever there is a SESSION, model or not: a board has no
+    # model to clock, but it does have a core that advances on its own, and
+    # skipping the whole group there would mean the operator's run silently
+    # does not demonstrate the flagship act.
+    act_model = first.pe if model_backed else None
+    try:
+        demo_act(act_model)
+    except SessionError as exc:
+        demo("r3_demo_act", False, f"the act stopped early: {exc}")
 
     for name, case in (
         ("r3_debug_status", debug_status_case),
