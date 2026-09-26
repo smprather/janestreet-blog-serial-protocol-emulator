@@ -318,12 +318,18 @@ module tb_pe_soc_sr04;
 
       $display("    measurement %0d: echo %0d us -> firmware %0d us, answer %0d mm (expected %0d mm)",
                seg, e_us[seg], got_us, got_mm, exp_mm);
+      // US IS ONE REGISTER HOLDING THE LAST WIDTH, so this is checked ONCE,
+      // on the last measurement, and not per measurement: the first version
+      // of this loop compared every segment against it and so reported the
+      // SECOND echo's width as the first measurement's error -- a check
+      // failing on a number the firmware never claimed for that point. The
+      // per-measurement claim in this act is the mm, which is banked per slot.
       // 1 % of the width, with a floor of 1.5 us rounded UP to 2 because the
       // tick is a whole microsecond and a floor of 1 would be tighter than
       // the instrument.
       tol_us = e_us[seg] / 100;
       if (tol_us < 2) tol_us = 2;
-      if (iabs(got_us - e_us[seg]) > tol_us)
+      if (seg == N_MEAS-1 && iabs(got_us - e_us[seg]) > tol_us)
         check(0, $sformatf("measurement %0d: the measured width %0d us is outside 1 %% (floor 2 us) of the model's %0d us",
                            seg, got_us, e_us[seg]));
       // The conversion is EXACT for 11/64, so this is an equality. The
