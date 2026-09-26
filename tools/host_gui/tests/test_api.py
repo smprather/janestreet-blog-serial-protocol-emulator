@@ -138,7 +138,8 @@ class TestARefusalReachesTheOperatorAsText(unittest.TestCase):
 
     def test_a_session_refusal_is_a_conflict_with_its_reason_intact(self):
         status, detail = SV.error_response(
-            S.SessionStateError("a fault is latched; clear it first"))
+            S.SessionStateError("a fault is latched; clear it first")
+        )
         self.assertEqual(status, 409)
         self.assertIn("clear it first", detail)
 
@@ -150,8 +151,7 @@ class TestARefusalReachesTheOperatorAsText(unittest.TestCase):
         their own mistake. This is the assertion that keeps the mapper narrow.
         """
         for boom in (ValueError("a real bug"), KeyError("missing"), TypeError()):
-            with self.subTest(exc=type(boom).__name__), \
-                    self.assertRaises(type(boom)):
+            with self.subTest(exc=type(boom).__name__), self.assertRaises(type(boom)):
                 SV.error_response(boom)
 
     def test_each_refusal_the_session_can_raise_stays_readable(self):
@@ -181,11 +181,11 @@ class TestARefusalReachesTheOperatorAsText(unittest.TestCase):
         self.assertEqual(len([m for m in messages if m]), 3, messages)
         for message in messages:
             with self.subTest(refusal=message[:30]):
-                status, detail = SV.error_response(
-                    S.SessionStateError(message))
+                status, detail = SV.error_response(S.SessionStateError(message))
                 self.assertEqual(status, 409)
-                self.assertEqual(detail, message,
-                                 "the reason must survive the mapping intact")
+                self.assertEqual(
+                    detail, message, "the reason must survive the mapping intact"
+                )
 
     @staticmethod
     def _refusal(call):
@@ -232,20 +232,37 @@ class TestARefusalReachesTheOperatorAsText(unittest.TestCase):
           .catch((e) => process.stdout.write(e.message));
         """
         with_detail = subprocess.run(
-            [NODE, "-e", driver, str(APP_JS),
-             json.dumps({"status": 409,
-                         "detail": "a fault is latched; clear it first"})],
-            capture_output=True, text=True, check=False)
+            [
+                NODE,
+                "-e",
+                driver,
+                str(APP_JS),
+                json.dumps(
+                    {"status": 409, "detail": "a fault is latched; clear it first"}
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         self.assertEqual(with_detail.returncode, 0, with_detail.stderr[:300])
-        self.assertEqual(with_detail.stdout.strip(),
-                         "a fault is latched; clear it first")
+        self.assertEqual(with_detail.stdout.strip(), "a fault is latched; clear it first")
         without = subprocess.run(
-            [NODE, "-e", driver, str(APP_JS),
-             json.dumps({"status": 409, "statusText": "Conflict"})],
-            capture_output=True, text=True, check=False)
+            [
+                NODE,
+                "-e",
+                driver,
+                str(APP_JS),
+                json.dumps({"status": 409, "statusText": "Conflict"}),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         self.assertEqual(without.returncode, 0, without.stderr[:300])
-        self.assertIn("409", without.stdout,
-                      "with no detail the page must still say something")
+        self.assertIn(
+            "409", without.stdout, "with no detail the page must still say something"
+        )
 
 
 class TestSourceResolution(unittest.TestCase):
