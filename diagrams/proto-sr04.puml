@@ -42,7 +42,7 @@ skinparam note {
 }
 
 state "STATUS: GREEN\n4 runs, 4 distances\n199 / 999 / 343 / 1375 mm" as OK <<green>>
-OK : image: 387 words loaded (637 NOP-filled)\n\nrun 0: echo 1160 us -> 199 mm\nrun 1: echo  5816 us -> 999 mm\nrun 2: echo 2000 us -> 343 mm\nrun 3: echo 8000 us -> 1375 mm\n\n<b>ALL FOUR EXACT.</b> Run 3 is the interesting one:\n8000 = 64 x 125, so r = 0 and the\nconversion's truncation is a NO-OP.\n\n<b>TWO MUTATION CASES</b> of 62 in the family: sr-trig-count and sr-q-mask.\nThe first is caught ONLY by the 601 equality, because 600 clocks\nstill SATISFIES the device's "> 10 us minimum".
+OK : image: 387 words loaded (637 NOP-filled)\n\nrun 0: echo 1160 us -> 199 mm\nrun 1: echo  5816 us -> 999 mm\nrun 2: echo 2000 us -> 343 mm\nrun 3: echo 8000 us -> 1375 mm\n\n<b>ALL FOUR EXACT.</b> Run 3 is the interesting one:\n8000 = 64 x 125, so r = 0 and the\nconversion's truncation is a NO-OP.\n\n<b>TWO MUTATION CASES</b> of 61 in the family: sr-trig-count and sr-q-mask.\nThe first is caught ONLY by the 601 equality, because 600 clocks\nstill SATISFIES the device's "> 10 us minimum".
 
 ' ---------------------------------------------------------------- EMITTER --
 state "FIRMWARE SIDE - firmware/sr04_range.pe" as EMIT {
@@ -133,13 +133,7 @@ note bottom of BNK
   mutant. That is also why the measured count is written down as 601 rather
   than as "10 us".
   ...
-  <b>AND WHAT IS STILL UNCOVERED:</b> two of 62 is thin for an act whose whole
-  claim is an equality. sr-trig-count exercises the TIMING; sr-q-mask exercises
-  the BIG TERM of the conversion. <b>Nothing yet perturbs the SMALL TERM</b>,
-  floor(11r/64) - and the mutant that would do it, forcing the small term to
-  zero, is invisible in exactly the run one might expect. That is the
-  tabulated blindness in the CON note above, and it is why "two cases" should
-  be read as a start rather than as coverage.
+<b>AND THE SMALL TERM'S CASE IS WRITTEN BUT NOT MERGED.</b>\n  Nothing MERGED perturbs the small term, floor(11r/64) - the mutant that\n  would do it is invisible in exactly the run one might expect (CON note\n  above). But <b>sr-term-shift</b> (e6ff51d) exists and is the COMPLEMENT of\n  sr-q-mask: sr-q-mask reaches only the r = 0 run, sr-term-shift only the\n  r != 0 ones, so between them they cover every width in the set.\n  <b>It is not an ancestor of main and not in the tree this figure was\n  written against</b> - so that coverage is PENDING, not HELD. Writing it as\n  held would be the rounding error this figure exists to avoid.
 end note
 
 

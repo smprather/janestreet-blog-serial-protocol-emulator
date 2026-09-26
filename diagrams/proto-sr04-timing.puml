@@ -175,7 +175,7 @@ note over CPU, ECHO
   | mm from echo 3 | 2000 x 11/64 = 343.75 | <b>343 mm</b> | host | PASS, truncated exactly |
   | mm from echo 4 | 8000 x 11/64 = 1375 | <b>1375 mm</b> | host | PASS - no truncation, r = 0, and the only 16-bit overflow |
   | runs banked | 4 | <b>4</b> | host | PASS |
-  | mutation cases | 2 of 62 in the family | <b>sr-trig-count, sr-q-mask</b> | both | PASS, both detected |
+  | mutation cases | 2 of 61 distinct MERGED | <b>sr-trig-count, sr-q-mask</b> | both | PASS, both detected |
   | the firmware image | 1 024 words of imem | <b>387 words, 637 NOP-filled</b> | host | PASS - see below |
   ...
   <b>AND NOTE WHAT IS NOT IN THE TABLE.</b> No row is a failure, and no row is a

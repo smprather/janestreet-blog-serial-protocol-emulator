@@ -201,17 +201,13 @@ note bottom of HDR
   ...
   An earlier revision of this figure said sr04 had NO mutation coverage. That was
   true when written; it is corrected here rather than dropped. regress/
-  mutate_timing_tb.sh now carries 62 cases and TWO are sr04.
+  mutate_timing_tb.sh now carries 61 DISTINCT cases - 62 case\n  LINES, because fm-per-base is listed twice, a defect in that harness and\n  not here - and TWO of them are sr04.
   ...
   | case | the change | what catches it |
   | <b>sr-trig-count</b> | deletes the redundant LDI setting the trigger's ending level | <b>ONLY the 601 equality</b> - 600 clocks = 10.000 us SATISFIES the device's "> 10 us minimum", so a WINDOW check passes the mutant |
   | <b>sr-q-mask</b> | drops ONE bit from the 0x3F mask on the high byte of us | 1375 -> 1023 on 8 000 us ALONE, because bit 3 is set in 0x1F alone |
   ...
-  <b>WHAT IS STILL UNCOVERED:</b> sr-trig-count exercises the TIMING and
-  sr-q-mask exercises the BIG TERM. <b>Nothing yet perturbs the SMALL TERM,</b>
-  floor(11r/64) - and the mutant that would do it, forcing the small term to zero, is
-  invisible in exactly the run one might expect. That is the blindness tabulated
-  below, and it is why "two cases" is a start rather than coverage.
+<b>WHAT IS STILL UNCOVERED BY ANY MERGED CASE:</b> sr-trig-count exercises the\n  TIMING and sr-q-mask the BIG TERM; nothing MERGED perturbs the SMALL TERM,\n  floor(11r/64) - the mutant that would do it being invisible in exactly the run\n  one might expect (tabulated below).\n  ...\n  <b>AND THE SMALL TERM'S CASE IS WRITTEN BUT NOT MERGED.</b> sr-term-shift\n  (e6ff51d) exists and is the COMPLEMENT of sr-q-mask: sr-q-mask reaches\n  only the r = 0 run, sr-term-shift only the r != 0 ones, so between them they\n  cover every width in the set. <b>It is not an ancestor of main and not in\n  the tree this figure was written against</b> - so that coverage is PENDING,\n  not HELD, and writing it down as held would be the rounding error this\n  figure exists to avoid.
 end note
 
 @enduml
