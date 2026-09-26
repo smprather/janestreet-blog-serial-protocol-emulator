@@ -42,8 +42,9 @@ MODULE = REPO_ROOT / "tools" / "host_gui" / "r2_vectors.py"
 # module now REFUSES the transform, so a suite that read its input from HEAD
 # would stop testing the mechanism the moment the tool was used. It is an input,
 # not a copy of the truth, so it cannot drift into a second source of claims.
-PREFLIP = (REPO_ROOT / "tools" / "host_gui" / "tests" / "fixtures"
-           / "r2_vectors_preflip.py")
+PREFLIP = (
+    REPO_ROOT / "tools" / "host_gui" / "tests" / "fixtures" / "r2_vectors_preflip.py"
+)
 
 CITE = "chip repo: reviews/2026-09-25/R2-READ-PATH-REVIEW.md (section 'Conformance')"
 DATE = "2026-09-26"
@@ -58,9 +59,11 @@ class FlipHarness(unittest.TestCase):
         # the FLIPPED one (pending set empty), or this suite is measuring the
         # wrong direction - it exists to test the transform, not the outcome
         self.assertIn(
-            '"pending_steps": (),', MODULE.read_text(encoding="utf-8"),
+            '"pending_steps": (),',
+            MODULE.read_text(encoding="utf-8"),
             "the shipped module should be flipped; this suite exercises the "
-            "pre-flip input on purpose")
+            "pre-flip input on purpose",
+        )
 
     def source(self) -> str:
         return self.source_text
@@ -160,9 +163,7 @@ class TestTheFlipMovesOnlyTheFourSteps(FlipHarness):
         for name, pair in input_pinned.items():
             with self.subTest(step=name):
                 self.assertEqual(tuple(pinned[name]), pair)
-        self.assertEqual(
-            len(pinned), len(input_pinned) + len(V.HELD_STEP_NAMES)
-        )
+        self.assertEqual(len(pinned), len(input_pinned) + len(V.HELD_STEP_NAMES))
         # the new pairs are the SHIPPED bytes, not invented ones
         on_disk = json.loads(V.SPEC.artifact.read_text(encoding="utf-8"))
         shipped = {
@@ -248,8 +249,9 @@ class TestTheNoticeIsGeneratedFromTheFlags(unittest.TestCase):
         self.assertIn(f"({confirmed}/{confirmed})", V.PACKAGE_NOTICE)
         self.assertNotIn("NOT CHIP-CONFIRMED", V.PACKAGE_NOTICE)
         for name in V.HELD_STEP_NAMES:
-            self.assertNotIn(name, V.PACKAGE_NOTICE,
-                             "a confirmed step must not be listed as pending")
+            self.assertNotIn(
+                name, V.PACKAGE_NOTICE, "a confirmed step must not be listed as pending"
+            )
 
     def test_the_notice_generated_for_a_fully_confirmed_package_reads_right(self):
         """The other branch of the generator, which the flip will land on.

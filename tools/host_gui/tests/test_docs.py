@@ -157,6 +157,7 @@ class TestTheDemoWalkthrough(unittest.TestCase):
         # been stale the moment the flip landed - and worse, it would have
         # demanded the walkthrough understate a package that is now 22/22.
         from tools.host_gui import r2_vectors as R2V
+
         confirmed = len(R2V.CHIP_EVIDENCE["confirmed_steps"])
         self.assertIn(f"{confirmed}/{confirmed}", self.text)
         self.assertNotRegex(
@@ -181,8 +182,12 @@ class TestTheDemoWalkthrough(unittest.TestCase):
         which is the only version of this test that stays true across a flip.
         """
         from tools.host_gui import r2_vectors as R2V
-        row = next(line for line in self.text.splitlines()
-                   if "Memory/register readback (R2)" in line)
+
+        row = next(
+            line
+            for line in self.text.splitlines()
+            if "Memory/register readback (R2)" in line
+        )
         confirmed = len(R2V.CHIP_EVIDENCE["confirmed_steps"])
         pending = len(R2V.CHIP_EVIDENCE["pending_steps"])
         self.assertIn(f"{confirmed}/{confirmed}", row)
@@ -193,6 +198,7 @@ class TestTheDemoWalkthrough(unittest.TestCase):
             self.assertNotIn("| **chip-confirmed (simulation)** |", row)
         else:
             self.assertNotIn("unconfirmed", row)
+
     def test_the_debug_act_documents_what_the_new_beats_prove(self):
         """The walkthrough must describe the beats the run now performs.
 
@@ -226,6 +232,7 @@ class TestTheDemoWalkthrough(unittest.TestCase):
         self.assertRegex(self.text, r"host('s)?\s+own\s+policy|HOST's\s+rule")
         # the honest boundary: the four held-core steps are not yet chip-confirmed
         from tools.host_gui import r2_vectors as R2V
+
         confirmed = len(R2V.CHIP_EVIDENCE["confirmed_steps"])
         self.assertIn(f"{confirmed} of {confirmed}", self.text)
 

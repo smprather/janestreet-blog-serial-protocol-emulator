@@ -176,8 +176,11 @@ class TestTheHeldReadbackAndRefusalBeats(unittest.TestCase):
             self.assertIn("not yet", detail.lower())
         else:
             self.assertIn(f"{confirmed}/{confirmed + pending}", detail)
-            self.assertNotIn("not yet", detail.lower(),
-                             "nothing is pending, so the beat must not say so")
+            self.assertNotIn(
+                "not yet",
+                detail.lower(),
+                "nothing is pending, so the beat must not say so",
+            )
         # and the hardware boundary is unconditional
         self.assertIn("Hardware acceptance NOT run", detail)
 

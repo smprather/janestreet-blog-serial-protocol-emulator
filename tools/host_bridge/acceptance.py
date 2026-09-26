@@ -188,11 +188,15 @@ def _r2_evidence_summary() -> str:
     pending = len(evidence["pending_steps"])
     total = confirmed + pending
     if pending:
-        return (f"{confirmed}/{confirmed} read-path steps byte-exact; the "
-                f"package is {confirmed} of {total}, and the {pending} "
-                f"held-core steps are not yet re-run by the chip")
-    return (f"{confirmed}/{total} golden steps byte-exact, the four held-core "
-            f"steps included (state 2 step-pause, state 3 live hit)")
+        return (
+            f"{confirmed}/{confirmed} read-path steps byte-exact; the "
+            f"package is {confirmed} of {total}, and the {pending} "
+            f"held-core steps are not yet re-run by the chip"
+        )
+    return (
+        f"{confirmed}/{total} golden steps byte-exact, the four held-core "
+        f"steps included (state 2 step-pause, state 3 live hit)"
+    )
 
 
 def _r2_detail(text: str) -> str:

@@ -79,11 +79,11 @@ CONFIRMED_STEP_NAMES = (
     "read_imem_at_ceiling_15",
     "read_imem_over_ceiling",
     "read_dmem_zero_count",
-# Confirmed by the chip's re-run; see chip_evidence.
-"status_reports_the_hold",
-"dump_core_answers_the_same_header",
-"status_reports_the_hit",
-"dump_core_refused_the_strap_is_high",
+    # Confirmed by the chip's re-run; see chip_evidence.
+    "status_reports_the_hold",
+    "dump_core_answers_the_same_header",
+    "status_reports_the_hit",
+    "dump_core_refused_the_strap_is_high",
 )
 
 # The four held-core steps the chip has NOT re-run. Named here rather than
@@ -173,22 +173,22 @@ CONFIRMED_STEP_BYTES = {
         "a55a11600003000100044dd4",
         "a55a196000030002000000008830",
     ),
-"status_reports_the_hold": (
-    "a55a1110000100008afe",
-    "a55a19100001000b00000002000000000001004100000000000000000003444e",
-),
-"dump_core_answers_the_same_header": (
-    "a55a115000020000c2c6",
-    "a55a19500002000b0000000200000000000100410000000000000000000383b7",
-),
-"status_reports_the_hit": (
-    "a55a1110000100008afe",
-    "a55a19100001000b000000030001000000020041000000000000000000034516",
-),
-"dump_core_refused_the_strap_is_high": (
-    "a55a115000020000c2c6",
-    "a55a19500002000100068090",
-),
+    "status_reports_the_hold": (
+        "a55a1110000100008afe",
+        "a55a19100001000b00000002000000000001004100000000000000000003444e",
+    ),
+    "dump_core_answers_the_same_header": (
+        "a55a115000020000c2c6",
+        "a55a19500002000b0000000200000000000100410000000000000000000383b7",
+    ),
+    "status_reports_the_hit": (
+        "a55a1110000100008afe",
+        "a55a19100001000b000000030001000000020041000000000000000000034516",
+    ),
+    "dump_core_refused_the_strap_is_high": (
+        "a55a115000020000c2c6",
+        "a55a19500002000100068090",
+    ),
 }
 
 CHIP_EVIDENCE = {
@@ -545,7 +545,7 @@ def flip_held_steps(source: str, *, cite: str = "", date: str = "") -> str:
         out,
         '\n    "pending_reason": ',
         '\n    "scope":',
-        f'"These four steps were added on 2026-09-25 because R3\'s debug work '
+        f"\"These four steps were added on 2026-09-25 because R3's debug work "
         f"made the R2 readback reachable in states 2 (DEBUG_HOLD) and 3 "
         f"(BP_HIT) while no R2 vector exercised either. The chip has since "
         f"re-run tb_pe_ctrl_r2 against them with the debug inputs driven and "

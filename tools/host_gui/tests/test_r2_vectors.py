@@ -95,8 +95,11 @@ class TestR2VectorPackage(unittest.TestCase):
             1 for v in self.package["vectors"] for s in v["steps"] if s["chip_confirmed"]
         )
         self.assertEqual(confirmed, len(V.CONFIRMED_STEP_BYTES))
-        self.assertEqual(self.package["chip_confirmed"], not pending_now(),
-                         "the package-level flag IS the pending set being empty")
+        self.assertEqual(
+            self.package["chip_confirmed"],
+            not pending_now(),
+            "the package-level flag IS the pending set being empty",
+        )
         self.assertIn("chip-confirmed in simulation", self.package["notice"].lower())
         # the honest boundary: simulation confirmed, hardware not
         self.assertIn("not hardware-confirmed", self.package["notice"].lower())
@@ -553,8 +556,7 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
                 )
                 self.assertEqual(len(vector["steps"]), 2)
                 self.assertIn(vector["model_image_id"], self.images)
-                self.assertEqual(vector["chip_confirmed"],
-                                 not pending_now())
+                self.assertEqual(vector["chip_confirmed"], not pending_now())
 
     def test_the_step_pause_reports_state_two_with_the_strap_still_low(self):
         step = self._steps("status_while_step_paused")["status_reports_the_hold"]
@@ -659,8 +661,7 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
                     for s in v["steps"]
                     if s["name"] == name
                 )
-                self.assertEqual(step["chip_confirmed"],
-                                 name in confirmed_now())
+                self.assertEqual(step["chip_confirmed"], name in confirmed_now())
                 if step["chip_confirmed"]:
                     self.assertIsNotNone(step.get("chip_evidence"))
                 else:
@@ -688,8 +689,7 @@ class TestTheHeldCoreStatusSteps(unittest.TestCase):
         for name in HELD_STEPS:
             with self.subTest(step=name):
                 self.assertIn(name, shipped)
-                self.assertEqual(shipped[name]["chip_confirmed"],
-                                 name in confirmed_now())
+                self.assertEqual(shipped[name]["chip_confirmed"], name in confirmed_now())
                 if shipped[name]["chip_confirmed"]:
                     self.assertIsNotNone(shipped[name]["chip_evidence"])
                 else:
@@ -731,8 +731,7 @@ class TestTheNoticeMatchesTheFlagArithmetic(unittest.TestCase):
         self.assertEqual(set(self.confirmed), confirmed_now())
         self.assertEqual(sorted(self.unconfirmed), sorted(pending_now()))
         total = len(self.confirmed) + len(self.unconfirmed)
-        self.assertIn(f"{len(self.confirmed)}/{len(self.confirmed)}",
-                      self.notice)
+        self.assertIn(f"{len(self.confirmed)}/{len(self.confirmed)}", self.notice)
         if self.unconfirmed:
             self.assertIn(f"{len(self.confirmed)} of the {total}", self.notice)
         else:
