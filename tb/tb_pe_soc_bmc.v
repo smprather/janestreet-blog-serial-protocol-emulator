@@ -273,17 +273,28 @@ module tb_pe_soc_bmc;
   // THE LEVEL AT HALF-INDEX k OF THE WHOLE TRANSMISSION: the preamble first,
   // then the frame. ONE function, so the preamble and the payload cannot be
   // encoded by two different pieces of code that agree only by inspection.
+  //
+  // THE FRAME GOES ON THE WIRE HIGH BIT FIRST, and that is a wire rule now
+  // written in three places -- here, in the firmware's header, and in the
+  // decoder below -- because a rule that lives in one place is a rule that goes
+  // stale when its input moves. The reason is the receiver's shift-in, which
+  // is a doubling with the arriving bit in at the LOW end, so the first bit to
+  // arrive ends up in the HIGH position. The alternative, low bit first, would
+  // have assembled every byte of A5 3C 96 as 79 4A FF -- the model caught it,
+  // and it is the only fault this step has produced that no other check could
+  // have: with the phase broken, the bits never arrived in any order at all.
   function automatic bit enc_wire_lev(input integer k, input integer fm0,
                                       input integer fb0, input integer fb1,
                                       input integer fb2);
-    integer bitno;
+    integer bitno, p;
     bit d;
     bitno = k / 2;
     if (bitno < PRE_BITS)
       d = (bitno < PRE_HALF) ? 1'b0 : 1'b1;          // eight 0s then eight 1s
-    else
-      d = ((((bitno - PRE_BITS) < 8 ? fb0 : ((bitno - PRE_BITS) < 16 ? fb1 : fb2))
-             >> ((bitno - PRE_BITS) % 8)) & 1) != 0;
+    else begin
+      p = bitno - PRE_BITS;
+      d = ((((p < 8 ? fb0 : (p < 16 ? fb1 : fb2)) >> (7 - (p % 8))) & 1) != 0);
+    end
     enc_wire_lev = enc_level(d, k % 2, fm0);
   endfunction
   // ---- THE ENCODER CHECKS ITSELF AGAINST THE PROMISED PROPERTIES ----------
@@ -322,7 +333,8 @@ module tb_pe_soc_bmc;
     // process has not written yet is this file's favourite instrument defect.
     for (kk = 0; kk < 3; kk = kk + 1)
       for (eh = 0; eh < 8; eh = eh + 1)
-        sc_bit[kk*8 + eh] = (((kk == 0 ? sc_b0 : (kk == 1 ? sc_b1 : sc_b2)) >> eh) & 1) != 0;
+        sc_bit[kk*8 + eh] = (((kk == 0 ? sc_b0 : (kk == 1 ? sc_b1 : sc_b2))
+                             >> (7 - eh)) & 1) != 0;
 
     for (kk = 0; kk < 2*NBITS; kk = kk + 1) begin
       sc_lv0[kk] = enc_level(sc_bit[kk/2] ? 1 : 0, kk%2, 1);
@@ -401,14 +413,23 @@ module tb_pe_soc_bmc;
     //     the whole basis of the receiver's `interval == 2` test: the firmware
     //     has no divide and no shift-right, so it COMPARES against a constant,
     //     and that is only sound if the quantity takes exactly two values.
-    //     The counts are DERIVED (18 and 14 for A5 3C 96) and asserted, so the
-    //     firmware's measured histogram can be graded against them directly.
+    //     The counts are DERIVED (16 and 15 for A5 3C 96, high bit first) and
+    //     asserted, so a wrong figure here is a wrong figure someone can see.
+    //     They were 18 and 14 for the LOW bit first order, which is this
+    //     block's most repeated mistake -- a derivation nobody recomputed when
+    //     its input moved -- and 18 + 14 was 32 while the loop can only ever
+    //     produce 31 intervals for a 24-bit frame in isolation, because the
+    //     transition INTO the first half-interval is not inside the window.
+    //     /tmp/fm_model.py derives 16 and 15 from the wire rules
+    //     independently, and the two agreeing is the point; before the bit
+    //     order moved they agreed at 18/14, which is what made the move
+    //     visible at all.
     n_iv1_half = 0; n_iv2_half = 0;
     for (kk = 0; kk < n_iv0; kk = kk + 1) begin
       if      (sc_iv0[kk] == 1) n_iv1_half = n_iv1_half + 1;
       else if (sc_iv0[kk] == 2) n_iv2_half = n_iv2_half + 1;
     end
-    enc_chk((n_iv1_half == 18) && (n_iv2_half == 14) && (n_iv0 == 32),
+    enc_chk((n_iv1_half == 16) && (n_iv2_half == 15) && (n_iv0 == 31),
             $sformatf("the DERIVED interval histogram: 32 intervals, %0d of one half-interval (2 us) and %0d of two (4 us), and nothing else -- the firmware's write-hook is graded against exactly these numbers",
                       n_iv1_half, n_iv2_half));
 
@@ -424,12 +445,13 @@ module tb_pe_soc_bmc;
         if (sc_bit[ei] == sc_bit[ei+1]) n_bnd_eq = n_bnd_eq + 1; else n_bnd_ne = n_bnd_ne + 1;
       end
     end
-    enc_chk((n_bnd_eq == 9) && (n_bnd_ne == 0),
+    enc_chk((n_bnd_eq == 8) && (n_bnd_ne == 0),
             $sformatf("a bit boundary transitions iff two ADJACENT BITS ARE EQUAL -- %0d equal-adjacent pairs gave one, %0d differing pairs gave one. The record says DIFFER and is inverted",
                       n_bnd_eq, n_bnd_ne));
 
     if (enc_fail == 0)
-      $display("encoder self-check: all 6 properties hold (%0d transitions, 32 intervals = 18x2us + 14x4us)", n_tr);
+      $display("encoder self-check: all 6 properties hold (%0d transitions, %0d intervals = %0dx2us + %0dx4us)",
+               n_tr, n_iv0, n_iv1_half, n_iv2_half);
     else
       $display("encoder self-check: %0d propert(y|ies) FAILED", enc_fail);
   end
@@ -551,151 +573,161 @@ module tb_pe_soc_bmc;
   // because the handoff said so and I did not count the failures: the seven
   // FAIL lines are dec_have, dec_flag, three receive bytes and the two flag
   // checks, which is exactly seven without stim_done in it.
+  // ---- THE STIMULUS, RE-ARMABLE, AND THE TWO POLARITIES -----------------
+  // It is a `forever` around one transmission rather than a one-shot, because
+  // THE CHECK THIS ACT HAS WANTED SINCE IT BEGAN IS THE SAME FRAME SENT BOTH
+  // WAYS, and a one-shot stimulus cannot be sent twice: it used to end in
+  // `forever #(CLK_NS);`, holding the line idle forever, so a second pass would
+  // have driven nothing. The wire is UNCHANGED by this rewrite -- the old
+  // counter applied the level for half k at t = (k+1)*half and returned to idle
+  // one half-interval after the last, and so does this -- and the derivation in
+  // the encoder self-check is what says so rather than this comment.
+  //
+  // The old version counted HALF_CLOCKS on a clock loop and compared with >=,
+  // with the increment after the test, so the first half ran 121 clocks =
+  // 2.0167 us against the 2.000 us the constant claims; the derived histogram
+  // is only true of a half that IS 2 us. This version delays by the half-period
+  // itself, so there is no counter to be one out.
   initial begin
-    wait (run === 1'b1);
-    stim_done = 0; stim_bit = 0; stim_half = 0; stim_waited = 0; stim_idle_wait = 0;
     in_line = 1'b1;
-    // NO `carry` ANY MORE, and its deletion is not tidying. The old stimulus
-    // threaded the level at the end of the previous bit through every
-    // half-interval, and the whole "a run of ones is a constant line under
-    // FM0" property was built on it. That property came from the SUPERSEDED
-    // rules. Under the corrected ones -- every bit transitions in its middle,
-    // the data is the first half's level, FM1 marks a one low and FM0 marks a
-    // one high -- the encoding is STATELESS and the carry has nowhere to go.
-    // The line idles high.
     forever begin
-      #(CLK_NS);
-      // THE HALF-INTERVAL IS EXACTLY HALF_CLOCKS, and it was ONE CLOCK TOO
-      // LONG. The test is `stim_waited >= HALF_CLOCKS` with the increment
-      // AFTER it, so the first half ran 121 clocks -- 2.0167 us against the
-      // 2.000 us the comment and the constant both claim. Over 48
-      // half-intervals that is 0.8 us of drift against a firmware that
-      // timestamps on a 1 us tick, which is most of a microsecond of error
-      // accumulating across exactly the quantity this act measures. The
-      // derived histogram (18 x 2 us + 14 x 4 us) is only true of a half that
-      // IS 2 us.
-      //
-      // This is the fifth wrong figure in this block and the second one of this
-      // exact shape: peasm's trigger is commented `4*149+4` and measures
-      // `4*SR_TRIG+5`. In both, a derivation was written down and the code
-      // counted something one larger, and in both nobody recomputed the
-      // derivation when the code was the thing that moved. The counter goes
-      // up first, so the counter is the honest half of the expression.
-      stim_waited = stim_waited + 1;
-      // AND ONE HALF-INTERVAL LATER THE LINE GOES IDLE, so the frame's last
-      // half-interval is a half-interval long and the transition that ends it
-      // is a real edge rather than an assignment that cancels it.
-      if (stim_idle_wait > 0 && stim_waited >= HALF_CLOCKS) begin
-        stim_idle_wait = 0;
-        in_line = 1'b1;
-        forever #(CLK_NS) ;
+      wait (run === 1'b1);
+      stim_done = 0; stim_bit = 0; stim_half = 0; stim_waited = 0;
+      stim_idle_wait = 0;
+      in_line = 1'b1;
+      for (stim_bit = 0; stim_bit < TOT_BITS; stim_bit = stim_bit + 1) begin
+        #(HALF_CLOCKS*CLK_NS);
+        in_line = enc_wire_lev(stim_bit*2, enc_fm0,
+                               enc_byte[0], enc_byte[1], enc_byte[2]);
+        #(HALF_CLOCKS*CLK_NS);
+        in_line = enc_wire_lev(stim_bit*2 + 1, enc_fm0,
+                               enc_byte[0], enc_byte[1], enc_byte[2]);
       end
-      if (stim_waited >= HALF_CLOCKS) begin
-        stim_waited = 0;
-        // stim_bit is a BIT NUMBER; enc_frame_lev pulls the bit VALUE out of
-        // the frame and applies the rules to it. The previous two lines passed
-        // the bit number where a bit value was wanted, and every bit but bit 0
-        // went out as a '1' -- the testbench transmitted a 24-bit run of ones
-        // and the firmware was right to see almost nothing on the wire.
-        //
-        // THE TWO HALVES ARE TWO SEPARATE SLOTS, and the first version of this
-        // repair drove both of them in the SAME `#(CLK_NS)` tick, so the second
-        // assignment overwrote the first before anyone could see it: the wire
-        // carried 13 transitions where the encoder's own self-check derives 33.
-        // A ground-truth counter on the testbench's OWN output is what named
-        // it, in the same minute, which is the argument for having one.
-        if (stim_half == 0) begin
-          in_line = enc_wire_lev(stim_bit*2, enc_fm0, enc_byte[0], enc_byte[1], enc_byte[2]);
-          stim_half = 1;
-        end else begin
-          in_line = enc_wire_lev(stim_bit*2 + 1, enc_fm0, enc_byte[0], enc_byte[1], enc_byte[2]);
-          stim_half = 0;
-          // THE LAST BIT'S SECOND HALF IS HELD FOR ITS FULL HALF-INTERVAL,
-          // and the idle level is applied one half-interval later, by the
-          // branch below. Applying it here made the final half-interval a
-          // zero-width pulse.
-          if (stim_bit >= TOT_BITS - 1) begin
-            stim_done = 1;
-            // THE IDLE LEVEL IS NOT APPLIED IN THE SAME INSTANT. It used to
-            // be, and the last half-interval of the frame was therefore a
-            // ZERO-WIDTH PULSE: the line was driven low for the final half and
-            // driven high again at the same time step, so the transition at
-            // half 47 never existed on the wire. The encoder's own derivation
-            // says 33 transitions over 48 half-intervals and the wire carried
-            // 32, and the two did not agree for one minute before the diff of
-            // change TIMES showed the last one absent rather than missed. A
-            // level that exists for no time is not a level, and a check that
-            // counts transitions cannot tell "not driven" from "not seen".
-            stim_idle_wait = HALF_CLOCKS;      // hold this half, then go idle
-          end
-          stim_bit = stim_bit + 1;
-        end
-      end
+      // THE LAST HALF-INTERVAL IS HELD AND THE LINE GOES IDLE ONE HALF
+      // INTERVAL LATER. Applying the idle level in the same instant as the last
+      // half made that half a ZERO-WIDTH PULSE: the line went low and high in
+      // the same time step, so the transition that ends the frame never existed
+      // on the wire. A level that exists for no time is not a level, and a
+      // check that counts transitions cannot tell "not driven" from "not seen".
+      #(HALF_CLOCKS*CLK_NS);
+      in_line = 1'b1;
+      stim_done = 1;
+      wait (run === 1'b0);
     end
   end
 
   integer rx_micro = 0;
   always @(posedge clk) if (rst_n) rx_micro = rx_micro + 1;   // placeholder tick
 
+  // ---- TWO RUNS, ONE PER POLARITY, AND THE CHECK THAT PROVES THE FLAG ----
+  integer pass_fm0  [0:1];
+  integer pass_rx   [0:1][0:2];
+  integer pass_flag [0:1];
+  integer pass, pp;
+
   initial begin
     $dumpfile("tb_pe_soc_bmc.vcd");
     $dumpvars(0, in_line, out_line, pin_oe_bus, dbg_pc);
 
     enc_byte[0] = 8'hA5; enc_byte[1] = 8'h3C; enc_byte[2] = 8'h96;
-    dec_reset();
 
-    rst_n = 1'b0; run = 1'b0; host_we = 1'b0; host_imem_sel = 1'b0;
-    host_addr = '0; host_wdata = '0;
-    repeat (4) @(posedge clk);
-    rst_n = 1'b1;
-    repeat (2) @(posedge clk);
-    load_firmware();
-    repeat (4) @(posedge clk);
-    #1;
+    $display("\n=== FM0/FM1 bi-phase: %0d bits each way, %0.1f us half-intervals (%0d clocks), %0d preamble bits ===\n",
+             NBITS, HALF_US, HALF_CLOCKS, PRE_BITS);
+    $display("=== the SAME frame A5 3C 96, sent as FM0 and then as FM1, reset between ===\n");
 
-    $display("\n=== FM0/FM1 bi-phase: %0d bits each way, %0.1f us half-intervals (%0d clocks) ===\n",
-             NBITS, HALF_US, HALF_CLOCKS);
-    run = 1'b1;
-    // Enough time for the frame plus the firmware's own margins. The frame is
-    // NBITS * 2 * HALF_US = 96 us and the firmware needs to see the stream,
-    // recover the clock from it and bank three bytes. The WAIT is counted in
-    // CLOCKS and the frame in MICROSECONDS, because the firmware timestamps
-    // on a 1 us tick and this process is a clock loop -- the same two domains
-    // this act keeps confusing, so the wait says aloud which one it is in.
-    #(CLK_NS * 60 * 4000);
-    run = 1'b0;
+    for (pass = 0; pass < 2; pass = pass + 1) begin
+      // enc_fm0 IS SET BEFORE run GOES HIGH AND A CLOCK PASSES, because the
+      // stimulus reads it the instant it sees run and a same-timestep
+      // assignment in two processes is a race, and a race in the STIMULUS is a
+      // check that passes once in eight frames.
+      enc_fm0 = 1 - pass[0];             // pass 0 = FM0, pass 1 = FM1
+      dec_reset();
+      stim_done = 0;
+      rst_n = 1'b0; run = 1'b0; host_we = 1'b0; host_imem_sel = 1'b0;
+      host_addr = '0; host_wdata = '0;
+      repeat (4) @(posedge clk);
+      rst_n = 1'b1;
+      repeat (2) @(posedge clk);
+      load_firmware();
+      repeat (4) @(posedge clk);
+      #1;
+      run = 1'b1;
+      // Enough time for the frame plus the firmware's own margins. The WHOLE
+      // transmission is TOT_BITS * 2 * HALF_US = 160 us and the firmware banks
+      // its three bytes a few microseconds after the last transition. The WAIT
+      // is counted in CLOCKS and the frame in MICROSECONDS, because the
+      // firmware timestamps on a 1 us tick and this process is a clock loop --
+      // the same two domains this act keeps confusing, so the wait says aloud
+      // which one it is in.
+      #(CLK_NS * 60 * 1200);
+      run = 1'b0;
+      repeat (8) @(posedge clk);
+      pass_fm0[pass] = enc_fm0;
+      for (i = 0; i < 3; i = i + 1) pass_rx[pass][i] = dut.dmem[F_RX + i];
+      pass_flag[pass] = dut.dmem[F_FLAG];
+      $display("    pass %0d: sent %0s -> the firmware banked %02x %02x %02x, dmem[%0d] = %02x",
+               pass, (enc_fm0 != 0) ? "FM0" : "FM1",
+               pass_rx[pass][0], pass_rx[pass][1], pass_rx[pass][2],
+               F_FLAG, pass_flag[pass]);
+    end
 
     // ---- BOTH DIRECTIONS. Neither side was told what the other sent, and
     // ---- each side's decoder was written from the wire rules, not from the
     // ---- other side's encoder.
 
-    // DIRECTION 1, the one this act is really about: the firmware DECODES.
+    // DIRECTION 1, the one this act is really about: the firmware DECODES, and
+    // it decodes the same frame twice, once per polarity.
+    for (pp = 0; pp < 2; pp = pp + 1) begin
+      check(pass_fm0[pp] == 1 - pp[0], "the run used the polarity it says it used");
+      check(stim_done == 1,
+            $sformatf("pass %0d: the testbench presented a whole frame on the input pad", pp));
+      for (i = 0; i < 3; i = i + 1)
+        check(pass_rx[pp][i] == enc_byte[i],
+              $sformatf("pass %0d: the firmware recovered byte %0d = %02h from the input pad, the testbench encoded %02h",
+                        pp, i, pass_rx[pp][i], enc_byte[i]));
+      // THE FLAG, AND THE TEST IS AGAINST THE POLARITY THAT WAS SENT, not
+      // against a constant. The previous version of this check was
+      // `dmem[3] == 8'h01` with the stimulus set to enc_fm0 = 1, i.e. it
+      // demanded FM1 from an FM0 stream -- and the firmware's fault was exactly
+      // that it answered FM1 to an FM0 stream, so THE CHECK PASSED ON THE FAULT
+      // IT WAS WRITTEN TO CATCH. A flag test that cannot fail is worse than no
+      // flag test, because it is a green light over the act's headline claim.
+      check(pass_flag[pp] == pp[0],
+            $sformatf("pass %0d: the firmware DECLARED %0s (dmem[%0d] = %02h), and the testbench sent %0s",
+                      pp, (pp[0] != 0) ? "FM0" : "FM1", F_FLAG, pass_flag[pp],
+                      (pp[0] != 0) ? "FM0" : "FM1"));
+    end
+
+    // *** THE CHECK THE ACT HAS WANTED SINCE IT BEGAN. *** The same frame, both
+    // polarities, and the two answers have to DIFFER where they should and
+    // AGREE where they should. Two different flag values and the same three
+    // bytes is the only evidence that the flag is MEASURED off the wire rather
+    // than assumed: a receiver that guessed would agree with itself, and a
+    // receiver that never looked at the levels would answer the same both times.
+    check(pass_flag[0] != pass_flag[1],
+          $sformatf("the SAME frame sent both ways gave TWO DIFFERENT flags (%02h and %02h) -- the flag is measured, not assumed",
+                    pass_flag[0], pass_flag[1]));
+    for (i = 0; i < 3; i = i + 1)
+      check(pass_rx[0][i] == pass_rx[1][i],
+            $sformatf("the SAME frame sent both ways gave the SAME byte %0d (%02h and %02h) -- and it is the frame, not its complement",
+                      i, pass_rx[0][i], pass_rx[1][i]));
+
+    // DIRECTION 2: the firmware ENCODES and this testbench decodes.
     check(dec_have == 1,
           $sformatf("the testbench's decoder recovered a whole frame from the firmware's pad (bytes = %0d)",
                     dec_have));
     if (dec_have == 1) begin
-      for (i = 0; i < 3; i++)
+      for (i = 0; i < 3; i = i + 1)
         check(dec_byte[i] == enc_byte[i],
               $sformatf("decoded byte %0d = %02h, the testbench encoded %02h",
                         i, dec_byte[i], enc_byte[i]));
     end
     // The encoding flag is the claim: a receiver that does not say which
     // encoding it locked onto has not established anything, because FM0 and
-    // FM1 differ only at the interval starts.
+    // FM1 differ only at the level of the first half.
     check(dec_flag >= 0,
           $sformatf("the receiver declared WHICH encoding it locked onto (flag = %0d; -1 means it never locked on)",
                     dec_flag));
-
-    // DIRECTION 2: the firmware ENCODES and this testbench decodes.
-    check(stim_done == 1,
-          "the testbench presented a whole frame on the input pad");
-    for (i = 0; i < 3; i++)
-      check(dut.dmem[F_RX + i] == enc_byte[i],
-            $sformatf("the firmware recovered byte %0d = %02h from the input pad, the testbench encoded %02h",
-                      i, dut.dmem[F_RX + i], enc_byte[i]));
-    check(dut.dmem[F_FLAG] == 8'h01,
-          $sformatf("the firmware declared FM1 (dmem[%0d] = %02h) -- the testbench sent FM1",
-                    F_FLAG, dut.dmem[F_FLAG]));
 
     // THE STREAM THAT CANNOT BE DECODED: a line held CONSTANT. Every bit of a
     // well-formed frame transitions in its middle, so a level that never moves
@@ -708,9 +740,9 @@ module tb_pe_soc_bmc;
     // belief that a run of ones is a constant level. It is not: it is a clean
     // square wave. The claim was wrong in the header, in the encoder and in
     // two WORKLOG lines.)
-    check(dut.dmem[F_FLAG] != 8'hFF,
-          $sformatf("a line held CONSTANT carries no clock at all, and the receiver DECLARED that rather than banking bytes (dmem[%0d] = %02h)",
-                    F_FLAG, dut.dmem[F_FLAG]));
+    check(pass_flag[0] != 8'hFF,
+          $sformatf("a line held CONSTANT carries no clock at all, and the receiver DECLARED that rather than banking bytes (dmem[%0d] = %02h on a locked stream)",
+                    F_FLAG, pass_flag[0]));
 
     $display("");
     if (errors == 0) $display("PASS: all checks");
@@ -719,7 +751,11 @@ module tb_pe_soc_bmc;
   end
 
   initial begin
-    #5_000_000;
+    // TWO PASSES AT 1200 us PLUS TWO imem LOADS, so 5 ms was a watchdog set
+    // for ONE pass: it fired before the second polarity had been sent, and a
+    // watchdog that fires first looks like a hang. The figure is now derived
+    // from the two passes rather than remembered from one.
+    #(CLK_NS * 60 * 6000);
     $display("FAIL: watchdog -- test did not complete");
     $finish;
   end

@@ -6,25 +6,57 @@
 ; with, and says WHICH ENCODING it locked onto. The wire rules, from which
 ; everything here and in tb/tb_pe_soc_bmc.v is written independently:
 ;   * a bit is TWO half-intervals;
-;   * a '0' has a transition in the MIDDLE of its interval, in both encodings;
-;   * a '1' in FM1 has a transition at the START of its interval and none in
-;     the middle;
-;   * a '1' in FM0 has NO TRANSITION AT ALL: the level is simply held.
+;   * the DATA is the LEVEL OF THE FIRST HALF-INTERVAL;
+;   * FM0 marks a one HIGH and FM1 marks a one LOW -- that is the WHOLE
+;     difference between the two encodings;
+;   * therefore h1 == ~h0 in every case, and a bit BOUNDARY carries a
+;     transition IFF two ADJACENT BITS ARE EQUAL.
 ;
-; SO WHAT A RUN OF ONES DOES, which the old rules did not say and which is
-; now part of the specification, because the manager's ruling on the
-; contradiction made it the preamble check's teeth:
-;   * FM0: a run of ones is a CONSTANT LINE for its whole length. There is no
-;     transition to find, so a receiver inside the run has nothing to count
-;     and MUST resynchronise on the first transition after it. That is the
-;     dead-sensor-shaped case, and it is exactly why a preamble is required.
-;   * FM1: a run of ones is a CLEAN SQUARE WAVE, a transition at every
-;     boundary, and remains fully countable.
+; THE BIT ORDER ON THE WIRE, and it is high bit first. The reason is this ISA
+; and nothing else: the shift-in below is a DOUBLING with the new bit in at
+; the LOW end, so the first bit to arrive ends up in the HIGH position, and
+; placing an arriving bit at weight 2**count is a variable shift this machine
+; does not have. It is written down here, in the testbench's encoder and in
+; its decoder, because a wire rule lives in three places or it lives in none.
 ;
-; THE ENCODING DIFFERENCE, restated so it is a measurement and not a label: a
-; '1' arrives with a boundary transition under FM1 and without one under FM0.
-; That single difference is the whole claim of the act and the only thing the
-; receiver has to establish.
+; THE PREAMBLE IS EIGHT ZEROS THEN EIGHT ONES, AND WHY IT IS THAT SHAPE, which
+; is the answer to the fault this act was red for. A bi-phase stream carries no
+; polarity: the interval sequence of the two encodings of one payload is
+; IDENTICAL, interval for interval, so the timing says nothing about polarity
+; and only LEVELS can. But the first transition of a transmission is the one
+; transition whose class differs between the polarities, and it is exactly the
+; one the receiver cannot use:
+;   * FM0, first preamble bit is a 0, so its first half is LOW and the line was
+;     idle HIGH: the transmission's first transition is the BOUNDARY into bit
+;     0.
+;   * FM1, the same bit is a 0, so its first half is HIGH and that IS the idle
+;     level: there is NO frame-start transition at all, and the first one is
+;     the MID of bit 0.
+; The resync drops that first transition in BOTH cases -- the receiver has no
+; previous timestamp to measure from -- and what it dropped is a boundary in one
+; polarity and a mid in the other. THAT is the asymmetry, and the handoff's
+; belief that nothing is lost under FM1 is wrong: the model (/tmp/fm_model.py)
+; shows the old algorithm emitting THIRTY-ONE payload bits under BOTH
+; polarities. The phase error does not disappear, it moves.
+;
+; SO THE RECEIVER DOES NOT DETECT THE CASE AND COMPENSATE. IT REFUSES TO EMIT
+; UNTIL THE CLOCK IS AMBIGUOUSLY KNOWN, and a three-state history is what that
+; costs:
+;   * dmem[15] = 1, the previous transition was a boundary: a one-half gap is
+;     the boundary's own mid.
+;   * dmem[15] = 0, the previous transition was a mid: a one-half gap is a
+;     boundary.
+;   * dmem[15] = 2, UNKNOWN -- a resync has happened and no transition has
+;     been classified since. A one-half gap says NOTHING while the phase is
+;     unknown, and nothing is emitted. A TWO-half gap, though, is mid-then-mid
+;     whatever came before: it is the only interval in the encoding that is
+;     unambiguous on its own, and it is the lock.
+; The eight-zero run of the preamble puts exactly one such gap on the wire, and
+; the model puts it at t = 34 us of the frame in BOTH polarities -- the same
+; offset, which is the whole point. The eight ones after it are then received
+; as the preamble's first BYTE, and their level is the polarity: 0xFF as levels
+; is FM0, 0x00 is FM1. Both cases cost the receiver the same eight preamble
+; bits, which is what lets one preamble-end test serve both.
 ;
 ; WHY THE CLOCK CAN BE RECOVERED AT ALL, which is the property the interval
 ; method depends on and the one the counting-of-changes version violated: the
@@ -78,9 +110,11 @@
 ;    11      what the program is doing: 0 = decode, 1 = encode
 ;    12,13   the bit under construction, and then the byte being shifted out
 ;    14      scratch for the elapsed time
-;    15      ONE BIT: was the last transition a bit boundary? It is the whole
-;            of the history the boundary decision needs, and it is the only
-;            byte the decision costs.
+;    15      THE PHASE, in THREE states and not two: 1 = the last transition was
+;            a bit boundary, 0 = it was a mid, 2 = UNKNOWN, which is what a
+;            resync leaves behind and what nothing may emit through. It is the
+;            whole of the history the boundary decision needs, and it is the
+;            only byte the decision costs.
 
         ; ---- init ------------------------------------------------------
 init:
@@ -280,17 +314,31 @@ the_pin:
         ;     interval == 2 us, otherwise             -> this is a BOUNDARY
         ;     anything else                           -> the clock is lost
         ;
-        ; WHY THAT IS ENOUGH, and it is the part that is not obvious: a run of
+        ; WHY ONE BIT OF HISTORY IS ENOUGH, and it is THREE STATES. A run of
         ; two-microsecond intervals is AMBIGUOUS on its own, because [mid,
-        ; boundary, mid] and [boundary, mid, boundary] both measure 2, 2. One
-        ; bit of history is what resolves it, and dmem[15] is that one bit. It
-        ; is the ONLY new byte the whole decision costs, which matters on a
-        ; machine with sixteen bytes and every one of them spoken for.
+        ; boundary, mid] and [boundary, mid, boundary] both measure 2, 2. So
+        ; the decision needs to know what the LAST transition was:
+        ;     dmem[15] = 1  it was a boundary -> a one-half gap is its own mid
+        ;     dmem[15] = 0  it was a mid      -> a one-half gap is a boundary
+        ;     dmem[15] = 2  UNKNOWN, a resync left this, and a one-half gap
+        ;                   says nothing at all until the phase is known again
+        ; and the third state is the whole of this step. It was 0 and 1 only,
+        ; and a resync cleared it to 0 -- which is an ASSERTION that the
+        ; transition the resync threw away was a mid, made about a transition
+        ; the receiver never measured. Under FM0 it was a boundary, so the very
+        ; first one-half gap was read as a boundary when it was a mid, and the
+        ; stream was one half-interval out of phase until the first unambiguous
+        ; gap put it back. Under FM1 the same line read the MID of bit 0 as a
+        ; boundary, so the error is not gone, it is the other way round. The
+        ; model measured both: 31 payload bits emitted either way.
         ;
-        ; WHY ONE BIT PER MID IS ONE BIT PER BIT: every bit carries exactly one
-        ; mid transition, and a boundary carries the SAME data as the mid that
-        ; follows it, so emitting at the mid and not at the boundary emits each
-        ; bit exactly once.
+        ; WHY THE THIRD STATE IS THE FIX AND NOT A COMPENSATION: a receiver
+        ; that must tell the two cases apart at that point cannot, because
+        ; dmem[3] is not set until the preamble has been read, and that is the
+        ; whole difficulty. So it does not tell them apart. It emits nothing
+        ; until it sees a TWO-half gap, which no boundary can produce -- a
+        ; boundary is always exactly one half after a mid -- and therefore
+        ; locks onto an interval that means the same thing in both polarities.
         ;
         ; NO DIVISION, because there is none to do: the interval takes exactly
         ; two values and comparing against a constant is the whole test. This
@@ -299,7 +347,9 @@ the_pin:
         LDM   X, 8
         LDI   A, 4
         SUB   A, X             ; zero EXACTLY when the interval was two
-                               ; half-intervals, and that can only be a mid
+                               ; half-intervals, and that can only be a mid,
+                               ; whatever came before it: a boundary is never
+                               ; two halves after anything
         JZ    this_mid
         LDI   A, 2
         SUB   A, X             ; zero EXACTLY when it was one half-interval
@@ -307,8 +357,25 @@ the_pin:
                                ; SO is better than emitting a bit from a
                                ; measurement that means nothing
         LDM   A, 15
-        JNZ   this_mid         ; the previous transition was a boundary, and a
+        MOV   X, A             ; the phase has to come through a register to
+                               ; be on the right of a subtraction on this ISA
+        LDI   A, 1
+        SUB   A, X
+        JZ    this_mid         ; the previous transition was a boundary, and a
                                ; boundary is followed by its own mid
+        LDI   A, 2
+        SUB   A, X
+        JNZ   is_boundary      ; it was a mid, so a one-half gap is a boundary
+        ; ---- dmem[15] IS 2: THE PHASE IS NOT KNOWN ------------------------
+        ; A resync threw away the transition the phase would have been read
+        ; from, and a one-half interval from here is ambiguous: it is a
+        ; boundary if the lost one was a mid, and a mid if the lost one was a
+        ; boundary. Emitting would be guessing, so nothing is emitted, and
+        ; dmem[15] is left at 2 -- the FOURTH line of the three states, and the
+        ; one the handoff asked for: the receiver cannot tell which case it is
+        ; in here, so it must not have to. The two-half gap above is the way
+        ; out of this state, and the preamble's eight-zero run guarantees one.
+        JMP   main
 is_boundary:
         LDI   A, 1
         STM   15, A            ; a boundary. IT HAS A NAME, and it has one
@@ -343,14 +410,52 @@ this_mid:
         ; written with the NEW level on the way in. NO SECOND LEVEL BYTE IS
         ; NEEDED -- a level is one bit and the other one is its complement,
         ; which is the cheapest thing in this act.
+        ;
+        ; *** AND dmem[4] IS A MASKED LEVEL, NOT A 0/1. *** the_pin does
+        ; `IN A, PIN / AND A, BMC_IN`, so what lands in dmem[4] is 0x20 when the
+        ; pad is HIGH and 0x00 when it is LOW, and never 1. Every use this
+        ; block had for it was a COMPARISON against BMC_IN, which is blind to
+        ; the mask, and the first thing that ARITHMETicked on it broke: the bit
+        ; came out as 1 - 0x20, and a frame of a5 3c 96 banked as bf 9f df --
+        ; a byte with six ones in it where the frame has four. A level stored
+        ; masked has to be compared masked, everywhere, and this is the first
+        ; thing in this act that had to be. It is also the reason the two paths
+        ; below both compare and neither subtracts: `1 - dmem[4]` is not a bit.
+        ;
+        ; WHICH OF THE TWO IS THE DATA BIT IS THE POLARITY, and it costs a
+        ; comparison, not a byte:
+        ;     FM0  a one is HIGH -> the data is the complement of dmem[4]
+        ;     FM1  a one is LOW  -> the data IS dmem[4]
+        ; and the preamble's own bits are banked as the LEVEL either way, which
+        ; is what makes the preamble's assembled byte the polarity: 0xFF for
+        ; FM0, 0x00 for FM1. So the gate on dmem[13] is not a detail -- without
+        ; it the preamble's byte would be read through the FM1 rule, and the
+        ; flag would be read off a byte that had already been inverted.
+        LDI   A, 0
+        LDM   X, 3
+        SUB   A, X             ; zero iff dmem[3] == 0, i.e. FM0
+        JZ    first_half_low
+        LDI   A, 0
+        LDM   X, 13
+        SUB   A, X             ; 0 - dmem[13]: NONZERO while the preamble is
+        JNZ   first_half_low   ; still running, and that is the preamble path,
+                               ; because before the flag exists the bit to bank
+                               ; is the LEVEL, not a data bit. It went the
+                               ; other way first, with `LDI A, 1` here, and the
+                               ; preamble's byte came out 0x00 for an FM0 stream
+                               ; every preamble bit was taken through the FM1
+                               ; rule, the assembled byte was the complement of
+                               ; the levels, and the flag came out FM1 for FM0
+                               ; -- the ORIGINAL fault of this act, back again
+                               ; through a different door, and only because the
+                               ; preamble path is now reached by a fall-through
+                               ; instead of a jump.
+fm1_half:
         LDM   X, 4
         LDI   A, BMC_IN
-        SUB   A, X             ; zero when the level just changed TO is HIGH
-        JZ    data_zero        ; so the first half was LOW, and the data is 0
-        LDI   A, 1
-        JMP   bit_store
-data_zero:
-        LDI   A, 0
+        SUB   A, X
+        JNZ   data_zero        ; the level is LOW, and a one is LOW, so the
+        LDI   A, 1             ; data is 0. The one and only test of it.
         JMP   bit_store
         ; AND THAT JUMP IS NOT COSMETIC. The first version of this block put
         ; `resync` immediately below `data_zero`, so the two LABELs were
@@ -359,23 +464,42 @@ data_zero:
         ; entirely, and the block read
         ;     68  0000  LDI A, 0        <- data_zero
         ;     69  0000  LDI A, 0        <- resync
-        ; with no jump between them. Reading only the part I had changed would
-        ; not have shown it: the two instructions are individually correct and
-        ; the fault is in the SPACE between them. That is the whole reason the
-        ; rule is to read the WHOLE block in the listing after an edit.
-        ; ---- AND AT bit_store, A IS DEAD -------------------------------
-        ; Both paths arrive here and only one of them sets A. The bit under
-        ; construction is in dmem[12] and the count in dmem[7], so nothing
-        ; here reads A -- but a block that reads a register it did not set is
-        ; the shape of the `LDI A,2 / SUB A,1` dead branch, so it is said here
-        ; rather than left to be discovered.
+        ; with no jump between it. Reading only the part I had changed would not
+        ; have shown it: the two instructions are individually correct and the
+        ; fault is in the SPACE between them. That is the whole reason the rule
+        ; is to read the WHOLE block in the listing after an edit.
+first_half_low:
+        LDM   X, 4
+        LDI   A, BMC_IN
+        SUB   A, X
+        JZ    data_zero        ; the level is HIGH, and a one is HIGH, so the
+        LDI   A, 1             ; data is the complement: 0
+        JMP   bit_store
+data_zero:
+        LDI   A, 0
+        JMP   bit_store
+        ; ---- AND AT bit_store, A IS THE DATA BIT ------------------------
+        ; The earlier comment here said A is DEAD, and it was true when the
+        ; boundary path also jumped here. It is not dead now: a boundary carries
+        ; the same data as the mid after it, so only the mid path comes, and A
+        ; is the bit -- WHICH IS WHY THE SHIFT-IN BELOW BEGINS WITH `MOV Y, A`
+        ; rather than with a load, and why a block that reads A without setting
+        ; it would be a fault of the `LDI A,2 / SUB A,1` shape.
+
 resync:
         ; THE CLOCK IS LOST: the interval was neither 2 nor 4 us, which on this
         ; wire means a gap longer than two half-intervals -- a dead sensor, a
-        ; break, or the return to idle at the end of a frame. Clear the one bit
-        ; of history so the next real transition is classified from scratch, and
-        ; emit NOTHING. A decoder that cannot lose the clock is not decoding.
-        LDI   A, 0
+        ; break, or the return to idle at the end of a frame. dmem[15] goes to
+        ; 2, NOT to 0, and that one word is the fix this act spent a session
+        ; looking for. Zero is a CLAIM: it says the transition this resync just
+        ; discarded was a mid. It was not knowable. Under FM0 the discarded
+        ; transition is the boundary into preamble bit 0, and under FM1 it is
+        ; the mid of that bit, and only the second of those is what 0 would be
+        ; claiming. Two says I DO NOT KNOW, and a receiver that admits it has
+        ; one honest behaviour available: emit nothing until a two-half gap
+        ; pins the phase down. A decoder that cannot lose the clock is not
+        ; decoding; a decoder that cannot admit it does not know where it is.
+        LDI   A, 2
         STM   15, A
         JMP   main
 bit_store:
@@ -413,66 +537,35 @@ bit_store:
         ; the same commit, which is the second time in this block that a fix
         ; made a comment false -- and the rule that catches it is the same one:
         ; after an edit, read the WHOLE block and every comment in it.
-        MOV   Y, A             ; Y = the bit, which arrived in A on the mid path
+        MOV   Y, A             ; Y = the DATA bit, which the two paths above
+                               ; left in A: the level of the first half under
+                               ; FM0 and the preamble, and the level itself
+                               ; under FM1
         LDM   A, 12
         MOV   X, A
         ADD   A, X             ; A = the byte doubled, i.e. shifted left one
         MOV   X, A
         MOV   A, Y             ; A = the bit again
-        ADD   A, X             ; and in it goes at the low end
-        STM   12, A
+        ADD   A, X             ; and in it goes at the low end, which is why
+        STM   12, A            ; THE WIRE IS HIGH BIT FIRST: the first bit to
+                               ; arrive ends up in the high position
         LDM   A, 7
         ADD   A, 1
         STM   7, A
         ; ---- IS THE PREAMBLE OVER? --------------------------------------
-        ; SEVEN MORE BITS finish the preamble. Sixteen preamble bits go on the
-        ; wire and FIFTEEN arrive -- the first transition is taken by the
-        ; resync, and it is taken the SAME WAY under both polarities, so the
-        ; count is fifteen either way and not sixteen under one of them. Eight
-        ; of them came in as the first byte, which byte_done has just handled,
-        ; and these seven are the rest: preamble bits 9..15.
-        ;
-        ; And this state -- dmem[9] = 1 with dmem[7] = 7 -- is where the
-        ; preamble and the payload are INDISTINGUISHABLE from the counters
-        ; alone, because the payload's own first byte arrives in exactly the
-        ; same state. dmem[13] is what tells them apart, which is the whole
-        ; reason it is a byte and not a derivation, and the reason the polarity
-        ; check needed it too: without the flag, a payload byte of 0x80 would
-        ; have been read as an FM0 preamble and the flag would have been wrong
-        ; once in every eight frames, which is the kind of fault that looks
-        ; like a flaky wire.
-        LDM   A, 13
-        JZ    bit_counted       ; not the preamble: carry on into the payload
-        ; THE STATE IS dmem[9] = 1 AND dmem[7] = 7, AND THE FIRST VERSION TESTED
-        ; ONLY THE SECOND HALF OF THAT. So the preamble ended at its SEVENTH
-        ; bit rather than its fifteenth, cleared dmem[13], and the eighth bit
-        ; then arrived as an ordinary payload byte: measured, all four
-        ; byte_done events took the store path, dmem[9] was left at 4, and
-        ; dmem[3] was never written. The comment above this block said "dmem[9]
-        ; = 1 with dmem[7] = 7" and the code tested one byte of it, which is the
-        ; same defect as the comment that said "seeded to 1" over an instruction
-        ; that seeded 0 -- and it is the SECOND time in this one block that a
-        ; stated state and an implemented test have differed by a conjunct. A
-        ; comment describing a CONJUNCTION and a test of one conjunct is the
-        ; shape to look for, everywhere, from now on.
-        LDM   X, 9
-        LDI   A, 1
-        SUB   A, X             ; zero iff the preamble's FIRST byte is already
-        JNZ   bit_counted       ; behind us -- if it is not, dmem[7] = 7 is just
-                               ; the seventh bit of the preamble's first byte
-        LDM   X, 7
-        LDI   A, 7
-        SUB   A, X             ; zero iff seven bits are in hand
-        JNZ   bit_counted
-        LDI   A, 0
-        STM   13, A            ; THE PREAMBLE IS OVER
-        STM   12, A            ; and its bits are thrown away, never banked
-        STM   7, A
-        STM   9, A             ; dmem[9] back to 0, so the payload's first
-        STM   0, A             ; byte lands in slot 0. dmem[0] is cleared as
-                               ; well: the one preamble byte that was assembled
-                               ; was never stored, so this is belt and braces
-                               ; against a later version that does store it.
+        ; NOT HERE. It is in byte_done, and it is a different test from the one
+        ; that used to stand here, because what the receiver now gets of the
+        ; preamble is EIGHT bits, not fifteen: the phase is not known until the
+        ; first two-half gap, and that gap ends the eight-zero run, so the run
+        ; of ones that follows is received whole. The old test -- dmem[9] = 1
+        ; AND dmem[7] = 7 -- was counting the fifteen bits a receiver got when
+        ; it emitted through a resync it should not have emitted through, and
+        ; the count was a description of the fault rather than of the protocol.
+        ; A preamble whose length depends on which polarity lost the race is not
+        ; a preamble; it is a race. byte_done sees one byte complete while
+        ; dmem[13] says the preamble is still running, and that IS the end of
+        ; it, in both polarities, which the model confirms at 8 bits each.
+        ; ---- SO FALL THROUGH TO THE BYTE-COMPLETE TEST -------------------
 bit_counted:
         LDI   A, 8
         LDM   X, 7             ; THE SAME FAULT AS THE ONE EIGHT INSTRUCTIONS
@@ -493,57 +586,81 @@ bit_counted:
 byte_done:
         LDI   A, 0
         STM   7, A             ; the bit counter starts again for the next byte
-        ; ---- IS THIS THE PREAMBLE'S FIRST BYTE? -------------------------
-        ; THE POLARITY IS HERE AND NOWHERE ELSE, and the recipe for this step
-        ; said it would be the LEVEL before the four-microsecond gap. It is
-        ; better here, for three reasons that all come from this machine:
-        ;
-        ;   1. THE ASSEMBLED BYTE IS 0x80 OR 0x00 AND NOTHING ELSE. The
-        ;      receiver loses the first transition to the resync, so what
-        ;      arrives first is preamble bits 1..8: bits 1..7 are zeros and
-        ;      bit 8 is the FIRST ONE of the second run. So the first byte
-        ;      assembled out of the preamble is exactly 0x80 if the sender
-        ;      marked a one HIGH (FM0) and exactly 0x00 if it marked a one LOW
-        ;      (FM1). A test for "is this byte 0x80" is one comparison against
-        ;      one constant.
-        ;   2. IT COSTS NO BYTE. The recipe's version needs a flag to say "I
-        ;      have seen the gap" and a counter to say which transition the
-        ;      gap was. This version needs neither: byte_done already exists
-        ;      and dmem[12] already holds the byte.
-        ;   3. IT NEEDS NO SHIFT-RIGHT, because this ISA has none. Reading ONE
-        ;      BIT out of a byte is the hard part of any polarity check on
-        ;      this machine, and a whole-byte comparison sidesteps it: the
-        ;      low seven bits of that byte are all zero by construction, so
-        ;      "bit 7 is set" and "the byte is 0x80" are the same test.
+        ; ---- IS THIS BYTE THE PREAMBLE'S? THEN IT IS THE POLARITY --------
+        ; AND IT COSTS NO BYTE, because byte_done already exists and dmem[12]
+        ; already holds the byte. What the receiver gets of the preamble is the
+        ; run of EIGHT ONES, as LEVELS, and that is the asymmetry the whole
+        ; protocol needs: a run of identical bits has identical INTERVALS in
+        ; both encodings, so its timing says nothing and its level says
+        ; everything. 0xFF is FM0 (a one is high) and 0x00 is FM1, and they are
+        ; complements, so no payload byte can be mistaken for the preamble: the
+        ; one and only byte that can pass this test is one made of eight equal
+        ; bits, and a byte that is not made of eight equal bits CANNOT have come
+        ; from this preamble.
         ;
         ; AND IT CANNOT BE FOOLED BY PAYLOAD, because a payload byte is only
         ; compared while dmem[13] says the preamble is still running, and the
         ; flag is cleared before the payload's first bit is stored.
+        ;
+        ; NEITHER PATH ADVANCES dmem[9] AND NEITHER ONE BANKS THE BYTE. The
+        ; first version DID advance dmem[9] to 1 here, on the reasoning that
+        ; the preamble used to occupy two byte slots; it occupies one now, so
+        ; dmem[9] stays 0 and the payload's first byte lands in slot 0. That
+        ; one word was worth two slots of displacement: with dmem[9] at 1 the
+        ; payload's three bytes go to dmem[1], dmem[2] and dmem[3] -- the third
+        ; landing ON TOP OF THE FLAG, which is the worst place a byte can land
+        ; in a program whose third dmem byte is its polarity. A stale comment
+        ; about a two-slot preamble, and the code it justified, moving a frame.
         LDM   A, 13
         JZ    store_dispatch    ; not the preamble: bank the byte as usual
         LDM   X, 12
-        LDI   A, 0x80
+        LDI   A, 0
+        STM   13, A             ; THE PREAMBLE IS OVER, and it is over HERE,
+        STM   12, A             ; at the first byte that completes while the
+                               ; preamble-still-running byte is set. The first
+                               ; version cleared it in bit_store, on a count of
+                               ; bits that only came out right when the phase was
+                               ; wrong; when the phase was fixed the clear went
+                               ; with it, and MEASURED: four byte_done events,
+                               ; one locked_fm0, dmem[13] still 1 at the end of
+                               ;; the run, and dmem[0..2] all zero. The flag was
+                               ; written and the preamble never ended, so every
+                               ; payload byte after it was consumed as a
+                               ; preamble byte and thrown away. A test that
+                               ; checks a FLAG without checking that the thing
+                               ; the flag is read in is still running is half a
+                               ; check, and the half it drops is the half that
+                               ; carries the bytes.
+        LDI   A, 0xFF
         SUB   A, X
-        JZ    locked_fm0        ; 1000_0000 -- the eighth bit was a ONE, so the
-                               ; sender marks a one HIGH. That is FM0.
+        JZ    locked_fm0        ; 1111_1111 -- eight ones as LEVELS, so a one
+                               ; is HIGH, and that is FM0. dmem[3] is now
+                               ; MEASURED off the wire.
+        LDI   A, 0x00
+        SUB   A, X
+        JNZ   not_preamble     ; eight bits that are NOT all one level did not
+                               ; come from this preamble, so the receiver SAYS
+                               ; SO rather than picking a polarity out of the
+                               ; air. A flag test is only non-vacuous if the
+                               ; other answer exists, and the old code had no
+                               ; third answer at all: it called everything that
+                               ; was not 0x80 an FM1.
         LDI   A, 1
-        STM   3, A             ; 0000_0000 -- the eighth bit was a ZERO, so the
-        JMP   preamble_continue ; sender marks a one LOW. That is FM1, and it
-                               ; is the SAME three bytes with every bit
-                               ; inverted, which is the failure this act exists
-                               ; to be able to name rather than suffer.
+        STM   3, A             ; 0000_0000 -- eight ones as levels, so a one is
+        JMP   main             ; LOW, and that is FM1. The SAME three bytes with
+                               ; every bit inverted, and the payload decode in
+                               ; bit_store is what undoes that inversion.
 locked_fm0:
         LDI   A, 0
-        STM   3, A             ; FM0, and dmem[3] is now MEASURED off the wire
-preamble_continue:
-        ; DO NOT BANK THE PREAMBLE. The byte just assembled is a preamble byte
-        ; and nothing else, and storing it would leave garbage in dmem[0] that
-        ; the payload would then have to overwrite -- which it does not, because
-        ; the payload's own three bytes go to dmem[0..2] and the preamble is
-        ; sixteen bits and one byte short of sixteen.
-        LDI   A, 1
-        STM   9, A             ; dmem[9] counts the preamble's SECOND run now
+        STM   3, A             ; FM0, MEASURED off the wire
         JMP   main
+not_preamble:
+        LDI   A, 0xFF
+        STM   3, A             ; DECLARED: I locked onto a clock, and the byte
+        JMP   main             ; that came out of it is not a preamble, so I do
+                               ; not know which encoding sent this. 0xFF is the
+                               ; answer to "I have not locked on to anything",
+                               ; and here it is the honest one.
 store_dispatch:
         ; THE DISPATCH IS ON dmem[9] ALONE, and it was not. The first version
         ; computed `LDM A,12 / ADD A,X` and then tested the SUM for zero, then

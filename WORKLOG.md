@@ -1304,3 +1304,78 @@ HANDOFF: reviews/2026-09-26/BLOCK3-STATE.md ends with the final state, the three
 2026-09-26 06:22 CDT | fw-timing | TASK-WIP | ACT (c) STEP 4, PARTIAL AND COMMITTED RED: THE PREAMBLE IS ON THE WIRE AND IN THE FIRMWARE, THE POLARITY IS READ OUT OF THE ASSEMBLED BYTE RATHER THAN OFF A LEVEL, AND THE STEP OPENS WITH A COMMENT THAT IS RIGHT BESIDE AN INSTRUCTION THAT IS NOT. The testbench now puts EIGHT ZEROS THEN EIGHT ONES on the wire before the frame, through a new enc_wire_lev that serves the preamble and the payload from ONE function so the two cannot be encoded by two pieces of code that agree only by inspection. The firmware reads the polarity in byte_done, out of the first byte it assembles out of the preamble, and the 05:52 recipe's version -- "read the level before the 4 us gap" -- is the worse one for three reasons that all come from this machine. THE ASSEMBLED BYTE IS 0x80 OR 0x00 AND NOTHING ELSE: the receiver loses the first transition to the resync, so what arrives first is preamble bits 1..8, which are seven zeros and then the FIRST ONE of the second run, so that byte is 0x80 if the sender marks a one HIGH and 0x00 if it marks a one LOW. ONE comparison against ONE constant, NO new byte, and NO shift-right -- which this ISA does not have and which is the hard part of any one-bit polarity test on it. And it lands in a block that already exists rather than in a new detector with its own state. dmem[13] is the one byte the preamble costs and it has to be a byte and not a derivation, because dmem[9] = 1 with dmem[7] = 7 is reached by the preamble's second run AND by the payload's own first byte INDISTINGUISHABLY, and without the flag a payload byte of 0x80 would have been read as an FM0 preamble -- a flag wrong once in every eight frames, which is the kind of fault that looks like a flaky wire. THE FAULT THIS STEP OPENED WITH is the act's own recurring defect in its purest form: the init comment said dmem[13] was "seeded to 1" and the instruction seeded it to ZERO, because the LDI A,1 was left out and the preceding LDI A,0 was still in scope. A comment that is right and an instruction that is not, and the instruction is the one that runs. Measured: every byte_done took the store path, the preamble was banked as payload, four bytes were banked, dmem[9] was left at 4, dmem[3] was never written -- which is why the flag stayed 0xFF and the bytes came out 1c 1c 1c. STILL RED, AND I AM OUT OF CONTEXT, SO THE OPEN FAULT IS NAMED RATHER THAN GUESSED: THE PROGRAM REACHES THE ENCODER STUB. dmem[13] reads 0xFF and the only writer of 0xFF to that byte is half_wait's LDI A,0xFF / STM 13,A, which is inside the encoder. dmem[11] is seeded to 0 by init and the only other writer of dmem[11] is enc_start, which the reachability pass still reports as DEAD, so the encoder is being entered by a path the static checks do not see and the next context should look at HOW rather than re-derive the preamble. The numbers for it: changes detected 56, MID 32, BOUNDARY 23, RESYNC 1, store_dispatch 0; the preamble plus the payload need 39 mids less the resync and 32 arrived, so the receiver is losing transitions AGAIN and the preamble's own work in bit_store is the obvious first suspect -- settled by re-running the sample-gap measurement, whose previous reading was a longest gap of 80 clocks against a shortest possible interval of 120.
 2026-09-26 06:30 CDT | fw-timing | TASK-START | ACT (c) STEP 4, THE NAMED FAULT: HOW DOES THE PROGRAM ENTER THE ENCODER STUB, IF THE STATIC CHECK SAY IT CANNOT? dmem[13] reads 0xFF and the only writer of 0xFF to that byte is half_wait's `LDI A,0xFF / STM 13,A`, which is inside the encoder, and enc_start is still reported dead by the reachability pass. Three ways that can be true at once, and they are distinguishable in one run: (a) dmem[11] is not 0 when main tests it, so `LDM A,11 / JNZ encoding` goes through -- and the only writer of dmem[11] besides init is enc_start, so this needs enc_start to have run; (b) something falls through INTO enc_start, and frame_done sits IMMEDIATELY above it with a JMP park, so the adjacency is the thing to look at rather than the label; (c) dmem[13] is 0xFF for a reason that has nothing to do with the encoder at all, and I have been wrong about which instruction writes 0xFF -- which is the kind of assumption this act has now made wrong nine times. THE CHECK I WILL RUN FIRST IS (c), because it is the cheapest and it is the one that would make the other two irrelevant: EVERY store of 0xFF anywhere in the listing, with the instruction that produced it, read off the assembler's output and not off my memory of the source. Then a counter on the two entry points into the encoder, hooked by LABEL, so the answer is which one fired and not a deduction about which one could have.
 2026-09-26 06:52 CDT | fw-timing | TASK-WIP | ACT (c) STEP 4, THE PREAMBLE IS CONSUMED AND THE DECODER IS ARITHMETICALLY RIGHT, AND THE FAULT THAT HAD BEEN HIDING BEHIND TWO OTHERS FOR THREE SESSIONS WAS NOT A PHASE PROBLEM AT ALL. Four faults, and the order they were found in is the order they were layered in. (1) THE ENCODER ENTRY, which was two faults wearing one name: the init comment said dmem[13] was "seeded to 1" and the instruction seeded it to 0 because the LDI A,1 was left out and the preceding LDI A,0 was in scope -- and then, ON THE FIX, A was 1 for the THREE STORES THAT FOLLOW, so dmem[5], dmem[11] and dmem[12] were seeded to 1 instead of 0, and dmem[11] is the MODE BYTE, so main's LDM A,11 / JNZ encoding fired on the first poll and the program jumped into the encoder stub where half_wait sets dmem[13] to 0xFF and spins. That is how "the program reaches the encoder" and "the preamble flag reads 0xFF" turned out to be the same fault, and it is worth recording that EVERY STRUCTURAL CHECK PASSED WHILE IT WAS THERE -- the jump check, the reachability pass and the adjacent-label check all clean, because all three are structural and this is a DATA fault inside a block whose stores inherit a register value set earlier in the same block. So the run of zero stores now carries its OWN LDI A,0, and the one store needing a non-zero value is at the very end of init where it cannot reach anything; both halves, because either alone leaves the other trap armed. (2) *** THE BIT WAS ADDED AT ITS OWN INDEX INSTEAD OF SHIFTED IN *** -- the block computed dmem[12] + dmem[7], adding the bit INDEX rather than the bit AT that index, and the comment called it "a general add of two bytes, whose carry is NOT tested: both are 0 or 1" which is true of the index AND of the bit, and is why it read as correct. THAT IS WHY EVERY BYTE THIS ACT HAS EVER REPORTED HAS BEEN 1c: 0x1c is 0001_1100, and it is what a byte looks like when its bits land at the indices they are. THREE SESSIONS READ 1c 1c out of this program and I read it as a PHASE problem, because the boundary decision was independently known to be exact and a wrong phase was the obvious suspect. IT WAS NEVER A PHASE PROBLEM. A right answer to the wrong question about the arithmetic, arrived at by measuring, which is the best disguise this block has produced. A left shift on this ISA is a DOUBLING -- there is no shift-left opcode and the recipe this act began with asked for a halving, which is a doubling wearing the wrong name -- so the bit now goes in at the low end of a doubled accumulator. (3) THE PREAMBLE ENDED AT BIT SEVEN INSTEAD OF FIFTEEN: the comment described the state as "dmem[9] = 1 with dmem[7] = 7" and the code tested ONE CONJUNCT of it, the second time in this one block that a stated state and an implemented test have differed by a conjunct. MEASURED AND THE DECODER IS NOW RIGHT: 65 changes detected, 39 mids, 25 boundaries, 1 resync, and 39 mids is exactly 16 preamble bits plus 24 payload bits less the one the resync takes. THE EMITTED STREAM, captured one bit per arrival at bit_store, is sixteen 1s then 0 1 0 0 1 0 1 0 | 0 1 1 1 1 0 0 0 | 1 1 0 1 0 0 1, against a frame of 1 0 1 0 0 1 0 1 | 0 0 1 1 1 1 0 0 | 1 0 0 1 0 1 1 0. STILL OPEN AND IT IS ONE BIT: THE PAYLOAD IS EMITTED ONE BIT LATE, so the preamble's first assembled byte is 0xFF where the flag test wants 0x80 and the flag comes out FM1 for an FM0 stream. The cause is the resync and it is not a bug in the resync: THE FIRST TRANSITION OF A TRANSMISSION IS ALWAYS THE START OF A BIT, so dropping it discards the boundary into the preamble's first bit, and under FM0 -- where the preamble's first half differs from the idle line -- that boundary is the only transition that carries bit 0. Under FM1 there is no frame-start transition at all, so FM1 does not lose a bit, and that asymmetry is to be DESIGNED OUT rather than compensated for. NEXT: make the first transition after a resync a BOUNDARY rather than a dropped one, and model BOTH polarities before editing, because FM1's first transition is a mid and the two cases have to be told apart -- and dmem[3] is not set at that point, which is the whole difficulty and the reason this must be modelled rather than reasoned about.
+
+## 2026-09-27 act (c): the phase is fixed BY THE MODEL, and both polarities
+## now give the same three bytes with two different flags
+
+**The model came first, as the handoff asked.** `/tmp/fm_model.py` is written
+from the wire rules and from nothing else in this repository: it builds the
+level sequence for both polarities, lists the transition times and the interval
+sequence, and runs the receiver algorithm. It reproduces the measured fault
+exactly -- 39 emitted bits, sixteen ones, then the frame delayed by one bit,
+for the FM0 stream -- so it is a model of THIS firmware and not of an idea.
+
+**What the model says about the handoff's own claim.** The handoff says that
+under FM1 "there is no frame-start transition and nothing is lost". The model
+says FM1 loses a bit too: its first transition is the MID of bit 0, the old
+algorithm reads that as a boundary, and 31 payload bits come out, exactly as 31
+come out for FM0. The phase error does not disappear under FM1; it moves to the
+other side of the stream.
+
+**The preamble SHAPE can be made polarity-independent, and it is not a
+compensation.** The first transition of a transmission is the only one whose
+class differs between the polarities (a boundary into bit 0 under FM0, the mid
+of bit 0 under FM1), and the resync drops it in both cases. So the receiver
+must not be told which case it is in. The fix is that it stops guessing:
+`dmem[15]` becomes a THREE-state phase (1 = the last transition was a boundary,
+0 = a mid, 2 = UNKNOWN), a one-half gap emits nothing while the state is 2, and
+only a TWO-half gap may emit -- a two-half gap is mid-then-mid whatever came
+before it, so it is the one interval in this encoding that is unambiguous on
+its own. The preamble's eight-zero run guarantees exactly one such gap, and the
+model puts it at t = 34 us of the frame in BOTH polarities. The eight ones
+after it are then received whole, as the preamble's first byte, and their
+LEVEL is the polarity: 0xFF is FM0, 0x00 is FM1. Both polarities lose the same
+eight preamble bits, which is what lets one preamble-end test serve both.
+
+    MEASURED, one frame, two polarities, reset between:
+      pass 0: sent FM0 -> banked a5 3c 96, dmem[3] = 00
+      pass 1: sent FM1 -> banked a5 3c 96, dmem[3] = 01
+
+**The check that passes on the fault it was written to catch.** The old flag
+check was `dmem[3] == 8'h01` with the stimulus at `enc_fm0 = 1`, i.e. it
+demanded FM1 from an FM0 stream -- and the fault was exactly that the firmware
+answered FM1 to an FM0 stream, so the check was green over the act's headline
+claim. It is now `pass_flag[pp] == pp[0]`, tested per pass, and the two passes
+are compared against each other: two different flags and the same three bytes.
+
+**Three more faults, all found by printing, none by reading the diff:**
+
+1. **The bit order had to move to HIGH BIT FIRST, and only the phase being
+   right could show it.** The receiver's shift-in is a doubling with the
+   arriving bit in at the low end, so the first bit to arrive lands in the high
+   position; a low-bit-first frame assembled as `79 4A FF`. Placing the bit at
+   weight 2**count is a variable shift this ISA does not have. The alternative
+   costs a scratch byte shared with the poll loop, so the wire rule was changed
+   instead and written down in three places. Every derived number moved with it
+   (18/14 intervals became 16/15, 9 equal-adjacent pairs became 8), which is
+   this block's most repeated mistake -- a derivation nobody recomputed when its
+   input moved -- and it is in the encoder self-check as a NUMBER so it cannot
+   go stale silently again.
+2. **`JZ`/`JNZ` TEST A, NOT A FLAG.** The first version of the polarity gate
+   tested `dmem[3]` with a `LDM` followed by a bare `JZ`, so the branch saw
+   whatever A held -- the level. MEASURED: the inversion was taken ZERO times
+   out of thirty-two bits, in both polarities, and the jump check, the
+   reachability pass and the adjacent-label check all called it clean. The rule
+   that catches it: THE INSTRUCTION BEFORE EVERY JZ OR JNZ IS A SUB. That is
+   the third fault of this family in this act.
+3. **`dmem[4] IS A MASKED LEVEL, NOT A 0/1.** `the_pin` does
+   `IN A, PIN / AND A, BMC_IN`, so the level stored is 0x20 or 0x00. Every use
+   of that byte was a comparison against BMC_IN, which is blind to the mask,
+   and the first thing that arithmetic'd on it produced `1 - 0x20` and banked
+   `bf 9f df` for a frame of `a5 3c 96`. A level stored masked has to be
+   compared masked, everywhere.
+
+**Still red, and it should be:** the encode direction. The firmware's encoder
+is a ten-word stub whose `half_wait` cannot terminate, and the testbench's
+decoder folds two transitions per bit -- the same flaw this act was written to
+catch. Both are the next step, and both are marked `<<wip>>>` until they are.
