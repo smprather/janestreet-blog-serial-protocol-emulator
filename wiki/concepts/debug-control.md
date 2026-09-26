@@ -132,10 +132,10 @@ while executing, at `pc` while held, and at 0 at the boot stop, so a
 free-running readback reports the **landing** word. A harness that synthesises a
 mid-execution snapshot — pinning `pc` every cycle to hold a genuinely running
 core — **collapses the fetch pipeline**, so the `insn` it reports is the
-collapsed one. At a freeze the chip reports the *latched* pipeline word,
-whatever the fetch presented last, and no RTL change is involved: the
-disagreement is in how the snapshot was synthesised. Treat an `insn` mismatch in
-a synthesised-running vector as a harness artefact until measured otherwise.
+collapsed one. At a freeze the chip reports the *latched* pipeline word and no
+RTL change is involved: the disagreement is in how the snapshot was synthesised.
+Treat an `insn` mismatch in a synthesised-running vector as a harness artefact
+until measured otherwise.
 
 ## Gotcha 5 — DEBUG_BP_CLR reports the PC *at the request*
 
@@ -145,8 +145,8 @@ is documented release semantics, not a stale value — and it was a genuine
 disagreement: the contract's own vector table originally expected `pc=0` in the
 response, and the manager's ruling was to correct the **table**, never truthful
 RTL to match a doc. Related: `bp_flags` bit0 is what distinguishes "disarmed"
-from "armed at address 0"; a breakpoint at 0 is legal and `bp_addr` alone cannot
-tell you.
+from "armed at address 0" — a breakpoint at 0 is legal and `bp_addr` alone
+cannot tell you.
 
 ## Gotcha 6 — an undriven debug input must read as inactive
 
@@ -161,24 +161,28 @@ hardware.
 Not theoretical here: leaving those inputs unconnected in testbenches that
 instantiate `pe_cpu`/`pe_soc` directly took **six acts to their reset** after the
 `5b4731f` merge, and only the full integration suite caught it — no unit TB finds
-a port addition on its own. All 13 TBs now tie them low, with a comment.
+a port addition on its own. The contract recorded 13 TBs tying them low; that
+count is dated — on today's tree 26 testbenches reference `pe_cpu`/`pe_soc` and 21
+tie the debug inputs low. Quote it as the contract's figure, not the current one.
 
 ## Why a host's own model cannot show most of this
 
 A host model reaches a held state by *declaring* `debug_hold: true`; the chip
 reaches it by traffic, and the traffic has to be legal. So gotchas 1 and 2 are
-structurally invisible to a model-driven debugger — the model is right about the
-state and wrong about the path. When the two disagree the chip is the authority,
-and `tb_pe_ctrl_r2` builds its state-2 and state-3 pre-states by **driving the
-debug opcodes on a real `pe_ctrl`**, asserting the registers rather than
-assigning them, so the vectors test a *reachable* state.
+invisible to a model-driven debugger — the model is right about the state and
+wrong about the path. When they disagree the chip is the authority, and
+`tb_pe_ctrl_r2` builds its state-2/3 pre-states by **driving the debug opcodes on
+a real `pe_ctrl`**, asserting rather than assigning the registers, so the vectors
+test a *reachable* state.
 
 ## How this is proved
 
 Golden vectors first (RED against unmodified RTL — every debug op answered
 UNSUPPORTED, 42 failures — then GREEN), then directed cases, then mutation:
 `regress/mutate_ctrl_r3_tb.sh` runs 7 mutants and all 7 are detected, wired into
-`run_all.sh`. Formally, `formal/pe_cpu/formal_pe_cpu.v` proves S1–S4 (one
+`run_all.sh`. **That 7 is a different denominator from the 14** in the formal
+mutant harness (`formal/mutants.sh`, [[concepts/formal-verification]]): 7 is the
+R3 *testbench* suite, 14 the *formal* proof-mutant set. Formally, `formal/pe_cpu/formal_pe_cpu.v` proves S1–S4 (one
 instruction per step, the hold preserves the PC) **unbounded** by temporal
 induction; `formal/pe_ctrl` adds H1 (a hit implies the hold) and H2 (a hit
 implies state 3).
@@ -192,5 +196,4 @@ trusted, and that is the one failure mode the campaign's rules exist to prevent.
 The bring-up trap has both a proof and a mutant (`pe_ctrl_bp_hit_no_hold`) that
 dies without it.
 
-Simulation and mapped pre-layout screening only: **no board has been run, and
-hardware is not claimed.**
+Simulation and mapped pre-layout screening only: **no board has been run.**
