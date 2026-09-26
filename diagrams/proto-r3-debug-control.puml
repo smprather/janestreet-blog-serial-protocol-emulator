@@ -1,0 +1,257 @@
+@startuml
+title R3 debug control - the four-state machine, STOP-BEFORE landing, the opcode flows, and the bring-up trap
+top to bottom direction
+skinparam componentStyle rectangle
+skinparam defaultFontName Monospaced
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam legendBackgroundColor #f8f8f8
+skinparam legendBorderColor #666666
+hide stereotype
+
+skinparam component {
+  BackgroundColor<<free>> #d5e8d4
+  BorderColor<<free>> #82b366
+  FontColor<<free>> #1d4620
+  BackgroundColor<<held>> #ffe6cc
+  BorderColor<<held>> #d79b00
+  FontColor<<held>> #7f4b00
+  BackgroundColor<<hit>> #f8cecc
+  BorderColor<<hit>> #b85450
+  FontColor<<hit>> #7b1c18
+  BackgroundColor<<enc>> #dbe5f1
+  BorderColor<<enc>> #6c8ebf
+  FontColor<<enc>> #1f3864
+  BackgroundColor<<trap>> #e1d5e7
+  BorderColor<<trap>> #9673a6
+  FontColor<<trap>> #4a235a
+}
+
+package "THE STATE ENCODING - one wire, and R2's old 0/1 keep their meaning" {
+  component "dbg_state = dbg_hold_r ? (bp_hit ? 3 : 2)\n                         : (run     ? 1 : 0)\nbp_flags  = {bp_hit, bp_en}\n  bit0 = breakpoint ARMED\n  bit1 = HIT latched" as enc <<enc>>
+
+  component "0  STOPPED\nthe normal boot stop:\nrun=0, no hold,\nPC HELD AT 0" as s0 <<free>>
+
+  component "1  RUNNING\nthe strap is high and\nno debug hold is\nasserted" as s1 <<free>>
+
+  component "2  DEBUG_HOLD\nheld by the debug controls\nwith the PC PRESERVED\n(single-stepping).\nThe core is NOT executing." as s2 <<held>>
+
+  component "3  BP_HIT\nheld by the breakpoint:\nPC preserved,\nthe hit LATCHED" as s3 <<hit>>
+
+  component "bp_addr is the armed address, or 0 when disarmed.\nA BREAKPOINT AT ADDRESS 0 IS LEGAL and is told\napart from 'disarmed' by bp_flags bit0, not by\nthe address - which is the whole reason the flag\nexists." as addr <<enc>>
+
+  enc --> s0
+  enc --> s1
+  enc --> s2
+  enc --> s3
+  s3 --> addr
+}
+
+package "THE MACHINE - every edge is one of the four opcodes, or the strap, or reset" {
+  component "0 STOPPED" as t0 <<free>>
+  component "1 RUNNING" as t1 <<free>>
+  component "2 DEBUG_HOLD" as t2 <<held>>
+  component "3 BP_HIT" as t3 <<hit>>
+
+  component "BP_CLR  -  THE ONLY RELEASE\nreleases the hold AND disarms.\nwith run=1 the core RESUMES (state 1);\nwith run=0 it returns to the normal boot\nstop (state 0, PC re-zeroed at that same\nedge). IDEMPOTENT - safe when disarmed." as tclr <<enc>>
+
+  component "DEBUG_STEP  -  executes EXACTLY ONE\ninstruction, then returns to held.\nFrom 0 or 2. NOT_READY, with NO fault\nand NO side effect, while the core is\nFREE-RUNNING (run=1 and not held)." as tstep <<enc>>
+
+  t0 --> t1 : raise the run strap
+  t1 --> t0 : drop the run strap
+  t0 --> t2 : DEBUG_STEP
+  t2 --> t2 : DEBUG_STEP (the hit clears)
+  t2 --> t3 : DEBUG_STEP that LANDS on the bp
+  t1 --> t3 : a live core's landing PC\nmatches an armed bp_addr
+  t3 --> t2 : DEBUG_STEP that does NOT land
+  t1 --> t1 : BP_CLR
+  t2 --> t1 : BP_CLR, run=1 - RESUMES
+  t3 --> t1 : BP_CLR, run=1 - RESUMES
+  t2 --> t0 : BP_CLR, run=0
+  t3 --> t0 : BP_CLR, run=0
+  tclr -[hidden]down-> tstep
+}
+
+package "STOP-BEFORE - the hit compares the LANDING address, not the current one" {
+  component "THE COMPARISON\nif (bp_en && !dbg_hold_r && (run || dbg_step)\n    && (dbg_next_pc == bp_addr))\n  begin bp_hit <= 1; dbg_hold_r <= 1; end\n\ndbg_next_pc is the combinational next PC - the\naddress the core is ABOUT to execute." as cmp <<enc>>
+
+  component "SO THE CORE IS HELD AT THAT EDGE WITH\nPC == bp_addr, AND THE INSTRUCTION AT bp_addr\nHAS NOT RUN. No io_we, no dmem_we, no a/x/y\neffect of it occurred. That is the stop-before a\ndebugger expects: inspect it, then step THAT\nvery instruction." as sb <<hit>>
+
+  component "AND STOP-BEFORE IS NOT A NO-OP STEP.\nStepping 1 to 2 with the breakpoint armed at 2\nDOES execute the LDI at 1 - a step retires the\ninstruction it stepped FROM, as a step always\ndoes - and leaves the instruction AT 2 untouched.\nIt protects the one the debugger is about to\ninspect, and that is the entire distinction." as sb2 <<held>>
+
+  component "THE PC IS PRESERVED, NOT RE-ZEROED\nUnder a hold the PC keeps its value across\narbitrarily many cycles. Only the boot stop\n(run=0, no hold) re-zeroes it, exactly as R2's\nread arbitration requires." as sb3 <<held>>
+
+  component "THE FETCH FOLLOWS THE SAME THREE MODES\nimem_addr = cpu_exec ? next_pc\n            : dbg_hold ? pc\n            : 0\nso each mode keeps the pipeline invariant R2's\nread arbitration depends on, and insn follows the\nmode rather than being imem[pc] unconditionally." as sb4 <<enc>>
+
+  cmp --> sb
+  sb --> sb2
+  sb2 --> sb3
+  sb3 --> sb4
+}
+
+package "THE FOUR OPCODE FLOWS - TARGET_HOST only; the loopback target answers UNSUPPORTED" {
+  component "0x21 DEBUG_STEP   len 0\n  -> (OK, state, pc_next, bp_addr, bp_flags)\n  5 words.\n  state and bp_flags are the state AFTER the step:\n  a step that lands on the armed address reports\n  state 3 and flags 0x03.\n  bp_flags here is computed POST-step, NOT the\n  pre-edge latch, which would report the hit the\n  step is clearing.\n  On refusal: NOT_READY, state/pc from the live\n  registers, and the PRE-edge bp_flags." as f_step <<held>>
+
+  component "0x22 DEBUG_BP_SET  len 1\n  -> (OK, state, pc, bp_addr, bp_flags)\n  5 words. ONE payload word: the address.\n  address must be < IMEM_WORDS, else RANGE, and\n  then the breakpoint is NOT armed and NOT\n  changed - a rejected op has no side effect.\n  On RANGE the bp_addr and bp_flags words report\n  the UNCHANGED previous values, not the request.\n  On OK: bp_addr is the armed address, flags 0x01.\n  Arming CLEARS A STALE HIT. May arm while running." as f_set <<enc>>
+
+  component "0x23 DEBUG_BP_CLR  len 0\n  -> (OK, state, pc, bp_addr_before, bp_flags)\n  5 words. Disarms, clears the hit, and RELEASES\n  the hold. state is the RELEASED state: 1 with the\n  strap high, 0 with it low. pc is the PC AT THE\n  REQUEST - with run=0 the core re-zeroes at that\n  same edge, so the FOLLOWING read reports 0.\n  This is also how a host resumes a core that a\n  breakpoint stopped." as f_clr <<free>>
+
+  component "0x24 DEBUG_STATUS  len 0\n  -> (OK, state, pc, bp_addr, bp_flags,\n                run, a, x, y, insn)\n  10 words: the common 5-word prefix plus the\n  architectural state, same field meanings and\n  widths as READ_CPU. run is the STRAP level.\n  ANSWERED WHILE RUNNING AND WHILE HELD." as f_stat <<enc>>
+
+  f_step --> f_set : f_set --> f_clr : f_clr --> f_stat
+}
+
+package "THE BRING-UP TRAP - once held, the run strap is ignored BOTH WAYS" {
+  component "THE GATE\ncpu_exec = (dbg_step === 1'b1)\n        || (run && !(dbg_hold === 1'b1))\n\nrun is MASKED BY THE HOLD - in BOTH directions." as g1 <<trap>>
+
+  component "DROPPING run DOES NOT RESUME\nand RAISING run DOES NOT EITHER.\nA host that single-steps, or that stops on a\nbreakpoint, and then 're-asserts run=1 to carry\non' finds the core STILL HELD - with no fault\nand nothing in the response words to explain it." as g2 <<trap>>
+
+  component "dbg_hold_r IS CLEARED AT EXACTLY TWO PLACES\n  1. reset\n  2. the DEBUG_BP_CLR branch\nand SET by a step or by a hit. Nowhere else. So\nthe ONLY resume is DEBUG_BP_CLR - which also\nDISARMS - or a reset.\nThis is a property of the debug design, not a bug." as g3 <<trap>>
+
+  component "THE RESUME RECIPE, if the breakpoint\nis still wanted\n  1. DEBUG_STEP   step off the breakpoint; the\n                  hit clears, the core stays held\n  2. DEBUG_BP_CLR release; with run=1 it resumes\n  3. DEBUG_BP_SET re-arm WHILE IT RUNS\nThe core cannot instantly re-hit: it left bp_addr\nwhen it stepped, and the strap resumes it from the\nstep's landing address. BP_SET while running\nclears any stale hit, so the recipe is IDEMPOTENT.\nA host that does not care about the breakpoint\njust issues DEBUG_BP_CLR once." as g4 <<enc>>
+
+  g1 --> g2
+  g2 --> g3
+  g3 --> g4
+}
+
+package "THE SUBTLETY: BP_SET clears bp_en and bp_hit but NOT dbg_hold_r" {
+  component "DEBUG_BP_CLR clears ALL THREE\nbp_en, bp_hit AND dbg_hold_r" as c1 <<free>>
+
+  component "DEBUG_BP_SET clears only TWO\nbp_en and bp_hit - NOT dbg_hold_r.\nSo arming a core that is ALREADY HELD does\nnot release it, and nothing reports an error." as c2 <<hit>>
+
+  component "WHY THAT MATTERS: the free-running hit\nlatch is gated on !dbg_hold_r, so an armed\nbreakpoint cannot produce a hit on a core that\nis held and therefore not advancing. The core\nsits at state 2 with bp_hit clear, forever." as c3 <<hit>>
+
+  component "BUT DO NOT GENERALISE IT. The STEP path\nis NOT gated on !dbg_hold_r - DEBUG_STEP sets\nbp_hit directly from (bp_en && dbg_next_pc ==\nbp_addr). So ARMING A HELD CORE IS LEGAL, and\nstepping onto the armed address DOES latch\nstate 2 to 3. That is exactly the stop-before\nflow the R2 held-core vectors use." as c4 <<held>>
+
+  component "WHICH IS WHY THE VECTORS OPEN WITH\nDEBUG_BP_CLR. The first v10 prep re-armed a\ncore the v09 step had just left held; the hit\nnever latched and the failure surfaced as a WORD\nMISMATCH INSIDE A GOLDEN RESPONSE - word 5 =\n0002, want 0003 - pointing at the STATUS builder\nwhen the cause was two opcodes earlier. Both preps\nnow open with BP_CLR and ASSERT the release." as c5 <<enc>>
+
+  c1 --> c2
+  c2 --> c3
+  c3 --> c4
+  c4 --> c5
+}
+
+' LAYOUT ONLY, no architecture. The six sections read in order - the encoding,
+' the machine, the landing rule, the opcodes, the trap, the subtlety - but as
+' siblings they lay out as columns and the diagram goes wide. This hidden
+' chain stacks them so each section adds height rather than width, which is
+' the squarer-aspect invariant in diagrams/README.md. Safe to delete.
+addr -[hidden]down-> t0
+tclr -[hidden]down-> cmp
+sb4 -[hidden]down-> f_step
+f_stat -[hidden]down-> g1
+g4 -[hidden]down-> c1
+
+note bottom of enc
+  THE ENCODING IS 2 BITS IN THE LOW HALF of the
+  word and the UPPER 14 ARE ZERO, so a host can
+  read it as a small integer without masking and
+  a swapped 2/3 encoding is still a valid-looking
+  word. That is exactly why it needed a vector:
+  a mutant swapping 2 and 3 still passes the 18
+  shipped R2 steps and fails only the four
+  held-core ones - 18/22, the four held steps and
+  nothing else.
+end note
+
+note bottom of enc
+  bp_flags bit0 is what makes 'disarmed' and
+  'armed at address 0' different states, and it is
+  also the only thing a host can trust after an
+  out-of-range BP_SET, which leaves both the
+  register and the reported flag untouched.
+end note
+
+note bottom of cmp
+  THE FREE-RUNNING LATCH AND THE STEP PATH ARE
+  TWO DIFFERENT PLACES, and collapsing them into
+  one sentence is how a host ends up encoding a
+  half-truth as a rule. The free-running latch
+  (pe_ctrl.v:692) is gated on !dbg_hold_r; the
+  step path (:1067) is not. A guard written from
+  the over-broad reading refuses to arm a held
+  core - which is LEGAL - and its own conformance
+  run is what caught it.
+end note
+
+note bottom of f_step
+  All four debug ops are READY-IMMEDIATE: they
+  are answered from registers in the request's own
+  CRC cycle, exactly like READ_CPU, so they emit
+  ZERO 0xFFFF filler words. The wait-word rule
+  stays what it is for the bounded reads 0x13 and
+  0x14 ONLY. A host must not assume every op can
+  return late.
+
+  NO NEW FAULT CLASS. A malformed frame (bad CRC,
+  bad length, bad header) answers BAD_FRAME and
+  has NO side effect - no step, no arming. A
+  sequencing refusal answers NOT_READY with no
+  fault, exactly like LOAD while running.
+end note
+
+note bottom of g1
+  WRITE THE GATE IN THE === FORM. The plain
+  expression (dbg_step || (run && !dbg_hold))
+  is the PRE-REPAIR form and it is NOT
+  equivalent in simulation: with a debug input
+  floating at x or z, !dbg_hold is x, so the
+  gate goes x and the core freezes. The === 1'b1
+  comparisons make an UNDRIVEN DEBUG INPUT READ
+  AS INACTIVE - the step term false, the hold
+  term inactive - so an unconnected port cannot
+  stop the core. Ground truth: pe_cpu.v:233.
+
+  The convention is enforced WHERE THE INPUT IS
+  CONSUMED, not at every call site, because that
+  is the only place a new call site cannot forget
+  it. In synthesis the two forms are identical (x
+  and z do not exist in hardware), so nothing
+  about the netlist changes.
+
+  This is not a theoretical concern. Leaving the
+  debug inputs undriven in testbenches that
+  instantiate pe_cpu/pe_soc directly took SIX ACTS
+  to their reset after the 5b4731f merge, and the
+  FULL SUITE caught it immediately - no unit TB
+  finds a port addition on its own. The contract recorded 13 TBs tying
+  them low; that count is DATED - on today's tree 26 testbenches
+  reference pe_cpu/pe_soc and 21 of those tie the debug inputs low,
+  because the population has grown. Quote it as the contract's figure,
+  not as the current one.
+end note
+
+note bottom of g2
+  This is invisible from the response words, which
+  is why it is drawn with its own emphasis. It is
+  recorded in the contract precisely because it
+  costs a bring-up board a long time when nobody
+  has written it down - and because a host whose
+  MODEL declares debug_hold: true can never show
+  it: the model reaches the state by fiat, the
+  chip reaches it by traffic.
+end note
+
+note bottom of c5
+  The second finding: BP_SET clears the latched
+  bp_hit, so re-running the pre-state prep before a
+  vector's SECOND step would turn state 3 back
+  into state 2. The prep is therefore emitted once
+  per VECTOR, not once per step - a golden read
+  does not disturb the debug state, so one call per
+  vector is enough. That is why the include is
+  generated from the step table rather than
+  hand-written.
+end note
+
+legend left
+  |= Tone |= Meaning |
+  | <#d5e8d4> | A state or field the strap alone controls |
+  | <#ffe6cc> | A debug hold - PC preserved, core not executing |
+  | <#f8cecc> | The breakpoint, and the traps around it |
+  | <#dbe5f1> | Encoding, opcode shape, or a comparison |
+  | <#e1d5e7> | The bring-up trap - the masked run strap |
+endlegend
+
+@enduml

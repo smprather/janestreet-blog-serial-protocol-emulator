@@ -721,6 +721,23 @@ else
   echo "STALE: wiki/reference/block-diagram.md — run python3 tools/gen/block_diagram.py"
   stale=1
 fi
+# The HAND-WRITTEN wiki pages, against the five rules wiki/SCHEMA.md states and
+# that nothing had ever checked. Every other documentation gate above is a
+# GENERATED-page drift check — it compares wiki/reference/* against tools/gen/* —
+# so a hand-written page could break every rule in the schema and no gate would
+# notice. The known violations are PINNED in wiki/.known-rule-violations.txt, one
+# line each with a reason, and the checker enforces the pin in BOTH directions: a
+# NEW violation is red, and a pinned violation that has been FIXED is also red,
+# because a baseline that silently outlives its defect is a checklist rather than
+# a pin. Its negative control (13 cases, including the stale direction and the
+# fail-closed paths) is regress/test_check_wiki_pages.sh.
+if bash regress/check_wiki_pages.sh > /tmp/check_wiki_pages.log 2>&1; then
+  echo "wiki page rules: OK ($(grep -c . /tmp/check_wiki_pages.log) line(s); see regress/check_wiki_pages.sh)"
+else
+  echo "wiki page rules: FAILED (see /tmp/check_wiki_pages.log)"
+  tail -20 /tmp/check_wiki_pages.log
+  stale=1
+fi
 # The local presentation viewer's fit arithmetic has its own focused check.
 # This uses an embedded SVG fixture and does not consume the project diagrams,
 # which are maintained as PlantUML source in diagrams/.
@@ -801,6 +818,26 @@ else
   echo "run-lock process tree: FAILED"
   cat /tmp/test_run_lock.log
   stale=1
+fi
+
+# The R2 golden package the conformance harness consumes: tb/r2-vectors/ is a
+# DERIVED SNAPSHOT of the host's package (reviews/2026-09-25/r2-hex), and this
+# gate is what stops it quietly becoming a second source of truth. The class
+# died twice on 2026-09-25/26 — the copy sat at 18 steps while the host was at
+# 22, the derived table never named three of its own steps, and the package
+# notice claimed "every golden step passes" while the same file's conformance
+# line said 15/15. Every existing gate compared the .hex BYTES and none looked
+# at the FLAGS. Unlike the R3 gate, manifest.json is NOT excluded here: this
+# snapshot is a byte copy, and the chip's evidence for each confirmation lives
+# in reviews/2026-09-25/R2-HELD-CORE-CHIP-SIDE.md rather than in an edited copy
+# of somebody else's file.
+if "$REPO_ROOT/regress/check_r2_package.sh" > /tmp/check_r2_package.log 2>&1; then
+  echo "R2 golden package: OK ($(tail -1 /tmp/check_r2_package.log))"
+else
+  echo "R2 golden package: FAILED (snapshot drift, or a claim that does not match its own flags)"
+  cat /tmp/check_r2_package.log
+  fail=$((fail+1))
+  failed_names+=("check_r2_package")
 fi
 
 # The R3 golden package the conformance harness consumes, in TWO places: the

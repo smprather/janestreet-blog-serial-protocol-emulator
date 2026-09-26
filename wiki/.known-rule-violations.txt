@@ -1,0 +1,64 @@
+# .known-rule-violations.txt — the PINNED BASELINE for check_wiki_pages.sh
+#
+# WHY THIS FILE EXISTS. wiki/SCHEMA.md states five rules for hand-written pages
+# (frontmatter present, `type` inside the enum, every tag inside the taxonomy,
+# at least two outbound wikilinks, listed in index.md). Until 2026-09-25
+# NOTHING checked any of them: every documentation gate in regress/run_all.sh
+# was a GENERATED-page drift check, comparing wiki/reference/* against
+# tools/gen/*. So a hand-written page could violate all five with no gate
+# noticing. This file is how the gate could be landed at all.
+#
+# THE SHAPE, and why it is this shape rather than "fix the pages first".
+# A gate written today would be RED on 12 violations across 8 pages. Landing a
+# red gate on another worker's suite is not a call a docs task makes, and
+# deleting a rule because the wiki currently breaks it is the wrong cure - the
+# rules are right, the corpus is not. So the violations are PINNED, exactly
+# the way tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt pins a known divergence set,
+# and the checker enforces the pin in BOTH directions:
+#
+#   * a violation NOT listed here            -> NEW    -> RED
+#   * a listed entry that NO LONGER FAILS   -> STALE  -> RED
+#
+# The second half is the half that matters. Without it this file is a ratchet
+# that silently becomes wrong: somebody fixes a page, the entry stays, and the
+# gate still reports the violation it no longer sees - so the log and the tree
+# disagree and nobody can tell which one is true. A baseline that cannot go
+# stale is a checklist; this one has to be able to fail.
+#
+# FORMAT: `<page-relative-to-wiki/> <rule> <reason...>`. Fields 1 and 2 are
+# machine-read; the reason is free text and is never parsed. A blank line or a
+# line starting `#` is a comment. A MALFORMED line is an error, not a skip -
+# fail-closed, because a baseline entry this checker cannot read is an entry
+# that silently stops being enforced.
+#
+# MEASURED 2026-09-25 over 43 hand-written pages. The other rule violations
+# found that day - 23 off-taxonomy tags across 9 pages - were NOT pinned: the
+# manager ruled they were a defect in the taxonomy, and wiki/SCHEMA.md now
+# carries all 23. That is why the taxonomy extension and this file are one
+# change: the rules are enforced, and the thing that was actually wrong got
+# fixed rather than excused.
+#
+# TO CLOSE AN ENTRY: fix the page, then DELETE the line. The checker will
+# refuse to pass with a stale entry, so this is not optional bookkeeping.
+#
+# ---------------------------------------------------------------------------
+# RULE no-frontmatter: the page has no YAML frontmatter block at all.
+# RULE zero-outbound-links: fewer than two DISTINCT [[wikilink]] targets in the
+#   body. (Body = after the frontmatter, so a link inside `sources:` cannot
+#   satisfy it.)
+
+# --- no-frontmatter (4) ------------------------------------------------------
+plans/ethernet-soc.md no-frontmatter written before the schema was formalised; needs frontmatter plus a `updated` date
+plans/i2c-transaction.md no-frontmatter same vintage as ethernet-soc; part of the plans/ corner cleanup, not this gate
+plans/pe-ctrl.md no-frontmatter predates the phase split that gave it R1/R2/R3 content; its content is current, its metadata is not
+reference/simulator-bakeoff.md no-frontmatter a HAND-written reference page, not a generated one; only its frontmatter is missing
+
+# --- zero-outbound-links (8) -------------------------------------------------
+plans/ethernet-soc.md zero-outbound-links zero links of any kind; the plan names its neighbours in prose only
+plans/host-controller-gui.md zero-outbound-links zero links; notable because it is the plan that owns the bus every other plan defers to
+plans/i2c-transaction.md zero-outbound-links zero links; should cross-reference plans/through-i2c
+plans/pe-ctrl-readback.md zero-outbound-links zero links; its decision is recorded in adr-007 and the review, neither linked
+plans/pe-ctrl.md zero-outbound-links zero links; the R1 contract this page owns is cited by four other pages that link to none of them
+plans/serdes-integration.md zero-outbound-links zero links; should cross-reference concepts/factored-hardware-blocks
+plans/spi-pads.md zero-outbound-links zero links; should cross-reference concepts/spi-as-firmware
+reference/simulator-bakeoff.md zero-outbound-links zero links; the measured bakeoff that justifies running iverilog rather than Verilator

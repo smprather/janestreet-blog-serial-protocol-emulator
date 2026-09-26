@@ -1,0 +1,308 @@
+@startuml
+title I2C-advanced — the combined-format transaction engine
+' Sources: firmware/i2c_adv.pe (dmem[10] state chain, send_byte / read_byte),
+'          tb/tb_pe_soc_i2c_adv.v (the independent slave model),
+'          tools/fw/peasm.py (T_LOW/T_HIGH/T_STA/T_STO/T_BUF, SDA/SCL)
+' Program: START 0xA0 A 0x3C A 0x5A A  (repeated START) 0xA1 A  0x11 A 0x22 A 0x33 N  STOP
+skinparam defaultFontName Monospaced
+skinparam state {
+  FontSize 11
+  BackgroundColor<<tx>>   #dce9f8
+  BorderColor<<tx>>       #4a6fa5
+  FontColor<<tx>>         #16324f
+  BackgroundColor<<rx>>   #dceee0
+  BorderColor<<rx>>       #4a8a5c
+  FontColor<<rx>>         #17452a
+  BackgroundColor<<ack>>  #fbe9cf
+  BorderColor<<ack>>      #b8813a
+  FontColor<<ack>>        #5a3d12
+  BackgroundColor<<abort>> #f6d9d9
+  BorderColor<<abort>>    #b05050
+  FontColor<<abort>>      #6a2020
+  BackgroundColor<<box>>  #f2f2f2
+  BorderColor<<box>>      #808080
+  FontColor<<box>>        #303030
+}
+
+state "BUS FSM — dmem[10]\nmain: LDM A,10 then a cumulative SUB A,1 / JZ chain,\ntwo instructions per state" as bus <<box>>
+state "0\ndo_start" as s0
+state "1\nTX 0xA0\nACK -> dmem[1]" as s1 <<tx>>
+state "2\nTX 0x3C\nACK -> dmem[2]" as s2 <<tx>>
+state "3\nTX 0x5A\nACK -> dmem[3]" as s3 <<tx>>
+state "4\ndo_start\n(repeated)" as s4
+state "5\nTX 0xA1\nACK -> dmem[4]" as s5 <<tx>>
+state "6\nread byte 1\n-> dmem[5]" as s6 <<rx>>
+state "7\nread byte 2\n-> dmem[6]" as s7 <<rx>>
+state "8\nread byte 3\n-> dmem[7]\nNACKS it" as s8 <<rx>>
+state "9\ndo_stop" as s9
+state "10\npark" as sp
+
+s0 --> s1
+s1 --> s2
+s2 --> s3
+s3 --> s4
+s4 --> s5
+s5 --> s6
+s6 --> s7
+s7 --> s8
+s8 --> s9
+s9 --> sp
+sp --> sp : JMP park
+bus --> s0
+
+state "send_byte — 8 bits + the ACK slot\nentered from states 1, 2, 3, 5" as txeng <<box>> {
+  state "sb_drive\nSDA set while SCL is low\nout=1 in open drain = RELEASE" as sb_drive <<tx>>
+  state "tLOW wait (7 ticks)" as sb_low <<tx>>
+  state "sb_hi\npoll the PAD until SCL reads high\ndmem[0]++ on every low sample" as sb_hi <<tx>>
+  state "tHIGH wait (6 ticks)" as sb_high <<tx>>
+  state "arbitration\nif a 1 was sent, read SDA back;\nlow = another master won" as sb_arb <<ack>>
+  state "sb_pl\npull SCL low HOLDING SDA" as sb_pl <<tx>>
+  state "sb_ack\nrelease SDA, clock it, sample\n0x00 = ACK, 0x10 = NACK -> dmem[13]" as sb_ack <<ack>>
+  sb_drive --> sb_low
+  sb_low --> sb_hi
+  sb_hi --> sb_high : SCL reads high
+  sb_high --> sb_arb
+  sb_arb --> sb_pl : still bus master
+  sb_pl --> sb_drive : 8 bits done, dmem[8] <<= 1
+  sb_pl --> sb_ack : dmem[10] == 0
+}
+
+state "read_byte — 8 bits + the 9th clock\nentered from states 6, 7, 8" as rxeng <<box>> {
+  state "release SDA\n(the slave drives the line)" as rb_rel <<rx>>
+  state "tLOW wait (7 ticks)" as rb_low <<rx>>
+  state "poll the PAD until SCL reads high\ndmem[0]++ per low sample" as rb_hi <<rx>>
+  state "tHIGH wait (6 ticks)\nsample SDA at the end of the high\nacc = acc*2 + bit  (dmem[11])" as rb_high <<rx>>
+  state "rb_ack\nthe 9th clock: the MASTER drives SDA\nACK = hold SDA low (state 6,7)\nNACK = release SDA (state 8)" as rb_ack <<ack>>
+  rb_rel --> rb_low
+  rb_low --> rb_hi
+  rb_hi --> rb_high : SCL reads high
+  rb_high --> rb_rel : 8 bits done
+  rb_rel --> rb_ack : dmem[10] == 0
+}
+
+state "arb_abort\nrelease BOTH lines, no STOP\n(the winner owns the transaction)\ndmem[15] = 0x55" as arb <<abort>>
+state "do_stop\ntSU;STO 6, poll SCL, release SDA, tBUF 6\nthen dmem[15] = 0xA5 if dmem[1..4] are all 0x00,\notherwise 0x55" as stop <<box>>
+
+[*] --> bus
+s1 --> txeng
+s2 --> txeng
+s3 --> txeng
+s5 --> txeng
+s6 --> rxeng
+s7 --> rxeng
+s8 --> rxeng
+txeng --> s2 : sb_ack_ok -> main
+rxeng --> s7 : state 6,7 -> state+1
+rxeng --> stop : state 8 -> state 9
+s9 --> stop
+txeng --> arb : a transmitted 1 reads back low
+stop --> sp : dmem[15] = 0xA5 / 0x55
+arb --> sp
+note right of rb_ack
+  The pin discipline here is the whole
+  trap of a read burst. The 9th clock is
+  a rising edge, so SDA must HOLD across
+  it: an ACK keeps SDA driven low and
+  releases SCL alone; a NACK releases
+  both. Releasing both for the ACK ends
+  the burst after one byte AND moves SDA
+  under a rising clock.
+end note
+@enduml
+
+@startuml
+title I2C-advanced — one byte is nine cells, and the 9th is not a data bit
+skinparam defaultFontName Monospaced
+' shown: 0xA0, the write address this program sends first
+skinparam ParticipantBackgroundColor #eef3fb
+skinparam ParticipantBorderColor #4a6fa5
+skinparam ParticipantFontColor #16324f
+skinparam SequenceGroupBackgroundColor #fbfbfb
+skinparam SequenceGroupBorderColor #b0b0b0
+skinparam ArrowColor #333333
+
+participant "START" as S #fbe9cf
+participant "b7\n1" as b7
+participant "b6\n0" as b6
+participant "b5\n1" as b5
+participant "b4\n0" as b4
+participant "b3\n0" as b3
+participant "b2\n0" as b2
+participant "b1\n0" as b1
+participant "b0\n0 = W" as b0
+participant "cell 8\nACK" as A #dceee0
+participant "next" as N #f6d9d9
+
+S -> b7 : SCL rises
+b7 -> b6 : rises
+b6 -> b5 : rises
+b5 -> b4 : rises
+b4 -> b3 : rises
+b3 -> b2 : rises
+b2 -> b1 : rises
+b1 -> b0 : rises
+b0 -> A : rises
+A -> N : SCL falls
+note over b7, b0
+  bits 7..1 = the 7-bit slave address, MSB first
+  0xA0 -> 1010 0000 : 0x50 write,  R/W = 0
+  0xA1 -> 1010 0001 : 0x50 read,   R/W = 1
+  0x3C -> 0011 1100   0x5A -> 0101 1010
+  every byte is sent MSB first; the working
+  copy is left-shifted after each bit
+end note
+note over A
+  cell 8: the master has released SDA
+  (open drain, out = 1) and the SLAVE
+  pulls it low to ACK.
+  read back on the rising edge:
+    0x00 = ACK,  0x10 = NACK
+  the sample lands in the dynamic
+  ACK slot named by dmem[13]
+end note
+@enduml
+
+@startuml
+title I2C-advanced — the combined-format transaction, field by field
+skinparam defaultFontName Monospaced
+skinparam ParticipantBackgroundColor #eef3fb
+skinparam ParticipantBorderColor #4a6fa5
+skinparam ParticipantFontColor #16324f
+skinparam ActorBackgroundColor #fbe9cf
+skinparam ActorBorderColor #b8813a
+skinparam ActorFontColor #5a3d12
+skinparam SequenceGroupBackgroundColor #fbfbfb
+skinparam SequenceGroupBorderColor #b0b0b0
+skinparam ArrowColor #333333
+
+actor "master\npe_soc, open drain" as M
+participant "bus\nSDA / SCL" as B
+actor "slave\nTB model, decodes the\nwire and stretches" as S
+
+M -> B : START  (SDA falls while SCL is high)
+activate B
+
+group WRITE PHASE — arbitrary length, which is what makes the repeated START a real test
+  M -> B : cell 0 1010 0000  = 0xA0
+  B -> S : 9 cells
+  alt slave ACKs (SDA pulled low on cell 8)
+    S -> M : ACK  dmem[1] = 0x00
+    M -> B : cell 0 0011 1100  = 0x3C
+    B -> S : 9 cells
+    S -> M : ACK  dmem[2] = 0x00
+    M -> B : cell 0 0101 1010  = 0x5A
+    B -> S : 9 cells
+    S -> M : ACK  dmem[3] = 0x00
+  else slave NACKs (cell 8 reads high)
+    S -> M : NACK  dmem[1] = 0x10
+    M -> S : STOP and park, dmem[15] = 0x55
+  end
+end
+
+M -> B : repeated START  (no STOP in between)
+B -> M : tHD;STA 6 ticks, then tLOW 7 ticks again
+
+group READ PHASE — a burst, so the master must DRIVE SDA again
+  M -> B : cell 0 1010 0001  = 0xA1
+  B -> S : 9 cells
+  alt the read address is ACKed
+    S -> M : ACK  dmem[4] = 0x00
+    M -> S : cell 0 0001 0001  = 0x11   (state 6)
+    M -> B : ACK  — master holds SDA low on cell 8
+    M -> S : cell 0 0010 0010  = 0x22   (state 7)
+    M -> B : ACK  — again SDA low
+    M -> S : cell 0 0011 0011  = 0x33   (state 8)
+    M -> B : NACK — SDA released, the burst ends
+  else the read address is NACKed
+    S -> M : NACK  dmem[4] = 0x10
+    M -> S : no read byte is clocked at all; STOP, dmem[15] = 0x55
+  end
+end
+
+M -> B : STOP  (SDA rises while SCL is high)
+deactivate B
+
+note over M, S
+  THE BURST IS THE POINT. Continuing a read means pulling SDA LOW on the 9th
+  clock of every byte but the last, which is transmitter behaviour inside a
+  receive phase. A master that only ever releases SDA deadlocks here: the
+  slave waits for a byte nobody promises. The TB's slave counts what it
+  served (3) and what the master ACKed (2), and flags an ACK past the end.
+end note
+note over M
+  THE RECIPIENT OF THE 9th CLOCK SWAPS BY PHASE.
+    address / write-data byte : the SLAVE drives cell 8
+    read byte                  : the MASTER drives cell 8
+  Nothing in the RTL knows which protocol is running; the state number is the
+  only thing that decides who owns the ninth clock.
+end note
+@enduml
+
+@startuml
+!pragma teoz
+title I2C-advanced — one data bit cell, timed from the PAD, not from the write
+skinparam defaultFontName Monospaced
+robust "firmware label" as F
+concise "SCL" as SCL
+concise "SDA" as SDA
+concise "who owns the line" as OWN
+concise "the numbers" as NUM
+@0
+F is sb_drive
+SCL is 0
+SDA is 1
+OWN is "master drives SDA"
+NUM is "tLOW 7us (min 4.7)"
+@7
+F is sb_hi
+SCL is 1
+OWN is "slave may own SCL"
+NUM is "poll the pad"
+@13
+F is sb_rel
+SDA is 0
+OWN is "bit 0, master still drives"
+NUM is "tHIGH 6us (min 4.0)"
+@19
+F is sb_pl
+SCL is 0
+OWN is "SCL low, SDA held"
+NUM is "arb read-back"
+@26
+SCL is 0
+@endsync
+@enduml
+
+@startuml
+!pragma teoz
+title I2C-advanced — a stretching slave owns SCL, so tHIGH starts at the REAL rise
+skinparam defaultFontName Monospaced
+robust "firmware label" as F
+concise "SCL line" as SCL
+concise "slave pulls SCL" as PULL
+concise "the numbers" as NUM
+@0
+F is sb_drive
+SCL is 0
+PULL is 0
+NUM is "tLOW 7us (min 4.7)"
+@7
+F is sb_hi
+PULL is 1
+SCL is 0
+NUM is "slave holds SCL: 900 clks = 15.0us"
+@22
+SCL is 1
+NUM is "tHIGH starts HERE, at the real rise"
+@28
+F is sb_rel
+PULL is 0
+NUM is "tHIGH 6us (min 4.0)"
+@34
+F is sb_pl
+SCL is 0
+NUM is "max tLOW measured = 15.016us"
+@40
+SCL is 0
+@endsync
+@enduml
