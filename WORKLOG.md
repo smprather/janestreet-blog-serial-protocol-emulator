@@ -3032,3 +3032,50 @@ one short, a lint rule that the new Python trips, a shell check that the new
 count invalidates. Every one of those is invisible to a per-file run and fatal
 at merge time, and this act's whole subject is that a thing which passes alone
 is not the same claim as a thing which passes in company.
+
+### THE WHOLE GATE FAILED, AND IT FOUND A FAULT THAT WAS MINE
+
+`regress/run_all.sh`, 32 minutes, **exit 1**, three failures. Only one was
+caused by this act's code, and the other two were not close.
+
+| failure | whose |
+| :--- | :--- |
+| `FIRMWARE: 42 PASS 42 FAIL 0` and `TOTAL: 47 PASS 47 FAIL 0` | green — my two new run_cases and every testbench |
+| `delay-lattice numbers: FAILED` — `wiki/concepts/protocol-servo.md: updated: 2026-09-25 but the content last changed 2026-09-26` | **MINE** |
+| `run-lock process tree: FAILED` — `E: a cleanly finished run left its child running` | not mine (`run_lock.sh` last changed 2026-09-25, another block) |
+| `R3 golden package: FAILED` — two READMEs disagree about chip confirmation | not mine (both dated 2026-09-25, R3's own commits) |
+
+**The wiki date is the whole argument for running the gate in company.** A
+one-line front-matter bump to a page, and the gate compares that date against
+when the content last changed — so it needed the edit AND the gate in the same
+tree, and no per-file run could ever have shown it. That is the act's rule
+("read the WHOLE block, not the part that changed") applied to a pipeline, and
+it cost 32 minutes to find a one-line fix.
+
+### AND `git add -A` PUT 584101 LINES OF WAVEFORM INTO A COMMIT ABOUT A WIKI DATE
+
+**Found because the run's own output was checked against my file list.** The
+commit that bumped the wiki date also carried `tb_pe_ctrl_r3.vcd` — 584101
+lines of generated waveform, written to the **repo root** by the run — plus a
+regenerated `formal/results/summary.txt`.
+
+**AND THE .gitignore ALREADY KNEW.** `tb/*.vcd` carries a comment recording
+that this had happened before (`tb/tb_pe_pinmux.vcd`, "a 40 KB binary blob")
+and concluding "**one pattern covers them all**". Then the fix for a later
+root-level leak was `tb_pe_eth_mac.vcd` — **a single named file**. So the
+lesson was learned once, written down correctly, and applied narrowly: a fix
+for the *instance* instead of the *class*, and `tb_pe_ctrl_r3.vcd` walked
+straight through the gap one level down.
+
+**This is the act's own subject, committed.** A generated artifact is not repo
+state; it churns every run, nothing reads it, and a silent pass is what it
+looks like when it is versioned. `formal/results/summary.txt` shows the same
+shape in miniature — its numbers are **not reproducible run to run** (47.52 ->
+46.84 MB, 101.77 -> 102.54 MB peak), so it dirties the tree on every gate run
+and every such run offers it to the next `git add -A`.
+
+Fixed: the VCD is removed and the commit amended so its contents match its
+message, and `.gitignore` now carries **`*.vcd`** — the class, which also
+retires the three named patterns instead of leaving them to rot. **A gate that
+runs is a gate that dirties the tree; what is swept in afterwards is a
+decision, and this time it was made by `git add -A` instead of by me.**
