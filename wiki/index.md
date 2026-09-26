@@ -41,8 +41,8 @@
 - [[reference/crc-config]] — every CRC constant `pe_crc` is loaded with, derived and checked against the RevEng catalogue's published values (generated).
 - [[reference/clock-arithmetic]] — every protocol constant at the LOCKED 60 MHz operating point: what is integer-exact and what is an approximation. `CLK_HZ` is read from the RTL (generated).
 - [[reference/block-diagram]] — RTL block inventory: integrated blocks, standalone orphans, cell counts, and testbenches (generated and drift-checked).
-- `diagrams/project-plan.puml` — planned system topology, including baseline and stretch protocol goals.
-- `diagrams/project-progress.puml` — implementation status by block; colors distinguish integrated, standalone, and open work.
+- `diagrams/project-plan.puml` — planned system topology: host/b board, the SoC, the R2 read path and wait-word contract, the R3 debug-control contract, the protocol and timing acts as firmware, the formal campaign, and the parallel worktree fleet (baseline and stretch protocol goals).
+- `diagrams/project-progress.puml` — implementation status by block; colors distinguish integrated, standalone, and open work. Note that the R3 debug section is deliberately red: the contract is frozen but the RTL is not implemented.
 - [[reference/simulator-bakeoff]] — Icarus vs Verilator, measured (speed, build cost, X)
 
 ## Comparisons
