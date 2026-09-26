@@ -59,11 +59,22 @@ is the authoritative list, not `pe_soc`:
 | `uo_out[0]` | UART TX / SPI SCLK (one persona at a time) |
 | `uo_out[1]` | IRQ_N — host fault, sticky, active low |
 | `uo_out[2]` | 10BASE-T TX+ (reclaims `dbg_pc[0]`; port bit 7) |
-| `uo_out[3]` | 10BASE-T TX− `eth_tx_n` (reclaims `dbg_pc[1]`; [[plans/eth-tx-line-driver]], proposed) |
+| `uo_out[3]` | 10BASE-T TX− `eth_tx_n` (reclaims `dbg_pc[1]`; [[plans/eth-tx-line-driver]]) |
 | `uo_out[7:4]` | `dbg_pc[5:2]` — visible PC for bring-up |
 | `uio[0:1]` | I2C SDA / SCL, open-drain |
 | `uio[2:3]` | SPI MOSI / CS_N, push-pull |
 | `uio[4:7]` | framed host bus: CS_N, MOSI, MISO, SCK |
+
+**A status line elsewhere is stale, and it is not this page's to resolve.** The
+pad map assigns `uo_out[3]` to `eth_tx_n` and the RTL genuinely drives it —
+`rtl/tt_um_protocol_emulator.v` wires the signal, gives it a reset rule, and
+muxes `uo_out[3] = eth_tx_n_en ? eth_tx_n : dbg_pc[1]` — and the line driver
+merged at gate 46/46 (`02fe062`). But `plans/eth-tx-line-driver.md` still reads
+"IMPLEMENTED and COMMITTED … **NOT MERGED**, awaiting the manager to adopt", and
+the wrapper is internally inconsistent: its pad-map line lists `uo_out[3]` as an
+ordinary assignment while its own narrative still calls the change PROPOSED.
+Adoption is a manager's call, so this row states what the RTL does and leaves the
+status line to whoever owns it.
 
 The `run` strap is the one to remember: it is a **pin, not a host-bus
 register**, which is why R2's read path and R3's debug control must treat it
