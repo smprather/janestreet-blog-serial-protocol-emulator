@@ -170,10 +170,15 @@ class TestTheServerDeliversEventsOverTheSocket(unittest.TestCase):
 
     SKIPPED wherever fastapi is absent, which is a pre-existing property of
     this environment rather than of this test: the whole FastAPI surface
-    (create_app, every route, this endpoint) is untested here, and the API
-    tests skip for the same reason. Stated rather than hidden, because the
-    operator's GUI needs that extra installed and nothing in this tree has
-    exercised the server.
+    (create_app, every route, this endpoint) is untested without the extra, and
+    the API tests skip for the same reason.
+
+    The first execution of this test, with the extra installed, FAILED - and it
+    failed because the test never connected the session. `process_events`
+    short-circuits on `self._transport is None`, so the endpoint ticked away
+    faithfully delivering nothing, and the test would have "passed" a delivery
+    path it never exercised. Worth recording: a test that skips everywhere can
+    hide a hole in itself, and the hole was only visible once something ran it.
     """
 
     def setUp(self):
@@ -181,6 +186,11 @@ class TestTheServerDeliversEventsOverTheSocket(unittest.TestCase):
         if client_class is None:
             self.skipTest("fastapi is not installed in this environment")
         self.api, self.session, self.bridge, self.port = make_api()
+        # The session must be CONNECTED: the endpoint drains
+        # `session.process_events()`, which returns [] for a session with no
+        # transport. Without this the socket is genuinely silent and the test
+        # measures nothing.
+        self.api.connect()
         self.client = client_class(SV.create_app(self.api, self.api.config))
 
     def test_a_queued_event_is_delivered_with_the_shape_the_page_reads(self):

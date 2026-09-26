@@ -163,6 +163,15 @@ MICROPYTHON=/path/to/ports/unix/build-standard/micropython \
     tools/host_gui/run_host_tests.sh
 ```
 
+**The API-layer tests need the extra.** The server's route, error-mapping and
+event-stream tests are driven through starlette's `TestClient`, so they only run
+when `.[host-gui]` is installed — including `httpx2`, which that client imports
+and which the extra did not declare until 2026-09-25. Without the extra the
+suite still reports `OK`, with those tests **skipped**: a green run that never
+executed the API layer reads exactly like one that did, so check the skip count
+(2 with the extra, 3 without) rather than the word PASS. Run under
+`PATH="$PWD/.venv/bin:$PATH"` if you keep the extra in a repo-local venv.
+
 A build is a local artifact at an arbitrary path, so the variable is opt-in and
 the default is unchanged. Worth doing explicitly rather than relying on `PATH`:
 a step that only runs when someone happens to have the interpreter installed is

@@ -24,12 +24,29 @@ dependencies = []
 # (protocol, image, transport, session, server logic) run dependency-free; a
 # real serial device needs pyserial and the HTTP/WebSocket server needs
 # fastapi+uvicorn. Install with: pip install .[host-gui]
+#
+# `httpx2` is here because starlette's TestClient imports it, and this
+# repository's own API tests drive the server THROUGH that client. It was
+# missing until the extra was actually installed and run (2026-09-25): the
+# documented flow - install this extra, then run the host gate - failed with
+# "the starlette.testclient module requires the httpx2 package", so three
+# tests errored for a reason that had nothing to do with the code under test.
+# An extra that cannot run the tests it exists to enable is not an extra.
 [project.optional-dependencies]
 host-gui = [
     "fastapi>=0.110",
     "uvicorn>=0.27",
     "pyserial>=3.5",
+    "httpx2>=2.13",
 ]
+
+[tool.pyright]
+# The type checker must see the SAME environment the gate runs in. Without
+# this, every import of the optional server stack reads as missing and each
+# use of those names is reported "possibly unbound" - a wall of diagnostics
+# about a dependency that is installed, in the repo's own venv.
+venvPath = "."
+venv = ".venv"
 
 [tool.setuptools]
 # This distribution ships NO importable package, and saying so explicitly is
