@@ -1006,8 +1006,9 @@ logical step is not "another protocol" but "**a way to make protocols**".
   act, which already has to *receive* a 38 kHz burst and time the gaps — the
   chip already does the hard half of this today. It just does not *report* it.
 - **How it lands here.** The DS18B20 and NEC acts are already receivers
-  (`nec_ir.pe` measures 38,049 Hz off the pin, +0.128%, with half periods
-  measured to 0.05 clocks). The frame buffer is the sink. The read path is the
+  (`nec_ir.pe` measures 38,049 Hz off the pin, +0.128% off the 38 kHz nominal,
+  with the eight bursts' half periods landing in 787.95–794.95 clocks around
+  a nominal 788.95). The frame buffer is the sink. The read path is the
   report. The pin matrix is the tap.
 - **Effort shape.** Firmware-shaped, and it is the cheapest demonstration of
   generality available: a protocol persona that only *listens* is a different
