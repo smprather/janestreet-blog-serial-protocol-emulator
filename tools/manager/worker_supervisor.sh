@@ -142,8 +142,8 @@ while :; do
       rm -f "/tmp/pi-sup-idle-since-${agent}"
       # A worker whose newest line is IDLE-QUEUE-EMPTY cannot be
       # 'silent while working' — stale spinner scrollback is not activity.
-      newest_line=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1)
-      case "$newest_line" in *IDLE-QUEUE-EMPTY*|*QUESTION*|*BLOCKED*) continue;; esac
+      newest_line=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -3)
+      case "$newest_line" in *IDLE-QUEUE-EMPTY*|*standby*|*STANDBY*|*QUESTION*|*BLOCKED*) continue;; esac
       # Marker lifecycle: cleared the moment the worker resumes logging,
       # so a gap can re-alert if it recurs (the 02:44 marker never cleared).
       if [ $((now - newest_epoch)) -lt "$STALL_ALERT_S" ]; then rm -f "/tmp/pi-sup-stall-${agent}"; fi
