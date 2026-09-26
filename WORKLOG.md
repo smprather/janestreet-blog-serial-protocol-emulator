@@ -3850,3 +3850,45 @@ unit path).
 
 **THE 7 THAT REMAIN, by line, for a hand edit: 204, 205, 213, 262, 329, 414,
 552.** Seven lines is a job with an end, which twenty-eight was not.
+
+### `UP031` IS ZERO, AND THE SEVEN WERE A HAND EDIT AFTER ALL
+
+    UP031 (--select UP031):  All checks passed!     (was 28)
+    ruff check (every rule):  All checks passed!
+    model output vs the pre-conversion baseline:  ONE line differs,
+      and it is line 78 -- the dispatched-bytes property's own message, which
+      says it now reads the transmitter's output. That is the intended change
+      and not a regression.
+
+**The last seven were not a converter job and I should have stopped after
+attempt three.** They were seven single-line `print("..." % (args))` statements,
+and the reason a line-span rewrite could not take them is the reason the
+converter kept failing: **the `%`-expression's span is not the statement's
+span**, so replacing it eats the `print(`. My fifth attempt tried splicing by
+character offset instead, and it broke on implicit-concatenation column
+arithmetic -- and its revert restored a **stale backup** that silently undid
+the committed 28 -> 7 work in the working tree, which is why the count came
+back as 28 and I very nearly "restarted" a conversion that was already done.
+
+**That is the same shape as everything else this act has found:** a revert to a
+snapshot that was true when it was taken and not when it was used. **`git
+checkout --` is the only revert that means "the state I verified", and a
+hand-copied backup is a claim about the past.**
+
+Seven hand edits later, with nested quotes done deliberately (the conditional in
+`chk` and the `join` in the mask print live inside double-quoted f-strings, so
+they use singles), plus two redundant-paren cleanups the automated pass left at
+lines 484 and 491.
+
+**AND THE THREE CHECKS HELD ALL THE WAY, which is the only reason this was safe
+to finish:**
+
+| check | what it caught here |
+| :--- | :--- |
+| `UP031` count before/after | a no-op converter (28 -> 28, output identical) |
+| `ast.parse` | a rewrite that left the file unloadable |
+| `diff` of the model's 110 lines | a rewrite that parsed, ran, and **dropped a `print`** |
+| `git checkout --` before starting | a stale-backup revert that undid committed work |
+
+That last row is new, and it is the one that would have cost the most: every
+other check protects the *file*, and that one protects the *starting point*.

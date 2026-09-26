@@ -201,8 +201,8 @@ def emitted(fm0, idem, pre_first=0, pre_ones=8):
     print(
         f"  emitted: {rx.mids:d} mids, {rx.bnds:d} boundaries, {rx.resyncs:d} resyncs, {rx.skipped:d} skipped, {rx.iv2:d} x 2us, {rx.iv4:d} x 4us, {rx.ivx:d} other"
     )
-    print("    preamble bits emitted: %2d  %s" % (len(pre), pre))
-    print("    payload  bits emitted: %2d  %s" % (len(pay), pay))
+    print(f"    preamble bits emitted: {len(pre):2d}  {pre}")
+    print(f"    payload  bits emitted: {len(pay):2d}  {pay}")
     print(
         f"    bytes {rx.d[0]:02x} {rx.d[1]:02x} {rx.d[2]:02x}   flag dmem[3] = {'FM0' if rx.d[3] == 0 else 'FM1' if rx.d[3] == 1 else 'NO LOCK'}"
     )
@@ -210,7 +210,9 @@ def emitted(fm0, idem, pre_first=0, pre_ones=8):
 
 
 frame_bits = "".join(str(b) for b in bits()[16:])
-print("THE FRAME IN ARRIVAL ORDER: %s   (A5 3C 96, high bit first)" % frame_bits)
+print(
+    f"THE FRAME IN ARRIVAL ORDER: {frame_bits}   (A5 3C 96, high bit first)"
+)
 print(
     f"the preamble is {PRE_ZEROS:d} zeros then {PRE_ONES:d} ones; the frame starts at tick {FRAME_START_US:d}"
 )
@@ -259,7 +261,7 @@ eq = sum(1 for i in range(len(f) - 1) if f[i] == f[i + 1])
 print(
     f"  a bit boundary transitions iff two adjacent bits are EQUAL: {eq:d} of the 23 adjacent pairs in the payload are equal"
 )
-print("  (so %d boundary transitions inside the payload, and %d mids)" % (eq, len(f)))
+print(f"  (so {eq:d} boundary transitions inside the payload, and {len(f):d} mids)")
 wa, wb = show(1), show(0)
 print(
     f"  whole stream: {len(wa):d} + {len(wb):d} intervals, {wa.count(2) + wb.count(2):d} x 2us and {wa.count(4) + wb.count(4):d} x 4us"
@@ -326,7 +328,10 @@ def chk(cond, what):
     global fail
     if not cond:
         fail += 1
-    print("  %s  %s" % ("ok  " if cond else "FAIL", what))
+    # THE NESTED QUOTES ARE DELIBERATE: the conditional and the join live
+    # inside a double-quoted f-string, so they use singles. Same reason the
+    # other 20 conversions here do.
+    print(f"  {'ok  ' if cond else 'FAIL'}  {what}")
     return cond
 
 
@@ -411,7 +416,7 @@ for fl in (0, 1):
     fm0 = 0 if fl == 1 else 1
     want = [level(k, fm0) for k in range(TX_HALF_TOTAL)]
     print(" %s" % ("FM0 (dmem[3] = 0)" if fl == 0 else "FM1 (dmem[3] = 1)"))
-    print("    first 8 half-intervals: %s" % "".join(str(x) for x in tx.wire[:8]))
+    print(f"    first 8 half-intervals: {''.join(str(x) for x in tx.wire[:8])}")
     chk(
         tx.wire == want,
         f"the counter-driven transmitter agrees with the wire rules, half-interval for half-interval ({sum((1 for a, b in zip(tx.wire, want) if a == b)):d} of {TX_HALF_TOTAL:d})"
@@ -476,14 +481,14 @@ chk(
     f"and the interval SEQUENCE is the same for the two polarities ({len(iv0):d} intervals) -- DERIVED, not independent: it follows from the complement above for any wire, so it cannot fail on its own; the conclusion is that the return leg's TIMING says nothing about polarity"
 )
 print(
-    f"  a bit boundary transitions iff the two adjacent bits are EQUAL: the return leg's payload has {sum((1 for i in range(23) if bits()[16 + i] == bits()[17 + i])):d} equal-adjacent pairs of 23"
+    f"  a bit boundary transitions iff the two adjacent bits are EQUAL: the return leg's payload has {sum(1 for i in range(23) if bits()[16 + i] == bits()[17 + i]):d} equal-adjacent pairs of 23"
 )
 print()
 print("THE FIVE BYTES THE ENCODER DISPATCHES ON, and the eight masks:")
 for b in range(5):
     byte = Tx(0).byte_at(b * 8)  # byte_at takes a BIT index: b*8 is the first
     print(
-        f"  bit {b * 8:2d}..{b * 8 + 7:2d} -> byte {b // 8:d} = {byte:02x}   masks {' '.join(('%02x' % (128 >> i) for i in range(8)))}"
+        f"  bit {b * 8:2d}..{b * 8 + 7:2d} -> byte {b // 8:d} = {byte:02x}   masks {' '.join('%02x' % (128 >> i) for i in range(8))}"
     )
 #
 # *** AND THIS ONE USED TO BE THE ONLY PROPERTY THAT COULD NOT SEE ITS OWN
@@ -549,6 +554,6 @@ chk(
 
 print()
 if fail:
-    print("MODEL SELF-CHECK: %d PROPERTIES FAILED" % fail)
+    print(f"MODEL SELF-CHECK: {fail:d} PROPERTIES FAILED")
     raise SystemExit(1)
 print("MODEL SELF-CHECK: all properties hold")
