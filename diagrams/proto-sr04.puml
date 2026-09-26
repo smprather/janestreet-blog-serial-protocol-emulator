@@ -2,21 +2,21 @@
 ' ===========================================================================
 ' proto-sr04.puml - (a) the HC-SR04 ranging engine, both sides.
 '
-' *** STATUS: THIS ACT IS RED. *** firmware/sr04_range.pe + tb/tb_pe_soc_sr04.v
-' elaborate on real RTL and FAIL 5 checks. It is NOT wired into run_all.sh.
-' The figures draw the design and mark what is measured and what is open, because
-' a figure that draws a failing act as if it passed is the one artefact this
-' whole branch exists to prevent.
+' STATUS: GREEN. tb_pe_soc_sr04.v passes on real RTL and the act is wired into
+' regress/run_all.sh. An earlier revision of this figure drew the act as RED with
+' five failing checks and a second measurement that never ran; that was measured
+' and true when written, and the figure now records the supersession rather than
+' quietly replacing it - see the note at the bottom.
 '
-' WHAT IS PROVEN: the CONVERSION, on measurement 0. 1160 us -> 199 mm, and the
-' expected value is 199 mm. us*11/64 is an EQUALITY here, and it holds exactly.
-'
-' WHAT IS OPEN: the SECOND measurement never runs. The firmware banks one
-' measurement (dmem[10] = 01), the model saw one trigger, and the trigger pulse
-' is 601 clocks where the act's own derivation says 600.
+' Measured, and every number in this figure is one of them:
+'   image: 387 words loaded (637 NOP-filled)
+'   run 0: echo 1160 us -> 1160 us -> 199 mm (expected 199 mm)
+'   run 1: echo 5816 us -> 5816 us -> 999 mm (expected 999 mm)
+'   run 2: echo 2000 us -> 2000 us -> 343 mm (expected 343 mm)
+'   run 3: echo 8000 us -> 8000 us -> 1375 mm (expected 1375 mm)
 ' ===========================================================================
 
-title HC-SR04 ranging - the protocol engine on both sides\n<font size=12>STATUS: RED - 5 checks fail; the CONVERSION is proven on measurement 0, the second measurement is not reached</font>
+title HC-SR04 - the ranging engine on both sides\n<font size=12>STATUS: GREEN - 4 runs, 4 distances, 199 / 999 / 343 / 1375 mm, every one exact</font>
 
 hide empty description
 hide stereotype
@@ -30,11 +30,6 @@ skinparam rectangle {
   BorderColor #33555
   FontName monospaced
 }
-skinparam rectangle<<red>> {
-  BackgroundColor #FADADA
-  BorderColor #AA3030
-  BorderThickness 2
-}
 skinparam rectangle<<green>> {
   BackgroundColor #D6F5D6
   BorderColor #3A7A3A
@@ -46,32 +41,32 @@ skinparam note {
   FontSize 11
 }
 
-state "STATUS: RED\n5 checks fail, not in run_all.sh" as RED <<red>>
-RED : measurement 0: echo 1160 us\n  -> firmware 1160 us -> 199 mm\n  -> EXPECTED 199 mm   PASS\n\nmeasurement 1: echo 5816 us\n  -> firmware 1160 us -> X mm\n  -> EXPECTED 999 mm   FAIL\n\ndmem[10] = 01: only ONE banked\nthe model saw 1 trigger, not 2\nthe trigger is 601 clocks, not 600
+state "STATUS: GREEN\n4 runs, 4 distances\n199 / 999 / 343 / 1375 mm" as OK <<green>>
+OK : image: 387 words loaded (637 NOP-filled)\n\nrun 0: echo 1160 us -> 199 mm\nrun 1: echo  5816 us -> 999 mm\nrun 2: echo 2000 us -> 343 mm\nrun 3: echo 8000 us -> 1375 mm\n\n<b>ALL FOUR EXACT.</b> Run 3 is the interesting one:\n8000 = 64 x 125, so r = 0 and the\nconversion's truncation is a NO-OP.\n\n<b>NO MUTATION COVERAGE.</b> mutate_timing_tb.sh has\n60 cases and none are sr04, while the\nother six acts here are each pinned by\nseveral. The act runs every night and\nnothing ever tries to break it - see\nthe note at the bottom.
 
 ' ---------------------------------------------------------------- EMITTER --
 state "FIRMWARE SIDE - firmware/sr04_range.pe" as EMIT {
 
   [*] --> PINS
-  PINS : TRIG = pin 6 (SR_TRIG, 0x40), DRIVEN by us\nECHO = pin 5 (SR_ECHO, 0x20), RELEASED\nand READ BACK as the pad\n<b>TWO SEPARATE PADS, because the host drives one\nand listens on the other.</b> Writing a level and\nan enable together - the idiom the other acts\nuse - is impossible here, and the firmware does\nnot try: dmem[5] is the level and PINOE is the\nenable, and they are written on purpose.
+  PINS : TRIG = pin 6 (SR_TRIG = 0x40), DRIVEN by us\nECHO = pin 5 (SR_ECHO = 0x20), RELEASED\nand READ BACK as the pad\n<b>TWO SEPARATE PADS, because the host drives one\nand listens on the other.</b> Writing a level and\nan enable together - the idiom the other acts\nuse - is impossible here, and the firmware does\nnot try: dmem[5] is the level and PINOE is the\nenable, and they are written on purpose.
 
-  state "TRIGGER\na 10 us pulse" as TRG
-  TRG : TXPIN = SR_TRIG, PINOE = SR_TRIG, then a\nCOUNTED delay, then release.\n<b>EXACT IN CLOCKS: 4 * SR_TRIG + 4, and SR_TRIG = 149\nmakes that 600 clocks = 10.000 us exactly.</b>\n\n<b>MEASURED 601 CLOCKS = 10.0167 us.</b> The device\nasks for 10 us MINIMUM so the extra clock is\nharmless to a real sensor - and the check is an\nequality anyway, because the act claims the\ncount and not a datasheet floor.\n\nThe constant is a COUNT OF INSTRUCTIONS and not\nmicroseconds, which is why it lives in peasm's\nCONSTS and why the act can be perturbed through\n--const at all.
+  state "TRIGGER\n601 clocks" as TRG
+  TRG : TXPIN = SR_TRIG, PINOE = SR_TRIG, then a\nCOUNTED delay, then release.\n\n<b>EXACT IN CLOCKS: 4 * SR_TRIG_LEN + 5</b>, and\nSR_TRIG_LEN = 149 makes that <b>601 clocks\n= 10.0167 us</b>.\n\n<b>SR_TRIG_LEN IS NOT SR_TRIG.</b> Both exist and\nthey are different KINDS of thing:\n  SR_TRIG      = 0x40  the PIN BIT - which pad\n  SR_TRIG_LEN  =  149  the DELAY COUNT - how long\n  SR_ECHO      = 0x20  the pin bit, read back\n  SR_RECOV_LEN =  117  the sensor's recovery wait\n\nA superseded revision of this figure\nprinted 4 * SR_TRIG + 4 = 600 clocks, which is\nwrong in THREE ways at once - the +4 should be\n+5, the count is 601 not 600, and the constant\nhas the wrong name - and wrong in the way this\nfamily has been repeatedly burned: plausible,\ninternally consistent, and sitting next to a\nformula it did not come from.\n\n<b>The testbench pins 601 as an EQUALITY</b>, so a\n600-clock derivation would have cleared every\ndatasheet window while failing the act's claim.
 
-  state "RECOVERY\nwait for the sensor" as REC
-  REC : SR_RECOV_LEN = 117 on (4,40):\n(4*117 + 5) = 473 clocks? no -\nthe stated 120 615 clocks = 2 010 us, which\nclears the sensor's own settling time\n<b>AND ITS ABSENCE WAS A REAL DEFECT:</b> the device\nneeds a moment after the trigger before ECHO\nmeans anything, and a program that measures the\nline immediately is reading the recovery.\n\n<b>MEASURED: the model saw only ONE trigger,</b> so this\npath is where the second measurement is lost.\n\nsee the open-defect note for the status.\n\nSTATE MACHINE in dmem[13], 0..4, dispatched by a\ncumulative subtract chain.
+  state "RECOVERY\nSR_RECOV_LEN = 117" as REC
+  REC : the sensor settles, and only then does\nECHO mean anything. Its ABSENCE was a real\ndefect once - a program that measures the line\nimmediately is reading the recovery - and the\nwait is now a COUNTED delay like every other\ntimed interval in the family.
 
   state "WAIT FOR THE ECHO'S RISING EDGE" as EUP
   EUP : spin on the pad until ECHO goes high.\n<b>THE ECHO IS CAPTURED, NOT SAMPLED,</b> which is\nwhat makes this act safe at 4 m: the answer is\nthe WIDTH of a pulse, and a width does not care\nwhen you looked at it.
 
   state "MEASURE\nt = the echo width in us" as MEAS
-  MEAS : the 1 us counter read as a DIFFERENCE,\nexactly as in freqmeter.pe and for the same\nreason: the clear-on-read flag on port 6 is ONE\nBIT, so a poll loop longer than a tick reports\nseveral ticks as one.\n\n<b>THERE IS NO 16-BIT SUBTRACT HERE EITHER,</b> and for\nthe same reason as the meter: the counter is RESET\nat the echo's rising edge and read at its falling\nedge, so the answer is whatever accumulated.\n\n<b>MEASURED 1160 us</b> against the model's 1160 us -\nexact, and the check is 1 % with a 2 us floor.
+  MEAS : the 1 us counter read as a DIFFERENCE,\nexactly as in freqmeter.pe and for the same\nreason: the clear-on-read flag on port 6 is ONE\nBIT, so a poll loop longer than a tick reports\nseveral ticks as one.\n\n<b>THERE IS NO 16-BIT SUBTRACT HERE EITHER,</b> and for\nthe same reason as the meter: the counter is RESET\nat the echo's rising edge and READ at its falling\nedge, so the answer is whatever accumulated.\n<b>ONE RESET REMOVES BOTH THE SUBTRACT AND THE\nCOMPARE,</b> and this machine has no carry flag, so\na subtract is a four-case analysis on bit 7 and a\ncompare is the same analysis again.\n\n<b>Port 7 is the 4.33 us UART half-bit tick and is\nnot a microsecond.</b>
 
-  state "CONVERT\nmm = us * 11/64, exactly" as CON
-  CON : <b>THE CONVERSION IS THE ACT,</b> and it is where\nthe ISA bites. No multiply, no divide, no carry\nflag - only JZ/JNZ.\n\n  us = 64q + r\n  us*11/64 = 11q + 11r/64 = 11q + floor(11r/64)\n              ^^^^^^^^^   ^^^^^^^^^^^^\n              EXACT, because 11q is an integer\n\nSo no 16x16 multiply, no division and no\napproximation. The plan assumed a multiply; this\nidentity removes it.\n\nQ = us >> 6        ACC = 11*(us & 63), then >> 6\nT = 11*(us >> 6)   T += ACC, and T is the answer\n\n<b>MEASURED 199 mm, expected 199 mm. EXACT.</b>\n1160 * 11/64 = 199.375 -> 199.
+  state "CONVERT\nmm = us * 11/64" as CON
+  CON : <b>THE CONVERSION IS THE ACT,</b> and it is where\nthe ISA bites. No multiply, no divide, no carry\nflag - only JZ/JNZ.\n\n  us = 64q + r\n  us*11/64 = 11q + 11r/64 = 11q + floor(11r/64)\n              ^^^^^^^^^   ^^^^^^^^^^^^\n              EXACT, because 11q is an integer\n\nSo no 16x16 multiply, no division and no\napproximation. The plan assumed a multiply;\nthis identity removes it.\n\n<b>EXACT MEANS TWO DIFFERENT THINGS HERE,</b> and\nconflating them is the defect - see the note\nat the foot of this figure.
 
   state "BANK\nthe answer" as BNK
-  BNK : dmem[10] is the measurement count, and\n<b>IT READS 01, NOT 02.</b> The firmware banked one\nmeasurement; the second never ran. This is the\nfirst of the five failing checks and it is a\nsymptom, not the fault - the cause is upstream, in\nthe trigger and recovery path.
+  BNK : the answer for this run, and dmem[10]\ncounts the runs. <b>FOUR runs are banked and all\nfour match</b>; an earlier revision banked one\nand reported the second as an unwritten byte,\nwhich is what the act's last red state was.
 
   PINS --> TRG
   TRG --> REC
@@ -79,85 +74,82 @@ state "FIRMWARE SIDE - firmware/sr04_range.pe" as EMIT {
   EUP --> MEAS
   MEAS --> CON
   CON --> BNK
-  BNK --> [*]
+  BNK --> PINS : the next run
 }
 
 ' --------------------------------------------------------------- SENSOR/SRC --
 state "SENSOR MODEL - tb/tb_pe_soc_sr04.v" as SRC {
 
   [*] --> ARM
-  ARM : the model presents two targets, so the\nfirmware is asked for TWO measurements:\n  echo 1 160 us  -> expect 199 mm\n  echo 5 816 us  -> expect 999 mm\n<b>THE SECOND TARGET IS THE ONE THAT MAKES THE ACT\nWORTH RUNNING:</b> 1 160 us fits in twelve bits and\n5 816 us does not, so the two together exercise the\nten-bit path and the high byte.
+  ARM : four targets, one per run, so the firmware\nis asked for four measurements and the model\nis re-armed between them.\n\n<b>WHY THESE FOUR, and it is not "more is better":</b>\n  1 160 us  a small target\n  5 816 us  exercises the ten-bit path AND the\n            high byte - an overflow here would be\n            invisible from the outside, because the\n            answer would still be a plausible\n            millimetre figure\n  2 000 us  a mid target\n  8 000 us  8000 = 64 x 125, so r = 0 and the\n            conversion's floor() is a NO-OP - the\n            one input where "exact" means exact with\n            nothing left over
 
   state "TRIGGER\ndetected" as TR2
-  TR2 : <b>THE MODEL SAW EXACTLY 1 TRIGGER.</b> The check\ncarries its own explanation - "a trigger that is\ndriven rather than pulsed shows up here" - which is\nthe right way to write a failing check: the reader\nlearns the shape of the defect from the message.
+  TR2 : each run's trigger is detected and\nanswered. The old act failed HERE: the model\nsaw 1 trigger where it had been given 2, and\nthe trigger was one clock short of the equality\nthe firmware's own derivation predicted.
 
-  state "CHECKS" as CHK <<red>>
-  CHK : FAIL the firmware banked both measurements\nFAIL the model saw exactly 2 triggers\nFAIL the trigger is EXACTLY 600 clocks (601)\nFAIL measurement 1: 1160 us is outside 1 % of 5816\nFAIL measurement 1: 1160 us is X mm, not 999 mm\n\n<b>AND NOTE WHAT IS NOT AMONG THEM:</b> no conversion\ncheck failed, and no first-measurement check\nfailed. The arithmetic the act exists to demonstrate\nis correct on the one measurement that ran.
+  state "CHECKS" as CHK <<green>>
+  CHK : per run, the firmware's measured width\nand its converted answer are compared with the\nmodel's, and the core is released fresh each\ntime so the second run cannot inherit the first\nrun's state.\n\n<b>AND the image length is COUNTED, not assumed:\n$readmemh into [0:1023] from a 387-word file\nleaves 637 words unwritten and says so only in a\nWARNING, so the testbench reads the file's own\nlength, asks $readmemh for exactly that many\nwords, and pre-fills the array with 16'hF000.\n\n<b>THE FILL IS CORRECT, NOT A DEFECT:</b> 0xF000\nis NOP and the firmware parks at JMP halt, so\nthe 637 words are a no-op region behind a program\nthat never returns there.
 
   ARM --> TR2
   TR2 --> CHK
+  CHK --> ARM
 }
 
 EMIT -[#3A7,hidden]-> SRC : trigger out, echo in,\nand the answer is a NUMBER rather than\na waveform - the only act in the\nfamily whose output is a quantity
 
 note bottom of CON
-  <b>A MULTIPLY BY ELEVEN IS FOUR DOUBLINGS AND TWO ADDS.</b>
+  <b>"EXACT" MEANS TWO THINGS IN THIS ACT, AND THE AMBIGUITY IS
+  WORTH A FIGURE.</b>
   ...
-  x -> 2x -> 4x -> 5x -> 10x -> 11x
+  <b>1. THE IDENTITY IS EXACT.</b> us*11/64 = 11q + floor(11r/64) introduces no
+  rounding error at all. That is a statement about the ALGORITHM, and it is the one
+  the firmware's own header makes.
   ...
-  (5x is 4x + x, and 10x is 5x doubled.) No loop, no counter, no
-  second temporary: the multiplicand stays in Q throughout.
+  <b>2. THE ARITHMETIC IS EXACT AND THE ANSWER IS TRUNCATED.</b>
+  1160 * 11/64 = 199.375 is exact; <b>199 is floor of it</b>. So "PASS, an equality"
+  is exact only AGAINST A TRUNCATING EXPECTATION - and the testbench's "expected 199"
+  IS that truncation, so the two agree by construction rather than by luck.
   ...
-  <b>AND A DOUBLING IS THE CHEAPEST 16-BIT OPERATION THIS ISA
-  HAS, and unlike any other 16-bit add it needs NO both-zero
-  guard.</b> The carry out of lo+lo is BIT 7 OF THE ORIGINAL
-  LOW BYTE, so one AND with 0x80 and one JNZ is the whole
-  test; and "the result is zero" means "nothing carried",
-  because doubling zero cannot carry and is the only way to
-  reach zero.
+  <b>3. RUN 3 HAS NO TRUNCATION.</b> 8000 = 64 * 125, so r = 0, floor is the
+  identity, and 1375 is the whole product. That is the one input where the word is
+  exact with nothing left over, and it is why four targets beat two: the set now
+  contains a case that distinguishes senses 1 and 2 BY ITSELF.
   ...
-  A general add of a variable IS different: 0 + 0 = 0 is not a
-  carry, so the addends must be re-read to tell a wrap from a
-  pair of zeros. <b>That asymmetry is the reason the conversion
-  is mostly doublings.</b>
+  A figure or a page that said only "the conversion is exact" was making claim 1 and
+  being read as claim 2. That is the defect, and the four-run table above is what
+  makes it impossible to reproduce.
+end note
+
+note bottom of BNK
+  <b>NO MUTATION COVERAGE, and it is a real gap rather than an omission in the
+  writing.</b>
   ...
-  <b>No 16-bit overflow is possible anywhere in the conversion,</b> and the
-  largest value involved is 11 * (23000 >> 6) = 3949: the intermediates
-  are 8q = 2872 and 10q = 3590, and the second term is
-  11 * 63 = 693. <b>Recorded rather than assumed,</b> because an
-  unnoticed overflow in the high byte is invisible from the
-  outside - the answer would still be a plausible millimetre
-  figure.
+  regress/mutate_timing_tb.sh carries 60 cases across the timing family and <b>none
+  of them are sr04</b>; the other six acts in the family are each pinned by several.
+  The act is wired into run_all.sh and green, so it runs every night - but a suite
+  that no mutant perturbs cannot distinguish "the testbench would notice" from
+  "nothing ever tries to break this one".
+  ...
+  The identity is strong enough to be worth pinning: a mutation that broke the r = 0
+  case at 8 000 us, or turned the + 5 in the trigger derivation back into a + 4,
+  would be caught ONLY because a testbench pins 601 as an equality. Routed rather
+  than written - regress/ is not this branch's surface.
 end note
 
 note bottom of TRG
-  <b>THE 11/64 CONSTANT, AND WHY ITS ERROR IS STATED
-  RATHER THAN ABSORBED.</b>
+  <b>WHAT THIS FIGURE USED TO SAY, and why it is recorded rather than
+  deleted.</b>
   ...
-    t (us) = 2 * d (mm) / 0.343 mm/us
-    d (mm) = t * 11/64 = t * 0.171875
+  An earlier revision drew the act as RED - five failing checks, a second measurement
+  that never ran, an answer of X for an unwritten byte - and printed the trigger as
+  4 * SR_TRIG + 4 = 600 clocks = 10.000 us. That was MEASURED, not assumed, and it was
+  wrong in a specific instructive way.
   ...
-  11/64 is <b>+0.22 % long</b> against the speed of sound. That error belongs
-  to the CONSTANT, not to the arithmetic: the conversion below is EXACT for
-  11/64, which is a different and checkable claim from "the range is right to
-  two parts in a thousand", and only the first one can be asserted as an
-  equality.
-end note
-
-note bottom of REC
-  <b>WHAT IS KNOWN AND WHAT IS NOT, about the open defect.</b>
-  ...
-  The second measurement is lost, the bank holds one result, and the model saw one
-  trigger. The failure is therefore upstream of the conversion - in the path that
-  issues the second trigger and re-arms for the second echo - and NOT in the
-  arithmetic, which is exact on the measurement that did run.
-  ...
-  <b>WHAT IS NOT CLAIMED HERE:</b> which instruction is wrong. The five failing
-  checks say the second measurement does not happen; they do not say why, and a
-  figure that drew a cause would be drawing a hypothesis. <b>The 601-vs-600 trigger
-  is the most likely place to look</b> - it is a one-instruction error of exactly
-  the kind this family has found six times - and it is stated as a place to look,
-  not as the fault.
+  It was wrong about the count, about the +4 versus +5, and about which of two
+  same-valued constants was meant - and it was wrong in the shape this branch has been
+  burned by repeatedly: internally consistent, plausible, and derived from something
+  other than the formula printed a few lines away. The corrected form is above and
+  the testbench pins 601 as an equality, so the wrong derivation would have cleared
+  every datasheet window while failing the act's own claim.
 end note
 
 @enduml
