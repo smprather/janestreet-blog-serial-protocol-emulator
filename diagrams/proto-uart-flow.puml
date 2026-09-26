@@ -1,0 +1,306 @@
+@startuml
+title UART RTS/CTS — the handshake as firmware, and the invariant it guarantees
+' Sources: firmware/uart_flow.pe (the poll, the dispatch, the bit loop),
+'          tb/tb_pe_soc_uart_flow.v (the invariant monitor, the 8N1 receiver,
+'          the two cases), tools/fw/peasm.py (UTX/URX/RTS/CTS, TIMER)
+' Pin map, the shared 8-bit port: bit 0 TX (out)  bit 3 RX (in)
+'                                 bit 4 RTS (out) bit 5 CTS (in)
+' Program: payload 0x00 0xFF 0xA5, one RTS frame around each byte
+skinparam defaultFontName Monospaced
+skinparam state {
+  FontSize 11
+  BackgroundColor<<tx>>   #dce9f8
+  BorderColor<<tx>>       #4a6fa5
+  FontColor<<tx>>         #16324f
+  BackgroundColor<<hs>>   #fbe9cf
+  BorderColor<<hs>>       #b8813a
+  FontColor<<hs>>         #5a3d12
+  BackgroundColor<<wait>> #dceee0
+  BorderColor<<wait>>     #4a8a5c
+  FontColor<<wait>>       #17452a
+  BackgroundColor<<box>>  #f2f2f2
+  BorderColor<<box>>      #808080
+  FontColor<<box>>        #303030
+}
+
+[*] --> init
+state "init\nLDI A, UTX / OUT TXPIN\nTX idles HIGH, RTS RELEASED\n(bits 4 and 8..: 8 payloads live\nin dmem[8], dmem[9], dmem[10])" as init
+state "main\nLDM A,2 (bytes sent)\nSUB A,3 / JZ done" as main <<box>>
+state "ASSERT RTS FIRST\nLDI A, RTS|UTX / OUT TXPIN\nthe line is still idle, so nothing\nhas been transmitted yet\ndmem[4] = 0x10" as rts <<hs>>
+state "wait_cts — A POLL, NOT A TIMEOUT\nIN A,PIN / AND A,CTS / JNZ cts_go\nelse dmem[3]++ and saturate at 0xFF:\na real driver bounds this wait and gives\nup on a dead receiver; there is no\nretry policy here" as wait <<wait>>
+state "fetch the payload by DISPATCH\nLDS A,[X] is X-indexed with NO\noffset, so dmem[8+index] is not\naddressable: three compares and\nthree loads, not a table lookup" as fetch <<box>>
+state "tx_start — 2 TIMER ticks\nRTS is re-asserted in the value:\nLDI A, RTS  (the start bit is TX low\nwith RTS still high)" as txs <<tx>>
+state "tx_loop — 8 data bits, LSB first\nAND A,1 / OR A,RTS / OUT TXPIN\nRTS stays high for the WHOLE frame:\ndropping it here would tell the\nreceiver the line is free mid-byte" as txl <<tx>>
+state "tx_stop — 2 more ticks\nLDI A, RTS|UTX\nTX high for the stop bit,\nRTS still asserted" as txp <<tx>>
+state "RELEASE RTS, AND ONLY NOW\nthe last stop bit has been clocked\nout, so the line is ours no longer\nOUT TXPIN with UTX, dmem[4] = 0x00" as rel <<hs>>
+state "count\ndmem[1]++ index, dmem[2]++ sent" as cnt <<box>>
+state "done\ndmem[12] = 0xA5" as done
+state "park" as park
+
+init --> main
+main --> rts : sent < 3
+rts --> wait
+wait --> fetch : CTS is HIGH
+wait --> wait : CTS is LOW, dmem[3]++
+fetch --> txs
+txs --> txl
+txl --> txl : dmem[6]--, 8 bits
+txl --> txp
+txp --> rel
+rel --> cnt
+cnt --> main
+main --> done : sent == 3
+done --> park
+park --> park : JMP park
+
+note right of wait
+  WHY ASSERT BEFORE WAIT. The receiver
+  raises CTS IN RESPONSE to RTS. A driver
+  that waited for CTS before asserting RTS
+  would wait for ever on a receiver that
+  only raises CTS when asked — a deadlock
+  no amount of correct bit-banging fixes,
+  and one a testbench that drives CTS
+  low-then-high can make look like a hang
+  rather than like an ordering mistake.
+end note
+note right of wait
+  THE SATURATION IS NOT COSMETIC. The loop
+  runs one iteration every six clocks, so
+  a receiver holding CTS low for a
+  millisecond wraps an 8-bit counter
+  several times over. Saturating at 0xFF
+  makes dmem[3] a statement about "it
+  waited, and at least this long" instead
+  of a residue — which is what the TB's
+  second case requires.
+end note
+@enduml
+
+@startuml
+title UART RTS/CTS — one byte is ten cells, and the ninth clock is the handshake
+skinparam defaultFontName Monospaced
+skinparam ParticipantBackgroundColor #eef3fb
+skinparam ParticipantBorderColor #4a6fa5
+skinparam ParticipantFontColor #16324f
+skinparam SequenceGroupBackgroundColor #fbfbfb
+skinparam SequenceGroupBorderColor #b0b0b0
+skinparam ArrowColor #333333
+
+actor "receiver" as R #dceee0
+participant "RTS\nbit 4" as RTS #fbe9cf
+participant "CTS\nbit 5" as CTS #fbe9cf
+participant "TX\nbit 0" as TX
+actor "master" as M
+
+R -> RTS : "I am ready to receive"
+M -> RTS : RTS HIGH — asserted BEFORE CTS is read
+R -> CTS : CTS HIGH
+note over RTS, CTS
+  ORDER IS ASSERTED, NOT INFERRED. A driver
+  that waited for CTS first deadlocks against
+  a receiver that only raises CTS in response
+  to RTS, and the TB's second case is exactly
+  what such a receiver looks like.
+end note
+participant "start" as st
+participant "d0" as d0
+participant "d1" as d1
+participant "d2" as d2
+participant "d3" as d3
+participant "d4" as d4
+participant "d5" as d5
+participant "d6" as d6
+participant "d7" as d7
+participant "stop" as sp
+participant "next" as nx
+
+M -> st : TX low
+st -> d0 : one bit = 2 TIMER ticks = 520 clks = 8.667 us
+d0 -> d1
+d1 -> d2
+d2 -> d3
+d3 -> d4
+d4 -> d5
+d5 -> d6
+d6 -> d7
+d7 -> sp
+sp -> nx : RTS released here, and only here
+note over d0, d7
+  LSB FIRST, and the payload is 0x00, 0xFF, 0xA5
+  on purpose. 0x00 is eight zero bits behind a
+  start bit and 0xFF is eight one bits, so a bit
+  period a little long or a little short shows up
+  in one of them and not the other; and 0xA5
+  (1010 0101) is not a bit palindrome, so a
+  transmitter that shifted the wrong way is
+  visible rather than accidentally correct.
+end note
+note over sp
+  10 cells per byte, 2 ticks each.
+  RTS is re-asserted inside every single
+  OUT, so it cannot be dropped by a
+  refactor of the bit loop.
+end note
+@enduml
+
+@startuml
+title UART RTS/CTS — case 1: CTS held low for 400 us, then released
+skinparam defaultFontName Monospaced
+skinparam ParticipantBackgroundColor #eef3fb
+skinparam ParticipantBorderColor #4a6fa5
+skinparam ParticipantFontColor #16324f
+skinparam SequenceGroupBackgroundColor #fbfbfb
+skinparam SequenceGroupBorderColor #b0b0b0
+skinparam ArrowColor #333333
+
+actor "TB receiver\ndrives CTS" as R #dceee0
+participant "CTS" as C #fbe9cf
+participant "RTS" as S #fbe9cf
+participant "TX" as T
+actor "master\npoll loop" as M
+
+R -> C : CTS LOW for 24,000 clocks
+activate M
+M -> C : read CTS, find it LOW
+loop the wait — one iteration every six clocks, dmem[3] saturates at 0xFF
+  M -> C : read CTS again
+  C --> M : still LOW
+end
+R -> C : CTS released
+C --> M : HIGH — the wait exits
+M -> S : first start bit, at or after the CTS rise
+M -> T : 0x00, then 0xFF, then 0xA5
+M -> S : RTS released after the last stop bit
+deactivate M
+note over C, T
+  THE INVARIANT, CHECKED EVERY CLOCK:
+  TX NEVER LEAVES IDLE WHILE CTS IS LOW.
+  Not "the program eventually transmits" —
+  a bare echo satisfies that. Not even "it
+  waits for CTS before its first start bit",
+  which a one-shot test satisfies by
+  accident if the wait sits after the frame.
+  The claim is about EVERY instant CTS is
+  low, and it is the only one of the three a
+  receiver with a full buffer can rely on.
+end note
+note over S
+  RTS MUST BE HIGH FOR EVERY INSTANT TX
+  IS NOT IDLE. TX low means this program is
+  mid-frame, and RTS low at that instant
+  tells the receiver the line is free while
+  we are driving it — the failure a
+  "release RTS when the buffer is empty"
+  implementation makes, and invisible to a
+  check that only compares the first and
+  last edge of the handshake.
+end note
+note over M
+  Measured: CTS released at 417.225 us;
+  the three bytes decode at 499.874,
+  585.853 and 672.517 us, i.e. a frame
+  period of 85.98 and 86.66 us for ten
+  cells. dmem[3] = 255 (saturated), which
+  is the non-vacuity half: a program that
+  never consulted CTS would leave it 0
+  and pass every other check here.
+end note
+@enduml
+
+@startuml
+!pragma teoz
+title UART RTS/CTS — the 400 us wait, to scale; one axis unit is 10 us
+skinparam defaultFontName Monospaced
+concise "CTS" as C
+concise "RTS" as S
+concise "TX" as T
+concise "wire" as W
+concise "nums" as N
+@0
+C is 0
+S is 0
+T is 1
+W is "idle"
+N is "TX idle HIGH"
+@1
+S is 1
+N is "RTS asserted FIRST"
+@42
+N is "the wait spins"
+@43
+C is 1
+N is "CTS rises 417.2 us"
+@44
+W is "byte 0 = 0x00"
+N is "first start bit"
+@52
+W is "byte 1 = 0xFF"
+N is "RTS still high"
+@61
+W is "byte 2 = 0xA5"
+N is "86.66 us per frame"
+@65
+S is 0
+N is "RTS released"
+@70
+W is "idle"
+N is "3 bytes decoded"
+@80
+N is "case 2: no wait ends"
+@90
+N is "the wire never moved"
+@100
+N is "dmem[3] = 255, dmem[2] = 0"
+@endsync
+@enduml
+
+@startuml
+!pragma teoz
+title UART RTS/CTS — one byte of 0xA5, ten cells; one axis unit is one TIMER tick = 260 clks = 4.3333 us, so a byte is 86.67 us
+skinparam defaultFontName Monospaced
+concise "RTS" as S
+concise "TX" as T
+concise "cells" as N
+@0
+S is 1
+T is 0
+N is "start"
+@4
+T is 1
+N is "d0 = 1"
+@8
+T is 0
+N is "d1 = 0"
+@12
+T is 1
+N is "d2 = 1"
+@16
+T is 0
+N is "d3 = 0"
+@20
+T is 0
+N is "d4 = 0"
+@24
+T is 1
+N is "d5 = 1"
+@28
+T is 0
+N is "d6 = 0"
+@32
+T is 1
+N is "d7 = 1"
+@36
+T is 1
+N is "stop"
+@40
+S is 0
+N is "RTS low"
+@48
+N is "10 cells"
+@56
+N is "86.67 us"
+@64
+N is "measured 86.66"
+@endsync
+@enduml
