@@ -153,46 +153,59 @@ end note
 @enduml
 
 @startuml
-title DMX512-A — the START codes, and the one this firmware sends
+title DMX512-A — the three START-code ranges, and the one this firmware sends
 skinparam defaultFontName Monospaced
 skinparam ParticipantBackgroundColor #eef3fb
 skinparam ParticipantBorderColor #4a6fa5
 skinparam ParticipantFontColor #16324f
+skinparam ActorBackgroundColor #fbe9cf
+skinparam ActorBorderColor #b8813a
+skinparam ActorFontColor #5a3d12
 skinparam SequenceGroupBackgroundColor #fbfbfb
 skinparam SequenceGroupBorderColor #b0b0b0
 skinparam ArrowColor #333333
 
-participant "slot 0\nthe START code" as S #fbe9cf
-participant "slot 1" as S1
-participant "slot 2" as S2
-participant "..." as SD
-participant "slot 512\nthe last" as SL
+participant "START code\nslot 0" as S0
+participant "0x00\nall-slot" as R00 #dceee0
+participant "0x01..0x7F\nfirst 1..127 slots" as R01
+participant "0x80..0xFF\nstart address" as R80
+actor "receiver" as RX
 
-S -> S1 : what the 512 slots MEAN
-S1 -> S2
-S2 -> SD
-SD -> SL
+S0 -> RX : slot 0 arrives
+group the all-slot code — the ONLY one this firmware sends
+  S0 -> R00 : 0x00
+  R00 -> RX : every one of the 512 data slots is a\ndimmer or fixture level; no follow-up slot
+end
+group the patch-cable range
+  S0 -> R01 : 0x01 .. 0x7F
+  R01 -> RX : the following slots are patch-cable\npositions: code 0x2A starts at slot 42
+end
+group the start-address range
+  S0 -> R80 : 0x80 .. 0xFF
+  R80 -> RX : the NEXT TWO slots are one big-endian\n16-bit slot number, and the frame starts there
+end
 
-note over S, SL
-  DMX512-A defines three START-code ranges:
-    0x00        the all-slot code: every one of the 512 data
-               slots is a dimmer or fixture level
-    0x01..0x7F  first 1 to 127 slots: the following slots are
-               patch-cable positions
-    0x80..0xFF  start address: the NEXT TWO slots are one
-               big-endian 16-bit slot number, and the frame
-               starts there
-  THIS FIRMWARE SENDS 0x00 AND NOTHING ELSE. The TB's
-  expected-slot function returns 0x00 for slot 0 and
-  (n-1) & 0xFF for every slot after it, so a start code
-  from the other two ranges would be caught on slot 0
-  and on the slot count that follows.
+note over S0, RX
+  DMX512-A defines exactly these three ranges, and the START code is what tells a
+  receiver what the 512 slots MEAN. Sending 512 slots with no START code is the
+  most common way to end up with a working fixture that lights nothing.
+
+  THIS FIRMWARE SENDS 0x00 AND NOTHING ELSE, and it goes out through the SAME
+  transmitter as the data slots — so there is one bit format in the file rather
+  than two, and a START code sent by a different code path is a START code that
+  can disagree with the slots.
+
+  The TB's expected-slot function returns 0x00 for slot 0 and (n-1) & 0xFF for
+  every slot after it, so a START code from either of the other two ranges would
+  be caught on slot 0 and on the slot count that follows.
 end note
-note over S
-  WHY 0x00 IS THE RIGHT CHOICE FOR A FIXTURE: it is
-  the only range that needs no follow-up slot, so the
-  512 payload slots are all payload. A start-address
-  code would spend two of the 513 on the address.
+note over R00
+  WHY 0x00 IS THE RIGHT CHOICE FOR A
+  FIXTURE: it is the only range that
+  needs no follow-up slot, so all 512
+  payload slots are payload. A
+  start-address code would spend two of
+  the 513 on the address.
 end note
 @enduml
 
