@@ -52,8 +52,7 @@ class TestTheHostPinMapMatchesTheChipPinout(unittest.TestCase):
         pads = board.HOST_SPI_PADS
         for signal, (index, phrase) in CHIP_PINOUT.items():
             with self.subTest(signal=signal):
-                self.assertIn(signal, pads,
-                              f"the host map has no {signal}")
+                self.assertIn(signal, pads, f"the host map has no {signal}")
                 self.assertEqual(pads[signal], index)
 
     def test_the_map_is_exactly_the_four_host_bus_signals(self):
@@ -67,8 +66,11 @@ class TestTheHostPinMapMatchesTheChipPinout(unittest.TestCase):
 
     def test_no_two_signals_share_a_pad(self):
         indices = list(board.HOST_SPI_PADS.values())
-        self.assertEqual(len(indices), len(set(indices)),
-                         f"two host signals share a pad: {board.HOST_SPI_PADS}")
+        self.assertEqual(
+            len(indices),
+            len(set(indices)),
+            f"two host signals share a pad: {board.HOST_SPI_PADS}",
+        )
 
     def test_the_copied_rows_still_say_what_they_did_when_read(self):
         """The copy is a claim about another repo, so the claim is checked.
