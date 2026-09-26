@@ -210,9 +210,7 @@ def emitted(fm0, idem, pre_first=0, pre_ones=8):
 
 
 frame_bits = "".join(str(b) for b in bits()[16:])
-print(
-    f"THE FRAME IN ARRIVAL ORDER: {frame_bits}   (A5 3C 96, high bit first)"
-)
+print(f"THE FRAME IN ARRIVAL ORDER: {frame_bits}   (A5 3C 96, high bit first)")
 print(
     f"the preamble is {PRE_ZEROS:d} zeros then {PRE_ONES:d} ones; the frame starts at tick {FRAME_START_US:d}"
 )
@@ -419,15 +417,15 @@ for fl in (0, 1):
     print(f"    first 8 half-intervals: {''.join(str(x) for x in tx.wire[:8])}")
     chk(
         tx.wire == want,
-        f"the counter-driven transmitter agrees with the wire rules, half-interval for half-interval ({sum((1 for a, b in zip(tx.wire, want) if a == b)):d} of {TX_HALF_TOTAL:d})"
+        f"the counter-driven transmitter agrees with the wire rules, half-interval for half-interval ({sum((1 for a, b in zip(tx.wire, want) if a == b)):d} of {TX_HALF_TOTAL:d})",
     )
     chk(
         len(tx.wire) == TX_HALF_TOTAL,
-        f"it drives exactly {TX_HALF_TOTAL:d} half-intervals and stops"
+        f"it drives exactly {TX_HALF_TOTAL:d} half-intervals and stops",
     )
 chk(
     all(WIRES[1][k] == 1 - WIRES[0][k] for k in range(TX_HALF_TOTAL)),
-    f"the two encodings' output streams are the exact COMPLEMENT of one another, all {TX_HALF_TOTAL:d} half-intervals"
+    f"the two encodings' output streams are the exact COMPLEMENT of one another, all {TX_HALF_TOTAL:d} half-intervals",
 )
 chk(
     WIRES[0] == [level(k, 1) for k in range(TX_HALF_TOTAL)],
@@ -478,7 +476,7 @@ chk(
 # ENCODING rather than about the complement, and nothing above asks it.
 chk(
     iv0 == iv1,
-    f"and the interval SEQUENCE is the same for the two polarities ({len(iv0):d} intervals) -- DERIVED, not independent: it follows from the complement above for any wire, so it cannot fail on its own; the conclusion is that the return leg's TIMING says nothing about polarity"
+    f"and the interval SEQUENCE is the same for the two polarities ({len(iv0):d} intervals) -- DERIVED, not independent: it follows from the complement above for any wire, so it cannot fail on its own; the conclusion is that the return leg's TIMING says nothing about polarity",
 )
 print(
     f"  a bit boundary transitions iff the two adjacent bits are EQUAL: the return leg's payload has {sum(1 for i in range(23) if bits()[16 + i] == bits()[17 + i]):d} equal-adjacent pairs of 23"
@@ -525,7 +523,7 @@ for fl in (0, 1):
         ok = (rx.d[0], rx.d[1], rx.d[2], rx.d[3]) == (FRAME[0], FRAME[1], FRAME[2], fl)
         chk(
             ok,
-            f"flag {fl:d} at t={off:2d} us: banked {rx.d[0]:02x} {rx.d[1]:02x} {rx.d[2]:02x}, dmem[3] = {rx.d[3]:d}"
+            f"flag {fl:d} at t={off:2d} us: banked {rx.d[0]:02x} {rx.d[1]:02x} {rx.d[2]:02x}, dmem[3] = {rx.d[3]:d}",
         )
 print()
 print("  AND THE IDLE LEVEL IS NOT A DETAIL, which is why it is a parameter")
@@ -538,7 +536,7 @@ for fl in (0, 1):
     rx = rx_on(WIRES[fl], 20, IDLE, 20 + 2 * HALF_US * TX_HALF_TOTAL + 8)
     chk(
         (rx.d[0], rx.d[1], rx.d[2], rx.d[3]) == (FRAME[0], FRAME[1], FRAME[2], fl),
-        f"  the same, with the return leg idling HIGH: banked {rx.d[0]:02x} {rx.d[1]:02x} {rx.d[2]:02x}, dmem[3] = {rx.d[3]:d}"
+        f"  the same, with the return leg idling HIGH: banked {rx.d[0]:02x} {rx.d[1]:02x} {rx.d[2]:02x}, dmem[3] = {rx.d[3]:d}",
     )
 
 print()
