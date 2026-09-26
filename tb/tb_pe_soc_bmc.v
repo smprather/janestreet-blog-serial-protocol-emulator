@@ -456,92 +456,168 @@ module tb_pe_soc_bmc;
       $display("encoder self-check: %0d propert(y|ies) FAILED", enc_fail);
   end
 
-  // ---- THE TESTBENCH'S DECODER, also from the wire rules ---------------
-  // It timestamps the level and compares with the level at the last CHANGE,
-  // which is what recovers the clock; it is NOT told the period it is
-  // expected to see, because a receiver that is told its own bit rate is not
-  // recovering anything.
-  integer  dec_t = 0;                 // the last change, in microseconds
-  logic   dec_lev = 1'b1;
-  integer  dec_bit = 0, dec_idx = 0, dec_flag = -1;
-  integer  dec_bits = 0;
+  // ---- THE TESTBENCH'S DECODER, ALSO FROM THE WIRE RULES -----------------
+  // It timestamps the level and compares it with the level recorded at the
+  // last CHANGE, which is what recovers the clock; it is NOT told the period
+  // it is expected to see, because a receiver that is told its own bit rate is
+  // not recovering anything.
+  //
+  // *** AND IT IS THE FIRM'S RECEIVER AGAIN, NOT THE PREDECESSOR'S. *** The
+  // version this replaces counted TRANSITIONS per bit: `fold_half` went round
+  // twice and called a bit, and the bit's value came from whether the line was
+  // low when the pair finished. That is the fold this act exists to catch --
+  // the number of transitions in a bit depends on the DATA and the ENCODING
+  // (a '0' gives one mid, an FM1 '1' gives one at the boundary, an FM0 '1'
+  // gives none at all), so a receiver that counts them is reading the data and
+  // calling it the clock. The two agreed with each other and were wrong
+  // together, which is why this file has two decoders written from the rules
+  // and not one decoder and one encoder.
+  //
+  // WHAT REPLACED IT, from the three rules and nothing else:
+  //   * a bit is TWO half-intervals, so a transition is one or two of them;
+  //   * the DATA is the level of the FIRST half, and the mid is the edge that
+  //     ENDS it, so the data is the level on the OTHER side of the mid;
+  //   * a bit boundary carries a transition iff two adjacent bits are EQUAL,
+  //     which is the only reason a one-half gap is ambiguous and a two-half
+  //     gap is not.
+  // And the three-state phase, which is the part the firmware's receiver has
+  // and this one had not: after a resync the phase is UNKNOWN, a one-half gap
+  // says nothing while it is unknown, and only a TWO-half gap -- mid then mid,
+  // whatever came before it -- may emit.
+  integer  dec_clk = 0;              // clocks, and the microseconds are DERIVED
+  integer  dec_t = 0;                // the clock of the last CHANGE
+  logic    dec_lev = 1'b0;           // the level at the last CHANGE
+  integer  dec_gap = 0, dec_us = 0;  // the interval just measured, in both
+  integer  dec_phase = 2;            // 0 = the last change was a mid,
+                                     // 1 = a boundary, 2 = UNKNOWN
+  logic    dec_pre = 1'b1;            // the preamble is still being consumed
+  integer  dec_bit = 0, dec_idx = 0, dec_flag = -1, dec_bits = 0;
+  logic [7:0] dec_acc = 8'h00;        // the byte under construction
   logic [7:0] dec_byte [0:2];
   integer  dec_have = 0;
+  integer  dec_mids = 0, dec_bnds = 0, dec_resync = 0, dec_skips = 0;
+  integer  dec_iv2 = 0, dec_iv4 = 0, dec_ivx = 0;
 
   task automatic dec_reset;
     begin
-      dec_t = 0; dec_lev = 1'b1; dec_bit = 0; dec_idx = 0; dec_flag = -1;
-      dec_bits = 0; dec_have = 0;
+      dec_t = 0; dec_lev = 1'b0; dec_bit = 0; dec_idx = 0; dec_flag = -1;
+      dec_bits = 0; dec_have = 0; dec_pre = 1'b1; dec_phase = 2; dec_acc = 0;
+      dec_clk = 0; dec_gap = 0; dec_us = 0;
+      dec_mids = 0; dec_bnds = 0; dec_resync = 0; dec_skips = 0;
+      dec_iv2 = 0; dec_iv4 = 0; dec_ivx = 0;
       for (int k = 0; k < 3; k++) dec_byte[k] = 8'h00;
     end
   endtask
 
-  // The decoder is FED BY THE PAD and by a microsecond counter, and by
-  // nothing else. In particular it is not told the half-interval it should
-  // expect: a receiver that is told its own bit rate is not recovering
-  // anything, and the whole claim of this act is that the clock comes out of
-  // the data. What it does know is that a change of level is a TRANSITION, and
-  // how long ago it happened -- so the bit period it measures is the interval
-  // between transitions, which for this encoding is one or two half-intervals
-  // depending on the data, and that ambiguity is exactly what the encoding
-  // flag has to resolve.
-  integer  rx_us = 0;                  // CLOCKS since the frame started. The
-  integer  dec_gap = 0;                // name says us and the value is not:
-                                       // this block fires on posedge clk, so it
-                                       // counts clocks, while the firmware
-                                       // timestamps on a 1 us tick. Renaming
-                                       // it rx_clk is on the list for the same
-                                       // reason HALF_CLOCKS exists -- a wrong
-                                       // name is how the stimulus came to run
-                                       // sixty times too fast.
-  integer  dec_prev_gap = 0;
-  logic   dec_started = 0;
+  // THE DECODER IS FED BY THE PAD and by a clock, and by nothing else. In
+  // particular it is not told the half-interval it should expect.
+  //
+  // AND IT WORKS IN MICROSECONDS, DERIVED FROM THE CLOCK COUNT, which is the
+  // receiver's own timebase and the firmware's too: I2CTICK counts whole
+  // microseconds, so a 121-clock interval is 2 us to both of them. The
+  // predecessor compared in whatever its counter happened to be counting, and
+  // the HALF_US constant at the top of this file was a figure in the wrong
+  // domain for six hours -- a constant asserted in one place and consumed in
+  // another, which is this block's recurring defect and the reason the
+  // division here is `dec_gap / 60` and 60 is written beside it.
+  localparam int CLOCKS_PER_US = 60;   // 60 MHz, and the tick the core counts
 
   always @(posedge clk) if (rst_n) begin
-    rx_us <= rx_us + 1;
-    // A CHANGE of level is a transition, and the interval since the last one
-    // is the length of the run that just ended. Every interval is an even
-    // number of half-intervals, so the interval in half-intervals is
-    // gap / HALF_CLOCKS -- and the ODD case cannot happen in a valid frame,
-    // is what makes "an interval that is not a whole number of half-intervals"
-    // a decodable-frame failure rather than a bit value.
+    dec_clk <= dec_clk + 1;
     if (out_line !== dec_lev) begin
-      dec_gap = rx_us - dec_t;
-      dec_prev_gap = dec_gap;
+      dec_gap = dec_clk - dec_t;
+      dec_us  = dec_gap / CLOCKS_PER_US;
+      dec_t   = dec_clk;
       dec_lev = out_line;
-      dec_t = rx_us;
-      dec_started = 1;
-    end
-  end
-
-  // Fold the measured intervals into bits, once per BIT rather than once per
-  // transition: in this encoding a bit is two half-intervals, so a bit ends
-  // every two half-intervals and a data transition inside a bit is what tells
-  // FM0 from FM1.
-  integer fold_half = 0;
-  always @(posedge clk) if (rst_n && dec_started && dec_gap > 0) begin
-    dec_gap = 0;
-    fold_half = fold_half + 1;
-    if (fold_half == 2) begin
-      fold_half = 0;
-      if (dec_bit < NBITS) begin
-        // A '0' has a transition at the END of its interval, so a transition
-        // arriving on the SECOND half-interval boundary is a zero; a '1' has
-        // none, and its boundary is silent. The ENCODING is read off the
-        // START: FM0 transitions at the start of a one, FM1 does not.
-        if (out_line === 1'b0) begin
-          dec_byte[dec_idx] = dec_byte[dec_idx] & ~(8'h01 << dec_bit);
-          dec_flag = 1;                    // the boundary was a data edge
+      if (dec_us == 4) begin
+        // A TWO-HALF GAP IS MID THEN MID WHATEVER CAME BEFORE IT: the one
+        // interval in this encoding that means the same thing on its own, and
+        // the lock. The preamble's run of eight identical bits guarantees
+        // exactly one of them, at the same offset in both encodings.
+        dec_iv4 = dec_iv4 + 1;
+        dec_phase = 0;
+        dec_mids = dec_mids + 1;
+        // THE DATA IS THE LEVEL OF THE FIRST HALF, and the mid is the edge
+        // that ends it, so the data is the level on the OTHER side of this
+        // one: the complement of what the line is now.
+        if (dec_pre) begin
+          // the preamble is banked as LEVELS, which is the whole point of it:
+          // eight ones as levels is FM0 and eight zeros is FM1, and a byte
+          // that is neither did not come from this preamble
+          dec_acc = {dec_acc[6:0], ~out_line};
         end else begin
-          dec_byte[dec_idx] = dec_byte[dec_idx] | (8'h01 << dec_bit);
-        end
-        dec_bit = dec_bit + 1;
-        if (dec_bit == 8) begin
-          dec_bit = 0;
-          dec_idx = dec_idx + 1;
-          if (dec_idx == 3) dec_have = 1;
+          dec_acc = {dec_acc[6:0], (dec_flag == 1) ? ~out_line : out_line};
         end
         dec_bits = dec_bits + 1;
+        dec_bit  = dec_bit + 1;
+        if (dec_bit == 8) begin
+          dec_bit = 0;
+          if (dec_pre) begin
+            if (dec_acc == 8'hFF)      dec_flag = 0;   // a one is HIGH: FM0
+            else if (dec_acc == 8'h00) dec_flag = 1;   // a one is LOW:  FM1
+            else                       dec_flag = -1;  // DECLARED: I locked
+            dec_pre = 1'b0;                          // onto something that
+            dec_acc = 8'h00;                         // is not this preamble
+          end else begin
+            // THE PAYLOAD'S FIRST BYTE LANDS IN SLOT 0. The preamble is ONE
+            // received byte, so it does not consume a slot, and an earlier
+            // version of this decoder advanced the index anyway -- which is
+            // what put the third payload byte ON TOP OF the flag in the
+            // firmware, and would here have shifted all three by one.
+            if (dec_idx < 3) dec_byte[dec_idx] = dec_acc;
+            dec_acc = 8'h00;
+            if (dec_idx < 3) dec_idx = dec_idx + 1;
+            if (dec_idx == 3) dec_have = 1;
+          end
+        end
+      end else if (dec_us != 2) begin
+        // THE CLOCK IS LOST: neither one nor two half-intervals. The phase
+        // goes to UNKNOWN and NOT to "was a mid", because a mid is a claim
+        // about a transition this receiver never measured, and asserting it
+        // is what put the stream a half-interval out of phase.
+        dec_ivx   = dec_ivx + 1;
+        dec_phase = 2;
+        dec_resync = dec_resync + 1;
+      end else begin
+        dec_iv2 = dec_iv2 + 1;
+        if (dec_phase == 1) begin
+          // the previous change was a BOUNDARY, and a boundary is followed by
+          // its own mid
+          dec_phase = 0;
+          dec_mids  = dec_mids + 1;
+          if (dec_pre) dec_acc = {dec_acc[6:0], ~out_line};
+          else         dec_acc = {dec_acc[6:0], (dec_flag == 1) ? ~out_line : out_line};
+          dec_bits = dec_bits + 1;
+          dec_bit  = dec_bit + 1;
+          if (dec_bit == 8) begin
+            dec_bit = 0;
+            if (dec_pre) begin
+              if (dec_acc == 8'hFF)      dec_flag = 0;
+              else if (dec_acc == 8'h00) dec_flag = 1;
+              else                       dec_flag = -1;
+              dec_pre = 1'b0;
+              dec_acc = 8'h00;
+            end else begin
+              if (dec_idx < 3) dec_byte[dec_idx] = dec_acc;
+              dec_acc = 8'h00;
+              if (dec_idx < 3) dec_idx = dec_idx + 1;
+              if (dec_idx == 3) dec_have = 1;
+            end
+          end
+        end else if (dec_phase == 0) begin
+          // the previous change was a MID, so this one is a boundary -- and a
+          // boundary carries the same data as the mid that follows it, so it
+          // EMITS NOTHING. Emitting on both paths is what banked three bytes
+          // out of 31 bits in the firmware and read 1c 1c for 3c 96.
+          dec_phase = 1;
+          dec_bnds  = dec_bnds + 1;
+        end else begin
+          // THE PHASE IS UNKNOWN, and a one-half gap says NOTHING here: it is
+          // a mid if the lost transition was a boundary and a boundary if it
+          // was a mid. So nothing is emitted, and the wait for a two-half gap
+          // is the lock.
+          dec_skips = dec_skips + 1;
+        end
       end
     end
   end

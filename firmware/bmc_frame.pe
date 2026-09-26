@@ -12,12 +12,27 @@
 ;   * therefore h1 == ~h0 in every case, and a bit BOUNDARY carries a
 ;     transition IFF two ADJACENT BITS ARE EQUAL.
 ;
-; THE BIT ORDER ON THE WIRE, and it is high bit first. The reason is this ISA
-; and nothing else: the shift-in below is a DOUBLING with the new bit in at
-; the LOW end, so the first bit to arrive ends up in the HIGH position, and
-; placing an arriving bit at weight 2**count is a variable shift this machine
-; does not have. It is written down here, in the testbench's encoder and in
-; its decoder, because a wire rule lives in three places or it lives in none.
+; THE BIT ORDER ON THE WIRE, and it is high bit first. It was adopted
+; because this ISA's receiver could not cheaply do the other thing -- not
+; because the protocol prefers it. The RECEIVER's shift-in below is a
+; DOUBLING with the new bit in at the LOW end, so the first bit to arrive
+; ends up in the HIGH position, and placing an arriving bit at weight
+; 2**count is a variable shift this machine does not have. It is written
+; down here, in the testbench's encoder and in its decoder, because a wire
+; rule lives in three places or it lives in none.
+;
+; *** AND THE REASON ABOVE IS NOW HALF OF A STALE FIGURE, AND IT IS THE MOST
+; EXPENSIVE KIND THIS ACT HAS FOUND. *** There is a variable shift now: SHR
+; (opcode 0xA, one bit, no operand, DISCARDING the bit it shifts out) peels a
+; byte from the TOP, so an ENCODER can take bit 7 first exactly as cheaply as
+; bit 0 first -- LDM X,12 / LDI A,0x80 / AND A,X to test, LDM A,12 / SHR to
+; peel. The three comments that said this machine has no shift-RIGHT were
+; wrong: this header, the NO DIVISION block below, and the previous handoff,
+; which is what carried the error into a design. A wrong NUMBER in a second
+; place goes stale quietly; a wrong claim about the MACHINE produces an act
+; that cannot be built, or a reader who designs around a limitation that is
+; not there. There is still NO shift-LEFT, which is why the receiver's
+; shift-in is a doubling and why everything measured about it stands.
 ;
 ; THE PREAMBLE IS EIGHT ZEROS THEN EIGHT ONES, AND WHY IT IS THAT SHAPE, which
 ; is the answer to the fault this act was red for. A bi-phase stream carries no
@@ -93,22 +108,46 @@
 ; THE ENCODER'S HALF-INTERVAL IS COUNTED, NOT WAITED ON: 120 clocks = 2 us,
 ; because the receiver timestamps in whole microseconds and a period that is
 ; not a whole number of them would make this act's own arithmetic the least
-; accurate thing in it.
+; accurate thing in it. IT IS THREE COUNTED LOOPS rather than one, and the
+; reason is in the listing at each: the two OUT TXPIN writes bracket a
+; half-interval, so every instruction between two of them is timing, and the
+; three routes out of the encoder's tail are not the same length. Read the
+; constants with the addresses beside them, never from this paragraph.
+;
+; THE ENCODER IS ENTERED FROM frame_done AND FROM NOWHERE ELSE, and its state
+; is TWO bytes, which is the whole reason it is shaped the way it is. dmem is
+; not cleared by a reset, so a byte the encoder reads has to belong to the
+; encoder alone; dmem[6] and dmem[11] are the two that belong to nothing
+; else, and there is no third. So the byte being sent is not held BESIDE a
+; mask or a bit index: it is held with its current bit already at bit 7, and
+; SHR peels one bit per bit, so "which bit is this" is not a question the
+; program has to answer or a byte it has to spend.
 ;
 ; MEMORY, and it is the whole sixteen bytes:
 ;     0,1,2  the three bytes recovered from the input pad
 ;     3      the encoding flag: 0 = FM0, 1 = FM1, 0xFF = no transitions
 ;     4      the level at the last CHANGE (the bounce)
 ;     5      the microsecond timestamp of the last change
-;     6      the byte this program encodes onto the output pad
+;     6      THE ENCODER'S HALF-INTERVAL COUNTER, 0..79. It was the byte
+;            this program encoded, which the loopback does not need: the
+;            bytes it sends are the three it received.
 ;     7      the bit counter
 ;     8      the INTERVAL between the last two transitions, in microseconds.
 ;            It is 2 or 4 and nothing else -- measured, not assumed: the
 ;            write-hook counts 18 twos and 13 fours over one frame and no six.
 ;     9      the byte index being assembled
 ;    10      the previous 1 us reading, for the elapsed difference
-;    11      what the program is doing: 0 = decode, 1 = encode
-;    12,13   the bit under construction, and then the byte being shifted out
+;    11      THE ENCODER'S BYTE BEING SENT, with the bit now going at bit 7.
+;            It was the mode byte (0 = decode, 1 = encode), which the poll
+;            loop's dispatch used and LOOPBACK deletes: an encoder entered
+;            from the poll loop is re-entered by the next poll and restarts
+;            the transmission in the middle of it.
+;    12      the bit under construction
+;    13      "the preamble is still running" -- THE DECODER'S, and it is now
+;            the decoder's ALONE. The dead encoder stub counted half-
+;            intervals here, which is a scratch shared between a routine and
+;            its caller, which is how the DS18B20 act lost a byte counter to
+;            a delay routine.
 ;    14      scratch for the elapsed time
 ;    15      THE PHASE, in THREE states and not two: 1 = the last transition was
 ;            a bit boundary, 0 = it was a mid, 2 = UNKNOWN, which is what a
@@ -170,15 +209,23 @@ init:
         ; The first version seeded it HERE, in the middle of the run of zero
         ; stores, and the seeding needs an `LDI A, 1`. That left A = 1 for the
         ; THREE STORES THAT FOLLOW, so dmem[5], dmem[11] and dmem[12] were all
-        ; seeded to 1 instead of 0 -- and dmem[11] is the MODE BYTE, so main's
+        ; seeded to 1 instead of 0 -- and dmem[11] WAS the MODE BYTE, so main's
         ; `LDM A,11 / JNZ encoding` fired on the very first poll and the program
-        ; jumped into the encoder stub, where half_wait sets dmem[13] to 0xFF
-        ; and spins. That is how "the program reaches the encoder" and "the
+        ; jumped into the encoder stub, where half_wait set dmem[13] to 0xFF
+        ; and spun. That is how "the program reaches the encoder" and "the
         ; preamble flag reads 0xFF" were the same fault, and neither the jump
         ; check nor the reachability pass nor the adjacent-label check could
         ; see it: all three of those are structural, and this is a DATA fault
         ; inside a block whose stores inherit a register value set earlier in
         ; the same block.
+        ;
+        ; AND THE MODE BYTE IS GONE NOW, so the store that seeded it is gone
+        ; with it. What is left of the fault is the shape, and the shape is
+        ; what the store-run check in firmware/bmc_checks.py looks for: a run
+        ; of stores that inherits a register value from a setter further up
+        ; the same block. dmem[11] now belongs to the ENCODER (the byte being
+        ; sent, bit 7 first) and is seeded there, at enc_locked, for the same
+        ; reason dmem[5] is seeded here.
         ;
         ; So the run of zero stores below now carries its OWN `LDI A, 0` and
         ; does not depend on anything above it, and the one store that needs a
@@ -200,21 +247,6 @@ init:
                                ; it is a first-draft assumption. The map below
                                ; says dmem[5] holds a timestamp; it did not say
                                ; who was meant to put a zero there.
-        STM   11, A            ; THE MODE BYTE, and the init omitted it, which
-                               ; is why this act was red. main does
-                               ; `LDM A, 11 / JNZ encoding`, so dmem[11]
-                               ; chooses decode or encode -- and dmem is NOT
-                               ; cleared by a reset (rtl/pe_soc.v writes it
-                               ; only under dmem_we), so an uninitialised
-                               ; mode byte is whatever power-up left. The
-                               ; program therefore jumped STRAIGHT TO THE
-                               ; ENCODER, never looked at the input pad, and
-                               ; left dmem[3] at the 0xFF its own init wrote
-                               ; there -- which reads as "I have not locked on
-                               ; to anything" and is the correct answer to a
-                               ; line it had never sampled. Zero is DECODE,
-                               ; so this is the instruction that makes the
-                               ; program look at the wire at all.
         STM   12, A
         LDI   A, 0xFF
         STM   3, A             ; ... so it starts at 0xFF: "I have not locked
@@ -249,8 +281,16 @@ main:
         MOV   X, A             ; elapsed time, 1..255. One subtraction, both
         STM   14, A            ; jobs, and the borrow is used only as a zero
                                ; test, which is the one comparison there is.
-        LDM   A, 11
-        JNZ   encoding         ; the encoder counts clocks, not microseconds
+        ; *** AND THE MODE BYTE IS GONE, and this is its line. *** It used to
+        ; read `LDM A,11 / JNZ encoding`: main's dispatch into the encoder,
+        ; chosen because the encoder was reached from the poll loop. Under
+        ; LOOPBACK it cannot be there, because the encoder is entered ONCE
+        ; per frame and a dispatch in the poll loop re-enters it on the next
+        ; poll and restarts the transmission in the middle of it. frame_done
+        ; hands over instead, and this dispatch is DELETED rather than left
+        ; beside it: two entries to one transmitter is how half a frame gets
+        ; sent twice. The mode byte had no other reader, so dmem[11] is free
+        ; and the encoder has it -- see the memory map.
 
         ; ---- the decoder: a CHANGE of level is a transition ------------
         ; The level is compared with the level at the last CHANGE, not with
@@ -342,8 +382,13 @@ the_pin:
         ;
         ; NO DIVISION, because there is none to do: the interval takes exactly
         ; two values and comparing against a constant is the whole test. This
-        ; ISA has no divide and no shift-right, and the recipe this step started
-        ; from asked for a halving, which is a DOUBLING wearing the wrong name.
+        ; ISA has no divide, and the recipe this step started from asked for
+        ; a halving, which is a DOUBLING wearing the wrong name. (It also said
+        ; here, wrongly, that there is no shift-right. THERE IS: SHR, opcode
+        ; 0xA, one bit, no operand, and it DISCARDS the shifted-out bit -- so
+        ; the encoder below tests the top bit and then peels it. What is still
+        ; absent is the shift-LEFT, and it is the reason the block above is a
+        ; doubling and not a shift.)
         LDM   X, 8
         LDI   A, 4
         SUB   A, X             ; zero EXACTLY when the interval was two
@@ -528,6 +573,9 @@ bit_store:
         ; opcode, and the recipe this act started from asked for a halving,
         ; which is a DOUBLING wearing the wrong name. So: Y takes the bit, X
         ; takes the byte, A doubles it, and the bit goes in at the low end.
+        ; (SHR IS NOT MISSING, in case that is the next thing to be believed:
+        ; it is opcode 0xA, one bit, no operand, and it throws the shifted-out
+        ; bit away. The encoder peels a byte with it. See the header.)
         ;
         ; AND A IS THE BIT HERE, not dead -- the earlier comment on this block
         ; said "AT bit_store, A IS DEAD", and that was true when the BOUNDARY
@@ -699,10 +747,31 @@ stored:
         LDM   X, 9
         LDI   A, 1
         ADD   A, X
-        STM   9, A
-        LDI   A, 3
-        SUB   A, X             ; zero when THREE bytes have been banked
-        JZ    frame_done
+        STM   9, A             ; the byte index advances
+        ; *** AND THIS IS THE FOURTH CONSTANT SUBTRACTION OF THIS SHAPE, AND
+        ; THE FIRST ONE NO STRUCTURAL CHECK COULD SEE. *** It read
+        ; `LDM X,9 / LDI A,1 / ADD A,X / STM 9,A / LDI A,3 / SUB A,X /
+        ; JZ frame_done`, which is CORRECT ARITHMETIC AND NEVER FIRES: X was
+        ; loaded from dmem[9] BEFORE the increment, so on the third byte X is
+        ; 2 and 3 - 2 is 1. The jump is structurally perfect -- a JZ with a
+        ; SUB in front of it and a label beside it -- so the jump check, the
+        ; reachability pass, the adjacent-label check, the store-run check and
+        ; the branch-operand check all called it clean, and they were all
+        ; right about what they look at. The act spent its whole history
+        ; teaching that a check which cannot fail is worse than no check, and
+        ; this is what that looks like from the other side: FIVE checks green
+        ; over a branch that is never taken.
+        ;
+        ; MEASURED, and not by reading the diff: a probe counting
+        ; executions of the two OUT TXPIN in the encoder, and of enc_half
+        ; itself, reported ZERO of each in a whole pass, with dmem[6] still 0
+        ; and dmem[11] still x -- the encoder had never been entered even
+        ; though dmem[0..2] held a5 3c 96 and dmem[3] held the right flag. The
+        ; three bytes arrive and nothing notices they have all arrived.
+        LDM   X, 9              ; dmem[9] is re-read, NOT the X from above,
+        LDI   A, 3              ; because the test is about the index AFTER
+        SUB   A, X              ; the increment and re-reading is what says so
+        JZ    frame_done        ; three bytes banked
         JMP   main
         ; *** A FIFTH CONSTANT SUBTRACTION, AND THE THIRD OF THIS SHAPE ***
         ; This used to read `LDI A,3 / SUB A,1 / JZ enc_start`, which computes
@@ -716,39 +785,331 @@ stored:
         ; rather than the source. The fix is the same in all three: the thing
         ; being compared has to come through X.
 frame_done:
-        ; THREE BYTES BANKED. The encoder is NOT entered from here: enc_start's
-        ; half_wait sets dmem[13] to 0xFF and spins until it reads zero, which
-        ; it never does, so handing over to it is a hang rather than an encode.
-        ; Parking is the honest end state until the encoder is written, and the
-        ; encode direction of the act stays red because it should.
+        ; ================ THE ENCODER, AND IT IS THE LOOPBACK ============
+        ; dmem[0..2] -- the frame this program just decoded -- goes back out
+        ; under the encoding in dmem[3], the one the DECODER MEASURED. What
+        ; is on the wire is written against firmware/bmc_model.py and not
+        ; against a wish: 40 bits, 80 half-intervals, 160 us, the same
+        ; eight-zeros-then-eight-ones preamble the input leg had, and the
+        ; same level sequence it had. The model has the whole round trip in
+        ; it, through its own receiver, at three offsets and both idle
+        ; levels, and it says the same three bytes come back.
+        ;
+        ; THE FLAG MUST BE ONE THIS PROGRAM MEASURED. 0xFF is the answer to
+        ; "I have not locked onto anything", and an unmeasured polarity is
+        ; not a polarity: the three bytes in dmem[0..2] came off a wire that
+        ; said nothing at all about which encoding sent them. So this path
+        ; parks, and sends nothing.
+        LDM   X, 3
+        LDI   A, 0
+        SUB   A, X
+        JZ    enc_locked          ; 0 = FM0
+        LDI   A, 1
+        SUB   A, X
+        JZ    enc_locked          ; 1 = FM1
         JMP   park
+enc_locked:
+        ; ---- THE LEVEL OF THE FIRST HALF, BEFORE THE PAD IS CLAIMED ----
+        ; The first preamble bit is a ZERO, so under FM0 its first half is
+        ; LOW and under FM1 it is HIGH. The LEVEL REGISTER is written first
+        ; and the pad claimed second: a pad released for four clocks with
+        ; the wrong level in its latch is an edge on the wire that no bit
+        ; accounts for, and the loop below writes the same level again
+        ; immediately, which costs nothing and changes nothing.
+        LDM   X, 3
+        LDI   A, 1
+        SUB   A, X
+        JZ    enc_first_high
+        LDI   A, 0
+        JMP   enc_level_first
+enc_first_high:
+        LDI   A, BMC_OUT
+        JMP   enc_level_first   ; the jump is not cosmetic: two labels on
+enc_level_first:               ; consecutive addresses are a fall-through
+        OUT   TXPIN, A          ; waiting to happen, and the adjacent-label
+        LDI   A, BMC_OUT        ; check is right to name them
+        OUT   PINOE, A           ; claim the output pad; the input is released
+        LDI   A, 0
+        STM   6, A               ; dmem[6] = the half-interval counter
+        LDI   A, 0
+        STM   11, A              ; dmem[11] = the byte to send, bit 7 first:
+                               ; eight zeros, the preamble's first byte
+        JMP   enc_half
 
-        ; ---- and then it encodes one byte on the other pad ---------------
-enc_start:
+        ; ---- ONE HALF-INTERVAL -----------------------------------------
+enc_half:
+        ; THE LEVEL OF THIS HALF, AND IT TAKES NO INDEX AND NO MASK. dmem[11]
+        ; holds the byte with the bit being sent at bit 7, because SHR peels
+        ; it there once per bit -- so "which bit" is not a thing this program
+        ; has to know. It is a shift-right, the instruction this act's own
+        ; comments used to say the machine did not have.
+        LDM   A, 11
+        AND   A, 0x80            ; 0x80 if the bit is 1, else 0x00 -- and it
+        MOV   X, A               ; is tested against ZERO, not against one:
+        LDI   A, 0               ; a masked value belongs to the domain it was
+        SUB   A, X               ; produced in, and 1 is not in {0, 0x80}
+        JZ    enc_bit_zero        ; (this exact shape was a fault below)
+        LDI   A, BMC_OUT
+        JMP   enc_have_level
+enc_bit_zero:
+        LDI   A, 0
+        NOP                   ; one clock of pad, and the reason is the two
+                               ; routes above being five and four long
+enc_have_level:
+        ; ---- AND THE POLARITY, WHICH IS ONE COMPARISON -----------------
+        ; s = dmem[3] XOR (c AND 1), and it is ONE quantity because FM1
+        ; inverts every bit while the SECOND half of every bit inverts the
+        ; first: h1 == ~h0 in both encodings, so the two inversions are the
+        ; same inversion and they add. The XOR of two bits is the low bit of
+        ; their sum, which is how s is built with no XOR opcode at all.
+        MOV   Y, A               ; Y = the level, before the gate
+        LDM   X, 6
         LDI   A, 1
+        AND   A, X               ; A = c AND 1
+        LDM   X, 3
+        ADD   A, X
+        AND   A, 1               ; A = s
+        MOV   X, A
+        LDI   A, 0               ; and s is tested against ZERO as well: s is
+        SUB   A, X               ; 0 or 1, and the branch wants the KEEP case
+        JZ    enc_keep_level     ; when it is 0, which is not what 1 - s says
+        MOV   A, Y
+        MOV   X, A
+        LDI   A, BMC_OUT
+        SUB   A, X               ; BMC_OUT - level: THE COMPLEMENT
+        JMP   enc_drive
+enc_keep_level:
+        MOV   A, Y             ; *** THE LEVEL COMES BACK OUT OF Y HERE, AND
+                               ; THE FIRST VERSION OF THIS BLOCK DID NOT PUT
+                               ; IT BACK. *** The branch test at 204 is
+                               ; `LDI A, 0 / SUB A, X`, so arriving here means
+                               ; A HOLDS THE TEST'S OWN RESULT -- a zero --
+                               ; and the five instructions after it were NOPs,
+                               ; which of course leave A alone. So the pad was
+                               ; driven at 0x00 for every FIRST HALF of a bit
+                               ; whose value was a one, and the wire carried a
+                               ; frame with half of every one-bit missing.
+                               ;
+                               ; MEASURED, on the wire and not by reading it:
+                               ; 144 intervals of 121 clocks and NOT ONE of
+                               ; 241, and the levels at half-intervals 16..21
+                               ; were 00 00 00 40 00 40 where the preamble's
+                               ; eight ones want 40 00 40 00 40 00. A decoder
+                               ; reading that stream cannot find a single
+                               ; two-half gap, so it never locks, which is
+                               ; what the testbench reported as "recovered
+                               ; zero bytes" with the flag at -1.
+                               ;
+                               ; It is invisible to every check here: the
+                               ; branch is taken, the label is right, the
+                               ; route is the length it was fitted to, and A
+                               ; is a value the block computed. What it needed
+                               ; was the level to be somewhere the branch
+                               ; could not reach, which is what Y is for.
+        NOP
+        NOP
+        NOP
+        JMP   enc_drive        ; five clocks, like the complement's five:
+                               ; a half-interval is a FIXED number of clocks
+                               ; and the two routes of this gate are not the
+                               ; same length without the padding
+enc_drive:
+        OUT   TXPIN, A           ; <<<< THE EDGE. The interval from the last
+                               ; OUT to THIS one is a half-interval, and
+                               ; nothing else on this machine decides that.
+        ; ---- THE COUNTER, WHICH IS THE ONLY THING THAT SURVIVES --------
+        ; dmem[6] counts half-intervals, so the parity above is free and the
+        ; end of the frame is a comparison against 80. Registers do not
+        ; survive: X is the delay's own counter, and dmem has two free bytes
+        ; and not three, which is why the byte is peeled in place rather
+        ; than held beside a mask.
+        LDM   X, 6
+        LDI   A, 1
+        ADD   A, X
+        MOV   X, A
+        STM   6, A              ; the count is STORED, so the test after the
+                                ; peel can read it back: only X is addressable
+                                ; as the ALU's second operand on this machine,
+                                ; so a value parked in Y is a value the ALU
+                                ; cannot see, and the first version of this
+                                ; block reached for Y and would not assemble
+        LDI   A, 80
+        SUB   A, X
+        JZ    enc_sent           ; 80 half-intervals: 40 bits, 160 us
+        ; ---- WAS THE HALF THAT JUST WENT OUT THE FIRST OF A BIT? -------
+        ; c is even when it was the first half of a bit, and the count after
+        ; it is therefore ODD, so "the new count is odd" IS the question.
+        ; The first version of this line asked whether the new count was
+        ; ZERO, which is a different question that is never true, so the mid
+        ; route was DEAD: measured, the mid delay loop was entered zero times
+        ; in a whole pass and the first loop 1927 times. Every half-interval
+        ; took the mid-bit path, and a run of zeros reloaded its byte on
+        ; every bit -- 1330 reloads in a pass for the five that belong there.
+        ; Both of those faults were invisible to every structural check: a
+        ; comparison against a live register, with a SUB in front of it and a
+        ; label behind it, is a perfectly good branch of the wrong question.
+        LDI   A, 1
+        AND   A, X
+        MOV   X, A
+        LDI   A, 1
+        SUB   A, X              ; 1 - parity: zero iff the new count is ODD
+        JZ    enc_wait_mid       ; an odd new count means the half just sent
+                                ; was the FIRST of a bit, so the next one is
+                                ; its mid and nothing is peeled
+enc_peel:
+        ; ---- so a bit just went out, and the byte loses its top bit -----
+        LDM   A, 11
+        SHR
         STM   11, A
-        LDI   A, 0x40
-        OUT   PINOE, A         ; claim the output pad; the input is released
+        ; ---- AND THE BYTE IS SPENT AT EVERY SIXTEENTH HALF-INTERVAL ----
+        ; NOT when dmem[11] reaches zero, which is what this line first said:
+        ; a byte whose value is 0x00 is zero from the moment it is loaded, so
+        ; that test fired on the FIRST bit of the preamble's eight zeros. A
+        ; byte is eight bits and a bit is two half-intervals, so the COUNT
+        ; says when a byte is spent and the byte's own value does not.
+        LDM   X, 6
+        LDI   A, 15
+        AND   A, X
+        MOV   X, A
+        LDI   A, 0
+        SUB   A, X
+        JZ    enc_next_byte      ; zero iff the new count is a multiple of 16
+        JMP   enc_wait_first
+enc_next_byte:
+        ; ---- WHICH BYTE COMES NEXT -------------------------------------
+        ; dmem[6] >> 4 is the index of the byte that is STARTING, because the
+        ; count that got here is a multiple of 16 and c = 80 was taken by the
+        ; end test above. So it is 1, 2, 3 or 4 -- and 1 is the preamble's
+        ; EIGHT ONES, 2 is dmem[0], 3 is dmem[1] and 4 is dmem[2].
+        ;
+        ; *** AND EVERY ONE OF THOSE WAS OFF BY ONE IN THE FIRST VERSION, AND
+        ; THE LABEL NAMES ARE WHY. *** It dispatched 1 to `enc_load_zeros`
+        ; and 2 to `enc_load_ones`, so the preamble's eight ones were sent as
+        ; eight zeros, dmem[0] was sent as 0xFF, dmem[1] as dmem[0] and
+        ; dmem[2] as dmem[1] -- the whole frame, shifted by one byte and
+        ; complemented at the front. MEASURED: the wire carried a
+        ; hundred-and-forty-four 121-clock intervals and not ONE 241, and
+        ; dmem[11] was still 0x00 at half-interval 16 where the preamble's
+        ; ones should have started. A label that says `zeros` beside a
+        ; constant 0, tested against an index whose meaning is set three
+        ; instructions earlier, is a comment that agrees with itself.
+        ;
+        ; So there is ONE case now, not three: index 1 is the preamble's ones
+        ; and every index from 2 up is dmem[index - 2], which is CONTIGUOUS,
+        ; so LDS reaches it with no case at all. A three-way dispatch over
+        ; four values was three ways to be off by one.
         LDM   A, 6
-        STM   12, A            ; the byte to send
-        LDI   A, 0
-        STM   7, A             ; the bit counter
-        LDI   A, 0
-        OUT   TXPIN, A         ; the line idles LOW while encoding
-encoding:
-        LDI   A, BMC_HALF
-        STM   13, A
-half_wait:
-        LDM   A, 13
-        JZ    half_end
-        LDI   A, 0xFF
-        STM   13, A
-        JMP   half_wait
-half_end:
-        LDI   A, 0
-        STM   13, A
+        SHR
+        SHR
+        SHR
+        SHR
+        MOV   X, A
         LDI   A, 1
-        OUT   PINOE, A         ; drive the pad at the level A holds
-        JMP   half_wait
-park:
-        JMP   park
+        SUB   A, X
+        JZ    enc_load_ones
+        DECX
+        DECX                  ; X = 0, 1 or 2
+        LDS                   ; A = dmem[X], and dmem[0..2] is contiguous
+        NOP
+        NOP
+        NOP
+        NOP
+        JMP   enc_have_next
+enc_load_ones:
+        LDI   A, 0xFF          ; the preamble's second byte: eight ones
+        NOP
+        NOP
+        NOP
+        NOP
+        NOP
+        NOP
+        JMP   enc_have_next     ; both routes EIGHT clocks, and they are NOPs
+                               ; because a half-interval is a fixed number of
+                               ; clocks and the two routes are not the same
+                               ; length without them
+enc_have_next:
+        STM   11, A              ; and the bit goes back to bit 7
+        JMP   enc_wait_next
+
+        ; ---- THE THREE HALF-INTERVAL DELAYS, AND WHY THERE ARE THREE ---
+        ; The two OUTs above bracket a half-interval, so everything between
+        ; two of them is TIMING, and the three routes out of the tail above
+        ; are not the same number of instructions long. So there are three
+        ; counted delay loops rather than one loop and a hope, and the
+        ;     120 = (the route's own instructions) + 2 (the loop's set-up)
+        ;          + 4 * (the iteration count)
+        ; with the route counted IN THE LISTING and not in this comment. The
+        ; rule that goes with them: touch anything between the two OUTs and
+        ; RE-COUNT BOTH SIDES, because a half-interval that is one clock long
+        ; is a two-microsecond interval that measures as 2.0167, and the
+        ; receiver's whole arithmetic is built on it being 2.
+        ;
+        ; *** AND THE LOOP IS FOUR CLOCKS AN ITERATION, NOT THREE, AND THE
+        ; THREE-CLOCK FORM IS A RUNNING SUM RATHER THAN A COUNTDOWN. *** The
+        ; recipe for this delay was `LDI A,1 / SUB A,X / JNZ` -- three
+        ; instructions, "and 40 is 120 clocks". It is three instructions, and
+        ; it does not count: SUB computes A - X and NOTHING PUTS A BACK, so
+        ; every pass subtracts the next X again and A becomes
+        ; 0 - (n + (n-1) + ...). The loop leaves when that RUNNING SUM is
+        ; congruent to zero mod 256, which for n = 25 is 49 passes and 147
+        ; clocks, and for most n is not reachable at all. MEASURED, on the
+        ; wire and not in the listing: 49 loop bodies between two OUT TXPIN
+        ; with `LDI A, 25` standing beside them, and a half-interval of 192
+        ; clocks where the listing said 120.
+        ;
+        ; SO THE `LDI A, 0` MOVED INSIDE THE LOOP. Four instructions, and the
+        ; fourth is the one that makes the branch a comparison instead of an
+        ; accumulation: DECX, put a zero back in A, SUB A,X is zero exactly
+        ; when X is, JNZ on that. Thirty passes is 120 clocks and the number
+        ; in the listing is the number on the machine.
+        ;
+        ; AND THE CHECK THAT COUNTS IT SIMULATES THESE LOOPS INSTEAD OF
+        ; CHARGING THEM THREE CLOCKS A PASS, because the version that assumed
+        ; three reported 120 for a loop that takes 49. A check that shares the
+        ; assumption it exists to test is a check that cannot fail, which is
+        ; the sentence this act has spent three sessions trying to earn.
+enc_wait_mid:
+        NOP
+        NOP
+        NOP                   ; THREE NOPS IN THE SET-UP, and this is where
+                               ; the routes that are not the same length are
+                               ; paid for: the three routes out of the tail
+                               ; differ, so their loops are fitted separately
+                               ; and the set-up absorbs the residue. The loop
+                               ; is four clocks a pass, so the residue is paid
+                               ; in NOPs of one and two rather than in a third
+                               ; number whose fraction is not an integer.
+        LDI   A, 19
+        MOV   X, A             ; the set-up is TWO instructions now
+enc_wait_mid_loop:
+        DECX
+        LDI   A, 0             ; <-- the instruction that makes this a
+        SUB   A, X              ;     comparison and not a running sum
+        JNZ   enc_wait_mid_loop ; four clocks a pass
+        JMP   enc_half
+enc_wait_first:
+        LDI   A, 17
+        MOV   X, A
+enc_wait_first_loop:
+        DECX
+        LDI   A, 0
+        SUB   A, X
+        JNZ   enc_wait_first_loop
+        JMP   enc_half
+enc_wait_next:
+        NOP
+        NOP                   ; two more of the same, for the third route
+        LDI   A, 12
+        MOV   X, A
+enc_wait_next_loop:
+        DECX
+        LDI   A, 0
+        SUB   A, X
+        JNZ   enc_wait_next_loop
+        JMP   enc_half
+enc_sent:
+        LDI   A, 0
+        OUT   PINOE, A           ; THE TRANSMISSION IS OVER, so the pad goes
+        JMP   park              ; back to being released: a driver that holds
+park:                          ; a pad forever is a driver that fights the
+        JMP   park              ; next user of it, and nothing is listening
