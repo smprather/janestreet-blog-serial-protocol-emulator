@@ -145,17 +145,42 @@ the_pin:
         JZ    main             ; unchanged: not a transition
         MOV   A, X
         STM   4, A             ; the level at the last change
-        LDM   A, 14
-        SUB   A, 5             ; the interval since the last change
-        JZ    main             ; two changes in one tick cannot happen on a
         LDM   A, 5
         ADD   A, 1
-        STM   5, A             ; ... this tick is now
+        STM   5, A             ; ... one more change. THE DEGLITCH THAT USED
+                               ; TO BE HERE IS GONE, and it was this act's
+                               ; blocker: it read dmem[14] - dmem[5] and
+                               ; abandoned the edge when that was zero. But
+                               ; dmem[14] is main's ELAPSED-SINCE-LAST-POLL
+                               ; delta, almost always 1, and dmem[5] is a
+                               ; COUNT of changes -- so the guard fired
+                               ; exactly when an edge arrived, after the
+                               ; first one, and the firmware banked two
+                               ; level changes out of 47. The memory map
+                               ; called dmem[5] a timestamp and the code
+                               ; incremented it, and the guard compared one
+                               ; against the other; the map is corrected
+                               ; below to say what the code does. A deglitch
+                               ; is not needed here anyway: the half-interval
+                               ; is 2 us and the poll is about 0.2 us, so two
+                               ; changes cannot land inside one interval.
         LDM   A, 8
         ADD   A, 1
         STM   8, A             ; one more half-interval
         LDI   A, 2
-        SUB   A, 1
+        SUB   A, 8             ; 2 - dmem[8], and THIS is the test that was
+                               ; wrong: it subtracted the CONSTANT 1, so the
+                               ; result was always 1, the JNZ below always
+                               ; fired, and the bit-boundary path was DEAD
+                               ; CODE -- the firmware could count half-
+                               ; intervals but never act on a bit boundary.
+                               ; Subtracting dmem[8] makes the result zero
+                               ; exactly at two half-intervals, which is the
+                               ; condition the comment below has always
+                               ; claimed. Read from the assembler's listing,
+                               ; where `LDI A,2 / SUB A,1 / JNZ` is visibly
+                               ; a constant, and the one mechanical check
+                               ; this act has never got wrong.
         JNZ   half_done
         LDI   A, 0
         STM   8, A             ; two half-intervals is a bit boundary
