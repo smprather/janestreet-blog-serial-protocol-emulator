@@ -723,3 +723,117 @@ with `main` merged in beneath it as `2adc845` so that landing is a clean
 fast-forward. Merging it is the manager's call; see the open QUESTION in the
 WORKLOG. The merge-readiness run that established this is on the merged tree,
 not on the pre-merge one.
+
+---
+
+# STATE AT WRAP (2026-09-25, 77%)
+
+> **IF YOUR BRIEFING SAYS `tb_pe_soc_midi.v` IS RED, OR THAT THE WIP IS
+> UNCOMMITTED, OR THAT THE DMX FACTORISATION IS "120 CLOCKS", IT IS WRONG ON ALL
+> THREE.** This section is the counterweight. Verified against the tree at wrap:
+> the MIDI TB **passes** (14/14 frames, 31,251 baud, spread 0.0000); there are
+> **zero** uncommitted changes under `firmware/` or `tb/`; and a DMX bit cell is
+> **240 clocks** = 4.000 us, not 120. The 120-clock figure in the old handoff was
+> a half-bit error, and "the transmitter is right, the testbench is the defect"
+> was the premise this block reversed.
+
+## Block 3: COMPLETE, committed, pushed
+
+`fw-bus-protocols` is on `origin` at **1798abf**. The seven firmware defects are
+documented above, and both acts are measured on the pin rather than asserted:
+
+| act | cell | measured | spread |
+| --- | --- | --- | --- |
+| MIDI 31.25 kbaud 8N1, running status | 1920 clocks | 31,998.7 ns = 31,251 baud | 0.0000 us over 14 frames |
+| DMX512-A 250 kbaud 8N2 | 240 clocks | 3,999.8 ns = 250,010 baud | 0.0000 us over 513 slots |
+
+Also delivered: both TBs same-listed into `run_all.sh`, both firmwares into
+`run_firmware_tests.sh`, and `regress/mutate_fwbus_tb.sh` extended to five
+firmware DUTs with **21 mutations, 21 detected, 0 survived** — including two
+counted-delay-constant mutations, which is the defect class the block exists to
+catch. Full suite on the branch: **EXIT=0, 35/35 firmware, 39/39 testbenches**.
+
+## Diagrams: delivered, then reassigned to pw-diag-proto
+
+Four diagram commits are on `origin/fw-bus-protocols` (`3e7ba87`, `2799767`,
+`c3219a8`, `75b0e3e`): both PlantUML maps plus colocated png/svg, carrying the R2
+read path, R3 debug control, the protocol and timing acts, the formal campaign and
+the worktree fleet. **Three things in there must not be reverted:** R3 is
+**landed** (not "unimplemented" — that was my error, measured against my own tree
+instead of `main`); the formal counts are **10 properties / 5 modules / 14
+mutants**; and the squarer-aspect fix is a **hidden vertical chain** across the
+five new sections (left-to-right and split-by-workstream both made it worse). The
+manager reassigned further map work to `pw-diag-proto`; I drew no maps after
+that.
+
+## Firmware comment batch: all three DONE
+
+| fix | commit | where |
+| --- | --- | --- |
+| `spi_mode3.pe` response bytes `0x6B/0x2C/0xD9` -> **`0x6F/0x6C/0x6D`** | `1798abf` then `e8d9dc0` | `fw-bus-protocols` |
+| `dmx512.pe` "fifteen NOPs" -> 14 in the transmitter, 16 in the file | `1798abf` | `fw-bus-protocols` (pushed) |
+| `servo_sweep.pe` steps 619/4655 -> **625**/**5000** | `dcb27df` | `fwbus/block3-mergeprep` |
+
+Nothing in that batch is pending. Two notes for whoever reads it: the spi3 and
+dmx512 figures were **derived from the artifacts, not transcribed** (the TB's
+`RESP_MASK` XOR, and a direct count of the padding NOPs); the servo_sweep figures
+come from **the file's own reachability formula** two paragraphs below the bad
+lines. All three were proven comment-only by a **byte-identical assembled image**,
+which is the only test that settles it. The `servo_sweep` fix is on the prep
+branch because that file **does not exist on `fw-bus-protocols`** — it lives on
+`main`/`fw-timing-protocols` — and the prep tree has `main` merged, so the
+correction lands *with* Block 3.
+
+**`e8d9dc0` corrects `1798abf`, in this file's own lesson.** The spi3 response
+bytes were right and **reversed**: `1798abf` listed them in the TB's *literal*
+order (`WORD_HI = {8'h13, 8'h12, 8'h11}`) where a concatenation is MSB-first, so
+the last literal is index 0 and `0x11` is the *first* word on the wire. The
+routing supplied the wire order; `tb_pe_soc_spi3.v` already prints it
+(`word=1134 ... resp=6f`, `word=1245 ... resp=6c`, `word=1356 ... resp=6d`).
+The file now pairs each response with the word that produces it. Worth keeping:
+**arithmetic in the right order and the wrong order are both internally
+consistent**, so a self-consistent derivation can still be published backwards
+with every step checking out — and here the file's own immediately-preceding
+word list was what made the reversal visible.
+
+## What is prepared, and what is pending
+
+**Prepared, not landed** (manager's call) — `fwbus/block3-mergeprep` in
+`/tmp/fwbus-mergeprep`:
+
+1. `4d70997` — `main` merged into my branch after it had moved 76 commits. The
+   `run_firmware_tests.sh` conflict resolved as a **union** and verified three
+   ways: by count, by `bash -n`, and by running it. (An earlier resolution
+   nested one `for` inside the other and I nearly shipped it.)
+2. `a65dee5` — a one-line sync of `main`'s stale R3 chip-confirmation status.
+3. `dcb27df` — the `servo_sweep` comment fix above.
+
+Its suite: **EXIT=1** with **42/42 firmware, 48/48 testbenches, every mutation gate
+OK including fw-bus 21/21, and the R3 gate OK**. The only red is
+`run_lock` sub-check E.
+
+**Open, all `main`-owned, all logged as QUESTIONs:**
+
+- Land Block 3 + `a65dee5` — `main` is red on the R3 gate without the one-liner,
+  so landing it alone would leave the suite failing.
+- `run_lock` sub-check **E**, "a cleanly finished run left its child running" —
+  intermittent, fails standalone as well as under load, and it is precisely the
+  failure mode the lock exists to prevent, reported by the lock's own test.
+- `tb/tb_pe_soc_sr04.v` is tracked on `main` and **not wired** into
+  `run_all.sh`, with no `.sh` referencing it — the concrete instance of the
+  same-list hole.
+- **14 gate logs share `/tmp` paths** across worktrees, so concurrent suites
+  overwrite each other's evidence; a run-lock result was unreadable for exactly
+  this reason.
+- No gate covers `diagrams/` at all.
+
+## What the block cost, honestly
+
+Seven firmware defects, all found by measuring the pin — **in a transmitter the
+handoff had certified as correct.** And six self-inflicted ones of my own: three
+false published numbers, a false "leaked mutant" **ALERT** raised and retracted
+within two turns, a mis-diagnosed "flake", a merge resolver that silently
+dropped three testbenches from `run_all.sh`, and a self-test that could pass
+while checking nothing. Every one survived a gate, because **nothing checked the
+artifact making the claim** — which is the same lesson this block was built to
+demonstrate, arrived at from the wrong direction.
