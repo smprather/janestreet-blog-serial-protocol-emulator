@@ -2242,3 +2242,41 @@
   Normalised content hashing was **rejected on evidence, not taste**: the failure *is* a geometry difference, and PlantUML bakes font metrics into the output as `textLength` numbers, so "geometry + text, fonts stripped" either keeps the geometry — which is the byte comparison, still environment-sensitive — or discards it, and then it no longer verifies the figure at all. Pinning is also the only option that gives a red an *action*: the gate now names the differing component and both versions.
   The byte comparison is therefore **conditional on the pin matching**. On a match it stays authoritative (a one-character edit to a committed render is still a hard failure — verified in both directions). On a mismatch the gate reports a TOOLCHAIN MISMATCH and treats byte-differences as inconclusive, while the environment-independent checks — parses, both formats colocated, nothing unclaimed, aspect sane — still fail as hard, because none of them depends on which renderer produced the bytes. A **missing pin is a failure, not a skip**: without one the byte comparison is unenforceable, and skipping it would be fail-open.
 - **A toolchain check that cried wolf on the right host, and the JVM banner that caused it.** The first working version reported `plantuml(not detected on this host)` and `java(not detected on this host)` on *every* run — including a self-test that then passed two byte-difference cases for the wrong reason, because inconclusive is indistinguishable from clean. Both tools are JVMs, and a JVM prints `Picked up JAVA_TOOL_OPTIONS: ...` to **stderr whenever that variable is set** — and the gate exports it, because `diagrams/README.md` requires it for the headless render. So `plantuml -version 2>&1 | head -1` captured the *banner*, and the anchored `sed` matched nothing. `dot` and `fc-match` are not JVMs, which is precisely why only those two keys failed and why the fault looked like a parsing bug. The detectors now **filter before `head`**, and the self-test grew two cases that would have caught it: one where a byte difference under a *differing* pin must be inconclusive rather than a stale-render failure, and one where a missing pin must fail. 10 of 10.
+
+## [2026-09-26] docs (diag-proto) | white-on-white scope measurement, handed to diag-bus (no .puml touched)
+
+Read-only measurement taken while standing clear of the fleet-wide palette
+mandate, so the fix has a scope rather than a guess. **No diagram was edited.**
+
+- **My five sets are CLEAN.** Every text and every rect in `project-plan`,
+  `project-progress`, `proto-spi-framing`, `proto-r2-read-path` and
+  `proto-r3-debug-control` carries an EXPLICIT `fill`, and there are **zero
+  `<style>` blocks**. A viewer's stylesheet therefore cannot override them, so
+  for these files **a `.puml` palette change is not the fix** — there is no
+  unpinned colour to unpin. Decisive test, each text against its nearest
+  preceding filled rect (WCAG contrast, 1,375 text elements): `project-plan`
+  18.59:1, `project-progress` 8.89:1, and the three proto figures 6.00:1 each.
+  The closest pair in the set is **`#7F4B00` on `#FFE6CC`** (the
+  integrity/ceil stereotype) at 6.00:1 — legible, above the 4.5:1 AA line, and
+  the **only** pair under 7:1, so it is the first thing to look at if a user
+  reports faintness in these figures.
+- **The two structural facts that should shape the fix.** (1)
+  `regress/check_diagram_renders.sh` no longer exists on main — the pin
+  mechanism was folded into `tools/diag/check_diagrams.sh` and the duplicate
+  retired (2741328), so a sweep reaching for the old script will not find it.
+  (2) The render gate compares **bytes** with no plantuml/dot/JVM/font pin
+  anywhere in the repo, and the SVGs emit a **generic** `font-family`
+  (`monospace`) that resolves per host. If the user-reported symptom is faint
+  glyphs in the **PNG** path rather than a colour collision, the missing
+  toolchain and font pin is the cause and a palette change would fix nothing.
+- All five of my sources are currently green under the consolidated gate: one
+  block each, both formats colocated, every render fresh and byte-consistent.
+- **A false positive of my own, corrected here rather than left in a report.** I
+  earlier reported `project-plan` as pinned stale in
+  `wiki/.known-stale-diagrams.txt`. It is not, and the baseline carries **zero**
+  pins: my grep was unanchored and matched an explanatory comment in the file's
+  header. My second, anchored check returned nothing, and the "contradiction"
+  between a pin and a passing gate was never real. Sixth instrument of mine to
+  lie this session, after the XML-BAD, a worker-count that read 0, a fence-count
+  that counted closings, a zero-loss baseline that never changed, and a
+  class/fill regex that reported inheritance where every fill was explicit.
