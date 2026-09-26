@@ -88,11 +88,21 @@
 #
 # WHY THE SELF-TEST IS PART OF THE GATE rather than something run once. A checker
 # that stops detecting is worse than no checker: it reports OK on a broken tree
-# and the suite goes green on a claim nothing is testing. The self-test plants
-# each defect class in a THROWAWAY COPY and asserts the checker fails on every one
-# and passes on the untouched copy, so a planted failure cannot be blamed on the
-# copy. It never mutates the real diagrams/, so an interruption cannot leave the
-# checkout in a planted state — a lesson this repo has already paid for once.
+# and the suite goes green on a claim nothing is testing. So the self-test is in
+# the suite, not merely available on request, and it plants seven defect classes
+# in a THROWAWAY SYNTHETIC fixture — a stale render, a hand-edited render, a
+# broken .puml, a committed error image, an unclaimed render, a missing block
+# render, and a source name containing spaces (that last one is a PASS case: it
+# fails if the checker gets NOISIER, not if it gets laxer). It requires the
+# checker to fail on every planted case and to pass an untouched copy, so a
+# planted failure cannot be blamed on the fixture, and it verifies each planting
+# actually CHANGED something — or a no-op planting reports itself as a broken
+# checker, which is how two of the three bugs in this file's own history were
+# found in the first place.
+#
+# It never mutates the real diagrams/, so an interruption cannot leave the
+# checkout in a planted state — a lesson this repo has already paid for once. The
+# only destructive line in the file guards BOTH halves of its path with ${var:?}.
 #
 # EXIT: 0 all checks passed, 1 otherwise. The self-test exits 0 only if every
 # planted defect was caught AND the clean copy passed.
@@ -219,10 +229,20 @@ check_dir() {
     base=$(basename "$src")
     n=$(block_count "$src")
     local miss=0
-    for st in $(expected_stems "$src" "$n"); do
+    # Read the stems a LINE AT A TIME, never as `for st in $(...)`. The stems are
+    # filenames, and unquoted command substitution word-splits them, so a source
+    # called "my figure.puml" was reported as needing my.png, my.svg,
+    # figure.png AND figure.svg — four false failures, immediately followed by
+    # "every render is fresh and byte-consistent" for a file the loop had never
+    # visited. No diagram in this repo has a space in its name today, so this was
+    # latent rather than active; but a gate that is only correct while nobody
+    # names a file the obvious way is correct by luck, and the day it fires the
+    # red gets ignored or the gate gets disabled.
+    while IFS= read -r st; do
+      [ -n "$st" ] || continue
       [ -f "${st}.png" ] || { miss=1; [ "$quiet" = "1" ] || fail "$base: no ${st##*/}.png for one of its $n block(s)"; }
       [ -f "${st}.svg" ] || { miss=1; [ "$quiet" = "1" ] || fail "$base: no ${st##*/}.svg for one of its $n block(s)"; }
-    done
+    done < <(expected_stems "$src" "$n")
     if [ $miss -ne 0 ]; then
       bad_total=$((bad_total + 1))
     else
@@ -247,7 +267,7 @@ check_dir() {
     fi
   done
   if [ $n_orphan -ne 0 ]; then bad_total=$((bad_total + n_orphan)); fi
-  rm -f "$claimed"
+  rm -f "${claimed:?}"
 
   # ---- 3. freshness + consistency, BATCHED --------------------------------
   # One plantuml invocation per format for the whole directory, not two per
@@ -271,9 +291,12 @@ check_dir() {
     # reported as such. The mtime still earns its place by explaining a real
     # mismatch ("edited at T, rendered before T") and by being free.
     local bad=0
-    for st in $(expected_stems "$src" "$n"); do
+    while IFS= read -r st; do
+      [ -n "$st" ] || continue
       for ext in png svg; do
-        local committed="${st}.${ext}" rendered="$fresh/$(basename "$st").${ext}"
+        local committed rendered
+        committed="${st}.${ext}"
+        rendered="$fresh/$(basename "$st").${ext}"
         [ -f "$committed" ] || continue
         local stale=0
         older_than "$committed" "$src" "$MTIME_TOL" && stale=1
@@ -290,7 +313,7 @@ check_dir() {
           [ "$quiet" = "1" ] || printf '  note: %s is older than its source but byte-identical to a fresh render — up to date\n' "$(basename "$committed")"
         fi
       done
-    done
+    done < <(expected_stems "$src" "$n")
     if [ $bad -ne 0 ]; then
       bad_total=$((bad_total + 1))
     else
@@ -344,7 +367,7 @@ EOF
   n_svg=$(find "$dir" -maxdepth 1 -name '*.svg' | wc -l)
   [ "$quiet" = "1" ] || printf '  -- %d .puml, %d .png, %d .svg in %s\n' "$n_puml" "$n_png" "$n_svg" "$dir"
 
-  rm -rf "$work"
+  rm -rf "${work:?}"
   FAILURES=$bad_total
   [ "$bad_total" -eq 0 ]
 }
@@ -412,7 +435,11 @@ self_test() {
     fi
   }
   # Each case gets its own pristine copy of the fixture.
-  fresh_case() { rm -rf "$sandbox/$1"; cp -r "$sandbox/f" "$sandbox/$1"; }
+  # ${var:?} on BOTH halves: this is the only destructive line in the file, and
+  # an empty parent would otherwise turn into a path like "/c0" rather than a
+  # hard error. Cheap insurance in a tool whose promise is that it never touches
+  # the real tree.
+  fresh_case() { rm -rf "${sandbox:?}/${1:?}"; cp -r "$sandbox/f" "$sandbox/$1"; }
 
   # did_change FILE_BEFORE FILE_AFTER — a planting that silently did nothing must
   # be reported as a PLANTING failure, not as a checker failure. The first
@@ -517,8 +544,39 @@ self_test() {
   fi
   plant "f an error image committed as a render" dirty c6
 
+  # (g) A SOURCE WHOSE NAME CONTAINS A SPACE. This is the word-splitting class,
+  #     and it is here because the fix without this case would rot silently: the
+  #     checker read `for st in $(expected_stems ...)`, so "my figure.puml" was
+  #     reported as needing my.png, my.svg, figure.png AND figure.svg — four
+  #     false failures immediately followed by "every render is fresh and
+  #     byte-consistent" for a file the loop had never visited. No diagram in
+  #     this repo has a space in its name, so the class was latent; a checker that
+  #     is only correct while nobody names a file the obvious way is correct by
+  #     luck. The planted tree here is a CORRECT tree, so the expectation is
+  #     PASS: this case fails if the checker gets noisier, not if it gets laxer.
+  fresh_case c7
+  if [ -f "$sandbox/c7/fixture-single.puml" ]; then
+    cp "$sandbox/c7/fixture-single.puml" "$sandbox/c7/a figure with spaces.puml"
+    cp "$sandbox/c7/fixture-single.png"  "$sandbox/c7/a figure with spaces.png"
+    cp "$sandbox/c7/fixture-single.svg"  "$sandbox/c7/a figure with spaces.svg"
+    plantuml -tpng "$sandbox/c7/a figure with spaces.puml" -o "$sandbox/c7" >/dev/null 2>&1
+    plantuml -tsvg "$sandbox/c7/a figure with spaces.puml" -o "$sandbox/c7" >/dev/null 2>&1
+    # The copy above is only a stand-in if PlantUML refused the spaced name, so
+    # assert the real renders exist rather than trusting the cp.
+    if [ -f "$sandbox/c7/a figure with spaces.png" ] && [ -f "$sandbox/c7/a figure with spaces.svg" ]; then
+      plant "g a source name containing spaces" clean c7
+    else
+      printf '  FAIL: self-test — g: PlantUML did not render the spaced name, so\n'
+      printf '        the word-splitting class cannot be exercised\n'
+      results=$((results + 1))
+    fi
+  else
+    printf '  FAIL: self-test — g: no single-block fixture to rename\n'
+    results=$((results + 1))
+  fi
+
   printf '  -- self-test: %d of %d cases behaved correctly\n' "$caught" "$results"
-  rm -rf "$sandbox"
+  rm -rf "${sandbox:?}"
   [ "$caught" -eq "$results" ]
 }
 
