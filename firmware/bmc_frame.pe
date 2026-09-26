@@ -168,19 +168,22 @@ the_pin:
         ADD   A, 1
         STM   8, A             ; one more half-interval
         LDI   A, 2
-        SUB   A, 8             ; 2 - dmem[8], and THIS is the test that was
-                               ; wrong: it subtracted the CONSTANT 1, so the
-                               ; result was always 1, the JNZ below always
-                               ; fired, and the bit-boundary path was DEAD
-                               ; CODE -- the firmware could count half-
-                               ; intervals but never act on a bit boundary.
-                               ; Subtracting dmem[8] makes the result zero
-                               ; exactly at two half-intervals, which is the
-                               ; condition the comment below has always
-                               ; claimed. Read from the assembler's listing,
-                               ; where `LDI A,2 / SUB A,1 / JNZ` is visibly
-                               ; a constant, and the one mechanical check
-                               ; this act has never got wrong.
+        LDM   X, 8             ; THE OPERAND HAS TO COME THROUGH X, and this
+                               ; is the instruction that finally makes the act
+                               ; work. SUB is an ALU op whose field is an
+                               ; IMMEDIATE -- there is no `SUB A, <dmem>` form
+                               ; at all -- so both of the earlier versions of
+                               ; this test were subtracting a CONSTANT: the
+                               ; original `SUB A, 1` computed 2-1 = 1 and the
+                               ; JNZ below always fired, and when I "fixed"
+                               ; it to `SUB A, 8` it computed 2-8 = 250 and
+                               ; the JNZ still always fired. The probe is what
+                               ; said so: dmem[8] reached 46, a counter that
+                               ; should never pass 2. `LDM X,8` then
+                               ; `SUB A,X` is the only way to put dmem[8] on
+                               ; the right-hand side, and it costs the two
+                               ; extra instructions the ISA charges for it.
+        SUB   A, X             ; 2 - dmem[8], zero exactly at two half-intervals
         JNZ   half_done
         LDI   A, 0
         STM   8, A             ; two half-intervals is a bit boundary
