@@ -123,6 +123,36 @@ is_cpu_case() {
     || entry_rtl_files "$1" | grep -Fxq 'rtl/pe_soc.v'
 }
 
+# WHICH CASE READS WHICH PACKAGE DIRECTORY, learned from the testbenches
+# themselves. A testbench's data is not always named after it: tb_pe_ctrl_r2
+# $readmemh's tb/r2-vectors/*.hex and tb_pe_ctrl_r3_conf reads
+# tb/r3-vectors/*.hex, so a change to a vector BYTE belongs to that case even
+# though the directory is not a case name. Derived by scanning each case's own
+# source, so a testbench that starts reading a new directory teaches the gate
+# that directory without anyone editing the gate. Without this the gate called
+# all ten r2-vectors files of the held-core commit a "same-list violation" —
+# ten false alarms, which is how a real one (tb_pe_soc_freqmeter.v) gets
+# ignored.
+DATA_DIRS=""
+load_data_dirs() {
+  local e name d
+  DATA_DIRS=""
+  while IFS= read -r e; do
+    [ -n "$e" ] || continue
+    name=$(entry_name "$e")
+    [ -f "tb/${name}.v" ] || continue
+    while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      DATA_DIRS="$DATA_DIRS$d	$name
+"
+    done < <(grep -oE '\.\./tb/[A-Za-z0-9_.-]+/' "tb/${name}.v" 2>/dev/null \
+             | sed 's|^\.\./||; s|/$||' | sort -u)
+  done <<< "$CASE_TABLE"
+}
+cases_reading_dir() {  # $1 = repo-relative dir, e.g. tb/r2-vectors
+  printf '%s' "$DATA_DIRS" | awk -F'\t' -v d="$1" '$1 == d { print $2 }'
+}
+
 SELECTED=""      # newline-separated "name|top" entries
 SEL_WHY=""       # the same entries + TAB + why
 FULL_REASON=""   # non-empty => run everything
@@ -163,7 +193,7 @@ is_record_only() {
 # gate selects nothing while reporting an empty mapping. The self-test's own
 # counter is guarded for exactly this reason.
 map_changed() {
-  local label="$1" f e hit base fw_seen="" INERT="" fw_n fw_short
+  local label="$1" f e hit base fw_seen="" INERT="" fw_n fw_short d readers rn
   SELECTED=""; SEL_WHY=""; FULL_REASON=""; WARNINGS=""
   while IFS= read -r f; do
     [ -n "$f" ] || continue
@@ -195,11 +225,22 @@ map_changed() {
         if [ -n "$e" ]; then
           add_sel "$e" "its own testbench $f ($label)"
         else
-          # A testbench that is not in run_all.sh is not in the regression at
-          # all (the same-list rule). Loud, because it means the suite's own
-          # claim — "every testbench, one command" — is false for this file.
-          WARNINGS="$WARNINGS  $label: $f is NOT in run_all.sh's CASES (same-list violation; not in the regression)
+          # Not a testbench name: is it a PACKAGE DIRECTORY one of them reads?
+          local d="tb/$base" readers
+          readers=$(cases_reading_dir "$d")
+          if [ -n "$readers" ]; then
+            while IFS= read -r rn; do
+              [ -n "$rn" ] || continue
+              add_sel "$(printf '%s\n' "$CASE_TABLE" | grep "^${rn}|" | head -1)" \
+                      "its golden data $f ($label)"
+            done <<< "$readers"
+          else
+            # A testbench that is not in run_all.sh is not in the regression at
+            # all (the same-list rule). Loud, because it means the suite's own
+            # claim — "every testbench, one command" — is false for this file.
+            WARNINGS="$WARNINGS  $label: $f is NOT in run_all.sh's CASES, and no testbench in the suite reads $d/ (same-list violation; not in the regression)
 "
+          fi
         fi ;;
       firmware/*|tools/fw/*)
         fw_seen="$fw_seen$f " ;;
@@ -283,7 +324,7 @@ selftest() {
   # SUBSHELL, so its counters would be lost and this self-test could report
   # success having counted nothing. The guard below is the anti-vacuity check;
   # it must not be the thing that is vacuous.
-  local real_table="$CASE_TABLE" bad=0 ran=0 contract_ran=0 want_rules=15 want_contract=3
+  local real_table="$CASE_TABLE" real_dirs="$DATA_DIRS" bad=0 ran=0 contract_ran=0 want_rules=17 want_contract=3
   CASE_TABLE="tb_a|../rtl/pe_cpu.v|tb_a
 tb_b|../rtl/pe_ctrl.v|tb_b
 tb_c|../rtl/pe_cpu.v ../rtl/pe_soc.v|tb_c
@@ -305,7 +346,13 @@ tb_line_codec|../rtl/pe_nrzi.v|tb_line_codec"
     fi
     printf '  ok    %-46s %s, %s case(s)\n' "$label" "$kind" "$n"
   }
-  echo "verify_merge.sh self-test ($want_rules rules):"
+  echo "verify_merge.sh self-test ($((want_rules + want_contract)) checks):"
+  # The synthetic case table's testbenches do not exist on disk, so the
+  # package-directory rule is exercised with an injected association - the same
+  # shape load_data_dirs builds from the real sources.
+  DATA_DIRS="tb/r2-vectors	tb_b
+tb/r3-vectors	tb_b
+"
   st "an rtl file selects only its compilers" SELECT 1 ""                            <<< "rtl/pe_ctrl.v"
   st "a testbench selects its own case" SELECT 1 ""                                <<< "tb/tb_b.v"
   st "a case's vector dir selects the case" SELECT 1 ""                            <<< "tb/tb_b/vectors.v"
@@ -316,6 +363,8 @@ tb_line_codec|../rtl/pe_nrzi.v|tb_line_codec"
   st "a record alone falls back to full (no silent negative)" FULL 0 "inert"      <<< "WORKLOG.md"
   st "an unexercised rtl file is reported, not selected" FULL 0 "coverage gap"    <<< "rtl/pe_new.v"
   st "a TB outside the suite is reported as a same-list hole" FULL 0 "same-list" <<< "tb/tb_nosuite.v"
+  st "a golden-byte change selects the case that reads it" SELECT 1 ""       <<< "tb/r2-vectors/v.req.hex"
+  st "an unread directory is still a same-list hole" FULL 0 "same-list"      <<< "tb/tb_nosuite/data.hex"
   st "an unmappable file falls back to full" FULL 0 ""                              <<< "flow/foo.tcl"
   st "wiki/ is global (the reference gates read it)" FULL 0 ""                      <<< "wiki/reference/x.md"
   st "docs alone fall back to full (nothing to narrow)" FULL 0 "inert"            <<< "docs/x.md"
@@ -329,7 +378,7 @@ tb_line_codec|../rtl/pe_nrzi.v|tb_line_codec"
   filter_contract_test 2 "two selected cases, regex vs run_all's matcher" || bad=$((bad + 1))
   map_changed "contract" <<< "firmware/x.pe"
   filter_contract_test 2 "a firmware-wide selection, same contract" || bad=$((bad + 1))
-  CASE_TABLE="$real_table"
+  CASE_TABLE="$real_table"; DATA_DIRS="$real_dirs"
   if [ "$ran" -ne "$want_rules" ] || [ "$contract_ran" -ne "$want_contract" ]; then
     echo "  FAIL  exercised $ran rule(s) and $contract_ran contract check(s), expected $want_rules and $want_contract — the self-test would pass while checking less than it claims"
     exit 1
@@ -354,6 +403,7 @@ MERGE=no
 if [ "$(git rev-list --parents -n1 "$REV" | wc -w)" -gt 2 ]; then MERGE=yes; fi
 
 load_case_table regress/run_all.sh
+load_data_dirs
 if [ -z "$CASE_TABLE" ]; then
   # Loud, and to the SAFE side: with no readable table there is no mapping, and
   # a full suite is the only honest answer to "what does this merge break".
@@ -438,8 +488,8 @@ if [ "${BEHIND_N:-0}" -gt 0 ]; then
     [ -n "$e" ] || continue; printf '  %-26s %s\n' "$(entry_name "$e")" "$why"
   done
 fi
-[ -n "$MERGE_WARN" ] && printf '%s' "$MERGE_WARN"
-[ -n "$BEHIND_WARN" ] && printf '%s' "$BEHIND_WARN"
+[ -n "$MERGE_WARN" ] && printf '%s' "$MERGE_WARN" | sed 's/^  /  ! /'
+[ -n "$BEHIND_WARN" ] && printf '%s' "$BEHIND_WARN" | sed 's/^  /  ! /'
 
 REGEX=""
 if [ "$FORCE_FULL" -eq 1 ] || [ -n "$FULL_REASON" ]; then
