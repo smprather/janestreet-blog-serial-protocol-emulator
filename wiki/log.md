@@ -2358,3 +2358,26 @@ nearest **enclosing** filled rect, 7,389 text elements.
   `#6A2020` 11.41:1, `#143D1E` 12.24:1, `#16324F` 13.10:1, `#333` 12.63:1, and
   `#000` 21.00:1. Every one clears AA with margin, so the palette needs no
   change and none is routed to diag-bus.
+
+### Adoption recorded: the 10BASE-T line driver is ADOPTED and MERGED (manager's fact)
+
+- **`wiki/plans/eth-tx-line-driver.md`** — the status line read "IMPLEMENTED and
+  COMMITTED on branch `eth-tx-line-driver` … **NOT MERGED** … a proposal for the
+  manager to adopt, amend or reject" *after* the adoption had already landed. It
+  now states **ADOPTED and MERGED** via `02fe062` ("merge: eth-tx-line-driver …
+  gate 46/46 + documented sr04 wip"), names the wrapper pad map as the pinout
+  authority, and notes that the line was stale because the page was written on
+  the branch and the merge did not revisit it. The heading "Decisions taken here
+  (for the manager)" is now "(adopted)", and the "How to read this page" note
+  no longer points at a branch or at "awaiting adoption".
+- **`rtl/tt_um_protocol_emulator.v`** — the wrapper contradicted itself: its
+  pad-map line listed `uo_out[3] = eth_tx_n` as an ordinary assignment while the
+  narrative four lines later still called it "PROPOSED on branch
+  eth-tx-line-driver … the manager adopts or rejects". The narrative now records
+  the pinout as **ADOPTED and MERGED (02fe062, gate 46/46)** and says the pad-map
+  entry is the landed pinout, with STATUS item 4's `dbg_pc` pads released for
+  the pair. **Comment-only change, 3 insertions / 2 deletions, zero non-comment
+  lines**, so no RTL behaviour moved; the file still elaborates.
+- This closes the item `concepts/soc-wiring-and-memory.md` flagged in its own
+  body: the page's `uo_out[3]` row had been corrected to state what the RTL does
+  without asserting adoption, because adoption was not mine to record. It is now.
