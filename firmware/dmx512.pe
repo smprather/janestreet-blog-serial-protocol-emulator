@@ -75,9 +75,12 @@
 ;   CELL IS NEXT, because the dispatch that selects the next cell's code is
 ;   only partly executed on each path. Reaching a data cell runs seven
 ;   instructions of dispatch, reaching the start bit runs the same seven, the
-;   first stop runs two and the second stop runs three. Fifteen NOPs exist in
-;   this file for no reason other than to make those four paths the same
-;   length, and every one of them makes some OTHER cell the right size.
+;   first stop runs two and the second stop runs three. FOURTEEN NOPs sit in
+;   those four branches for no reason other than to make the paths the same
+;   length, and every one of them makes some OTHER cell the right size; two
+;   more, one each, are the leading NOP of the break and mark delay blocks, so
+;   sixteen NOPs in the file and fourteen in the transmitter. (This line said
+;   "fifteen" for the whole file, which is neither number.)
 ;
 ;   cell 0   start   240 clocks   three NOPs
 ;   cells 1-8 data    240 clocks   the reference: no padding anywhere

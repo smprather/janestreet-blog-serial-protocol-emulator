@@ -54,7 +54,9 @@
 ; per-word frame boundary to count: exactly 40 SCLK rises per frame.
 ;
 ; The words are 0x1134, 0x1245, 0x1356. None is a bit palindrome, and neither
-; is any of the three response bytes (0x6B, 0x2C, 0xD9). A palindromic word
+; is any of the three response bytes (0x6D, 0x6C, 0x6F -- the testbench
+; shifts 0x13, 0x12, 0x11 and RESP_MASK 16'h7E5A makes each wire byte that
+; value XOR 0x7E, so the pair is checkable from either end). A palindromic word
 ; puts the identical pin sequence on MOSI whichever way the shift goes, so it
 ; cannot catch a bit-order defect at all -- the trap firmware/spi_xfer.pe
 ; records for 0x5A, and the reason it sends 0x5B instead.
