@@ -272,9 +272,34 @@ run_one() {
         STM   1, A              ; 1500 us, centre'
       repl='        LDI   A, 169
         STM   1, A              ; the order of two positions is swapped' ;;
-    sv-idle-level)
-      anchor='        OUT   TXPIN, A          ; the level: LOW, the servo'"'"'s idle'
-      repl='        OUT   TXPIN, A          ; the level: HIGH, which is not idle' ;;
+    # *** THE sv-idle-level ARM WAS HERE, AND IT IS GONE DELIBERATELY. ***
+    # It had a full anchor/repl pair and a row in the wiki, and it was not in
+    # the CASES list above, so it had never run: a complete-looking mutation
+    # case that the harness never executed.
+    #
+    # IT COULD NOT HAVE PASSED EVEN IF IT HAD BEEN LISTED, and the reason is
+    # worth more than the case was. The anchor and the repl were TEXTUALLY
+    # IDENTICAL apart from a comment:
+    #
+    #   anchor = 'OUT TXPIN, A   ; the level: LOW, the servo's idle'
+    #   repl   = 'OUT TXPIN, A   ; the level: HIGH, which is not idle'
+    #
+    # MEASURED by listing both cases and running them: `sv-first-rise`
+    # DETECTED (6 checks failed), `sv-idle-level` SURVIVED. Nothing was
+    # injected, so nothing failed, and adding the row would have reddened the
+    # gate for a reason that has nothing to do with the servo.
+    #
+    # IT WAS ALSO REDUNDANT, which is why this is a removal and not a repair.
+    # servo_sweep writes the idle level in ONE place (firmware/servo_sweep.pe,
+    # `LDI A, 0x00 / OUT TXPIN, A`), so a working `sv-idle-level` would have to
+    # mutate the very same two lines that `sv-first-rise` already mutates --
+    # one site, one fault, 66 seconds of servo simulation each, and the second
+    # would add no coverage. The wiki claimed the pair covered the fault "from
+    # both directions"; there is only one direction to cover.
+    #
+    # The fault itself is NOT uncovered: `sv-first-rise` makes the idle level
+    # HIGH by the same route and is detected. The wiki has been corrected to
+    # say so, rather than left claiming a case that cannot exist.
     sv-first-rise)
       anchor='        LDI   A, 0x00
         OUT   TXPIN, A          ; the level: LOW, the servo'"'"'s idle'

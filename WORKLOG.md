@@ -2776,3 +2776,73 @@ So the two things that were proven are: the check passes when the models agree,
 and it reports a model's self-check failure with the model's own words instead
 of a bare exit code. The disagree-and-report path is correct by construction
 and untested by injection, and **it is named here rather than left implied**.
+
+## 2026-09-27 act (c): TASK-START -- THE sv-idle-level ARM, WHICH HAS NEVER RUN
+
+The manager's report: `run_one` has an `sv-idle-level` arm with no `CASES`
+entry -- dead code that has never run. My call, wired or removed.
+
+**IT IS NOT IN THE CASES HEREDOC, AND THE ARM IS COMPLETE** -- anchor, repl,
+and a wiki row at wiki/concepts/protocol-servo.md:260 claiming it is a
+mutation case. So the wiki asserts a case the harness has never executed,
+which is this act's subject one level up.
+
+**AND THE ANCHOR AND THE REPL ARE TEXTUALLY IDENTICAL.** That is the whole
+finding, and it is why the manager's prediction was right for a reason neither
+of us had yet: adding the entry would NOT redden the gate by exposing a real
+fault, it would redden it by injecting NOTHING.
+
+### THE VERDICT: REMOVE, AND IT IS NOT CLOSURE
+
+**MEASURED, by listing the two cases together and running them:**
+
+    detected  [sv-first-rise  (servo_sweep|...the first pulse has no rising edge)]  (6 checks failed)
+    SURVIVED  [sv-idle-level  (servo_sweep|the idle level becomes HIGH)]
+
+**So the manager's prediction was right for a sharper reason than "it might
+redden the gate".** The arm COULD NOT have passed if it had been listed,
+because **the anchor and the repl were textually identical apart from a
+comment.** Nothing was injected, so nothing failed, and the gate would have
+reddened for a reason with nothing to do with the servo.
+
+**AND IT WAS ALSO REDUNDANT, which is why this is a removal and not a repair.**
+`servo_sweep` writes the idle level in **ONE** place -- `firmware/servo_sweep.pe`,
+`LDI A, 0x00 / OUT TXPIN, A` -- so a *working* `sv-idle-level` would have to
+mutate the very two lines `sv-first-rise` already mutates. One site, one fault,
+66 seconds of servo simulation each, and the second would add no coverage. The
+wiki claimed the pair covered the fault **"from both directions"**; there is
+only one direction to cover.
+
+**THE FAULT IS NOT UNCOVERED.** `sv-first-rise` makes the idle level HIGH by
+the same route and is DETECTED. The arm and the wiki row are gone, and the wiki
+now says what is true -- including *why* the second case was removed, so the
+next writer does not re-add it and does not read the removal as a coverage loss.
+
+**THIS IS THE SAME SHAPE AS EVERY STALE FIGURE THIS ACT KEEPS HUNTING:** a
+documented test case that cannot exist, presented exactly like one that can.
+The wiki asserted a case for a defect; the harness had never run it; and the
+assertion was as load-bearing as any of the encoding claims, because it is what
+a reader would check to decide the fault is covered.
+
+### AND THE CLASS IS UNGATED, WHICH IS THE ACTUAL FINDING
+
+**`regress/check_mutation_lists.sh` does NOT cross-check the CASES list against
+the dispatch arms.** It checks that each harness's `MUTABLE` covers every file
+that harness *writes* -- a file-coverage gate, and a good one. **Nothing
+anywhere asserts that every `<id>)` arm in a harness's dispatch appears in its
+`CASES` list.** So "a complete-looking mutation arm with no CASES entry, which
+therefore never runs" is possible in **any** of the four harnesses that
+dispatch on an id (`run_one_tb.sh`, `run_all.sh`, `mutate_timing_tb.sh`,
+`mutate_ctrl_r3_tb.sh`), and nothing would say so.
+
+**That is the next scoped task, named rather than started**, because it wants a
+check that has been *proven to fire* and I am at the wrap:
+1. extend `check_mutation_lists.sh` to parse each harness's `<id>)` arms and
+   its `CASES` heredoc and FAIL on an arm with no entry -- the same
+   "list is only trustworthy if something checks it" argument the file already
+   makes about MUTABLE;
+2. prove it by putting the arm back with no CASES entry, which is the fault
+   this entry is about;
+3. and it is a static check on a harness's own self-consistency, which is why
+   it belongs in that file rather than in a mutation suite that costs 66
+   seconds a case to notice a missing line.
