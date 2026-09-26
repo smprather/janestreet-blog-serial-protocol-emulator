@@ -119,8 +119,7 @@ class TestTheFlipMovesOnlyTheFourSteps(FlipHarness):
         self.assertEqual(sorted(evidence["pending_steps"]), [])
         for name in V.HELD_STEP_NAMES:
             self.assertIn(name, evidence["confirmed_steps"])
-        self.assertEqual(len(evidence["confirmed_steps"]),
-                         18 + len(V.HELD_STEP_NAMES))
+        self.assertEqual(len(evidence["confirmed_steps"]), 18 + len(V.HELD_STEP_NAMES))
         self.assertIn("22/22", evidence["conformance"])
         self.assertIn(CITE.split(" (")[0], evidence["review"])
 
@@ -129,12 +128,15 @@ class TestTheFlipMovesOnlyTheFourSteps(FlipHarness):
         namespace: dict = {}
         exec(compile(flipped, "r2_vectors.py", "exec"), namespace)  # noqa: S102
         evidence = namespace["CHIP_EVIDENCE"]
-        before = set(json.loads(
-            (V.SPEC.artifact).read_text(encoding="utf-8")
-        )["chip_evidence"]["confirmed_steps"])
+        before = set(
+            json.loads((V.SPEC.artifact).read_text(encoding="utf-8"))["chip_evidence"][
+                "confirmed_steps"
+            ]
+        )
         after = set(evidence["confirmed_steps"])
-        self.assertTrue(before.issubset(after),
-                        "the flip must only ADD to the confirmed set")
+        self.assertTrue(
+            before.issubset(after), "the flip must only ADD to the confirmed set"
+        )
         self.assertEqual(after - before, set(V.HELD_STEP_NAMES))
 
     def test_the_fingerprint_gains_the_four_pairs_and_keeps_the_eighteen(self):
@@ -145,13 +147,16 @@ class TestTheFlipMovesOnlyTheFourSteps(FlipHarness):
         for name, pair in V.CONFIRMED_STEP_BYTES.items():
             with self.subTest(step=name):
                 self.assertEqual(tuple(pinned[name]), pair)
-        self.assertEqual(len(pinned),
-                         len(V.CONFIRMED_STEP_BYTES) + len(V.HELD_STEP_NAMES))
+        self.assertEqual(
+            len(pinned), len(V.CONFIRMED_STEP_BYTES) + len(V.HELD_STEP_NAMES)
+        )
         # the new pairs are the SHIPPED bytes, not invented ones
         on_disk = json.loads(V.SPEC.artifact.read_text(encoding="utf-8"))
-        shipped = {step["name"]: (step["request_hex"], step["response_hex"])
-                   for vector in on_disk["vectors"]
-                   for step in vector["steps"]}
+        shipped = {
+            step["name"]: (step["request_hex"], step["response_hex"])
+            for vector in on_disk["vectors"]
+            for step in vector["steps"]
+        }
         for name in V.HELD_STEP_NAMES:
             with self.subTest(step=name):
                 self.assertEqual(tuple(pinned[name]), shipped[name])
@@ -206,14 +211,18 @@ class TestTheNoticeIsGeneratedFromTheFlags(unittest.TestCase):
         """
         self.assertEqual(
             V.PACKAGE_NOTICE,
-            V.notice_for(confirmed=len(V.CHIP_EVIDENCE["confirmed_steps"]),
-                         pending=V.CHIP_EVIDENCE["pending_steps"]))
+            V.notice_for(
+                confirmed=len(V.CHIP_EVIDENCE["confirmed_steps"]),
+                pending=V.CHIP_EVIDENCE["pending_steps"],
+            ),
+        )
 
     def test_the_notice_says_18_of_22_while_four_are_pending(self):
         notice = V.PACKAGE_NOTICE
         self.assertEqual(len(V.CHIP_EVIDENCE["confirmed_steps"]), 18)
-        self.assertEqual(sorted(V.CHIP_EVIDENCE["pending_steps"]),
-                         sorted(V.HELD_STEP_NAMES))
+        self.assertEqual(
+            sorted(V.CHIP_EVIDENCE["pending_steps"]), sorted(V.HELD_STEP_NAMES)
+        )
         self.assertIn("18 of the 22", notice)
         for name in V.HELD_STEP_NAMES:
             self.assertIn(name, notice)

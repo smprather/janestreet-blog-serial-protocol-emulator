@@ -219,8 +219,9 @@ def notice_for(*, confirmed: int, pending) -> str:
     about the other.
     """
     total = confirmed + len(pending)
-    where = ("the chip repo's reviews/2026-09-25/R2-READ-PATH-REVIEW.md, "
-             "section 'Conformance'")
+    where = (
+        "the chip repo's reviews/2026-09-25/R2-READ-PATH-REVIEW.md, section 'Conformance'"
+    )
     if not pending:
         return (
             f"CHIP-CONFIRMED IN SIMULATION: all {total} golden steps in this "
@@ -246,8 +247,10 @@ def notice_for(*, confirmed: int, pending) -> str:
 
 def _notice(evidence: dict) -> str:
     """The notice for an evidence block (the module's own, and a flipped one)."""
-    return notice_for(confirmed=len(evidence.get("confirmed_steps", ())),
-                      pending=tuple(evidence.get("pending_steps", ())))
+    return notice_for(
+        confirmed=len(evidence.get("confirmed_steps", ())),
+        pending=tuple(evidence.get("pending_steps", ())),
+    )
 
 
 PACKAGE_NOTICE = _notice(CHIP_EVIDENCE)
@@ -353,8 +356,7 @@ def _source_literal(source: str, name: str):
     raise FlipRefused(f"no module-level literal named {name} to work from")
 
 
-def _replace_span(source: str, start: str, end: str, replacement: str,
-                  what: str) -> str:
+def _replace_span(source: str, start: str, end: str, replacement: str, what: str) -> str:
     """Replace the text between two markers, or refuse.
 
     The lesson from my own F1 fix (r3_vectors, 2026-09-25): a `str.replace`
@@ -370,7 +372,7 @@ def _replace_span(source: str, start: str, end: str, replacement: str,
     last = source.find(end, first + len(start))
     if last < 0:
         raise FlipRefused(f"{what}: the end marker {end!r} is gone")
-    return source[:first + len(start)] + replacement + source[last:]
+    return source[: first + len(start)] + replacement + source[last:]
 
 
 def _literal_bounds(source: str, name: str) -> tuple[int, int]:
@@ -388,7 +390,8 @@ def _literal_bounds(source: str, name: str) -> tuple[int, int]:
                 if node.end_lineno is None or node.value.end_lineno is None:
                     raise FlipRefused(
                         f"{name}: the literal has no end position, so there "
-                        f"is nowhere to insert; the module may be a stub")
+                        f"is nowhere to insert; the module may be a stub"
+                    )
                 return node.end_lineno, node.value.end_lineno
     raise FlipRefused(f"no module-level literal named {name} to work from")
 
@@ -437,9 +440,10 @@ def _append_to_literal(source: str, name: str, body: str, what: str) -> str:
         raise FlipRefused(f"{what}: the literal's bounds are out of range")
     sample = lines[first - 1]
     indent = " " * (len(sample) - len(sample.lstrip()))
-    block = "".join(f"{indent}{line}\n"
-                    for line in body.rstrip("\n").split("\n") if line.strip())
-    return "".join(lines[:end - 1]) + block + "".join(lines[end - 1:])
+    block = "".join(
+        f"{indent}{line}\n" for line in body.rstrip("\n").split("\n") if line.strip()
+    )
+    return "".join(lines[: end - 1]) + block + "".join(lines[end - 1 :])
 
 
 def flip_held_steps(source: str, *, cite: str = "", date: str = "") -> str:
@@ -466,14 +470,15 @@ def flip_held_steps(source: str, *, cite: str = "", date: str = "") -> str:
     if not (cite or "").strip():
         raise FlipRefused(
             "a cite is required: the trigger is the chip's report, so the "
-            "report has to be named (chip repo review path)")
+            "report has to be named (chip repo review path)"
+        )
     if not (date or "").strip():
-        raise FlipRefused(
-            "a date is required: a citation without a date rots silently")
+        raise FlipRefused("a date is required: a citation without a date rots silently")
     if _evidence_is_already_flipped(source):
         raise FlipRefused(
             "the held-core steps are already confirmed (or the evidence block "
-            "was edited by hand) - nothing to flip")
+            "was edited by hand) - nothing to flip"
+        )
 
     # The byte freeze, checked against a FRESH build before anything is
     # rewritten. This is the anti-laundering gate.
@@ -489,47 +494,59 @@ def flip_held_steps(source: str, *, cite: str = "", date: str = "") -> str:
         if tuple(pinned.get(name, ())) != fresh[name]:
             raise FlipRefused(
                 f"{name}: the pinned byte pair does not match a fresh build, "
-                f"so flipping now would confirm a byte edit nobody re-ran")
+                f"so flipping now would confirm a byte edit nobody re-ran"
+            )
 
     count = len(names) + len(HELD_STEP_NAMES)
     out = source
     # 1. the four names join the confirmed tuple
     out = _append_to_literal(
-        out, "CONFIRMED_STEP_NAMES",
+        out,
+        "CONFIRMED_STEP_NAMES",
         "\n# Confirmed by the chip's re-run; see chip_evidence.\n"
         + "\n".join(f'"{name}",' for name in HELD_STEP_NAMES),
-        "confirmed-step names")
+        "confirmed-step names",
+    )
     # 2. the four byte pairs join the freeze, from the SHIPPED bytes
     out = _append_to_literal(
-        out, "CONFIRMED_STEP_BYTES",
+        out,
+        "CONFIRMED_STEP_BYTES",
         "\n".join(
-            f'"{name}": (\n    "{fresh[name][0]}",\n'
-            f'    "{fresh[name][1]}",\n),'
-            for name in HELD_STEP_NAMES),
-        "confirmed-step bytes")
+            f'"{name}": (\n    "{fresh[name][0]}",\n    "{fresh[name][1]}",\n),'
+            for name in HELD_STEP_NAMES
+        ),
+        "confirmed-step bytes",
+    )
     # 3. the conformance line restates the arithmetic
     out = _replace_span(
-        out, "\n    \"conformance\": ", "\n    \"pending_steps\":",
+        out,
+        '\n    "conformance": ',
+        '\n    "pending_steps":',
         f' "{count}/{count} golden steps PASS, byte-exact including CRC, in '
-        f'the chip repo\'s tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: '
-        f'the R2 read-path steps plus the four held-core steps (state 2 '
+        f"the chip repo's tb/tb_pe_ctrl_r2.v with the R3 debug inputs driven: "
+        f"the R2 read-path steps plus the four held-core steps (state 2 "
         f'step-pause, state 3 live hit). Reported in {cite}, {date}.",',
-        "conformance")
+        "conformance",
+    )
     # 4. pending becomes history, with the report that cleared it
     out = _replace_span(
-        out, "\n    \"pending_reason\": ", "\n    \"scope\":",
-        f' "These four steps were added on 2026-09-25 because R3\'s debug work '
-        f'made the R2 readback reachable in states 2 (DEBUG_HOLD) and 3 '
-        f'(BP_HIT) while no R2 vector exercised either. The chip has since '
-        f're-run tb_pe_ctrl_r2 against them with the debug inputs driven and '
-        f'reported them byte-exact ({cite}, {date}), so the pending set is '
+        out,
+        '\n    "pending_reason": ',
+        '\n    "scope":',
+        f" \"These four steps were added on 2026-09-25 because R3's debug work "
+        f"made the R2 readback reachable in states 2 (DEBUG_HOLD) and 3 "
+        f"(BP_HIT) while no R2 vector exercised either. The chip has since "
+        f"re-run tb_pe_ctrl_r2 against them with the debug inputs driven and "
+        f"reported them byte-exact ({cite}, {date}), so the pending set is "
         f'empty and the notice is generated from the full count.",',
-        "pending reason")
+        "pending reason",
+    )
     # 5. pending_steps empties
-    out = _replace_span(out, "\n    \"pending_steps\": ",
-                        "\n    \"pending_reason\":", " (),", "pending steps")
+    out = _replace_span(
+        out, '\n    "pending_steps": ', '\n    "pending_reason":', " (),", "pending steps"
+    )
     # 6. the date
-    out = _replace_span(out, "\n    \"date\": ", ",\n}", f' "{date}"', "date")
+    out = _replace_span(out, '\n    "date": ', ",\n}", f' "{date}"', "date")
     # 7. and the result must still be Python: a text transform that can emit
     #    a file nobody can import is not a transform. `ast.parse` rather than
     #    `compile`, because what is being checked is SYNTAX - the flipped file
@@ -994,13 +1011,18 @@ def confirm_cli(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="python3 -m tools.host_gui.r2_vectors --confirm-held-steps",
         description="Confirm the four held-core R2 steps against the chip's "
-                    "report. The trigger is the chip's GREEN report, not this "
-                    "command.",
+        "report. The trigger is the chip's GREEN report, not this "
+        "command.",
     )
-    parser.add_argument("--cite", required=False, default="",
-                        help="the chip report that cleared them (review path)")
-    parser.add_argument("--date", required=False, default="",
-                        help="the date of that report, YYYY-MM-DD")
+    parser.add_argument(
+        "--cite",
+        required=False,
+        default="",
+        help="the chip report that cleared them (review path)",
+    )
+    parser.add_argument(
+        "--date", required=False, default="", help="the date of that report, YYYY-MM-DD"
+    )
     args = parser.parse_args(argv)
 
     module_path = Path(__file__).resolve()
@@ -1011,30 +1033,39 @@ def confirm_cli(argv: list[str]) -> int:
         print(f"REFUSED: {exc}")
         return 1
     module_path.write_text(after, encoding="utf-8")
-    diff = difflib.unified_diff(before.splitlines(), after.splitlines(),
-                                fromfile=str(module_path), tofile=str(module_path),
-                                lineterm="", n=1)
+    diff = difflib.unified_diff(
+        before.splitlines(),
+        after.splitlines(),
+        fromfile=str(module_path),
+        tofile=str(module_path),
+        lineterm="",
+        n=1,
+    )
     print("".join(line + "\n" for line in diff))
     count = len(CONFIRMED_STEP_NAMES) + len(HELD_STEP_NAMES)
-    print("Now regenerate and verify the artifacts (this process held the "
-          "pre-flip module, so it must not write them itself):\n"
-          "  python3 -m tools.host_gui.r2_vectors --write\n"
-          "  python3 -m tools.host_gui.r2_vectors --hex\n"
-          "  python3 -m tools.host_gui.r2_vectors --check")
-    print(f"\nAnd the prose a human still owes (the notice itself is generated, "
-          f"so it is already {count} of {count}):\n"
-          "  docs/demo-walkthrough.md  the R2 row: '18 of 22' -> "
-          f"'{count} of {count}', and the 4-unconfirmed sentence goes\n"
-          "  reviews/2026-09-25/R2-READ-VERIFICATION.md  the Status section\n"
-          "  reviews/2026-09-25/R2-HELD-STATUS-BYTES.md  the header claim\n"
-          "  tools/host_bridge/acceptance.py  _r2_detail's tag\n"
-          "  tools/host_gui/tests/test_docs.py  the walkthrough pin, if it "
-          "asserts the old wording\n"
-          "  wiki/STATUS.md + HANDOFF.md  the R2 notes\n"
-          "  The gates will NAME each one that is stale: test_r2_vectors' "
-          "notice guard,\n"
-          "  test_docs' walkthrough pins, and the acceptance beat-count/PASS-"
-          "count pins.")
+    print(
+        "Now regenerate and verify the artifacts (this process held the "
+        "pre-flip module, so it must not write them itself):\n"
+        "  python3 -m tools.host_gui.r2_vectors --write\n"
+        "  python3 -m tools.host_gui.r2_vectors --hex\n"
+        "  python3 -m tools.host_gui.r2_vectors --check"
+    )
+    print(
+        f"\nAnd the prose a human still owes (the notice itself is generated, "
+        f"so it is already {count} of {count}):\n"
+        "  docs/demo-walkthrough.md  the R2 row: '18 of 22' -> "
+        f"'{count} of {count}', and the 4-unconfirmed sentence goes\n"
+        "  reviews/2026-09-25/R2-READ-VERIFICATION.md  the Status section\n"
+        "  reviews/2026-09-25/R2-HELD-STATUS-BYTES.md  the header claim\n"
+        "  tools/host_bridge/acceptance.py  _r2_detail's tag\n"
+        "  tools/host_gui/tests/test_docs.py  the walkthrough pin, if it "
+        "asserts the old wording\n"
+        "  wiki/STATUS.md + HANDOFF.md  the R2 notes\n"
+        "  The gates will NAME each one that is stale: test_r2_vectors' "
+        "notice guard,\n"
+        "  test_docs' walkthrough pins, and the acceptance beat-count/PASS-"
+        "count pins."
+    )
     return 0
 
 

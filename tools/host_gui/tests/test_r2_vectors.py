@@ -109,8 +109,7 @@ class TestR2VectorPackage(unittest.TestCase):
                         self.assertIn("R2-READ-PATH-REVIEW", evidence["review"])
                         self.assertIn("tb_pe_ctrl_r2", evidence["testbench"])
                         confirmed = len(V.CHIP_EVIDENCE["confirmed_steps"])
-                        self.assertIn(f"{confirmed}/{confirmed}",
-                                      evidence["conformance"])
+                        self.assertIn(f"{confirmed}/{confirmed}", evidence["conformance"])
                         self.assertIn("date", evidence)
                         # the citation must also say what it does NOT prove
                         self.assertIn("SIMULATION", evidence["scope"])
