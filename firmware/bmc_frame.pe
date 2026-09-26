@@ -6,11 +6,45 @@
 ; with, and says WHICH ENCODING it locked onto. The wire rules, from which
 ; everything here and in tb/tb_pe_soc_bmc.v is written independently:
 ;   * a bit is TWO half-intervals;
-;   * a '1' has NO transition at the END of its interval, in both encodings;
-;   * a '0' HAS one, in both encodings;
-;   * FM0 adds a transition at the START of the interval for a '1', FM1 does
-;     not -- which is the ONLY difference between the two encodings, and so
-;     the only thing a receiver has to establish to know which it is reading.
+;   * a '0' has a transition in the MIDDLE of its interval, in both encodings;
+;   * a '1' in FM1 has a transition at the START of its interval and none in
+;     the middle;
+;   * a '1' in FM0 has NO TRANSITION AT ALL: the level is simply held.
+;
+; SO WHAT A RUN OF ONES DOES, which the old rules did not say and which is
+; now part of the specification, because the manager's ruling on the
+; contradiction made it the preamble check's teeth:
+;   * FM0: a run of ones is a CONSTANT LINE for its whole length. There is no
+;     transition to find, so a receiver inside the run has nothing to count
+;     and MUST resynchronise on the first transition after it. That is the
+;     dead-sensor-shaped case, and it is exactly why a preamble is required.
+;   * FM1: a run of ones is a CLEAN SQUARE WAVE, a transition at every
+;     boundary, and remains fully countable.
+;
+; THE ENCODING DIFFERENCE, restated so it is a measurement and not a label: a
+; '1' arrives with a boundary transition under FM1 and without one under FM0.
+; That single difference is the whole claim of the act and the only thing the
+; receiver has to establish.
+;
+; WHY THE CLOCK CAN BE RECOVERED AT ALL, which is the property the interval
+; method depends on and the one the counting-of-changes version violated: the
+; POSITION of a transition within the bit carries the data, so the NUMBER of
+; transitions per bit is NOT fixed -- a '0' contributes one in the middle, an
+; FM1 '1' one at the boundary, an FM0 '1' none at all. A receiver that called
+; two transitions a bit was reading the data and calling it the clock, and the
+; testbench's own decoder folded two transitions per bit for the same reason,
+; so the two agreed with each other and were wrong together. What IS fixed is
+; the INTERVAL BETWEEN TRANSITIONS, which counts half-intervals regardless of
+; what the data was, and that is what the receiver must use.
+;
+; A NOTE ON WHAT THIS COST, because a ruling that resolves a contradiction has
+; consequences the ruling did not state: the old first rule said EVERY bit
+; transitions in its middle, and the ruled behaviour -- a run of ones is a
+; constant line under FM0 -- is incompatible with that, because a constant line
+; has no mid-bit transition either. So the mid-bit transition belongs to the
+; '0' and not to every bit. That is the scoping this rule text adopts, and it
+; is flagged rather than buried because it is a change to what the act claims,
+; made as a consequence of a decision rather than requested by it.
 ;
 ; THE SHAPE OF THE RECEIVER, and it is forced by the ISA. A bi-phase receiver
 ; does not synchronise on a pin LEVEL: it TIMESTAMPS the level and compares
