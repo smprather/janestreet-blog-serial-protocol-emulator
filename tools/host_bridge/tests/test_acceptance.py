@@ -307,13 +307,14 @@ class TestTheDemoActReachesTheBreakpointWithoutTheModel(unittest.TestCase):
         fake = ACC.run_acceptance(fake=True)
         beat = next(c for c in fake.checks if c.name == "r3_demo_2_run_and_hit")
         self.assertIn(
-            "model-clocked: FakePE does not self-advance, a real core does",
-            beat.detail)
+            "model-clocked: FakePE does not self-advance, a real core does", beat.detail
+        )
 
         board = ACC.run_acceptance(fake=True, model_backed=False)
         beat = next(c for c in board.checks if c.name == "r3_demo_2_run_and_hit")
-        self.assertNotIn("FakePE", beat.detail,
-                         "a board run must not talk about the model")
+        self.assertNotIn(
+            "FakePE", beat.detail, "a board run must not talk about the model"
+        )
         self.assertNotIn("model-clocked", beat.detail)
         self.assertIn("on its own", beat.detail)
 
@@ -323,8 +324,9 @@ class TestTheDemoActReachesTheBreakpointWithoutTheModel(unittest.TestCase):
         The wait reports the last state observed; the beat has to carry it, or
         an operator is left with a bare FAIL and a board to guess about.
         """
-        hit = ACC.await_breakpoint_hit(debug_state=lambda: 1, advance=None,
-                                       tries=2, sleep=lambda _s: None)
+        hit = ACC.await_breakpoint_hit(
+            debug_state=lambda: 1, advance=None, tries=2, sleep=lambda _s: None
+        )
         self.assertFalse(hit["stopped"])
         self.assertIn("state=1", hit["detail"])
         self.assertIn("expected 3", hit["detail"])

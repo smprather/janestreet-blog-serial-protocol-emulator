@@ -689,9 +689,9 @@ def run_acceptance(
             "does not self-advance, a real core does)"
             if pe is not None
             else f"run strap high; the core advanced on its own until its "
-                 f"LANDING address equalled the armed one, then stopped there "
-                 f"({hit['detail']}) - no model on this link, so nothing was "
-                 f"clocked",
+            f"LANDING address equalled the armed one, then stopped there "
+            f"({hit['detail']}) - no model on this link, so nothing was "
+            f"clocked",
         )
 
         # 3. the hit is visible and distinguishable: state 3 = BP_HIT
