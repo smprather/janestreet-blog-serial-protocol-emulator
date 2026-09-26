@@ -1664,3 +1664,69 @@ the wrong edge.
 3. Only then the firmware, and only if (1) and (2) agree that the WIRE is wrong
    rather than the receiver. They cannot both be right, and saying which one is
    wrong is the whole of this step.
+
+### THE FINDING: SHR DOES NOT RE-ALIGN, SO THE HANDOFF'S RECIPE SENDS THE BYTE LOW BIT FIRST
+
+`tb/probes/probe_tb_classify.v`, in full, is the answer in fourteen lines:
+
+    #1 .. #14   2 us   skip   (the phase is UNKNOWN, nothing is emitted)
+    #15         4 us   MID    acc 01
+    #16         4 us   MID    acc 02      <-- TWO four-us gaps in a row
+    #17         2 us   mid
+    #18         2 us   BOUNDARY
+
+**The lock is RIGHT.** Gap 15 is the two-half gap at the preamble's 0-to-1
+boundary, which is the only gap in that run that is two halves -- so the
+receiver found the lock the wire rules say is there. **But gap 16 is also two
+halves, and nothing in the preamble's run of eight ONES can be**: eight equal
+bits give a mid and a boundary in every half-interval. So the wire is
+transitioning where the rules say it is silent, and it is the WIRE that is
+wrong, not the receiver -- which is the thing the trace was for, because the
+two cannot both be right and the trace says which.
+
+**AND THE REASON IS THE PEEL, AND THE PEEL IS THE HANDOFF'S SHR RECIPE.**
+
+    SHR is `a <= {1'b0, a[7:1]}`. The new bit 7 is ZERO, always.
+
+The handoff said the encoder "tests the top bit first (`LDM X,12 / LDI A,0x80
+/ AND A,X`) then peels (`LDM A,12 / SHR`)", and that this made the high-bit-first
+order free. **It does not, and it is the same error as the comment it corrects
+one paragraph earlier:** a shift-RIGHT moves every bit DOWN one place and throws
+the top one away, so after one SHR the bit that was at 6 is at 5, not at 7. So
+a byte peeled with SHR comes out **LOW BIT FIRST**, and the bit test at 0x80
+reads a ZERO for every bit after the first.
+
+**MEASURED, and it is arithmetic you can do from the trace above.** The
+preamble's byte is `0xFF`, which is eight ones in every order, so the wire looks
+perfect for sixteen half-intervals. The payload is not: `dmem[11]` was `0xFF`,
+then `0x7F`, then `0x52` -- and `0x52` is `0xA5` shifted right, whose top bit is
+0, so the firmware sent the frame's bit 0 where the wire rules want bit 7.
+The gap that cannot exist is a boundary between two of the preamble's ones, and
+the eight ones ARE symmetric -- which is exactly why a fault that only reverses
+the payload's bit order can hide behind a preamble made of all-ones.
+
+**SO WHAT THE SHR FINDING ACTUALLY CHANGES, and it is the opposite of what it
+says.** SHR makes reading a byte **from the low end** cheap. It does not make
+reading it from the top cheap, because there is no shift-LEFT to re-align with.
+The high-bit-first order is forced by the RECEIVER, whose shift-in is a
+doubling with the arriving bit in at the low end, and the manager's ruling is
+explicit that the order is the receiver's: "THE ENCODER MUST THEREFORE TAKE
+BIT 7 FIRST FROM A BYTE IT IS CONSUMING." **So the ruling stands and its cost
+claim does not:** the encoder pays for the mask, and the cheap peel is the wrong
+direction to peel in.
+
+**THE CHEAPEST CORRECT SHAPE, and it is the mask SHR moves down.** Hold the MASK
+in `dmem[11]` (0x80, 0x40, ... 0x01, reloaded at 0x80 at each byte boundary) and
+read the byte beside it: `AND A, mask` is 0x80 exactly when the bit is set, and
+SHR takes the mask down one place per bit, which is the one thing a
+shift-RIGHT *is* good at. The byte then has to be in a register at the moment of
+the AND, so it is read per half-interval -- the same five-way dispatch that is
+already in the byte-boundary path, moved up into the level block.
+
+**AND THE STANDING LESSON, which is the expensive kind.** The handoff's SHR
+finding was made by assembling and counting, which is the right way, and the
+RECIPE inside it was written from the same stale figure it was correcting: that
+a shift-right peels from the top. So the finding was half right in a way that
+**looks** more right than the thing it replaced, and a reader who implements it
+gets a firmware that transmits. This is the sixth stale figure in this act and
+the first one that arrived INSIDE a correction.
