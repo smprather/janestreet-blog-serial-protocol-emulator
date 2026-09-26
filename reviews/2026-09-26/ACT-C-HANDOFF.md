@@ -1,14 +1,144 @@
-# Act (c) FM0/FM1 — handoff at the 07:00 CDT wrap
+# Act (c) FM0/FM1 — handoff after the 70% wrap
 
-**branch `fw-timing-protocols` · worktree `/tmp/worktrees/fw-timing` · `03d71c1`**
-Tree clean apart from `.pi-lens-probe-home/` (a pi-lens log artefact).
-176 words. Act is RED; everything below is measured.
+**branch `fw-timing-protocols` · worktree `/tmp/worktrees/fw-timing` · `f649969`**
+188 words. **The DECODE direction is GREEN and the ENCODE direction is RED**, and
+the split is now a line rather than a mood.
 
-Written to the repository on purpose: the `/tmp` copy of this file was deleted
-twice during the session by something that cleans `/tmp`, and a handoff that
-vanishes is worse than no handoff.
+Written to the repository on purpose, as the last one was: /tmp has been cleaned
+three times this session with files in it, and the two artefacts that decide
+this act -- `firmware/bmc_model.py` and `firmware/bmc_checks.py` -- are now in
+the repository for the same reason.
 
 ---
+
+## WHAT IS MEASURED, AND IT IS THE HEADLINE OF THE ACT
+
+    pass 0: sent FM0 -> the firmware banked a5 3c 96, dmem[3] = 00
+    pass 1: sent FM1 -> the firmware banked a5 3c 96, dmem[3] = 01
+
+**Two different flags and the same three bytes, from the same frame.** That is
+the check the act has wanted since it began, and it is now the check the
+testbench runs, per pass, against the polarity that was actually sent.
+
+## THE ONE-BIT-LATE FAULT IS GONE, AND IT WAS NOT A COMPENSATION
+
+`dmem[15]` is a THREE-state phase: 1 = the last transition was a boundary, 0 =
+a mid, **2 = UNKNOWN**, which is what the resync leaves behind. While it is 2 a
+one-half gap emits nothing, and only a **two-half** gap may emit -- a two-half
+gap is mid-then-mid whatever came before it, so it is the one interval in this
+encoding that is unambiguous on its own. The preamble's eight-zero run
+guarantees exactly one, and the model puts it at **t = 34 us of the frame in
+both polarities**. So the receiver never has to tell which case it is in, which
+is the difficulty the handoff named: it does not have to, because it refuses to
+answer until the clock is unambiguous.
+
+Two things the model settled that the handoff had backwards, both worth keeping:
+
+* **the loss is NOT asymmetric in the way the handoff said.** It said nothing is
+  lost under FM1. The model says FM1 loses a bit too -- its first transition is
+  the MID of bit 0, the old algorithm read that as a boundary, and 31 payload
+  bits come out, exactly as for FM0. The phase error moves, it does not go.
+* **both polarities lose the same eight preamble bits**, which is what lets ONE
+  preamble-end test serve both. A preamble whose length depends on which
+  polarity lost the race is not a preamble, it is a race.
+
+## THE FLAG IS READ OFF THE WIRE, IN THREE ANSWERS
+
+The preamble's received byte is eight ones AS LEVELS: 0xFF is FM0, 0x00 is FM1,
+and **anything else means the receiver locked onto something that is not this
+preamble, which it now DECLARES (dmem[3] = 0xFF)** rather than calling FM1. The
+payload is then inverted whenever the flag is FM1 -- without that step the frame
+comes back as its own complement, measured as 5a c3 69, which is the most
+plausible-looking failure this act exists to be able to name.
+
+## THREE FAULTS THAT ONLY THE RIGHT PHASE COULD SHOW
+
+1. **THE WIRE IS HIGH BIT FIRST, and the ISA decided it.** The receiver's
+   shift-in is a doubling with the arriving bit in at the low end, so the first
+   bit to arrive lands in the high position; a low-bit-first frame assembled as
+   `79 4A FF`. Placing a bit at weight 2**count is a variable shift this machine
+   does not have. Every derived number moved with the change (18/14 intervals
+   became 16/15; 9 equal-adjacent pairs became 8) and the encoder self-check
+   now prints the values it derived rather than a remembered string.
+2. **`JZ`/`JNZ` TEST A, NOT A FLAG.** The first polarity gate tested dmem[3]
+   with a `LDM` followed by a bare `JZ`, so the branch saw the level. Measured:
+   the inversion was taken **zero times out of thirty-two bits**, in both
+   polarities, with the jump check, the reachability pass and the adjacent-label
+   check all clean. The rule: the instruction before a JZ/JNZ is a SUB.
+3. **`dmem[4] IS A MASKED LEVEL, NOT A 0/1.** `the_pin` does
+   `IN A, PIN / AND A, BMC_IN`, so the level stored is 0x20 or 0x00. Every use
+   of it had been a comparison against BMC_IN, which is blind to the mask, and
+   the first thing that arithmetic'd on it produced `1 - 0x20` and banked
+   `bf 9f df` for a frame of `a5 3c 96`. A level stored masked has to be
+   compared masked, everywhere.
+
+## THE TWO CHECKS THAT ARE STILL RED, AND THEY ARE ONE ITEM
+
+**The encode direction.** Two red checks, both naming it: the testbench's
+decoder recovered no frame from the firmware's pad, and its flag is -1.
+
+* the firmware's encoder is still the ten-word stub whose `half_wait` cannot
+  terminate -- `LDI A,BMC_HALF / STM 13,A` then `half_wait` reads 13, sets it to
+  0xFF and spins on a byte nothing will ever clear;
+* the testbench's decoder folds **two transitions per bit**, which is the flaw
+  this act was written to catch, and it starts at the first change, which
+  assumes a frame-start transition that only one polarity has;
+* and the shapes do not match: the firmware has ONE byte to send (dmem[6]) and
+  the testbench expects three (it compares `dec_byte[0..2]` against the frame).
+  That is a design decision nobody has made, not a bug.
+
+**The order to do it in, and it is the same order that just worked here:** model
+the ENCODER's wire output in `bmc_model.py` first (half-interval by half-
+interval, from the wire rules), then write the firmware to the model, then write
+the testbench's decoder to the wire rules and not to the firmware, then let the
+two argue. A `half_wait` that must be exactly 120 clocks is countable in the
+listing before it is simulated -- count the instructions on the path.
+
+**Wire it behind `<<wip>>`.** It is not in the regression, it is not claimed,
+and the two red checks are the honest end state until it is.
+
+## RUN IT
+
+```sh
+python3 firmware/bmc_checks.py firmware/bmc_frame.pe    # the five checks
+python3 firmware/bmc_model.py                           # the model, both polarities
+python3 tools/fw/peasm.py firmware/bmc_frame.pe > firmware/bmc_frame.hex
+/tmp/run_bmc_probe.sh /tmp/probe_cls.v                  # classifications by name
+```
+
+`probe_cls.v` counts mids, boundaries, resyncs, unknown-skips and byte_done by
+NAME, with the addresses injected from the assembler's listing. It is the probe
+that answers "how many of each" without a hand-counted address, and it is the
+first one to run. `probe_bits.v` prints the emitted stream grouped into bytes
+and `probe_inv.v` prints dmem[3], dmem[4] and dmem[13] at every bit_store.
+
+**Run the checks after every edit and read the WHOLE block in the listing.** That
+rule caught three faults this session, and one of them -- a cleared preamble
+flag that left the preamble running for the whole frame -- was invisible to
+every check and visible in one probe line.
+
+## THE FIVE CHECKS, AND WHY THE LAST TWO EXIST
+
+1. the one-line jump check (label map vs the encoded operand) -- has never been
+   wrong;
+2. reachability -- the only unreachable words are the encoder stub's;
+3. adjacent labels -- a label immediately after another is a fall-through
+   waiting to happen, and it is how `data_zero`/`resync` was missed once;
+4. **a store run split by a setter that CHANGED the value** -- the fourth
+   permanent check the handoff asked for, and the class all three above are
+   blind to by construction. Proven against a copy with `LDI A, 1 / STM 13, A`
+   put back into init, which is the fault that made dmem[11] = 1;
+5. **a JZ/JNZ whose A did not come from a SUB or a load of the tested byte.**
+
+Both of the last two took three tries to get a signature that is not the
+ordinary idiom, and both are proven by putting the fault BACK into a copy and
+watching the count go non-zero. A check that has never been shown to fire is a
+comment.
+
+
+---
+
+# THE PREVIOUS HANDOFF, KEPT WHOLE BELOW
 
 ## THE ONE OPEN FAULT, AND IT IS ONE BIT
 
