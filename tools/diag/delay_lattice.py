@@ -179,12 +179,34 @@ def audit_conversions(path: Path) -> list[str]:
     trust: the self-test plants a wrong conversion, shows the gate failing,
     adds the marker, shows the gate passing, and removes it again. If the marker
     ever stops being what does the work, the self-test fails.
+
+    THE MARKER IS SELF-LIMITING, and that is the part this function used to be
+    missing. A [sic] used to skip its line FOREVER, which meant the moment the
+    defect it marked got fixed -- which is the entire expected life story of a
+    documented defect -- the marker started switching off a REAL CHECK on a line
+    that had become correct. Nothing noticed. That is the same shape as the wiki
+    baseline's STALE direction: a pin that stops failing must come out, and
+    I built that direction into somebody else's gate and not into my own.
+
+    So a marked line is still recomputed, and the marker's standing depends on the
+    answer:
+      * the conversion is WRONG  -> the marker is earning its place, suppress it
+      * the conversion is RIGHT  -> the marker is STALE, that IS the finding
+      * there is no conversion   -> the marker suppresses nothing, that is noise
+    The exemption can therefore only ever suppress a genuinely-wrong claim, never
+    a right one, and a marker cannot outlive its defect.
     """
     failures = []
     for lineno, line in enumerate(path.read_text().splitlines(), 1):
-        if SIC in line:
+        marked = SIC in line
+        found = list(CONV.finditer(line))
+        if marked and not found:
+            failures.append(
+                f"{path.name}:{lineno}: {SIC} marks a line with no conversion to exempt, "
+                "so it suppresses nothing - remove it"
+            )
             continue
-        for m in CONV.finditer(line):
+        for m in found:
             raw = m.group(1)
             printed = m.group(2)
             try:
@@ -195,13 +217,24 @@ def audit_conversions(path: Path) -> list[str]:
                 # which is the whole reason this branch exists at all.
                 claimed = float(printed.strip().replace("\u00a0", "_").replace(" ", "_"))
             except ValueError:
+                # An unparseable conversion is never exempt: a marker cannot make
+                # a claim the checker cannot read into a claim it can.
                 failures.append(
                     f"{path.name}:{lineno}: unparseable conversion "
                     f"{raw!r} clocks = {printed!r}"
                 )
                 continue
             got = us(clocks)
-            if abs(got - claimed) > _tolerance_as_printed(printed):
+            wrong = abs(got - claimed) > _tolerance_as_printed(printed)
+            if marked:
+                if not wrong:
+                    failures.append(
+                        f"{path.name}:{lineno}: STALE {SIC} - the conversion it marks is "
+                        f"CORRECT ({clocks} clocks = {got:.4f} us, printed {claimed} us), "
+                        "so the marker is switching off a real check. Remove it."
+                    )
+                continue
+            if wrong:
                 failures.append(
                     f"{path.name}:{lineno}: {clocks} clocks = {got:.4f} us, "
                     f"printed {claimed} us  (off by {claimed - got:+.4f})"
@@ -534,7 +567,22 @@ def selftest() -> int:
         good &= require(f"same conversion marked {SIC!r}", want_fail=False)
         target.write_text(original)
 
-        # (5) and the gate must be green again once every planted error is gone
+        # (5) THE MARKER MUST NOT BE ABLE TO SURVIVE ITS DEFECT. This is the
+        #     other half of (4) and the half that used to be missing: a marker
+        #     on a conversion that is now CORRECT is a marker switching off a
+        #     real check, and the whole expected life of a documented defect is
+        #     that it gets fixed - at which point an unexamined exemption turns
+        #     itself off. So this must FAIL, in the gate's own exit code.
+        target.write_text(original + f"\n69 clocks = 1.15 \u00b5s  {SIC}\n")
+        good &= require(
+            f"STALE marker: a CORRECT conversion marked {SIC!r}", want_fail=True
+        )
+        # and a marker on a line with no conversion at all suppresses nothing
+        target.write_text(original + f"\nthis line carries a {SIC} and no conversion\n")
+        good &= require("marker with no conversion to exempt", want_fail=True)
+        target.write_text(original)
+
+        # (6) and the gate must be green again once every planted error is gone
         if not require("all planted errors removed", want_fail=False):
             return 1
 
