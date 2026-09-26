@@ -353,8 +353,28 @@ CONSTS: dict[str, int] = {
     # shifted base overlaps the working counters rather than running off the
     # end. The mutation gate perturbs them for exactly that reason.
     "FM_IN": 0x40,
-    "FM_PER_BASE": 8,   # the period of slot n is at 8 + 4n
-    "FM_HI_BASE": 10,   # its high time is at 10 + 4n
+    "FM_PER_BASE": 8,  # the period of slot n is at 8 + 4n
+    "FM_HI_BASE": 10,  # its high time is at 10 + 4n
+    #
+    # ---------------------------------------------------------------------
+    # HC-SR04 ULTRASONIC RANGING. The one act here whose ANSWER is a number
+    # rather than a waveform: the width of the echo pulse IS the distance, and
+    # the act is judged on the millimetre figure. Two pads this time -- the
+    # device has a trigger in and an echo out -- and PINOE must be written
+    # with BOTH bits, because PINOE is a whole register and a write claiming
+    # one pad is a write giving the other away (the fourth such write in this
+    # repository; see stepper_ramp.pe's header).
+    #   SR_TRIG  bit 6: driven by this program, the trigger pulse
+    #   SR_ECHO  bit 5: released, and read back as the pad
+    #
+    #   SR_TRIG_LEN is a COUNTED delay in instructions, not microseconds, and
+    #   it is 149 for a reason worth stating exactly: the loop is four clocks
+    #   per iteration (LDM, SUB, STM, JNZ) and the pulse spans the counter
+    #   load, the loop and the release, so the width is 4*149 + 4 = 600 clocks
+    #   = exactly 10.000 us at 60 MHz. The device asks for 10 us minimum.
+    "SR_TRIG": 0x40,
+    "SR_ECHO": 0x20,
+    "SR_TRIG_LEN": 149,
 }
 
 
