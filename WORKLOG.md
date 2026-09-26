@@ -2446,3 +2446,67 @@ is measuring has been wrong four times in two entries — a stale address, a
 non-blocking label lag, a summary that never printed, and now a disagreement
 with the listing. **The next probe samples AT the instruction, and says which
 address it sampled.**
+
+## 2026-09-27 act (c): TASK-START -- SAMPLE AT THE GATE, NOT AT THE OUT
+
+The queue is one measurement and its whole point is WHERE it samples. Every
+measurement in the last two entries was taken at the `OUT`, twenty instructions
+downstream of the gate, and a probe that samples downstream of the thing it
+measures has been wrong four times. So this one samples at the gate's own
+`LDM X, 6` and at the `JZ` that decides, and prints the register the branch is
+about to test.
+
+### THE GATE IS CORRECT AT EVERY HALF-INTERVAL, SO THE FIRMWARE IS EXONERATED
+
+Sampled at the gate's own instructions, as the TASK-START said:
+
+    c=13  dmem[6]=13 dmem[3]=0 dmem[11]=02   at the JZ: A=00 X=00   s=0 -> keep
+    c=14  dmem[6]=14 dmem[3]=0 dmem[11]=01   at the JZ: A=00 X=00   s=0 -> keep
+    c=15  dmem[6]=15 dmem[3]=0 dmem[11]=01   at the JZ: A=ff X=01   s=1 -> complement
+    c=16  dmem[6]=16 dmem[3]=0 dmem[11]=80   at the JZ: A=00 X=00   s=0 -> keep
+    c=17  dmem[6]=17 dmem[3]=0 dmem[11]=80   at the JZ: A=ff X=01   s=1 -> complement
+
+**`dmem[6]` IS the half-interval number at the gate, `dmem[3]` IS zero throughout,
+`s` IS the parity, and the keep and complement routes alternate exactly as the
+listing says — at c = 14 included.** So the gate is not the fault, the mask is not
+the fault (it walks `0x80 0x40 … 0x01` and reloads), the byte dispatch is now
+right, and **the encoder is doing what the listing says it does.**
+
+**AND YET TWO PROBES DISAGREE ABOUT A AT c = 14, TWENTY INSTRUCTIONS APART:**
+
+* at pc 232, the gate's own `JZ`: **`A = 0x00`**
+* at pc 243, the `OUT TXPIN`: **`A = 0x40`**
+
+and the listing says A cannot change between them — the keep route is
+`MOV A, Y / NOP / NOP / NOP / JMP enc_drive`, and `Y` is not written after the
+gate. **So one of the two readings is wrong, and the firmware is not.**
+
+**THAT IS THE NINTH TIME AN INSTRUMENT HAS DISAGREED WITH THE LISTING IN THIS
+ACT**, and the count is the point: a stale address, a non-blocking label lag, a
+summary that never printed, a probe that triggered on the clock instead of the
+event, a probe that referenced a variable declared below it, a macro that would
+not bind, a probe sampling twenty instructions downstream of its subject — and
+now two probes, both plausible, both printing numbers, disagreeing about one
+register on one clock.
+
+**SO THE RETURN LEG'S LEVELS ARE NOT YET MEASURED EITHER, and I am not going to
+claim the act is one instruction from done on the strength of a string built by a
+probe that has now been shown wrong about a register it read correctly-shaped.**
+
+### NEXT, AND IT IS NOT A BETTER PROBE
+
+1. **The wire levels can be read from a place that has no probe in it at all:**
+   the pad's level register is `pin_out[6]`, and the model already says what all
+   eighty of them must be. The comparison belongs in the SIMULATION as a check
+   inside the testbench — a `check` that compares `out_line` against the
+   model's eighty levels at each half-interval boundary — because then it is part
+   of the regression, it runs every pass, in both polarities, and **it cannot
+   disagree with itself.**
+2. **That is the eighth check's real form**, and the reason it is worth writing
+   there rather than in `bmc_checks.py`: a static check cannot see a level, and a
+   probe has been wrong eight times, and a check inside the testbench is the only
+   form of this measurement that is not a person reading a printout.
+3. **And the two probes' disagreement is itself the last thing to explain** — but
+   it is worth a paragraph rather than a fix, because the one that reads `dbg_a`
+   at the `OUT` is the one the levels string is built from, and the string is the
+   best evidence this act has produced.
