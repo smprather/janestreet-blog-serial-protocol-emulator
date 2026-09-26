@@ -22,6 +22,13 @@ for the judge-facing demo script (with a no-board fallback).
 > Picking this up cold (human or agent)? Read **[`HANDOFF.md`](HANDOFF.md)** first
 > — current verified state, the traps worth not rediscovering, and the next step.
 
+**Deep reading.** [`wiki/concepts/overview.md`](wiki/concepts/overview.md) is the
+entry point for the concept pages — one per protocol, each with the wire format,
+the timing constraints and their tolerances, how the emulator implements it, how
+the testbench proves it and the mutation coverage. Where a protocol's figures are
+listed below, its page is the prose behind them. The next-ideas list is
+[`wiki/plans/feature-brainstorm.md`](wiki/plans/feature-brainstorm.md).
+
 ## Block diagrams
 
 **Project plan** — architecture and contracts
@@ -59,23 +66,23 @@ State machines, packet/field breakouts and timing diagrams for each act.
 
 | Protocol | Figures |
 |---|---|
-| dht11-frame | [dht11-frame](diagrams/dht11-frame.png) |
-| dht11-timing | [dht11-timing](diagrams/dht11-timing.png) |
-| DHT11 | [dht11](diagrams/dht11.png) |
-| DMX-512 | [dmx512](diagrams/dmx512.png) · [dmx512_001](diagrams/dmx512_001.png) · [dmx512_002](diagrams/dmx512_002.png) · [dmx512_003](diagrams/dmx512_003.png) · [dmx512_004](diagrams/dmx512_004.png) |
-| ds18b20-frame | [ds18b20-frame](diagrams/ds18b20-frame.png) |
-| ds18b20-timing | [ds18b20-timing](diagrams/ds18b20-timing.png) |
-| DS18B20 1-Wire | [ds18b20](diagrams/ds18b20.png) |
-| I2C advanced | [i2c-adv](diagrams/i2c-adv.png) · [i2c-adv_001](diagrams/i2c-adv_001.png) · [i2c-adv_002](diagrams/i2c-adv_002.png) · [i2c-adv_003](diagrams/i2c-adv_003.png) · [i2c-adv_004](diagrams/i2c-adv_004.png) |
-| MIDI | [midi](diagrams/midi.png) · [midi_001](diagrams/midi_001.png) · [midi_002](diagrams/midi_002.png) · [midi_003](diagrams/midi_003.png) · [midi_004](diagrams/midi_004.png) |
-| servo-frame | [servo-frame](diagrams/servo-frame.png) |
-| servo-timing | [servo-timing](diagrams/servo-timing.png) |
-| Servo PWM | [servo](diagrams/servo.png) |
-| SPI mode 3 + CRC | [spi3-crc](diagrams/spi3-crc.png) · [spi3-crc_001](diagrams/spi3-crc_001.png) · [spi3-crc_002](diagrams/spi3-crc_002.png) · [spi3-crc_003](diagrams/spi3-crc_003.png) · [spi3-crc_004](diagrams/spi3-crc_004.png) |
-| UART RTS/CTS | [uart-flow](diagrams/uart-flow.png) · [uart-flow_001](diagrams/uart-flow_001.png) · [uart-flow_002](diagrams/uart-flow_002.png) · [uart-flow_003](diagrams/uart-flow_003.png) · [uart-flow_004](diagrams/uart-flow_004.png) |
-| ws2812-frame | [ws2812-frame](diagrams/ws2812-frame.png) |
-| ws2812-timing | [ws2812-timing](diagrams/ws2812-timing.png) |
-| WS2812 | [ws2812](diagrams/ws2812.png) |
+| dht11-frame | [dht11-frame](diagrams/proto-dht11-frame.png) |
+| dht11-timing | [dht11-timing](diagrams/proto-dht11-timing.png) |
+| DHT11 | [dht11](diagrams/proto-dht11.png) |
+| DMX-512 | [dmx512](diagrams/proto-dmx512.png) · [dmx512_001](diagrams/proto-dmx512_001.png) · [dmx512_002](diagrams/proto-dmx512_002.png) · [dmx512_003](diagrams/proto-dmx512_003.png) · [dmx512_004](diagrams/proto-dmx512_004.png) |
+| ds18b20-frame | [ds18b20-frame](diagrams/proto-ds18b20-frame.png) |
+| ds18b20-timing | [ds18b20-timing](diagrams/proto-ds18b20-timing.png) |
+| DS18B20 1-Wire | [ds18b20](diagrams/proto-ds18b20.png) |
+| I2C advanced | [i2c-adv](diagrams/proto-i2c-adv.png) · [i2c-adv_001](diagrams/proto-i2c-adv_001.png) · [i2c-adv_002](diagrams/proto-i2c-adv_002.png) · [i2c-adv_003](diagrams/proto-i2c-adv_003.png) · [i2c-adv_004](diagrams/proto-i2c-adv_004.png) |
+| MIDI | [midi](diagrams/proto-midi.png) · [midi_001](diagrams/proto-midi_001.png) · [midi_002](diagrams/proto-midi_002.png) · [midi_003](diagrams/proto-midi_003.png) · [midi_004](diagrams/proto-midi_004.png) |
+| servo-frame | [servo-frame](diagrams/proto-servo-frame.png) |
+| servo-timing | [servo-timing](diagrams/proto-servo-timing.png) |
+| Servo PWM | [servo](diagrams/proto-servo.png) |
+| SPI mode 3 + CRC | [spi3-crc](diagrams/proto-spi3-crc.png) · [spi3-crc_001](diagrams/proto-spi3-crc_001.png) · [spi3-crc_002](diagrams/proto-spi3-crc_002.png) · [spi3-crc_003](diagrams/proto-spi3-crc_003.png) · [spi3-crc_004](diagrams/proto-spi3-crc_004.png) |
+| UART RTS/CTS | [uart-flow](diagrams/proto-uart-flow.png) · [uart-flow_001](diagrams/proto-uart-flow_001.png) · [uart-flow_002](diagrams/proto-uart-flow_002.png) · [uart-flow_003](diagrams/proto-uart-flow_003.png) · [uart-flow_004](diagrams/proto-uart-flow_004.png) |
+| ws2812-frame | [ws2812-frame](diagrams/proto-ws2812-frame.png) |
+| ws2812-timing | [ws2812-timing](diagrams/proto-ws2812-timing.png) |
+| WS2812 | [ws2812](diagrams/proto-ws2812.png) |
 
 ## What exists today
 
