@@ -3017,3 +3017,18 @@ next poll and restart the transmission" -- cannot happen, because the poll
 loop has no branch to the encoder and the encoder never returns to the poll
 loop.** That is a proof from the listing, not from the intent, which is the
 only kind this act has been willing to accept.
+
+## 2026-09-27 act (c): TASK-START -- RUN THE WHOLE GATE, ONCE, END TO END
+
+**Eight files were changed across the gate and every one was verified alone:**
+the firmware and its two checks, the testbench, `run_firmware_tests.sh`,
+`check_mutation_lists.sh`, `mutate_timing_tb.sh`, the wiki, `labels.py` and
+`run.sh`. Each passes on its own.
+
+**NOTHING HAS RUN THEM TOGETHER, and that is where a cross-gate interaction
+lives** -- a docs-accuracy rule that counts mutation cases and finds the wiki
+one short, a lint rule that the new Python trips, a shell check that the new
+`comm`/process-substitution does not survive, a baseline that a changed line
+count invalidates. Every one of those is invisible to a per-file run and fatal
+at merge time, and this act's whole subject is that a thing which passes alone
+is not the same claim as a thing which passes in company.
