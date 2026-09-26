@@ -193,9 +193,7 @@ def compare_one(py_s, v_s, name, emit=True):
             f"{FRAME_LEVELS} half-intervals, first at {diff[0]}"
         )
         for i in diff[:8]:
-            print(
-                f"      half-interval {i:2d}: python {py_s[i]} verilog {v_s[i]}"
-            )
+            print(f"      half-interval {i:2d}: python {py_s[i]} verilog {v_s[i]}")
         print(f"      python : {py_s}")
         print(f"      verilog: {v_s}")
     return False
@@ -241,10 +239,18 @@ def self_test():
     # correctly reported that a disagreement had gone unnoticed.
     case("identical strings agree", base, base, True)
     case("one flipped bit is caught", base, "1" + base[1:], False)
-    case("the LAST bit flipped is caught", base, base[:-1] + (
-        "1" if base[-1] == "0" else "0"), False)
-    case("a whole byte inverted is caught", base, "".join(
-        "1" if c == "0" else "0" for c in base[:8]) + base[8:], False)
+    case(
+        "the LAST bit flipped is caught",
+        base,
+        base[:-1] + ("1" if base[-1] == "0" else "0"),
+        False,
+    )
+    case(
+        "a whole byte inverted is caught",
+        base,
+        "".join("1" if c == "0" else "0" for c in base[:8]) + base[8:],
+        False,
+    )
     try:
         compare_one(base, base[:-1], "SELF-TEST", emit=False)
         print("  FAIL  a length mismatch is refused rather than compared")
