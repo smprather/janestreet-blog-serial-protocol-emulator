@@ -171,27 +171,133 @@ module tb_pe_soc_bmc;
     enc_bitval = (b == 0) ? 1'b0 : 1'b1;              // LSB first
   endfunction
 
-  // The level in the given half-interval of the given bit, from the wire
-  // rules at the top of this file.
+  // THE LEVEL IN A GIVEN HALF-INTERVAL, from the wire rules in the header of
+  // firmware/bmc_frame.pe. `carry` is the level at the END of the previous bit,
+  // which is the same thing as the level at the START of this one -- that is
+  // what makes the encoding STATEFUL, and it is why the old version could not
+  // express it at all.
   //
-  // "BI-PHASE" MEANS THE LEVEL CHANGES WITHIN THE BIT INTERVAL. The first
-  // half is the COMPLEMENT of the data and the second half is the data, so
-  // every bit carries a transition in its middle; a '0' then carries a
-  // second one at the bit boundary, and a '1' does not. FM0's extra
-  // transition is at the START of a '1', and that is the only difference
-  // between the two encodings.
+  // THE THREE CASES, and each is one line of the rule:
+  //   a '0'  : h0 = carry,   h1 = ~carry   -> a transition in the MIDDLE
+  //   a '1', FM1 : h0 = ~carry, h1 = ~carry -> a transition at the START only
+  //   a '1', FM0 : h0 = carry,   h1 = carry -> NO TRANSITION AT ALL
   //
+  // AND THAT PRODUCES THE TWO BEHAVIOURS THE SPEC NOW PROMISES, which is the
+  // check rather than the claim: a run of ones under FM0 is a CONSTANT LINE
+  // (h0 and h1 are both `carry`, and `carry` is unchanged from bit to bit), and
+  // under FM1 it is a CLEAN SQUARE WAVE with a transition at every boundary
+  // (h0 flips against the previous h1, and h1 == h0, so nothing happens inside
+  // the bit). A '0' is the only case that transitions in the middle -- which is
+  // the manager's confirmed reading, and it is what puts the DATA in the
+  // POSITION of the transition and the CLOCK in the fixed interval between
+  // them.
+  //
+  // fm0 IS READ IN THE BODY, which is the whole point: the previous version
+  // declared this parameter and never used it, so FM0 and FM1 encoded to the
+  // identical stream and the act's own headline check could not be run at all.
   // THE PARENTHESES ARE NOT DECORATION: `return a ? b : c` parses as
   // `return (a) ? b : c` and Icarus will not have it.
-  function automatic bit enc_level(input integer b, input integer half, input integer fm0);
+  function automatic bit enc_level(input integer b, input integer half,
+                                   input integer fm0, input bit carry);
     bit data_one;
+    bit h0;
     data_one = enc_bitval(b);
-    if (half == 0) begin
-      return (data_one ? 1'b0 : 1'b1);   // the complement of the data
-    end else begin
-      return data_one;                  // the data itself
-    end
+    h0 = data_one ? (fm0 ? carry : ~carry) : carry;
+    if (half == 0) return h0;
+    else           return (data_one ? h0 : ~h0);
   endfunction
+
+  // ---- THE ENCODER CHECKS ITSELF AGAINST THE PROMISED PROPERTIES ----------
+  //
+  // The act's headline claim is that the two encodings are DIFFERENT and that
+  // the receiver can say which one it locked onto. Until now nothing in this
+  // file tested that, because the encoder could not express the difference --
+  // it declared an fm0 argument and never read it. These four checks are the
+  // ones that would have caught it, and they are here rather than in a review
+  // because a property nobody checks is a claim, not a rule.
+  //
+  // They are written against the SPEC, not against the implementation: a run of
+  // ones is a constant line under FM0 and a square wave under FM1, and the two
+  // encodings of one frame must not be the same stream.
+  integer enc_fail = 0, ei, eh, ediff, econst0, econst1;
+  bit   ec0, ec1, el0, el1, ecarry;
+  bit   s_fm0 [0:15];
+  bit   s_fm1 [0:15];
+  task automatic enc_chk(input bit c, input string m);
+    if (!c) begin $display("FAIL(encoder): %s", m); enc_fail++; end
+  endtask
+  initial begin
+    // (1) A RUN OF ONES UNDER FM0 IS A CONSTANT LINE. Eight 1s, the level held
+    //     from the first half of the first bit to the second half of the last.
+    ecarry = 1'b1; econst0 = 1;
+    for (ei = 0; ei < 8; ei = ei + 1)
+      for (eh = 0; eh < 2; eh = eh + 1) begin
+        el0 = enc_level(7, eh, 1, ecarry);          // 7 -> data_one = 1
+        if (el0 !== ecarry) econst0 = 0;
+        ecarry = el0;
+      end
+    enc_chk(econst0,
+            "a run of ones under FM0 is a CONSTANT LINE -- the spec's promise, and the reason a preamble is needed");
+
+    // (2) A RUN OF ONES UNDER FM1 IS A CLEAN SQUARE WAVE: a transition at every
+    //     bit boundary, so the level at the start of each bit alternates.
+    ecarry = 1'b1; econst1 = 1; el1 = 1'b1;
+    for (ei = 0; ei < 8; ei = ei + 1)
+      for (eh = 0; eh < 2; eh = eh + 1) begin
+        el0 = enc_level(7, eh, 0, ecarry);
+        if (eh == 0 && el0 === el1) econst1 = 0;   // boundary must transition
+        el1 = el0;
+        ecarry = el0;
+      end
+    enc_chk(econst1,
+            "a run of ones under FM1 is a CLEAN SQUARE WAVE with a transition at every boundary");
+
+    // (3) THE TWO ENCODINGS OF ONE FRAME ARE NOT THE SAME STREAM. This is the
+    //     check the act exists to support, and the one the old encoder made
+    //     impossible: it returned the complement of the data on the first half
+    //     and the data on the second, for both encodings alike.
+    //
+    //     AND THE FIRST VERSION OF THIS CHECK WAS ITSELF WRONG, in the way
+    //     this block keeps producing: it kept ONE variable per encoding,
+    //     overwrote it on every half-interval, and compared the two at the
+    //     end. That compares the LAST level of each stream and calls it "they
+    //     differ" -- and both streams end at 0, so it reported a failure on an
+    //     encoder that was correct. A check that compares one value and
+    //     describes it as a comparison of streams is the same defect as
+    //     `SUB A, 1` read as "subtract one": the code does something
+    //     narrower than the sentence claims, and the sentence is what gets
+    //     believed. The whole sequence is compared here, all sixteen
+    //     half-intervals, because that is what the claim is about.
+    ecarry = 1'b1; ediff = 0;
+    for (ei = 0; ei < 8; ei = ei + 1) begin
+      s_fm0[ei*2]   = enc_level(ei, 0, 1, ecarry); ecarry = s_fm0[ei*2];
+      s_fm0[ei*2+1] = enc_level(ei, 1, 1, ecarry); ecarry = s_fm0[ei*2+1];
+    end
+    ecarry = 1'b1;
+    for (ei = 0; ei < 8; ei = ei + 1) begin
+      s_fm1[ei*2]   = enc_level(ei, 0, 0, ecarry); ecarry = s_fm1[ei*2];
+      s_fm1[ei*2+1] = enc_level(ei, 1, 0, ecarry); ecarry = s_fm1[ei*2+1];
+    end
+    for (ei = 0; ei < 16; ei = ei + 1)
+      if (s_fm0[ei] !== s_fm1[ei]) ediff = ediff + 1;
+    enc_chk(ediff > 0,
+            $sformatf("FM0 and FM1 encode one frame as DIFFERENT streams (%0d of 16 half-intervals differ) -- if these are the same the flag cannot be measured",
+                      ediff));
+
+    // (4) A '0' TRANSITIONS IN ITS MIDDLE, in BOTH encodings -- the confirmed
+    //     reading, and the only case that carries data by transition position.
+    for (ei = 0; ei < 2; ei = ei + 1) begin
+      ecarry = 1'b1;
+      el0 = enc_level(0, 0, ei, ecarry);
+      el1 = enc_level(0, 1, ecarry ? 0 : 1, ecarry);
+      enc_chk(el0 !== el1,
+              $sformatf("a '0' transitions in the MIDDLE under %0s (half0 %0b, half1 %0b)",
+                        ei ? "FM0" : "FM1", el0, el1));
+    end
+
+    if (enc_fail == 0)
+      $display("encoder self-check: all 5 properties hold");
+  end
 
   // ---- THE TESTBENCH'S DECODER, also from the wire rules ---------------
   // It timestamps the level and compares with the level at the last CHANGE,
@@ -286,6 +392,7 @@ module tb_pe_soc_bmc;
   // ---- the testbench's stimulus and receiver, one process each ---------
   integer stim_bit = 0, stim_half = 0, stim_waited = 0;
   logic   stim_done = 0;
+  logic   stim_carry = 1'b1;   // the level carried across a bit boundary
 
   // THE STIMULUS IS ARMED BY THE FIRMWARE'S RELEASE, and that is the whole
   // reason this act was red. It used to begin at time 0, which meant it
@@ -307,16 +414,23 @@ module tb_pe_soc_bmc;
     wait (run === 1'b1);
     stim_done = 0; stim_bit = 0; stim_half = 0; stim_waited = 0;
     in_line = 1'b1;
+    stim_carry = 1'b1;                 // the line idles high
     forever begin
       #(CLK_NS);
       if (stim_waited >= HALF_CLOCKS) begin
         stim_waited = 0;
         if (stim_half == 0) begin
-          in_line = enc_level(stim_bit, 0, enc_fm0);
+          in_line = enc_level(stim_bit, 0, enc_fm0, stim_carry);
           stim_half = 1;
         end else begin
-          in_line = enc_level(stim_bit, 1, enc_fm0);
+          in_line = enc_level(stim_bit, 1, enc_fm0, stim_carry);
           stim_half = 0;
+          // THE CARRY IS UPDATED AT EVERY BIT BOUNDARY, and that one line is
+          // what makes the encoding stateful and the two encodings differ: the
+          // next bit's first half is written against the level this bit ended
+          // on, so a '1' under FM0 leaves it alone (constant line through a run
+          // of ones) and a '1' under FM1 flips it (square wave).
+          stim_carry = in_line;
           if (stim_bit >= NBITS - 1) begin
             stim_done = 1;
             in_line = 1'b1;                    // idle high between frames
