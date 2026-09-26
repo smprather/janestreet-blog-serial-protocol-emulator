@@ -887,9 +887,7 @@ class TestEveryUnconfirmedStepIsEnumeratedWithAReason(unittest.TestCase):
         for reason in block.values():
             self.assertIsInstance(reason, str)
         # and it survives a dump/load round trip byte for byte
-        self.assertEqual(
-            json.loads(json.dumps(evidence))["not_confirmed_steps"], block
-        )
+        self.assertEqual(json.loads(json.dumps(evidence))["not_confirmed_steps"], block)
 
 
 if __name__ == "__main__":

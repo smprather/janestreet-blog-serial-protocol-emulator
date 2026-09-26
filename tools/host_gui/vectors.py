@@ -670,8 +670,7 @@ def check_hex_export(spec: Spec, build, directory: Path | None = None) -> int:
     for key in ("chip_evidence", "notice", "chip_confirmed"):
         if manifest.get(key) != package.get(key):
             print(
-                f"hex manifest {key} does not match a fresh build "
-                f"(regenerate with --hex)"
+                f"hex manifest {key} does not match a fresh build (regenerate with --hex)"
             )
             return 1
     return _check_image_files(directory, images, manifest.get("image_files", {}))
