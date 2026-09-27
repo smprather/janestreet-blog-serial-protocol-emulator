@@ -11,11 +11,24 @@ more than the acts they came from.
 
 ## Where the three acts of Block 3 stand
 
+**ALL THREE ARE GREEN AND IN THE REGRESSION, UNMARKED. The full gate measured
+it: `TOTAL: 48 PASS: 48 FAIL: 0`, and NOT ONE case carries a `<<wip>>` -- the
+suite has no known-red act left in it at all.** (The gate's one red line is
+`R3 golden package: FAILED`, a committed README drift in another block's golden
+package; all 124 `.hex` streams are byte-identical.)
+
 | act | state | where |
 |---|---|---|
 | (b) input frequency + duty meter | **GREEN, in the regression**, 58/58 mutations | `d88e316` |
-| (a) HC-SR04 ultrasonic ranging | **BLOCKED** on one 26-instruction block; everything else measured | `b0351b3` |
-| (c) FM0/FM1 bi-phase | **started, still RED**: 7-check testbench + first-draft firmware; the WIRE RULES were wrong and are now corrected | `tb/tb_pe_soc_bmc.v`, `firmware/bmc_frame.pe`, `0513b7e`, `cb191ef` |
+| (a) HC-SR04 ultrasonic ranging | **GREEN, in the regression.** Testbench restructured to two runs, each answer read as it is banked | `c790945`, `ac14baa` (wip marking removed) |
+| (c) FM0/FM1 bi-phase | **GREEN BOTH DIRECTIONS, in the regression, unmarked.** Same frame both polarities, two flags, 80 pad levels against an independent model, every delay route counted | `b0fc713`, `2e37b32` |
+
+**The dated sections below still say (a) and (c) are unfinished. They are
+HISTORY, kept because this project records what was believed and when -- and all
+three are marked SUPERSEDED where they appear.** They are the reason this
+session opened with a stale brief: the status a next context reads first was
+two acts out of date, and "(c) is RED" sent a worker to re-encode an act that
+had been green for hours. **If you are reading this table, read THIS one.**
 
 Also delivered this session: the **merge-repair** of the six acts in main
 (`3657847`, proven on three throwaway exports of main: unpatched 6/6 FAIL,
@@ -23,7 +36,15 @@ the RTL hunk alone 6/6 PASS, the TB hunks alone 6/6 PASS, both 6/6 PASS).
 
 ---
 
-## (a) HC-SR04 — BLOCKED, and the block is the EDIT
+## (a) HC-SR04 — BLOCKED, and the block is the EDIT -- **SUPERSEDED, see the top table**
+
+> **(a) IS GREEN AND IN THE REGRESSION.** The carry fault described below was
+> fixed by the exact-carry identity and exhaustively verified over all 65,536
+> operand pairs; the testbench was restructured (`c790945`) and the case wired
+> green (`ac14baa`). Both "Also open" items below are also closed: peasm's
+> derivation reads `4*SR_TRIG + 5` and the hardware equality follows it, and the
+> inter-measurement check guards on `n_trig == N_MEAS`. Kept as the record of
+> the act's hardest hour.
 
 ### What is measured and correct
 
@@ -552,7 +573,13 @@ always been hardest and has never once been about the maths.
 
 ---
 
-## FINAL STATE AT THE HARD WRAP (2026-09-27 00:30)
+## FINAL STATE AT THE HARD WRAP (2026-09-27 00:30) -- **SUPERSEDED, see the top table**
+
+> **BOTH (a) AND (c) ARE NOW GREEN AND IN THE REGRESSION.** At the moment this
+> section was written they were not, and it is kept as the record of what was
+> believed then. The testbench restructure it calls outstanding on (a) landed
+> in `c790945` and the case was wired green in `ac14baa`; (c) reached both
+> directions green in `b0fc713` and was wired in `2e37b32`.
 
 Everything below is COMMITTED and the working tree is clean.
 
@@ -575,13 +602,18 @@ the TB hunks alone 6/6 PASS, both 6/6 PASS.
   (four temporaries and three), and the three-temporary form is what shipped;
 * one answer per run, temporaries at {6,7,11}, bank low byte first.
 
-### The three things still open on (a), in the order they should be done
+### The three things that were open on (a), and where each landed
 
 1. **Restructure tb_pe_soc_sr04.v into two runs** -- loop over the two
    distances, reset between (rst_n low, reload, four stopped clocks then #1),
    and **read the answer at the moment dmem[10] goes to 1**, not at the end of
    the run. The end-reading is what reported a correct conversion as 222 mm.
    The full recipe is in the WORKLOG at 23:45.
+   **DONE, `c790945`.** The TB now has a `run_reset()` task and reads on
+   `F_DONE`'s RISING edge, and it has since grown to **FOUR** distances
+   (`N_MEAS = 4`), not the two this section names: 1160, 5816, 2000 and 8000 us,
+   answering 199 / 999 / 343 / 1375 mm. All four are exactly `floor(us*11/64)`,
+   checked as equalities and not as windows.
 2. **Three stray reads in the leftover acc_x11_h tail** (`LDM A,2` and
    `LDM A,3` twice) -- a site's replacement range ends at the NEXT LABEL, and
    the old block's `<lab>_h` label and high-byte add sit after the JZ. They are
@@ -589,8 +621,18 @@ the TB hunks alone 6/6 PASS, both 6/6 PASS.
    **The rule that catches this, and it should become a permanent gate on this
    act: no instruction outside init / echo_down / convert may touch dmem[2] or
    dmem[3]** -- those two bytes ARE the width, and the width is the measurement.
+   **DONE, by DELETION rather than by a gate.** The `acc_x11_h` tail is now
+   `LDM A,7 / LDM X,6 / OR / AND A,0x80 / LDM A,1 / ADD A,1 / STM 1,A` and the
+   high-byte add -- no `dmem[2]` or `dmem[3]` read survives in it. **The
+   proposed permanent gate does not exist**, and with nothing left to catch it
+   would police empty space; the rule is recorded in the TB's header instead.
 3. The width check reads dmem[2..3] AFTER the bank, which is legal only
    because the conversion no longer writes those bytes. Say so in the file.
+   **DONE.** `tb/tb_pe_soc_sr04.v` now states it at the read: the bank and the
+   width check do not collide *because* `dmem[2..3]` are the width and the
+   conversion writes a different pair, and an edit that gave the conversion the
+   high byte would alias its own arithmetic back into the measurement and look
+   like a wrong millimetre figure rather than an alias.
 
 ### The finding that outlives all of it
 
@@ -700,7 +742,14 @@ they assert a number in a second place, and the second place is what goes stale.
 
 ---
 
-## THE MANAGER'S FINAL HANDWRAP POINT (2026-09-27 03:05)
+## THE MANAGER'S FINAL HANDWRAP POINT (2026-09-27 03:05) -- **SUPERSEDED, see the top table**
+
+> **THIS SECTION SAYS "(c) IS RED" AND (a) HAS AN OPEN ITEM. BOTH ARE GREEN NOW
+> AND IN THE REGRESSION.** It is kept verbatim as the record of what was
+> believed at the cut, and the bullets are annotated below rather than rewritten.
+> The "read this section first" instruction is the part that did damage: a
+> worker took "(c) is RED" from here as a brief and went to re-encode an act
+> that had been green for hours. **The top table is the current status.**
 
 Read this section first. It is the state at the cut.
 
@@ -716,15 +765,26 @@ Read this section first. It is the state at the cut.
   moment dmem[10] goes to 1 rather than at the end of the run. Recipe in the
   WORKLOG at 23:45. Also three stray reads in a reachable tail, which the
   width-byte rule catches.
+  **>> CLOSED.** `c790945` did the restructure; `ac14baa` wired the case green
+  and removed the `<<wip>>`. The stray reads are gone by deletion, and the TB
+  has since grown a third distance. `tb_pe_soc_sr04.v` PASSES.
 * **(c) FM0/FM1 -- RED testbench with seven correct checks**, a first-draft
   firmware, and the wire rules corrected. Needs a PREAMBLE, because a bi-phase
   stream carries no polarity information; the check that matters is that the
   same frame sent both ways gives two different flags and the same three bytes.
+  **>> CLOSED, AND THE PREAMBLE IS THE WHOLE ACT.** `b0fc713` took it to both
+  directions green; `2e37b32` wired it into the regression unmarked. The check
+  this bullet names is the one that shipped: one frame both polarities, two
+  different flags, the same three bytes, 80 pad levels against a model sharing
+  no code with either side.
 
 **The firmware comment batch -- done on my side, and the rest is not mine:**
 
 * mine, comment-only, image md5 proven unchanged: servo_sweep intermediates
   (4355c29), peasm (2,13) conversion (cacaf23), spi_mode3 word list (4a7e172);
+  **>> the third citation is wrong -- `4a7e172` is a rewrap commit. The
+  word-list commit is `f768e5a`, and it is the one that is WRONG; it was
+  corrected in `9d462b3` after the wire was measured.**
 * fw-bus already corrected dmx512.pe and the spi_mode3 response line in
   `1798abf`, and I reverted my duplicate edit of that line (222f384) because
   theirs derives the wire byte and mine only named the rule;
@@ -732,6 +792,13 @@ Read this section first. It is the state at the cut.
   response figures wrong** (they state 0x6D, 0x6C, 0x6F from the OLD high bytes
   0x11, 0x12, 0x13; the corrected words give 0x6F, 0x5C, 0x4D). Whichever
   commit lands second recomputes them. It is arithmetic, not judgement.
+  **>> THIS WAS BACKWARDS AND THERE IS NO TWO-WORKER DEPENDENCY.** 0x6F, 0x5C,
+  0x4D is what the STALE high bytes 0x22/0x33 give, not what the code's
+  0x11/0x12/0x13 give -- the code's words are 0x1134, 0x1245, 0x1356 and their
+  responses are 0x6F, 0x6C, 0x6D (also in the wrong order here). `1798abf` had
+  the words RIGHT, so there was never anything to recompute after it. Measured
+  on the wire, not derived: `word=1134/1245/1356`, `resp=6f/6c/6d`. See THE
+  MERGE-ORDER DEPENDENCY section below, which is corrected in place.**
 
 **Also delivered:** the merge-repair of the six acts in main (`3657847`), proven on
 three throwaway exports -- unpatched 6/6 FAIL, RTL hunk alone 6/6 PASS, TB hunks

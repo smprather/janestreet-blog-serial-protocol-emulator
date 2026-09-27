@@ -4673,3 +4673,89 @@ dies". **Ask whether a run can START, not whether a file is there.**
   against a file a mutation harness was holding is how a probe reports a
   failure that is not one. It did: my first probe failed, and the cause was my
   own `$readmemh("../firmware/spi_mode3.hex")` CWD, not the chip.
+
+## 2026-09-27: NOT IDLE -- the state document was the stale brief, and (a) had one item left
+
+Asked whether the Block 3 queue was empty. It was not, and the item is the one
+that cost this session its opening: **the handover document's status was two acts
+out of date, and that is what produced the "encode RED" brief I was handed.**
+
+    | act | state in BLOCK3-STATE.md's TOP table | reality |
+    | (a) HC-SR04 | **BLOCKED** on one 26-instruction block | GREEN, in the regression |
+    | (c) FM0/FM1 | **started, still RED** | GREEN both directions, unmarked |
+
+The top table is the first thing a next context reads, and it said (c) is RED.
+A worker took that as a brief and went to re-encode an act that had been green
+for hours. **The document that is supposed to prevent a repeat is the thing that
+caused one.** Three dated sections carried the same stale status, and all three
+are now marked SUPERSEDED in place rather than rewritten -- this project records
+what was believed and when, and the record is more useful than a clean file.
+
+**(a)'s "three things still open" are all closed, and I checked each rather than
+trusting the commits:**
+
+1. *restructure into two runs, read on the flag's rise* -- **DONE** `c790945`,
+   wired green `ac14baa`. `run_reset()` and `F_DONE`'s RISING edge are there.
+2. *three stray reads in the `acc_x11_h` tail* -- **DONE, by DELETION, not by
+   the proposed gate.** The tail is now `LDM A,7 / LDM X,6 / OR / AND A,0x80 /
+   LDM A,1 / ADD A,1 / STM 1,A`; no `dmem[2]` or `dmem[3]` read survives. The
+   "permanent gate" the old text proposed **does not exist**, and with nothing
+   left to catch it would police empty space -- so the rule now lives in the
+   TB header, which says what it is for.
+3. *"say so in the file"* about reading the width AFTER the bank -- **this was
+   genuinely open, and it is the item this session actually did.** It is now
+   stated at the read: the bank and the width check do not collide *because*
+   `dmem[2..3]` ARE the width and the conversion writes a different pair, and an
+   edit that gave the conversion the high byte would alias its own arithmetic
+   back into the measurement and present as a wrong millimetre figure rather
+   than as an alias.
+
+### AND THEN THE SAME DEFECT WAS STILL IN THE TB, FOUR MORE TIMES
+
+Fixing (a).3 meant writing a sentence about how many distances there are, so I
+counted them -- and found the header had been stale for however long it had
+been four.
+
+    | the TB said | `N_MEAS` = 4 says |
+    | "For the two distances in this case" | four |
+    | "so there are TWO RUNS, one per distance" | four |
+    | "TWO RUNS, so the watchdog is twice what one run needed" | four |
+    | "The longest run is 5816 us of echo" | **8000 us** |
+    | "The two per-run budgets above are 17 ms each" | `WAIT_CHUNKS` = 4000 x 256 = **17.07 ms** |
+
+**I propagated one of these myself before catching it** -- I wrote "the per-run
+budget above is 17 ms" having inherited 17 ms from the comment I was editing,
+and only grepped for it afterwards. It exists only as a rounding inside the very
+sentence being fixed. **That is the trap this block is named for, and I walked
+into it while writing about it.** The fix is now cited from the constant
+(`WAIT_CHUNKS`, 4000 x 256 clocks = 17.07 ms/run, four runs = 68.3 ms of the
+120 ms watchdog, 51.7 ms of margin) so there is no rounded copy left to go
+stale, and it now says that adding a fifth distance is a decision about that
+constant rather than a free edit.
+
+The four distances, and the arithmetic re-checked rather than recalled:
+
+    run 0: 1160*11/64 = 199.375 -> banks 199    run 2: 2000*11/64 = 343.75 -> 343
+    run 1: 5816*11/64 = 999.625 -> banks 999    run 3: 8000*11/64 = 1375.0  -> 1375
+
+**8000 us is the one that pins the floor.** It lands on a whole millimetre, so
+truncation and rounding disagree about it and only one survives -- which is a
+stronger claim than the three points that merely differ from the true value.
+`tb_pe_soc_sr04.v` PASSES on all four, recompiled and re-run after every edit.
+
+### TWO SMALL THINGS THE TRAPS CAUGHT, IN ONE COMMAND
+
+`pgrep -af 'run_all.sh'` returned three pids and **one of them was my own shell**,
+because the pattern matches the command line that contains it -- the recorded
+`pkill -f` trap, one level down. Disambiguated by reading `/proc/<pid>/cwd`: the
+two real runs are in `janestreet-blog-serial-protocol-emulator`, a DIFFERENT
+worktree with its own lock and its own RLOG. So the per-worktree locking did
+exactly what it was built for -- two gates running at once, no collision -- and
+my probe was safe after all, but only because I checked rather than assumed,
+and because `rtl/` was clean at the time.
+
+I also caught **myself** claiming "three distances" in BLOCK3-STATE three
+paragraphs before `N_MEAS = 4` corrected it. **The same sweep that found three
+stale figures in the TB found one in the fix I was writing.** Both were caught
+by counting the thing rather than recalling it, which is the only reason either
+was caught.
