@@ -4863,3 +4863,116 @@ and nothing else, every `PROVED`/`VACUOUS` status identical, nondeterministic.
 **Handover:** `/tmp/pi-fw-timing-interrupt`. **First command next session:**
 `./regress/run_all.sh` (~26 min serial) -- expect 48/48 and the one R3 line
 until its owner syncs the README.
+
+## 2026-09-27: TASK-START (RE-OPENED BY THE MANAGER) -- the sibling-act header sweep
+
+The sweep logged as cancelled above is re-opened, scoped to READING ONLY:
+`tb_pe_soc_freqmeter.v`, `tb_pe_soc_bmc.v`, and the `freqmeter.pe` / `bmc_frame.pe`
+headers. Same bar as before, unchanged:
+
+* every number in a header is checked against one of exactly three authorities
+  -- **the constant or expression in the same file**, then **the assembler's
+  listing**, then **the wire** -- and is only called WRONG on a positive match;
+* "could not check it" is UNCHECKED, never folded into wrong;
+* comment-only, citing the constant rather than restating the number, so no
+  rounded copy is left to drift;
+* `firmware/*.hex` md5 before and after anything touched.
+
+Justification is the manager's, and it is the same one in my own risk note: this
+block's unchecked-duplicate class was wrong **3 of 3** times, and four stale
+figures sat in the SR04 header with **nothing flagging them**.
+
+## 2026-09-27: THE SWEEP, RUN -- one wrong figure in four files, and it is a UNIT ERROR
+
+Four files read. **One wrong figure found, in the (b) act, and the same wrong
+figure was in TWO of them.** The (c) act's headers are clean.
+
+| # | file | the claim | verdict | authority |
+| :-- | :-- | :-- | :-- | :-- |
+| 1 | `tb_pe_soc_freqmeter.v` L57 | "twelve points from **80 Hz** to **10 kHz**" | **WRONG** | the `p_us[]` table |
+| 2 | `firmware/freqmeter.pe` L12 | "sweeps the input over **158 Hz to 10 kHz**" | **WRONG (imprecise)** | the `p_us[]` table |
+| 3 | `tb/tb_pe_soc_bmc.v` header | no count, run length or budget asserted | **nothing to fix** | -- |
+| 4 | `firmware/bmc_frame.pe` header | 120 clocks = 2 us; counter 0..79; three phases | **all CORRECT** | `bmc_checks.py`, `HALF_CLOCKS` |
+
+### The wrong figure is a MICROSECONDS column read as a FREQUENCY
+
+The sweep table is `p_us[]` -- **periods in microseconds**:
+
+    driven  (18): 6300 8000 10000 2500 3150 4000 1250 1600 2000
+                    630  800 1000  315  400  500   63   80  100
+    each run r banks k=1,2 and DISCARDS k=0, so:
+
+    | set | count | slowest | fastest |
+    | driven, all | 18 | 10000 us = **100 Hz** | 63 us = **15.9 kHz** |
+    | **banked** | **12** | 10000 us = **100 Hz** | 80 us = **12.5 kHz** |
+
+**There is no 80 Hz point in this sweep, and there cannot be** -- 80 Hz would be
+a 12500 us period and the longest period in the table is 10000 us. **The 80 is
+`p_us[16] = 80 MICROSECONDS`**, the fastest banked point, i.e. 12.5 kHz. A
+microseconds column labelled as a rate, read off the last run's two banked
+points and generalised to the whole set. Wrong at BOTH ends: 80 Hz does not
+exist, and the top of the range is 12.5 kHz not 10 kHz.
+
+### AND HERE IS HOW IT PROPAGATED, WHICH IS THE PART WORTH KEEPING
+
+The testbench's own summary line prints the two ranges adjacently:
+
+    === input frequency + duty meter: 6 runs, 18 driven periods,
+        12 banked points, 158 Hz to 10000 Hz ===
+
+and those two frequencies are `1_000_000/p_us[0]` and `1_000_000/p_us[N_PTS-1]`
+-- **the first and last DRIVEN period, which is neither the driven extreme nor
+the banked one.** So a line that puts a COUNT and a RANGE in the same breath
+reads as "the count of these", and it was copied from there into this file's
+header and into `run_all.sh`'s case comment. **`run_all.sh` says "twelve banked
+points from 158 Hz to 10 kHz" -- wrong the same way, and it is the same error
+one file over.**
+
+**I did not edit the `$display` string**, because the sweep was scoped
+comment-only and that is a behaviour-visible change. The honest fix is to label
+the two figures in the string, and it needs a decision. I left a comment above
+it naming exactly what the two numbers are, which is what stops the next reader
+copying them.
+
+**AND I DID NOT EDIT `run_all.sh`, for a second reason worth naming:** it is a
+GATE script, and `regress/dep_guard.sh` exists because editing a harness
+mid-run can make it report a false PASS. A one-line comment fix in a gate is
+not worth spending that on; it is flagged below instead.
+
+### WHAT WAS CHECKED AND FOUND CORRECT (recorded, because that is half the job)
+
+    1/10000 = 0.01% and 1/100 = 1.0%   "0.01 % at 100 Hz, 1.0 % at 10 kHz"  OK
+    10000 mod 256 = 16                 "reports 16 us for a 100 Hz signal"      OK
+    sum(p_us) = 42688 us = 42.688 ms   "about 43 ms"                           OK
+    42688 * 60 = 2.561 M clocks        "2.6 M clocks"                          OK
+    max(p_us) = 10000 us               "the slowest is 10 ms"                   OK
+    rtl/pe_soc.v L151 DMEM_BYTES = 16  "the machine has sixteen bytes"          OK
+    (24+16)*2 = 80 half-intervals      "the counter is 0..79"                   OK
+    36 loop + 12 entry routes, 0 off   "120 clocks = 2 us"  ENFORCED, not just
+                                        asserted -- bmc_checks.py, 7 checks     OK
+
+**ONE CLAIM LEFT UNCHECKED, AND IT IS NOT FOLDED INTO "WRONG":**
+`bmc_frame.pe` L136 says the transition interval "is 2 or 4 and nothing else --
+measured, not assumed: the write-hook counts **18 twos and 13 fours** over one
+frame and no six." Confirming it needs the write-hook instrumented, which is
+more than a bounded read. **UNCHECKED.** It is the one figure in these four
+files I could not settle, and by this block's own record the unchecked ones are
+the ones to distrust -- so it is named here rather than left implied.
+
+### PROOF IT IS COMMENT-ONLY, BOTH FILES
+
+    freqmeter.hex  md5 5baba520ebc90b5e002f7972fa3ce9d8  before
+    freqmeter.hex  md5 5baba520ebc90b5e002f7972fa3ce9d8  after
+    every changed line starts with ';' or '//'
+    bmc_frame.hex  md5 ff226b09cd5fc8090aefd372d6322af0  (not touched)
+    tb_pe_soc_freqmeter  compile 0  PASS: all checks   (summary line byte-identical)
+    tb_pe_soc_bmc        compile 0  PASS: all checks
+
+### TWO DECISIONS FOR THE MANAGER, NEITHER MINE TO TAKE
+
+1. **`run_all.sh`'s case comment for (b)** says "Twelve banked points from 158 Hz
+   to 10 kHz" -- wrong at both ends, the same unit error. One-line comment fix,
+   but it is a gate script, so it should be a deliberate act and not a drive-by.
+2. **The `$display` label** above: labelling the two figures fixes the source of
+   the propagation for good, and is a behaviour-visible change to a testbench's
+   stdout. Cheap, but it is not comment-only and was out of the granted scope.

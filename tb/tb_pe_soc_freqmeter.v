@@ -54,9 +54,18 @@
 // THE CHECKS, and how each could be unfalsified:
 //
 //   1. EVERY BANKED POINT, against an independent measurement of the pad:
-//      twelve points from 80 Hz to 10 kHz, each to 1 % of the period and to
-//      one and a half microseconds absolute. An endpoint-only check passes a
-//      firmware that is wrong in the middle.
+//      N_BANK = N_SEG * (N_PER_SEG - 1) = 12 of them, spanning 100 Hz to
+//      12.5 kHz. THE RANGE IS NOT THE TABLE'S ENDPOINTS, and taking it from
+//      them is how this line was wrong: p_us[0] is 6300 us and
+//      p_us[N_PTS-1] is 100 us -- 158.7 Hz and 10 kHz -- but NEITHER is an
+//      extreme of the banked set, because each run banks its periods k=1,2
+//      and discards k=0. The banked extremes are p_us[2] = 10000 us, which is
+//      100 Hz and the SLOWEST point in the whole table, and p_us[16] = 80 us,
+//      which is 12.5 kHz. **"80 Hz" was p_us[16] = 80 MICROSECONDS read as a
+//      frequency**: the microseconds column labelled as a rate, and read off
+//      the last run's two banked points rather than the set. Each point to
+//      1 % of the period and to one and a half microseconds absolute. An
+//      endpoint-only check passes a firmware that is wrong in the middle.
 //   2. THE HIGH TIME, on the same terms. The duty is a ratio of the high time
 //      to the period, so a firmware that measures the two with the same edge
 //      discipline gets a ratio that is right even when both are off by a
@@ -306,6 +315,20 @@ module tb_pe_soc_freqmeter;
     repeat (4) @(posedge clk);
     #1;
 
+    // READ THE TWO FREQUENCIES FOR WHAT THEY ARE: they are p_us[0] and
+    // p_us[N_PTS-1], the FIRST and LAST DRIVEN period, printed next to a
+    // banked-point count that has nothing to do with them. The banked set is
+    // each run's k=1,2 with k=0 discarded, so its own extremes are
+    // p_us[2] = 10000 us (100 Hz) and p_us[16] = 80 us (12.5 kHz) -- neither
+    // of which appears in this line. This display is where "twelve points
+    // from 80 Hz to 10 kHz" came from, in this file's header and in
+    // run_all.sh's case comment, and both are wrong: there is no 80 Hz point
+    // in the table at all, because 80 is p_us[16] in MICROSECONDS. A summary
+    // line that puts a count and a range in the same breath reads as "the
+    // count of these", so the range needs to name the set it came from.
+    // NOT DONE HERE, because the sweep was scoped COMMENT-ONLY and this is a
+    // $display: the honest fix is to label the two figures in the string
+    // itself, which is a behaviour-visible change and needs a decision.
     $display("\n=== input frequency + duty meter: %0d runs, %0d driven periods,\
  %0d banked points, %0d Hz to %0d Hz ===\n",
              N_SEG, N_PTS, N_BANK, 1_000_000/p_us[0], 1_000_000/p_us[N_PTS-1]);
