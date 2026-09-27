@@ -10,6 +10,11 @@ confidence: high
 
 # Debug control
 
+> **What you'll learn here:** the four debug states and the traps a debugger must code around, led by the one where a held core ignores the run strap in both directions
+>
+> **You can verify this by:** `tb/tb_pe_ctrl_r3_conf.v` replays the R3 golden steps and compares each response byte for byte, and fails if the set of known divergences ever changes - see `tb/r3-vectors/R3_KNOWN_DIVERGENCES.txt`.
+
+
 R2 made "observe" real; R3 makes "debug" real. Four opcodes, one hardware
 breakpoint on PC, no new pads, no ISA change. The contract is the block in
 `rtl/pe_ctrl.v`'s header; the frozen document that specified it is

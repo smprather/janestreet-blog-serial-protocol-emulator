@@ -10,6 +10,11 @@ confidence: high
 
 # UART with RTS/CTS hardware flow control
 
+> **What you'll learn here:** how hardware flow control changes a UART persona, and the single invariant the whole thing rests on
+>
+> **You can verify this by:** `tb/tb_pe_soc_uart_flow.v` exercises RTS/CTS against a model and asserts the invariant, rather than counting bytes and hoping.
+
+
 `firmware/uart_flow.pe` is a 115200 8N1 software UART with a two-wire
 handshake. There is no UART hardware in this chip and there is no flow-control
 hardware either: the same 8-bit port, the same free-running timer and the same

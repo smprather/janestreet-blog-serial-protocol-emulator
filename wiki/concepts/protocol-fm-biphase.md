@@ -10,6 +10,11 @@ confidence: medium
 
 # FM0/FM1 bi-phase coding
 
+> **What you'll learn here:** a receiver-only protocol judged on whether a receiver can decode it, and why a receiver cannot skip one of the wire rules
+>
+> **You can verify this by:** **No testbench for this act exists yet, and no firmware ships for it** - the page documents the act's subject and its wire rules. The nearest hardware exercised today is `tb/tb_pe_can.v`, which is a different codec.
+
+
 > **This act is a designed WIP and it is RED.** The two files it names do not
 > exist in this tree: `fw-timing-protocols:firmware/bmc_frame.pe` and
 > `fw-timing-protocols:tb/tb_pe_soc_bmc.v` are on branch `fw-timing-protocols`

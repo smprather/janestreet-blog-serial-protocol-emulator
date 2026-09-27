@@ -10,6 +10,11 @@ confidence: high
 
 # DMX512-A at 250 kbaud
 
+> **What you'll learn here:** how a 250 kbaud rate is reached with no 1 us tick in it at all, and why 512 slots need two counter bytes
+>
+> **You can verify this by:** **There is no testbench for this act on `main` yet**, for the same reason as the MIDI page: its firmware (`firmware/dmx512.pe`) exists only on the unlanded `fw-bus` branch. `regress/mutate_fwbus_tb.sh` is the suite that will cover it.
+
+
 `firmware/dmx512.pe` is a DMX512-A transmitter in software: a break, a mark, a
 START code and 512 data slots, at 250 kbaud. It is the mirror image of
 [[concepts/protocol-midi]], and the pair brackets the rate problem exactly.
