@@ -103,10 +103,12 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 4
 # regression in the matcher is caught by the matcher and not by a human
 # noticing that 30 findings became 0.
 selftest() {
-  local fails=0 probe expect got
+  local fails=0 probe expect got ran=0 find_n=0 clean_n=0
   probe=$(mktemp) || return 1
   while IFS='|' read -r line expect; do
     [ -n "$line" ] || continue
+    ran=$((ran + 1))
+    [ "$expect" = FIND ] && find_n=$((find_n + 1)) || clean_n=$((clean_n + 1))
     printf '%s\n' "$line" > "$probe"
     got=$(grep -vE '^[[:space:]]*#' "$probe" | shared_tmp_paths /dev/stdin)
     if [ "$expect" = "FIND" ] && [ -z "$got" ]; then
@@ -129,8 +131,15 @@ vvp /tmp/chip-wt.abc123/mut_loop.vvp|CLEAN
 grep -c ok /tmp/check_diagrams.${_diag_wt}.log|CLEAN
 CASES
   rm -f "$probe"
+  # These counts are now COUNTED, not typed. "7 shared, 5 exempt" was correct
+  # when written and could only be kept correct by hand: add a case to the
+  # CASES block above and the message keeps asserting the old numbers, printing
+  # an authoritative-looking count of the very cases that were not run. Nothing
+  # checked it, so it was a claim about evidence rather than evidence -- the
+  # failure this file's own header warns about one level up. Counting in the
+  # loop makes the message unable to disagree with the loop that ran.
   if [ "$fails" -eq 0 ]; then
-    echo "  ok   selftest: every path shape classified correctly (7 shared, 5 exempt)"
+    echo "  ok   selftest: every path shape classified correctly ($find_n shared, $clean_n exempt; $ran case(s) run)"
   fi
   return "$fails"
 }
