@@ -591,7 +591,11 @@ fi
 # that listed the files -- /tmp/mut_ -- cannot match /tmp/mutate_. A fix to
 # instances cannot be complete; this gates the class.
 if "$REPO_ROOT/regress/check_tmp_isolation.sh" > "$CHIP_WT_DIR"/check_tmp_isolation.log 2>&1; then
-  echo "tmp isolation: OK ($(tail -1 "$CHIP_WT_DIR"/check_tmp_isolation.log))"
+  # The lint's own summary line already begins "tmp isolation: ", so wrapping it
+  # in another "tmp isolation: OK (...)" printed the phrase twice. Strip its
+  # prefix rather than re-word it: the suite log is evidence, and a stutter in
+  # the evidence reads as a second check having run.
+  echo "tmp isolation: $(tail -1 "$CHIP_WT_DIR"/check_tmp_isolation.log | sed 's/^tmp isolation: //')"
 else
   echo "tmp isolation: FAILED -- a script shares a global /tmp name with every other worktree"
   cat "$CHIP_WT_DIR"/check_tmp_isolation.log
