@@ -33,6 +33,25 @@
 #    a reader who trusted the old sentence would have SKIPPED the proof, which is
 #    worse than the proof being absent. Writing the missing self-test is the real
 #    fix; it is outstanding work, not something this comment may imply is done.
+#
+#    A RECIPE THAT WORKS, since building this fixture took three attempts and a
+#    next session should not have to rediscover it. Two things are NOT obvious and
+#    both cost a failed run:
+#      * ROOT comes from the SCRIPT's own path (cd "$(dirname "$0")/.."), NOT the
+#        cwd. A copy at /tmp/x/check_wiki_links.sh therefore cds to /tmp and looks
+#        for /tmp/wiki/.known-dead-links.txt. The fixture must live at
+#        <root>/regress/check_wiki_links.sh with <root>/wiki/ beside it.
+#      * the gate has TWO anti-vacuity floors and refuses to run below either: it
+#        wants >= 67 in-scope documents and a real number of links, reporting
+#        "only 2 document(s) in scope" / "only 3 links checked". So a two-page
+#        fixture is refused, and that refusal is the gate working correctly.
+#    With those: ~70 generated wiki pages, each carrying one wiki-relative and one
+#    bare-sibling link, plus a README.md and a docs/ page, and a page holding
+#    [[concepts/foo]] (resolve it under wiki/concepts/foo.md), [[foo]] (resolve
+#    it under wiki/foo.md, a SIBLING of the linking page) and [[nope]] (leave it
+#    absent). Measured result: 75 documents, 143 links, exactly 1 dead, that one
+#    being nope, exit 1 -- both conventions proven to resolve and a real dead
+#    link proven to be caught, in one run.
 # 2. `sources:` IS A CITATION, NOT AN OUTBOUND LINK. Frontmatter names where a
 #    claim came from, and a `reviews/...md` path in it is relative to the repo
 #    root, not to the page, so resolving it as an outbound link manufactures false
