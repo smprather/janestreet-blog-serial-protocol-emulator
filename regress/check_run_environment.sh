@@ -122,7 +122,21 @@ self_test() {
   else
     printf '  FAIL: self-test — %-44s expected clean, checker said %s\n' "a trivial threshold PASSES" "$got"
   fi
-  echo "check_run_environment self-test: $caught/$results cases behaved correctly"
+  # ANTI-VACUITY. "[ $caught -eq $results ]" below is already vacuity-proof on
+  # FAILURE. Not on COVERAGE: delete a case and both counters fall together, so
+  # this still reads "1/1" all-green having exercised one shape instead of two.
+  # Bound the exercised count to a DECLARED number. Same guard as
+  # verify_merge, test_dep_guard, check_doc_index, test_check_wiki_pages and
+  # check_harness_preflight.
+  want_cases=2
+  if [ "$results" -ne "$want_cases" ]; then
+    echo "check_run_environment self-test: FAIL -- exercised $results case(s), expected $want_cases." >&2
+    echo "  A case was removed or neutered; this self-test would pass while checking" >&2
+    echo "  less than it claims. Fix the fixture or the expectation; do not lower" >&2
+    echo "  want_cases to make this go away." >&2
+    return 1
+  fi
+  echo "check_run_environment self-test: $caught/$want_cases cases behaved correctly"
   [ "$caught" -eq "$results" ]
 }
 

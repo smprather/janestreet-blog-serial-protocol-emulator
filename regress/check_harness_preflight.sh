@@ -113,7 +113,22 @@ EOF
   plant "(c) a harness with no chip_dep_check"       dirty c_nocheck
   plant "(d) MUTABLE targets but NO baseline"        dirty d_nobaseline
   plant "(e) empty MUTABLE is exempt and clean"      clean e_nomutable
-  echo "check_harness_preflight self-test: $caught/$results cases behaved correctly"
+  # ANTI-VACUITY. "[ $caught -eq $results ]" below is already vacuity-proof on
+  # FAILURE -- a wrong case lowers caught and turns the function false. But not
+  # on COVERAGE: delete a plant() line and both counters fall together, so this
+  # still reads "4/4 cases behaved correctly" all-green while one fewer shape is
+  # actually being exercised. Bind the exercised count to a DECLARED number.
+  # Same guard as verify_merge, test_dep_guard, check_doc_index and
+  # test_check_wiki_pages.
+  want_cases=5
+  if [ "$results" -ne "$want_cases" ]; then
+    echo "check_harness_preflight self-test: FAIL -- exercised $results case(s), expected $want_cases." >&2
+    echo "  A case was removed or neutered; this self-test would pass while checking" >&2
+    echo "  less than it claims. Fix the fixture or the expectation; do not lower" >&2
+    echo "  want_cases to make this go away." >&2
+    return 1
+  fi
+  echo "check_harness_preflight self-test: $caught/$want_cases cases behaved correctly"
   [ "$caught" -eq "$results" ]
 }
 
