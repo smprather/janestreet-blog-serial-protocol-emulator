@@ -5291,3 +5291,43 @@ R3's committed README drift the only red -- not mine, routed. Queue empty, one
 pending QUESTION for the manager, no commit owed beyond this line.
 
 IDLE-QUEUE-EMPTY
+
+## TASK-START -- WHY THE SUPERVISOR NEVER SUPPRESSED, AND IT IS NOT THE TOKEN
+
+The manager's fix (put the literal token in the last three lines) was applied
+and the nudge still came, so the diagnosis was wrong. Read the actual
+suppression instead of guessing again: `tools/manager/worker_supervisor.sh`.
+
+    :49  WORKLOG="${WORKLOG:-/home/mylesp/janestreet-blog-serial-protocol-emulator/WORKLOG.md}"
+    :138 newest_ts=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" | grep -v " | supervisor | " | tail -1)
+    :145 case "$newest_line" in *IDLE-QUEUE-EMPTY*) continue;; esac
+    :172 newest=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" | grep -v " | supervisor | " | tail -3)
+    :173 case "$newest" in *IDLE-QUEUE-EMPTY*|*standby*|*STANDBY*) continue;; esac
+    :52  WORKERS="... 0:pw-fw-timing:fw-timing ..."
+
+**THREE THINGS WERE WRONG WITH THE DIAGNOSIS, AND NONE OF THEM WAS THE TOKEN:**
+
+1. **It is not "the last three lines of the file."** It is the last three lines
+   **matching `" | fw-timing | "`** -- PIPE-DELIMITED TELEMETRY, filtered to
+   exclude the supervisor's own lines. My entries are markdown prose, so they
+   have never been candidates. **The token was in the right file the whole time
+   and in a format the tool cannot see.**
+2. **It is not my worktree's WORKLOG.** Line 49 points at the **chip repo's**,
+   `/home/mylesp/janestreet-blog-serial-protocol-emulator/WORKLOG.md`. Every
+   line I have written this session went to `/tmp/worktrees/fw-timing/`.
+   **I have written ZERO telemetry lines the supervisor can read, all session.**
+3. So the newest `fw-timing` line it could see was its OWN
+   `VIOLATION-IDLE` at 21:19, 21:29, 21:39 -- which it then excludes by
+   `grep -v " | supervisor | "`, leaving it with nothing, which is the nudge.
+
+**THE REAL COST, WHICH IS NOT THE NOISE:** the supervisor has logged three
+`VIOLATION-IDLE` rows against `fw-timing` for "two consecutive nudges with zero
+WORKLOG activity". **That charge is factually wrong and it is mine to answer.**
+My WORKLOG activity was not zero -- it was substantial and it is committed --
+but I logged it where the enforcement machinery does not look. **A telemetry
+convention nobody was told is not telemetry, and the gap between what I did and
+what was recorded is exactly the kind of duplicate that goes stale.**
+
+**THE FIX, one appended line, in the file the tool reads, in the format it
+greps.** Not an edit to the supervisor: that is the manager's tooling, and
+L1's format is theirs to define.
