@@ -82,9 +82,16 @@ Ground truth, re-derived from the `p_us` table and the banking loop
 | --- | --- | --- |
 | `regress/run_all.sh:234` | 100 Hz – 12.5 kHz | correct (mine) |
 | `tb/tb_pe_soc_freqmeter.v:57` | 80 Hz – 10 kHz | wrong; `7fe4a1f` fixes it, **unmerged** |
-| `wiki/concepts/protocol-freqmeter.md:252` | 158 Hz – 10 kHz | wrong, and **nothing pending covers it** |
-| `wiki/concepts/protocol-freqmeter.md:33` | 158 Hz – 10 kHz | **CORRECT — do not "fix" this one** |
+| `protocol-freqmeter.md`, the sentence containing **"twelve points spanning 158 Hz"** (line 257 as of `4066c8e`) | 158 Hz – 10 kHz | wrong, and **nothing pending covers it** |
+| `protocol-freqmeter.md`, the sentence containing **"sweeps the input over 158 Hz"** (line 38 as of `4066c8e`) | 158 Hz – 10 kHz | **CORRECT — do not "fix" this one** |
+| `protocol-freqmeter.md`, the sentence containing **"twelve points spanning 158 Hz"** (line 257 as of `4066c8e`) | 158 Hz – 10 kHz | wrong, and **nothing pending covers it** |
+| `protocol-freqmeter.md`, the sentence containing **"sweeps the input over 158 Hz"** (line 38 as of `4066c8e`) | 158 Hz – 10 kHz | **CORRECT — do not "fix" this one** |
 | `tb/tb_pe_soc_freqmeter.v:116` | "12 banked points" (count only) | fine |
+
+> **Anchor on the words, not the line.** An earlier version of this record cited
+> `:252` and `:33`. Commit `4066c8e` (23:14) added lines to that page and both
+> references now point 5 lines early — `:252` lands on a blank line. The line
+> numbers above are dated to `4066c8e`; the quoted phrases will not expire.
 
 `7fe4a1f` touches `WORKLOG.md`, `firmware/freqmeter.pe` and the TB — **not the
 wiki**. So the obvious merge fixes one wrong copy and leaves the other.
