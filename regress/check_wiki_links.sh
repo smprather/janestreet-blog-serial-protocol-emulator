@@ -18,9 +18,21 @@
 #    resolves a same-directory link). A resolver that knows only ONE form calls
 #    every link in the other form dead, and people then "fix" links that were
 #    fine. A checker that INVENTS dead links is worse than no checker, because
-#    the repository learns to distrust its own prose. Both forms are resolved, and
-#    the self-test plants one of each so the resolver is proven rather than
-#    assumed.
+#    the repository learns to distrust its own prose. Both forms are resolved.
+#
+#    AND THE HONEST STATE OF THE PROOF, which this comment used to get wrong.
+#    It said "the self-test plants one of each so the resolver is proven rather
+#    than assumed". There is no self-test. This script accepts only [--list] (see
+#    the usage line), `git log -S'self_test' -- regress/check_wiki_links.sh`
+#    returns nothing so one has never existed here, and run_all.sh invokes only
+#    the real check. So the two-convention behaviour is ASSERTED here and
+#    exercised only by the live corpus: if the corpus happens to contain no bare
+#    [[foo]] form, a resolver that knew only the wiki-relative form would still
+#    report OK. That is exactly the "a checker that never fires looks just like
+#    a checker that works" gap, and it is stated here rather than papered over --
+#    a reader who trusted the old sentence would have SKIPPED the proof, which is
+#    worse than the proof being absent. Writing the missing self-test is the real
+#    fix; it is outstanding work, not something this comment may imply is done.
 # 2. `sources:` IS A CITATION, NOT AN OUTBOUND LINK. Frontmatter names where a
 #    claim came from, and a `reviews/...md` path in it is relative to the repo
 #    root, not to the page, so resolving it as an outbound link manufactures false
