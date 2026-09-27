@@ -5259,3 +5259,21 @@ given, or on a lock it can take, and never on a name it contains.
 `killed by explicit pid` also matters procedurally: `kill -0` would have
 answered "still running" for a process I had merely asked about, and the whole
 point of this session has been that a liveness answer has to mean something.
+
+---
+
+## IDLE-QUEUE-EMPTY -- timing protocols, Block 3 (gate re-measured, 21:07 CDT)
+
+    FIRMWARE: 43 PASS 43 FAIL 0        TOTAL: 48 PASS 48 FAIL: 0
+    all testbenches pass               param guards: OK (36 scripts parse)
+    run-lock process tree: OK          harness-edit pre-flight: OK
+    mutation suites: 16 ran            the new 6 us assertion: HOLDS
+    R3 golden package: FAILED          <- unchanged, third run, not mine
+
+Nothing open on my side. One item with the **manager**: `run_all.sh`'s (b) case
+comment, still on line 270 and still carrying the microseconds-as-Hz error. It
+needs a quiet moment; one was available at 21:07 and this run took it, so the
+next one is theirs to time.
+
+Commits this session: `9d462b3`, `5e01c24`, `83f1fba`, `e55b626`, `7fe4a1f`,
+`6fb6893`, `aa026b4`, `916a4ae`, `07c0bb7`, `23a5fbc`.
