@@ -202,7 +202,21 @@ self_test() {
   #     satisfy (a) and (b) and be worthless.
   plant "(c) a COMPLETE index stays silent"     clean c_everything_listed
 
-  echo "check_doc_index self-test: $caught/$results cases behaved correctly"
+  # ANTI-VACUITY. caught/results is a denominator COMPUTED from the same loop
+  # that increments it, so deleting a plant() line drops both together and this
+  # still reads all-green, one case smaller -- the file cannot notice it stopped
+  # testing something. Bind the exercised count to a DECLARED number so a removed
+  # or neutered case is caught rather than absorbed. Same guard as verify_merge
+  # and test_dep_guard.
+  want_cases=3
+  if [ "$results" -ne "$want_cases" ]; then
+    echo "check_doc_index self-test: FAIL -- exercised $results case(s), expected $want_cases."
+    echo "  A case was removed or neutered; the self-test would pass while checking"
+    echo "  less than it claims. Fix the fixture or the expectation; do not lower"
+    echo "  want_cases to make this go away."
+    return 1
+  fi
+  echo "check_doc_index self-test: $caught/$want_cases cases behaved correctly"
   [ "$caught" -eq "$results" ]
 }
 
