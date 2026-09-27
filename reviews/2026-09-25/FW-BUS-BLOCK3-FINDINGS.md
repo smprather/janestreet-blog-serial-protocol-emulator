@@ -837,3 +837,88 @@ dropped three testbenches from `run_all.sh`, and a self-test that could pass
 while checking nothing. Every one survived a gate, because **nothing checked the
 artifact making the claim** — which is the same lesson this block was built to
 demonstrate, arrived at from the wrong direction.
+
+---
+
+## The gate that reported INCONCLUSIVE three times, and the fourth thing nothing checks
+
+Added 2026-09-27, after `c1a3ff0`. A session resumed to "continue Block 3 to
+green" found the suite reporting:
+
+```text
+mutation suite mutate_fwbus_tb.sh: INCONCLUSIVE — the harness script or one of
+its MUTABLE targets changed while it was running
+    firmware/i2c_adv.hex
+      declared: mutated   observed: pristine   held for 0.208s
+```
+
+**The guard was right and the harness was lying.** `run_tb` assembled the image
+and then declared `firmware/<fw>.hex` **mutated, unconditionally**. That is
+honest for a mutation case and false for a **baseline**, and not briefly false:
+in a baseline the `.pe` is pristine, the assembler reproduces the committed image
+**byte-for-byte**, and the declaration therefore held for the whole baseline run
+of that testbench — seconds, and twenty-seven of them for DMX. `i2c_adv` is the
+**first** firmware baselined, which is exactly the path the guard named.
+
+So this defect class is different from every other one in this file, and better:
+**it is provable by construction, not by measurement.** Reassembling all five
+unmutated sources reproduces all five committed images byte-identically, so
+"mutated" during a baseline is false by arithmetic. No timing argument, no
+load model, no reproduction required — a five-line loop settles it.
+
+`MUTATED_FW` now records whether a case has actually edited a `.pe`, and `run_tb`
+declares the `.hex` mutated only then.
+
+### The part that took the whole session: the fix I shipped first was wrong
+
+I read the diagnostic, saw `restore; verify_restore` followed by the declaration,
+and concluded the contradiction window was the ten-file `cmp` loop. I measured it
+(19.3 ms committed, 12.5 ms with the declaration moved, 3.7 ms per file), shipped
+that, and re-ran: **still INCONCLUSIVE, 0.239 s.** The control fired at 0.237 s.
+My fix changed nothing observable, and the measurement was real — it was simply
+measuring the wrong window, the way a precisely-measured irrelevant quantity
+looks exactly like progress.
+
+Two false reproductions came before that, and both are the kind of thing that
+survives being written down:
+
+- **The sandbox `TMPDIR` was wiped mid-run**, so the guard's stamp directory
+  vanished and the run reported 21 harness errors and no stamp. My reproduction
+  was invalid because of my *environment*, and a harness-looking failure is
+  exactly what that produces.
+- **The harness never starts the poller.** `run_all.sh` does. A standalone
+  `./regress/mutate_fwbus_tb.sh` run has **no sampler at all**, so it cannot
+  show this class however long it is watched — and mine reported a clean
+  **21/21 detected** while the suite said INCONCLUSIVE. Both were true. The
+  lesson is the one this file keeps making, one level up: *a green run of the
+  component is not a green run of the integration.* The component is the harness;
+  the thing that failed is the harness **plus the suite's sampler**.
+
+### Why the control matters more than the fix
+
+A clean result that cannot be shown to be sensitive is decoration. So the
+committed shape was run through the same path, under the same load:
+
+| shape (real sampler, under load) | verdict |
+| --- | --- |
+| committed | **INCONCLUSIVE** — declared mutated / observed pristine, 0.237 s |
+| restore-window fix only | **INCONCLUSIVE** — 0.239 s (my fix, measured, useless here) |
+| `MUTATED_FW` | **OK** — 21/21, no contradiction |
+
+The middle row is the point. It is in the table because a fix that does not fix
+anything is a fact the project needs, and because the third row is only
+meaningful next to it.
+
+### One thing I am not closing
+
+`regress/test_dep_guard.sh` — the guard's own test, 13 cases — reported
+**13/13** unloaded and **13/13** under 12-way load, but **12/13** once inside a
+full `--fast -j8` suite under 24-way saturation, failing the timing-sensitive
+*"a mid-run change to a MUTABLE target is INCONCLUSIVE"* case. The self-test does
+not reference this harness, so it is not mine to attribute and I did not.
+It is recorded rather than explained away: an intermittent in a **shared
+preflight** that sixteen harnesses and the lock depend on is the same class as
+the `/tmp` collision in this file — a shared resource whose contention is
+invisible until it is measured, which is exactly the condition under which
+nobody is looking.
+
