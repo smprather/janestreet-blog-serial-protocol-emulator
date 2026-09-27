@@ -20,8 +20,12 @@ documentation hard to learn from. So it is sorted into three tiers:
 | tier | what it is for | how to read it |
 |---|---|---|
 | **1. MANUAL** | learning the project by doing it | start at the top and follow the steps |
-| **2. REFERENCE** | looking something up | jump to it when you need the value |
-| **3. DEEP DIVES** | understanding why a decision was made | read when the manual and the reference are not enough |
+| **2. DEEP DIVES** | understanding why a decision was made | read when the manual has told you *what* and you want *why* |
+| **3. REFERENCE** | looking a value up | jump to it when you need the number |
+
+REFERENCE sits last deliberately: it is lookup material — port maps, constants,
+generated tables — and is reached *from* the manual at the moment you need a
+value, not read in sequence.
 
 **If you are new, read tier 1 in order and skip the rest.** Everything in tiers
 2 and 3 is also reachable from the manual at the point you need it.
@@ -30,7 +34,13 @@ documentation hard to learn from. So it is sorted into three tiers:
 
 # TIER 1 — MANUAL
 
-- [[getting-started]] — **start here.** A hands-on track where every step is a
+- [[project-atlas]] — **start here, before anything else.** What the project is
+  *made of*, in one page: the 16 RTL blocks and what each is, the host stack
+  and its pieces, the firmware acts sorted into the **timing family** and the
+  **bus family** and why the split matters, the verification stack, and a
+  **names table** decoding the workspace shorthand (`fw-bus`, `fw-timing`,
+  `diag-*`, `gui`, `protocol`) that a reader meets in every log and review.
+- [[getting-started]] — **then do this.** A hands-on track where every step is a
   command you can run, with what you will see and what it means: check the
   toolchain, run the firmware, assemble a protocol, run each gate, break a gate
   on purpose, run a testbench, read a waveform. Written so that a reader who
@@ -67,7 +77,7 @@ repo root, not a wiki page: it is the judge-facing act script.)
 
 ---
 
-# TIER 3 — DEEP DIVES
+# TIER 2 — DEEP DIVES
 
 The reasoning. These pages are long, accurate, and were written by people who
 were present for the decisions; they are worth reading when the manual and the
@@ -245,7 +255,7 @@ has an obvious home. See **In flight** below for what is still to come.)*
 
 ---
 
-# TIER 2 — REFERENCE
+# TIER 3 — REFERENCE
 
 Look things up here. These pages are the lookup surfaces: generated tables,
 port maps, constants, wire formats, and the records of what has been measured.
