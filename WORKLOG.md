@@ -5008,3 +5008,107 @@ than left implied. Everything else in these four files is either verified
 against a constant, verified on the wire, or verified by a gate.
 
 `formal/results/summary.txt` still uncommitted (nondeterministic `MEM` peak).
+
+## 2026-09-27: RULINGS (2) AND (3) -- the L136 claim is MEASURED, and it is **WRONG**
+
+Ruling (1) is the manager's and deferred to their next quiet moment, so
+`run_all.sh` is untouched here -- and no gate run either, since editing a gate
+mid-run is what `dep_guard.sh` exists to catch. Rulings (2) and (3) approved
+test-output text and one small instrumented check; both are done.
+
+### (2) THE `$display` LABEL -- RESTORED
+
+    === input frequency + duty meter: 6 runs, 18 driven periods, 12 banked
+        points, FIRST/LAST DRIVEN 158 Hz to 10000 Hz (p_us[0] and
+        p_us[N_PTS-1] -- NOT the banked set's own range, which is
+        100 Hz to 12.5 kHz) ===
+
+Test-output text only; no check, no tolerance, no DUT behaviour touched.
+
+### (3) THE WRITE-HOOK, AND THE VERDICT IS **THE CLAIM IS WRONG**
+
+`bmc_frame.pe` L136 said dmem[8] "is 2 or 4 and nothing else -- measured, not
+assumed: the write-hook counts 18 twos and 13 fours over one frame and no six."
+**No such write-hook existed.** Worse, `tb_pe_soc_bmc.v`'s failure message
+*claimed* "the firmware's write-hook is graded against exactly these numbers" --
+so a check was reporting another file's arithmetic as if it had measured it.
+
+The hook now exists and counts **STORES on the CPU's data port**
+(`dut.u_cpu.dmem_we/addr/wdata`), not samples of a memory: a change-detector is
+the cheaper instrument and would be **wrong**, because it cannot see two
+identical intervals in a row and on this wire most intervals repeat.
+
+    MEASURED over the whole run (both passes):
+    129 stores = 93 two-us + 32 four-us + ZERO six-us + 4 of 19/21 us
+
+**Both halves of the claim were wrong, and the property underneath it was
+right.** The four 19/21 values are the **INTER-FRAME GAP** -- intended
+stimulus, named in the testbench's own header. There are only TWO stores to
+dmem[8] in the firmware (the init "believed" value at L194 and the interval at
+L327), so the gap is the only other value it ever takes, and it is not an
+in-frame interval at all. **"2 or 4 and nothing else" was false about a number
+the gap legitimately owns.** The 18/13 counts were never right either: the poll
+loop stores the interval on more than one pass, so a whole-run total is a
+number with no frame in it.
+
+**WHAT IS NOW A GATE IS THE PROPERTY, NOT THE ARITHMETIC.** The load-bearing
+claim is the receiver's `interval == 2` test, and what that needs is that no
+in-frame interval is ever THREE half-intervals -- a 6 us gap being the single
+value a two-valued decoder cannot classify. **So the gate asserts zero 6 us
+stores**, and reports the rest. That is the difference between a comment that
+can rot and a check that cannot: the arithmetic was never the point and it was
+never right; the property is the point and it holds.
+
+### AND A FOURTH STALE FIGURE, FOUND WHILE LOOKING FOR THE WRITE-HOOK
+
+`tb_pe_soc_bmc.v:312` claimed the asserted histogram was "18 one-half
+intervals, 14 two-half". **The assert twelve lines below has said 16 and 15
+all along.** 18/14 was the LOW-bit-first order's count, superseded when the
+bit order moved -- so this is the same superseded derivation the file's own
+comment calls "this block's most repeated mistake", sitting in the same file,
+describing an assert that contradicts it. It is also **arithmetically
+impossible as written**: 18 + 14 is 32 intervals, and a 24-bit frame in
+isolation can only yield 31. A figure that cannot be true is the cheapest kind
+to catch, and it sat there for the whole life of the act.
+
+Also fixed in that message: it hardcoded "32 intervals" where the assert
+requires 31. Now `%0d` of `n_iv0`, so the message cannot state a number the
+assert does not use.
+
+**SCOPE, STATED PLAINLY:** 16/15 is the 24 **payload** bits; the firmware's
+whole-frame count is a different measurement and is not expected to match it.
+That is now written down, because it is exactly the kind of apparent
+contradiction that gets "resolved" by editing the wrong number.
+
+### PROOF
+
+    bmc_frame.hex   md5 ff226b09cd5fc8090aefd372d6322af0  before AND after
+    freqmeter.hex   md5 5baba520ebc90b5e002f7972fa3ce9d8  before AND after
+    every firmware line changed is a ';'
+    the only non-comment lines added are the write-hook (ruling 3) and the two
+    message strings (ruling 2)
+    tb_pe_soc_bmc        PASS: all checks
+    tb_pe_soc_freqmeter  PASS: all checks
+
+---
+
+## IDLE-QUEUE-EMPTY -- timing protocols, Block 3 (rulings 2 and 3 complete)
+
+Nothing open on my side. One item sits with the **manager**: `run_all.sh`'s (b)
+case comment, "twelve banked points from 158 Hz to 10 kHz", carries the same
+unit error as the two I fixed and is deferred to their next quiet moment. It is
+the only thing left anywhere in this block.
+
+Block 3 complete: (a)(b)(c) green and in the regression unmarked, `TOTAL: 48
+PASS 48 FAIL 0`, `FIRMWARE 43/43`, run-lock OK under load, the comment batch
+done or routed, and BLOCK3-STATE agreeing with the gate. Commits this session:
+`9d462b3`, `5e01c24`, `83f1fba`, `e55b626`, `7fe4a1f`, `6fb6893`, and this one.
+
+**FIVE stale figures found across this block, all by the same mechanism, and
+all now either fixed or gated:** the SR04 header's four (two runs / 5816 us /
+17 ms), the (b) sweep's microseconds-read-as-Hz range in two files, the (c)
+histogram's superseded 18/14, the "32 intervals" message, and this L136 claim
+-- which was the only one where **the property was true and the sentence
+stating it was not.** That is the one to remember: a claim can be right for the
+whole life of an act and still be worth nothing, because what a reader checks
+is the sentence.

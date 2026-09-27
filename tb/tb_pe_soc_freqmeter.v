@@ -325,12 +325,15 @@ module tb_pe_soc_freqmeter;
     // run_all.sh's case comment, and both are wrong: there is no 80 Hz point
     // in the table at all, because 80 is p_us[16] in MICROSECONDS. A summary
     // line that puts a count and a range in the same breath reads as "the
-    // count of these", so the range needs to name the set it came from.
-    // NOT DONE HERE, because the sweep was scoped COMMENT-ONLY and this is a
-    // $display: the honest fix is to label the two figures in the string
-    // itself, which is a behaviour-visible change and needs a decision.
+    // count of these", so the range names the set it came from. DONE in the
+    // string itself, approved by the manager: a summary line is the ONE place
+    // in this act that everybody reads, and a comment beside it is read by
+    // whoever opens the file, which is not the same population. Test-output
+    // text only -- no DUT behaviour, no check, no tolerance is touched.
     $display("\n=== input frequency + duty meter: %0d runs, %0d driven periods,\
- %0d banked points, %0d Hz to %0d Hz ===\n",
+ %0d banked points, FIRST/LAST DRIVEN %0d Hz to %0d Hz (p_us[0] and\
+ p_us[N_PTS-1] -- NOT the banked set's own range, which is 100 Hz to 12.5 kHz)\
+ ===\n",
              N_SEG, N_PTS, N_BANK, 1_000_000/p_us[0], 1_000_000/p_us[N_PTS-1]);
 
     for (seg = 0; seg < N_SEG; seg++) begin

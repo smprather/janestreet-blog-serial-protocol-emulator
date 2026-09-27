@@ -133,8 +133,26 @@
 ;            bytes it sends are the three it received.
 ;     7      the bit counter
 ;     8      the INTERVAL between the last two transitions, in microseconds.
-;            It is 2 or 4 and nothing else -- measured, not assumed: the
-;            write-hook counts 18 twos and 13 fours over one frame and no six.
+;            IN-FRAME it is 2 or 4 and nothing else, and no frame can produce
+;            a THREE-half gap of 6 us -- that is the one value the receiver's
+;            two-valued `interval == 2` test cannot classify, so it is what
+;            tb_pe_soc_bmc.v's write-hook now ASSERTS. **This entry used to
+;            claim "2 or 4 and nothing else ... 18 twos and 13 fours over one
+;            frame and no six", and BOTH halves were wrong.** There is no
+;            write-hook anywhere that measured it, and the failure message in
+;            that testbench claimed the firmware's write-hook was graded
+;            against these numbers, which was false -- a check that reported
+;            another block's arithmetic as its own. When the hook was finally
+;            written it found the truth: over both passes, 129 stores = 93 of
+;            2 us, 32 of 4 us, **ZERO of 6 us**, and FOUR of 19 or 21 us. Those
+;            four are the INTER-FRAME GAP -- intended stimulus, named in the
+;            testbench's own header -- and there are only two stores to
+;            dmem[8] in this program (the init "believed" value and the
+;            interval itself), so the gap is the only other value and it is
+;            not an in-frame interval at all. The 18/13 counts were never
+;            right either: the poll loop stores the interval on more than one
+;            pass, so a whole-run total is a number with no frame in it. **The
+;            property was always true; the sentence stating it was not.**
 ;     9      the byte index being assembled
 ;    10      the previous 1 us reading, for the elapsed difference
 ;    11      THE ENCODER'S BYTE BEING SENT, with the bit now going at bit 7.

@@ -163,6 +163,33 @@ module tb_pe_soc_bmc;
   always #(CLK_NS/2) clk = ~clk;
 
   integer errors = 0;
+
+  // THE FIRMWARE'S OWN INTERVAL HISTOGRAM, MEASURED. firmware/bmc_frame.pe's
+  // header claims dmem[8] "is 2 or 4 and nothing else -- measured, not
+  // assumed: the write-hook counts 18 twos and 13 fours over one frame and no
+  // six." **That claim was UNCHECKED for the whole life of the act: no
+  // write-hook existed, and the failure message in this file CLAIMED the
+  // firmware's write-hook was graded against these numbers, which was itself
+  // false.** This is the hook, and it is a gate rather than a probe so the
+  // claim cannot go stale the way the comment did.
+  //
+  // IT WATCHES THE CPU'S DATA-STORE PORT, so it counts STORES and not samples
+  // of a memory that may legitimately hold a stale value. A change-detector
+  // would be the obvious cheaper thing and would be WRONG: it cannot see two
+  // identical intervals in a row, and on this wire most intervals repeat, so
+  // it would undercount by roughly half and still look plausible.
+  integer fw_iv_2 = 0, fw_iv_4 = 0, fw_iv_6 = 0, fw_iv_gap = 0, fw_iv_n = 0;
+  always @(posedge clk) begin
+    if (rst_n && dut.u_cpu.dmem_we && (dut.u_cpu.dmem_addr == 8)) begin
+      case (dut.u_cpu.dmem_wdata)
+        8'd2: fw_iv_2 = fw_iv_2 + 1;
+        8'd4: fw_iv_4 = fw_iv_4 + 1;
+        8'd6: fw_iv_6 = fw_iv_6 + 1;   // a THREE-half gap: the ambiguous one
+        default: fw_iv_gap = fw_iv_gap + 1;
+      endcase
+      fw_iv_n = fw_iv_n + 1;
+    end
+  end
   task automatic check(input bit c, input string m);
     if (!c) begin $display("FAIL: %s @%0t", m, $time); errors++; end
   endtask
@@ -309,10 +336,22 @@ module tb_pe_soc_bmc;
   // A property is only worth having if the check and the thing under test were
   // derived INDEPENDENTLY. Here the derivation is arithmetic on the frame: the
   // level sequence, the transition positions, the intervals, the histogram.
-  // The expected histogram (18 one-half intervals, 14 two-half, for
+  // The expected histogram (16 one-half intervals, 15 two-half, for
   // A5 3C 96) was computed by hand from the three rules and is asserted as a
   // NUMBER, so if the encoder and the rules ever part company the check says
-  // which one moved.
+  // which one moved. **It said 18 and 14 here until this session, which is
+  // this block's most repeated mistake wearing a second hat: 18 and 14 is the
+  // LOW-bit-first count, it was superseded when the bit order moved, and the
+  // assert twelve lines below has said 16 and 15 ever since. It is also
+  // ARITHMETICALLY IMPOSSIBLE as written -- 18 + 14 is 32 intervals, and a
+  // 24-bit frame in isolation can only ever yield 31, because the transition
+  // into the first half-interval is outside the window. A figure that cannot
+  // be true is the cheapest kind to catch and this one sat here for the whole
+  // life of the act, in the same file, describing an assert that contradicts
+  // it.** (Note also the scope difference, which is NOT a discrepancy: the
+  // numbers here and in the assert cover the 24 PAYLOAD bits. The firmware's
+  // own header counts a WHOLE frame, preamble included, so its dmem[8]
+  // histogram is a different measurement and is not expected to match.)
   integer enc_fail = 0, ei, eh, ek, kk;
   bit   sc_bit  [0:NBITS-1];
   bit   sc_lv0  [0:2*NBITS-1];
@@ -430,8 +469,8 @@ module tb_pe_soc_bmc;
       else if (sc_iv0[kk] == 2) n_iv2_half = n_iv2_half + 1;
     end
     enc_chk((n_iv1_half == 16) && (n_iv2_half == 15) && (n_iv0 == 31),
-            $sformatf("the DERIVED interval histogram: 32 intervals, %0d of one half-interval (2 us) and %0d of two (4 us), and nothing else -- the firmware's write-hook is graded against exactly these numbers",
-                      n_iv1_half, n_iv2_half));
+            $sformatf("the DERIVED interval histogram: %0d intervals (n_iv0, and it must be 31), %0d of one half-interval (2 us) and %0d of two (4 us), and nothing else -- the firmware's write-hook is graded against exactly these numbers",
+                      n_iv0, n_iv1_half, n_iv2_half));
 
     // (6) A BIT BOUNDARY CARRIES A TRANSITION IFF TWO ADJACENT BITS ARE EQUAL.
     //     NOT "differ". The record has this line INVERTED, and the whole
@@ -1027,6 +1066,28 @@ module tb_pe_soc_bmc;
     check(pass_flag[0] != 8'hFF,
           $sformatf("a line held CONSTANT carries no clock at all, and the receiver DECLARED that rather than banking bytes (dmem[%0d] = %02h on a locked stream)",
                     F_FLAG, pass_flag[0]));
+
+    // THE CLAIM, SETTLED, by measurement. **The header's claim was WRONG, and
+    // wrong in a way only measuring could have found: it said dmem[8] "is 2 or
+    // 4 and nothing else", and the INTER-FRAME GAP -- intended stimulus, named
+    // in this file's own header -- stores 19 and 21 into it.** There are only
+    // two stores to dmem[8] in the firmware (the init "believed" value and the
+    // interval itself), so those two are the gap and nothing else is. The
+    // header also said "18 twos and 13 fours over one frame"; measured over the
+    // whole run it is a different number again, because the poll loop stores
+    // the interval on more than one pass, so a per-frame count read off a
+    // whole-run total is a number with no frame in it.
+    //
+    // SO THE GATE IS THE PROPERTY, NOT THE ARITHMETIC: the load-bearing claim
+    // is the receiver's `interval == 2` test, and what that needs is that no
+    // in-frame interval is ever THREE half-intervals. A 6 us gap is the one
+    // value a two-valued decoder cannot classify, so THAT is what is asserted,
+    // and the rest is reported.
+    check(fw_iv_6 == 0,
+          $sformatf("no THREE-half-interval (6 us) gap is ever written to dmem[8], which is the one value the receiver's two-valued `interval == 2` test cannot classify (over both passes: %0d stores = %0d two-us, %0d four-us, %0d six-us, %0d inter-frame-gap)",
+                    fw_iv_n, fw_iv_2, fw_iv_4, fw_iv_6, fw_iv_gap));
+    $display("    dmem[8] stores over the whole run: %0d total = %0d two-us + %0d four-us + %0d six-us + %0d inter-frame-gap (19/21 us)",
+             fw_iv_n, fw_iv_2, fw_iv_4, fw_iv_6, fw_iv_gap);
 
     $display("");
     if (errors == 0) $display("PASS: all checks");
