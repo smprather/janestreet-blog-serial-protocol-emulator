@@ -969,6 +969,26 @@ else
   tail -20 "$CHIP_WT_DIR"/check_wiki_links.log
   stale=1
 fi
+# ...and that the link checker can FAIL. "document links: OK" above is only
+# evidence if a dead link would have been caught; a checker that never fires looks
+# exactly like a checker that works. check_wiki_links.sh grew a --self-test in
+# 0d8474a that plants one resolvable link of each [[wikilink]] convention plus a
+# genuinely absent target, and requires exactly one dead link. Until it ran here,
+# that proof existed but nothing re-ran it -- and a rule nobody re-runs is a rule
+# that quietly stops being true.
+# BOTH NUMBERS ARE COUNTED, never typed. cb613b2 fixed exactly this mistake in
+# the harness pre-flight line, where a literal "of 5" sat beside a counted pass
+# count; repeating it here would undo that fix in the very commit extending it.
+if bash regress/check_wiki_links.sh --self-test > "$CHIP_WT_DIR"/check_wiki_links_selftest.log 2>&1; then
+  _wl_n=$(grep -oE '[0-9]+/[0-9]+' "$CHIP_WT_DIR"/check_wiki_links_selftest.log | head -1 | cut -d/ -f2)
+  [ -n "$_wl_n" ] || _wl_n="?"
+  echo "document links self-test: OK ($(grep -c 'ok   self-test' "$CHIP_WT_DIR"/check_wiki_links_selftest.log) of $_wl_n cases proved the resolver)"
+else
+  echo "document links self-test: FAILED (see $CHIP_WT_DIR/check_wiki_links_selftest.log)"
+  cat "$CHIP_WT_DIR/check_wiki_links_selftest.log"
+  fail=$((fail+1))
+  failed_names+=("check_wiki_links_selftest")
+fi
 if bash tools/diag/check_diagrams.sh > "$CHIP_WT_DIR/check_diagrams.log" 2>&1; then
   echo "diagrams: OK ($(grep -c '^  ok:' "$CHIP_WT_DIR/check_diagrams.log") check(s) passed; see tools/diag/check_diagrams.sh)"
 else
