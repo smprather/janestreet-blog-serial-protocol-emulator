@@ -285,6 +285,60 @@ is_record_only() {
   esac
 }
 
+# IS THIS DIRTY PATH JUST THE MEASUREMENT COLUMN? formal/results/summary.txt
+# carries real verdict signal across time -- it has held REFUTED and UNREACHABLE,
+# and rows that appeared and vanished -- so it must stay tracked and must never
+# be gitignored. But run_formal.sh:177-179 rewrites it every run, and its
+# peak_rss column is a per-run memory measurement, so the file is DIRTY after
+# essentially every formal run even when every verdict is byte-identical.
+#
+# WHY THIS NEEDS A RULE RATHER THAN A FILENAME LIST. The merge gate's dirty-tree
+# NOTE (:651) exists so "the merge is green" is never claimed for a tree that is
+# not the one being pushed -- and the suite really does run the tree, so the
+# NOTE is correct. But a NOTE that fires on measurement noise trains its reader
+# to dismiss it, and this gate's whole reason for existing is that a reader who
+# learns to ignore a signal has stopped getting evidence from it. So the note
+# distinguishes the two kinds of dirt: SUBSTANTIVE dirt (a real source change;
+# the rule applies in full) and this churn (a number no gate reads -- run_all.sh
+# :1061 decides the formal verdict from run_formal.sh's EXIT CODE alone, and
+# :1062's "see summary.txt" is a human pointer, not a parse; repo-wide nothing
+# else consumes the file).
+#
+# The test is BY CONTENT, not by path: a diff of this file whose changed lines
+# all still match the header's 5-field shape and differ ONLY in the trailing
+# peak_rss field is churn. Any other diff -- a verdict flipping, a row added or
+# removed, the header changing -- is substantive, and this returns false, so the
+# full NOTE fires. The failure mode is deliberately toward calling noise
+# "substantive": a missed classification costs a redundant NOTE, a wrong one
+# would hide a verdict change.
+dirty_is_measurement_churn() {
+  local f="$1" d
+  [ "$f" = "formal/results/summary.txt" ] || return 1
+  git ls-files --error-unmatch -- "$f" >/dev/null 2>&1 || return 1   # untracked => not churn
+  d=$(git diff -U0 -- "$f" 2>/dev/null | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)')
+  [ -n "$d" ] || return 1                                            # clean file => not dirty
+  # Every changed line, stripped of its +/- and of a leading peak_rss change,
+  # must be identical; equivalently: no changed line may alter fields 1-4 or
+  # the header. Compare field-by-field.
+  printf '%s\n' "$d" | while IFS= read -r ln; do
+    body=${ln:1}
+    # header line?
+    [ "${body%%|*}" = "name" ] && { echo BAD; continue; }
+    # must be exactly 5 pipe-separated fields
+    [ "$(printf '%s' "$body" | awk -F'|' '{print NF}')" = "5" ] || { echo BAD; continue; }
+    # fields 1-4 (name|result|depth|shape) are the verdict-bearing ones
+    echo "${body}" | cut -d'|' -f1-4
+  done | sort -u | grep -qx BAD && return 1
+  # Reconstruct: does each minus-line's fields 1-4 appear as a plus-line's?
+  # Simpler and sufficient: the set of fields 1-4 across ALL changed lines must
+  # be unchanged when only peak_rss moves. Compare sorted field tuples of the
+  # '-' lines vs '+' lines; they must be identical.
+  local minus_pp plus_pp
+  minus_pp=$(printf '%s\n' "$d" | grep '^-' | sed 's/^-//' | cut -d'|' -f1-4 | sort)
+  plus_pp=$(printf '%s\n' "$d" | grep '^+' | sed 's/^+//' | cut -d'|' -f1-4 | sort)
+  [ "$minus_pp" = "$plus_pp" ]
+}
+
 # map_changed: stdin = one changed path per line, blank lines ignored. Sets
 # SELECTED / SEL_WHY / FULL_REASON / WARNINGS. $1 = the diff's label.
 # CALL IT WITH A HERE-STRING, NEVER A PIPE. `printf ... | map_changed` runs the
@@ -649,7 +703,25 @@ fi
 echo "  changed:  $(printf '%s' "$MERGE_CHANGED" | grep -c . || true) path(s) merged in" \
      "$( [ "$MERGE" = yes ] && echo "| behind: $(printf '%s' "$BEHIND_CHANGED" | grep -c . || true) path(s) main gained while it was away" )"
 if [ "${DIRTY:-0}" -gt 0 ]; then
+  # Separate SUBSTANTIVE dirt from run-artifact measurement churn, so the NOTE
+  # below is honest about which kind it is. See dirty_is_measurement_churn: the
+  # file stays tracked and a verdict change is still reported as substantive
+  # dirt. The suite runs the tree either way, so the rule is unchanged -- only
+  # the note's precision. A reader must not learn to dismiss a real signal.
+  DIRTY_SUBSTANTIVE=$(
+    git status --porcelain 2>/dev/null | sed -E 's/^.. //' | while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      dirty_is_measurement_churn "$f" || printf '%s\n' "$f"
+    done | grep -c . || true
+  )
+  DIRTY_CHURN=$(( DIRTY - DIRTY_SUBSTANTIVE ))
   echo "  NOTE: working tree is DIRTY ($DIRTY path(s)); the run is against the TREE, not the commit."
+  if [ "${DIRTY_SUBSTANTIVE:-0}" -eq 0 ] && [ "${DIRTY_CHURN:-0}" -gt 0 ]; then
+    echo "    ...all $DIRTY_CHURN of them run-artifact MEASUREMENT churn (peak_rss), not source:"
+    echo "    no gate reads it, and every verdict in it is byte-identical to the commit."
+  elif [ "${DIRTY_CHURN:-0}" -gt 0 ]; then
+    echo "    ...$DIRTY_SUBSTANTIVE substantive, $DIRTY_CHURN run-artifact measurement churn (peak_rss)."
+  fi
 fi
 echo
 echo "--- merged-in set ($MERGE_N case(s)) ---"
