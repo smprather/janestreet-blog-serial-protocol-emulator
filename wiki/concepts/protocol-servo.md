@@ -1,7 +1,7 @@
 ---
 title: Servo PWM — a protocol with nothing in it but a number
 created: 2026-09-25
-updated: 2026-09-26
+updated: 2026-09-27
 type: concept
 tags: [protocol, verification, clocking, physical-layer, gpio, architecture]
 sources: []

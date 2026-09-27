@@ -1,7 +1,7 @@
 ---
 title: WS2812 — a clockless receiver, and why "nearly right" is wrong
 created: 2026-09-25
-updated: 2026-09-26
+updated: 2026-09-27
 type: concept
 tags: [protocol, verification, clocking, physical-layer, gpio, architecture]
 sources: []
