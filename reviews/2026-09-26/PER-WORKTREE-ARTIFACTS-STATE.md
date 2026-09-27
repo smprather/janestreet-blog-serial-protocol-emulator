@@ -49,12 +49,22 @@ either re-running everything or quoting a stale number.
 | document index | `wiki/index.md` + renders | no | `check_doc_index`: OK |
 | diagrams | `diagrams/*.puml` | **yes** — no `.puml` moved | `check_diagrams`: OK (re-run anyway) |
 | formal safety / mutants | `formal/*/`, `rtl/` | **yes** — only the *generated* summary moved | — |
+| **wiki gate negative control** | `regress/test_check_wiki_pages.sh` | **was green VACUOUSLY — see below** | re-run after `587b425`: 46/0 |
 | tmp isolation | `regress/`, `tools/`, `formal/` | **yes** | re-run: OK, 0 findings |
 
-Nothing under `rtl/`, `tb/`, `firmware/`, `diagrams/` or `regress/` changed, so
-the expensive half of the verdict is untouched and the cheap half was re-checked
-in seconds. That is the shape a stale verdict should be decomposed into, rather
-than being re-run or asserted.
+Nothing under `rtl/`, `tb/` or `firmware/` has changed, so the expensive half of
+the verdict is untouched and the cheap half was re-checked in seconds. That is
+the shape a stale verdict should be decomposed into, rather than being re-run or
+asserted.
+
+> **One correction to this section, found 00:45 — and it is about my own change.**
+> The earlier version of this table said *nothing* under `regress/` had changed.
+> That was true when written and **false within fifty minutes**: `587b425` at
+> 23:19 changed `regress/test_check_wiki_pages.sh`. It is not a nit — see the
+> row above and the finding below. The lesson is the one this document keeps
+> teaching: **a decomposition has a shelf life too.** Decomposing a stale verdict
+> is not a one-time act of honesty; the decomposition is itself a claim about
+> the present, and it expires at the same rate everything else does.
 
 ---
 
@@ -146,7 +156,22 @@ independently arrived at by three people for the same defect class — `_diag_wt
 `"detected: 12"` in its own **green** log and realising it was another worktree's.
 That convergence is better evidence than any argument in this document.
 
-**5. Cheap proxies, published as measurements.** Eight of my own claims were
+**5. A gate can report OK for a reason that has nothing to do with what it
+checks — and my own change caused one.** `8fea9fc` routed every gate log in
+`run_all.sh` through `$CHIP_WT_DIR`. That broke
+`regress/test_check_wiki_pages.sh`, whose wiring fixture did not set the
+variable, so the fixture's redirect became `/check_wiki_pages.log` —
+unwritable (verified). The gate therefore went **RED**, and the wiki negative
+control *wants* red, so it passed **for the wrong reason**: the 21:50 run's
+`negative control: OK (46 passed, 0 failed)` was satisfied by the fixture's own
+breakage. `587b425` at 23:19 fixed it, and its message states the class better
+than the fix does: *"a fixture must model everything the thing under test
+READS, or it is measuring the fixture."* Mechanism verified (`/` unwritable);
+the vacuous pass is strongly implied, not demonstrated — I did not run another
+worker's pre-fix regression to watch it fail. The 47 cases and 16 suites are
+unaffected and stand; this leg is the one that was not real.
+
+**6. Cheap proxies, published as measurements.** Eight of my own claims were
 wrong tonight and every one came from the same move: reporting a grep's reach, a
 variable's file count, a coincidence, or an intuition as if it were a
 measurement. The rule that survives: **never transcribe what a tool can print,
