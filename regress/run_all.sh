@@ -636,7 +636,20 @@ fi
 # rule was proven exactly once, by a worker at a terminal, which is a memory and
 # not a check: a rule nobody re-runs is a rule that quietly stops being true.
 if bash "$REPO_ROOT/regress/check_harness_preflight.sh" --self-test > "$CHIP_WT_DIR"/check_harness_preflight_selftest.log 2>&1; then
-  echo "harness pre-flight self-test: OK ($(grep -c 'ok:   self-test' "$CHIP_WT_DIR"/check_harness_preflight_selftest.log) of 5 cases behaved correctly)"
+  # The total is COUNTED, not typed. This line used to print a literal "of 5"
+  # beside a grep -c of the passes, so the run log carried two counts and the
+  # wrong one was the one phrased as a claim: add a case to the preflight's
+  # self-test and run_all goes on asserting "of 5" while the counted number
+  # beside it changes, leaving a reader no way to tell which to believe. The
+  # same class fixed in check_tmp_isolation, and worse-placed -- this is the
+  # master suite's own reporting, so every run log a human reads is affected.
+  # The denominator is read from the self-test's own "N/M cases" summary, which
+  # 9ea3b44 made a checked rendering rather than a typed literal. The fallback
+  # keeps the line honest if that summary ever changes shape: an unknown total
+  # prints as "?", never as a number nobody counted.
+  _hpf_n=$(grep -oE '[0-9]+/[0-9]+' "$CHIP_WT_DIR"/check_harness_preflight_selftest.log | head -1 | cut -d/ -f2)
+  [ -n "$_hpf_n" ] || _hpf_n="?"
+  echo "harness pre-flight self-test: OK ($(grep -c 'ok:   self-test' "$CHIP_WT_DIR"/check_harness_preflight_selftest.log) of $_hpf_n cases behaved correctly)"
 else
   echo "harness pre-flight self-test: FAILED (see $CHIP_WT_DIR/check_harness_preflight_selftest.log)"
   cat "$CHIP_WT_DIR"/check_harness_preflight_selftest.log
