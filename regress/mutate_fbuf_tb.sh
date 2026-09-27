@@ -80,8 +80,19 @@ run_tb() {
     return
   fi
   local out
-  out=$(cd sim && vvp "$work/tb.vvp" 2>&1)
+  # BOUNDED (2026-09-27). This function's PROTOCOL IS ITS STDOUT: a count of FAIL
+  # lines, or "0" for "not detected". Unbounded, a design that never reached
+  # $finish produced no output, printed "0", and was scored as a SURVIVOR - a
+  # false accusation against the testbench, from a hang. A hang is reported
+  # through BUILDFAIL, the inconclusive channel the caller already handles,
+  # because emitting a new sentinel risks it falling through to the "0" path and
+  # reintroducing the exact bug. Both mean: the harness could not run this case.
+  out=$(cd sim && timeout "${MUT_VVP_TIMEOUT:-300}" vvp "$work/tb.vvp" 2>&1); local rc=$?
   rm -rf "$work"
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    echo "BUILDFAIL"
+    return
+  fi
   if grep -q '^FAIL' <<< "$out"; then
     echo "$(grep -c '^FAIL' <<< "$out")"
   else

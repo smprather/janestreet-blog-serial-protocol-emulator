@@ -150,8 +150,17 @@ run_case() {
   # looks "detected" for the same wrong reason. (This exact bug was found the
   # hard way in regress/mutate_i2c_tb.sh.)
   local out
-  out=$(cd sim && vvp "$work/$top.vvp" 2>&1)
+  # BOUNDED (2026-09-27). Unbounded, a mutated design that never reached $finish
+  # ran forever AND emitted nothing, so the `grep -q '^FAIL'` below did not match
+  # and the mutation was scored on no evidence at all. The hazard is the mirror
+  # of mutate_i2c_tb.sh's: silence is not a verdict. A timeout is a HARNESS
+  # ERROR, reported as one, and is never the "SURVIVED" path.
+  out=$(cd sim && timeout "${MUT_VVP_TIMEOUT:-300}" vvp "$work/$top.vvp" 2>&1); local rc=$?
   rm -rf "$work"
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    echo "    (timeout after ${MUT_VVP_TIMEOUT:-300}s -- HARNESS ERROR, not a survivor)"
+    return 2
+  fi
 
   if grep -q '^FAIL' <<< "$out"; then
     echo "  DETECTED (TB failed on the mutated design)"

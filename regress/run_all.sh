@@ -97,6 +97,22 @@ case "$JOBS" in
   0)           echo "run_all.sh: -j 0 would run nothing" >&2; exit 2 ;;
 esac
 
+# THE SIMULATION WALL-CLOCK BOUND. A testbench that never reaches $finish does
+# not fail: vvp spins one core at 100% and prints nothing, and nothing bounded
+# it. On 2026-09-27 that pegged all 24 cores for ~10 minutes and the accumulated
+# processes drove user-1000.slice into its pids limit (TasksMax=84178), so the
+# desktop could no longer fork a thread and the graphical session was torn down
+# to a login screen. The suite's own record of that window says a run "printed
+# NO summary, NO survivor count and no error text" - a hang was indistinguishable
+# from silence, which is why it took a forensic session to attribute.
+#
+# 900s is deliberately far above any legitimate run here: the mutation harnesses
+# that already carried bounds use 120-600s, and the slowest real testbench in
+# this suite finishes in well under a minute. A case that reaches 900s is not
+# slow, it is stuck, and it now says so by name. Override with VVP_TIMEOUT=.
+VVP_TIMEOUT="${VVP_TIMEOUT:-900}"
+export VVP_TIMEOUT
+
 if [ "$FAST" -eq 1 ]; then
   echo "(--fast: parallel testbench loop, $JOBS jobs, same 4-state simulation)"
 fi
@@ -494,8 +510,13 @@ for c in "${CASES[@]}"; do
     fail=$((fail+1)); failed_names+=("$top(compile)")
     continue
   fi
-  out=$(vvp "$CHIP_WT_DIR/${top}.vvp" 2>&1)
-  if grep -q '^PASS' <<< "$out"; then
+  # Bounded, and the verdict is NAMED. vvp_run.sh returns one of PASS / FAIL /
+  # TIMEOUT on its first line, so a hung testbench is a labelled red instead of
+  # silence, and it is counted as a failure like any other.
+  verdict_out=$("$REPO_ROOT/regress/vvp_run.sh" "$VVP_TIMEOUT" "$CHIP_WT_DIR/${top}.vvp" 2>&1)
+  verdict=$(head -1 <<< "$verdict_out")
+  detail=$(tail -n +2 <<< "$verdict_out")
+  if [ "$verdict" = "PASS" ]; then
     if [ "$wip" = "<<wip>>" ]; then
       printf '%-18s WIP-NOW-PASSING (remove the <<wip>> marking)\n' "$top"
       fail=$((fail+1)); failed_names+=("$top(wip-now-passing)")
@@ -505,12 +526,14 @@ for c in "${CASES[@]}"; do
     pass=$((pass+1))
   elif [ "$wip" = "<<wip>>" ]; then
     printf '%-18s KNOWN-WIP (expected red; the act is not finished)\n' "$top"
-    grep -E '^FAIL' <<< "$out" | head -5 | sed 's/^/  /'
+    [ -n "$detail" ] && printf '%s\n' "$detail" | sed 's/^/  /'
     WIP_LIST="$WIP_LIST $top"
   else
-    printf '%-18s FAIL\n' "$top"
-    grep -E '^FAIL' <<< "$out" | head -5
-    fail=$((fail+1)); failed_names+=("$top")
+    # The actual verdict, not a hardcoded FAIL. TIMEOUT has to be visible as
+    # TIMEOUT or nobody can tell a stuck testbench from a wrong one.
+    printf '%-18s %s\n' "$top" "$verdict"
+    [ -n "$detail" ] && printf '%s\n' "$detail"
+    fail=$((fail+1)); failed_names+=("$top($verdict)")
   fi
 done
 fi

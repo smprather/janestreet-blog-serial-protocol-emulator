@@ -153,8 +153,19 @@ run_case() {
   # of this script did: five mutations reported DETECTED with byte-identical
   # failures, which is the signature of a broken harness, not a good test.
   local out
-  out=$(cd sim && vvp "$work/$top.vvp" 2>&1)
+  # BOUNDED (2026-09-27). Unbounded, a mutated design that never reached $finish
+  # ran forever AND produced no output - so the `grep -q '^FAIL'` below did not
+  # match and the case was reported SURVIVED. That is a false accusation against
+  # the testbench: a hang and a genuine survivor are opposite findings and the
+  # script was conflating them. A timeout is a HARNESS ERROR (rc 2), the same
+  # channel mutate_eth_mac_tb.sh already uses, and it is deliberately not the
+  # "not detected" path. Matches the 300 s already used in this tree.
+  out=$(cd sim && timeout "${MUT_VVP_TIMEOUT:-300}" vvp "$work/$top.vvp" 2>&1); local rc=$?
   rm -rf "$work"
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    echo "    (timeout after ${MUT_VVP_TIMEOUT:-300}s -- HARNESS ERROR, not a survivor)"
+    return 2
+  fi
 
   if grep -q '^FAIL' <<< "$out"; then
     echo "  DETECTED (TB failed on the mutated design)"
@@ -319,7 +330,14 @@ if [ "$cc" -ne 0 ]; then
   echo "  INCONCLUSIVE: did not compile"
   inconclusive=$((inconclusive+1))
 else
-  if (cd sim && vvp "$work/u.vvp" 2>&1) | grep -qE '^FAIL|watchdog'; then
+  # BOUNDED, same reason as the case above: unbounded, a hang yields no output,
+  # the grep does not match, and the mutation is scored SURVIVED - which is a
+  # false accusation against the testbench rather than a finding.
+  uout=$(cd sim && timeout "${MUT_VVP_TIMEOUT:-300}" vvp "$work/u.vvp" 2>&1); urc=$?
+  if [ "$urc" -eq 124 ] || [ "$urc" -eq 137 ]; then
+    echo "  INCONCLUSIVE: the mutated read-back never finished (timeout ${MUT_VVP_TIMEOUT:-300}s)"
+    inconclusive=$((inconclusive+1))
+  elif grep -qE '^FAIL|watchdog' <<< "$uout"; then
     echo "  DETECTED (the UART TB fails or hangs on the mutated read-back)"
     detected=$((detected+1))
   else

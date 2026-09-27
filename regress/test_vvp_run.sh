@@ -37,13 +37,18 @@ expect() { # label expected actual
 # $1 = label, $2 = initial-block body. A body with no $finish is the hang case.
 build() {
   local label="$1" body="$2" src="$WORK/$1.v" out="$WORK/$1.vvp"
-  cat >"$src" <<EOF
-module $label;
-  initial begin
-    $body
-  end
-endmodule
-EOF
+  # printf, NOT a heredoc. The first version of this test used an unquoted
+  # heredoc and wrote `display(...)` without the dollar sign, so iverilog
+  # rejected two cases with "Enable of unknown task ``display''" and the test
+  # blamed the wall-clock bound for a typo in its own fixture. printf has no
+  # expansion hazard at all, whatever the body contains.
+  {
+    printf 'module %s;\n'     "$label"
+    printf '  initial begin\n'
+    printf '    %s\n'         "$body"
+    printf '  end\n'
+    printf 'endmodule\n'
+  } >"$src"
   iverilog -g2012 -s "$label" -o "$out" "$src" 2>"$WORK/$label.cc.log" || return 1
   printf '%s' "$out"
 }
@@ -68,7 +73,7 @@ if [ -x "$VVP_RUN" ]; then ok "vvp_run.sh exists and is executable"; else
 fi
 
 # ---- 1. a terminating PASS testbench still passes ---------------------------
-if p=$(build ok_tb 'display("PASS"); $finish;'); then
+if p=$(build ok_tb '$display("PASS"); $finish;'); then
   IFS='|' read -r v el rc <<<"$(run_case 30 "$p")"
   expect "a finishing PASS testbench -> PASS" "PASS" "$v"
   expect "  ...and it is fast (under 30s)" "yes" "$([ "$el" -lt 30 ] && echo yes || echo "no (${el}s)")"
@@ -77,7 +82,7 @@ else
 fi
 
 # ---- 2. a failing testbench still fails, and keeps its FAIL detail ----------
-if p=$(build bad_tb 'display("FAIL: something broke"); $finish;'); then
+if p=$(build bad_tb '$display("FAIL: something broke"); $finish;'); then
   IFS='|' read -r v el rc <<<"$(run_case 30 "$p")"
   expect "a failing testbench -> FAIL" "FAIL" "$v"
   out=$(timeout 30 "$VVP_RUN" 30 "$p" 2>&1)
