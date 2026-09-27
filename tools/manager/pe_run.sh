@@ -62,16 +62,37 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 
-# ---- the budget. Conservative on purpose; tune from measurement. -----------
-#   TasksMax   512 - a --fast -j8 gate peaks in the low hundreds. This is ~1/6
-#                      of the per-process pids limit that worked fine, and
-#                      ~1/160 of the 84178 that killed the session.
-#   MemoryMax  8G   - above anything this toolchain legitimately needs, below
-#                      the 26.8G user-slice peak that did this.
-#   CPUQuota   1600% - 16 of 24 cores, so a single agent cannot pin the machine
-#                      and leave your desktop starved.
+# ---- the TEAM budget, and the per-agent share of it. -----------------------
+# PER-AGENT CAPS ALONE DO NOT ADD UP, and on this box the arithmetic was fatal:
+# 4 agents x 8G = 32G on a 31G machine that also runs the desktop, Chrome and
+# five other projects. Every agent individually well-behaved, collectively dead.
+# So the real ceiling is a systemd slice that all pe scopes nest inside, and the
+# per-agent numbers are a share OF that ceiling rather than the ceiling itself.
+#
+#   pe-agents.slice   MemoryHigh=14G  throttle + reclaim here (this is the knob
+#                                  that swaps work to disk rather than killing it)
+#                     MemoryMax=20G   hard wall; the desktop keeps >=11G even
+#                                  when the fleet is at its ceiling
+#                     TasksMax=2048   4 agents x 512
+#                     CPUQuota=1600%  16 of 24 cores, so the fleet cannot pin
+#                                  the machine and starve the desktop
+#   pe-<agent>.scope  MemoryHigh=4G   one agent's working set; above this the
+#                                  kernel reclaims from THIS agent first
+#                     MemoryMax=6G
+#                     TasksMax=512    a --fast -j8 gate peaks in the low
+#                                  hundreds; ~1/160 of the 84178 that killed
+#                                  the session
+#                     CPUQuota=1600%
+#
+# MEASURED, not guessed: with the team's MemoryHigh dropped to 64M, a 200MB
+# allocation in a nested scope was reclaimed to 70MB and the process stayed
+# ALIVE. That is the difference between degrading and dying, and it is why
+# MemoryHigh (throttle) sits below MemoryMax (kill) - reclaim is tried first and
+# the hard wall only fires if reclaim genuinely failed.
 TASKS_MAX="${PE_TASKS_MAX:-512}"
-MEMORY_MAX="${PE_MEMORY_MAX:-8G}"
+MEMORY_HIGH="${PE_MEMORY_HIGH:-4G}"
+MEMORY_MAX="${PE_MEMORY_MAX:-6G}"
+SLICE="${PE_SLICE:-pe-agents.slice}"
 CPU_QUOTA="${PE_CPU_QUOTA:-1600%}"
 SESSION_FLAG="--continue"
 
@@ -84,8 +105,9 @@ usage: $(basename "$0") <agent-name> [--fresh] [command [args...]]
   <name> --fresh     same, but start a new session
   <name> <cmd> ...   run an arbitrary command as a named, bounded agent
 
-limits: TasksMax=$TASKS_MAX MemoryMax=$MEMORY_MAX CPUQuota=$CPU_QUOTA
-override with PE_TASKS_MAX / PE_MEMORY_MAX / PE_CPU_QUOTA
+limits: agent MemoryHigh=$MEMORY_HIGH MemoryMax=$MEMORY_MAX TasksMax=$TASKS_MAX CPUQuota=$CPU_QUOTA
+        team  $SLICE (the aggregate ceiling - see tools/manager/pe-agents.slice)
+override with PE_MEMORY_HIGH / PE_MEMORY_MAX / PE_TASKS_MAX / PE_CPU_QUOTA / PE_SLICE
 EOF
   exit 2
 }
@@ -138,7 +160,58 @@ if systemctl --user is-active --quiet "$unit.scope" 2>/dev/null; then
   exit 4
 fi
 
-echo "pe_run.sh: $name -> $unit.scope  TasksMax=$TASKS_MAX MemoryMax=$MEMORY_MAX CPUQuota=$CPU_QUOTA" >&2
+# The TEAM slice must exist before any scope can nest in it, and if it cannot be
+# established the agent must NOT start unbounded. Failing loudly is the point: a
+# silently-missing ceiling is the exact condition that would let 4 agents each ask
+# for 6G on a 31G box. Idempotent, and the unit is versioned in the repo rather
+# than hand-written, so the budget is reviewable in a diff.
+SLICE_SRC="$HERE/pe-agents.slice"
+# Only the repo's own slice is auto-installed. Honouring PE_SLICE for the
+# INSTALL path meant `PE_SLICE=anything` silently created a bogus unit named
+# `anything.slice` out of the pe-agents.slice body - a budget under a name
+# nobody chose, which is worse than no budget because it looks deliberate.
+if [ "$SLICE" = "pe-agents.slice" ] && [ -f "$SLICE_SRC" ]; then
+  # The unit FILE is named after the slice, and the slice name already ends in
+  # ".slice" - so appending another one installs `pe-agents.slice.slice`, which
+  # systemd loads as a unit by that literal name and which nothing ever joins.
+  # That bug was invisible for a test run only because a correct file from an
+  # earlier session was still lying around doing the real work.
+  case "$SLICE" in *.slice) SLICE_FILE="$SLICE";; *) SLICE_FILE="${SLICE}.slice";; esac
+  SLICE_DST="$HOME/.config/systemd/user/$SLICE_FILE"
+  mkdir -p "$(dirname "$SLICE_DST")"
+  if ! cmp -s "$SLICE_SRC" "$SLICE_DST" 2>/dev/null; then
+    cp "$SLICE_SRC" "$SLICE_DST" || { echo "pe_run.sh: cannot install the team budget" >&2; exit 5; }
+    systemctl --user daemon-reload >/dev/null 2>&1
+    echo "pe_run.sh: installed the team budget $SLICE from the repo copy" >&2
+  fi
+fi
+
+# Load the slice so its properties are actually applied, then read them back.
+# Reading is not optional: an unloaded unit is perfectly readable and reports
+# MemoryMax=infinity, so a check on the EXIT CODE of `systemctl show` passes on a
+# slice that has no ceiling at all. That is the bug this guards against - the
+# first version of this guard tested the exit code, printed
+# "TEAM MemoryMax=infinity", and started the agent anyway.
+systemctl --user start "$SLICE" >/dev/null 2>&1 || true
+TEAM_HIGH="$(systemctl --user show "$SLICE" -p MemoryHigh --value 2>/dev/null)"
+TEAM_MAX="$(systemctl --user show "$SLICE" -p MemoryMax --value 2>/dev/null)"
+TEAM_TASKS="$(systemctl --user show "$SLICE" -p TasksMax --value 2>/dev/null)"
+
+case "$TEAM_MAX" in
+  ''|infinity)
+    echo "pe_run.sh: REFUSING to start $name." >&2
+    echo "  $SLICE reports MemoryMax=${TEAM_MAX:-<none>}, so the fleet has NO aggregate" >&2
+    echo "  ceiling. Per-agent caps alone do not add up: 4 x $MEMORY_MAX is 24G on a" >&2
+    echo "  31G machine, and that is the arithmetic that killed the session on 2026-09-27." >&2
+    echo "  Fix: install tools/manager/pe-agents.slice to ~/.config/systemd/user/ and run" >&2
+    echo "       'systemctl --user daemon-reload', or pass PE_SLICE=pe-agents.slice." >&2
+    exit 5
+    ;;
+esac
+
+echo "pe_run.sh: $name -> $unit.scope, nested in $SLICE" >&2
+echo "pe_run.sh:   agent  MemoryHigh=$MEMORY_HIGH MemoryMax=$MEMORY_MAX TasksMax=$TASKS_MAX CPUQuota=$CPU_QUOTA" >&2
+echo "pe_run.sh:   TEAM   MemoryHigh=$TEAM_HIGH MemoryMax=$TEAM_MAX TasksMax=$TEAM_TASKS   <- the ceiling that adds up" >&2
 echo "pe_run.sh: repo=$REPO  cmd=$*" >&2
 
 # The tag is set by a HELPER FILE, not by a `bash -c` string. systemd expands
@@ -151,7 +224,9 @@ echo "pe_run.sh: repo=$REPO  cmd=$*" >&2
 # scope: this is a --scope, not a service, so the terminal comes with it.
 exec systemd-run --user --scope \
   --unit="$unit" \
-  -p "TasksMax=$TASKS_MAX" \
+  --slice="$SLICE" \
+  -p "MemoryHigh=$MEMORY_HIGH" \
   -p "MemoryMax=$MEMORY_MAX" \
+  -p "TasksMax=$TASKS_MAX" \
   -p "CPUQuota=$CPU_QUOTA" \
   -- "$HERE/pe_scope_exec.sh" "$name" "$@"

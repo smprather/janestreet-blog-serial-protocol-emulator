@@ -1,0 +1,31 @@
+[Slice]
+# pe-agents.slice — the protocol emulator's AGGREGATE budget.
+#
+# WHY A SLICE AND NOT JUST PER-AGENT CAPS. pe_run.sh bounds each agent
+# (MemoryHigh=4G MemoryMax=6G TasksMax=512), and on paper that looked like
+# enough. It is not: 4 agents x 6G is 24G on a 31GiB machine that also runs the
+# desktop, Chrome, and five other projects in tmux. Every agent individually
+# well-behaved, collectively fatal. A per-agent cap that does not sum to a
+# ceiling is worse than no cap, because it reads as protection.
+#
+# This slice is the ceiling. Every pe scope nests inside it, so the SUM is
+# bounded by the kernel whether or not any script is alive - which is the state
+# the 2026-09-27 session death was found in.
+#
+# MemoryHigh sits BELOW MemoryMax on purpose. MemoryHigh is the throttle: when
+# the team exceeds it the kernel reclaims and swaps the team's own pages first,
+# which degrades throughput without killing anything. Measured: with the team's
+# MemoryHigh dropped to 64M, a 200MB allocation in a nested scope was reclaimed
+# to 70MB and the process stayed ALIVE. MemoryMax is the hard wall that only
+# fires if reclaim genuinely failed. Degrade first, kill only if you must.
+#
+# The desktop keeps >=11GiB even when the fleet is at its ceiling.
+#
+# Installed to ~/.config/systemd/user/ by tools/manager/pe_run.sh, idempotently,
+# and versioned HERE so the budget is reviewable in a diff rather than being a
+# hand-typed line nobody can audit.
+MemoryHigh=14G
+MemoryMax=20G
+TasksMax=2048
+CPUQuota=1600%
+Delegate=yes
