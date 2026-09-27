@@ -408,6 +408,26 @@ CASES=(
   #     clock on the pin. A second case holds CTS low for ever and requires
   #     that nothing at all is transmitted.
   "tb_pe_soc_uart_flow|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_uart_flow"
+  # (4) MIDI 1.0 AT 31.25 kBAUD, WITH RUNNING STATUS. firmware/midi_xfer.pe is
+  #     the rate a FRACTIONAL TICK cannot express: a 32 us bit against a
+  #     4.3333 us tick is 7.38 ticks, and the program builds the cell from
+  #     counted instructions -- 1920 clocks, measured on the pin -- and uses
+  #     the timer not at all. Six two-data-byte messages go out as fourteen
+  #     bytes rather than eighteen because a new status byte REPLACES the
+  #     running one. The TB's receiver is a free-running oversampling search
+  #     that VERIFIES each frame's stop bit, because in a back-to-back 8N1
+  #     stream a falling edge is not a start bit; and it found a firmware
+  #     defect that compared thirteen perfectly good bytes and never noticed
+  #     the fourteenth had no stop bit at all.
+  "tb_pe_soc_midi|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_midi"
+  # (5) DMX512-A AT 250 kBAUD, WITH BREAK AND MARK. firmware/dmx512.pe is the
+  #     rate a tick cannot express AT ALL: a 4 us bit is 0.923 of the shared
+  #     4.3333 us tick, so the timer is not used once. The frame is break
+  #     (>=87.5 us), mark (>=8 us), a start code and 512 slots of a wrapping
+  #     8-bit ramp, each 8N2 -- 22.6 ms and 1.37 million clocks of simulated
+  #     time, which is why this TB samples only inside a slot instead of
+  #     free-running a strobe across the frame.
+  "tb_pe_soc_dmx512|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_dmx512"
 )
 
 # ---- OPTIONAL case filter (OFF by default; the merge gate's driver) --------
