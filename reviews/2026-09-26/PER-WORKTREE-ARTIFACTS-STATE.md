@@ -93,6 +93,11 @@ Ground truth, re-derived from the `p_us` table and the banking loop
 > references now point 5 lines early — `:252` lands on a blank line. The line
 > numbers above are dated to `4066c8e`; the quoted phrases will not expire.
 
+**Checked across every ref, 00:30:** the wrong sentence is present on **all 12**
+local branches and remotes, and a search for a correction
+(`twelve points spanning 100 Hz`, `12.5 kHz`) in that page returns **nothing on
+any ref**. So the wiki copy is wrong everywhere and fixed nowhere — which is a
+stronger statement than "nothing pending covers it", and it is the one to act on.
 `7fe4a1f` touches `WORKLOG.md`, `firmware/freqmeter.pe` and the TB — **not the
 wiki**. So the obvious merge fixes one wrong copy and leaves the other.
 
