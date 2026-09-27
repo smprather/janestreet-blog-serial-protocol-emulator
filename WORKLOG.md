@@ -4759,3 +4759,107 @@ paragraphs before `N_MEAS = 4` corrected it. **The same sweep that found three
 stale figures in the TB found one in the fix I was writing.** Both were caught
 by counting the thing rather than recalling it, which is the only reason either
 was caught.
+
+## 2026-09-27: TASK-START -- THE SAME SWEEP, APPLIED TO THE SIBLING ACTS INSTEAD OF BY ACCIDENT
+
+I closed the session saying nothing was open. That was true of the QUEUE and
+false of the RISK, and the difference is the block's own finding:
+
+> "The three I could not check -- a comment claiming a value whose derivation
+> lives in a testbench model, a comment naming bytes the model derives, and a
+> comment belonging to a file that is not on my branch -- **are the three that
+> were wrong**, and all three are wrong in the way a duplicate is wrong: they
+> assert a number in a second place, and the second place is what goes stale."
+
+**Every stale figure I fixed this session was found BY ACCIDENT**, in a file I
+happened to be editing for another reason: the SR04 header's "two runs" against
+`N_MEAS = 4` surfaced only because writing item 3 of (a)'s open list asked how
+many distances there were. **Four figures in one header, all of them the same
+defect, and none of them flagged by anything.** So the honest next task is not
+more queue items -- it is to run the sweep deliberately across the sibling acts
+instead of waiting to trip over it again.
+
+Scope, and the bar for calling something wrong:
+
+* the Block 3 acts -- (a) `tb_pe_soc_sr04.v` / `firmware/sr04_range.pe`,
+  (b) `tb_pe_soc_freqmeter.v` / `firmware/freqmeter.pe`,
+  (c) `tb_pe_soc_bmc.v` / `firmware/bmc_frame.pe`, plus the `CONSTS` each of
+  them leans on in `tools/fw/peasm.py`;
+* every NUMBER asserted in a header, checked against one of exactly three
+  authorities, in this order of preference:
+  1. **the constant or expression in the same file** (N_MEAS, WAIT_CHUNKS, a
+     localparam, the table it indexes);
+  2. **the firmware's own arithmetic**, from the assembler's listing rather
+     than from the source -- a count of instructions is not a reading of them;
+  3. **the wire**, by running the testbench and reading what it prints.
+* a number is only called WRONG on a positive match against one of those three.
+  "I could not check it" is recorded as UNCHECKED, never folded into wrong --
+  the block's own error was the opposite confusion, and `dmx512.pe` is the
+  standing example of a figure that cannot be checked here at all.
+* fixes are comment-only and each carries its proof: assembled-image md5
+  unchanged for firmware, recompile-and-rerun for a TB.
+
+Deliverable: a table of every number found, with which authority settled it, and
+the ones that were wrong fixed. **If nothing is wrong, that is the finding and
+I will say so rather than manufacture an edit.**
+
+### TASK-START ABOVE IS **CANCELLED**, NOT DONE -- manager ruled the queue empty
+
+Logging the terminal state in the same turn I opened a task, and leaving the
+TASK-START above standing, would put two different claims about this block's
+state in one file -- **which is this block's own defect**: a number asserted in
+a second place, and the second place is what goes stale. So the task is closed
+out here explicitly rather than abandoned.
+
+**CANCELLED, not completed: the sibling-act figure sweep.** Nothing in it was
+executed -- no `freqmeter` or `bmc` header was read, no number was checked. The
+manager's ruling is that the Block 3 family is complete and standby is the
+honest state, and that is the queue: every act is green and in the regression
+unmarked, the routed comment batch is done or routed, and the state document
+agrees with the gate for the first time. **A completed task and a cancelled one
+must not be logged the same way, so this says which.**
+
+What the cancelled task proposed is kept below as a RISK, because it was a real
+observation and dropping it would be the same error in the other direction. It
+is not owed work and it is not a claim that anything is broken:
+
+> **KNOWN RISK, NOT AN OPEN ITEM.** Four stale figures were found in
+> `tb_pe_soc_sr04.v`'s header this session -- "two distances", "TWO RUNS",
+> "the longest run is 5816 us" and a per-run budget restated as 17 ms -- all of
+> them the same defect as the five wrong figures in this block, and **none of
+> them flagged by anything**: they surfaced only because writing an unrelated
+> comment asked how many distances there were. The same unchecked-duplicate
+> class was wrong in three of three cases in this block, so **a header in a
+> sibling act stating a count, a run length or a budget is the most likely
+> place for the next one.** No gate catches it, and the fix for a comment is
+> always to cite the constant rather than restate the number, so that there is
+> no rounded copy left to drift. Cheap to check on whoever next touches those
+> headers; not this block's job now.
+
+---
+
+## IDLE-QUEUE-EMPTY -- timing protocols, Block 3 (2026-09-27 ~19:50 CDT)
+
+**Queue is empty and this is the terminal state. Standing by.**
+
+Every item is landed, routed, or explicitly not mine, and nothing is in progress:
+
+| item | terminal state |
+| :--- | :--- |
+| `tb_pe_soc_bmc` / act (c) | GREEN both directions, in the regression, unmarked -- `TOTAL: 48 PASS: 48 FAIL: 0` |
+| full gate end to end | measured twice: 48/48, `FIRMWARE 43/43`, run-lock OK **under load**; the one red is R3's committed README drift |
+| `run_lock.sh` case E / case H | FIXED, 17/17, and green inside the gate |
+| firmware comment batch | 2 already in and re-verified; 1 wrong and FIXED (`9d462b3`, measured on the wire); 1 (`dmx512.pe`) not in this worktree, routed to fw-bus |
+| BLOCK3-STATE merge-order note | the two word lists were SWAPPED; corrected in place, and the dependency it warned about does not exist |
+| BLOCK3-STATE status tables | three stale sections marked SUPERSEDED; the top table now matches the gate |
+| (a) HC-SR04 open items | all three closed and CHECKED, the third was the real one; four more stale figures in the same header corrected |
+| R3 golden package | **not mine** -- routed to its owner with evidence; deliberately not "fixed", because syncing it means asserting R3's confirmation status against that file's own rule |
+
+**Committed, working tree clean but for one deliberate artifact:**
+`5e01c24`, `9d462b3`, `83f1fba`.
+`formal/results/summary.txt` is left uncommitted: 9 lines of `MEM: nn.nn MB`
+and nothing else, every `PROVED`/`VACUOUS` status identical, nondeterministic.
+
+**Handover:** `/tmp/pi-fw-timing-interrupt`. **First command next session:**
+`./regress/run_all.sh` (~26 min serial) -- expect 48/48 and the one R3 line
+until its owner syncs the README.
