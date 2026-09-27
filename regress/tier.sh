@@ -248,10 +248,22 @@ $(printf '%s\n' "$dirty" | head -5 | sed 's/^/    /')"
   # drifts from run_lock.sh:101 the guard degrades to "never blocks", which is
   # the safe direction but must not go unnoticed.
   _lock="${CHIP_RUN_LOCK_FILE:-/tmp/chip-run-all.shared.lock}"
-  if ! flock -n 9 2>/dev/null; then
-    blocked="${blocked:+$blocked; }another run holds the project run lock ($_lock)"
+  # OPEN THE LOCK FILE FIRST. run_lock.sh:314 does `exec 9>"$CHIP_RUN_LOCK_FILE"`
+  # and only then `flock -n 9`. Skipping that line - which this guard did - makes
+  # `flock -n 9` fail with EBADF on a closed descriptor, the `if !` reads that
+  # failure as "held", and the guard reports a held lock FOREVER. So the window
+  # could never be clear and the guard was permanently refusing. The same class
+  # of bug as a guard that never fires, wearing the costume of one that always
+  # does: either way it carries no information.
+  if exec 9>"$_lock" 2>/dev/null; then
+    if ! flock -n 9 2>/dev/null; then
+      blocked="${blocked:+$blocked; }another run holds the project run lock ($_lock)"
+    fi
+    exec 9>&- 2>/dev/null || true
+  else
+    # Cannot even open the lock, so we cannot claim the window is clear.
+    blocked="${blocked:+$blocked; }cannot open the run lock $_lock to test it"
   fi
-  exec 9>&- 2>/dev/null || true
   harness="$(pgrep -af 'mutate_.*\.sh' 2>/dev/null | not_self | head -3)"
   [ -n "$harness" ] && blocked="${blocked:+$blocked; }a mutation harness is running and owns a planted mutant
 $(printf '%s\n' "$harness" | sed 's/^/    /')"
