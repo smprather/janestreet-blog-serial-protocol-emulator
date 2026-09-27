@@ -5331,3 +5331,37 @@ what was recorded is exactly the kind of duplicate that goes stale.**
 **THE FIX, one appended line, in the file the tool reads, in the format it
 greps.** Not an edit to the supervisor: that is the manager's tooling, and
 L1's format is theirs to define.
+
+### FIXED, AND VERIFIED WITH THE SUPERVISOR'S OWN EXPRESSIONS
+
+One line appended to `/home/mylesp/janestreet-blog-serial-protocol-emulator/WORKLOG.md`
+in the format `tools/manager/worker_supervisor.sh` actually greps, then both of
+its suppression paths re-run by hand:
+
+    :172 newest=$(grep -E " \| (pw-)?fw-timing \| " "$W" | grep -v " | supervisor | " | tail -3)
+         -> last 3 are the predecessor's 01:40 MERGE-RESOLUTION, 02:45 TASK-DONE,
+            and this session's IDLE-QUEUE-EMPTY
+    :173 case -> *IDLE-QUEUE-EMPTY* MATCHES  -> continue, no nudge
+    :145 newest_line (single line)          -> MATCHES  -> stall-alert suppressed too
+
+**AND THE LAST PIECE, WHICH MAKES IT A REGRESSION RATHER THAN A MISCONVENTION:**
+that file ALREADY carried `fw-timing` telemetry from the predecessor's session --
+`2026-09-26 01:40 | fw-timing | MERGE-RESOLUTION` and `02:45 | fw-timing |
+TASK-DONE`. **So the convention was being followed, and I stopped following it
+the moment I started writing long-form markdown into the worktree instead.** A
+previous worker in this same role got it right, and I did not, and the three
+`VIOLATION-IDLE` rows are the receipt.
+
+That is this block's own finding applied to me one last time, and the sharpest
+version of it: **the two logs are duplicates of each other, and I wrote
+everything to the copy nobody reads.** The prose in
+`/tmp/worktrees/fw-timing/WORKLOG.md` is the better record and it is the wrong
+destination; the one line that matters to the machinery is the one I did not
+write. Writing a thorough account somewhere no one looks is not telemetry, and
+neither is a correct record that cannot be found.
+
+**WHAT I DID NOT DO:** edit `worker_supervisor.sh`. It is the manager's
+tooling, the `continue` on line 146 covers one case, and a better long-term fix
+is to have the supervisor read the worktree's WORKLOG as well as the chip
+repo's -- but that is their call, not mine. I fixed my half: one line, in the
+place and format the tool reads.
