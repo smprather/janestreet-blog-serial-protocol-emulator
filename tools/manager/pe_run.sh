@@ -74,15 +74,14 @@ REPO="$(cd "$HERE/../.." && pwd)"
 #                     MemoryMax=20G   hard wall; the desktop keeps >=11G even
 #                                  when the fleet is at its ceiling
 #                     TasksMax=2048   4 agents x 512
-#                     CPUQuota=1600%  16 of 24 cores, so the fleet cannot pin
-#                                  the machine and starve the desktop
-#   pe-<agent>.scope  MemoryHigh=4G   one agent's working set; above this the
-#                                  kernel reclaims from THIS agent first
-#                     MemoryMax=6G
+#                     CPUQuota=2400% all 24 cores - CPU is not scarce here
+#   pe-<agent>.scope  MemoryHigh=7G   ONE measured full gate peaked at 4.7G, so
+#                                  this must clear it or every gate is throttled
+#                     MemoryMax=9G
 #                     TasksMax=512    a --fast -j8 gate peaks in the low
 #                                  hundreds; ~1/160 of the 84178 that killed
 #                                  the session
-#                     CPUQuota=1600%
+#                     CPUQuota=2400%
 #
 # MEASURED, not guessed: with the team's MemoryHigh dropped to 64M, a 200MB
 # allocation in a nested scope was reclaimed to 70MB and the process stayed
@@ -90,10 +89,29 @@ REPO="$(cd "$HERE/../.." && pwd)"
 # MemoryHigh (throttle) sits below MemoryMax (kill) - reclaim is tried first and
 # the hard wall only fires if reclaim genuinely failed.
 TASKS_MAX="${PE_TASKS_MAX:-512}"
-MEMORY_HIGH="${PE_MEMORY_HIGH:-4G}"
-MEMORY_MAX="${PE_MEMORY_MAX:-6G}"
+# THE PER-AGENT NUMBERS ARE MEASURED, NOT GUESSED. A full gate - the most
+# RAM-hungry thing an agent does - was sampled at 4.7G peak for a WHOLE agent on
+# 2026-09-27 (cgroup memory.peak, during the mutation phase; swap 9M). The first
+# version of this file set MemoryHigh=4G and MemoryMax=6G, which were both wrong
+# and wrong in the dangerous direction:
+#
+#   MemoryHigh=4G  was BELOW the observed 4.7G peak, so every full gate was
+#                  already crossing the throttle point and having its pages
+#                  reclaimed - slowing the gate down to solve no problem.
+#   MemoryMax=6G   was only 28% above that peak, so a `--fast -j24` run, which
+#                  holds far more simulators at once than the serial path does,
+#                  would have been OOM-killed MID-GATE by the very limit meant to
+#                  protect it. A ceiling that tight does not protect anything; it
+#                  just picks a victim.
+#
+# So: MemoryHigh=7G clears the measured peak with room to spare, and
+# MemoryMax=9G is a hard wall that a runaway - not a legitimate gate - hits.
+# The TEAM ceiling in pe-agents.slice is what actually bounds the sum; this is one
+# agent's share.
+MEMORY_HIGH="${PE_MEMORY_HIGH:-7G}"
+MEMORY_MAX="${PE_MEMORY_MAX:-9G}"
 SLICE="${PE_SLICE:-pe-agents.slice}"
-CPU_QUOTA="${PE_CPU_QUOTA:-1600%}"
+CPU_QUOTA="${PE_CPU_QUOTA:-2400%}"   # all 24 cores; RAM is the scarce resource
 SESSION_FLAG="--continue"
 
 usage() {
@@ -201,7 +219,7 @@ case "$TEAM_MAX" in
   ''|infinity)
     echo "pe_run.sh: REFUSING to start $name." >&2
     echo "  $SLICE reports MemoryMax=${TEAM_MAX:-<none>}, so the fleet has NO aggregate" >&2
-    echo "  ceiling. Per-agent caps alone do not add up: 4 x $MEMORY_MAX is 24G on a" >&2
+    echo "  ceiling. Per-agent caps alone do not add up: 4 x $MEMORY_MAX is 36G on a" >&2
     echo "  31G machine, and that is the arithmetic that killed the session on 2026-09-27." >&2
     echo "  Fix: install tools/manager/pe-agents.slice to ~/.config/systemd/user/ and run" >&2
     echo "       'systemctl --user daemon-reload', or pass PE_SLICE=pe-agents.slice." >&2

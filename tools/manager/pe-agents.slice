@@ -19,7 +19,14 @@
 # to 70MB and the process stayed ALIVE. MemoryMax is the hard wall that only
 # fires if reclaim genuinely failed. Degrade first, kill only if you must.
 #
-# The desktop keeps >=11GiB even when the fleet is at its ceiling.
+# MemoryHigh=14G / MemoryMax=20G are the TEAM ceiling, and they are sized from a
+# measurement rather than a guess. A full gate - the single most RAM-hungry thing
+# the fleet does - was sampled at 4.7G peak for the whole agent (2026-09-27,
+# during the mutation phase, memory.peak from the cgroup, swap 9M). So 20G
+# admits roughly four concurrent full gates, which is what a four-agent fleet is
+# for, and 14G is the throttle point at which the kernel starts reclaiming the
+# team's own pages before anything hard happens. That leaves ~11G of a 31.3G host
+# for the desktop and the user's five other projects.
 #
 # Installed to ~/.config/systemd/user/ by tools/manager/pe_run.sh, idempotently,
 # and versioned HERE so the budget is reviewable in a diff rather than being a
@@ -27,5 +34,18 @@
 MemoryHigh=14G
 MemoryMax=20G
 TasksMax=2048
-CPUQuota=1600%
+# CPU is NOT the scarce resource here - the user said so explicitly ("help
+# yourself to ALL the cpus you can eat, RAM is the precious resource"), and the
+# two failure modes that actually cost a session on 2026-09-27 were vvp spins and
+# pid exhaustion, NOT CPU starvation. Both are now bounded elsewhere (every vvp
+# call site is under a wall-clock timeout, and TasksMax=2048 caps the process
+# count), so a CPU cap here buys nothing and only slows the gate down. 2400% is
+# all 24 cores; the desktop simply contends for them when it is actually busy.
+CPUQuota=2400%
+# READBACK GOTCHA, recorded so nobody chases it: `systemctl show -p CPUQuota`
+# returns EMPTY for a slice. CPUQuota is the deprecated alias; the live property
+# is CPUQuotaPerSecUSec, which reads 24s here - 24 seconds of CPU per second,
+# which is all 24 cores. The authoritative check is the kernel file:
+#   cat /sys/fs/cgroup$(systemctl --user show pe-agents.slice -p ControlGroup --value)/cpu.max
+#   -> 2400000 100000   (2400% of one core = the whole machine)
 Delegate=yes
