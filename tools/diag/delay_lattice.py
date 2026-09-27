@@ -537,6 +537,29 @@ def check_updated_dates() -> int:
     fifth, and it is the one about a page being HONEST about when it was last
     checked -- which is the same species as every other gap this gate has closed:
     a rule that is stated and not enforced is a rule that is a convention.
+
+    THE DATE TO WRITE, which is the part that is easy to get wrong, and which
+    this function's own remedy line used to get wrong. The comparison is
+    against the AUTHOR DATE OF THE LAST COMMIT (see _last_content_change), so
+    on a working tree whose edit is not yet committed, git reports the
+    PREVIOUS commit and the gate sees the old date and passes -- and the
+    identical bytes go RED the moment the edit is committed, because the author
+    date becomes the commit date. A page edited today must therefore declare
+    the date it is COMMITTED on. Declaring instead the date the content last
+    changed, which is what "Bump the date" plainly invited, produces a fix that
+    is green until the instant it is committed and red forever after: the worst
+    possible shape for a gate fix, because it looks finished and is a permanent
+    red. Measured on this repository rather than reasoned about: six pages
+    stamped with their last content-change date passed this gate unstaged and
+    failed it after the commit, and re-stamping them with the commit date is
+    what turned them green on a fresh clone of origin/main.
+
+    AND THE ORDER THAT MATTERS, since the trap is easy to re-enter while fixing
+    a red: run this gate on the COMMITTED tree, not on the working tree. A
+    green measured before the commit is a green about a state that does not yet
+    exist, and no negative control catches it, because the control and the fix
+    agree with each other perfectly well -- they are simply both describing
+    yesterday.
     """
     import re
 
@@ -572,7 +595,9 @@ def check_updated_dates() -> int:
         if declared < changed:
             print(
                 f"FAIL  {rel}: `updated: {declared}` but the content last changed "
-                f"{changed}. Bump the date or revert the change."
+                f"{changed} (the author date of the last commit touching it). Set "
+                f"`updated:` to the date you COMMIT this edit, not the date the "
+                f"content last changed, or revert the change."
             )
             failures += 1
         else:
