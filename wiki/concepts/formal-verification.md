@@ -10,6 +10,11 @@ confidence: high
 
 # Formal verification
 
+> **What you'll learn here:** how to tell a PROVED claim from a merely TESTED one, and where the campaign's vacuous proofs and its mutants are recorded
+>
+> **You can verify this by:** `bash formal/run_formal.sh` re-runs the campaign and writes `formal/results/summary.txt`, where every property carries its own status (PROVED, REACHABLE, VACUOUS). The mutants that prove the proofs are not vacuous are in `formal/results/mutants.txt`; `formal/mutants.sh` re-runs them.
+
+
 The deep-reading page for the chip-side formal campaign. Its subject is a
 distinction this project had to learn the hard way, so that distinction is the
 spine: **a property that is TESTED is not a property that is PROVED.** Testing

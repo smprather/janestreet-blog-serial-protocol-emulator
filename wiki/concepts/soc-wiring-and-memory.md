@@ -10,6 +10,11 @@ confidence: high
 
 # The SoC wiring
 
+> **What you'll learn here:** how pe_soc is actually wired: the port-numbering rule and why it exists, the pad map, and SRAM against the flop fallback it replaced
+>
+> **You can verify this by:** `bash regress/synth_area.sh` re-measures the mapped area and cell counts, and `python3 tools/gen/sram_budget.py --check` regenerates the macro geometry the memory decision rests on.
+
+
 Everything the firmware reaches that is not a register: the port-numbering rule
 the ISA forced, the port space and the pad map, the memory macro and its
 fallback, and what synthesis and the mapped timing screen say about it. The core
