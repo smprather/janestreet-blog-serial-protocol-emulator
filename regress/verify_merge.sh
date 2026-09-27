@@ -784,7 +784,23 @@ if [ "${DEP_CHANGED:-0}" -gt 0 ]; then
     echo "  a FALSE PASS as easily as a false failure, and this run's verdict cannot be"
     echo "  trusted in either direction. The run that reported it:"
     grep -E 'CHIP-DEP-CHANGED|INCONCLUSIVE — ' "$LOG" | head -6 | sed 's/^/    /'
-    echo "  Re-run the gate with nothing editing regress/ concurrently."
+    # "Re-run with nothing editing regress/ concurrently" was the whole of this
+    # advice until 2026-09-26, and it was wrong often enough to cost real time:
+    # a CHIP-DEP-CHANGED raised from a MUTABLE target is NOT evidence that anyone
+    # edited anything. A harness that declares a state it has not yet earned
+    # produces the identical signature, and it is the more common cause -- the
+    # 2026-09-26 codec red was exactly that, with nothing else running. So the
+    # advice now names both and points at the discriminator, rather than sending
+    # the reader to look for a concurrent editor who may not exist.
+    if grep -q 'a MUTABLE target did not hold the state' "$LOG"; then
+      echo "  READ THE DEP-GUARD MESSAGE ABOVE BEFORE RE-RUNNING: 'a MUTABLE target did"
+      echo "  not hold the state' has TWO causes with one signature, and the more likely"
+      echo "  one is a HARNESS BUG, not an interloper. If the target still matches the"
+      echo "  harness's own pristine snapshot, nothing outside the run wrote it: the"
+      echo "  harness declared a state it had not earned yet, which is latent on an idle"
+      echo "  box and fires under load. Fix the declaration, or the re-run will void again."
+    fi
+    echo "  Otherwise: re-run the gate with nothing editing regress/ concurrently."
   } >&2
   exit 4
 fi
