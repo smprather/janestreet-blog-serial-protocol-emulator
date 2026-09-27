@@ -41,6 +41,15 @@
 
 set -u
 
+# tmp-isolation: box-global singleton, EXEMPT on purpose. One memory monitor
+# watches the whole box, and its ALERT_FILE, SNAPDIR, LOG and PIDFILE are
+# consumed by the manager and by a human reading /tmp. Namespacing them per
+# worktree would give each worktree a private monitor that reports on one
+# worktree's memory while the machine as a whole is what is being watched -- it
+# would break the tool to satisfy a lint. regress/check_tmp_isolation.sh honours
+# this marker, so the exemption lives at the site that needs it and greps for
+# `tmp-isolation`, rather than in a list inside the lint that nobody re-reads.
+
 THRESHOLD="${THRESHOLD:-80}"
 REALERT_S="${REALERT_S:-600}"
 INTERVAL="${INTERVAL:-2}"

@@ -43,6 +43,7 @@ cd "$(dirname "$0")/.."
 
 FINDINGS=0
 REPORTED=0
+EXEMPTED=0
 
 # The extensions that are a compiled artifact, a captured log, or a golden
 # payload -- i.e. anything a run produces and something else may read back.
@@ -150,11 +151,23 @@ for f in regress/*.sh tools/*.sh tools/*/*.sh formal/*.sh sim/*.sh; do
   case "$f" in
     regress/check_tmp_isolation.sh) continue ;;
   esac
+  # A DELIBERATE exemption is carried by the file itself, as a marker line
+  # naming the reason, rather than by a list here. A second copy of the list is
+  # a second thing to forget to update, and an exemption that lives only inside
+  # the gate that honours it is invisible to anyone reading the tool it excuses.
+  # Grepping `tmp-isolation` shows every exempt file and its justification; if
+  # that set grows, the growth is visible in a diff rather than buried in here.
+  if grep -q '^#[[:space:]]*tmp-isolation:' "$f" 2>/dev/null; then
+    EXEMPTED=$((EXEMPTED + 1))
+    printf 'exempt: %-40s %s\n' "$f" \
+      "$(grep -m1 '^#[[:space:]]*tmp-isolation:' "$f" | sed 's/^#[[:space:]]*//')"
+    continue
+  fi
   scan "$f"
 done
 
 if [ "$FINDINGS" -eq 0 ]; then
-  echo "tmp isolation: OK (no script writes a fixed global /tmp artifact name)"
+  echo "tmp isolation: OK (no script writes a fixed global /tmp artifact name$([ "$EXEMPTED" -gt 0 ] && printf ', %s deliberate box-global exemption(s)' "$EXEMPTED"))"
   exit 0
 fi
 echo "tmp isolation: FAILED ($FINDINGS file(s) share a global /tmp name)" >&2

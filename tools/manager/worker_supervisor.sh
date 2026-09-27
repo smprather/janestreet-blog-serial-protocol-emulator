@@ -43,6 +43,15 @@
 # Usage: worker_supervisor.sh [--once]     (deploy detached via nohup setsid)
 
 set -u
+
+# tmp-isolation: box-global singleton, EXEMPT on purpose. The supervisor's state
+# under /tmp/pi-sup-* is deliberately fleet-wide: it must see every agent in
+# every worktree at once, or it cannot tell that the fleet is idle and cannot
+# stop two agents writing the same violation counter. Namespacing these per
+# worktree would give each worktree a supervisor blind to the others, which is
+# the opposite of the job. regress/check_tmp_isolation.sh honours this marker,
+# so the exemption is greppable at the site that needs it.
+
 INTERVAL="${INTERVAL:-30}"
 NUDGE_COOLDOWN="${NUDGE_COOLDOWN:-600}"
 STALL_ALERT_S="${STALL_ALERT_S:-900}"

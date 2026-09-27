@@ -26,6 +26,14 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
+# Per-worktree scratch, so a diff written here cannot be read by a concurrent
+# run in another worktree and reported as this tree's drift. Same hash as
+# regress/run_lock.sh's CHIP_WT_DIR; this is a check, not a run, so it does not
+# source the lock.
+_wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
+SCRATCH="${CHIP_WT_DIR:-/tmp/chip-wt.${_wt:-shared}}"
+mkdir -p "$SCRATCH" 2>/dev/null || :
+
 HOST_PKG=reviews/2026-09-25/r2-hex
 SNAP=tb/r2-vectors
 bad=0
@@ -38,11 +46,11 @@ bad=0
 DERIVED=(R2_CONFORMANCE_RUN.vh R2_READ_EXPECT.vh R2_READ_STEPS.vh r2_steps.txt)
 EXC=()
 for d in "${DERIVED[@]}"; do EXC+=(--exclude="$d"); done
-if diff -r "${EXC[@]}" "$HOST_PKG" "$SNAP" > /tmp/r2_pkg_diff.log 2>&1; then
+if diff -r "${EXC[@]}" "$HOST_PKG" "$SNAP" > "$SCRATCH"/r2_pkg_diff.log 2>&1; then
   :
 else
   echo "FAIL snapshot drift: $SNAP does not carry $HOST_PKG's bytes"
-  head -12 /tmp/r2_pkg_diff.log | sed 's/^/    /'
+  head -12 "$SCRATCH"/r2_pkg_diff.log | sed 's/^/    /'
   bad=$((bad + 1))
 fi
 
