@@ -76,6 +76,7 @@ T1_SELF=(
 )
 
 FORCE=0
+CHECK_ONLY=0
 usage() {
   cat <<EOF
 usage: regress/tier.sh <tier> [--force] [--list]
@@ -86,6 +87,11 @@ usage: regress/tier.sh <tier> [--force] [--list]
            unless the window is clear.            (20-30 min)
   --list   print the declared check list and exit
   --force  run T2 anyway, loudly, even if the window is not clear
+  --check-window
+           with T2: answer "is the window clear?" and STOP. Never launches the
+           gate. `tier.sh 2 | head` does NOT do this - it passes the guard and
+           then starts a real 20-30 minute run, which is how this flag came to
+           exist.
 
 WHY T2 REFUSES: a gate that runs while the tree is dirty, or while a mutation
 harness holds a planted mutant, measures whatever the tree happens to contain and
@@ -100,6 +106,7 @@ for a in "$@"; do
   case "$a" in
     0|1|2) tier="$a" ;;
     --force) FORCE=1 ;;
+    --check-window) CHECK_ONLY=1 ;;
     --list) printf 'T0 (%d checks):\n' "${#T0[@]}"; printf '  %s\n' "${T0[@]}"
             printf 'T1 self-tests (%d):\n' "${#T1_SELF[@]}"; printf '  %s\n' "${T1_SELF[@]}"
             printf 'T2: the full gate (regress/run_all.sh)\n'; exit 0 ;;
@@ -156,6 +163,36 @@ summarise() { # label declared
   return 0
 }
 
+# not_self: read "PID cmd..." lines on stdin, drop any belonging to this process
+# or an ancestor of it.
+#
+# WHY. `pgrep -f` matches the FULL COMMAND LINE, so a process that merely NAMES
+# a script matches it. The T2 window guard asked
+# `pgrep -af 'run_all\.sh|verify_merge\.sh'` and refused immediately, because the
+# manager's own shell had the string inside a WORKLOG line it was writing. A
+# guard that fires on the word "run_all.sh" gets --forced every time, and a
+# guard that is always overridden protects nothing. An ancestor can match just as
+# easily - a tmux or node wrapper whose arguments name the gate - so excluding
+# only $$ is not enough.
+not_self() {
+  local p=$$ line pid keep i
+  local -a anc=()
+  while [ -n "$p" ] && [ "$p" -gt 1 ] 2>/dev/null; do
+    anc+=("$p")
+    p=$(awk '{print $4}' "/proc/$p/stat" 2>/dev/null) || break
+  done
+  while read -r line; do
+    [ -z "$line" ] && continue
+    pid="${line%% *}"
+    keep=1
+    for i in "${anc[@]}"; do
+      if [ "$pid" = "$i" ]; then keep=0; break; fi
+    done
+    [ "$keep" -eq 1 ] && printf '%s\n' "$line"
+  done
+  return 0
+}
+
 case "$tier" in
 0)
   echo "=== TIER 0 - fast self-tests (run this on every edit) ==="
@@ -194,12 +231,44 @@ case "$tier" in
   dirty="$(substantive_dirty_paths)"
   [ -n "$dirty" ] && blocked="substantive uncommitted changes in regress/ rtl/ tb/
 $(printf '%s\n' "$dirty" | head -5 | sed 's/^/    /')"
-  harness="$(pgrep -af 'mutate_.*\.sh' 2>/dev/null | head -3)"
+
+  # pgrep -f matches the WHOLE COMMAND LINE, so any process that merely NAMES a
+  # gate script trips it. The first version of this guard asked
+  # `pgrep -af 'run_all\.sh|verify_merge\.sh'` and immediately refused because the
+  # manager's own shell had the string in a log message it was writing. A guard
+  # that fires on the word "run_all.sh" is a guard that is always overridden, and
+  # an always-overridden guard protects nothing. not_self (defined above) drops
+  # this process and its ancestors, which makes a self-mention impossible.
+
+  # Is another RUN in flight? Ask the AUTHORITY, not the process table.
+  # regress/run_lock.sh:101 holds CHIP_RUN_LOCK_FILE under an exclusive flock and
+  # REFUSES to start when it is held, so a held lock IS the answer. A pgrep for
+  # the script name is a guess about a moving target; the lock is the mechanism
+  # the project already trusts for exactly this question. If this default ever
+  # drifts from run_lock.sh:101 the guard degrades to "never blocks", which is
+  # the safe direction but must not go unnoticed.
+  _lock="${CHIP_RUN_LOCK_FILE:-/tmp/chip-run-all.shared.lock}"
+  if ! flock -n 9 2>/dev/null; then
+    blocked="${blocked:+$blocked; }another run holds the project run lock ($_lock)"
+  fi
+  exec 9>&- 2>/dev/null || true
+  harness="$(pgrep -af 'mutate_.*\.sh' 2>/dev/null | not_self | head -3)"
   [ -n "$harness" ] && blocked="${blocked:+$blocked; }a mutation harness is running and owns a planted mutant
 $(printf '%s\n' "$harness" | sed 's/^/    /')"
-  other="$(pgrep -af 'run_all\.sh|verify_merge\.sh' 2>/dev/null | grep -v 'pgrep' | head -3)"
-  [ -n "$other" ] && blocked="${blocked:+$blocked; }another gate is already running
-$(printf '%s\n' "$other" | sed 's/^/    /')"
+  # --check-window comes FIRST, and deliberately. It is a QUERY, so it must not
+  # print "REFUSING to start the full gate" when it started nothing - that
+  # wording tells the reader a gate was imminent, which is the opposite of what a
+  # query did. It also means --check-window never has to be special-cased at the
+  # call site: the answer is the same whether the window is clear or not.
+  if [ "$CHECK_ONLY" -eq 1 ]; then
+    if [ -n "$blocked" ]; then
+      echo "tier2 --check-window: WINDOW NOT CLEAR (nothing was started):"
+      printf '    %s\n' "${blocked//;/$'\n    '}"
+      exit 6
+    fi
+    echo "tier2 --check-window: WINDOW CLEAR. A full gate may start now (still ~20-30 min)."
+    exit 0
+  fi
   if [ -n "$blocked" ] && [ "$FORCE" -ne 1 ]; then
     echo "tier2: REFUSING to start the full gate."
     echo
@@ -211,7 +280,8 @@ $(printf '%s\n' "$other" | sed 's/^/    /')"
     echo "  2026-09-27. On a weak box a wrongly-started 20-minute gate is 20 minutes"
     echo "  you do not get back."
     echo
-    echo "  Fix the window, or override deliberately with:  regress/tier.sh 2 --force"
+    echo "  Ask without launching:  regress/tier.sh 2 --check-window"
+    echo "  Override deliberately: regress/tier.sh 2 --force"
     exit 6
   fi
   [ "$FORCE" -eq 1 ] && [ -n "$blocked" ] && echo "tier2: --FORCE, starting anyway with the window UNCLEAR:" && printf '    %s\n' "${blocked//;/$'\n    '}"
