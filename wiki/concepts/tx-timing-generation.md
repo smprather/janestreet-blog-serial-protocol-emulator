@@ -9,6 +9,10 @@ confidence: high
 ---
 
 # TX Timing Generation (No PLL)
+> **What you'll learn here:** how a protocol period becomes an exact integer number of clocks at 60 MHz, and why 66 MHz was not an option
+>
+> **You can verify this by:** Every constant is generated from the RTL and checked: `python3 tools/gen/clock_arithmetic.py --check` produces [[reference/clock-arithmetic]], which reads `CLK_HZ` from the source rather than repeating a number.
+
 
 Binding TX constraint across all targets: the 50 ns half-UI of 10BASE-T Manchester. (SPI half-SCLK ties it only if we choose 10 MHz SCK — that rate is ours to pick.) Everything else is >=100 ns.
 

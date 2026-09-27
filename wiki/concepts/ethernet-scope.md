@@ -9,6 +9,10 @@ confidence: medium
 ---
 
 # 10BASE-T Scope — Where the Chip Stops
+> **What you'll learn here:** what 10Mbit Ethernet actually requires here, and the arithmetic that decides which parts must be hardware rather than firmware
+>
+> **You can verify this by:** The per-protocol constants are generated and checked: `python3 tools/gen/clock_arithmetic.py --check`. The arithmetic on this page (instructions available per byte versus a software CRC) is the same one the gate in [[reference/clock-arithmetic]] tabulates.
+
 
 What "10Mbit Ethernet" as a stretch goal actually asks for, and what it does not.
 Written because the obvious reading ("we cannot fit a TCP/IP stack, so Ethernet is

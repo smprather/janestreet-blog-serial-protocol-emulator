@@ -9,6 +9,10 @@ confidence: medium
 ---
 
 # GPIO Signoff Corners
+> **What you'll learn here:** how fast and slow corners are characterised, and how an extracted parasitic becomes an input or output delay in the constraint file
+>
+> **You can verify this by:** `bash regress/synth_area.sh` re-measures the mapped area and cell counts the page quotes. The gate refuses to run synthesis without a real result rather than reporting a number it did not measure.
+
 
 Internal logic signs off at SS/FF, but the pad ring needs FS (fast-N/slow-P) and SF (slow-N/fast-P): unequal pull-up/pull-down strength skews tplh vs tphl, causing duty-cycle distortion that thins 50 ns half-bit pulses (e.g. 5 ns imbalance turns 50 ns into 45 ns before board capacitance adds more). The 8x CDR in [[concepts/cdr-oversampling]] absorbs this by re-syncing phase on every edge, but the margin must be quantified, not assumed.
 

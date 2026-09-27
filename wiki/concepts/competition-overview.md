@@ -9,6 +9,10 @@ confidence: high
 ---
 
 # Competition Overview
+> **What you'll learn here:** what the competition actually asks for, and the tile, area and deadline constraints that follow from it
+>
+> **You can verify this by:** The constraints are enforced as gates, not prose: `bash regress/check_wiki_pages.sh` checks the wiki against [[SCHEMA]], and the area budget behind them is in [[reference/sram-budget]] and [[reference/floorplan-feasibility]]. The plan that executes the baseline scope is [[plans/through-i2c]].
+
 
 Design an open-source, general-purpose protocol-emulator ASIC: a tiny CPU with an ISA for reading/writing pins, counting cycles, and hitting precise timing so protocols run in firmware, not fixed logic. Reprogrammability after fabrication (within timing/IO limits) is the point — not one UART block plus one SPI block plus one I2C block. Models: RP2040 PIO, TI Sitara PRU.
 

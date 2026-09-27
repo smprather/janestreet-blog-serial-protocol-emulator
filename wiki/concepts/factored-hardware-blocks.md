@@ -9,6 +9,10 @@ confidence: medium
 ---
 
 # Factored Hardware Blocks
+> **What you'll learn here:** which hardware primitives are shared between protocols instead of written once per protocol, and why no line-coding scheme beyond NRZI/Manchester is needed
+>
+> **You can verify this by:** `tb/tb_pe_crc.v` proves the CRC engine across widths, and `python3 tools/gen/crc_config.py --check` regenerates the constant table this page refers to.
+
 
 Keep the programmable core small by factoring shared, parameterized primitives between the execution engine and the pin matrix (TX/RX FIFOs + interrupts decouple them). Firmware then works at byte/packet level; bit-level timing lives in hardware. Area figures below are transcript estimates (~130 nm cells) to confirm after first synthesis per [[concepts/competition-overview]].
 
