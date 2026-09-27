@@ -11,6 +11,17 @@ worker; this file is the manager's restart prompt.
 
 ## First actions
 
+0. **Launch yourself through the wrapper, not bare `pi`:**
+   `./tools/manager/pe_run.sh manager` — resumes the last session, names you
+   `manager`, exports `PE_TEAM`/`PE_AGENT_NAME`/`PE_ROOT_PID` so every process
+   you spawn is attributable, and runs you inside a systemd user scope with
+   `TasksMax=512`, `MemoryMax=8G`, `CPUQuota=1600%` that the kernel enforces
+   whether or not any script is alive. Started bare, you are untagged: the
+   manager's own killers then cannot tell you from anyone else, which is exactly
+   how the previous manager killed itself on 2026-09-27. Use
+   `pe_run.sh <name> [command...]` for workers and one-off tools too, and
+   `pe_run.sh manager --fresh` to opt out of resuming. Limits are overridable
+   with `PE_TASKS_MAX` / `PE_MEMORY_MAX` / `PE_CPU_QUOTA`.
 1. Read `HANDOFF.md`, `reviews/2026-09-23/PROJECT-REVIEW.md`, and
    `wiki/STATUS.md`. Read `COLD-START.md` only when you need the worker's
    instructions.
@@ -114,6 +125,20 @@ worker; this file is the manager's restart prompt.
   `regress/verify_merge.sh` (affected-TB mapping, full-suite fallback) before
   every merge push; a merge that turns the suite red is reverted or repaired
   before anything else lands on top of it.
+- **Resource containment (user ruling 2026-09-27, after the session-death
+  incident).** The whole box is shared, so the fleet is contained rather than
+  trusted: every agent is launched with `tools/manager/pe_run.sh`, which bounds
+  it in a systemd user scope the kernel enforces. Do NOT launch `pi`, a worker,
+  or a suite bare. A testbench that never reaches `$finish` used to be bounded
+  by nothing — on 2026-09-27 that pegged all 24 cores for ~10 minutes and
+  accumulated until `user-1000.slice` hit `TasksMax=84178`, at which point the
+  desktop could no longer fork a thread and the graphical session was torn down
+  to a login screen. `mem_monitor` watches per-process RAM and `runaway_watch`
+  watched per-process CPU time; neither can see a process *count*, which is why
+  it reached the desktop. The scope is the fix that does not depend on a
+  manager being alive. **pe may only manage pe work** (user ruling): kill
+  authority stops at the team boundary, and an untagged process is never
+  touched.
 - **RAM watchdog + OOM forensics (2026-09-25).** Two kernel OOM events —
   2026-09-24 14:33:40 and 18:43:28 (`journalctl -k`) — each killed a runaway
   `python3` at 22-23 GB anon RSS (+5 GB swapped) living in the wezterm
