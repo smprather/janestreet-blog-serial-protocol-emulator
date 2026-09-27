@@ -5146,3 +5146,51 @@ the property -- zero three-half gaps -- and the arithmetic is reported rather
 than believed. **Gate the property, cite the constant, never restate the
 number, and when a comment claims something was measured, go and measure it:
 the claim about the measurement was the thing that was wrong.**
+
+## TASK-START -- THE FULL GATE, ONCE, WITH THE NEW CHECK *IN IT*
+
+A supervisor nudge asked for work, and this time there is some, and it is not
+manufactured: **the full gate has not been run since the write-hook check was
+added to it.** The last end-to-end `run_all.sh` was 19:11-19:37. Every commit
+since is after it, and one of them (`aa026b4`) adds a NEW CHECK to
+`tb_pe_soc_bmc.v` -- a file the gate compiles and a case the gate counts. I ran
+that testbench standalone and it passed, which is exactly the class of evidence
+this project treats as insufficient: **a standalone run reads one case the way
+a person runs it, and only the gate reads it the way a merge will.**
+
+What is unmeasured, precisely:
+
+* a new assertion now sits in a gate case (`no THREE-half-interval (6 us) gap`),
+  and nothing has ever seen it in the full run, under the firmware gate, the
+  mutation suites, or the dep-guard pre-flight;
+* two `$display`/failure-message strings changed (rulings 2 and 3), which are
+  test-output text but are still bytes the gate greps;
+* `83f1fba`, `7fe4a1f`, `aa026b4` and `916a4ae` all touch files the gate reads,
+  and only two of the four testbenches among them have been run at all since.
+
+Claimed going in, so the run can be held to it:
+
+| claim | status |
+| :--- | :--- |
+| `TOTAL: 48 PASS: 48 FAIL: 0` | measured at 19:37, BEFORE the new check existed |
+| `FIRMWARE: 43 PASS: 43 FAIL: 0` | same |
+| the new 6 us assertion holds in the full run | **never measured** |
+| the only red line is R3's committed README drift | measured; `1798abf` still not an ancestor |
+
+**A GATE IS RUNNING IN THIS WORKTREE RIGHT NOW** (pid 2918005), which is the
+same condition the manager's own no-runs-active check screens for, so the
+manager's deferred `run_all.sh` (b) fix still cannot be applied -- line 270
+still reads "Twelve banked points from 158 Hz to 10 kHz". **So this run also
+does not close the manager's item, and I will not pretend otherwise when
+reporting it.** Waiting for the lock, then running it once, end to end.
+
+**One correction to my own record while I have it: the WORKLOG entries I have
+been dating "2026-09-27" are dated 2026-09-26 by the repository clock** -- this
+session's commits are all `2026-09-26`, and the block directory is
+`reviews/2026-09-26/`. The predecessor's entries and the manager's briefs also
+say 2026-09-27, so the date was inherited rather than observed. It is the
+block's own defect one last time -- a figure asserted in a second place -- and
+**I am flagging it rather than silently rewriting six headings**, because some
+of those dates are other people's and a bulk find-and-replace over a shared
+handover document is how a record gets quietly falsified. `git log` is the
+authority and it disagrees with my headings.
