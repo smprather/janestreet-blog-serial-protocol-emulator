@@ -10,6 +10,11 @@ confidence: high
 
 # WS2812
 
+> **What you'll learn here:** why a protocol with no clock on the wire is the sharpest test of the thesis, and how a bit cell becomes an exact 75 clocks at 60 MHz
+>
+> **You can verify this by:** `tb/tb_pe_soc_ws2812.v` measures the cells on the pin and prints the high times, the cell count and the between-frame reset. It also checks the 75-clock grid, which a datasheet-window check would not.
+
+
 The WS2812 is the project's first *timing* protocol, and the one that made the
 rest of the family's design rules visible. It is worth reading first because every
 later act in the same block inherits one of its disciplines.
