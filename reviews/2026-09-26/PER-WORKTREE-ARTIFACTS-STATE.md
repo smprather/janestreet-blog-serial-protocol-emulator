@@ -34,6 +34,28 @@ instance cannot be introduced silently, and the run that proves it is
 Reproduce the gate: `./regress/verify_merge.sh` (~40 min). Reproduce the
 isolation property in seconds: `./regress/check_tmp_isolation.sh`.
 
+### What that GREEN still covers (read this before quoting it)
+
+Main moved after the 21:50 run: 18 `wiki/` files from two editorial passes, plus
+`WORKLOG.md`, this record, and `formal/results/summary.txt`. So the verdict
+decomposes, and the useful thing is to say which half is which rather than
+either re-running everything or quoting a stale number.
+
+| leg of the 21:50 run | reads | still valid? | re-verified at 23:4x |
+| --- | --- | --- | --- |
+| 16 mutation suites, 47 cases | `rtl/`, `tb/`, `firmware/` | **yes** — nothing there moved | — |
+| wiki page rules | `wiki/**.md` | no | `check_wiki_pages`: 0 new, 0 stale |
+| document links | `wiki/**.md` | no | `check_wiki_links`: 0 new, 0 stale |
+| document index | `wiki/index.md` + renders | no | `check_doc_index`: OK |
+| diagrams | `diagrams/*.puml` | **yes** — no `.puml` moved | `check_diagrams`: OK (re-run anyway) |
+| formal safety / mutants | `formal/*/`, `rtl/` | **yes** — only the *generated* summary moved | — |
+| tmp isolation | `regress/`, `tools/`, `formal/` | **yes** | re-run: OK, 0 findings |
+
+Nothing under `rtl/`, `tb/`, `firmware/`, `diagrams/` or `regress/` changed, so
+the expensive half of the verdict is untouched and the cheap half was re-checked
+in seconds. That is the shape a stale verdict should be decomposed into, rather
+than being re-run or asserted.
+
 ---
 
 ## The four defects, and what each one actually was
