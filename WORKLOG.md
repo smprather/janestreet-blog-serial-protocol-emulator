@@ -4510,3 +4510,166 @@ that it is comment-only is the assembled image md5, unchanged across it.
 Work queue, in order: (1) measure the wire, do not reason about it; (2) correct
 the two figures and BLOCK3-STATE's inverted note; (3) BLOCK3-STATE upkeep;
 (4) my OWN end-to-end `run_all.sh`, once the lock is free.
+
+## 2026-09-27 act (c): THE FULL GATE, RUN TWICE -- **48/48, FIRMWARE 43/43, AND ONE RED THAT IS NOT OURS**
+
+    ./regress/run_all.sh          # my own run, 19:11 -> 19:37
+
+| | |
+| :--- | :--- |
+| `FIRMWARE: 43   PASS: 43   FAIL: 0` | line 49 |
+| `TOTAL: 48   PASS: 48   FAIL: 0` | line 103 |
+| `all testbenches pass` | line 108 |
+| `tb_pe_soc_bmc      PASS` | line 86, **unmarked** |
+| `run-lock process tree: OK` | line 160 |
+| `harness-edit pre-flight: OK` | line 185 |
+| `mutation suites: 16 ran (full gate -- no narrowing)` | line 186 |
+| **`R3 golden package: FAILED`** | **line 162 -- the only non-green line in 186** |
+
+**The four claims the previous entry left as deductions are now measurements.**
+The suite is 48 cases and all 48 pass, `tb_pe_soc_bmc` is green with no
+`<<wip>>` marking to complain about, the firmware gate is 43/43, and the run
+lock holds inside the gate.
+
+**THE RUN-LOCK ROW IS THE ONE THAT WAS OPEN, AND IT WAS OPEN FOR A REASON.**
+The predecessor wrote: "if it is red on a quiet box, there is a second cause and
+the fix is incomplete -- and 'the fix is incomplete' is the outcome I would
+rather find now than have discovered from a merge." **It is green, and it was
+green UNDER LOAD**: my first `./regress/run_all.sh` was refused at 18:33 by
+another session's live run holding the lock in this same worktree, and that run
+reported `run-lock process tree: OK` while contending with me. So the busy box
+was the whole story, the fix is complete, and the case-H two-sided test
+(SCANS=45) is what makes it true rather than what the gate happened to observe.
+
+**THE GATE IS RED ANYWAY, ON ONE LINE, AND IT IS NOT MINE.**
+
+    R3 golden package: FAILED (package drift or a stale generated include)
+      < reviews/2026-09-25/r3-hex/README.md  "25 of 26 steps are CHIP-CONFIRMED
+        IN SIMULATION: the chip's tb_pe_ctrl_r3_conf is GREEN, 26/26 steps
+        byte-exact (CRC included), and 25 of them with no divergence..."
+      > tb/r3-vectors/README.md              "NOT CHIP-CONFIRMED ... no step here
+        has been run against the chip's tb_pe_ctrl_r3 yet, so every step is
+        chip_confirmed=false."
+
+**It is committed at HEAD** (`git diff HEAD` on both files is empty), so the gate
+was red on arrival, and the other session's 18:33 run -- an hour before I
+touched anything -- reported it too. Two runs, one hour apart, on either side
+of my work: same line.
+
+**It is a documentation copy drift, and the measurement says so:**
+
+    diff -rq --exclude=*.vh --exclude=R3_KNOWN_DIVERGENCES.txt \\
+            --exclude=manifest.json reviews/2026-09-25/r3-hex tb/r3-vectors
+    Files .../r3-hex/README.md and tb/r3-vectors/README.md differ   <- ONLY these
+    124 .hex compared pairwise: identical=124 differing=0
+
+So every request and response stream -- the part that is a real gate -- is
+byte-identical. One paragraph of prose, in two copies of one golden package,
+from two different eras of the R3 block.
+
+**I DID NOT FIX IT, DELIBERATELY.** The obvious repair is to copy one README
+over the other, and that would make the gate green in about ten seconds. It
+would also be me asserting, in another block's review artifact, which of two
+contradictory claims about R3 confirmation is true -- and the file's own text
+says *"confirmation is a citation, never an assertion, and the confirmed set is
+an explicit list."* The evidence is on the table for whoever owns R3:
+`tb_pe_ctrl_r3_conf` PASSES in this run, which is consistent with the review
+copy's "the chip's tb_pe_ctrl_r3_conf is GREEN" and not with the tb copy's "no
+step has been run against it yet" -- but "the conformance TB passes" and "25 of
+26 steps are chip-confirmed" are different claims, and the seven known
+divergences in `R3_KNOWN_DIVERGENCES.txt` sit in exactly that gap. **That is
+R3's call to make and record, not a side effect of a timing-protocol
+regression.**
+
+### THE COMMENT BATCH: TWO DONE, ONE WRONG, ONE NOT MINE
+
+| item | verdict |
+| :--- | :--- |
+| `tools/fw/peasm.py:200`, 1.15 us | **already in** (`cacaf23`) -- re-verified, not redone |
+| `firmware/servo_sweep.pe`, two intermediates | **already in** (`4355c29`) -- re-verified |
+| `firmware/spi_mode3.pe`, response list | **WAS WRONG -- fixed here, `9d462b3`** |
+| `firmware/dmx512.pe`, NOP count | **the file does not exist in this worktree** |
+
+**The re-verification was not a formality.** The wrap point's own finding is
+that the figures nobody could check are the ones that were wrong, so both
+"already done" items were re-derived from the source rather than trusted:
+
+    clocks = n3*(2*n2) + 17
+      (2,13)  ->   69 clocks = 1.150 us    peasm claims 1.15 us   CONFIRMED
+      (2,152) ->  625 clocks = 10.417 us   servo claims 10.4 us   CONFIRMED
+
+One formula, and it independently reproduces BOTH published figures -- so
+`cacaf23` and `4355c29` are right, and `clocks = n3*(2*n2) + 17` is now the
+thing to check any future delay comment against instead of the comment.
+
+**The `spi_mode3.pe` one was wrong in the same shape as the wrap point's five.**
+The header claimed words `0x1134, 0x2245, 0x3356`; the code assembles the high
+byte as `0x11 + i`, so the words are `0x1134, 0x1245, 0x1356` -- which the same
+file says 140 lines further down. The response bytes were a THIRD set,
+`0x6B, 0x2C, 0xD9`, answering to no word list and to no XOR mask either.
+Fixed to the derived `0x6F, 0x6C, 0x6D` (`resp = word_high XOR 0x7E`), and
+proved comment-only the only way that means anything:
+
+    spi_mode3.hex md5  0e48460d0200c067ad8626b1dd1b77ba  BEFORE
+    spi_mode3.hex md5  0e48460d0200c067ad8626b1dd1b77ba  AFTER
+    every changed line starts with ';'
+
+and confirmed on the wire rather than on paper -- `word=1134/1245/1356`,
+`resp=6f/6c/6d`, `PASS: tb_pe_soc_spi3`. Two previous attempts at this figure
+were both paper arithmetic, and the reason this one is right is that it was
+measured.
+
+**`firmware/dmx512.pe` is not in this worktree** -- no file, and no mention of
+"dmx512" anywhere under `firmware/`. `1798abf` (fw-bus, which corrected it) is
+**not an ancestor of this HEAD**. So that routed item is not actionable here and
+no fix was invented for a file I cannot see.
+
+### AND THE NOTE THAT NEEDED TWO WORKERS WAS WRONG, NOT JUST OUT OF DATE
+
+BLOCK3-STATE's cross-worker table had the two word lists **swapped**: it called
+`0x1134, 0x1245, 0x1356` the "old" list and said the corrected words give
+`0x6F, 0x5C, 0x4D`. But `0x6F, 0x5C, 0x4D` is what the STALE `0x22/0x33` high
+bytes give (`0x22^0x7E=0x5C`, `0x33^0x7E=0x4D`) -- real arithmetic, of the
+wrong words, which is exactly why it read as authoritative. Its other row was
+wrong in ORDER as well (`0x6D, 0x6C, 0x6F`, not `0x6F, 0x6C, 0x6D`).
+
+**The merge-order dependency that section was built to warn about DOES NOT
+EXIST.** `1798abf` had the words right, so there was never anything to
+recompute after it and no two-worker interaction. One list, one derivation, and
+a swap -- the same failure the wrap point names, three paragraphs further up
+the same file, about a number asserted in a second place.
+
+Also corrected there: the handwrap cites "spi_mode3 word list (`4a7e172`)", but
+`4a7e172` is a rewrap commit. The commit that put the list in is **`f768e5a`**,
+and it is the wrong one; the code it documented has not changed since `0d776e3`,
+so it was wrong on the day it landed.
+
+### TWO TRAPS, RE-PAID, BOTH CONFIRMED
+
+* **`pkill -f` matches your own command line.** Did not use it. Every liveness
+  question was answered by `ps -o stat= -p <pid>` on a pid read out of a FILE.
+* **`kill -0` succeeds on a zombie.** Did not use it either. The lock holder was
+  proven live by a **growing log**: 2910 -> 2934 -> 8327 -> 8574 bytes, and
+  `/proc/1344027/cwd -> sim/` with fd 1 on `/tmp/gate_full.log`, parented to
+  `systemd --user`. It was another session's real run, and the right move was to
+  wait ~30 minutes for it, not to kill it.
+
+**A THIRD, NEW, AND CHEAPER: THE LOCK FILE IS NOT THE LOCK.** It is an `flock`,
+so `/tmp/chip-run-all.<hash>.lock` **persists after the run dies** -- `ls`
+seeing it means nothing at all, and treating its presence as "busy" would have
+had this session waiting forever for a run that had already exited. The lock
+message's own wording is the tell: "the lock releases by itself if that run
+dies". **Ask whether a run can START, not whether a file is there.**
+
+### LEFT CLEAN, DELIBERATELY
+
+* `formal/results/summary.txt` is modified by every gate run. The diff is **9
+  lines of `MEM: nn.nn MB peak` and nothing else** -- every `PROVED` / `VACUOUS`
+  status identical. Nondeterministic noise, so it is left uncommitted rather
+  than committed as churn.
+* The other session's in-flight mutation on `rtl/pe_soc.v` was never staged.
+  When the tree carried a modified `rtl/pe_soc.v` I stopped and checked which
+  of the 14 files `tb_pe_soc_spi3` actually needs before compiling -- a TB run
+  against a file a mutation harness was holding is how a probe reports a
+  failure that is not one. It did: my first probe failed, and the cause was my
+  own `$readmemh("../firmware/spi_mode3.hex")` CWD, not the chip.
