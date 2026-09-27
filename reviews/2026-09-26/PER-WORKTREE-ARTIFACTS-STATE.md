@@ -227,6 +227,28 @@ the vacuous pass is strongly implied, not demonstrated — I did not run another
 worker's pre-fix regression to watch it fail. The 47 cases and 16 suites are
 unaffected and stand; this leg is the one that was not real.
 
+**7. Never amend a pushed commit — and a guard you override is worse than no
+guard.** I amended a commit that was already on `origin/main`, to fix a typo in
+its author email, in the same shell command whose own check had just printed
+*"HEAD is ON origin/main — amending would rewrite published history."* I read the
+reason not to and proceeded anyway. The amend did not even fix the email
+(`--amend` preserves the author without `--reset-author`); it only moved a hash
+other people had fetched. The recovery was a `reset --hard` back to the published
+commit, which restored the state exactly and needed no force-push.
+
+The rule, stated so it is usable: **a pushed commit is immutable to you.** A
+malformed author email is cosmetic and the fix is a follow-up commit or nothing
+at all. The `reset`-to-restore escape is correct **only** when you have just
+diverged your own unpushed HEAD — and it costs a colleague a rebase, while the
+defect it fixes costs nothing. Cheaper by far is not diverging in the first
+place.
+
+The part that generalises past git: **a check that fires and is overridden is
+worse than no check, because it makes the mistake look careful.** I had the
+guard; I read its output; I proceeded. Every other finding in this document is
+about a check that could not see something. This one is about a check that saw
+perfectly well and was ignored.
+
 **6. Cheap proxies, published as measurements.** Eight of my own claims were
 wrong tonight and every one came from the same move: reporting a grep's reach, a
 variable's file count, a coincidence, or an intuition as if it were a
