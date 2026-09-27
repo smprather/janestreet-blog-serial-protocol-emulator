@@ -83,6 +83,7 @@ Ground truth, re-derived from the `p_us` table and the banking loop
 | `regress/run_all.sh:234` | 100 Hz – 12.5 kHz | correct (mine) |
 | `tb/tb_pe_soc_freqmeter.v:57` | 80 Hz – 10 kHz | wrong; `7fe4a1f` fixes it, **unmerged** |
 | `wiki/concepts/protocol-freqmeter.md:252` | 158 Hz – 10 kHz | wrong, and **nothing pending covers it** |
+| `wiki/concepts/protocol-freqmeter.md:33` | 158 Hz – 10 kHz | **CORRECT — do not "fix" this one** |
 | `tb/tb_pe_soc_freqmeter.v:116` | "12 banked points" (count only) | fine |
 
 `7fe4a1f` touches `WORKLOG.md`, `firmware/freqmeter.pe` and the TB — **not the
