@@ -10,6 +10,11 @@ confidence: high
 
 # I2C advanced
 
+> **What you'll learn here:** the I2C features beyond a single write: combined format, read bursts, and clock stretching
+>
+> **You can verify this by:** `tb/tb_pe_soc_i2c_adv.v` drives a slave model through each sequence, and `regress/mutate_fwbus_tb.sh` proves those checks can fail.
+
+
 The baseline I2C act (`firmware/i2c_xfer.pe`, [[concepts/i2c-on-the-matrix]])
 sends one address byte, one data byte, a repeated START, a read address, **one**
 read byte, a NACK and a STOP. That is a legal transaction and it is the shape

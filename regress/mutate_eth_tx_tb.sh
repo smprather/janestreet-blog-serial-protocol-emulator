@@ -90,8 +90,8 @@ RTL="$ROOT/rtl/pe_eth_tx.v"
 # NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
 # escalates to running every suite rather than guessing.
 MUTABLE="rtl/pe_eth_tx.v"
-LOG=/tmp/mutate_eth_tx.log
-CCLOG=/tmp/mutate_eth_tx_cc.log
+LOG="$CHIP_WT_DIR"/mutate_eth_tx.log
+CCLOG="$CHIP_WT_DIR"/mutate_eth_tx_cc.log
 PRISTINE=$(mktemp -d /tmp/pristine_eth_tx_tb.XXXXXX)
 BAK=$(mktemp -d /tmp/backup_eth_tx_tb.XXXXXX)
 
@@ -109,9 +109,9 @@ cmp -s "$RTL" "$PRISTINE/pe_eth_tx.v" || { echo "FATAL: could not snapshot $RTL"
 # Same source list as run_all.sh's tb_pe_eth_tx case (no SRAM model: the
 # engine + the CRC engine are the whole design here).
 run_tb() {
-  iverilog -g2012 -s tb_pe_eth_tx -o /tmp/mut_eth_tx.vvp \
+  iverilog -g2012 -s tb_pe_eth_tx -o "$CHIP_WT_DIR"/mut_eth_tx.vvp \
     ../rtl/pe_eth_tx.v ../rtl/pe_crc.v ../tb/tb_pe_eth_tx.v >"$CCLOG" 2>&1 || return 2
-  timeout 300 vvp /tmp/mut_eth_tx.vvp >"$LOG" 2>&1
+  timeout 300 vvp "$CHIP_WT_DIR"/mut_eth_tx.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
 
@@ -137,6 +137,34 @@ check_mutation() {
   local name="$1"; shift
   if ! mutate "$1" "$2"; then
     echo "  [$name] HARNESS ERROR: anchor not found/unique"; restore; fail=$((fail+1)); return
+  fi
+    chip_dep_expect mutated $MUTABLE
+  run_tb
+  local rc=$?
+  if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))
+  elif [ $rc -eq 1 ]; then echo "  [$name] detected"; pass=$((pass+1))
+  else                     echo "  [$name] HARNESS ERROR: exit $rc"; tail -3 "$CCLOG" "$LOG" 2>/dev/null; fail=$((fail+1))
+  fi
+  restore; verify_restore
+}
+
+# A mutant that must move TWO assignments together. F1 is a pair: the pre-fix
+# boundary took its length from frame_len in BOTH stored_bytes and
+# data_bits_left, so this is the faithful inverse of the fix rather than an
+# arbitrary double perturbation.
+#
+# MEASURED, not assumed: a single-assignment mutant (stored_bytes only, with
+# data_bits_left left on pend_len) is ALSO killed by tb_pe_eth_tx's
+# f1-apply-window case, because that case asserts on the applied length
+# directly. The pair is therefore fidelity to the original defect and a wider
+# net -- NOT a necessity, and the comment must not claim otherwise.
+check_mutation2() {
+  local name="$1"; shift
+  if ! mutate "$1" "$2"; then
+    echo "  [$name] HARNESS ERROR: anchor 1 not found/unique"; restore; fail=$((fail+1)); return
+  fi
+  if ! mutate "$3" "$4"; then
+    echo "  [$name] HARNESS ERROR: anchor 2 not found/unique"; restore; fail=$((fail+1)); return
   fi
     chip_dep_expect mutated $MUTABLE
   run_tb
@@ -339,6 +367,17 @@ check_mutation "period-kept-on-disable" \
 check_mutation "nlp-negative" \
   "      default:                 tx_bit = half_phase;" \
   "      default:                 tx_bit = nlp_cell ? ~half_phase : half_phase;   // MUTANT: negative link pulse"
+
+# 34. F1's defect, restored. The guard and the latch are the SAME event, and
+# both consumers of the latched length must move together: a start pulse can be
+# up to DIV-1 = 5 clocks ahead of the cell boundary that applies it, and the
+# host owns TXLEN for that whole window. Re-reading frame_len at the boundary
+# transmits a length the runt/jabber guard never saw -- the original defect.
+check_mutation2 "f1-boundary-reread" \
+  "                stored_bytes   <= pend_len;          // the length validated at" \
+  "                stored_bytes   <= frame_len;         // MUTANT: boundary re-read (F1)" \
+  "                data_bits_left <= {pend_len, 3'b000};" \
+  "                data_bits_left <= {frame_len, 3'b000};  // MUTANT: boundary re-read (F1)"
 
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="

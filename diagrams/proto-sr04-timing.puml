@@ -1,4 +1,7 @@
 @startuml proto-sr04-timing
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-sr04-timing.puml - (c) HC-SR04 timing, and exactly which numbers are
 ' measured.
@@ -14,21 +17,32 @@
 ' ===========================================================================
 
 title HC-SR04 - timing, all four runs measured\n<font size=12>trigger 601 clocks = 10.0167 us, pinned as an equality; 199 / 999 / 343 / 1375 mm</font>
+skinparam defaultFontName Monospaced
+skinparam ParticipantFontName monospaced
+skinparam ActorFontName monospaced
+skinparam NoteFontName monospaced
+skinparam GroupFontName monospaced
 
 hide stereotype
 skinparam shadowing false
 skinparam sequence {
-  ArrowColor #33555
-  LifeLineBorderColor #33555
-  LifeLineBackgroundColor #FAFAFA
-  ParticipantBorderColor #33555
-  ParticipantBackgroundColor #F4F7FB
-  ParticipantFontName monospaced
-  ActorFontName monospaced
-  NoteFontName monospaced
-  GroupFontName monospaced
+  ArrowColor #335550
+  ArrowFontColor #1F2933
+  LifeLineBorderColor #8A94A6
+  LifeLineBackgroundColor #EDF1F7
+  ParticipantBorderColor #4A6FA5
+  ParticipantBackgroundColor #DCE9F8
+  ParticipantFontColor #16324F
+  GroupBorderColor #6B7686
+  GroupBackgroundColor #E3E9F2
+  SequenceBoxBackgroundColor #FFF3C4
+  SequenceBoxBorderColor #9A7B0A
+  SequenceGroupBorderColor #6B7686
+  SequenceGroupBackgroundColor #E3E9F2
+  SequenceLifeLineBackgroundColor #EDF1F7
+  SequenceLifeLineBorderColor #8A94A6
+  SequenceDividerColor #1F2933
 }
-
 participant "CPU\npe_cpu.v" as CPU
 participant "TRIG\npin 6" as TRIG
 participant "the sensor\nmodel" as SENSE

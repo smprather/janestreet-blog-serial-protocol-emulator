@@ -10,6 +10,11 @@ confidence: high
 
 # Servo PWM
 
+> **What you'll learn here:** that the simplest protocol here is a pure number on a wire, and what a frame period measured to five decimal places proves about the timing discipline
+>
+> **You can verify this by:** `tb/tb_pe_soc_servo.v` measures the frame period and each pulse width. The page's point is that the period is right because each pulse carries its own gap - which the testbench checks.
+
+
 The servo act is the cleanest demonstration of the project's central claim, and it
 is cleanest precisely because there is almost nothing to it. A hobby servo has no
 clock, no framing, no acknowledgement and no checksum. The entire protocol is:

@@ -96,8 +96,9 @@
 // line, the positive link pulses and the start-of-idle delimiter cannot be
 // made from eth_tx alone. uo_out[3] (dbg_pc[1]) is reclaimed as eth_tx_n
 // behind the same kind of bit-identical mux; four debug pins remain,
-// dbg_pc[5:2]. PROPOSED on branch eth-tx-line-driver: a pinout change the
-// manager adopts or rejects (STATUS item 4 owns the dbg_pc pads).
+// dbg_pc[5:2]. ADOPTED and MERGED (02fe062, gate 46/46): the pad-map entry
+// above is the landed pinout, not a proposal - STATUS item 4's dbg_pc pads
+// were released for this pair.
 //
 // The two I2C uio pins are wired as a loopback-capable open-drain pair driven
 // from the SoC's pin today. That is enough to prove the oe path works in

@@ -34,7 +34,7 @@ RTL="$ROOT/rtl/pe_eth_mac.v"
 MUTABLE="rtl/pe_eth_mac.v"
 TB="$ROOT/tb/tb_pe_eth_mac.v"
 SRCS="../rtl/pe_dru.v ../rtl/pe_nrzi.v ../rtl/pe_manch.v ../rtl/pe_bitstuff.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v $TB"
-LOG=/tmp/mutate_eth.log
+LOG="$CHIP_WT_DIR"/mutate_eth.log
 BAK=$(mktemp /tmp/pe_eth_mac.XXXXXX.v)
 
 cleanup() {
@@ -80,11 +80,11 @@ survived=0
 # example one that never reaches the state the wait polls) is silently counted
 # as detected. `timeout` returns 124 on expiry.
 run_tb() {
-  iverilog -g2012 -s tb_pe_eth_mac -o /tmp/mut_eth.vvp $SRCS >/tmp/mut_eth_cc.log 2>&1
+  iverilog -g2012 -s tb_pe_eth_mac -o "$CHIP_WT_DIR"/mut_eth.vvp $SRCS >"$CHIP_WT_DIR"/mut_eth_cc.log 2>&1
   if [ $? -ne 0 ]; then
     return 2
   fi
-  timeout 300 vvp /tmp/mut_eth.vvp >"$LOG" 2>&1
+  timeout 300 vvp "$CHIP_WT_DIR"/mut_eth.vvp >"$LOG" 2>&1
   local rc=$?
   if [ $rc -eq 124 ]; then
     echo "    (timeout after 300 s -- harness error, not a detected mutation)"

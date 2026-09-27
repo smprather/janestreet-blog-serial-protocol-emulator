@@ -9,6 +9,10 @@ confidence: high
 ---
 
 # The Pin Matrix
+> **What you'll learn here:** how one register file gives a program control of pin direction and open-drain, and why that is what makes I2C expressible at all
+>
+> **You can verify this by:** `tb/tb_pe_pinmux.v` models the bus at drive-strength levels, so it tests contention rather than assuming it away. That is also why it cannot be run under Verilator: see [[reference/simulator-bakeoff]].
+
 
 `rtl/pe_pinmux.v` is the block that makes a pin's **direction a runtime
 property** instead of a build-time constant, and that adds a read-back path so a

@@ -10,6 +10,11 @@ confidence: high
 
 # MIDI 1.0 at 31.25 kbaud
 
+> **What you'll learn here:** how a 31.25 kbaud protocol is produced when a fractional tick cannot express the rate, and what running status obliges a receiver to remember
+>
+> **You can verify this by:** **There is no testbench for this act on `main` yet.** The firmware it describes (`firmware/midi_xfer.pe`) exists only on the unlanded `fw-bus` branch, so the page currently documents a design whose implementation has not landed. `regress/mutate_fwbus_tb.sh` is the suite that will cover it; run the suite once the branch merges and the claim becomes checkable.
+
+
 `firmware/midi_xfer.pe` is a MIDI 1.0 transmitter in software: channel voice
 messages on channel 0, sent back to back at 31.25 kbaud, using **running
 status**. It exists because of the *rate*, not because of MIDI: a 31.25 kbaud

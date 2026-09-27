@@ -10,6 +10,11 @@ confidence: high
 
 # The ISA
 
+> **What you'll learn here:** the 16 opcodes and what the single-cycle choice buys, and how pe_soc's port map is wired to them
+>
+> **You can verify this by:** `python3 tools/fw/peemu.py firmware/uart_echo.hex --send '41 42'` runs a program on the bit-accurate emulator with no simulator at all, and the port map is tabulated in `rtl/pe_soc.v`'s own header.
+
+
 The thesis is one sentence, and it is the project's: **protocol logic belongs
 in software.** `pe_cpu` is the smallest thing that can run a protocol, so a
 protocol becomes a *program* — patchable, reloadable, shareable — instead of a

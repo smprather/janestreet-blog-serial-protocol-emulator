@@ -81,9 +81,33 @@ CHIP_RUN_SCRIPT_ARGS=("$@")
 # PER-WORKTREE by default (2026-09-25, parallel workers): concurrent runs in
 # DIFFERENT worktrees are safe (disjoint files); the hazard is concurrent runs
 # in the SAME worktree, which is what this lock exists for.
+#
+# CORRECTED 2026-09-26, because the premise above was half false and the false
+# half is what let a 35-minute run be lost. The FILES are disjoint per worktree.
+# The compiled artifacts are not: the mutation harnesses wrote their .vvp and
+# log paths as FIXED GLOBAL /tmp names, so two worktrees running the same
+# harness executed the SAME binary path concurrently -- each correctly holding
+# its own per-worktree lock, which is exactly why nobody noticed. Measured:
+# two `vvp` processes on one /tmp/mut_eth_tx_tt.vvp, one per worktree, and
+# vm_final2 came back RED on "eth_tx loopback TB mutations" while the identical
+# harness on the identical tree passed once the collision was gone.
+#
+# So the lock's scope was NARROWER than the shared resource it protects, and
+# the dep-guard could not see it either: its watch set is this worktree's
+# scripts and RTL targets, so a collision in /tmp leaves every guard provably
+# clean and the run still wrong. The per-worktree scratch dir below is the
+# narrowest thing that makes the premise true.
 _wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
 CHIP_RUN_LOCK_FILE="${CHIP_RUN_LOCK_FILE:-/tmp/chip-run-all.${_wt:-shared}.lock}"
 CHIP_RUN_OWNER_FILE="${CHIP_RUN_OWNER_FILE:-/tmp/chip-run-all.${_wt:-shared}.owner}"
+
+# Every artifact a run compiles, logs or tails lives HERE, not in a global /tmp
+# name, so two worktrees cannot collide on one another's binaries. Same hash as
+# the lock above, so a human reading /tmp can tell whose is whose. Exported
+# because the harnesses are invoked as separate processes by run_all.sh.
+CHIP_WT_DIR="${CHIP_WT_DIR:-/tmp/chip-wt.${_wt:-shared}}"
+export CHIP_WT_DIR
+mkdir -p "$CHIP_WT_DIR" 2>/dev/null || :
 
 # The pids this run owns, and nothing else.
 #
@@ -262,7 +286,24 @@ chip_take_run_lock() {
   # through. The lock FD is inherited, so the kernel view stays consistent, and
   # the child must NOT install a second watchdog or a second kill trap -- it
   # would take the whole run down with it.
-  if [ -n "${CHIP_RUN_LOCK_HELD:-}" ]; then
+  #
+  # BUT THE VARIABLE ALONE IS NOT EVIDENCE, and trusting it alone had turned the
+  # lock into decoration. CHIP_RUN_LOCK_HELD is exported, so it outlives the run
+  # that set it into any later shell, supervisor or worker that starts an
+  # INDEPENDENT gate -- and a gate that believes it never reaches the flock
+  # below, so mutual exclusion is silently absent and two runs mutate and
+  # restore the same RTL at once. Measured, on a live holder: an intruder
+  # launched with CHIP_RUN_LOCK_HELD=1 walked straight past it, exit 0, no
+  # refusal; the same intruder with the variable unset was refused. That is
+  # how four concurrent gates ran in one worktree on 2026-09-26 and each
+  # reported the others' MUTABLE files changing under it.
+  #
+  # fd 9 is the evidence that matters, and this file already says so: the
+  # holder's descriptor is inherited, which is what makes a genuine reentrant
+  # child recognisable. A real child has it open; a leaked variable does not.
+  # So the fast path is taken only when BOTH the variable and the descriptor
+  # agree, and a false variable falls through to the real lock below.
+  if [ -n "${CHIP_RUN_LOCK_HELD:-}" ] && : >&9 2>/dev/null; then
     return 0
   fi
 

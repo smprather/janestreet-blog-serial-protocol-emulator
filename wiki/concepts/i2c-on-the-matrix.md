@@ -9,6 +9,10 @@ confidence: high
 ---
 
 # I2C on the pin matrix
+> **What you'll learn here:** how I2C runs with no I2C controller in the silicon: START, one bit cell and STOP written as firmware against the pin matrix
+>
+> **You can verify this by:** `tb/tb_pe_soc_i2c.v` measures it on the pins, and `python3 tools/checks/i2c_xfer_check.py` sweeps all 60 tick phases, which is where the frequency spread on this page comes from.
+
 
 There is **no I2C controller** in this design, and that is the point. What the
 SoC provides is a register file that makes each pin's direction a runtime value

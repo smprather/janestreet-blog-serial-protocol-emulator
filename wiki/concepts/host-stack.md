@@ -13,6 +13,11 @@ confidence: high
 
 # Host Stack
 
+> **What you'll learn here:** how the host side is put together end to end, from the Pico bridge and the session's nine states to FakePE and the golden packages
+>
+> **You can verify this by:** `python3 -m tools.host_bridge.acceptance.py --fake` runs the no-board acceptance beats. The golden packages behind them are regenerated and checked with `python3 -m tools.host_gui.r2_vectors --check` and `... r3_vectors --check`.
+
+
 A laptop-side debugger for a chip whose host bus is a register-level SPI
 protocol, reached through a **Raspberry Pi Pico running MicroPython**. Nothing
 here has run on a board: every claim below is about simulation, and the one

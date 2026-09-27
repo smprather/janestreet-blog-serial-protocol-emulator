@@ -10,6 +10,11 @@ confidence: high
 
 # DHT11
 
+> **What you'll learn here:** how a protocol whose bit VALUE is a pulse width forces a receiver to synchronise rather than count, and what that costs in program structure
+>
+> **You can verify this by:** `tb/tb_pe_soc_dht11.v` drives a sensor model and measures the sample margin against both release windows, which is where the numbers on the page come from.
+
+
 The DHT11 is the hardest of the three original timing acts, and it is still just
 timing. What makes it hard is that **both sides decide what a bit means by how long
 they hold the line**, and the two sides are holding it in opposite directions.

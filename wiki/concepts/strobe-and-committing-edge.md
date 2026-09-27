@@ -9,6 +9,10 @@ confidence: high
 ---
 
 # Strobe and Committing Edge
+> **What you'll learn here:** the difference between a signal appearing and a signal being committed, and the sample-order mistake that follows from confusing them
+>
+> **You can verify this by:** `tb/tb_pe_serdes.v` exercises the strobe/load handshake, and `tb/tb_pe_eth_mac.v` is where the ordering actually bites. The mutation suites under `regress/mutate_*` exist to prove these tests can fail.
+
 
 The two words the RTL and TBs use constantly, defined once. Both are about *when*
 something happens, not *what* happens — which is why they matter in a design whose

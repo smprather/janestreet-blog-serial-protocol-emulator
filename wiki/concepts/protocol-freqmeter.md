@@ -10,6 +10,11 @@ confidence: high
 
 # Input frequency and duty meter
 
+> **What you'll learn here:** measuring rather than generating: measuring period and duty, and why the low end is the whole difficulty
+>
+> **You can verify this by:** `tb/tb_pe_soc_freqmeter.v` feeds known periods and duty cycles in and checks the firmware's measurement against them.
+
+
 Six of the timing acts in this repository **drive** a pad. This one **listens**,
 and that makes it a different shape of problem: the PWM arrives from outside, the
 program cannot ask when the edges are coming, and the answer it has to produce is

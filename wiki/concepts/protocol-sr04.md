@@ -10,6 +10,11 @@ confidence: high
 
 # HC-SR04 ultrasonic ranging
 
+> **What you'll learn here:** converting an echo time into a distance in firmware, and what the conversion is exact against
+>
+> **You can verify this by:** `tb/tb_pe_soc_sr04.v` models the sensor and checks the distance the firmware computes. This act is recorded as red in [[STATUS]], and the page says precisely which part is proven and which is open.
+
+
 HC-SR04 is the only act in this family whose **answer is a number** rather than a
 waveform. A 10 µs pulse on `TRIG` makes the device emit eight 40 kHz bursts and then
 hold `ECHO` high for the round trip, so **the width of the echo pulse is the

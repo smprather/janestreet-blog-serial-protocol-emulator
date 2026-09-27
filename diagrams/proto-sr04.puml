@@ -1,4 +1,7 @@
 @startuml proto-sr04
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-sr04.puml - (a) the HC-SR04 ranging engine, both sides.
 '
@@ -17,17 +20,57 @@
 ' ===========================================================================
 
 title HC-SR04 - the ranging engine on both sides\n<font size=12>STATUS: GREEN - 4 runs, 4 distances, 199 / 999 / 343 / 1375 mm, every one exact</font>
+skinparam defaultFontName Monospaced
+skinparam FontName monospaced
 
 hide empty description
 hide stereotype
 skinparam shadowing false
 skinparam state {
-  BackgroundColor White
-  BorderColor #33555
-  FontName monospaced
+  BackgroundColor #EEF3FB
+  BorderColor #4A6FA5
+  FontColor #16324F
+  ArrowColor #1F2933
+  ArrowFontColor #1F2933
+  BackgroundColor<<tx>>   #DCE9F8
+  BorderColor<<tx>>       #4A6FA5
+  FontColor<<tx>>         #16324F
+  BackgroundColor<<rx>>   #DCEEE0
+  BorderColor<<rx>>       #4A8A5C
+  FontColor<<rx>>         #17452A
+  BackgroundColor<<ack>>  #FFF3C4
+  BorderColor<<ack>>      #9A7B0A
+  FontColor<<ack>>        #3A2E00
+  BackgroundColor<<abort>> #F6D9D9
+  BorderColor<<abort>>    #B05050
+  FontColor<<abort>>      #6A2020
+  BackgroundColor<<box>>  #F0F3F7
+  BorderColor<<box>>      #6B7686
+  FontColor<<box>>        #1F2933
+  BackgroundColor<<brk>>   #FADBD8
+  BorderColor<<brk>>       #A93226
+  FontColor<<brk>>         #5B1610
+  BackgroundColor<<slot>>  #D6EAF8
+  BorderColor<<slot>>      #2E6DA4
+  FontColor<<slot>>        #16324F
+  BackgroundColor<<crc>>   #EDE0F5
+  BorderColor<<crc>>       #6B4E9B
+  FontColor<<crc>>         #3B2560
+  BackgroundColor<<data>>  #D5F0E0
+  BorderColor<<data>>      #2E7D4F
+  FontColor<<data>>        #12402A
+  BackgroundColor<<stat>>  #FDECC8
+  BorderColor<<stat>>      #A9741A
+  FontColor<<stat>>        #5A3D12
+  BackgroundColor<<hs>>    #FDF2E9
+  BorderColor<<hs>>        #A04000
+  FontColor<<hs>>          #5A2400
+  BackgroundColor<<wait>>  #D2E3F0
+  BorderColor<<wait>>      #24506E
+  FontColor<<wait>>        #12303F
 }
 skinparam rectangle {
-  BorderColor #33555
+  BorderColor #4A6FA5
   FontName monospaced
 }
 skinparam rectangle<<green>> {

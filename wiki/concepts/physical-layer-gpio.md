@@ -9,6 +9,10 @@ confidence: medium
 ---
 
 # Physical Layer via GPIO
+> **What you'll learn here:** what a CMOS pin can actually do at these voltages, and which of the usual protocol signals need anything more than a GPIO
+>
+> **You can verify this by:** The per-protocol pin arithmetic behind it is generated and checked: `python3 tools/gen/pin_budget.py --check`, and the page it produces is [[reference/protocol-pin-budget]].
+
 
 Tiles reach the outside world through standard digital IO cells (3.3 V IO domain on the breakout board, ~1.2 V core). So the physical layer is restricted to GPIO state changes: drive high, drive low, high-Z/input. The contest is timing precision and state-machine flexibility, not PHY synthesis — voltage/differential conversion happens in passives or external transceivers on the dev board.
 

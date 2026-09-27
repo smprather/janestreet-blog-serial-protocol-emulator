@@ -1,4 +1,7 @@
 @startuml proto-sr04-frame
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-sr04-frame.puml - (b) the HC-SR04 exchange, the four measured
 ' conversions, and the image.
@@ -13,13 +16,14 @@
 ' ===========================================================================
 
 title HC-SR04 - the exchange, the four conversions, and the image\n<font size=12>STATUS: GREEN - 199 / 999 / 343 / 1375 mm, every one exact</font>
+skinparam defaultFontName Monospaced
 
 left to right direction
 hide empty description
 hide stereotype
 skinparam shadowing false
 skinparam rectangle {
-  BorderColor #33555
+  BorderColor #4A6FA5
   FontName monospaced
   FontSize 12
 }

@@ -54,8 +54,8 @@ FILES=(rtl/pe_codec_mux.v rtl/pe_bitstuff.v rtl/pe_nrzi.v rtl/pe_manch.v)
 # NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
 # escalates to running every suite rather than guessing.
 MUTABLE="rtl/pe_codec_mux.v rtl/pe_bitstuff.v rtl/pe_nrzi.v rtl/pe_manch.v"
-LOG=/tmp/mutate_codec.log
-CCLOG=/tmp/mutate_codec_cc.log
+LOG="$CHIP_WT_DIR"/mutate_codec.log
+CCLOG="$CHIP_WT_DIR"/mutate_codec_cc.log
 
 BAKDIR=$(mktemp -d /tmp/mutate_codec.XXXXXX)
 cleanup() {
@@ -87,9 +87,9 @@ cd "$ROOT/sim"
 SRCS="../rtl/pe_nrzi.v ../rtl/pe_manch.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v"
 
 run_tb() {
-  iverilog -g2012 -s tb_pe_codec_mux -o /tmp/mutate_codec.vvp \
+  iverilog -g2012 -s tb_pe_codec_mux -o "$CHIP_WT_DIR"/mutate_codec.vvp \
     $SRCS ../tb/tb_pe_codec_mux.v >"$CCLOG" 2>&1 || return 2
-  timeout 120 vvp /tmp/mutate_codec.vvp >"$LOG" 2>&1
+  timeout 120 vvp "$CHIP_WT_DIR"/mutate_codec.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
 
@@ -122,7 +122,7 @@ check_mutation() {   # check_mutation <name> <file> <anchor> <replacement>
     echo "  [$name] HARNESS ERROR: anchor not found in $file"
     restore; verify_restore; fail=$((fail+1)); return
   fi
-    chip_dep_expect mutated $MUTABLE
+    chip_dep_expect mutated "$file"
   run_tb
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))

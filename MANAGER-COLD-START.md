@@ -88,6 +88,14 @@ worker; this file is the manager's restart prompt.
   `logs/worklog/YYYY-MM-DD[-NN].md` at ~10 MB or day boundaries; keep log
   lines ≤ ~500 chars (reports link to reviews/, never inline). The 58 MB
   GitHub-warning incident is why.
+- **Quiet windows for gate runs (2026-09-26): a verify_merge / full-suite run
+  is VOIDED by concurrent edits to regress//rtl//tb/ (the dep-guard reports
+  INCONCLUSIVE exit 4 - correct behaviour). During a gate run the manager HOLDS
+  all merges and commits to main and workers hold edits to those sets.** The
+  merge-on-arrival policy yields to the gate window, not the other way round:
+  tonight a review gate reported INCONCLUSIVE because the manager merged three
+  branches mid-run. Coordinate the window explicitly; announce it; end it when
+  the gate reports.
 - **Conflict-resolution scope (2026-09-25, learned the hard way): the
   timestamp-union script is ONLY for `WORKLOG.md` and `wiki/log.md`.
   Every other conflict — code, docs, configs — is HAND-MERGED hunk by hunk,

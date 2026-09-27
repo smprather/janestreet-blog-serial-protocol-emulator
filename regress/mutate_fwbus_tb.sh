@@ -82,8 +82,8 @@ _wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
 # run_all.sh captures this script's stdout in ITS own /tmp/mutate_fwbus.log,
 # which is not worktree-scoped and is the manager's to change; keep every path
 # this harness writes on its own so a parallel run cannot truncate them.
-LOG=/tmp/mutate_fwbus_case.${_wt}.log
-BAK=$(mktemp -d /tmp/fwbus_mut.${_wt}.XXXXXX)
+LOG="$CHIP_WT_DIR"/mutate_fwbus_case.log
+BAK=$(mktemp -d "$CHIP_WT_DIR"/fwbus_mut.XXXXXX)
 
 # The five (firmware, testbench) pairs. The firmware is the DUT of each.
 #
@@ -146,15 +146,15 @@ verify_restore() {
 run_tb() {
   local fw="$1" tb="$2"
   if ! python3 "$ROOT/tools/fw/peasm.py" "$ROOT/firmware/$fw.pe" \
-        -o "$ROOT/firmware/$fw.hex" >"/tmp/mut_fwbus_asm.${_wt}.log" 2>&1; then
+        -o "$ROOT/firmware/$fw.hex" >""$CHIP_WT_DIR"/mut_fwbus_asm.log" 2>&1; then
     return 2
   fi
   if ! (cd "$ROOT/sim" && iverilog -g2012 -s "$tb" \
-        -o "/tmp/mut_fwbus_${_wt}_$tb.vvp" $SRCS "$ROOT/tb/$tb.v") \
-        >"/tmp/mut_fwbus_cc.${_wt}.log" 2>&1; then
+        -o ""$CHIP_WT_DIR"/mut_fwbus_$tb.vvp" $SRCS "$ROOT/tb/$tb.v") \
+        >""$CHIP_WT_DIR"/mut_fwbus_cc.log" 2>&1; then
     return 2
   fi
-  (cd "$ROOT/sim" && timeout 300 vvp "/tmp/mut_fwbus_${_wt}_$tb.vvp") >"$LOG" 2>&1
+  (cd "$ROOT/sim" && timeout 300 vvp ""$CHIP_WT_DIR"/mut_fwbus_$tb.vvp") >"$LOG" 2>&1
   run_tb_verdict "$LOG"
 }
 
@@ -206,7 +206,7 @@ classifier_self_test() {
   # and reported nothing whatever. So `checked` counts the cases actually run,
   # is required to equal EXPECTED_CASES, and both numbers are printed.
   local EXPECTED_CASES=5
-  d=$(mktemp -d /tmp/fwbus_clsfy.${_wt:-shared}.XXXXXX)
+  d=$(mktemp -d "$CHIP_WT_DIR"/fwbus_clsfy.XXXXXX)
   # a GENUINE hang: the watchdog line plus diagnostic lines that are NOT FAILs
   printf '%s\n' "=== dmx ===" "FAIL: watchdog -- the test did not complete" \
     "  slots reached: 0 of 513" "  frame layer finished: 0" "  pc=64" > "$d/hang"
@@ -283,7 +283,7 @@ check_mutation() {
     echo "  [$name] detected (HANG/timeout only -- weaker: no assertion fired)"
     pass=$((pass+1)); hangs=$((hangs+1))
   else
-    echo "  [$name] HARNESS ERROR (assemble/compile failed, or no verdict in the log; see /tmp/mut_fwbus_*.${_wt}.log)"
+    echo "  [$name] HARNESS ERROR (assemble/compile failed, or no verdict in the log; see $CHIP_WT_DIR/mut_fwbus_*.${_wt}.log)"
     fail=$((fail+1))
   fi
   restore; verify_restore

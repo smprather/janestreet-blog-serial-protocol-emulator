@@ -9,6 +9,10 @@ confidence: high
 ---
 
 # PDK and Toolchain Setup
+> **What you'll learn here:** which PDK and EDA tools this project builds against, and where the SRAM macros and corner definitions come from
+>
+> **You can verify this by:** `python3 tools/checks/macro_flow_config.py` validates the flow's macro geometry and pin mapping against the PDK, and fails loudly rather than skipping quietly when the PDK is absent.
+
 
 Local bring-up of the IHP sg13g2 design environment on CachyOS (Arch). All paths verified on-machine.
 

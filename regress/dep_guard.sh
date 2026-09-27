@@ -326,8 +326,17 @@ chip_dep_sample_poll() {
           if awk -v e="$elapsed" -v p="$persist" 'BEGIN{exit !(e >= p)}'; then
             printf '%s\n  declared: %s   observed: %s   held for %ss while the run was live\n' \
               "${_t[i]}" "$want" "$cls" "$elapsed" >> "$base.sample.hit"
-            printf '  the harness said this file was %s, and something else made it %s.\n' \
-              "$want" "$cls" >> "$base.sample.hit"
+            # NEUTRAL BY DESIGN. This line used to read "and something else made
+            # it <state>", which asserted an outside writer as the cause -- and
+            # the most common cause is the opposite: a harness that declared a
+            # state it had not yet earned. Rendered into a live report on
+            # 2026-09-26, that sentence appeared directly beneath a careful
+            # two-cause explanation and contradicted it, which is worse than
+            # having said nothing: the reader has to decide which of the two
+            # adjacent statements to believe. The sampler observed a FACT here.
+            # It cannot see who wrote the file, so it no longer says.
+            printf '  the harness declared this file %s, and for %ss it was not.\n' \
+              "$want" "$elapsed" >> "$base.sample.hit"
             hit=1
             break
           fi
@@ -373,9 +382,36 @@ chip_dep_sample_stop() {
   pid=$(cat "$base.sample.pid" 2>/dev/null)
   [ -n "$pid" ] && { wait "$pid" 2>/dev/null || true; }
   if [ -s "$base.sample.hit" ]; then
+    # TWO CAUSES, ONE SIGNATURE, so this message must name both. The observed
+    # shape (declared: mutated, observed: pristine) is what a harness that
+    # DECLARED a state it had not yet earned looks like, and it is also what an
+    # outside writer looks like. The 2026-09-26 codec red was the first of
+    # those: mutate_codec_tb.sh declared all four MUTABLE files mutated after
+    # writing one, so the other three were pristine by construction. Nothing
+    # outside the run had touched anything, and this message -- which asserted
+    # the opposite, and was followed by verify_merge advising "re-run with
+    # nothing editing regress/ concurrently" -- sent the reader hunting a
+    # concurrent editor who did not exist. A wrong EXPLANATION on a right
+    # refusal is the expensive kind of gate defect: the verdict stands, so
+    # nothing looks wrong, and the stated reason sends the next person down the
+    # one path that cannot be the answer.
     echo "CHIP-DEP-CHANGED: $label: a MUTABLE target did not hold the state the harness" >&2
-    echo "  DECLARED it was in, so something outside this run wrote to it mid-run. That is" >&2
-    echo "  the 2026-09-25 shape, and a run in that state verified nothing:" >&2
+    echo "  DECLARED it was in. TWO causes produce this identical shape, and they" >&2
+    echo "  need different fixes, so read the evidence below before acting:" >&2
+    echo "    (1) THE HARNESS OVER-CLAIMED. It called chip_dep_expect mutated on a" >&2
+    echo "        whole set while writing only one file, so the rest were declared" >&2
+    echo "        mutated while still pristine. This is a harness bug and it is" >&2
+    echo "        LATENT: silent on an idle box, because the lie is only noticed" >&2
+    echo "        once it has persisted past CHIP_DEP_SAMPLE_PERSIST. Fix: declare" >&2
+    echo "        the single file you just wrote, as mutate_eth_tx_loop_tb.sh does" >&2
+    echo "        with \"\$rel\" and mutate_i2c_tb.sh with \"\$mutated_by_this_case\"." >&2
+    echo "    (2) SOMETHING OUTSIDE THIS RUN wrote to it mid-run. That is the" >&2
+    echo "        2026-09-25 shape: another run, worker or process sharing the file." >&2
+    echo "  TO TELL THEM APART: if the file still matches the harness's own pristine" >&2
+    echo "  snapshot, nobody outside wrote it and cause (1) is certain. If it matches" >&2
+    echo "  neither the snapshot nor any state this harness declared, it is (2)." >&2
+    echo "  EITHER WAY this run verified nothing and its verdict must be read as" >&2
+    echo "  INCONCLUSIVE, not as green:" >&2
     sed 's/^/    /' "$base.sample.hit" >&2
     return 1
   fi

@@ -65,8 +65,8 @@ cd "$(dirname "$0")/.."
 . "$(dirname "$0")/run_lock.sh"
 chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
-LOG=/tmp/mutate_eth_tx_loop.log
-CCLOG=/tmp/mutate_eth_tx_loop_cc.log
+LOG="$CHIP_WT_DIR"/mutate_eth_tx_loop.log
+CCLOG="$CHIP_WT_DIR"/mutate_eth_tx_loop_cc.log
 PRISTINE=$(mktemp -d /tmp/pristine_eth_tx_loop.XXXXXX)
 BAK=$(mktemp -d /tmp/backup_eth_tx_loop.XXXXXX)
 
@@ -105,7 +105,7 @@ for hex in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe \
 done
 if [ -n "$missing" ]; then
   echo "  firmware images missing:$missing - building them first"
-  ( cd "$ROOT" && ./regress/run_firmware_tests.sh >/tmp/mut_eth_tx_loop_fw.log 2>&1 ) \
+  ( cd "$ROOT" && ./regress/run_firmware_tests.sh >"$CHIP_WT_DIR"/mut_eth_tx_loop_fw.log 2>&1 ) \
     || { echo "FATAL: could not build the firmware images"; exit 2; }
 fi
 
@@ -116,18 +116,18 @@ TOP_SRCS="$SOC_SRCS ../rtl/pe_ctrl.v ../rtl/tt_um_protocol_emulator.v"
 run_loop_tb() {
   local sram
   sram=$(bash "$ROOT/regress/sram_model.sh" 2>/dev/null) || return 2
-  iverilog -g2012 -s tb_pe_soc_eth_loop -o /tmp/mut_eth_tx_loop.vvp \
+  iverilog -g2012 -s tb_pe_soc_eth_loop -o "$CHIP_WT_DIR"/mut_eth_tx_loop.vvp \
     $SOC_SRCS $sram ../tb/tb_pe_soc_eth_loop.v >"$CCLOG" 2>&1 || return 2
-  timeout 600 vvp /tmp/mut_eth_tx_loop.vvp >"$LOG" 2>&1
+  timeout 600 vvp "$CHIP_WT_DIR"/mut_eth_tx_loop.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
 
 run_tt_tb() {
   local sram
   sram=$(bash "$ROOT/regress/sram_model.sh" 2>/dev/null) || return 2
-  iverilog -g2012 -s tb_tt_um_protocol_emulator -o /tmp/mut_eth_tx_tt.vvp \
+  iverilog -g2012 -s tb_tt_um_protocol_emulator -o "$CHIP_WT_DIR"/mut_eth_tx_tt.vvp \
     $TOP_SRCS $sram ../tb/tb_tt_um_protocol_emulator.v >"$CCLOG" 2>&1 || return 2
-  timeout 600 vvp /tmp/mut_eth_tx_tt.vvp >"$LOG" 2>&1
+  timeout 600 vvp "$CHIP_WT_DIR"/mut_eth_tx_tt.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
 

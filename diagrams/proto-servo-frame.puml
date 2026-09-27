@@ -1,4 +1,7 @@
 @startuml proto-servo-frame
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-servo-frame.puml - (b) the servo "frame": a pulse, a gap, and the table
 ' that produces them.
@@ -17,7 +20,7 @@ hide empty description
 hide stereotype
 skinparam shadowing false
 skinparam rectangle {
-  BorderColor #33555
+  BorderColor #335550
   FontName monospaced
   FontSize 12
 }

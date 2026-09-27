@@ -109,6 +109,12 @@ module tb_pe_eth_tx;
   logic        rst_n, enable, push, start, abort;
   logic [7:0]  push_byte;
   logic [11:0] frame_len;
+  // F1's validated length, read through the hierarchy the way this TB already
+  // reads dut.u_tx_crc.crc_state. NOT the fv_pend_len / fv_stored_bytes ports:
+  // that whole block is `ifdef FORMAL, and tools/check_formal_ifdef.sh holds
+  // synthesis from ever defining it, so a case that needs the signal in a normal
+  // simulation cannot depend on those aliases existing.
+  logic [11:0] fv_pend_len, fv_stored_bytes;
   logic        push_ready, tx_busy, tx_done, tx_underrun, tx_overlong;
   logic        ifg_active, tx_bit, line_drive;
 
@@ -557,6 +563,65 @@ module tb_pe_eth_tx;
              tag, total, need, fcs_want);
   endtask
 
+  // Case: F1's apply window. The guard and the latch must be the SAME event.
+  // DIV = 6, so a start pulse can land up to DIV-1 = 5 clocks before the cell
+  // boundary that copies pend_len into stored_bytes / data_bits_left. A TXLEN
+  // rewrite inside that window must affect only the NEXT frame. Before F1 the
+  // boundary re-read frame_len, so a host rewrite in this window transmitted a
+  // length the runt/jabber guard never saw.
+  //
+  // All six phases of the window are exercised on purpose: a single phase can
+  // sit on the 0-clock edge, where the rewrite lands after the boundary and
+  // therefore cannot tell a correct engine from a broken one.
+  task automatic test_f1_apply_window(input int off, input string tag);
+    int total, need, rewritten;
+    total = 60;
+    need  = 64 + 8*total + 32;
+    reset_dut();
+    enable = 1'b1;
+    frame_len = 12'd60;
+    scan_start = ncells;
+    for (int k = 0; k < 8; k++) push_wait(stored[k]);
+    // The start pulse, deliberately offset by `off` clocks so the boundary it
+    // races lands at every phase of the 6-clock cell.
+    repeat (off) @(negedge clk);
+    @(negedge clk); start = 1'b1;
+    @(negedge clk); start = 1'b0;
+    // pend_len now holds the validated 60. Rewrite TXLEN to a RUNT on every
+    // remaining clock of the window: if the boundary re-reads frame_len the
+    // frame runs on 13 bytes -- a length the guard refused a moment earlier.
+    rewritten = 0;
+    for (int n = 0; n < 6; n++) begin
+      frame_len = 12'd13;
+      rewritten = 1;
+      @(negedge clk);
+      if (dut.start_pend !== 1'b1) break;   // the boundary already applied
+    end
+    check(rewritten == 1, $sformatf("%s: no clock left to rewrite TXLEN in", tag));
+    check(dut.pend_len === 12'd60,
+          $sformatf("%s: pend_len moved to %0d after the start pulse",
+                    tag, dut.pend_len));
+    // Wait for the boundary that applies the latched length, then assert the
+    // APPLIED length before pushing the rest of the frame. stored_bytes is the
+    // immediate consequence of F1, and asserting it here keeps the kill fast
+    // and legible: without this the case hangs on a FIFO that never drains,
+    // because a frame that ended early leaves the pushes with nowhere to go.
+    begin
+      int guard = 0;
+      while (dut.start_pend === 1'b1 && guard < 20) begin @(posedge clk); guard++; end
+    end
+    repeat (2) @(posedge clk);
+    if (dut.stored_bytes !== 12'd60) begin
+      check(1'b0, $sformatf("%s: the boundary applied %0d bytes; the frame must consume the 60 the guard validated",
+                            tag, dut.stored_bytes));
+      return;
+    end
+    for (int k = 8; k < 60; k++) push_wait(stored[k]);
+    wait_done_idle(1, tag);
+    analyze(scan_start, total, need, tag);
+    check(!saw_underrun, $sformatf("%s: unexpected tx_underrun", tag));
+  endtask
+
   // Case 6: refused requests. The engine stays IDLE and the line stays idle.
   task automatic test_refused(input int len, input string tag);
     int base;
@@ -927,6 +992,8 @@ module tb_pe_eth_tx;
 
     fill_pattern(1514, 8'h20);
     test_good_frame(1514, "max-1514");
+    for (int off = 0; off < 6; off++)
+      test_f1_apply_window(off, $sformatf("f1-apply-window+%0d", off));
 
     test_refused(1515, "overlong-1515");
     test_refused(13,   "runt-13");

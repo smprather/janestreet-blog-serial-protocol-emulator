@@ -1,4 +1,25 @@
 @startuml proto-ws2812-timing
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
+skinparam sequence {
+  ArrowColor #335550
+  ArrowFontColor #1F2933
+  LifeLineBorderColor #8A94A6
+  LifeLineBackgroundColor #EDF1F7
+  ParticipantBorderColor #4A6FA5
+  ParticipantBackgroundColor #DCE9F8
+  ParticipantFontColor #16324F
+  GroupBorderColor #6B7686
+  GroupBackgroundColor #E3E9F2
+  SequenceBoxBackgroundColor #FFF3C4
+  SequenceBoxBorderColor #9A7B0A
+  SequenceGroupBorderColor #6B7686
+  SequenceGroupBackgroundColor #E3E9F2
+  SequenceLifeLineBackgroundColor #EDF1F7
+  SequenceLifeLineBorderColor #8A94A6
+  SequenceDividerColor #1F2933
+}
 ' ===========================================================================
 ' proto-ws2812-timing.puml - (c) WS2812 wire timing, in the numbers the
 ' firmware actually produces.
@@ -20,18 +41,6 @@ title WS2812 - wire timing at 800 kHz\n<font size=12>1 clock = 16.6667 ns; one c
 
 hide stereotype
 skinparam shadowing false
-skinparam sequence {
-  ArrowColor #33555
-  LifeLineBorderColor #33555
-  LifeLineBackgroundColor #FAFAFA
-  ParticipantBorderColor #33555
-  ParticipantBackgroundColor #F4F7FB
-  ParticipantFontName monospaced
-  ActorFontName monospaced
-  NoteFontName monospaced
-  GroupFontName monospaced
-}
-
 participant "CPU\npe_cpu.v\nsingle-cycle:\n1 instr = 1 clock" as CPU
 participant "pad 6\nTXPIN / PINOE\npush-pull" as PAD
 participant "DIN wire\n+ strip pull-up" as WIRE

@@ -10,6 +10,11 @@ confidence: high
 
 # The protocol formal gaps
 
+> **What you'll learn here:** which formal claims are depth-16 proven rather than unbounded, and why k-induction cannot close them
+>
+> **You can verify this by:** `bash formal/run_formal.sh` re-runs the campaign and writes `formal/results/summary.txt`, where each property carries its own status; the mutants that make the proofs non-vacuous are in `formal/results/mutants.txt`.
+
+
 The companion to [[concepts/formal-verification]], which carries the campaign's
 headline state. This page carries the things a tapeout reviewer most needs and
 is most likely to misread: the claims that are **not** unbounded, the

@@ -10,18 +10,22 @@ confidence: medium
 
 # 10BASE-T Line Driver — the Pair, TP_IDL and Link Pulses
 
-**Status: IMPLEMENTED and COMMITTED on branch `eth-tx-line-driver`
-(worktree `/home/mylesp/worktrees/eth-tx-line-driver`, based on `main` at
-`4560432`), NOT MERGED.** It reclaims a pad (`uo_out[3]`, today
-`dbg_pc[1]`), which is a pinout decision, so the change is a **proposal for
-the manager to adopt, amend or reject** — STATUS item 4 owns the `dbg_pc`
-pads. Command-level evidence is in `reviews/2026-09-26/ETH-TX-LINE-DRIVER.md`.
+**Status: ADOPTED and MERGED.** The manager adopted the pinout change and the
+line driver is on `main` via `02fe062` ("merge: eth-tx-line-driver … gate 46/46 +
+documented sr04 wip"). It reclaims a pad (`uo_out[3]`, previously `dbg_pc[1]`);
+STATUS item 4's `dbg_pc` pads were released for the pair, and four debug pins
+remain (`dbg_pc[5:2]`). The landed pinout is the wrapper's pad map
+(`rtl/tt_um_protocol_emulator.v`), which is the authority. Command-level
+evidence is in `reviews/2026-09-26/ETH-TX-LINE-DRIVER.md`.
+
+This status line was stale for a while: it read "NOT MERGED … awaiting the
+manager to adopt" after the adoption had already landed, because the page was
+written on the branch and the merge did not revisit it.
 
 **How to read this page:** it is a **RECORD** of RTL, testbenches and gates
-that are in the tree on that branch — claims-check it against the code. Only
-two sections look forward: *Decisions taken here (for the manager)* (choices
-the branch already implements, awaiting adoption) and *Follow-ups (not done
-here)* (work that does not exist yet).
+that are in the tree — claims-check it against the code. Only two sections look
+forward: *Decisions taken here* (the choices the design makes, now adopted) and
+*Follow-ups (not done here)* (work that does not exist yet).
 
 `confidence: medium` is about the 802.3 numbers, not the RTL: they come from
 a transceiver datasheet and two secondary write-ups (see *Sources*), not from
@@ -193,7 +197,7 @@ Every level was written RED-first against interface stubs, then made GREEN:
 - **Not run:** the physical flow, DRC and LVS (standing ruling), and no STA
   screen of the new `uo_out[3]` path yet.
 
-## Decisions taken here (for the manager)
+## Decisions taken here (adopted)
 
 1. **Reclaim `uo_out[3]` (`dbg_pc[1]`) as `eth_tx_n`**; four debug pins
    remain (`dbg_pc[5:2]`).

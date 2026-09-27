@@ -9,6 +9,10 @@ confidence: high
 ---
 
 # 10BASE-T receive, in hardware
+> **What you'll learn here:** how a real 10BASE-T frame is recovered from the wire into memory: SFD lock, byte assembly, FCS check, and where four previously-orphaned blocks became one signal path
+>
+> **You can verify this by:** `tb/tb_pe_eth_mac.v` drives raw Manchester levels into the real chain, so every byte it checks is a byte a real receiver recovers. Run it with the suite: `regress/run_all.sh --fast` (see [[getting-started]] Step 7 for what that does and does not mean).
+
 
 `rtl/pe_eth_mac.v` — the first protocol block in this project that is deliberately
 **not** firmware, and the reason is arithmetic rather than taste:

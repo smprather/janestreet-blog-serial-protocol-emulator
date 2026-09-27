@@ -730,6 +730,23 @@ echo "(full log: $LOG)"
 RC=${PIPESTATUS[0]}
 
 TOTAL=$(grep -E '^TOTAL: [0-9]+' "$LOG" | tail -1 | awk '{print $2}')
+# The KNOWN-WIP cases are counted on NEITHER side, and that is a real asymmetry
+# rather than a rounding error. run_all.sh really does run them -- it NAMES them
+# every run, "KNOWN-WIP (ran, expected red, act unfinished)", precisely so a
+# <<wip>> case cannot go the way an unwired one did, quietly invisible -- but a
+# case that is EXPECTED red increments neither pass nor fail, so it sits outside
+# the TOTAL it prints. The mapping, meanwhile, counts TABLE ENTRIES, and
+# tb_pe_soc_sr04 is one of them. So a complete, clean, full-suite run reports a
+# TOTAL one lower than the selection that asked for it, and the cross-check
+# below read that as the mapping and the suite disagreeing: GATE ERROR, exit 3,
+# on a run in which every case ran and nothing failed. That is WORSE than a
+# flaky gate, because it is indistinguishable from a real failure and so
+# teaches its reader to ignore GATE ERROR -- the exact way a gate stops being
+# evidence. So the expected side takes the WIP cases back. Counted from what the
+# run actually reported, which also means a selection that EXCLUDES a WIP case
+# needs no back-count at all: it never ran, so it is not in the list.
+WIP_N=$(grep -E '^KNOWN-WIP \(ran, expected red, act unfinished\):' "$LOG" \
+        | tail -1 | sed 's/^.*): *//' | wc -w | tr -d ' ')
 SELECTED_BY_RUN=$(grep -oE '[-][-]cases [^:]*: [0-9]+ selected' "$LOG" | tail -1 | grep -oE '[0-9]+ selected' | grep -oE '[0-9]+')
 # The same discipline for the mutation narrowing. The ruling's own words: GREEN
 # must never claim more than it ran. So the number of suites run_all.sh reports
@@ -767,7 +784,23 @@ if [ "${DEP_CHANGED:-0}" -gt 0 ]; then
     echo "  a FALSE PASS as easily as a false failure, and this run's verdict cannot be"
     echo "  trusted in either direction. The run that reported it:"
     grep -E 'CHIP-DEP-CHANGED|INCONCLUSIVE — ' "$LOG" | head -6 | sed 's/^/    /'
-    echo "  Re-run the gate with nothing editing regress/ concurrently."
+    # "Re-run with nothing editing regress/ concurrently" was the whole of this
+    # advice until 2026-09-26, and it was wrong often enough to cost real time:
+    # a CHIP-DEP-CHANGED raised from a MUTABLE target is NOT evidence that anyone
+    # edited anything. A harness that declares a state it has not yet earned
+    # produces the identical signature, and it is the more common cause -- the
+    # 2026-09-26 codec red was exactly that, with nothing else running. So the
+    # advice now names both and points at the discriminator, rather than sending
+    # the reader to look for a concurrent editor who may not exist.
+    if grep -q 'a MUTABLE target did not hold the state' "$LOG"; then
+      echo "  READ THE DEP-GUARD MESSAGE ABOVE BEFORE RE-RUNNING: 'a MUTABLE target did"
+      echo "  not hold the state' has TWO causes with one signature, and the more likely"
+      echo "  one is a HARNESS BUG, not an interloper. If the target still matches the"
+      echo "  harness's own pristine snapshot, nothing outside the run wrote it: the"
+      echo "  harness declared a state it had not earned yet, which is latent on an idle"
+      echo "  box and fires under load. Fix the declaration, or the re-run will void again."
+    fi
+    echo "  Otherwise: re-run the gate with nothing editing regress/ concurrently."
   } >&2
   exit 4
 fi
@@ -814,8 +847,11 @@ if [ -n "$SELECTED_BY_RUN" ] && [ "$SELECTED_BY_RUN" != "$WANT" ]; then
   echo "MERGE GATE: GATE ERROR — selected $WANT case(s), run_all.sh selected $SELECTED_BY_RUN." >&2
   rm -f "$LOG"; exit 3
 fi
-if [ "$TOTAL" != "$WANT" ]; then
-  echo "MERGE GATE: GATE ERROR — expected $WANT case(s) to run, TOTAL says $TOTAL." >&2
+WANT_RAN=$((TOTAL + WIP_N))
+if [ "$WANT_RAN" != "$WANT" ]; then
+  echo "MERGE GATE: GATE ERROR — expected $WANT case(s) to run, TOTAL says $TOTAL" >&2
+  [ "${WIP_N:-0}" -gt 0 ] && \
+    echo "  plus $WIP_N KNOWN-WIP case(s) the TOTAL deliberately excludes = $WANT_RAN." >&2
   echo "  The mapping and the suite disagree; treating that as a failure, not a pass." >&2
   rm -f "$LOG"; exit 3
 fi
