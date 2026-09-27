@@ -43,6 +43,8 @@ chip_take_run_lock "run_all.sh"
 # negative control that proves it can fail.
 # shellcheck source=regress/dep_guard.sh
 . "$(dirname "$0")/dep_guard.sh"
+# shellcheck source=regress/lib_leak.sh
+. "$(dirname "$0")/lib_leak.sh"
 _on_exit() {
   local rc=$?
   # The pre-flight runs FIRST, before the lock is released: a run whose scripts
@@ -846,6 +848,29 @@ run_mutation_suite() {
   chip_dep_sample_start "$_sampler_label" ${_mut_deps[@]+"${_mut_deps[@]}"}
   "$@"
   local rc=$?
+  # A LEAKED CHILD, caught at the one boundary where it is still cheap.
+  #
+  # The suites here are called strictly one at a time - 16 separate calls, nothing
+  # backgrounded, no waits - so two suites cannot race each other directly. But a
+  # suite can spawn a child that outlives it, and that child keeps writing.
+  # Observed twice on 2026-09-27: mutate_eth_mac_tb.sh saw rtl/pe_eth_mac.v change
+  # to `mutated` with `cause: external` for 0.168s while it ran and was correctly
+  # declared INCONCLUSIVE, and a harness was still alive holding a plant in
+  # rtl/pe_soc.v after run_all had exited. One interference, two costs.
+  #
+  # So before the next suite may start, this suite's process tree must actually be
+  # gone. A leak returns the SAME verdict the dep-guard returns for interference,
+  # and for the same reason: the suite that leaked verified nothing reliable, and
+  # neither did the one after it. A warning would be worse than nothing, because a
+  # green earned by accident is the one nobody re-checks.
+  local leak_pids=""
+  if ! leak_pids="$(mut_leak_check "$n" "${MUT_LEAK_GRACE:-20}")"; then
+    echo "  LEAKED CHILD: $n left $(printf '%s\n' "$leak_pids" | grep -c '') process(es) alive" >&2
+    echo "  after it returned: $(printf '%s' "$leak_pids" | tr '\n' ' ')" >&2
+    echo "  They may still be writing, so this suite - and the next - have verified" >&2
+    echo "  nothing. INCONCLUSIVE, not a warning." >&2
+    rc=4
+  fi
   # The sampler is stopped before the check so its verdict is in hand either way,
   # and BOTH verdicts force the same INCONCLUSIVE: a suite whose DUT was
   # interfered with has verified nothing, whichever check noticed.
