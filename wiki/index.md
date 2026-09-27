@@ -12,12 +12,36 @@ read [[STATUS]] first if you are resuming after a context flush.
 
 ---
 
-## Start here
+# The wiki in three tiers
 
-- [[concepts/overview]] — **the on-ramp.** How the five layers fit (chip, host
-  bus, firmware personas, host stack, verification culture), an hour-long
-  reading order, and an explicit list of what is *not* true yet. **Read this
-  one if you read nothing else.**
+This wiki is written for two different readers, and mixing them is what makes
+documentation hard to learn from. So it is sorted into three tiers:
+
+| tier | what it is for | how to read it |
+|---|---|---|
+| **1. MANUAL** | learning the project by doing it | start at the top and follow the steps |
+| **2. REFERENCE** | looking something up | jump to it when you need the value |
+| **3. DEEP DIVES** | understanding why a decision was made | read when the manual and the reference are not enough |
+
+**If you are new, read tier 1 in order and skip the rest.** Everything in tiers
+2 and 3 is also reachable from the manual at the point you need it.
+
+---
+
+# TIER 1 — MANUAL
+
+- [[getting-started]] — **start here.** A hands-on track where every step is a
+  command you can run, with what you will see and what it means: check the
+  toolchain, run the firmware, assemble a protocol, run each gate, break a gate
+  on purpose, run a testbench, read a waveform. Written so that a reader who
+  has never seen the repository can end up modifying a protocol act.
+- [[glossary]] — **the vocabulary**, one line per term with a link: wait word,
+  the debug hold, STOP-BEFORE, counted-delay constant, `<<wip>>`, pinned
+  baseline, and the rest. Read it alongside the manual; it is the shortest page
+  here and the one you will return to.
+- [[concepts/overview]] — **how the five layers fit** (chip, host bus, firmware
+  personas, host stack, verification culture), an hour-long reading order, and
+  an explicit list of what is *not* true yet. Read this after the manual.
 - [[STATUS]] — **milestone status, newest blockquote first**, plus the ordered
   next-steps list. This is the only place the current regression figure lives;
   do not quote a number from memory.
@@ -40,6 +64,16 @@ repo root, not a wiki page: it is the judge-facing act script.)
 | **what to build next** | [[plans/feature-brainstorm]] |
 
 ---
+
+---
+
+# TIER 3 — DEEP DIVES
+
+The reasoning. These pages are long, accurate, and were written by people who
+were present for the decisions; they are worth reading when the manual and the
+reference have told you *what* and you want to know *why*. Each now carries a
+one-line "what you'll learn" header and a pointer to the runnable artefact
+behind its numbers.
 
 ## Concepts — how the design works
 
@@ -209,6 +243,13 @@ has an obvious home. See **In flight** below for what is still to come.)*
 
 ---
 
+---
+
+# TIER 2 — REFERENCE
+
+Look things up here. These pages are the lookup surfaces: generated tables,
+port maps, constants, wire formats, and the records of what has been measured.
+
 ## Reference — generated and measured facts
 
 These pages are **generated from the source and drift-checked in
@@ -276,6 +317,11 @@ The renders are *not* gated by the page-rules gate — see
 ---
 
 ## Plans — forward-looking work, with a definition of done
+
+**[[plans/feature-brainstorm]] is the "where to go next" page for a learner**:
+33 ideas for what could be built on top of this, ranked, each with the effort
+shape and what it would prove. It is linked from the manual tier for that
+reason.
 
 Kept in place as they complete; a landed plan's durable findings move into
 concepts/reference/decisions and the plan's status line records that it is
