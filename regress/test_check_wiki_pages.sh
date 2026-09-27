@@ -406,7 +406,17 @@ fi
 # live tree the gate was legitimately red because of another worker's page, so
 # the case was measuring their state rather than the wiring.
 d=$(fresh_minimal wire-pass)
-{ echo 'stale=0'; extract_wiring; echo 'echo "STALE=$stale"'; } > "$TMP/wiring.sh"
+# The wiring is executed with CHIP_WT_DIR EXPORTED to a real directory inside
+# the fixture. run_all.sh routes every gate log through "$CHIP_WT_DIR"/..., which
+# is the fix for the shared-/tmp log-path defect, so a fixture that does not set
+# it makes the redirect target "/check_wiki_pages.log" - an unwritable path - and
+# the gate reports RED for a reason that has nothing to do with the wiring under
+# test. This is the SAME class as the TOOLCHAIN.md gap: a fixture must model
+# everything the thing under test READS, or it is measuring the fixture.
+{ echo 'stale=0'
+  echo 'CHIP_WT_DIR="$PWD/sim"; mkdir -p "$CHIP_WT_DIR"'
+  extract_wiring
+  echo 'echo "STALE=$stale"'; } > "$TMP/wiring.sh"
 cp "$TMP/wiring.sh" "$d/"
 got=$(cd "$d" && bash wiring.sh 2>/dev/null | tail -1)
 if [ "$got" = "STALE=0" ]; then
