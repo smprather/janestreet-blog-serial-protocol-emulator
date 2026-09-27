@@ -5277,3 +5277,17 @@ next one is theirs to time.
 
 Commits this session: `9d462b3`, `5e01c24`, `83f1fba`, `e55b626`, `7fe4a1f`,
 `6fb6893`, `aa026b4`, `916a4ae`, `07c0bb7`, `23a5fbc`.
+
+## IDLE-QUEUE-EMPTY
+
+Noise fix, not work: the supervisor's suppression reads the LAST THREE LINES of
+this file for the literal token, and my entries carried it in the HEADING while
+ending on a list, so it was never seen. The state itself never changed --
+`run_all.sh:270` is still the manager's, still blocked by a live run.
+
+STATUS UNCHANGED. Full gate at 21:07 with the new 6 us check in it:
+TOTAL 48 PASS 48 FAIL 0, FIRMWARE 43/43, run-lock OK, 16 mutation suites, and
+R3's committed README drift the only red -- not mine, routed. Queue empty, one
+pending QUESTION for the manager, no commit owed beyond this line.
+
+IDLE-QUEUE-EMPTY
