@@ -37,7 +37,7 @@ RTL="$ROOT/rtl/pe_serdes.v"
 # NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
 # escalates to running every suite rather than guessing.
 MUTABLE="rtl/pe_serdes.v"
-LOG=/tmp/mutate_serdes.log
+LOG="$CHIP_WT_DIR"/mutate_serdes.log
 BAK=$(mktemp /tmp/pe_serdes.XXXXXX.v)
 
 cleanup() { cp "$BAK" "$RTL" 2>/dev/null; rm -f "$BAK"; }
@@ -53,9 +53,9 @@ cmp -s "$RTL" "$BAK" || { echo "FATAL: could not snapshot $RTL"; exit 2; }
 SRCS="../rtl/pe_serdes.v ../tb/tb_pe_serdes.v"
 
 run_tb() {
-  iverilog -g2012 -s tb_pe_serdes -o /tmp/mut_serdes.vvp $SRCS \
-    >/tmp/mut_serdes_cc.log 2>&1 || return 2
-  timeout 120 vvp /tmp/mut_serdes.vvp >"$LOG" 2>&1
+  iverilog -g2012 -s tb_pe_serdes -o "$CHIP_WT_DIR"/mut_serdes.vvp $SRCS \
+    >"$CHIP_WT_DIR"/mut_serdes_cc.log 2>&1 || return 2
+  timeout 120 vvp "$CHIP_WT_DIR"/mut_serdes.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
 

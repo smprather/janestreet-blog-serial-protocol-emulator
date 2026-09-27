@@ -807,15 +807,15 @@ fi
 # skip and a yosys-elaboration failure must all behave as designed. The
 # mutations run on a COPY of the flow config/PDN script, never the tracked
 # files, and the harness reports SKIPPED when its baseline is incomplete.
-if run_mutation_suite mutate_macro_flow_config.sh ./regress/mutate_macro_flow_config.sh > /tmp/mutate_macro_flow.log 2>&1; then
-  if grep -q "^SKIPPED" /tmp/mutate_macro_flow.log; then
+if run_mutation_suite mutate_macro_flow_config.sh ./regress/mutate_macro_flow_config.sh > "$CHIP_WT_DIR"/mutate_macro_flow.log 2>&1; then
+  if grep -q "^SKIPPED" "$CHIP_WT_DIR"/mutate_macro_flow.log; then
     echo "macro flow config negatives: SKIPPED (required PDK geometry unavailable)"
   else
     echo "macro flow config negatives: OK (pin-to-net, typed views, per-type geometry, ladder, skip and yosys-failure checks)"
   fi
 else
   echo "macro flow config negatives: FAILED"
-  tail -20 /tmp/mutate_macro_flow.log
+  tail -20 "$CHIP_WT_DIR"/mutate_macro_flow.log
   stale=1
 fi
 # The CRC constants are checked against the RevEng catalogue on every run, not
@@ -1154,11 +1154,11 @@ fi
 # testbench nobody mutation-tests is a testbench that quietly stops testing --
 # and this one has already been caught being vacuous twice (a wrong edge index
 # that made both interval checks unfailable, and a missing interval check).
-if run_mutation_suite mutate_i2c_tb.sh ./regress/mutate_i2c_tb.sh > /tmp/mutate_i2c.log 2>&1; then
+if run_mutation_suite mutate_i2c_tb.sh ./regress/mutate_i2c_tb.sh > "$CHIP_WT_DIR"/mutate_i2c.log 2>&1; then
   echo "i2c TB mutations: OK (no unexplained survivors)"
 else
   echo "i2c TB mutations: FAILED"
-  tail -20 /tmp/mutate_i2c.log
+  tail -20 "$CHIP_WT_DIR"/mutate_i2c.log
   stale=1
 fi
 
@@ -1172,92 +1172,92 @@ fi
 # then cmp-verifies that the tree was never written to -- a stronger statement
 # than "restored correctly". It is the slowest suite here (the servo TB is 66 s
 # per case) and runs at MUTATE_TIMING_JOBS, default 6.
-if run_mutation_suite mutate_timing_tb.sh ./regress/mutate_timing_tb.sh > /tmp/mutate_timing.log 2>&1; then
+if run_mutation_suite mutate_timing_tb.sh ./regress/mutate_timing_tb.sh > "$CHIP_WT_DIR"/mutate_timing.log 2>&1; then
   echo "timing TB mutations: OK (no unexplained survivors)"
 else
   echo "timing TB mutations: FAILED"
-  tail -20 /tmp/mutate_timing.log
+  tail -20 "$CHIP_WT_DIR"/mutate_timing.log
   stale=1
 fi
 
-if run_mutation_suite mutate_spi_tb.sh ./regress/mutate_spi_tb.sh > /tmp/mutate_spi.log 2>&1; then
+if run_mutation_suite mutate_spi_tb.sh ./regress/mutate_spi_tb.sh > "$CHIP_WT_DIR"/mutate_spi.log 2>&1; then
   echo "spi TB mutations: OK (no unexplained survivors)"
 else
   echo "spi TB mutations: FAILED"
-  tail -20 /tmp/mutate_spi.log
+  tail -20 "$CHIP_WT_DIR"/mutate_spi.log
   stale=1
 fi
 
 # The frame buffer's TB, mutation-tested on BOTH implementations (the macro and
 # the FLOP=1 fallback), because the fallback exists to stand in for the macro --
 # so a test that only covered one would leave that claim unchecked.
-if run_mutation_suite mutate_fbuf_tb.sh ./regress/mutate_fbuf_tb.sh > /tmp/mutate_fbuf.log 2>&1; then
+if run_mutation_suite mutate_fbuf_tb.sh ./regress/mutate_fbuf_tb.sh > "$CHIP_WT_DIR"/mutate_fbuf.log 2>&1; then
   echo "fbuf TB mutations: OK (no unexplained survivors)"
 else
   echo "fbuf TB mutations: FAILED"
-  tail -20 /tmp/mutate_fbuf.log
+  tail -20 "$CHIP_WT_DIR"/mutate_fbuf.log
   stale=1
 fi
 
-if run_mutation_suite mutate_eth_mac_tb.sh ./regress/mutate_eth_mac_tb.sh > /tmp/mutate_eth_mac.log 2>&1; then
+if run_mutation_suite mutate_eth_mac_tb.sh ./regress/mutate_eth_mac_tb.sh > "$CHIP_WT_DIR"/mutate_eth_mac.log 2>&1; then
   echo "eth_mac TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_mac TB mutations: FAILED"
-  tail -20 /tmp/mutate_eth_mac.log
+  tail -20 "$CHIP_WT_DIR"/mutate_eth_mac.log
   stale=1
 fi
 
 # The SoC-level Ethernet TB is the only proof a PROGRAM can consume a frame,
 # so it gets the same treatment the block TBs get.
-if run_mutation_suite mutate_eth_soc_tb.sh ./regress/mutate_eth_soc_tb.sh > /tmp/mutate_eth_soc.log 2>&1; then
+if run_mutation_suite mutate_eth_soc_tb.sh ./regress/mutate_eth_soc_tb.sh > "$CHIP_WT_DIR"/mutate_eth_soc.log 2>&1; then
   echo "eth_soc TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_soc TB mutations: FAILED"
-  tail -20 /tmp/mutate_eth_soc.log
+  tail -20 "$CHIP_WT_DIR"/mutate_eth_soc.log
   stale=1
 fi
 
 # The loader is how a program reaches silicon; its TB gets the same gate. The
 # run-transition cases (run rising in W_IDLE, W_PULSE or W_DONE) are the ones
 # the independent review found missing.
-if run_mutation_suite mutate_ctrl_tb.sh ./regress/mutate_ctrl_tb.sh > /tmp/mutate_ctrl.log 2>&1; then
+if run_mutation_suite mutate_ctrl_tb.sh ./regress/mutate_ctrl_tb.sh > "$CHIP_WT_DIR"/mutate_ctrl.log 2>&1; then
   echo "ctrl TB mutations: OK (no unexplained survivors)"
 else
   echo "ctrl TB mutations: FAILED"
-  tail -20 /tmp/mutate_ctrl.log
+  tail -20 "$CHIP_WT_DIR"/mutate_ctrl.log
   stale=1
 fi
 
 # The I2C transaction TB's DUT is the firmware, so its mutations are firmware
 # edits (bit order, repeated START, tLOW, STOP, arbitration, the tHD;DAT hold,
 # the read accumulator). Both the .pe and the .hex are restored and verified.
-if run_mutation_suite mutate_i2c_xfer_tb.sh ./regress/mutate_i2c_xfer_tb.sh > /tmp/mutate_i2c_xfer.log 2>&1; then
+if run_mutation_suite mutate_i2c_xfer_tb.sh ./regress/mutate_i2c_xfer_tb.sh > "$CHIP_WT_DIR"/mutate_i2c_xfer.log 2>&1; then
   echo "i2c_xfer TB mutations: OK (no unexplained survivors)"
 else
   echo "i2c_xfer TB mutations: FAILED"
-  tail -20 /tmp/mutate_i2c_xfer.log
+  tail -20 "$CHIP_WT_DIR"/mutate_i2c_xfer.log
   stale=1
 fi
 
 # The word engine's unit suite: the integration split bit_en into tx/rx
 # enables, and the TB's directed split case is what proves the sides are
 # independent.
-if run_mutation_suite mutate_serdes_tb.sh ./regress/mutate_serdes_tb.sh > /tmp/mutate_serdes.log 2>&1; then
+if run_mutation_suite mutate_serdes_tb.sh ./regress/mutate_serdes_tb.sh > "$CHIP_WT_DIR"/mutate_serdes.log 2>&1; then
   echo "serdes TB mutations: OK (no unexplained survivors)"
 else
   echo "serdes TB mutations: FAILED"
-  tail -20 /tmp/mutate_serdes.log
+  tail -20 "$CHIP_WT_DIR"/mutate_serdes.log
   stale=1
 fi
 
 # The word-engine integration: the plan's four required mutations (TX hold,
 # RX skip, doubled cell enable, strobe cross-wire) plus the two alignment
 # defects and the grid-aligned load. Each must fail tb_pe_soc_serdes.
-if run_mutation_suite mutate_soc_serdes_tb.sh ./regress/mutate_soc_serdes_tb.sh > /tmp/mutate_soc_serdes.log 2>&1; then
+if run_mutation_suite mutate_soc_serdes_tb.sh ./regress/mutate_soc_serdes_tb.sh > "$CHIP_WT_DIR"/mutate_soc_serdes.log 2>&1; then
   echo "soc serdes TB mutations: OK (no unexplained survivors)"
 else
   echo "soc serdes TB mutations: FAILED"
-  tail -20 /tmp/mutate_soc_serdes.log
+  tail -20 "$CHIP_WT_DIR"/mutate_soc_serdes.log
   stale=1
 fi
 
@@ -1266,11 +1266,11 @@ fi
 # preset 0x51, the ones-only cfg[7] rule and the cfg[6:4] run length, the
 # registered clr/rx_err contract (clr reaches every stage), and the pipeline
 # order / bypass subsets / half_phase. All 13 mutations must fail the TB.
-if run_mutation_suite mutate_codec_tb.sh ./regress/mutate_codec_tb.sh > /tmp/mutate_codec.log 2>&1; then
+if run_mutation_suite mutate_codec_tb.sh ./regress/mutate_codec_tb.sh > "$CHIP_WT_DIR"/mutate_codec.log 2>&1; then
   echo "codec TB mutations: OK (no unexplained survivors)"
 else
   echo "codec TB mutations: FAILED"
-  tail -20 /tmp/mutate_codec.log
+  tail -20 "$CHIP_WT_DIR"/mutate_codec.log
   stale=1
 fi
 
@@ -1280,19 +1280,19 @@ fi
 # and the done pulse. Two of them (pad-extra, ifg-95) SURVIVED the first
 # version of the suite and found two real gaps in tb_pe_eth_tx.v, which the
 # suite's own record carries.
-if run_mutation_suite mutate_ctrl_r3_tb.sh ./regress/mutate_ctrl_r3_tb.sh > /tmp/mutate_ctrl_r3.log 2>&1; then
+if run_mutation_suite mutate_ctrl_r3_tb.sh ./regress/mutate_ctrl_r3_tb.sh > "$CHIP_WT_DIR"/mutate_ctrl_r3.log 2>&1; then
   echo "ctrl R3 debug mutations: OK (no unexplained survivors)"
 else
   echo "ctrl R3 debug mutations: FAILED"
-  tail -20 /tmp/mutate_ctrl_r3.log
+  tail -20 "$CHIP_WT_DIR"/mutate_ctrl_r3.log
   stale=1
 fi
 
-if run_mutation_suite mutate_eth_tx_tb.sh ./regress/mutate_eth_tx_tb.sh > /tmp/mutate_eth_tx.log 2>&1; then
+if run_mutation_suite mutate_eth_tx_tb.sh ./regress/mutate_eth_tx_tb.sh > "$CHIP_WT_DIR"/mutate_eth_tx.log 2>&1; then
   echo "eth_tx TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_tx TB mutations: FAILED"
-  tail -20 /tmp/mutate_eth_tx.log
+  tail -20 "$CHIP_WT_DIR"/mutate_eth_tx.log
   stale=1
 fi
 
@@ -1302,11 +1302,11 @@ fi
 # convention and the window's push wrap. The pad mapping is only visible at
 # the PAD, so this harness runs BOTH tb_pe_soc_eth_loop and the pad-level
 # case in tb_tt_um_protocol_emulator.
-if run_mutation_suite mutate_eth_tx_loop_tb.sh ./regress/mutate_eth_tx_loop_tb.sh > /tmp/mutate_eth_tx_loop.log 2>&1; then
+if run_mutation_suite mutate_eth_tx_loop_tb.sh ./regress/mutate_eth_tx_loop_tb.sh > "$CHIP_WT_DIR"/mutate_eth_tx_loop.log 2>&1; then
   echo "eth_tx loopback TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_tx loopback TB mutations: FAILED"
-  tail -20 /tmp/mutate_eth_tx_loop.log
+  tail -20 "$CHIP_WT_DIR"/mutate_eth_tx_loop.log
   stale=1
 fi
 
@@ -1316,11 +1316,11 @@ fi
 # CRC's comparison, the CTS wait, the RTS assertion -- and each TB must catch
 # every one that applies to it. A survivor means the TB does not test what it
 # claims, which is the failure mode this project treats as worse than a red.
-if run_mutation_suite mutate_fwbus_tb.sh ./regress/mutate_fwbus_tb.sh > /tmp/mutate_fwbus.log 2>&1; then
+if run_mutation_suite mutate_fwbus_tb.sh ./regress/mutate_fwbus_tb.sh > "$CHIP_WT_DIR"/mutate_fwbus.log 2>&1; then
   echo "fw-bus TB mutations: OK (no unexplained survivors)"
 else
   echo "fw-bus TB mutations: FAILED"
-  tail -20 /tmp/mutate_fwbus.log
+  tail -20 "$CHIP_WT_DIR"/mutate_fwbus.log
   stale=1
 fi
 

@@ -81,9 +81,33 @@ CHIP_RUN_SCRIPT_ARGS=("$@")
 # PER-WORKTREE by default (2026-09-25, parallel workers): concurrent runs in
 # DIFFERENT worktrees are safe (disjoint files); the hazard is concurrent runs
 # in the SAME worktree, which is what this lock exists for.
+#
+# CORRECTED 2026-09-26, because the premise above was half false and the false
+# half is what let a 35-minute run be lost. The FILES are disjoint per worktree.
+# The compiled artifacts are not: the mutation harnesses wrote their .vvp and
+# log paths as FIXED GLOBAL /tmp names, so two worktrees running the same
+# harness executed the SAME binary path concurrently -- each correctly holding
+# its own per-worktree lock, which is exactly why nobody noticed. Measured:
+# two `vvp` processes on one /tmp/mut_eth_tx_tt.vvp, one per worktree, and
+# vm_final2 came back RED on "eth_tx loopback TB mutations" while the identical
+# harness on the identical tree passed once the collision was gone.
+#
+# So the lock's scope was NARROWER than the shared resource it protects, and
+# the dep-guard could not see it either: its watch set is this worktree's
+# scripts and RTL targets, so a collision in /tmp leaves every guard provably
+# clean and the run still wrong. The per-worktree scratch dir below is the
+# narrowest thing that makes the premise true.
 _wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
 CHIP_RUN_LOCK_FILE="${CHIP_RUN_LOCK_FILE:-/tmp/chip-run-all.${_wt:-shared}.lock}"
 CHIP_RUN_OWNER_FILE="${CHIP_RUN_OWNER_FILE:-/tmp/chip-run-all.${_wt:-shared}.owner}"
+
+# Every artifact a run compiles, logs or tails lives HERE, not in a global /tmp
+# name, so two worktrees cannot collide on one another's binaries. Same hash as
+# the lock above, so a human reading /tmp can tell whose is whose. Exported
+# because the harnesses are invoked as separate processes by run_all.sh.
+CHIP_WT_DIR="${CHIP_WT_DIR:-/tmp/chip-wt.${_wt:-shared}}"
+export CHIP_WT_DIR
+mkdir -p "$CHIP_WT_DIR" 2>/dev/null || :
 
 # The pids this run owns, and nothing else.
 #

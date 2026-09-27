@@ -22,7 +22,7 @@ RTL="$ROOT/rtl/pe_soc.v"
 TB="$ROOT/tb/tb_pe_soc_eth.v"
 SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
 SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v $SRAM_MODEL $TB"
-LOG=/tmp/mutate_eth_soc.log
+LOG="$CHIP_WT_DIR"/mutate_eth_soc.log
 BAK=$(mktemp /tmp/pe_soc.XXXXXX.v)
 
 # EVERY file this harness can mutate is snapshotted, not just pe_soc.v. The
@@ -75,11 +75,11 @@ fail=0
 survived=0
 
 run_tb() {
-  if ! iverilog -g2012 -s tb_pe_soc_eth -o /tmp/mut_eth_soc.vvp $SRCS \
-       >/tmp/mut_eth_soc_cc.log 2>&1; then
+  if ! iverilog -g2012 -s tb_pe_soc_eth -o "$CHIP_WT_DIR"/mut_eth_soc.vvp $SRCS \
+       >"$CHIP_WT_DIR"/mut_eth_soc_cc.log 2>&1; then
     return 2
   fi
-  timeout 300 vvp /tmp/mut_eth_soc.vvp >"$LOG" 2>&1
+  timeout 300 vvp "$CHIP_WT_DIR"/mut_eth_soc.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
 

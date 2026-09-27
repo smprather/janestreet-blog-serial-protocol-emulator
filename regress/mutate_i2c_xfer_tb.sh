@@ -32,9 +32,9 @@ MUTABLE="firmware/i2c_xfer.pe firmware/i2c_xfer.hex"
 TB="$ROOT/tb/tb_pe_soc_i2c_xfer.v"
 SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
 SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v $SRAM_MODEL"
-# run_all.sh captures this script's stdout in /tmp/mutate_i2c_xfer.log; keep
+# run_all.sh captures this script's stdout in $CHIP_WT_DIR/mutate_i2c_xfer.log; keep
 # each simulator run on a different path so it cannot truncate the outer log.
-LOG=/tmp/mutate_i2c_xfer_case.log
+LOG="$CHIP_WT_DIR"/mutate_i2c_xfer_case.log
 BAK=$(mktemp -d /tmp/i2c_xfer_mut.XXXXXX)
 
 cleanup() { cp "$BAK/i2c_xfer.pe" "$PE" 2>/dev/null; cp "$BAK/i2c_xfer.hex" "$HEX" 2>/dev/null; rm -rf "$BAK"; }
@@ -50,14 +50,14 @@ pass=0; fail=0; survived=0
 mkdir -p "$ROOT/sim"
 
 run_tb() {
-  if ! python3 "$ROOT/tools/fw/peasm.py" "$PE" -o "$HEX" >/tmp/mut_i2c_xfer_asm.log 2>&1; then
+  if ! python3 "$ROOT/tools/fw/peasm.py" "$PE" -o "$HEX" >"$CHIP_WT_DIR"/mut_i2c_xfer_asm.log 2>&1; then
     return 2
   fi
   if ! (cd "$ROOT/sim" && iverilog -g2012 -s tb_pe_soc_i2c_xfer \
-        -o /tmp/mut_i2c_xfer.vvp $SRCS "$TB") >/tmp/mut_i2c_xfer_cc.log 2>&1; then
+        -o "$CHIP_WT_DIR"/mut_i2c_xfer.vvp $SRCS "$TB") >"$CHIP_WT_DIR"/mut_i2c_xfer_cc.log 2>&1; then
     return 2
   fi
-  (cd "$ROOT/sim" && timeout 300 vvp /tmp/mut_i2c_xfer.vvp) >"$LOG" 2>&1
+  (cd "$ROOT/sim" && timeout 300 vvp "$CHIP_WT_DIR"/mut_i2c_xfer.vvp) >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
 

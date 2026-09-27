@@ -90,8 +90,8 @@ RTL="$ROOT/rtl/pe_eth_tx.v"
 # NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
 # escalates to running every suite rather than guessing.
 MUTABLE="rtl/pe_eth_tx.v"
-LOG=/tmp/mutate_eth_tx.log
-CCLOG=/tmp/mutate_eth_tx_cc.log
+LOG="$CHIP_WT_DIR"/mutate_eth_tx.log
+CCLOG="$CHIP_WT_DIR"/mutate_eth_tx_cc.log
 PRISTINE=$(mktemp -d /tmp/pristine_eth_tx_tb.XXXXXX)
 BAK=$(mktemp -d /tmp/backup_eth_tx_tb.XXXXXX)
 
@@ -109,9 +109,9 @@ cmp -s "$RTL" "$PRISTINE/pe_eth_tx.v" || { echo "FATAL: could not snapshot $RTL"
 # Same source list as run_all.sh's tb_pe_eth_tx case (no SRAM model: the
 # engine + the CRC engine are the whole design here).
 run_tb() {
-  iverilog -g2012 -s tb_pe_eth_tx -o /tmp/mut_eth_tx.vvp \
+  iverilog -g2012 -s tb_pe_eth_tx -o "$CHIP_WT_DIR"/mut_eth_tx.vvp \
     ../rtl/pe_eth_tx.v ../rtl/pe_crc.v ../tb/tb_pe_eth_tx.v >"$CCLOG" 2>&1 || return 2
-  timeout 300 vvp /tmp/mut_eth_tx.vvp >"$LOG" 2>&1
+  timeout 300 vvp "$CHIP_WT_DIR"/mut_eth_tx.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
 
