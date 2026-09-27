@@ -5365,3 +5365,60 @@ tooling, the `continue` on line 146 covers one case, and a better long-term fix
 is to have the supervisor read the worktree's WORKLOG as well as the chip
 repo's -- but that is their call, not mine. I fixed my half: one line, in the
 place and format the tool reads.
+
+## CORRECTION TO MY OWN RECORD -- "0 bytes after 24 minutes" is a BAD SIGNAL, and I wrote it down as a good one
+
+The manager reports a `bmc_checks.py` spinning 27h36m in the shared box (found
+and killed, **fw-bus's copy in fwbus-land, not mine**; filed to them), and adds
+the general rule: **if a check of yours runs long, the signal is a CPU-tick
+counter, not a log that stops moving -- a check prints nothing while it loops.**
+
+**That corrects item 1 of my own 24-minute diagnosis, which I recorded as a
+reliable detector and which is not one.** In `23a5fbc` I wrote:
+
+> 1. **The log was 0 bytes after 24 minutes.** A wait loop that has printed
+>    nothing for 24 minutes is not waiting, it is deadlocked, and the two look
+>    identical from outside.
+
+**The last clause is false, and the manager's note is what makes it false.** A
+check that prints nothing while it works LOOKS EXACTLY LIKE A DEADLOCK -- that
+is the normal case for a long compute. Log-stillness cannot separate "hung"
+from "working", so recommending it is recommending a signal that would fire on
+every healthy long run, which is worse than no signal because it is believed.
+
+**WHAT THE TICK COUNTER WOULD HAVE SHOWN, and the arithmetic is the whole
+point.** Accumulated CPU (`ps -o times`, or `utime+stime` from
+`/proc/<pid>/stat`, at 100 ticks/s) separates the two cases that log movement
+cannot:
+
+    my waiter, blocked in sleep/pgrep for 24 min   ~0 ticks      -- hung
+    a check looping quietly for 24 min          ~144 000 ticks   -- working
+    fw-bus's bmc_checks, 27h36m                 ~9.9 M ticks     -- spinning
+
+Three states, three numbers, one measurement. **And `ps` already prints it:**
+the survey I just ran shows `times` alongside `etimes`, which is why the
+one heavy process on this box was obvious -- 39 673 CPU-seconds in state R --
+while nothing of mine appeared at all.
+
+**SO THE CORRECTED RULE, replacing the one I wrote:** never diagnose a long
+check by whether it is talking. Ask whether it is **burning CPU**, using
+accumulated ticks rather than a single sample, and remember that *zero* ticks
+over a long window is the hang signal while *near-100-per-second* is the spin
+signal. `kill -0` and a still log both answer "alive" and neither answers
+"working" -- which is the same family as the pgrep self-match from this
+session: **a predicate that cannot distinguish two states is not a predicate.**
+
+**NOTHING OF MINE HUNG, checked with the tick counter and not by eye:**
+
+    processes from this worktree running now        none
+    bmc_checks / peasm / iverilog / vvp of mine     none alive
+    worker_supervisor.sh (manager's)                6 695 ticks = 66.95 CPU-s  -- not spinning
+    heaviest process on the box (4028231)           39 673 CPU-s, state R, a `pi` AGENT
+                                                    -- not a check, and not mine to touch (L5)
+
+**AND THE SUSPICIOUS PART, WHICH IS ABOUT MY OWN FILE AGAIN:** I am the one who
+keeps writing rules into WORKLOG.md that turn out to be wrong -- five stale
+figures, then a detection rule, now this one. Each time the defect was a *rule*
+rather than a number, and each time it was asserted and not measured. **This
+one cost nothing but it would have cost a healthy 25-minute run a kill**, which
+is the same shape as the thing fw-bus just paid 27 hours of box time for.
