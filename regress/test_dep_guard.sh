@@ -402,8 +402,24 @@ else
   bad "an external edit was not tagged cause: external (exit $rc): $out"
 fi
 
+# ANTI-VACUITY, and here it is load-bearing rather than decorative. The
+# denominator used to be COMPUTED from the same counter as the numerator
+# ($((pass+fail))), which is self-consistent by construction: delete a case and
+# the summary still reads all-green, one case smaller, so the file could never
+# notice it had stopped testing something. A guard that has never been seen to
+# fail is not a guard, so the count is bound to a DECLARED number and the
+# self-test refuses to report success unless it exercised exactly that many
+# cases. verify_merge carries the same guard; this is the same property.
+want_cases=15
 if [ "$fail" -ne 0 ]; then
   echo "dep_guard self-test: $fail of $((pass+fail)) FAILED"
   exit 1
 fi
-echo "dep_guard self-test: $pass/$((pass+fail)) cases, the pre-flight fires and stays quiet"
+if [ "$pass" -ne "$want_cases" ]; then
+  echo "dep_guard self-test: FAIL -- exercised $pass case(s), expected $want_cases."
+  echo "  The self-test would pass while checking less than it claims: a case was"
+  echo "  removed, skipped or neutered. Fix the fixture or the expectation; do not"
+  echo "  lower want_cases to make this go away."
+  exit 1
+fi
+echo "dep_guard self-test: $pass/$want_cases cases, the pre-flight fires and stays quiet"
