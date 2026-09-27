@@ -42,6 +42,18 @@ cd "$(dirname "$0")/.." || exit 1
 chip_take_run_lock "$(basename "$0")"
 ROOT="$PWD"
 SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
+# WHAT THIS HARNESS MUTATES, declared so regress/check_mutation_lists.sh can map
+# a suite to the files it guards, and so verify_merge.sh can narrow instead of
+# running all sixteen. Missing here is a GATE FAILURE, not a comment: it makes
+# this the one harness of the sixteen that verify_merge.sh cannot narrow, which
+# is how the omission was found -- a FILTERED run of run_all.sh refused to
+# proceed. It was lost in a merge that took this file over an older copy that
+# had the line, which is the whole hazard of resolving a conflict toward
+# "mine": mine was correct about the mutations and stale about the convention.
+# The DUT is the FIRMWARE for every case, so the mutable set is each program's
+# source and its assembled image -- the .hex because the harness reassembles it
+# after each edit and restores it afterwards.
+MUTABLE="firmware/dmx512.hex firmware/dmx512.pe firmware/i2c_adv.hex firmware/i2c_adv.pe firmware/midi_xfer.hex firmware/midi_xfer.pe firmware/spi_mode3.hex firmware/spi_mode3.pe firmware/uart_flow.hex firmware/uart_flow.pe"
 SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v $SRAM_MODEL"
 # EVERY /tmp PATH IN THIS HARNESS IS WORKTREE-SCOPED, and the reason is not
 # tidiness -- it is a measurement that came out wrong.
