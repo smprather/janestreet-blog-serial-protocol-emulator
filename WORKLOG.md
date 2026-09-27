@@ -4976,3 +4976,35 @@ the ones to distrust -- so it is named here rather than left implied.
 2. **The `$display` label** above: labelling the two figures fixes the source of
    the propagation for good, and is a behaviour-visible change to a testbench's
    stdout. Cheap, but it is not comment-only and was out of the granted scope.
+
+---
+
+## IDLE-QUEUE-EMPTY -- timing protocols, Block 3 (2026-09-27, sweep complete)
+
+The re-opened sweep is done and this is the terminal state. **Four files read,
+one wrong figure found, in two of them; the (c) act's headers are clean.**
+
+Decisions left with the manager, both one-line and neither taken unilaterally:
+
+1. `run_all.sh`'s (b) case comment -- "twelve banked points from 158 Hz to
+   10 kHz", the same unit error as the two I fixed. It is a **gate script**,
+   and `dep_guard.sh` exists because editing a harness mid-run can make it
+   report a false PASS, so it should be a deliberate act and not a drive-by.
+2. Labelling the two figures in `tb_pe_soc_freqmeter.v`'s `$display`, which
+   fixes the source of the propagation for good. Behaviour-visible, so out of
+   the comment-only scope the sweep was granted.
+
+Nothing else is open. Block 3 stands complete: all three acts green and in the
+regression unmarked (`TOTAL: 48 PASS: 48 FAIL: 0`, `FIRMWARE 43/43`), the
+routed comment batch done or routed, and the state document agreeing with the
+gate. Commits this session: `9d462b3`, `5e01c24`, `83f1fba`, `e55b626`,
+`7fe4a1f`.
+
+**THE ONE FIGURE I COULD NOT SETTLE, restated because it is the one to distrust:**
+`bmc_frame.pe` L136's "18 twos and 13 fours over one frame and no six" is
+UNCHECKED -- confirming it needs the write-hook instrumented. This block's
+unchecked-duplicate class was wrong 3 times out of 3, so it is named rather
+than left implied. Everything else in these four files is either verified
+against a constant, verified on the wire, or verified by a gate.
+
+`formal/results/summary.txt` still uncommitted (nondeterministic `MEM` peak).
