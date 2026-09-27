@@ -6,6 +6,51 @@ This is the record to continue from. Written so the next session does not
 rederive anything: what is green, what is with the manager, and the findings
 that are worth more than the fixes they came from.
 
+
+## CHAIN STATE — read this first
+
+Five dispatched items. **All five are DONE and on `main`.** Every cite below was
+re-measured at the time of this wrap, not carried from an earlier entry.
+
+| # | item | status | cite (current line numbers) |
+| --- | --- | --- | --- |
+| 1 | wip-count arithmetic fix | **DONE** | `63d49fe`; `regress/verify_merge.sh:748` counts `WIP_N` from the run's own `KNOWN-WIP` line, `:850` computes `WANT_RAN=$((TOTAL + WIP_N))`. In force: the GREEN run reported **47 cases** |
+| 2 | F1 enforcer (TXLEN latch atomicity) | **DONE** | `b65cd9e`, 106 insertions / **0 deletions** across `tb/tb_pe_eth_tx.v` (+67) and `regress/mutate_eth_tx_tb.sh` (+39). Both observables present: the port pair `tb/tb_pe_eth_tx.v:117` and the hierarchical read `:601`/`:603`, with `:113` documenting why the hierarchical read exists alongside the ports. Green in-suite: `eth_tx TB mutations: OK` |
+| 3 | R3 README sync | **DONE — nothing to regenerate** | `a9ca7c5` already on `main`: `reviews/2026-09-25/r3-hex/README.md` and `tb/r3-vectors/README.md` are **byte-identical** (`diff` returns 0), both paths clean, and neither contains the stale "never run" sentence. The citation behind the claim is live: `tb_pe_ctrl_r3_conf PASS` in this session's run |
+| 4 | `annotate_r3_confirmations` claim check | **DONE** | `0b6fa70`; `readme_claim_ok` at `tools/gen/annotate_r3_confirmations.py:222`, applied to both READMEs at `:340`. Proven by a **negative control** (`diff -r` passes on a jointly-stale pair, this check fails) and in-suite: `R3 golden package: OK` |
+| 5 | `run_all.sh` freqmeter comment | **DONE** | `ce4cfdd`; `regress/run_all.sh:234` now reads *"Twelve banked points from **100 Hz to 12.5 kHz**"*. It was wrong at BOTH ends: 158 Hz is `p_us[0]`, run 0's un-banked warm-up, and 80 is **microseconds** = 12.5 kHz |
+
+**One run proves items 1–4 together** (`/tmp/vm_final3.log`, the 21:50 GREEN):
+`MERGE GATE: GREEN — HEAD (47 case(s) run, 16/16 mutation suites run)`,
+`VERIFY_MERGE_EXIT=0`.
+
+### Caveat on that GREEN, stated rather than buried
+
+The **wiki gate negative control** line in that run (`46 passed, 0 failed`) was
+green **vacuously**: my own `8fea9fc` routed every gate log behind
+`$CHIP_WT_DIR`, the wiring fixture did not set it, the redirect became
+unwritable `/`, the gate went RED — and that control *wants* red. `587b425`
+(23:19) fixed it. The 47 cases and 16 suites are unaffected and stand; that one
+leg was not real. See finding 5.
+
+### What remains — three DECISIONS, not tasks
+
+1. **The wiki copy of the banked range.** `protocol-freqmeter.md`, the sentence
+   containing *"twelve points spanning 158 Hz"* (line 257 as of `4066c8e`) is
+   wrong, and the wrong sentence is on **all 12 refs** with **no ref carrying a
+   fix**. `7fe4a1f` (unmerged) fixes the testbench copy only. **The sentence
+   containing *"sweeps the input over 158 Hz"* (line 38) is CORRECT — do not
+   "fix" it.** See decision 1 below.
+2. **The `fwbus/block3-land` merge.** `regress/mutate_fwbus_tb.sh` conflicts in
+   3 hunks. If their `LOG=/tmp/mutate_fwbus_case.${_wt}.log` wins, the
+   tmp-isolation lint **reds the suite** — not because their fix is wrong, but
+   because the lint exempts `CHIP_WT_DIR` and `_diag_wt` and not `_wt`. Their
+   harness already sources `run_lock.sh`, so delete their three local `_wt`
+   lines and use the exported variable. See decision 2.
+3. **The freqmeter `$display` — the generator of item 5.** See decision 3.
+
+---
+
 ---
 
 ## The one-line version
