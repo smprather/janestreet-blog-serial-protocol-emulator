@@ -95,6 +95,15 @@ BAK=$(mktemp -d /tmp/fwbus_mut.${_wt}.XXXXXX)
 FWS="i2c_adv spi_mode3 uart_flow midi_xfer dmx512"
 
 cleanup() {
+  # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). Verified HERE because
+  # this is the only place it can be: this script sets its own `trap cleanup
+  # EXIT` after sourcing run_lock.sh, and a second EXIT trap REPLACES the first,
+  # so a check installed over there would be silently discarded. If this script
+  # or the lock helper it sources changed while we were running, bash's
+  # incremental read makes our verdict untrustworthy in EITHER direction -- so
+  # exit 4 (INCONCLUSIVE) rather than report a possibly-false pass. That is the
+  # whole reason this line exists and not a belt-and-braces one.
+  chip_dep_check "run_$(basename "$0")" || exit 4
   for f in $FWS; do
     cp "$BAK/$f.pe" "$ROOT/firmware/$f.pe" 2>/dev/null
     cp "$BAK/$f.hex" "$ROOT/firmware/$f.hex" 2>/dev/null
@@ -109,6 +118,10 @@ for f in $FWS; do
   cp "$ROOT/firmware/$f.pe"  "$BAK/$f.pe"
   cp "$ROOT/firmware/$f.hex" "$BAK/$f.hex"
 done
+# The snapshot exists NOW, so the pristine state is established and can be
+# declared -- and never before: a declaration the harness has not yet earned is
+# one the sampler could legitimately contradict.
+chip_dep_expect pristine $MUTABLE
 
 pass=0; fail=0; survived=0; hangs=0
 
@@ -254,6 +267,9 @@ check_mutation() {
     echo "  [$name] HARNESS ERROR: anchor not found in $fw.pe"
     restore; fail=$((fail+1)); return
   fi
+  # This case has now edited the file, and run_tb will reassemble the image, so
+  # the mutated state is earned -- declare it before the run, not after it.
+  chip_dep_expect mutated "$ROOT/firmware/$fw.pe" "$ROOT/firmware/$fw.hex"
   run_tb "$fw" "$tb"
   local rc=$?
   if   [ $rc -eq 0 ]; then
