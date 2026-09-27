@@ -613,35 +613,74 @@ measures one distance per run.
 
 ---
 
-## THE MERGE-ORDER DEPENDENCY THE NEXT CONTEXT MUST NOT MISS
+## THE MERGE-ORDER DEPENDENCY -- **CORRECTED 2026-09-27, THE TABLE BELOW WAS INVERTED**
 
-**fw-bus-protocols commit `1798abf` already corrects `firmware/dmx512.pe` AND
-`firmware/spi_mode3.pe`** ("docs(firmware): correct two header figures the wire
-contradicts"). The routed comment batch was already actioned by the worker who
-owns those files; neither needs doing again.
+**Everything in this section was wrong, and it was wrong in the way this block's
+own wrap point predicts: a derivation recomputed on paper instead of measured,
+and the two workers ended up each certain about the other's list.**
 
-Two things to know before that branch is merged:
+The claim it made, for the record, so the error is traceable: that the code
+builds `0x1134, 0x2245, 0x3356`, that the comment's `0x1134, 0x1245, 0x1356`
+was "wrong for two of the three", and that the first list therefore owes the
+wire `0x6F, 0x5C, 0x4D` while `1798abf`'s `0x6D, 0x6C, 0x6F` goes stale.
 
-1. **My `spi_mode3.pe` word-list fix is a different line and does not conflict.**
-   Line 224 adds the word index (0, 17, 34) to BOTH bytes as independent 8-bit
-   adds, so the words are `0x1134, 0x2245, 0x3356` -- the comment said
-   `0x1134, 0x1245, 0x1356`, wrong for two of the three. I reverted my own
-   edit of the response line precisely BECAUSE `1798abf` edits that same line
-   better (it derives the wire byte as the high byte XOR 0x7E), so my branch
-   still carries the stale response list and theirs replaces it cleanly.
+**It is the other way round, and the wire settles it.** `firmware/spi_mode3.pe`
+state 0 assembles `LDI A, 0x11 / MOV X, A / LDM A, 5 / ADD A, X` -- the high
+byte is `0x11 + i`, so the high bytes are `0x11, 0x12, 0x13` and the words are
+**`0x1134, 0x1245, 0x1356`**. The file's own prose at state 0 already said so.
+The high bytes are NOT `0x22, 0x33`; nothing in the program can produce them.
 
-2. **THE TWO FIXES INTERACT, AND `1798abf` FIGURES BECOME WRONG WITH MINE.**
+Measured, not derived -- `tb_pe_soc_spi3.v` run against the assembled image:
 
-   | | high bytes | wire bytes |
-   |---|---|---|
-   | corrected words `0x1134, 0x2245, 0x3356` | `0x11, 0x22, 0x33` | **`0x6F, 0x5C, 0x4D`** |
-   | old list `0x1134, 0x1245, 0x1356` | `0x11, 0x12, 0x13` | `0x6D, 0x6C, 0x6F` <- what 1798abf states |
+    CS_N high -> frame 0: word=1134 crc_in=ce (want ce) | MISO carried resp=6f
+    CS_N high -> frame 1: word=1245 crc_in=a1 (want a1) | MISO carried resp=6c
+    CS_N high -> frame 2: word=1356 crc_in=cd (want cd) | MISO carried resp=6d
+    PASS: tb_pe_soc_spi3
 
-   So `1798abf` is right for the words the comment used to claim and wrong for
-   the words the code builds. **Whichever commit lands second has to recompute
-   the response bytes from the corrected words.** That is the one thing in this
-   block that two workers have to agree on, and it is arithmetic rather than
-   judgement.
+| | high bytes | wire bytes | |
+|---|---|---|---|
+| **`0x1134, 0x1245, 0x1356`** | `0x11, 0x12, 0x13` | **`0x6F, 0x6C, 0x6D`** | the code's, and the measured |
+| `0x1134, 0x2245, 0x3356` | `0x11, 0x22, 0x33` | `0x6F, 0x5C, 0x4D` | the stale comment, never sent |
+
+**So `0x6F, 0x5C, 0x4D` is not what "the corrected words" give -- it is what the
+STALE `0x22/0x33` high bytes give** (`0x22^0x7E = 0x5C`, `0x33^0x7E = 0x4D`),
+which is why it looked authoritative: it is real arithmetic, of the wrong
+words. And the other row was wrong in ORDER as well as in its label: `0x11,
+0x12, 0x13` gives `0x6F, 0x6C, 0x6D`, not `0x6D, 0x6C, 0x6F`. The rule is
+`resp = word_high XOR 0x7E` (`RESP_MASK[15:8]`), which is monotone-inverting
+here, so the first and last swap.
+
+**`1798abf` is the one that had the words right** -- its `0x11, 0x12, 0x13` is
+the code -- so it did not need recomputing after all, and the merge-order
+dependency this section was built to warn about **does not exist**. There was
+never an interaction; there was one list, one derivation, and a swap.
+
+**THREE THINGS THAT SECTION GOT WRONG BEYOND THE TABLE, all now settled:**
+
+1. **A mis-citation above.** The handwrap point lists "spi_mode3 word list
+   (`4a7e172`)". `4a7e172` is *"join the sentence my rewrap had split"* -- a
+   rewrap. The commit that put the word list in is **`f768e5a`**, *"the SPI mode
+   3 word list is 0x1134, 0x2245, 0x3356"*, and it is the one that is wrong. The
+   code it was documenting has not changed since `0d776e3`, so it was wrong on
+   the day it landed.
+2. **A THIRD response set existed and nobody had seen it.** The file carried
+   `0x6B, 0x2C, 0xD9` on the same line -- answering to neither word list, and
+   to no XOR mask either. Three sets of response bytes in one repository for
+   one slave model. Corrected to `0x6F, 0x6C, 0x6D`.
+3. **`1798abf` is not in this branch.** `git merge-base --is-ancestor 1798abf
+   HEAD` is false, and `firmware/dmx512.pe` **does not exist in this worktree at
+   all** -- no file, and no mention of "dmx512" anywhere under `firmware/`. It
+   is fw-bus's file on their branch. The routed batch item "dmx512.pe NOP count"
+   is therefore **not actionable here**, and no fix was invented for it.
+
+**What landed on this branch, all comment-only and all with the image md5
+unchanged (`spi_mode3.hex` = `0e48460d0200c067ad8626b1dd1b77ba` before and
+after):** the word list at line 56, the response bytes at line 60, and this
+section. The other two routed items were already in and were **re-verified
+rather than redone**: `cacaf23` (`(2,13)` = 69 clocks = 1.15 us) checks out
+against the same `clocks = n3*(2*n2) + 17` that `servo_sweep.pe` states, and
+that formula reproduces its own `625 clocks = 10.4 us` too; `4355c29`'s
+servo intermediates are internally consistent to 0.1 us across all five rows.
 
 ## AND THE PATTERN ACROSS ALL FIVE
 

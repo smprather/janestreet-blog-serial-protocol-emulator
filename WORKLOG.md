@@ -4414,3 +4414,99 @@ the box has to be busy for. If it is green here, the load was the whole story.
 If it is red on a quiet box, there is a second cause and the fix is incomplete --
 and "the fix is incomplete" is the outcome I would rather find now than have
 discovered from a merge.
+
+## 2026-09-27 act (c): TASK-START -- THE FULL GATE, AND THE COMMENT BATCH THAT IS NOT DONE
+
+**First command was the gate. The gate did not run: the lock refused.**
+
+    ./regress/run_all.sh
+    run_all.sh: REFUSING TO START — another run already holds
+      /tmp/chip-run-all.2811a17f.lock.
+      current holder: run_all.sh pid=1344027 started=2026-09-26 18:33:17 CDT
+
+Not a stale lock and not a zombie: `/proc/1344027/cwd -> sim/`, state `S`, fd 1
+and 2 on `/tmp/gate_full.log`, parented to `systemd --user` — **another session's
+full gate, live, in this worktree**, started one minute before this session.
+So the lock did exactly what it was fixed to do, and the right move is to wait
+for it, not to kill it. Liveness was measured on a GROWING FILE, not on
+`kill -0`: the log went 2910 -> 8327 bytes over the run.
+
+**That run measured the four claims in the previous entry, and all four are
+green — including the one that was open:**
+
+| claim | last entry | the concurrent gate |
+| :--- | :--- | :--- |
+| `FIRMWARE: 43   PASS: 43   FAIL: 0` | measured | **confirmed** |
+| suite is 48 cases | counting the array | **`TOTAL: 48   PASS: 48   FAIL: 0`** |
+| `tb_pe_soc_bmc` passes unmarked | deduction | **`tb_pe_soc_bmc      PASS`** |
+| `run-lock process tree` | deduction | **`OK (every signal reaps the run; no bystander killed)`** |
+
+The run-lock row is the interesting one, because the predecessor flagged it as
+the outcome worth finding: "if it is red on a quiet box, there is a second
+cause". It is green here **under load** — that run held the lock while this
+session's run was refused by it inside the same minute. So the box being busy
+was the whole story, and the fix is complete.
+
+**BUT THE GATE IS RED ANYWAY, on something that is not mine and not new:**
+
+    R3 golden package: FAILED (package drift or a stale generated include)
+    diff -r ... reviews/2026-09-25/r3-hex/README.md tb/r3-vectors/README.md
+    10c10
+    < **Status: NOT chip-confirmed** - 25 of 26 steps are CHIP-CONFIRMED IN SIMULATION ...
+    > **Status: NOT chip-confirmed** - NOT CHIP-CONFIRMED. Reconciled against
+      the implemented R3 contract ... no step here has been run against the
+      chip's tb_pe_ctrl_r3 yet, so every step is chip_confirmed=false.
+
+`git diff HEAD` on both files is EMPTY, so the drift is **committed at HEAD**:
+the gate was already red on arrival and says so for a reason that has nothing
+to do with timing. This is the R3 debug-control README pair, and the two
+paragraphs are two different eras of the same file.
+
+**Now the comment batch, and the brief's "if not done" is load-bearing — it is
+NOT all done, and the part that is missing is the part that is wrong.**
+
+    4355c29  IN HEAD   servo_sweep intermediates
+    cacaf23  IN HEAD   peasm (2,13) = 1.15 us
+    4a7e172  IN HEAD   spi_mode3 word list
+    1798abf  NOT IN HEAD   fw-bus's two header figures
+    222f384  IN HEAD   my duplicate reverted (fw-bus had done it better)
+
+Two things fall out of that table.
+
+**1. `firmware/dmx512.pe` DOES NOT EXIST in this worktree.** No file, no mention
+of "dmx512" anywhere under `firmware/`. It is fw-bus's file on their branch;
+`1798abf` is their commit and it is not an ancestor of this HEAD. The brief's
+fourth comment item is therefore not actionable here, and I am not going to
+manufacture a fix for a file I cannot see.
+
+**2. `spi_mode3.pe` carries a figure that contradicts the code it documents,
+and BLOCK3-STATE.md's cross-worker note has the two halves the wrong way up.**
+
+Line 56 states the words are `0x1134, 0x2245, 0x3356`. The code two hundred
+lines below, in the same file, assembles
+
+    LDI A, 0x11 / MOV X, A / LDM A, 5 / ADD A, X   ; high byte = 0x11 + i
+
+so the high bytes are 0x11, 0x12, 0x13 and the words are **0x1134, 0x1245,
+0x1356** — which is what the file's OWN prose at line 195 already says. The
+TB is the third authority and it agrees with the code: `sl_resp =
+sl_word[15:8] ^ RESP_MASK[15:8]` with `RESP_MASK = 16'h7E5A`, i.e.
+
+    0x11 ^ 0x7E = 0x6F    0x12 ^ 0x7E = 0x6C    0x13 ^ 0x7E = 0x6D
+
+**BLOCK3-STATE says the corrected words "give 0x6F, 0x5C, 0x4D". They do
+not — 0x6F, 0x5C, 0x4D is the response set for the STALE 0x22/0x33 high bytes
+(0x22^0x7E = 0x5C, 0x33^0x7E = 0x4D).** So the note has the branches exactly
+backwards, and the third set in the file, the `0x6B, 0x2C, 0xD9` on line 60,
+answers to NEITHER word list. Three sets of response bytes in one repository
+for one slave model.
+
+`f768e5a` ("the word list is 0x1134, 0x2245, 0x3356") is the commit that put
+the wrong one in, and the code it was documenting had not changed since
+`0d776e3`. This is the wrap point's own finding, live: a number asserted in a
+second place, that nobody recomputed. The fix is comment-only, and the check
+that it is comment-only is the assembled image md5, unchanged across it.
+
+Work queue, in order: (1) measure the wire, do not reason about it; (2) correct
+the two figures and BLOCK3-STATE's inverted note; (3) BLOCK3-STATE upkeep;
+(4) my OWN end-to-end `run_all.sh`, once the lock is free.
