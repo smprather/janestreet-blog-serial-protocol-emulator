@@ -1,6 +1,7 @@
 import re
 import subprocess
 import sys
+import time
 
 # The two file operations below are deliberately LOUD and deliberately NOT
 # silent-and-clean, and the explicit SystemExit is what keeps them that way: this
@@ -288,9 +289,28 @@ def step(state, a):
     return (A, X, None)
 
 
-# The most walk states `routes` may explore before it gives up and says so. -1
-# in ROUTE_STATES means the cap was HIT, which is a failure, not a pass.
+# The most walk states `routes` may explore in ONE call before it gives up and
+# says so. This is a PER-CALL budget, and that is the whole point of the
+# rewrite below: the first version kept a single module-level counter and
+# reported exhaustion by setting it to -1, which meant the SECOND call to
+# routes() compared `1 > -1`, tripped on its first iteration and returned
+# nothing. The half-interval check calls routes() twice (the loop interval,
+# then the entry interval), so exhausting the first silently emptied the
+# second -- a check that reported a clean, empty answer for a walk it never
+# performed.
 ROUTE_STATES = 400000
+
+# A WALL-CLOCK deadline for one routes() call, as a backstop that no shape of
+# program can outrun. The state cap bounds the PATH COUNT and the per-path
+# limits bound a PATH's LENGTH, but a single state is not free: a counted delay
+# loop is re-walked at every state that reaches its branch, and that re-walk is
+# itself a loop. A cap on a counter cannot bound work done inside one
+# iteration, so a program whose states are individually expensive can still run
+# for a very long time while the state count stays modest. This deadline is
+# checked from the same place and is deliberately generous: the real firmware
+# finishes its walk in well under a second, so tripping this is a signal that
+# something is pathological, not that the machine is slow.
+ROUTE_DEADLINE_S = 60.0
 
 
 def routes(start, stop, budget=20000):
@@ -333,11 +353,19 @@ def routes(start, stop, budget=20000):
     # pathology that used to be unbounded.
     global ROUTE_STATES
     states = 0
+    # Per-call, and a deadline as well as a state count. `hit` is returned so
+    # the caller can name what was not finished; it is a local, so exhausting
+    # one walk cannot empty the next one.
+    hit = ""
+    t0 = time.monotonic()
     while stack:
         states += 1
         if states > ROUTE_STATES:
-            ROUTE_STATES = -1
-            return out
+            hit = "the state cap"
+            break
+        if (states & 0x3FFF) == 0 and time.monotonic() - t0 > ROUTE_DEADLINE_S:
+            hit = "the wall-clock deadline"
+            break
         a, cost, depth, A, X, used = stack.pop()
         if cost > budget or depth > 2000:
             continue
@@ -383,16 +411,31 @@ def routes(start, stop, budget=20000):
                 if taken:
                     continue
         stack.append((nxt, cost + 1 + extra, depth + 1, nA, nX, nused))
+    if hit:
+        # Say WHAT was not finished, and hand the reason back so the caller can
+        # put it in the failure. A walk that stopped early and a walk that
+        # finished with nothing to report both look like an empty list, and only
+        # one of them is a measurement.
+        out.append((None, ("DID NOT FINISH: " + hit)))
     return out
 
 
 rs: list = []
 ent: list = []
+# Why each walk stopped early, if it did. Collected at the call sites and
+# reported as a FAILURE, never as a measurement: an empty route list and an
+# unfinished walk look identical from here, and only one of them is a result.
+_unfinished: list = []
 if len(OUTS) < 2:
     print(f"  only {len(OUTS)} OUT TXPIN in the program: nothing to bracket")
 else:
     start = OUTS[-1]
     rs = routes(start, start)
+    # Drop any exhaustion sentinel BEFORE the histogram, whose sort key would
+    # otherwise compare None against an int, and keep the reason: a walk that
+    # stopped early must be named, not silently reported as an empty result.
+    _unfinished.extend(r[1] for r in rs if r[0] is None)
+    rs = [r for r in rs if r[0] is not None]
     hist = {}
     for c, loop in rs:
         hist[(c, loop)] = hist.get((c, loop), 0) + 1
@@ -434,6 +477,8 @@ else:
         ent = []
     else:
         ent = routes(OUTS[-2], start)
+        _unfinished.extend(r[1] for r in ent if r[0] is None)
+        ent = [r for r in ent if r[0] is not None]
     hist2 = {}
     for c, loop in ent:
         hist2[(c, loop)] = hist2.get((c, loop), 0) + 1
@@ -443,6 +488,8 @@ else:
             f"    {c:4d} clocks  x{hist2[(c, loop)]}"
             f"  THE FIRST HALF-INTERVAL, entry delay loop at {loop}{flag}"
         )
+# Sentinels were already separated at the two routes() call sites (a histogram
+# sorted on a None cost would raise), so these lists hold only real measurements.
 bad_iv = [c for c, _ in rs if c != 120] + [c for c, _ in ent if c != 120]
 if not rs:
     print("  NO ROUTE RETURNS to the OUT: the loop never drives a second edge")
@@ -681,11 +728,11 @@ if bad_br:
     fails.append(f"{bad_br} branch(es) whose A did not come from a SUB or a tested load")
 if not rs:
     fails.append("no route returns to the OUT: the loop never drives a second edge")
-if ROUTE_STATES < 0:
+for _why in _unfinished:
     fails.append(
-        "the route walk hit its 400000-state cap, so the half-interval check "
-        "did NOT finish: a walk that cannot finish is a program this check "
-        "cannot measure, and reporting that is what it is for"
+        f"the route walk {_why}, so that half-interval was NOT MEASURED: a walk "
+        f"that cannot finish is a program this check cannot measure, and "
+        f"reporting that is what it is for"
     )
 if bad_iv:
     fails.append(f"{len(bad_iv)} half-interval route(s) that are not exactly 120 clocks")
