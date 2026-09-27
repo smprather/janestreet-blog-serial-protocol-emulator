@@ -74,6 +74,102 @@
 # Usage:  regress/check_wiki_links.sh [--list]
 # Exit:   0 clean · 1 new or stale dead link, or harness error · 2 usage
 set -u
+
+# self_test -- prove the RESOLVER, not just the corpus.
+#
+# WHY THIS EXISTS. Rule 1 asserts that BOTH [[wikilink]] conventions resolve
+# (wiki-relative [[concepts/foo]] and bare-sibling [[foo]]). Until now that claim
+# was prose: this script had no self-test, and the live corpus alone exercised it,
+# so a resolver that understood only ONE form would still have reported OK
+# whenever the corpus happened to contain no link of the other form. A checker
+# that never fires looks exactly like a checker that works.
+#
+# TWO TRAPS, both paid for during development, documented so the next person does
+# not rediscover them:
+#   * The checker resolves ROOT from ITS OWN PATH (cd "$(dirname "$0")/.."), not
+#     from the caller's cwd. A self-test therefore cannot point it at a fixture
+#     root by cd'ing; it must COPY the checker to <fixture>/regress/ and run it
+#     there, which is exactly what the recipe in the header describes.
+#   * The checker has two anti-vacuity floors -- at least 67 in-scope documents
+#     and a real number of links -- and refuses to run below either. A two-page
+#     fixture is REFUSED, and that refusal is the gate working, not an obstacle.
+#     So the fixture is sized, not minimal.
+#
+# WHAT IS ASSERTED, in both directions, which is the property that matters:
+#   1. with [[concepts/foo]] and [[foo]] both resolvable and [[nope]] absent, the
+#      gate reports EXACTLY ONE dead link and that one is nope, and exits 1 --
+#      so it can detect a real dead link AND does not invent one for either
+#      convention;
+#   2. with the dead link removed, the same fixture is clean and exits 0 -- so
+#      the failure in (1) was the dead link and not the fixture being broken.
+# Without (2) a fixture that fails for any reason would satisfy (1).
+self_test() {
+  local FT ok=0 bad=0 out rc
+  FT=$(mktemp -d) || return 1
+  mkdir -p "$FT/regress" "$FT/wiki/concepts" "$FT/docs"
+  cp "$0" "$FT/regress/check_wiki_links.sh" || { rm -rf "$FT"; return 1; }
+  printf '# pinned baseline (self-test fixture): no pins\n' > "$FT/wiki/.known-dead-links.txt"
+
+  # Sized to clear both floors: ~70 pages, each carrying ONE wiki-relative and ONE
+  # bare-sibling link, so both conventions are exercised at scale and not only in
+  # the one page under test.
+  local i j
+  for i in $(seq 1 70); do
+    j=$(( (i % 70) + 1 ))
+    printf '# page %s\n\nWiki: [[p%s]]\nBare: [[p%s]]\n' "$i" "$j" "$j" > "$FT/wiki/p$i.md"
+  done
+  printf '# readme\n\nBody.\n' > "$FT/README.md"
+  printf '# d1\n\nBody.\n' > "$FT/docs/d1.md"
+  printf '# foo under concepts\n\nTarget.\n' > "$FT/wiki/concepts/foo.md"
+  printf '# foo sibling\n\nTarget.\n' > "$FT/wiki/foo.md"
+
+  # CASE 1: both conventions resolve, one link is genuinely dead.
+  printf '# t\n\nA: [[concepts/foo]]\nB: [[foo]]\nC: [[nope]]\n' > "$FT/wiki/t.md"
+  out=$(cd "$FT" && bash regress/check_wiki_links.sh 2>&1); rc=$?
+  if [ "$rc" -eq 1 ] \
+     && printf '%s' "$out" | grep -q 'wiki/t.md -> nope' \
+     && printf '%s' "$out" | grep -q '1 dead link' \
+     && ! printf '%s' "$out" | grep -q 't.md -> foo'; then
+    printf '  ok   self-test — both wikilink conventions resolve, and a real dead link is caught (exit 1)\n'
+    ok=$((ok + 1))
+  else
+    printf '  FAIL self-test — expected exactly one dead link (nope) and exit 1, got exit %s:\n%s\n' "$rc" "$out" >&2
+    bad=$((bad + 1))
+  fi
+
+  # CASE 2, the other direction: remove the dead link and the same fixture is
+  # clean. This is what stops case 1 passing merely because the fixture is broken.
+  printf '# t\n\nA: [[concepts/foo]]\nB: [[foo]]\n' > "$FT/wiki/t.md"
+  out=$(cd "$FT" && bash regress/check_wiki_links.sh 2>&1); rc=$?
+  if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'OK'; then
+    printf '  ok   self-test — the same fixture is clean once the dead link is removed (exit 0)\n'
+    ok=$((ok + 1))
+  else
+    printf '  FAIL self-test — expected a clean fixture and exit 0, got exit %s:\n%s\n' "$rc" "$out" >&2
+    bad=$((bad + 1))
+  fi
+
+  # CASE 3: a genuinely dead link with a name the corpus does NOT contain, so
+  # case 1's single finding cannot be an artefact of one hard-coded name.
+  printf '# t\n\nA: [[concepts/foo]]\nB: [[foo]]\nC: [[absent_target_xyz]]\n' > "$FT/wiki/t.md"
+  out=$(cd "$FT" && bash regress/check_wiki_links.sh 2>&1); rc=$?
+  if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q 't.md -> absent_target_xyz'; then
+    printf '  ok   self-test — a differently-named dead link is caught too (exit 1)\n'
+    ok=$((ok + 1))
+  else
+    printf '  FAIL self-test — expected absent_target_xyz to be caught, got exit %s:\n%s\n' "$rc" "$out" >&2
+    bad=$((bad + 1))
+  fi
+
+  rm -rf "$FT"
+  if [ "$ok" -ne 3 ]; then
+    echo "check_wiki_links self-test: FAIL -- $ok of 3 cases proved the resolver" >&2
+    return 1
+  fi
+  echo "check_wiki_links self-test: $ok/$ok cases proved the resolver (both conventions resolve; a real dead link is caught and a clean corpus is not flagged)"
+  return 0
+}
+
 cd "$(dirname "$0")/.." || exit 1
 
 BASELINE=wiki/.known-dead-links.txt
@@ -81,8 +177,9 @@ LIST_ONLY=0
 case "${1:-}" in
   "")        ;;
   --list)    LIST_ONLY=1 ;;
+  --self-test) self_test; exit $? ;;
   -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
-  *)         echo "usage: $0 [--list]" >&2; exit 2 ;;
+  *)         echo "usage: $0 [--list|--self-test]" >&2; exit 2 ;;
 esac
 
 [ -f "$BASELINE" ] || { echo "check_wiki_links: HARNESS ERROR — $BASELINE is missing" >&2; exit 1; }
