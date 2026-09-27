@@ -29,6 +29,12 @@
 #     over RUNAWAY_KB (default 6 GB) is snapshotted and KILLED, then alerted.
 #     Nothing legitimate in this toolchain needs more than a few GB; the two
 #     OOM runaways reached 22-23 GB because nothing stopped them.
+#   * OWNERSHIP GATE on that brake (user ruling 2026-09-27 13:44): the brake may
+#     only KILL a process launched by a named protocol-emulator team member -
+#     the name is in its /proc/<pid>/environ (tools/manager/agent_tag.sh). An
+#     untagged oversized process is REPORTED, never killed: the manager's kill
+#     authority stops at the team boundary. The runaways this monitor exists for
+#     were both ours, so the protection is intact exactly where it is needed.
 #   * Hysteresis: re-alert at most every REALERT_S (default 600 s) while the
 #     threshold stays crossed; re-arm when usage falls to THRESHOLD-5 or below.
 #
@@ -40,6 +46,9 @@
 # Env: THRESHOLD REALERT_S INTERVAL ALERT_FILE SNAPDIR LOG RUNAWAY_KB TOOL_RE
 
 set -u
+
+# shellcheck source=tools/manager/agent_tag.sh
+. "$(dirname "$0")/agent_tag.sh"
 
 # tmp-isolation: box-global singleton, EXEMPT on purpose. One memory monitor
 # watches the whole box, and its ALERT_FILE, SNAPDIR, LOG and PIDFILE are
@@ -123,10 +132,16 @@ fi
   while read -r pid rss rest; do
     [ -z "${pid:-}" ] && continue
     if [ "$rss" -ge "$RUNAWAY_KB" ] 2>/dev/null; then
-      runaways="$runaways pid=$pid rss=${rss}KB cmd=${rest}"$'\n'
+      verdict=$(pe_kill_decision "$pid" "$rest"); rc=$?
+      if [ "$rc" -ne 0 ]; then
+        runaways="$runaways pid=$pid rss=${rss}KB NOT-KILLED(${verdict#skip }) cmd=${rest}"$'\n'
+        log "RUNAWAY SKIP: pid=$pid rss=${rss}KB (${verdict#skip }) - not ours, reported only"
+        continue
+      fi
+      runaways="$runaways pid=$pid rss=${rss}KB agent=${verdict#kill } cmd=${rest}"$'\n'
       if [ "$ONCE" -eq 0 ]; then
         snap=$(snapshot "runaway_${pid}")
-        log "RUNAWAY KILL: pid=$pid rss=${rss}KB (snapshot $snap)"
+        log "RUNAWAY KILL: pid=$pid rss=${rss}KB agent=${verdict#kill } (snapshot $snap)"
         kill -9 "$pid" 2>/dev/null || true
       fi
     fi
