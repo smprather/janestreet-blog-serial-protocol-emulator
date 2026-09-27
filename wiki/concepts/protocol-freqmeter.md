@@ -1,7 +1,7 @@
 ---
 title: Frequency and duty meter — the first act that listens
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 type: concept
 tags: [protocol, verification, clocking, physical-layer, architecture]
 sources: []

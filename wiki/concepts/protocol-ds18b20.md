@@ -1,7 +1,7 @@
 ---
 title: DS18B20 — 1-Wire, where the device speaks first and the polarity flips
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 type: concept
 tags: [protocol, verification, clocking, physical-layer, gpio, architecture]
 sources: []

@@ -1,7 +1,7 @@
 ---
 title: NEC infrared — the protocol with no wire, and a carrier that cannot be late
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 type: concept
 tags: [protocol, verification, clocking, physical-layer, gpio, architecture]
 sources: []

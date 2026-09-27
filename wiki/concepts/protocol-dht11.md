@@ -1,7 +1,7 @@
 ---
 title: DHT11 — a protocol where the bit value is a width
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 type: concept
 tags: [protocol, verification, clocking, physical-layer, gpio, architecture]
 sources: []
