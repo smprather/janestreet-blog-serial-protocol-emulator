@@ -138,6 +138,28 @@ stronger statement than "nothing pending covers it", and it is the one to act on
 `7fe4a1f` touches `WORKLOG.md`, `firmware/freqmeter.pe` and the TB — **not the
 wiki**. So the obvious merge fixes one wrong copy and leaves the other.
 
+**3. The freqmeter `$display` — the GENERATOR of all three wrong copies, already
+diagnosed by its owner and waiting on a decision.** `tb_pe_soc_freqmeter.v:309`
+prints `N_BANK` ("12 banked points") directly beside `1_000_000/p_us[0]` and
+`1_000_000/p_us[N_PTS-1]`, so the banner announces
+**"12 banked points, 158.7 Hz to 10 000 Hz"** — the full sweep's endpoints, and
+`p_us[0]` is run 0's warm-up, never banked. The twelve are
+`p_us[2]` (100 Hz) to `p_us[16]` (12.5 kHz). **This line is where
+"158 Hz" came from** in the `run_all.sh` comment, the TB comment and the wiki.
+
+`7fe4a1f` (unmerged) already documents this, in the file, in the owner's own
+words: *"the honest fix is to label the two figures in the string itself, which
+is a behaviour-visible change and needs a decision."* The banner is unchanged;
+only the comment around it was fixed. So this needs a **decision, not a
+diagnosis** — and it is a real one: a `$display` edit changes test output, which
+is exactly the kind of thing the dep-guard and mutation harnesses treat as
+observable, which is presumably why it was correctly deferred.
+
+It also **leaves no trace**: `run_all.sh` captures only each case's PASS/FAIL, so
+the string is in no run log, and there is no freqmeter mutation harness, so the
+act's output lands in exactly one place — a terminal. A wrong claim that is
+never written down cannot be diffed, reviewed, or gated.
+
 **2. `fwbus/block3-land` merge — a trap in the resolution.** Merge tested in a
 throwaway worktree: `run_all.sh` **auto-merges**; the conflict is
 `regress/mutate_fwbus_tb.sh`, **3 hunks**. If their `LOG=/tmp/mutate_fwbus_case.${_wt}.log`
