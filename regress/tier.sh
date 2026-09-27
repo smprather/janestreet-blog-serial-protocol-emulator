@@ -44,6 +44,11 @@ set -u
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO" || { echo "tier.sh: cannot enter $REPO" >&2; exit 2; }
+# The shared dirty-classification rule, so this gate and the merge gate can never
+# disagree about what counts as substantive dirt. See regress/lib_dirty.sh for
+# why that disagreement is the dangerous direction.
+# shellcheck source=regress/lib_dirty.sh
+. "$REPO/regress/lib_dirty.sh"
 
 # ---- T0: the fast gate. Declared, not discovered, so it cannot silently shrink.
 T0=(
@@ -179,8 +184,15 @@ case "$tier" in
   echo "=== TIER 2 - the FULL gate (named gates only) ==="
   # The window guard. Each of these is a way the 2026-09-27 gate was voided.
   blocked=""
-  dirty="$(git status --porcelain -- regress/ rtl/ tb/ 2>/dev/null)"
-  [ -n "$dirty" ] && blocked="uncommitted changes in regress/ rtl/ tb/
+  # SUBSTANTIVE dirt only, via the rule verify_merge.sh shares with us. The first
+  # version of this guard used a bare `git status --porcelain -- regress/ rtl/ tb/`,
+  # which meant it refused FOREVER: formal/results/summary.txt is rewritten by
+  # every formal run and its peak_rss column is a per-run measurement, so the tree
+  # is dirty after essentially every run. A guard that is always right and always
+  # in the way gets --forced every time, and then it protects nothing. Both gates
+  # now ask lib_dirty.sh the same question, so they cannot drift apart.
+  dirty="$(substantive_dirty_paths)"
+  [ -n "$dirty" ] && blocked="substantive uncommitted changes in regress/ rtl/ tb/
 $(printf '%s\n' "$dirty" | head -5 | sed 's/^/    /')"
   harness="$(pgrep -af 'mutate_.*\.sh' 2>/dev/null | head -3)"
   [ -n "$harness" ] && blocked="${blocked:+$blocked; }a mutation harness is running and owns a planted mutant

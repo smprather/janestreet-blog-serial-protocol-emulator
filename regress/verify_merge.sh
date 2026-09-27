@@ -311,33 +311,19 @@ is_record_only() {
 # full NOTE fires. The failure mode is deliberately toward calling noise
 # "substantive": a missed classification costs a redundant NOTE, a wrong one
 # would hide a verdict change.
-dirty_is_measurement_churn() {
-  local f="$1" d
-  [ "$f" = "formal/results/summary.txt" ] || return 1
-  git ls-files --error-unmatch -- "$f" >/dev/null 2>&1 || return 1   # untracked => not churn
-  d=$(git diff -U0 -- "$f" 2>/dev/null | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)')
-  [ -n "$d" ] || return 1                                            # clean file => not dirty
-  # Every changed line, stripped of its +/- and of a leading peak_rss change,
-  # must be identical; equivalently: no changed line may alter fields 1-4 or
-  # the header. Compare field-by-field.
-  printf '%s\n' "$d" | while IFS= read -r ln; do
-    body=${ln:1}
-    # header line?
-    [ "${body%%|*}" = "name" ] && { echo BAD; continue; }
-    # must be exactly 5 pipe-separated fields
-    [ "$(printf '%s' "$body" | awk -F'|' '{print NF}')" = "5" ] || { echo BAD; continue; }
-    # fields 1-4 (name|result|depth|shape) are the verdict-bearing ones
-    echo "${body}" | cut -d'|' -f1-4
-  done | sort -u | grep -qx BAD && return 1
-  # Reconstruct: does each minus-line's fields 1-4 appear as a plus-line's?
-  # Simpler and sufficient: the set of fields 1-4 across ALL changed lines must
-  # be unchanged when only peak_rss moves. Compare sorted field tuples of the
-  # '-' lines vs '+' lines; they must be identical.
-  local minus_pp plus_pp
-  minus_pp=$(printf '%s\n' "$d" | grep '^-' | sed 's/^-//' | cut -d'|' -f1-4 | sort)
-  plus_pp=$(printf '%s\n' "$d" | grep '^+' | sed 's/^+//' | cut -d'|' -f1-4 | sort)
-  [ "$minus_pp" = "$plus_pp" ]
-}
+# THE CHURN RULE NOW LIVES IN ONE PLACE. It was defined here and is extracted
+# verbatim to regress/lib_dirty.sh, because regress/tier.sh's T2 window guard
+# needs the same answer, and two gates that classify dirt differently is how a
+# green claim ends up on a tree that is not the one being pushed. Concretely: if
+# tier.sh were looser it would start a gate the merge gate calls dirty; if it
+# were stricter it would refuse forever on formal/results/summary.txt, which is
+# dirty after every formal run, so people would reach for --force every time -
+# and a guard that is always overridden protects nothing. One rule, two callers.
+# The rule itself is unchanged; see the comment above this block.
+# (cwd is already the repo root: line 74 does `cd "$(dirname "$0")/.." || exit 1`.)
+# shellcheck source=regress/lib_dirty.sh
+. regress/lib_dirty.sh
+
 
 # wip_count_from_log <logfile> -- how many KNOWN-WIP cases the run reported.
 #
