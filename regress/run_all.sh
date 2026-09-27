@@ -652,6 +652,24 @@ else
   fail=$((fail+1))
   failed_names+=("check_harness_preflight")
 fi
+
+# ---- tree-known: no orphaned mutation residue in rtl/ or tb/ ---------------
+# Runs BEFORE any testbench compiles, because a planted mutant left behind by a
+# killed harness is not a red result - it is a tree that no longer says what it
+# says, and every case compiled after it measures a broken design. On
+# 2026-09-27 a mutation run died to a session-teardown SIGKILL holding a planted
+# line in rtl/pe_eth_mac.v, and nothing in the suite would have said so: the
+# existing check_staged_mutants.sh only fires at COMMIT time, and in that failure
+# mode nobody commits. SIGKILL cannot be trapped, so no cleanup could have run;
+# this verifies rather than trusts. See regress/check_tree_known.sh.
+if "$REPO_ROOT/regress/check_tree_known.sh" "$REPO_ROOT" > "$CHIP_WT_DIR"/check_tree_known.log 2>&1; then
+  echo "tree-known: OK (no orphaned mutation residue)"
+else
+  echo "tree-known: FAILED"
+  cat "$CHIP_WT_DIR"/check_tree_known.log
+  fail=$((fail+1))
+  failed_names+=("check_tree_known")
+fi
 # Its NEGATIVE CONTROL, in the suite. All three of this gate's rules - including
 # the MUTABLE-baseline rule the declaration protocol added - are rules that PASS
 # by not noticing, so each is planted here and required to fire, plus the
