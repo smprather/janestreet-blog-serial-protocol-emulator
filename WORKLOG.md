@@ -5112,3 +5112,37 @@ histogram's superseded 18/14, the "32 intervals" message, and this L136 claim
 stating it was not.** That is the one to remember: a claim can be right for the
 whole life of an act and still be worth nothing, because what a reader checks
 is the sentence.
+
+## IDLE-QUEUE-EMPTY (RECONFIRMED, with evidence, 2026-09-27 20:00 CDT)
+
+A supervisor nudge arrived asking for work. **There is none, and logging a
+TASK-START to satisfy it would be the defect this whole session has been
+fixing** -- a second place asserting a state, made because something asked
+rather than because it was true. So the terminal state is re-verified instead
+of re-asserted:
+
+    IDLE-QUEUE-EMPTY is the last entry above        yes
+    run_all.sh (b) fix has landed                   NO -- line 270 still reads
+                                                    "Twelve banked points from
+                                                    158 Hz to 10 kHz"
+    a gate is running in this worktree             YES -- pid 2776964,
+                                                    cwd /tmp/worktrees/fw-timing
+    working tree                                    clean but for the
+                                                    nondeterministic formal
+                                                    summary
+
+**So the ONE open item is the manager's, and the quiet moment they are waiting
+for has not arrived** -- there is a run in the worktree right now, which is
+precisely the condition their own no-runs-active check screens for. Nothing is
+blocked on me, and nothing is blocked on them but time.
+
+**What this session produced, for the record:** five stale figures, one
+mechanism -- a number asserted in a second place. Four found by sweep, one by
+instrumentation, and the last is the one that matters because **the property
+was true and the sentence stating it was false**: dmem[8] really does only
+carry 2 or 4 us in-frame, and the header said it carried 2 or 4 "and nothing
+else" on the strength of a write-hook that did not exist. The gate now asserts
+the property -- zero three-half gaps -- and the arithmetic is reported rather
+than believed. **Gate the property, cite the constant, never restate the
+number, and when a comment claims something was measured, go and measure it:
+the claim about the measurement was the thing that was wrong.**
