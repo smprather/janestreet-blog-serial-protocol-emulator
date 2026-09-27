@@ -231,7 +231,7 @@ CASES=(
   "tb_pe_soc_stepper_ramp|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_stepper_ramp"
   # The INPUT acts: the pin is an INPUT and the firmware recovers numbers from
   # a waveform it does not control, so the number that is the claim is the
-  # ACCURACY OF A COUNT. Twelve banked points from 158 Hz to 10 kHz with a
+  # ACCURACY OF A COUNT. Twelve banked points from 100 Hz to 12.5 kHz with a
   # varying duty, each checked against a SECOND, independent measurement of the
   # pad (the receiver in the TB) rather than against the generator's table --
   # a generator that knew the answer would agree with a firmware that had the
@@ -242,6 +242,19 @@ CASES=(
   # four of them. ~43 ms of 60 MHz, the largest simulation in the repository;
   # the generator is edge-driven with absolute delays rather than clocked,
   # which is what keeps it inside ~55 s of wall.
+  #
+  # The endpoints above took a measurement to settle, and the pair that was here
+  # before ("158 Hz to 10 kHz") was wrong at BOTH ends while looking right.
+  # Each run drives three periods and the firmware banks the second and third,
+  # so the banked set is p_us indices 1,2 4,5 7,8 10,11 13,14 16,17, and the
+  # extremes of THAT set are p_us[2] = 10 000 us = 100 Hz and p_us[16] = 80 us =
+  # 12.5 kHz. The 158 Hz that was here is p_us[0] = 6300 us, the first period
+  # of run 0 -- a warm-up the firmware never banks. The trap is that
+  # tb_pe_soc_freqmeter.v's banner prints 1_000_000/p_us[0] and
+  # 1_000_000/p_us[N_PTS-1], the FULL eighteen-point sweep (158.7 Hz to 10 kHz),
+  # which is a different set from the twelve that are verified: reading the
+  # banner instead of the banking loop is how 158 Hz got in here. The unit is the
+  # second trap -- p_us[] is microseconds, so 80 is 12.5 kHz and never 80 Hz.
   "tb_pe_soc_freqmeter|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_freqmeter"
   "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
   # The I2C TRANSACTION layer on real RTL: firmware/i2c_xfer.pe against a
