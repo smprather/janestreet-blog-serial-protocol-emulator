@@ -34,13 +34,21 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 TMP="$(mktemp -d /tmp/pe-tag-test.XXXXXX)"
 ALERTF="$TMP/alert.txt"
 : >"$ALERTF"
-PASS=0; FAIL=0
+PASS=0; FAIL=0; SKIPPED=0
 cleanup() { for p in "${SPAWNED[@]:-}"; do kill -9 "$p" 2>/dev/null; done; rm -rf "$TMP"; }
 trap cleanup EXIT
 SPAWNED=()
 
 ok()   { PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  FAIL  %s\n' "$1"; [ $# -gt 1 ] && printf '        %s\n' "$2"; return 0; }
+# A SAFETY SKIP IS NOT A FAILURE. The destructive half refuses to run when a real
+# tagged agent is on the box, because a KILL_CPU=0 scan would reach the live
+# fleet - and it is right to refuse. The first version of this test called bad()
+# for that refusal, so TIER 0 went red every time the fleet was running, which is
+# precisely when you least want a red. A gate that cries wolf gets ignored, and
+# then it protects nothing. Skips are counted and named separately so the summary
+# can never imply coverage it did not have.
+skip() { SKIPPED=$((SKIPPED+1)); printf '  SKIP  %s\n' "$1"; [ $# -gt 1 ] && printf '        %s\n' "$2"; return 0; }
 expect() { # $1=label $2=expected $3=actual
   if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected [$2], got [$3]"; fi
 }
@@ -116,7 +124,8 @@ SPAWNED=()
 sleep 0.3
 PRE=$(count_team)
 if [ "$PRE" -gt 0 ]; then
-  bad "end-to-end kill (SKIPPED: $PRE team-tagged process(es) already on the box - a full-threshold scan would reach the live fleet)"
+  skip "end-to-end kill (refused for safety: $PRE team-tagged process(es) are live - a full-threshold scan would reach the real fleet)" \
+       "This half proves the brake is not a no-op. It did NOT run, so this run does not prove that. Run it with the fleet down."
 else
   : >"$ALERTF"
   sleep 300 & VICTIM=$!; disown                       # untagged: must survive
@@ -132,8 +141,15 @@ fi
 
 # ---- verdict -----------------------------------------------------------------
 if [ "$FAIL" -eq 0 ]; then
-  echo "agent_tag self-test: OK ($PASS of $PASS cases proved the ownership gate)"
+  if [ "$SKIPPED" -gt 0 ]; then
+    echo "agent_tag self-test: OK ($PASS of $PASS cases proved the ownership gate, $SKIPPED SKIPPED for safety)"
+    echo "  NOTE: the skipped half did not run. This run does NOT prove the brake can"
+    echo "  actually kill - only that it will not touch what is not ours. Run it with"
+    echo "  the fleet down for full coverage."
+  else
+    echo "agent_tag self-test: OK ($PASS of $PASS cases proved the ownership gate)"
+  fi
   exit 0
 fi
-echo "agent_tag self-test: FAILED ($FAIL of $((PASS+FAIL)) cases failed)"
+echo "agent_tag self-test: FAILED ($FAIL of $((PASS+FAIL)) cases failed, $SKIPPED skipped for safety)"
 exit 1
