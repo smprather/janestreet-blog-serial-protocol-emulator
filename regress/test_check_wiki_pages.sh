@@ -780,6 +780,20 @@ $(printf '%s\n' "$blk" | sed 's/^/        | /')"
   fi
 done
 
-echo "test_check_wiki_pages: $pass passed, $fail failed"
+# ANTI-VACUITY. "$pass passed, $fail failed" is vacuity-proof on FAILURE --
+# `[ "$fail" -eq 0 ] || exit 1` below catches a wrong case -- but not on
+# COVERAGE. Delete a case and both counters fall together, so this still reads
+# "45 passed, 0 failed" all-green and the file cannot notice it stopped testing
+# something. Bind the exercised count to a DECLARED number. Same guard as
+# verify_merge, test_dep_guard and check_doc_index.
+want_cases=46
+if [ "$pass" -ne "$want_cases" ]; then
+  echo "test_check_wiki_pages: FAIL -- exercised $pass case(s), expected $want_cases." >&2
+  echo "  A case was removed or neutered; this self-test would pass while checking" >&2
+  echo "  less than it claims. Fix the fixture or the expectation; do not lower" >&2
+  echo "  want_cases to make this go away." >&2
+  exit 1
+fi
+echo "test_check_wiki_pages: $pass/$want_cases cases passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
 exit 0
