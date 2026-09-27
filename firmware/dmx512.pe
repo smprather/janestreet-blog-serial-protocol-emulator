@@ -80,7 +80,16 @@
 ;   length, and every one of them makes some OTHER cell the right size; two
 ;   more, one each, are the leading NOP of the break and mark delay blocks, so
 ;   sixteen NOPs in the file and fourteen in the transmitter. (This line said
-;   "fifteen" for the whole file, which is neither number.)
+;   "fifteen" for the whole file, which is neither number. Both numbers are
+;   countable, and this is the command that counts them, because a figure
+;   nobody can re-derive is a figure that decays:
+;
+;     grep -cE '^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*:[[:space:]]*)?NOP([[:space:]]|;|$)' \
+;         firmware/dmx512.pe            -> 16
+;
+;   and the two that are not the transmitter's are the labelled leaders of the
+;   break and mark delay blocks, brk: and mrk:, one each. Drop either and this
+;   paragraph is still true, which is exactly why it is worth writing down.)
 ;
 ;   cell 0   start   240 clocks   three NOPs
 ;   cells 1-8 data    240 clocks   the reference: no padding anywhere

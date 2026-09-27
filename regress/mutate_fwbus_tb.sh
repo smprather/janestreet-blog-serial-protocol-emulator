@@ -108,6 +108,15 @@ cleanup() {
     cp "$BAK/$f.pe" "$ROOT/firmware/$f.pe" 2>/dev/null
     cp "$BAK/$f.hex" "$ROOT/firmware/$f.hex" 2>/dev/null
   done
+  # These copies make every target pristine, and the poller keeps sampling until
+  # the SUITE stops it -- which is after this process has exited. So without a
+  # declaration here, every exit path (a FATAL restore mismatch, a signal, an
+  # ordinary end) leaves ten pristine targets announced as mutated for the last
+  # moments of the run, and the guard reports the harness's own cleanup as
+  # interference. Declared per pair, for the same reason restore() does.
+  for f in $FWS; do
+    chip_dep_expect pristine "$ROOT/firmware/$f.pe" "$ROOT/firmware/$f.hex" 2>/dev/null
+  done
   rm -rf "$BAK"
 }
 on_signal() { cleanup; trap - EXIT INT TERM; exit 143; }
@@ -127,10 +136,44 @@ pass=0; fail=0; survived=0; hangs=0
 
 mkdir -p "$ROOT/sim"
 
+# Set only by check_mutation, and only after mutate() has actually edited a .pe.
+# Empty means "no mutation in force", which is the state of every BASELINE run --
+# and in a baseline the assembled image is byte-identical to the committed one, so
+# run_tb must declare the .hex pristine there. See run_tb. Restored to empty by
+# restore(), which is the other half of "no mutation in force".
+MUTATED_FW=""
+
 restore() {
+  MUTATED_FW=""
   for f in $FWS; do
     cp "$BAK/$f.pe" "$ROOT/firmware/$f.pe"
     cp "$BAK/$f.hex" "$ROOT/firmware/$f.hex"
+    # PER FILE, and immediately: a declaration is a statement about ONE path, so
+    # the honest moment to make it for this pair is the instant its two copies
+    # land. The committed version declared once, after restore AND after
+    # verify_restore, and the worst-case window for the first-restored file --
+    # pristine on disk while the poller is still told "mutated" -- measured
+    # 19.3 ms committed, 12.5 ms with one declaration at the end of restore(),
+    # 3.7 ms here.
+    #
+    # This was NOT the cause of the INCONCLUSIVE that sent me looking; see the
+    # baseline declaration in run_tb, which is, and which is provable by
+    # construction rather than by timing. Keeping this anyway, for two reasons
+    # that survive on their own: it narrows a real (if secondary) lie by 5x, and
+    # it gives the HARNESS ERROR path a declaration at all -- that path restores
+    # and returns, so before this every target stayed declared "mutated" for the
+    # REST OF THE RUN, which is an unbounded version of the same defect.
+    #
+    # One chip_dep_expect call per pair is deliberate: the guard's contract says
+    # "immediately AFTER it has established that state", and the residual 3.7 ms
+    # is that one call rewriting the declaration file. Narrowing it further means
+    # changing chip_dep_expect in the SHARED dep_guard.sh, which sixteen
+    # harnesses and the lock depend on, so it is raised rather than taken.
+    #
+    # NOTE mutate_eth_tx_loop_tb.sh line 134 declares once after its own loop, so
+    # it still has the wide window; it is not mine to change and is flagged, not
+    # edited.
+    chip_dep_expect pristine "$ROOT/firmware/$f.pe" "$ROOT/firmware/$f.hex"
   done
 }
 verify_restore() {
@@ -146,15 +189,43 @@ verify_restore() {
 run_tb() {
   local fw="$1" tb="$2"
   if ! python3 "$ROOT/tools/fw/peasm.py" "$ROOT/firmware/$fw.pe" \
-        -o "$ROOT/firmware/$fw.hex" >""$CHIP_WT_DIR"/mut_fwbus_asm.log" 2>&1; then
+        -o "$ROOT/firmware/$fw.hex" >"$CHIP_WT_DIR"/mut_fwbus_asm.log 2>&1; then
     return 2
+  fi
+  # THE .hex HAS NOW BEEN WRITTEN, by that peasm call and not before. What it
+  # CONTAINS depends on whether a mutation is actually in force, and this
+  # declaration is the whole bug I was sent here to fix:
+  #
+  #   under a CASE   the .pe is mutated, so the image is too -> "mutated"
+  #   in a BASELINE  the .pe is pristine, and the assembler reproduces the
+  #                  committed image BYTE-FOR-BYTE -> "pristine"
+  #
+  # The first version declared "mutated" unconditionally, which is honest for a
+  # case and a lie for a baseline -- and not a brief lie: it held for the WHOLE
+  # baseline run of that testbench, seconds, and for DMX twenty-seven of them.
+  # The sampler is right to contradict it and did, voiding three separate runs
+  # to INCONCLUSIVE ("firmware/i2c_adv.hex declared: mutated observed: pristine
+  # held for 0.208s / 0.237s / 0.239s", i2c_adv being the FIRST firmware
+  # baselined). This one is provable by CONSTRUCTION and not by timing: all five
+  # images reassemble byte-identically from their unmutated sources, so "mutated"
+  # during a baseline is false by arithmetic, not by timing luck.
+  #
+  # Declaring it at the mutate site instead is the other error, and it was the
+  # first version's other half: the .pe and .hex together, before the assembler
+  # has run, so the .hex was declared mutated for as long as the assembler took.
+  # Hence MUTATED_FW, which check_mutation sets only once a case has actually
+  # edited a .pe, and restore() clears.
+  if [ -n "$MUTATED_FW" ]; then
+    chip_dep_expect mutated "$ROOT/firmware/$fw.hex"
+  else
+    chip_dep_expect pristine "$ROOT/firmware/$fw.hex"
   fi
   if ! (cd "$ROOT/sim" && iverilog -g2012 -s "$tb" \
-        -o ""$CHIP_WT_DIR"/mut_fwbus_$tb.vvp" $SRCS "$ROOT/tb/$tb.v") \
-        >""$CHIP_WT_DIR"/mut_fwbus_cc.log" 2>&1; then
+        -o "$CHIP_WT_DIR"/mut_fwbus_$tb.vvp $SRCS "$ROOT/tb/$tb.v") \
+        >"$CHIP_WT_DIR"/mut_fwbus_cc.log 2>&1; then
     return 2
   fi
-  (cd "$ROOT/sim" && timeout 300 vvp ""$CHIP_WT_DIR"/mut_fwbus_$tb.vvp") >"$LOG" 2>&1
+  (cd "$ROOT/sim" && timeout 300 vvp "$CHIP_WT_DIR/mut_fwbus_$tb.vvp") >"$LOG" 2>&1
   run_tb_verdict "$LOG"
 }
 
@@ -267,9 +338,13 @@ check_mutation() {
     echo "  [$name] HARNESS ERROR: anchor not found in $fw.pe"
     restore; fail=$((fail+1)); return
   fi
-  # This case has now edited the file, and run_tb will reassemble the image, so
-  # the mutated state is earned -- declare it before the run, not after it.
-  chip_dep_expect mutated "$ROOT/firmware/$fw.pe" "$ROOT/firmware/$fw.hex"
+  # This case has now edited the .pe, and ONLY the .pe: the image is rewritten by
+  # the assembler inside run_tb, so the .hex is declared THERE -- where the state
+  # it should report depends on whether a mutation is in force, which is what
+  # MUTATED_FW says. Set here, not before mutate(), because until that call
+  # returns there is no mutation to report.
+  chip_dep_expect mutated "$ROOT/firmware/$fw.pe"
+  MUTATED_FW="$fw"
   run_tb "$fw" "$tb"
   local rc=$?
   if   [ $rc -eq 0 ]; then
@@ -286,6 +361,8 @@ check_mutation() {
     echo "  [$name] HARNESS ERROR (assemble/compile failed, or no verdict in the log; see $CHIP_WT_DIR/mut_fwbus_*.${_wt}.log)"
     fail=$((fail+1))
   fi
+  # restore() declares each pair pristine the instant its copies land, and
+  # verify_restore then checks what restore() just claimed. See restore().
   restore; verify_restore
 }
 
