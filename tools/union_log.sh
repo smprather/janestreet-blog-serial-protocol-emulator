@@ -107,16 +107,36 @@ finalize_entries() {
 # total. A verifier that cries wolf is worse than none, because the obvious
 # response to a false alarm is to stop running it.
 verify_no_loss() {
-  local ours="$1" theirs="$2" sorted="$3" lost=0 e
-  while IFS= read -r e; do
-    [ -z "$e" ] && continue
-    grep -Fqx -- "$e" "$sorted" || { printf 'union_log.sh: LOST from ours: %s\n' "${e%%$'\t'*}" >&2; lost=$((lost+1)); }
-  done < <(emit_entries "$ours")
-  while IFS= read -r e; do
-    [ -z "$e" ] && continue
-    grep -Fqx -- "$e" "$sorted" || { printf 'union_log.sh: LOST from theirs: %s\n' "${e%%$'\t'*}" >&2; lost=$((lost+1)); }
-  done < <(emit_entries "$theirs")
-  return "$lost"
+  local ours="$1" theirs="$2" sorted="$3"
+  local ef_o ef_t
+  ef_o="$(mktemp)"; ef_t="$(mktemp)"
+  emit_entries "$ours"   >"$ef_o"
+  emit_entries "$theirs" >"$ef_t"
+  # ONE awk process, and no pattern ever passed as an argv element.
+  #
+  # The first two versions both used `grep -Fqx -- "$entry"`. The first could not
+  # match a multi-line entry, because grep works line by line; it reported healthy
+  # entries as LOST. The second passed the whole entry as a command-line ARGUMENT
+  # and died with "Argument list too long" on a long one - again reporting it as
+  # LOST. Both failures were the verifier's, not the union's, and both would have
+  # been acted on: a hand-merge of a 2000-entry log, or worse, a "resolution" that
+  # quietly dropped a thousand entries. A verifier that invents losses is worse
+  # than no verifier, so it now compares inside a single awk, where an entry of any
+  # length is just a string in a hash.
+  awk -F'\t' -v of="$ef_o" -v tf="$ef_t" -v sf="$sorted" '
+    FILENAME==sf { s[$0]=1; next }
+    FILENAME==of { o[$0]=1; next }
+    FILENAME==tf { t[$0]=1; next }
+    END {
+      lost=0
+      for (e in o) if (!(e in s)) { printf "union_log.sh: LOST from ours: %s\n", substr(e,1,16) > "/dev/stderr"; lost++ }
+      for (e in t) if (!(e in s)) { printf "union_log.sh: LOST from theirs: %s\n", substr(e,1,16) > "/dev/stderr"; lost++ }
+      exit (lost>0)
+    }
+  ' "$sorted" "$ef_o" "$ef_t"
+  local rc=$?
+  rm -f "$ef_o" "$ef_t"
+  return $rc
 }
 
 selftest() {
@@ -200,6 +220,27 @@ selftest() {
     ok "the verifier DETECTS a lost entry (it is not vacuous)"
   fi
 
+  # and the verifier must not INVENT a loss on a long entry. This is the
+  # regression for the `grep -Fqx -- "$entry"` version, which died with
+  # "Argument list too long" on a long entry and reported it LOST -- against the
+  # real WORKLOG.md, whose entries run to thousands of characters. A verifier that
+  # invents losses is worse than no verifier: it would have forced a hand-merge of
+  # a 2000-entry log, or worse, tempted a "resolution" that dropped 1198 entries.
+  { printf '2026-09-26 17:00 CDT | a | E | a long entry'
+    i=0
+    while [ "$i" -lt 400 ]; do
+      printf '  continuation line %s padding padding padding padding padding\n' "$i"
+      i=$((i+1))
+    done
+  } >"$T/long1"
+  cp "$T/long1" "$T/long2"
+  { emit_entries "$T/long1"; emit_entries "$T/long2"; } | sort_entries >"$T/longsorted"
+  if verify_no_loss "$T/long1" "$T/long2" "$T/longsorted" >/dev/null 2>&1; then
+    ok "a VERY LONG entry is not mistaken for a lost one (argv-overflow regression)"
+  else
+    bad "a very long entry is not mistaken for a lost one" "$(verify_no_loss "$T/long1" "$T/long2" "$T/longsorted" 2>&1 | head -1)"
+  fi
+
   if [ "$FAIL" -eq 0 ]; then
     echo "union_log self-test: OK ($PASS of $PASS cases proved the union is lossless)"
     return 0
@@ -214,11 +255,18 @@ FILE="${1:-}"
 [ -n "$FILE" ] || { echo "usage: $(basename "$0") <conflicted-file> | --selftest" >&2; exit 2; }
 [ -f "$FILE" ] || { echo "union_log.sh: no such file: $FILE" >&2; exit 2; }
 
+cleanup(){ rm -f "${FILE}.ours" "${FILE}.theirs" "${FILE}.sorted" "${FILE}.union"; }
+# The trap goes on BEFORE the first file is created, not after. The first version
+# ran the two `git show` calls first and only then set the trap, so when the first
+# one failed it exited with WORKLOG.md.ours already on disk and nothing to remove
+# it - which is how a failed merge left a stray file in the tree that then blocked
+# the NEXT merge attempt. A cleanup path that is installed after the thing it
+# cleans is not a cleanup path.
+trap cleanup EXIT
+
 # The two sides of a conflicted file live in the git index stages.
 git show :2:"$FILE" >"${FILE}.ours"  2>/dev/null || { echo "union_log.sh: no :2 stage for $FILE" >&2; exit 2; }
 git show :3:"$FILE" >"${FILE}.theirs" 2>/dev/null || { echo "union_log.sh: no :3 stage for $FILE" >&2; exit 2; }
-cleanup(){ rm -f "${FILE}.ours" "${FILE}.theirs" "${FILE}.sorted" "${FILE}.union"; }
-trap cleanup EXIT
 
 n_ours=$(emit_entries "${FILE}.ours"   | grep -c '' || true)
 n_theirs=$(emit_entries "${FILE}.theirs" | grep -c '' || true)
