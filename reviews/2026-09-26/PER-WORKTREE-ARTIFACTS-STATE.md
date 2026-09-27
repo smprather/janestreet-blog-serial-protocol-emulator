@@ -139,17 +139,24 @@ stronger statement than "nothing pending covers it", and it is the one to act on
 wiki**. So the obvious merge fixes one wrong copy and leaves the other.
 
 **3. The freqmeter `$display` — the GENERATOR of all three wrong copies, already
-diagnosed by its owner and waiting on a decision.** `tb_pe_soc_freqmeter.v:309`
-prints `N_BANK` ("12 banked points") directly beside `1_000_000/p_us[0]` and
+diagnosed by its owner and waiting on a decision.** The banner opens at
+`tb_pe_soc_freqmeter.v:309`, and the range it prints is on **line 310**. That
+line passes `N_BANK` ("12 banked points") directly beside `1_000_000/p_us[0]` and
 `1_000_000/p_us[N_PTS-1]`, so the banner announces
 **"12 banked points, 158.7 Hz to 10 000 Hz"** — the full sweep's endpoints, and
 `p_us[0]` is run 0's warm-up, never banked. The twelve are
 `p_us[2]` (100 Hz) to `p_us[16]` (12.5 kHz). **This line is where
 "158 Hz" came from** in the `run_all.sh` comment, the TB comment and the wiki.
 
-`7fe4a1f` (unmerged) already documents this, in the file, in the owner's own
-words: *"the honest fix is to label the two figures in the string itself, which
-is a behaviour-visible change and needs a decision."* The banner is unchanged;
+`7fe4a1f` (unmerged) already documents this, in the file. Quoted as three
+contiguous lines of their comment, because the comment WRAPS and a one-line
+quotation of it would be a sentence I assembled rather than one they wrote:
+
+> *"NOT DONE HERE, because the sweep was scoped COMMENT-ONLY and this is a"*
+> *"$display: the honest fix is to label the two figures in the string"*
+> *"itself, which is a behaviour-visible change and needs a decision."*
+
+The banner is unchanged;
 only the comment around it was fixed. So this needs a **decision, not a
 diagnosis** — and it is a real one: a `$display` edit changes test output, which
 is exactly the kind of thing the dep-guard and mutation harnesses treat as
