@@ -9,6 +9,10 @@ confidence: high
 ---
 
 # SPI as firmware
+> **What you'll learn here:** the project's central claim in one protocol: SPI mode 0 implemented entirely in software on the same port UART uses
+>
+> **You can verify this by:** `tb/tb_pe_soc_spi.v` drives a real slave model and decodes the real output. There is also a bit-accurate emulator you can run with no simulator at all: `python3 tools/fw/peemu.py firmware/spi_xfer.hex`.
+
 
 There is no SPI hardware in this chip. `firmware/spi_xfer.pe` is a **mode 0
 (CPOL=0, CPHA=0) SPI master** implemented entirely in `pe_cpu` software: SCLK

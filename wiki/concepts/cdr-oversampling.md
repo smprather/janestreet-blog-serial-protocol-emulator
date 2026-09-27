@@ -9,6 +9,10 @@ confidence: high
 ---
 
 # CDR Oversampling Design
+> **What you'll learn here:** how a 100 ns Manchester line is recovered from a 60 MHz clock, and why the sampling rate is 12x rather than 4x
+>
+> **You can verify this by:** `tb/tb_pe_dru.v`, driven by the oversampled receive unit `rtl/pe_dru.v`. It is run by `regress/run_all.sh`; to see this testbench wired into the suite, `grep cdr-oversampling regress/run_all.sh` is the wrong string - use `grep pe_dru regress/run_all.sh`.
+
 
 10BASE-T is 10 Mbps Manchester: a mid-bit transition every 100 ns bit period, so the
 shortest pulse is the 50 ns half-bit cell. A 12x oversampling digital data-recovery
