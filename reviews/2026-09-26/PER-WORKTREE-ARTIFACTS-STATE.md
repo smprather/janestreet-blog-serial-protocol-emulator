@@ -81,6 +81,33 @@ asserted.
 
 ## With the manager — two items, both needing a decision, not a task
 
+#### The anchors, in a form a check can read
+
+Prose tables are for people; these five claims are load-bearing, so they are also
+written out as `file<TAB>phrase`. A phrase that no longer appears in its file is
+a drifted record — which is not hypothetical: this record's references expired
+**three times in two hours** (line numbers, then a directory-level claim, then a
+whole row that was green for the wrong reason).
+
+```text
+file<TAB>phrase<TAB>meaning
+wiki/concepts/protocol-freqmeter.md	twelve points spanning 158 Hz	PRESENT = the defect; its disappearance means someone fixed it
+wiki/concepts/protocol-freqmeter.md	The testbench sweeps the input over	PRESENT = the CORRECT claim; its disappearance means someone broke it
+wiki/concepts/protocol-freqmeter.md	The warm-up period of each run is not checked	PRESENT = correct
+tb/tb_pe_soc_freqmeter.v	twelve points from 80 Hz	PRESENT = the defect; 7fe4a1f replaces it, unmerged
+tb/tb_pe_soc_freqmeter.v	N_BANK   = N_SEG * (N_PER_SEG - 1)	PRESENT = correct
+regress/run_all.sh	Twelve banked points from 100 Hz to 12.5 kHz	PRESENT = correct (mine)
+```
+
+**Deliberately not wired into a gate.** A check that verified a record's anchors
+would be a gate nobody asked for, added at 01:00 by the worker who wrote the
+record — the exact scope failure this session has declined twice already, and
+worse here, because I would be gating my own prose. What is worth having is that
+the anchors are *machine-readable at all*: the next session can check them with
+one `grep -F` loop, or wire them into `check_doc_index.sh` if that is ever the
+right home, and the difference between those is a decision that belongs to
+somebody other than me.
+
 **1. The banked-range claim: four copies, three answers, and the pending merge
 covers only one of the two wrong ones.**
 
