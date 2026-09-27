@@ -339,6 +339,29 @@ dirty_is_measurement_churn() {
   [ "$minus_pp" = "$plus_pp" ]
 }
 
+# wip_count_from_log <logfile> -- how many KNOWN-WIP cases the run reported.
+#
+# WHY THIS IS A FUNCTION AND NOT INLINE ARITHMETIC. This is the reconciliation
+# that makes a clean full-suite run with a WIP case read as green: run_all.sh
+# prints TOTAL as pass+fail, and a case marked <<wip>> that is EXPECTED red
+# increments NEITHER, so it sits outside the TOTAL it printed. The selection
+# counts TABLE ENTRIES, so the expected side has to take the WIP cases back or
+# a complete run reports one short and exits 3, GATE ERROR, having verified
+# everything -- indistinguishable from a real failure, which teaches the reader
+# to ignore GATE ERROR.
+#
+# It lives in a function so the SELF-TEST and the run path execute the SAME
+# lines. A test written as a second copy of the arithmetic is a test of the
+# copy: it can pass while the real path rots. That is not hypothetical here --
+# the sr04 act that motivated the fix now PASSES and its <<wip>> marking is
+# gone, so there are currently ZERO live WIP cases and the real path is dormant
+# in production. With no live case, a copy-based test is the ONLY thing standing
+# between this and a silent regression.
+wip_count_from_log() {
+  grep -E '^KNOWN-WIP \(ran, expected red, act unfinished\):' "$1" \
+    | tail -1 | sed 's/^.*): *//' | wc -w | tr -d ' '
+}
+
 # map_changed: stdin = one changed path per line, blank lines ignored. Sets
 # SELECTED / SEL_WHY / FULL_REASON / WARNINGS. $1 = the diff's label.
 # CALL IT WITH A HERE-STRING, NEVER A PIPE. `printf ... | map_changed` runs the
@@ -606,16 +629,65 @@ mut_c
   fi
   MUT_TABLE=""; MUT_UNMAPPABLE=""
 
+  # THE WIP RECONCILIATION, exercised against the SAME function the run path
+  # calls (wip_count_from_log). There are currently zero live <<wip>> cases --
+  # the sr04 act that motivated the fix now PASSES and its marking is gone --
+  # so this branch is dormant in production and this is its only permanent
+  # coverage. A test written as a second COPY of the arithmetic would test the
+  # copy; calling the shared function is what makes this a real test.
+  wip_ran=0
+  _wlog=$(mktemp)
+  _wcheck() {  # $1=label $2=TOTAL line $3=KNOWN-WIP line (or empty) $4=expected WANT_RAN
+    printf '%s\n' "$2" > "$_wlog"; [ -n "$3" ] && printf '%s\n' "$3" >> "$_wlog"
+    _t=$(grep -E '^TOTAL: [0-9]+' "$_wlog" | tail -1 | awk '{print $2}')
+    _r=$((_t + $(wip_count_from_log "$_wlog")))
+    if [ "$_r" = "$4" ]; then
+      printf '  ok    %-46s TOTAL %s + %s WIP = %s\n' "$1" "$_t" "$((_r - _t))" "$_r"
+      wip_ran=$((wip_ran + 1))
+    else
+      printf '  FAIL  %-46s TOTAL %s + %s WIP = %s, wanted %s\n' "$1" "$_t" "$((_r - _t))" "$_r" "$4"
+      bad=$((bad + 1))
+    fi
+  }
+  _wcheck "46 clean + 1 KNOWN-WIP reconciles to 47" \
+    "TOTAL: 46   PASS: 46   FAIL: 0" \
+    "KNOWN-WIP (ran, expected red, act unfinished): tb_pe_soc_sr04" 47
+  _wcheck "47 with no WIP line reconciles to 47" \
+    "TOTAL: 47   PASS: 47   FAIL: 0" "" 47
+  _wcheck "a selection EXCLUDING the WIP needs no back-count" \
+    "TOTAL: 46   PASS: 46   FAIL: 0" "" 46
+  _wcheck "two WIP cases are both taken back" \
+    "TOTAL: 45   PASS: 45   FAIL: 0" \
+    "KNOWN-WIP (ran, expected red, act unfinished): tb_a tb_b" 47
+  # The negative control, and the one that matters most: a selection expecting
+  # 48 when 47 ran must NOT reconcile, or the back-count is just a way to
+  # forgive under-running. Assert the arithmetic leaves them unequal.
+  printf 'TOTAL: 46   PASS: 46   FAIL: 0\nKNOWN-WIP (ran, expected red, act unfinished): tb_a\n' > "$_wlog"
+  _t=$(grep -E '^TOTAL: [0-9]+' "$_wlog" | tail -1 | awk '{print $2}')
+  _r=$((_t + $(wip_count_from_log "$_wlog")))
+  if [ "$_r" != "48" ]; then
+    printf '  ok    %-46s expecting 48 still fails at %s\n' \
+      "an under-run is NOT forgiven by the back-count" "$_r"
+    wip_ran=$((wip_ran + 1))
+  else
+    printf '  FAIL  %-46s an under-run reconciled and would pass\n' \
+      "an under-run is NOT forgiven by the back-count"
+    bad=$((bad + 1))
+  fi
+  rm -f "$_wlog"
+  want_wip=5
+
   CASE_TABLE="$real_table"; DATA_DIRS="$real_dirs"; MUT_TABLE="$real_mut"
-  if [ "$ran" -ne "$want_rules" ] || [ "$contract_ran" -ne "$want_contract" ]; then
-    echo "  FAIL  exercised $ran rule(s) and $contract_ran contract check(s), expected $want_rules and $want_contract — the self-test would pass while checking less than it claims"
+  if [ "$ran" -ne "$want_rules" ] || [ "$contract_ran" -ne "$want_contract" ] \
+     || [ "$wip_ran" -ne "$want_wip" ]; then
+    echo "  FAIL  exercised $ran rule(s), $contract_ran contract check(s) and $wip_ran WIP check(s), expected $want_rules, $want_contract and $want_wip — the self-test would pass while checking less than it claims"
     exit 1
   fi
-  TOTAL_CHECKS=$((want_rules + want_contract))
+  TOTAL_CHECKS=$((want_rules + want_contract + want_wip))
   if [ "$bad" -ne 0 ]; then
     echo "verify_merge.sh self-test: $bad check(s) of $TOTAL_CHECKS FAILED"; exit 1
   fi
-  echo "verify_merge.sh self-test: $TOTAL_CHECKS/$TOTAL_CHECKS checks ($want_rules mapper rules + $want_contract regex-contract), mapper and hand-off verified"
+  echo "verify_merge.sh self-test: $TOTAL_CHECKS/$TOTAL_CHECKS checks ($want_rules mapper rules + $want_contract regex-contract + $want_wip WIP-reconciliation), mapper and hand-off verified"
 }
 
 if [ "$MODE" = "self-test" ]; then selftest; exit $?; fi
@@ -817,8 +889,7 @@ TOTAL=$(grep -E '^TOTAL: [0-9]+' "$LOG" | tail -1 | awk '{print $2}')
 # evidence. So the expected side takes the WIP cases back. Counted from what the
 # run actually reported, which also means a selection that EXCLUDES a WIP case
 # needs no back-count at all: it never ran, so it is not in the list.
-WIP_N=$(grep -E '^KNOWN-WIP \(ran, expected red, act unfinished\):' "$LOG" \
-        | tail -1 | sed 's/^.*): *//' | wc -w | tr -d ' ')
+WIP_N=$(wip_count_from_log "$LOG")
 SELECTED_BY_RUN=$(grep -oE '[-][-]cases [^:]*: [0-9]+ selected' "$LOG" | tail -1 | grep -oE '[0-9]+ selected' | grep -oE '[0-9]+')
 # The same discipline for the mutation narrowing. The ruling's own words: GREEN
 # must never claim more than it ran. So the number of suites run_all.sh reports
