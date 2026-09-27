@@ -11,8 +11,10 @@ drift silently:
     harness measured as not matching. A step listed there is NOT confirmed, ever.
   * the 26 steps in the manifest itself.
 
-and it refuses to write unless the arithmetic is exactly what the manager ruled:
-23 confirmed, 3 not, and the 3 are precisely the pinned ones. Run it with
+and it refuses to write unless the arithmetic is exactly what the pinned set
+implies: as of the host-side vector-defect fixes (gui-worker b9d4eb2) that is
+25 confirmed, 1 not, and the 1 is precisely the pinned one
+(status_full_readback). Run it with
 `--check` in the suite: it re-derives the claim and fails if the file disagrees,
 so a hand-edit that claims a step the harness does not prove turns the build red.
 
