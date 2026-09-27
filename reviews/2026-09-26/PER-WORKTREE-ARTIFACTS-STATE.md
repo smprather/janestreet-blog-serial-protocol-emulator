@@ -81,12 +81,12 @@ Ground truth, re-derived from the `p_us` table and the banking loop
 | file | says | status |
 | --- | --- | --- |
 | `regress/run_all.sh:234` | 100 Hz – 12.5 kHz | correct (mine) |
-| `tb/tb_pe_soc_freqmeter.v:57` | 80 Hz – 10 kHz | wrong; `7fe4a1f` fixes it, **unmerged** |
+| `tb_pe_soc_freqmeter.v`, the line containing **"twelve points from 80 Hz"** (line 57 as of `8397c5b`) | 80 Hz – 10 kHz | wrong; `7fe4a1f` replaces it, **unmerged** |
 | `protocol-freqmeter.md`, the sentence containing **"twelve points spanning 158 Hz"** (line 257 as of `4066c8e`) | 158 Hz – 10 kHz | wrong, and **nothing pending covers it** |
 | `protocol-freqmeter.md`, the sentence containing **"sweeps the input over 158 Hz"** (line 38 as of `4066c8e`) | 158 Hz – 10 kHz | **CORRECT — do not "fix" this one** |
 | `protocol-freqmeter.md`, the sentence containing **"twelve points spanning 158 Hz"** (line 257 as of `4066c8e`) | 158 Hz – 10 kHz | wrong, and **nothing pending covers it** |
 | `protocol-freqmeter.md`, the sentence containing **"sweeps the input over 158 Hz"** (line 38 as of `4066c8e`) | 158 Hz – 10 kHz | **CORRECT — do not "fix" this one** |
-| `tb/tb_pe_soc_freqmeter.v:116` | "12 banked points" (count only) | fine |
+| `tb_pe_soc_freqmeter.v`, the line containing **`N_BANK   = N_SEG * (N_PER_SEG - 1)`** (line 116) | "12 banked points" (count only) | fine |
 
 > **Anchor on the words, not the line.** An earlier version of this record cited
 > `:252` and `:33`. Commit `4066c8e` (23:14) added lines to that page and both
