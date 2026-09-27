@@ -1,7 +1,43 @@
+import os
 import re
+import signal
 import subprocess
 import sys
 import time
+
+# THE WHOLE-PROCESS WATCHDOG. The per-call state cap and the per-call deadline
+# inside routes() bound that one walk. This bounds the SCRIPT, so that no future
+# loop, in this file or in anything it calls, can leave a process spinning
+# unattended again.
+#
+# It is here because of a 27 HOUR 36 MINUTE process (9.3M CPU ticks, R state)
+# that had to be killed by hand. Nothing noticed it: this check is not wired
+# into any gate, it is run by hand, and a hand-run check that hangs does not
+# fail -- it just occupies a core until a person notices. A check that can hang
+# is a check that has proven nothing while it is still running, and a hung one
+# proves nothing at all, so the bound cannot live only inside the loop that
+# happened to be the culprit.
+#
+# SIGALRM, not a watchdog thread: it fires even while the interpreter is busy in
+# a C call, and it needs no cooperation from the code it is bounding. The
+# handler prints the same words the cap uses -- DID NOT FINISH -- and leaves
+# through the failure path, so a timeout is a FAILURE and never a quiet success.
+WATCHDOG_S = 300.0
+
+
+def _watchdog(_signum, _frame):
+    sys.stderr.write(
+        f"\nFAIL: the whole check hit its {WATCHDOG_S:.0f}s watchdog, so NOTHING "
+        f"above is a measurement: a check that cannot finish is a program this "
+        f"check cannot measure, and reporting that is what it is for.\n"
+        f"RUN INCOMPLETE OR FAILED: this output is not a measurement.\n"
+    )
+    os._exit(1)
+
+
+if hasattr(signal, "SIGALRM"):
+    signal.signal(signal.SIGALRM, _watchdog)
+    signal.alarm(int(WATCHDOG_S))
 
 # The two file operations below are deliberately LOUD and deliberately NOT
 # silent-and-clean, and the explicit SystemExit is what keeps them that way: this
@@ -743,9 +779,25 @@ if bad_order:
     )
 
 if fails:
+    signal.alarm(0)  # the verdict is in; the watchdog has nothing left to guard
     print("FAIL: " + "; ".join(fails))
+    print("RUN INCOMPLETE OR FAILED: this output is not a measurement.")
     sys.exit(1)
 print(
     f"PASS: 7 checks, 0 failures "
     f"({N} words, {len(rs)} loop routes and {len(ent)} entry routes all 120 clocks)"
 )
+signal.alarm(0)  # disarm: the run is over, and a late SIGALRM must not rewrite it
+# THE COMPLETION MARKER, and it is the last thing this file can print.
+#
+# A check that is KILLED prints whatever it had reached, which for this file is
+# most of a page of numbers and a verdict that is not there. A reader -- or a
+# WORKLOG entry written from a scrollback -- cannot tell that from a real run.
+# That is not hypothetical: a bmc_checks.py process here ran 27 HOURS 36 MINUTES
+# and had to be killed, so its partial output was, in the most literal sense,
+# output from a run that did not finish.
+#
+# So the rule is mechanical rather than remembered: THIS SCRIPT IS VALID ONLY
+# FROM A COMPLETED RUN, and a completed run is one that reaches this line. Any
+# output lacking the marker below is partial, whatever it says above it.
+print("RUN COMPLETE: bmc_checks.py finished; the lines above are a measurement.")
