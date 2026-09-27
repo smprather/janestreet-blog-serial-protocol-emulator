@@ -5194,3 +5194,68 @@ block's own defect one last time -- a figure asserted in a second place -- and
 of those dates are other people's and a bulk find-and-replace over a shared
 handover document is how a record gets quietly falsified. `git log` is the
 authority and it disagrees with my headings.
+
+## THE GATE, WITH THE NEW CHECK IN IT -- 48/48, AND A SELF-DEADLOCK FOUND ON THE WAY
+
+| | |
+| :--- | :--- |
+| `FIRMWARE: 43   PASS: 43   FAIL: 0` | line 49 |
+| `TOTAL: 48   PASS: 48   FAIL: 0` | line 103 |
+| `all testbenches pass` | line 104 |
+| `tb_pe_soc_bmc      PASS` -- **with the new 6 us assertion in it** | line 86 |
+| `tb_pe_soc_freqmeter PASS` -- with the labelled `$display` | line 85 |
+| `param guards: OK` / `regress script syntax: OK` (36) | lines 104-105 |
+| `run-lock process tree: OK` | line 160 |
+| `harness-edit pre-flight: OK` | line 185 |
+| `mutation suites: 16 ran (full gate -- no narrowing)` | line 186 |
+| **`R3 golden package: FAILED`** | line 162 -- unchanged, still not mine, still not landed |
+
+**THE THING THIS RUN WAS FOR: the new `no THREE-half-interval (6 us) gap`
+assertion has now been seen by the gate for the first time, and it holds.**
+That check had only ever run standalone. The log is 8574 bytes, the same size
+as the previous full run's, which is what a run that changed one assertion and
+three message strings should look like.
+
+**The one red is R3's committed README drift, third consecutive run to show
+it, and it is still NOT the manager's fix having landed** -- line 270 of
+`regress/run_all.sh` still reads "Twelve banked points from 158 Hz to 10 kHz".
+So this run does not close their item and I am not going to report it as if it
+did.
+
+### AND A NEW TRAP, AND IT IS THE WORST SHAPE OF THE FAILURE MODE HERE
+
+Getting this run started took 24 minutes of nothing, and the cause is worth more
+than the run. I wrote a waiter that polled for a clear worktree and then
+launched the gate. **Its own script text contains the string
+`regress/run_all.sh`.** So `pgrep -f 'regress/run_all.sh' -- check cwd` matched
+**the waiter itself**, `busy` was permanently 1, and the waiter sat waiting for
+a lock that nobody held -- for twenty-four minutes, printing nothing.
+
+**THE LIVENESS PREDICATE MATCHED THE PROCESS ASKING THE QUESTION.** The
+recorded trap is "`pkill -f` matches your own command line", and the whole
+session I have treated it as a tidy-up hazard. It is worse than that: a
+predicate that matches its own asker is a predicate that can never go false,
+and the failure is a **silent hang with an empty log**, not a wrong answer. The
+predecer's own words from this block cover it exactly -- **"a check that cannot
+be made to say what it means is not yet a check"** -- and this one could not be
+made to say anything at all.
+
+Three things that would have caught it, none of which I did:
+
+1. **The log was 0 bytes after 24 minutes.** A wait loop that has printed
+   nothing for 24 minutes is not waiting, it is deadlocked, and the two look
+   identical from outside.
+2. `pgrep` returned a pid whose elapsed time equalled the waiter's own. The
+   answer contained the question.
+3. Twelve `chip-run-all.*.lock` files existed, one per worktree, all
+   persisting after their runs died -- which reconfirms the trap from earlier
+   today, and is why "is the lock file there" is not a liveness test either.
+
+**What I did instead: killed it by explicit PID (never `pkill -f`, for the
+reason above) and ran the gate directly.** And the fix for next time is not
+"be careful with pgrep" -- it is that a waiter should assert on a pid it was
+given, or on a lock it can take, and never on a name it contains.
+
+`killed by explicit pid` also matters procedurally: `kill -0` would have
+answered "still running" for a process I had merely asked about, and the whole
+point of this session has been that a liveness answer has to mean something.
