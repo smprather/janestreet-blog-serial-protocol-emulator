@@ -51,10 +51,26 @@ cd "$REPO" || { echo "tier.sh: cannot enter $REPO" >&2; exit 2; }
 . "$REPO/regress/lib_dirty.sh"
 
 # ---- T0: the fast gate. Declared, not discovered, so it cannot silently shrink.
+#
+# THE SPLIT IS MEASURED, NOT ASSUMED. Every entry was timed and the T0/T1 line
+# was drawn at 3 seconds, because T0's whole value is that it is cheap enough to
+# run without thinking. Measured 2026-09-27: check_tmp_isolation 0.2s and
+# check_r2_package 0.0s were sitting in T1 and are here now; test_run_lock 92.6s,
+# test_check_wiki_pages 14.7s and test_dep_guard 6.1s stay in T1.
+#
+# Moving check_tmp_isolation was not housekeeping. It caught a REAL defect today
+# - tools/manager/pe_forbidden_sweep.sh wearing a fleet-wide /tmp path with no
+# exemption marker - and under T1 the earliest anyone could have learned that was
+# the end of a 20-30 minute full gate. A gate that finds things 25 seconds after
+# you make the mistake is worth several times more than the same gate that finds
+# them 25 minutes after, and the whole point of the ladder is that the cheap
+# checks are the ones that catch cheap mistakes.
 T0=(
   "regress/check_shell_syntax.sh"
   "regress/check_tree_known.sh"
   "regress/check_staged_mutants.sh"
+  "regress/check_tmp_isolation.sh"
+  "regress/check_r2_package.sh"
   "regress/check_doc_index.sh"
   "regress/check_wiki_links.sh"
   "regress/check_harness_preflight.sh"
@@ -71,8 +87,6 @@ T1_SELF=(
   "regress/test_run_lock.sh"
   "regress/test_dep_guard.sh"
   "regress/test_check_wiki_pages.sh"
-  "regress/check_tmp_isolation.sh"
-  "regress/check_r2_package.sh"
 )
 
 FORCE=0

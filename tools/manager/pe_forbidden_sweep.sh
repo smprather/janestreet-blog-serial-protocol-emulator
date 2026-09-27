@@ -34,6 +34,24 @@
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+
+# tmp-isolation: box-global singleton, EXEMPT on purpose. This sweep is not a
+# per-worktree script - it is the ENFORCEMENT HALF of the box-global supervisor,
+# invoked once per tick from tools/manager/worker_supervisor.sh, and it has to
+# see every process in every worktree or it cannot enforce the rule at all. Its
+# ALERT and LOG are therefore the supervisor's own fleet-wide state, and they
+# default to the same paths the supervisor uses. Namespacing them per worktree
+# would give each worktree its own enforcement half, blind to the others, which
+# is the exact regression that let a pe rule reach into another project's work.
+#
+# The exemption is DELIBERATE and it is the same one worker_supervisor.sh and
+# mem_monitor.sh carry, because all three are one box-global singleton each. The
+# baseline gate caught this file on 2026-09-27 (check_tmp_isolation, "a script
+# shares a global /tmp name with every other worktree") and it was RIGHT: a new
+# file wearing a fleet-wide path with no marker saying so is indistinguishable
+# from a per-worktree script that happens to collide. Both LOG and ALERT remain
+# overridable, which is how tools/manager/test_pe_forbidden_sweep.sh runs the
+# whole rule against a private log without touching the real one.
 # shellcheck source=tools/manager/agent_tag.sh
 . "$HERE/agent_tag.sh"
 
