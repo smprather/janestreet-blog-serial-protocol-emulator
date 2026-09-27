@@ -349,6 +349,59 @@ else
   bad "a target with no declaration was reported as covered (exit $rc): $out"
 fi
 
+# 8. THE TWO-CAUSES DISCRIMINATION, MECHANICALLY. CHIP-DEP-CHANGED's "a MUTABLE
+#    target did not hold the state the harness declared" has always had two
+#    causes with one signature -- the 2026-09-26 harness over-claim (declared
+#    mutated on a file it never wrote) and a genuine outside writer -- and the
+#    message used to send a READER to adjudicate. But the sampler already holds
+#    the proof in its own hands: chip_dep_one is a content hash and the
+#    pre-run hash is retained, so a hit whose observed class is `pristine` means
+#    the content is UNCHANGED from the harness's own baseline (cause 1,
+#    overclaim, certain), and a hit observed `mutated` means the content really
+#    moved to an undeclared state (cause 2, external). These two cases pin that
+#    the tag is emitted AND correct in both directions, so the message names the
+#    cause instead of teaching the reader to guess it.
+printf 'module dut; endmodule\n' > "$TMP/dut_over.v"
+out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
+  set -u; . "$1"
+  command -v chip_dep_expect >/dev/null 2>&1 || { echo "NO SAMPLER IMPLEMENTED"; exit 9; }
+  lbl="run_$(basename "$0")"
+  chip_dep_stamp dut_over "$2"
+  chip_dep_sample_start "$lbl" "$2"
+  chip_dep_expect mutated "$2"      # over-claim: declared mutated, never written
+  sleep 0.4                          # sampler observes pristine past persist
+  rc=0; chip_dep_sample_stop "$lbl" || rc=4
+  chip_dep_check dut_over || rc=4
+  exit $rc
+' dut_over.sh "$GUARD" "$TMP/dut_over.v" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && grep -q 'cause: overclaim' <<< "$out"; then
+  ok "an over-claim (declared mutated, content unchanged) is tagged cause: overclaim"
+else
+  bad "an over-claim was not tagged cause: overclaim (exit $rc): $out"
+fi
+# ...and the OTHER direction, so the tag cannot be a constant. A genuine mid-run
+# external edit leaves the content in an undeclared state -> cause: external.
+printf 'module dut; endmodule\n' > "$TMP/dut_ext.v"
+out=$(CHIP_DEP_STAMP_DIR="$TMP/stamps" bash -c '
+  set -u; . "$1"
+  command -v chip_dep_expect >/dev/null 2>&1 || { echo "NO SAMPLER IMPLEMENTED"; exit 9; }
+  lbl="run_$(basename "$0")"
+  chip_dep_stamp dut_ext "$2"
+  chip_dep_sample_start "$lbl" "$2"
+  chip_dep_expect pristine "$2"
+  sleep 0.3
+  printf "module dut; // EDITED BY SOMEONE ELSE\nendmodule\n" > "$2"   # undeclared state
+  sleep 0.4
+  rc=0; chip_dep_sample_stop "$lbl" || rc=4
+  chip_dep_check dut_ext || rc=4
+  exit $rc
+' dut_ext.sh "$GUARD" "$TMP/dut_ext.v" 2>&1); rc=$?
+if [ "$rc" -ne 0 ] && grep -q 'cause: external' <<< "$out"; then
+  ok "a real mid-run external edit is tagged cause: external, not overclaim"
+else
+  bad "an external edit was not tagged cause: external (exit $rc): $out"
+fi
+
 if [ "$fail" -ne 0 ]; then
   echo "dep_guard self-test: $fail of $((pass+fail)) FAILED"
   exit 1

@@ -324,8 +324,19 @@ chip_dep_sample_poll() {
         else
           elapsed=$(awk -v a="$now" -v b="${_since[i]}" 'BEGIN{printf "%.3f", a-b}')
           if awk -v e="$elapsed" -v p="$persist" 'BEGIN{exit !(e >= p)}'; then
-            printf '%s\n  declared: %s   observed: %s   held for %ss while the run was live\n' \
-              "${_t[i]}" "$want" "$cls" "$elapsed" >> "$base.sample.hit"
+            # MACHINE-READABLE CAUSE, from evidence the sampler already holds.
+            # chip_dep_one is a content hash and _o[i] is this file's PRE-RUN
+            # hash, so cls=pristine proves the content is UNCHANGED from the
+            # harness's own baseline: the harness declared a state it never
+            # earned (cause 1, the over-claim) and nothing outside wrote it. A
+            # cls=mutated hit means the content genuinely changed to something
+            # the harness did not declare, which is the outside-writer shape
+            # (cause 2). This turns a signature the message used to ask a human
+            # to adjudicate into one it can name. It only ever AGREES with the
+            # classification it is derived from; it asserts no new fact.
+            if [ "$cls" = pristine ]; then _cause=overclaim; else _cause=external; fi
+            printf '%s\n  declared: %s   observed: %s   cause: %s   held for %ss while the run was live\n' \
+              "${_t[i]}" "$want" "$cls" "$_cause" "$elapsed" >> "$base.sample.hit"
             # NEUTRAL BY DESIGN. This line used to read "and something else made
             # it <state>", which asserted an outside writer as the cause -- and
             # the most common cause is the opposite: a harness that declared a
@@ -407,9 +418,28 @@ chip_dep_sample_stop() {
     echo "        with \"\$rel\" and mutate_i2c_tb.sh with \"\$mutated_by_this_case\"." >&2
     echo "    (2) SOMETHING OUTSIDE THIS RUN wrote to it mid-run. That is the" >&2
     echo "        2026-09-25 shape: another run, worker or process sharing the file." >&2
-    echo "  TO TELL THEM APART: if the file still matches the harness's own pristine" >&2
-    echo "  snapshot, nobody outside wrote it and cause (1) is certain. If it matches" >&2
-    echo "  neither the snapshot nor any state this harness declared, it is (2)." >&2
+    echo "  TO TELL THEM APART: this run's sampler already did, mechanically, from the" >&2
+    echo "  content hashes it held before and during the run. Each hit line above is" >&2
+    echo "  tagged 'cause:'." >&2
+    if grep -q 'cause: overclaim' "$base.sample.hit" 2>/dev/null; then
+      echo "    * cause: overclaim (observed: pristine) => CONTENT UNCHANGED from this" >&2
+      echo "      harness's own pre-run baseline. Cause (1) is CERTAIN: the harness" >&2
+      echo "      declared a state it had not yet earned, and NOTHING outside this run" >&2
+      echo "      wrote to it. Do not go looking for a concurrent editor." >&2
+    fi
+    if grep -q 'cause: external' "$base.sample.hit" 2>/dev/null; then
+      echo "    * cause: external (observed: mutated) => the content really changed to" >&2
+      echo "      a state this harness did not declare. Cause (2) is indicated: look" >&2
+      echo "      for another run, worker or process sharing the file." >&2
+    fi
+    if ! grep -qE 'cause: (overclaim|external)' "$base.sample.hit" 2>/dev/null; then
+      echo "    (no cause tag present -- an older or truncated hit file; fall back to the" >&2
+      echo "     manual discriminator below.)" >&2
+    fi
+    echo "  MANUAL DISCRIMINATOR, if the tags are absent: if the file still matches the" >&2
+    echo "  harness's own pristine snapshot, nobody outside wrote it and cause (1) is" >&2
+    echo "  certain. If it matches neither the snapshot nor any state this harness" >&2
+    echo "  declared, it is (2)." >&2
     echo "  EITHER WAY this run verified nothing and its verdict must be read as" >&2
     echo "  INCONCLUSIVE, not as green:" >&2
     sed 's/^/    /' "$base.sample.hit" >&2
