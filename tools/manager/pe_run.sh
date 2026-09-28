@@ -62,6 +62,49 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 
+# WHERE THE AGENT RUNS. This is not cosmetic: a worker belongs in ITS OWN
+# worktree, and the first version of this script did `cd "$REPO"` unconditionally,
+# which would have yanked every worker out of its worktree and into the main one the
+# moment it was launched. That is the shared-worktree hazard this project has now
+# paid for three times - two mutation-harness collisions and one gate voided mid-run
+# - so the launcher itself must not be the thing that causes it.
+#
+# Precedence, most explicit first:
+#   PE_WORKTREE   named outright, e.g. by a fleet manifest
+#   $PWD          if the caller is ALREADY inside a pe worktree
+#   main repo     the fallback, which is right for the manager
+is_pe_worktree() {
+  local d="$1"
+  [ -n "$d" ] && [ -d "$d" ] || return 1
+  git -C "$d" rev-parse --git-dir >/dev/null 2>&1 || return 1
+  [ -d "$d/regress" ] && [ -d "$d/tb" ]
+}
+if [ -n "${PE_WORKTREE:-}" ]; then
+  RUN_IN="$PE_WORKTREE"
+elif is_pe_worktree "${PWD:-}"; then
+  RUN_IN="$PWD"
+else
+  RUN_IN="$REPO"
+fi
+is_pe_worktree "$RUN_IN" || { echo "pe_run.sh: '$RUN_IN' is not a pe worktree" >&2; exit 1; }
+
+# ---- the MODEL, fixed at launch rather than typed into the TUI. ------------
+# USER ORDER 2026-09-27: workers run `opencode-go space-bunny-free`.
+#
+# WHY IT IS A LAUNCH FLAG AND NOT A `/model` KEYSTROKE. MANAGER-COLD-START.md
+# already records that "the command can sit unsubmitted in the input box" and
+# that "TUI input boxes eat mid-turn keystrokes - three dispatches were lost that
+# way on 2026-09-25". Both happened again today: a `/model` sent to a pane with
+# an open model picker was swallowed as picker keystrokes, and a second attempt
+# after `/new` was swallowed too. The status line kept reporting the OLD model
+# both times, which is exactly the "never assume it applied" trap.
+#
+# `pi --model` takes `provider/id` directly (pi --help), so putting it on the
+# command line makes the model a property of the LAUNCH rather than something an
+# interactive step has to land. There is no picker to fight and nothing to
+# verify by eye, because there is no second state to be in.
+PE_MODEL="${PE_MODEL:-opencode-go/space-bunny-free}"
+
 # ---- the TEAM budget, and the per-agent share of it. -----------------------
 # PER-AGENT CAPS ALONE DO NOT ADD UP, and on this box the arithmetic was fatal:
 # 4 agents x 8G = 32G on a 31G machine that also runs the desktop, Chrome and
@@ -146,7 +189,7 @@ fi
 # The manager is the one agent that is not optional to name, and it is the one
 # that must run in the repo. Everything else gets the repo as cwd too, because
 # every pe agent's tools resolve the repo from their own location.
-cd "$REPO" || { echo "pe_run.sh: cannot enter repo at $REPO" >&2; exit 1; }
+cd "$RUN_IN" || { echo "pe_run.sh: cannot enter $RUN_IN" >&2; exit 1; }
 
 # The user ruling: pe may only manage pe work. Refuse to run inside another
 # team's tag rather than quietly re-tagging it as ours.
@@ -165,8 +208,13 @@ if [ -z "$name" ]; then echo "pe_run.sh: an agent name is required" >&2; exit 2;
 # Default command: the agent harness, resuming, in the repo. Harness-agnostic in
 # spirit but pi is what this project runs.
 if [ $# -eq 0 ]; then
-  set -- pi
-  [ -n "$SESSION_FLAG" ] && set -- "$@" "$SESSION_FLAG"
+  set -- pi --continue
+fi
+# Stamp the model onto a bare `pi` invocation only. If the caller passed an
+# explicit command (a test harness, a one-off tool) their arguments are
+# authoritative and are left exactly as given.
+if [ "${1:-}" = "pi" ] && [ "${2:-}" != "--model" ]; then
+  set -- pi --model "$PE_MODEL" "${@:2}"
 fi
 
 unit="pe-${name}"
@@ -230,7 +278,8 @@ esac
 echo "pe_run.sh: $name -> $unit.scope, nested in $SLICE" >&2
 echo "pe_run.sh:   agent  MemoryHigh=$MEMORY_HIGH MemoryMax=$MEMORY_MAX TasksMax=$TASKS_MAX CPUQuota=$CPU_QUOTA" >&2
 echo "pe_run.sh:   TEAM   MemoryHigh=$TEAM_HIGH MemoryMax=$TEAM_MAX TasksMax=$TEAM_TASKS   <- the ceiling that adds up" >&2
-echo "pe_run.sh: repo=$REPO  cmd=$*" >&2
+echo "pe_run.sh: repo=$RUN_IN  cmd=$*" >&2
+echo "pe_run.sh: model=$PE_MODEL (set at launch, not typed into the TUI)" >&2
 
 # The tag is set by a HELPER FILE, not by a `bash -c` string. systemd expands
 # `$` in the command per its own unit-file rules before bash ever sees it, which
