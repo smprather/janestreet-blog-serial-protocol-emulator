@@ -12,4 +12,7 @@ if ! iverilog -g2012 -s tb_pe_eth_mac -o "$WORK/probe.vvp" \
     cat "$WORK/compile.txt"
     exit 2
 fi
-vvp "$WORK/probe.vvp"
+# BOUNDED 2026-09-28: a vvp with no ceiling is the exact defect that pegged all
+# 24 cores and exhausted the user pids limit on 2026-07-27. This script is a
+# manual review harness, not part of run_all.sh, so nothing else bounded it.
+timeout 300 vvp "$WORK/probe.vvp"

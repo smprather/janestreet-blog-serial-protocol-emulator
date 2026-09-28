@@ -217,6 +217,32 @@ if [ "${1:-}" = "pi" ] && [ "${2:-}" != "--model" ]; then
   set -- pi --model "$PE_MODEL" "${@:2}"
 fi
 
+# A FRESH SESSION BY DEFAULT, not a resume. This is a correction, not a
+# preference.
+#
+# The cold-start says agents should resume, and for a live agent that is right:
+# its findings live in the session AND in WORKLOG.md. But pe_run.sh is also the
+# RELAUNCH path, and there resuming is actively harmful. Two panes came back at
+# CH98.7% and CH98.3% - pi had resumed a nearly full session, three times in a
+# row, because a bare `pi` in a project that has stored sessions continues the
+# most recent one. That is past the 75% hard-wrap line, where the harness
+# auto-compacts at the worst boundary mid-task, the one outcome the cold-start
+# explicitly forbids. It also silently swallowed a dispatch: the typed task sat
+# unsubmitted and the pane never ran it.
+#
+# So the launch names its own session id, which pi CREATES if missing. Resuming
+# stays available and is the right default for a live agent - pass --continue
+# explicitly, or set PE_RESUME=1.
+if [ "${1:-}" = "pi" ] && [ "${2:-}" = "--model" ]; then
+  case " $* " in
+    *" --continue "*|*" -c "*) : ;;   # caller asked to resume; honour it
+    *) if [ "${PE_RESUME:-0}" != "1" ]; then
+         _sid="pe-${name}-$(date +%Y%m%d-%H%M%S)-$$"
+         set -- "$1" "$2" "$3" --session-id "$_sid" "${@:4}"
+       fi ;;
+  esac
+fi
+
 unit="pe-${name}"
 # systemd-run refuses a unit name that is already active, which is the correct
 # behaviour (one manager, not two) but the error is opaque, so name it.
