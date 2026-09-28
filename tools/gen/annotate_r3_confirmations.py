@@ -11,8 +11,10 @@ drift silently:
     harness measured as not matching. A step listed there is NOT confirmed, ever.
   * the 26 steps in the manifest itself.
 
-and it refuses to write unless the arithmetic is exactly what the manager ruled:
-23 confirmed, 3 not, and the 3 are precisely the pinned ones. Run it with
+and it refuses to write unless the arithmetic is exactly what the pinned set
+implies: as of the host-side vector-defect fixes (gui-worker b9d4eb2) that is
+25 confirmed, 1 not, and the 1 is precisely the pinned one
+(status_full_readback). Run it with
 `--check` in the suite: it re-derives the claim and fails if the file disagrees,
 so a hand-edit that claims a step the harness does not prove turns the build red.
 
@@ -35,12 +37,15 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import re
 import sys
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 TB_MANIFEST = REPO / "tb" / "r3-vectors" / "manifest.json"
 HOST_MANIFEST = REPO / "reviews" / "2026-09-25" / "r3-hex" / "manifest.json"
 DIVERGENCES = REPO / "tb" / "r3-vectors" / "R3_KNOWN_DIVERGENCES.txt"
+TB_README = REPO / "tb" / "r3-vectors" / "README.md"
+HOST_README = REPO / "reviews" / "2026-09-25" / "r3-hex" / "README.md"
 
 # The manager's ruling (2026-09-25), twice. First: flip the clean-matching
 # steps and hold back the three that do not match, each for a recorded reason.
@@ -216,6 +221,55 @@ def annotate(manifest: dict, pinned: set[str]) -> dict:
     return manifest
 
 
+def readme_claim_ok(path: pathlib.Path, confirmed: int, total: int) -> str | None:
+    """Return None if the README's Status paragraph agrees with the manifest.
+
+    WHY THIS EXISTS. Everything else in this file gates the MANIFEST: --check
+    re-derives chip_evidence, chip_confirmed, the notice and every per-step
+    flag from the pinned divergences, and refuses if the checked-in manifest
+    disagrees. That is strong, and it is silent about the one thing a human
+    actually reads. The package's README states the same claim in prose -- "25
+    of 26 steps are CHIP-CONFIRMED IN SIMULATION ... 26/26 steps byte-exact" --
+    and until now NOTHING read that sentence: this module never opens a markdown
+    file, and the suite's other leg is a diff between the two copies, which
+    catches the copies DIVERGING but not both being stale together.
+
+    That is not hypothetical. The stale claim this checks is the one that was
+    shipped and then fixed on 2026-09-25/26 (a9ca7c5): the tb copy said the
+    conformance run "has not been executed" and the review copy said the steps
+    were confirmed. A diff caught it, by luck of the two copies disagreeing.
+    Had the same stale sentence been pasted into both, every gate in the
+    repository would have stayed green while the package's headline claim was
+    false. A claim that is only checked for self-consistency is an assertion
+    wearing a citation's clothes.
+
+    So the prose is made a CHECKED RENDERING of the gated fact. The wording is
+    not pinned -- only the arithmetic is, because the arithmetic is the claim.
+    """
+    try:
+        text = path.read_text()
+    except OSError as exc:
+        return f"cannot read {path.relative_to(REPO)}: {exc}"
+    status = [ln for ln in text.splitlines() if ln.lstrip().startswith("**Status")]
+    if not status:
+        return f"{path.relative_to(REPO)} has no '**Status' line to check"
+    line = status[0]
+    # "{confirmed} of {total} steps" -- the confirmation count and the total.
+    if not re.search(rf"\b{confirmed}\s+of\s+{total}\s+steps\b", line):
+        return (
+            f"{path.relative_to(REPO)}: the Status line does not state "
+            f"'{confirmed} of {total} steps'; the manifest derives that number, so "
+            f"the prose and the gated claim have drifted apart"
+        )
+    # "{total}/{total} steps byte-exact" -- the conformance sweep's own result.
+    if not re.search(rf"\b{total}\s*/\s*{total}\s+steps\s+byte-exact\b", line):
+        return (
+            f"{path.relative_to(REPO)}: the Status line does not state "
+            f"'{total}/{total} steps byte-exact'"
+        )
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -225,9 +279,28 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    host = json.loads(HOST_MANIFEST.read_text())
+    # A gate that tracebacks is a gate that reports a stack trace where the
+    # operator needs a cause. These three reads were unguarded at HEAD; a
+    # missing or unparseable manifest is an ordinary operational state (a
+    # half-applied package refresh, a truncated file) and deserves a sentence,
+    # not a FileNotFoundError with a line number.
+    try:
+        host = json.loads(HOST_MANIFEST.read_text())
+    except (OSError, ValueError) as exc:
+        print(
+            f"cannot read the host manifest {HOST_MANIFEST.relative_to(REPO)}: {exc}",
+            file=sys.stderr,
+        )
+        return 2
     pinned = pinned_steps()
-    current = json.loads(TB_MANIFEST.read_text())
+    try:
+        current = json.loads(TB_MANIFEST.read_text())
+    except (OSError, ValueError) as exc:
+        print(
+            f"cannot read the TB manifest {TB_MANIFEST.relative_to(REPO)}: {exc}",
+            file=sys.stderr,
+        )
+        return 2
 
     # The golden bytes and the vector shape must still be the host's, whatever
     # the evidence fields say. A harness that compared the chip's own edits to
@@ -238,7 +311,11 @@ def main() -> int:
         )
         return 1
 
-    derived = annotate(json.loads(json.dumps(host)), pinned)
+    try:
+        derived = annotate(json.loads(json.dumps(host)), pinned)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"cannot derive the confirmation claim: {exc}", file=sys.stderr)
+        return 2
     if args.check:
         if current.get("chip_evidence") != derived["chip_evidence"]:
             print("chip_evidence is stale; run without --check", file=sys.stderr)
@@ -258,6 +335,19 @@ def main() -> int:
                     print(f"step {ds['name']} is stale", file=sys.stderr)
                     return 1
         n = len(derived["chip_evidence"]["confirmed_steps"])
+        # And the PROSE, which nothing else in the repository reads. See
+        # readme_claim_ok for why a self-consistent stale claim is the dangerous
+        # case rather than a harmless one.
+        for readme in (HOST_README, TB_README):
+            problem = readme_claim_ok(readme, n, EXPECT_TOTAL)
+            if problem:
+                print(f"R3 README claim is stale: {problem}", file=sys.stderr)
+                print(
+                    "  the manifest is the gated fact; the Status line is prose "
+                    "restating it, and prose is not evidence",
+                    file=sys.stderr,
+                )
+                return 1
         print(f"R3 confirmations: {n}/{EXPECT_TOTAL} steps confirmed, all cited")
         return 0
 

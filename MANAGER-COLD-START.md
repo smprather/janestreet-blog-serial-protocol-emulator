@@ -11,6 +11,17 @@ worker; this file is the manager's restart prompt.
 
 ## First actions
 
+0. **Launch yourself through the wrapper, not bare `pi`:**
+   `./tools/manager/pe_run.sh manager` — resumes the last session, names you
+   `manager`, exports `PE_TEAM`/`PE_AGENT_NAME`/`PE_ROOT_PID` so every process
+   you spawn is attributable, and runs you inside a systemd user scope with
+   `TasksMax=512`, `MemoryMax=8G`, `CPUQuota=1600%` that the kernel enforces
+   whether or not any script is alive. Started bare, you are untagged: the
+   manager's own killers then cannot tell you from anyone else, which is exactly
+   how the previous manager killed itself on 2026-09-27. Use
+   `pe_run.sh <name> [command...]` for workers and one-off tools too, and
+   `pe_run.sh manager --fresh` to opt out of resuming. Limits are overridable
+   with `PE_TASKS_MAX` / `PE_MEMORY_MAX` / `PE_CPU_QUOTA`.
 1. Read `HANDOFF.md`, `reviews/2026-09-23/PROJECT-REVIEW.md`, and
    `wiki/STATUS.md`. Read `COLD-START.md` only when you need the worker's
    instructions.
@@ -88,6 +99,14 @@ worker; this file is the manager's restart prompt.
   `logs/worklog/YYYY-MM-DD[-NN].md` at ~10 MB or day boundaries; keep log
   lines ≤ ~500 chars (reports link to reviews/, never inline). The 58 MB
   GitHub-warning incident is why.
+- **Quiet windows for gate runs (2026-09-26): a verify_merge / full-suite run
+  is VOIDED by concurrent edits to regress//rtl//tb/ (the dep-guard reports
+  INCONCLUSIVE exit 4 - correct behaviour). During a gate run the manager HOLDS
+  all merges and commits to main and workers hold edits to those sets.** The
+  merge-on-arrival policy yields to the gate window, not the other way round:
+  tonight a review gate reported INCONCLUSIVE because the manager merged three
+  branches mid-run. Coordinate the window explicitly; announce it; end it when
+  the gate reports.
 - **Conflict-resolution scope (2026-09-25, learned the hard way): the
   timestamp-union script is ONLY for `WORKLOG.md` and `wiki/log.md`.
   Every other conflict — code, docs, configs — is HAND-MERGED hunk by hunk,
@@ -106,6 +125,50 @@ worker; this file is the manager's restart prompt.
   `regress/verify_merge.sh` (affected-TB mapping, full-suite fallback) before
   every merge push; a merge that turns the suite red is reverted or repaired
   before anything else lands on top of it.
+- **The verification ladder (2026-09-27).** Match the gate to the change;
+  `regress/tier.sh <0|1|2>`. **T0** (~25s) is the fast self-tests - run it on
+  every edit, it needs no window. **T1** (1-3 min) is the slow self-tests plus
+  the AFFECTED testbench set only, since `verify_merge.sh --list` already
+  computes the mapping and `run_all.sh --cases=REGEX` already consumes it.
+  **T2** (20-30 min) is the full gate and is for NAMED GATES ONLY - a merge to
+  main, a closeout, a claim in a review. T2 **refuses to start** (exit 6) if
+  `regress/ rtl/ tb/` is dirty, a mutation harness is live, or another gate is
+  running; `--force` overrides and says so out loud. That refusal is the point:
+  on 2026-09-27 a gate ran against a dirty tree with a live mutant planted and
+  printed a verdict anyway. The evidence for the ladder: 20 completed full gates
+  and ~12 aborted at 4/15 and 13/15 suites, while the defects actually found
+  that day were process, not RTL. An aborted gate costs its whole budget and
+  returns nothing.
+- **The commit tail is the loss window (2026-09-27, measured).** The median gap
+  between commits is 1-4 minutes, so the agents are already diligent; the MAX
+  gap is 33.1h on active branches, and main's worst is 6.7h. The tail is the
+  hole, not the median. Two rules: **nothing stays untracked** (8 untracked
+  files on 2026-09-27 held the entire safety layer, and uncommitted work is the
+  one thing git cannot recover), and **no more than 60 minutes of work
+  uncommitted**. `WORKLOG.md` remains the durable record a fresh session reads
+  first - reconstructing the whole 2026-09-27 incident from it plus git took
+  minutes, which is the property that makes a lost session cheap.
+- **Resource containment (user ruling 2026-09-27, after the session-death
+  incident).** The whole box is shared, so the fleet is contained rather than
+  trusted: every agent is launched with `tools/manager/pe_run.sh`, which bounds
+  it in a systemd user scope the kernel enforces. Do NOT launch `pi`, a worker,
+  or a suite bare. A testbench that never reaches `$finish` used to be bounded
+  by nothing — on 2026-09-27 that pegged all 24 cores for ~10 minutes and
+  accumulated until `user-1000.slice` hit `TasksMax=84178`, at which point the
+  desktop could no longer fork a thread and the graphical session was torn down
+  to a login screen. `mem_monitor` watches per-process RAM and `runaway_watch`
+  watched per-process CPU time; neither can see a process *count*, which is why
+  it reached the desktop. The scope is the fix that does not depend on a
+  manager being alive. **pe may only manage pe work** (user ruling): kill
+  authority stops at the team boundary, and an untagged process is never
+  touched. Per-agent caps do NOT add up, so there is also a TEAM ceiling:
+  `tools/manager/pe-agents.slice` (MemoryHigh=14G MemoryMax=20G TasksMax=2048
+  CPUQuota=1600%), which `pe_run.sh` installs idempotently and nests every
+  agent scope inside. 4 x 6G is 24G on a 31G box; the team ceiling binds at 20G
+  and leaves the desktop >=11G. If the slice reports no ceiling, `pe_run.sh`
+  REFUSES to start rather than running the agent unbounded. `pe_forbidden_sweep.sh`
+  is the L3/L5 rule, and it acts ONLY on pe-tagged processes - it used to scan
+  the whole box and was killing the user's `engineering-loadout` work.
 - **RAM watchdog + OOM forensics (2026-09-25).** Two kernel OOM events —
   2026-09-24 14:33:40 and 18:43:28 (`journalctl -k`) — each killed a runaway
   `python3` at 22-23 GB anon RSS (+5 GB swapped) living in the wezterm

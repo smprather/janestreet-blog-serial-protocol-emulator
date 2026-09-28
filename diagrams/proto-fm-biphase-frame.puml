@@ -1,4 +1,7 @@
 @startuml proto-fm-biphase-frame
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-fm-biphase-frame.puml - (b) the FM0/FM1 symbol rules, the one bit that
 ' differs, and the sixteen bytes of receiver state.
@@ -11,12 +14,13 @@
 ' ===========================================================================
 
 title FM0/FM1 bi-phase - the symbol rules, and the receiver's sixteen bytes\n<font size=12>there is no packet: a bit is two half-intervals and the value is a transition pattern</font>
+skinparam defaultFontName Monospaced
 
 hide empty description
 hide stereotype
 skinparam shadowing false
 skinparam rectangle {
-  BorderColor #33555
+  BorderColor #4A6FA5
   FontName monospaced
   FontSize 12
 }

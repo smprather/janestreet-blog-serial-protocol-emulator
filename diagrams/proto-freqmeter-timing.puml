@@ -1,4 +1,7 @@
 @startuml proto-freqmeter-timing
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-freqmeter-timing.puml - (c) the input edge timing, and the accuracy
 ' the instrument actually has.
@@ -10,21 +13,32 @@
 ' ===========================================================================
 
 title Frequency + duty meter - edge timing and the accuracy it has\n<font size=12>12 points, 158 Hz to 10 000 Hz; three are one tick out and are printed so</font>
+skinparam defaultFontName Monospaced
+skinparam ParticipantFontName monospaced
+skinparam ActorFontName monospaced
+skinparam NoteFontName monospaced
+skinparam GroupFontName monospaced
 
 hide stereotype
 skinparam shadowing false
 skinparam sequence {
-  ArrowColor #33555
-  LifeLineBorderColor #33555
-  LifeLineBackgroundColor #FAFAFA
-  ParticipantBorderColor #33555
-  ParticipantBackgroundColor #F4F7FB
-  ParticipantFontName monospaced
-  ActorFontName monospaced
-  NoteFontName monospaced
-  GroupFontName monospaced
+  ArrowColor #335550
+  ArrowFontColor #1F2933
+  LifeLineBorderColor #8A94A6
+  LifeLineBackgroundColor #EDF1F7
+  ParticipantBorderColor #4A6FA5
+  ParticipantBackgroundColor #DCE9F8
+  ParticipantFontColor #16324F
+  GroupBorderColor #6B7686
+  GroupBackgroundColor #E3E9F2
+  SequenceBoxBackgroundColor #FFF3C4
+  SequenceBoxBorderColor #9A7B0A
+  SequenceGroupBorderColor #6B7686
+  SequenceGroupBackgroundColor #E3E9F2
+  SequenceLifeLineBackgroundColor #EDF1F7
+  SequenceLifeLineBorderColor #8A94A6
+  SequenceDividerColor #1F2933
 }
-
 participant "GENERATOR\nedge-driven, absolute\ndelays" as GEN
 participant "the pad\npin 6" as PAD
 participant "CPU\npe_cpu.v" as CPU

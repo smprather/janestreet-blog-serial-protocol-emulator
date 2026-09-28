@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# mutate_timing_tb.sh — mutation-test the four TIMING testbenches.
+# mutate_timing_tb.sh — mutation-test the TIMING testbenches.
 #
-# WHAT THIS IS FOR. The timing acts (WS2812, servo, DHT11, DS18B20) have a property
+# WHAT THIS IS FOR. The timing acts (WS2812, servo, DHT11, DS18B20, NEC IR,
+# stepper ramp, frequency meter, HC-SR04 ranging) have a property
 # none of the other protocols in this repository has: their DUT is partly the
 # FIRMWARE. The RTL is the already-verified CPU, pin matrix, timer and pads; what
 # is being tested is a program's instruction count. A testbench that passes
@@ -35,13 +36,29 @@
 # correctly", because it says the tree was never touched at all.
 #
 # THE IMAGE PATH IS A -D, NOT A STRING IN THE TESTBENCH. Each testbench reads its
-# image through a `WS2812_HEX / SERVO_HEX / DHT11_HEX / DS18B20_HEX` macro that
+# image through a `WS2812_HEX / SERVO_HEX / DHT11_HEX / DS18B20_HEX / NEC_HEX /
+# STEPPER_HEX / FREQMETER_HEX / SR04_HEX` macro that
 # defaults to the tree's firmware/<name>.hex, so a mutant case can be compiled
 # against its own image without editing a testbench. That also means the shipped
 # testbench and the mutant testbench are the SAME FILE, and a mutant cannot pass
 # by accident because it was running a different TB.
 set -u
-cd "$(dirname "$0")/.."
+# THE HARNESS'S OWN PATH, resolved once, HERE, before the cd below moves the
+# working directory. The case-list correspondence check further down re-reads
+# this file to count the arms in run_one, and $0 does not survive a cd on its
+# own: this harness is invoked as ./regress/mutate_timing_tb.sh by run_all.sh,
+# and by the time the check runs the relative path is being resolved from a
+# different directory. A check that read the wrong file would count zero arms
+# and report a duplicate-arm failure for a tree that has none -- loud, at
+# least, but a gate that cries wolf on a clean tree is a gate people learn to
+# re-run until it agrees. So the path is pinned to an absolute one here, while
+# it is still trivially correct, rather than reconstructed later.
+SELF="$PWD/${0#./}"
+# || exit, because a cd that fails leaves this harness running against whatever
+# directory it happened to start in and reporting a verdict about it. That is
+# not a hypothetical: the whole point of the checks below is that a verdict
+# must name the files it actually ran.
+cd "$(dirname "$0")/.." || exit 1
 # The single-run lock: this worktree is shared and a concurrent run would be
 # mutating and restoring the same RTL. Inherited from run_all.sh when this is one
 # of its children, so the harnesses do not deadlock their own parent.
@@ -57,7 +74,7 @@ SRAM_MODEL=$("$ROOT/regress/sram_model.sh")
 # An EMPTY value means this suite mutates nothing in the repo and is therefore
 # NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
 # escalates to running every suite rather than guessing.
-MUTABLE="firmware/ws2812.pe firmware/ws2812.hex firmware/servo_sweep.pe firmware/servo_sweep.hex firmware/dht11_read.pe firmware/dht11_read.hex firmware/ds18b20.pe firmware/ds18b20.hex firmware/nec_ir.pe firmware/nec_ir.hex firmware/stepper_ramp.pe firmware/stepper_ramp.hex firmware/freqmeter.pe firmware/freqmeter.hex"
+MUTABLE="firmware/ws2812.pe firmware/ws2812.hex firmware/servo_sweep.pe firmware/servo_sweep.hex firmware/dht11_read.pe firmware/dht11_read.hex firmware/ds18b20.pe firmware/ds18b20.hex firmware/nec_ir.pe firmware/nec_ir.hex firmware/stepper_ramp.pe firmware/stepper_ramp.hex firmware/freqmeter.pe firmware/freqmeter.hex firmware/sr04_range.pe firmware/sr04_range.hex"
 SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v"
 TB_WS="$ROOT/tb/tb_pe_soc_ws2812.v"
 TB_SV="$ROOT/tb/tb_pe_soc_servo.v"
@@ -66,15 +83,25 @@ TB_DS="$ROOT/tb/tb_pe_soc_ds18b20.v"
 TB_NEC="$ROOT/tb/tb_pe_soc_ir_nec.v"
 TB_STP="$ROOT/tb/tb_pe_soc_stepper_ramp.v"
 TB_FM="$ROOT/tb/tb_pe_soc_freqmeter.v"
+TB_SR="$ROOT/tb/tb_pe_soc_sr04.v"
 JOBS="${MUTATE_TIMING_JOBS:-6}"
 mkdir -p "$ROOT/sim"
 
 # ---- the tree must not change ---------------------------------------------
 SNAP=$(mktemp -d /tmp/mut_timing_snap.XXXXXX)
-for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter; do
+for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter sr04_range; do
   cp "$ROOT/firmware/$f.pe"  "$SNAP/$f.pe"
   cp "$ROOT/firmware/$f.hex" "$SNAP/$f.hex"
 done
+# THE DECLARATION PROTOCOL (regress/dep_guard.sh). This harness does NOT mutate
+# the repo firmware: every case works on a private copy under /tmp, and the
+# snapshot above exists to PROVE that, which the loop at the end re-checks byte
+# for byte. So the honest declaration is a single "pristine" for the whole
+# MUTABLE set -- which is not a formality, it is exactly the property this
+# harness already asserts, and it hands the sampler something real to check:
+# if anything else writes these fourteen files while this suite runs, the run
+# stops being able to say it never touched them.
+chip_dep_expect pristine $MUTABLE
 cleanup() { rm -rf "$SNAP"; }
 # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). ONE trap, not two: a
 # second `trap … EXIT` REPLACES the first, so `trap cleanup EXIT` followed by
@@ -141,7 +168,7 @@ PYEOF
   return $rc
 }
 export -f run_case
-export ROOT SRCS SRAM_MODEL TB_WS TB_SV TB_DH TB_DS TB_NEC TB_STP TB_FM
+export ROOT SRCS SRAM_MODEL TB_WS TB_SV TB_DH TB_DS TB_NEC TB_STP TB_FM TB_SR
 
 # ---- the cases --------------------------------------------------------------
 # Each one is a defect a real firmware of this shape can have, chosen so the
@@ -208,7 +235,63 @@ fm-idx-stuck|freqmeter|the slot index never advanced, so both points report the 
 fm-finishes-early|freqmeter|the run declared finished after ONE point, leaving the second slot unwritten
 fm-high-byte-order|freqmeter|the high time banked high byte first, which reads as a real measurement times 256
 fm-per-base|freqmeter|the period slot's base address shifted, so the periods land on the high times
+sr-q-mask|sr04_range|the high byte's six-bit mask missing bit 3, so the 8000 us echo -- the one with r = 0 -- reads 1023 mm
+sr-term-shift|sr04_range|the small term shifted by five instead of six, so floor(11r/64) doubles -- and reads zero at r = 0
+sr-trig-count|sr04_range|the +5 after 4*SR_TRIG_LEN turned back into a +4: a 600-clock, 10.000 us trigger
 CASES_EOF
+
+# ---- THE CASE LIST MUST DESCRIBE THE DISPATCH TABLE, IN BOTH DIRECTIONS ----
+# THE DEFECT THIS EXISTS FOR (2026-09-26), and it was found sideways: two
+# people counting the same list got two different numbers and neither was
+# wrong. fm-per-base was declared TWICE as a `case` arm in run_one, with an
+# IDENTICAL mutation, and bash takes the first match -- so the second was dead
+# code that read exactly like a second test. Nothing compared the two lists, so
+# the suite reported a case count nobody could reproduce: 61 case lines, 62
+# distinct arm labels, 63 arm labels in total. A number that three people quote
+# three ways is a number nobody can check, and the mutation count is a CLAIM
+# ABOUT COVERAGE, so an unreproducible one is worse than a slightly wrong one.
+#
+# WHY NOT "ASSERT THE CASE NAMES ARE DISTINCT", which is the obvious check and
+# the one this was first asked to add: the case names were, and still are,
+# distinct. Not one of the three counts above would have failed it. What was
+# wrong is the CORRESPONDENCE between the list and the table, so the
+# correspondence is what gets checked -- and it runs BEFORE the cases, because
+# a check that fires after twenty minutes of simulation has already spent the
+# time it was supposed to protect.
+_chip_arms=$(awk '/^run_one\(\) \{/,/^\}/' "$SELF" | grep -oE '^    [a-z][a-z0-9]*-[a-z0-9-]+\)' | tr -d ' )')
+_chip_lines=$(grep '|' "$CASES" | cut -d'|' -f1 | tr -d ' ')
+n_case_lines=$(grep -c '|' "$CASES")
+n_case_ids=$(printf '%s\n' "$_chip_lines" | sort -u | wc -l)
+n_arm_ids=$(printf '%s\n' "$_chip_arms" | sort -u | wc -l)
+n_arm_labels=$(printf '%s\n' "$_chip_arms" | grep -c .)
+dup_lines=$(printf '%s\n' "$_chip_lines" | sort | uniq -d | tr '\n' ' ')
+dup_arms=$(printf '%s\n' "$_chip_arms" | sort | uniq -d | tr '\n' ' ')
+no_arm=$(comm -23 <(printf '%s\n' "$_chip_lines" | sort -u) <(printf '%s\n' "$_chip_arms" | sort -u) | tr '\n' ' ')
+if [ "$n_case_lines" -ne "$n_case_ids" ] || [ -n "$dup_lines" ]; then
+  echo "FATAL: the case list names a case twice: ${dup_lines:-count mismatch}"
+  exit 2
+fi
+if [ "$n_arm_labels" -ne "$n_arm_ids" ] || [ -n "$dup_arms" ]; then
+  echo "FATAL: run_one declares the same case arm twice: ${dup_arms:-count mismatch}"
+  echo "       bash takes the FIRST match, so the second arm can never run, and"
+  echo "       the dead arm reads like a second test. This is the 2026-09-26 defect."
+  exit 2
+fi
+if [ -n "$no_arm" ]; then
+  echo "FATAL: declared case(s) with no arm in run_one: $no_arm"
+  echo "       run_one would return 2 for them -- but only after the whole suite ran."
+  exit 2
+fi
+echo "case list: $n_case_lines declared, $n_case_ids distinct, $n_arm_ids arms, $n_arm_labels arm labels -- every declared case has exactly one arm"
+# THE FOURTH DIRECTION IS REPORTED AND NOT FAILED, and the reason is a routing
+# decision rather than a convenience. An arm with no case line is unreachable,
+# so it costs nothing at run time: sv-idle-level has been in that state since
+# before this check existed. Adding it is the servo act owner's call, because it
+# MOVES THE CASE COUNT and could redden the gate on a case nobody has ever run.
+# So the check names it out loud and leaves the verdict where it was put.
+no_line=$(comm -13 <(printf '%s\n' "$_chip_lines" | sort -u) <(printf '%s\n' "$_chip_arms" | sort -u) | tr '\n' ' ')
+[ -n "$no_line" ] && \
+  echo "  note: arm(s) with no case line, unreachable and free: $no_line (routed, deliberately not failed on)"
 
 # The counts come from the $results file, not from four shell variables set
 # here: the cases run in parallel subshells, so a variable set in one of them
@@ -230,6 +313,7 @@ run_one() {
     ir-*) stem=nec_ir;       tb="$TB_NEC"; def=NEC_HEX ;;
     st-*) stem=stepper_ramp; tb="$TB_STP"; def=STEPPER_HEX ;;
     fm-*) stem=freqmeter;    tb="$TB_FM"; def=FREQMETER_HEX ;;
+    sr-*) stem=sr04_range;   tb="$TB_SR"; def=SR04_HEX ;;
     *) echo "HARNESS ERROR: unknown case id $id" >> "$results"; return 2 ;;
   esac
   case "$id" in
@@ -628,10 +712,13 @@ run_one() {
       repl="        LDI   A, FM_IN
         STM   4, A             ; MUTANT: the fitted constant is overridden" ;;
     fm-per-base)
-      # The other constant. On a SIXTEEN-BYTE machine a shifted slot base
-      # overlaps the working counters rather than running off the end of
-      # memory, so this does not read as an addressing bug: the periods land
-      # on the high times and vice versa, and both still look like numbers.
+      # The other counted constant, and the other half of the map. A shifted
+      # slot base on a SIXTEEN-BYTE machine does not run off the end of
+      # memory, it overlaps the working counters -- so the mutant reads as
+      # plausible numbers rather than as an addressing fault. This arm was
+      # declared TWICE until 2026-09-26, identically, and bash takes the first
+      # match, so the second could never run; see the correspondence check
+      # below the case list, which is what now makes that impossible to miss.
       extra='--const FM_PER_BASE=10'
       anchor='        LDI   A, FM_PER_BASE'
       repl='        LDI   A, FM_PER_BASE     ; MUTANT: the fitted constant is overridden' ;;
@@ -697,14 +784,6 @@ run_one() {
         INCX
         LDM   A, 2
         STS   [X], A" ;;
-    fm-per-base)
-      # The other counted constant, and the other half of the map. A shifted
-      # slot base on a SIXTEEN-BYTE machine does not run off the end of
-      # memory, it overlaps the working counters -- so the mutant reads as
-      # plausible numbers rather than as an addressing fault.
-      extra='--const FM_PER_BASE=10'
-      anchor='        LDI   A, FM_PER_BASE'
-      repl='        LDI   A, FM_PER_BASE     ; MUTANT: the fitted constant is overridden' ;;
     ow-presence-edge)
       anchor='ph1b:   IN    A, PIN
         AND   A, OW_DATA
@@ -748,6 +827,85 @@ run_one() {
         STM   3, A'
       repl='        LDI   A, 7              ; SEVEN bits: one slot short of a byte
         STM   3, A' ;;
+    sr-q-mask)
+      # THE CASE THAT EARNS 8000 us ITS PLACE IN THE SET, and it was derived
+      # before it was run, which is the only reason it is worth recording. The
+      # conversion is Q = us >> 6 and r = us & 0x3F, reassembled across the byte
+      # boundary by OR-ing the low byte's six shifts into the high byte's six
+      # -- and the high byte is masked with 0x3F before its own two-bit left
+      # shift. Dropping ONE bit from that mask is a slip no reviewer would
+      # catch, and it is invisible in three of the four runs: the high bytes
+      # are 0x04, 0x16, 0x07 and 0x1F, and bit 3 is set in 0x1F ALONE. So the
+      # mutant is right for 1160, 5816 and 2000 and wrong only for 8000, where
+      # Q falls from 125 to 93 and the answer from 1375 to 1023.
+      #
+      # WHAT THIS SAYS ABOUT THE r = 0 RUN, and it is the opposite of what the
+      # set was assembled hoping: r = 0 does NOT make that run sensitive to the
+      # small term, it makes it BLIND to it. Measured, not assumed -- forcing
+      # the mask to 0x00 (r = 0 in every run) breaks 1160, 5816 and 2000 and
+      # leaves 8000 correct, because 11 * 0 is 0 whatever the chain computes.
+      # A 8000 us echo is therefore the only case that can catch a defect in
+      # the 11*Q half, and the only width whose us * 11 (88 000) overflows the
+      # sixteen bits a naive firmware would materialise it in. Both of those
+      # are the Q chain, which is where this mutation sits.
+      anchor="        AND   A, 0x3F          ; (us_hi & 0x3f), then a LEFT shift by two as
+        MOV   X, A"
+      repl="        AND   A, 0x37          ; MUTANT: bit 3 is gone from the mask
+        MOV   X, A" ;;
+    sr-term-shift)
+      # THE OTHER HALF OF THE CONVERSION, and the only mutant in this file
+      # that is caught by the r != 0 runs. floor(11r/64) is assembled as
+      # (acc_lo >> 6) | ((acc_hi & 0x0f) << 2), and dropping the sixth shift
+      # leaves a term that is a plausible millimetre figure rather than a
+      # number that looks broken -- 200, 1001 and 346 against 199, 999 and
+      # 343 -- which is the whole hazard this act names about itself.
+      #
+      # MEASURED, and the signature is the point: 1160 -> 200, 5816 -> 1001,
+      # 2000 -> 346 all FAIL, and 8000 -> 1375 PASSES. That last one is not a
+      # gap in the mutant, it is the property. 11 * 0 is 0 before the shift or
+      # after it, so the r = 0 run cannot see this term at all -- which is
+      # exactly why the set carries three widths with r != 0. The corroborating
+      # measurement, taken while choosing between candidates: zeroing the
+      # remainder mask instead (so the term is 0 in EVERY run) fails the same
+      # three runs and again leaves 8000 correct.
+      #
+      # So the four targets are not redundant with each other. sr-q-mask
+      # reaches only the r = 0 run, this reaches only the other three, and a
+      # suite carrying just one of the two would have a hole exactly where the
+      # other one is blind.
+      anchor="        LDM   A, 0
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        STM   0, A            ; (acc_lo >> 6) | ((acc_hi & 0x0f) << 2)"
+      repl="        LDM   A, 0
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        SHR   A
+        STM   0, A            ; MUTANT: 11r >> 5, not >> 6" ;;
+    sr-trig-count)
+      # 4 * 149 + 5 = 601 CLOCKS, and the +5 is five instructions the pulse
+      # cannot do without. This deletes ONE of them -- the LDI that sets the
+      # ending level, which is redundant because the loop's last SUB has
+      # already left A at zero -- and the firmware stays otherwise perfect:
+      # same four answers, same widths, same one trigger per run.
+      #
+      # WHY IT IS WORTH A CASE. 600 clocks is 10.000 us, which SATISFIES the
+      # device's "> 10 us minimum". A window check passes this mutant; only the
+      # testbench's EQUALITY against 601 fails. So the act's real timing claim
+      # is that the pulse is exactly 601, and nothing else in the repository
+      # holds it to that -- which is also why the measured count is written
+      # down as 601 and not as "10 us".
+      anchor="        JNZ   trig_wait        ; 4 clocks per iteration
+        LDI   A, 0
+        OUT   TXPIN, A         ; TRIG falls here: 4*149 + 5 = 601 clocks"
+      repl="        JNZ   trig_wait        ; 4 clocks per iteration
+        OUT   TXPIN, A         ; MUTANT: 4*149 + 4 = 600 clocks" ;;
     *) return 2 ;;
   esac
   run_case "$id ($desc)" "$stem" "$tb" "$def" "$anchor" "$repl" "$extra"
@@ -772,11 +930,11 @@ rm -f "$CASES" "$results" "$CASELOG"
 
 # ---- the tree must not have changed ----------------------------------------
 stale=0
-for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter; do
+for f in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter sr04_range; do
   cmp -s "$SNAP/$f.pe" "$ROOT/firmware/$f.pe"  || { echo "FATAL: firmware/$f.pe was modified"; stale=1; }
   cmp -s "$SNAP/$f.hex" "$ROOT/firmware/$f.hex" || { echo "FATAL: firmware/$f.hex was modified"; stale=1; }
 done
-[ "$stale" -eq 0 ] && echo "firmware tree byte-identical after the run (cmp-verified, all 14 files: 7 programs, .pe and .hex)"
+[ "$stale" -eq 0 ] && echo "firmware tree byte-identical after the run (cmp-verified, all 16 files: 8 programs, .pe and .hex)"
 
 echo
 echo "timing-TB mutations: $n_cases cases, $n_ok detected, $n_surv survived, $n_err harness errors"

@@ -1,7 +1,7 @@
 ---
 title: 10BASE-T Scope — Where the Chip Stops
 created: 2026-09-20
-updated: 2026-09-20
+updated: 2026-09-26
 type: concept
 tags: [protocol, architecture, area-budget, constraint]
 sources: [raw/articles/janestreet-competition-blog-fulltext.md]
@@ -9,6 +9,10 @@ confidence: medium
 ---
 
 # 10BASE-T Scope — Where the Chip Stops
+> **What you'll learn here:** what 10Mbit Ethernet actually requires here, and the arithmetic that decides which parts must be hardware rather than firmware
+>
+> **You can verify this by:** The per-protocol constants are generated and checked: `python3 tools/gen/clock_arithmetic.py --check`. The arithmetic on this page (instructions available per byte versus a software CRC) is the same one the gate in [[reference/clock-arithmetic]] tabulates.
+
 
 What "10Mbit Ethernet" as a stretch goal actually asks for, and what it does not.
 Written because the obvious reading ("we cannot fit a TCP/IP stack, so Ethernet is
@@ -30,6 +34,12 @@ a chip that "bit-bangs protocols in firmware rather than fixed logic," useful fo
 state machines and TI PRU cores. Nobody expects a PIO block to terminate TCP. On
 that reading **"10Mbit Ethernet" means the line layer**: Manchester coding,
 preamble and start-of-frame delimiter, frame structure, CRC-32, link test pulses.
+
+*(2026-09-26: of that list, the link test pulses and the start-of-idle
+delimiter were the two items nothing built — and without link pulses a real
+partner declares link failure and ignores every frame. They are implemented,
+with the TX pair they need, on branch `eth-tx-line-driver`:
+[[plans/eth-tx-line-driver]], proposed, not merged.)*
 
 ## The 32 KB figure was never the requirement
 

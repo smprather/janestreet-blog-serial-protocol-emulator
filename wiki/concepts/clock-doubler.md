@@ -9,6 +9,10 @@ confidence: medium
 ---
 
 # Clock Doubler
+> **What you'll learn here:** how a clock is doubled when the design needs edges faster than the incoming clock, and what the standard-cell and full-custom options each cost
+>
+> **You can verify this by:** There is no testbench for this block; the numbers on the page come from the mapping and timing screens. `bash regress/synth_area.sh` re-measures cell counts and area, and the corner handling is described in [[concepts/gpio-signoff-corners]].
+
 
 Fallback if the board/mux cannot deliver a clean external 80 MHz clock (unverified transcript claim — confirm against [[entities/tiny-tapeout]] docs): generate 80 MHz inside the tile from a 40 MHz reference with an XOR edge-detector (one XOR input direct, other through an odd-count inverter/buffer delay chain; each reference edge emits a pulse whose width equals the chain delay).
 

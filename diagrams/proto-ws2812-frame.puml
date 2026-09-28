@@ -1,4 +1,7 @@
 @startuml proto-ws2812-frame
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-ws2812-frame.puml - (b) the WS2812 frame and cell encoding.
 '
@@ -21,7 +24,7 @@ hide empty description
 hide stereotype
 skinparam shadowing false
 skinparam rectangle {
-  BorderColor #33555
+  BorderColor #335550
   FontName monospaced
   FontSize 12
 }

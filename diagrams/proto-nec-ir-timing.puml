@@ -1,4 +1,7 @@
 @startuml proto-nec-ir-timing
+skinparam NoteBackgroundColor #FFF3C4
+skinparam NoteBorderColor #9A7B0A
+skinparam NoteFontColor #3A2E00
 ' ===========================================================================
 ' proto-nec-ir-timing.puml - (c) NEC wire timing, in the real numbers.
 '
@@ -16,21 +19,32 @@
 ' ===========================================================================
 
 title NEC infrared - wire timing\n<font size=12>carrier 38 049 Hz; halves 787.95-794.95 and 788.95 clocks, compared against EACH OTHER</font>
+skinparam defaultFontName Monospaced
+skinparam ParticipantFontName monospaced
+skinparam ActorFontName monospaced
+skinparam NoteFontName monospaced
+skinparam GroupFontName monospaced
 
 hide stereotype
 skinparam shadowing false
 skinparam sequence {
-  ArrowColor #33555
-  LifeLineBorderColor #33555
-  LifeLineBackgroundColor #FAFAFA
-  ParticipantBorderColor #33555
-  ParticipantBackgroundColor #F4F7FB
-  ParticipantFontName monospaced
-  ActorFontName monospaced
-  NoteFontName monospaced
-  GroupFontName monospaced
+  ArrowColor #335550
+  ArrowFontColor #1F2933
+  LifeLineBorderColor #8A94A6
+  LifeLineBackgroundColor #EDF1F7
+  ParticipantBorderColor #4A6FA5
+  ParticipantBackgroundColor #DCE9F8
+  ParticipantFontColor #16324F
+  GroupBorderColor #6B7686
+  GroupBackgroundColor #E3E9F2
+  SequenceBoxBackgroundColor #FFF3C4
+  SequenceBoxBorderColor #9A7B0A
+  SequenceGroupBorderColor #6B7686
+  SequenceGroupBackgroundColor #E3E9F2
+  SequenceLifeLineBackgroundColor #EDF1F7
+  SequenceLifeLineBorderColor #8A94A6
+  SequenceDividerColor #1F2933
 }
-
 participant "CPU\npe_cpu.v" as CPU
 participant "pad 6\nTXPIN / PINOE" as PAD
 participant "IR LED\ncathode on the pin:\nLOW emits" as LED

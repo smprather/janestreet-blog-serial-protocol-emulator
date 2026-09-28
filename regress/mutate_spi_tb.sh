@@ -61,6 +61,12 @@ cp "$IMAGE" "$PRISTINE/"
 run_case() {
   local name="$1"; shift
   local script="$1"
+  # $2 (after the shift) names the files THIS case changed. Not a blanket
+  # $MUTABLE: four of the five cases here change firmware/spi_xfer.pe (and the
+  # case regenerates its .hex) while the fifth changes rtl/pe_soc.v, so claiming
+  # the whole list would assert that files the case never touched were mutated --
+  # which the sampler reported as a false positive before this was narrowed.
+  local mutated_by_this_case="$2"
 
   echo "=== mutation: $name ==="
 
@@ -72,6 +78,7 @@ run_case() {
     for f in $MUTABLE; do cp "$backup/$(basename "$f")" "$f"; done
     rm -rf "$backup"
     python3 tools/fw/peasm.py firmware/spi_xfer.pe -o firmware/spi_xfer.hex >/dev/null 2>&1
+  chip_dep_expect pristine $MUTABLE
   }
 
 
@@ -106,6 +113,10 @@ run_case() {
   fi
 
   python3 tools/fw/peasm.py firmware/spi_xfer.pe -o firmware/spi_xfer.hex >/dev/null 2>&1
+  # The state is established now, so declare it -- and never before: a
+  # declaration the harness has not yet earned is one the sampler could
+  # legitimately contradict.
+  chip_dep_expect mutated $mutated_by_this_case
 
   # Compile into a temp dir under a name unique to this case, so a stale vvp
   # from a previous case can never be executed by accident. -s names the REAL
@@ -139,8 +150,17 @@ run_case() {
   # looks "detected" for the same wrong reason. (This exact bug was found the
   # hard way in regress/mutate_i2c_tb.sh.)
   local out
-  out=$(cd sim && vvp "$work/$top.vvp" 2>&1)
+  # BOUNDED (2026-09-27). Unbounded, a mutated design that never reached $finish
+  # ran forever AND emitted nothing, so the `grep -q '^FAIL'` below did not match
+  # and the mutation was scored on no evidence at all. The hazard is the mirror
+  # of mutate_i2c_tb.sh's: silence is not a verdict. A timeout is a HARNESS
+  # ERROR, reported as one, and is never the "SURVIVED" path.
+  out=$(cd sim && timeout "${MUT_VVP_TIMEOUT:-300}" vvp "$work/$top.vvp" 2>&1); local rc=$?
   rm -rf "$work"
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    echo "    (timeout after ${MUT_VVP_TIMEOUT:-300}s -- HARNESS ERROR, not a survivor)"
+    return 2
+  fi
 
   if grep -q '^FAIL' <<< "$out"; then
     echo "  DETECTED (TB failed on the mutated design)"
@@ -170,6 +190,7 @@ restore_pristine() {
   done
   [ -f "$PRISTINE/$(basename "$IMAGE")" ] && cp "$PRISTINE/$(basename "$IMAGE")" "$IMAGE"
   return 0
+chip_dep_expect pristine $MUTABLE
 }
 cleanup() {
   # THE HARNESS-EDIT PRE-FLIGHT (regress/dep_guard.sh). Stamped when this
@@ -313,11 +334,11 @@ print("  idle pattern removed: SCLK inherits the reset (UART) level")
 p.write_text(t)
 PY
 
-run_case "master samples MISO before the SCLK rise"          "$TMP/m1.py"
-run_case "transmit shifts LSB-first instead of MSB-first"    "$TMP/m2.py"
-run_case "CS_N never deasserted between frames"              "$TMP/m3.py"
-run_case "pin read ignores the input half (MISO stuck 0)"    "$TMP/m4.py"
-run_case "no explicit SCLK idle pattern (inherits reset)"     "$TMP/m5.py"
+run_case "master samples MISO before the SCLK rise"          "$TMP/m1.py" "firmware/spi_xfer.pe firmware/spi_xfer.hex"
+run_case "transmit shifts LSB-first instead of MSB-first"    "$TMP/m2.py" "firmware/spi_xfer.pe firmware/spi_xfer.hex"
+run_case "CS_N never deasserted between frames"              "$TMP/m3.py" "firmware/spi_xfer.pe firmware/spi_xfer.hex"
+run_case "pin read ignores the input half (MISO stuck 0)"    "$TMP/m4.py" "rtl/pe_soc.v"
+run_case "no explicit SCLK idle pattern (inherits reset)"     "$TMP/m5.py" "firmware/spi_xfer.pe firmware/spi_xfer.hex"
 
 echo "================================================================"
 echo "SPI TB mutations: $detected detected, $survived survived, $inconclusive inconclusive"

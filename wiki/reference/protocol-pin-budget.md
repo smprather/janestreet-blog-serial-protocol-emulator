@@ -39,7 +39,7 @@ distinguishes them, which is why two input bits are spoken for.
 | **PS/2** | also-suggested | **2** | `ps2_clk`(bidir), `ps2_data`(bidir) | pull-ups (board) |
 | **CAN (classic)** | also-suggested | **2** | `can_tx`(out), `can_rx`(in) | transceiver, e.g. SN65HVD230-class |
 | **USB 1.1 low-speed** | stretch | **2** | `d_plus`(bidir), `d_minus`(bidir) | series resistors + pull-up |
-| **10BASE-T** | stretch | **2** | `eth_tx`(out), `eth_rx`(in) | transformer / resistor ladder, or a PHY (LAN8720-class) |
+| **10BASE-T** | stretch | **3** | `eth_tx`(out), `eth_tx_n`(out), `eth_rx`(in) | TX: a line buffer + pulse transformer (RJ45 magnetics); RX: magnetics + a comparator |
 
 ### Notes per protocol
 
@@ -67,13 +67,13 @@ distinguishes them, which is why two input bits are spoken for.
 **USB 1.1 low-speed** — D+/D- driven as two single-ended CMOS outputs. Idle state is FS-only (D- pulled up); a real LS device needs the 1.5 kΩ pull-up on D-. SE0 (both low) and J/K are directly expressible — see the TB.  
 <sub>proven by `tb_pe_usb.v`</sub>
 
-**10BASE-T** — Manchester is single-ended here, so 2 pins carry it; the ±2.5 V differential into 100 Ω is the board's problem, not the pad's. The TB models one `wire_lvl`.  
+**10BASE-T** — TX is a PAIR, eth_tx (uo_out[2]) and eth_tx_n (uo_out[3]): the line has three states (+, −, 0 V idle) and one pad has two, so the link pulses and the start-of-idle delimiter need both (see [[plans/eth-tx-line-driver]]). The ±2.5 V into 100 Ω is made on the board, not by the pads; RX is one input behind a comparator. This TB models one `wire_lvl`; the pair is proven in `tb_pe_soc_eth_tx` and `tb_tt_um_protocol_emulator`.  
 <sub>proven by `tb_pe_eth.v`</sub>
 
 ## The answer
 
 - **Any single protocol: 4 pins maximum** (SPI), out of 24 usable. The budget is not the constraint.
-- **All nine at once: 22 protocol wires** (10 out, 5 in, 7 bidir). **It does not fit — see the direction arithmetic below.**
+- **All nine at once: 23 protocol wires** (11 out, 5 in, 7 bidir). **It does not fit — see the direction arithmetic below.**
 
 ### Worst case, by direction
 
@@ -92,8 +92,8 @@ bidirectional wire needs a `uio` pad, an input needs `ui_in` or a released
 | PS/2 | 0 | 0 | 2 | 2 |
 | CAN (classic) | 1 | 1 | 0 | 2 |
 | USB 1.1 low-speed | 0 | 0 | 2 | 2 |
-| 10BASE-T | 1 | 1 | 0 | 2 |
-| **sum** | **10** | **5** | **7** | **22** |
+| 10BASE-T | 2 | 1 | 0 | 3 |
+| **sum** | **11** | **5** | **7** | **23** |
 
 ### This design's actual pinout
 
@@ -102,7 +102,7 @@ bidirectional wire needs a `uio` pad, an input needs `ui_in` or a released
 | Bank | committed | free |
 |---|---|---|
 | `ui_in` | 3 (UART RX, run, 10BASE-T RX) | 5 |
-| `uo_out` | 8 (UART TX / SPI SCLK, IRQ_N, eth_tx, dbg_pc[5:1]) | 0 |
+| `uo_out` | 8 (UART TX / SPI SCLK, IRQ_N, eth_tx, eth_tx_n, dbg_pc[5:2]) | 0 |
 | `uio` | 8 (I2C SDA, I2C SCL, SPI MOSI, SPI CS_N, host CS_N, host MOSI, host MISO, host SCK) | 0 |
 | **total** | 19 | **5** |
 
@@ -110,12 +110,12 @@ After the pinned UART, SPI MOSI/CS_N, I2C and 10BASE-T-RX wires, the remaining p
 need 6 outputs, 3 inputs and 5 bidir:
 
 - **Debug pins kept** (the item-4 decision): 5 free pads against 14 remaining wires — short 11. The 3 inputs have 5 free `ui_in` + 0 `uio`; the 5 bidir wires need 5 `uio` but only 0 remain, so 5 bidir pads are missing; every `uo_out` pad is taken, so all 6 outputs are missing.
-- **Debug pins reclaimed:** 10 free pads, short 6: the 3 remaining inputs have the 5 free `ui_in` and 0 `uio`; the 5 bidir wires need 5 `uio` but only 0 remain, so 5 bidir pads are missing; `uo_out` supplies 5 of the 6 outputs, so 1 output is missing.
+- **Debug pins reclaimed:** 9 free pads, short 7: the 3 remaining inputs have the 5 free `ui_in` and 0 `uio`; the 5 bidir wires need 5 `uio` but only 0 remain, so 5 bidir pads are missing; `uo_out` supplies 4 of the 6 outputs, so 2 outputs are missing.
 
 **Even shedding every overhead** — the run strap, IRQ_N, the debug
-pads and the host row reclaimed at runtime — still leaves 1 pad
+pads and the host row reclaimed at runtime — still leaves 2 pads
 short: the 5 bidirectional wires have only 4
-reclaimed `uio`, while the 6 outputs fit the 6 freed `uo_out` bits.
+reclaimed `uio`, and the 6 outputs have only 5 freed `uo_out` bits (1 output short).
 So "all nine at once" is not a feasible permanent pinout here, and the raw
 23-of-24 count this page used to carry hid both the arithmetic error (UART
 plus SPI is 6 wires, not 7) and the direction mix. The permanent-only design
@@ -145,8 +145,11 @@ electrical, and they are on the board:
   bus-contention bug, not a pin-count one.
 - **USB LS** needs the 1.5 kΩ pull-up on D- to look like a device, and
   series resistors for impedance.
-- **10BASE-T** needs a transformer or PHY; true ±2.5 V differential into
-  100 Ω cannot come from a GPIO. See [[concepts/physical-layer-gpio]].
+- **10BASE-T** needs a line buffer and a pulse transformer on TX (the
+  ±2.5 V differential into 100 Ω is made on the board from the two TX
+  pads, never by a pad) and a comparator on RX. An external PHY would
+  replace the chip's own Manchester layer. See
+  [[concepts/physical-layer-gpio]] and [[plans/eth-tx-line-driver]].
 - **CAN** needs a transceiver; the chip only sees logic-level TX/RX.
 
 See [[concepts/gpio-signoff-corners]] for the rise/fall asymmetry that

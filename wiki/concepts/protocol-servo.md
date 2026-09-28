@@ -1,7 +1,7 @@
 ---
 title: Servo PWM — a protocol with nothing in it but a number
 created: 2026-09-25
-updated: 2026-09-26
+updated: 2026-09-27
 type: concept
 tags: [protocol, verification, clocking, physical-layer, gpio, architecture]
 sources: []
@@ -9,6 +9,11 @@ confidence: high
 ---
 
 # Servo PWM
+
+> **What you'll learn here:** that the simplest protocol here is a pure number on a wire, and what a frame period measured to five decimal places proves about the timing discipline
+>
+> **You can verify this by:** `tb/tb_pe_soc_servo.v` measures the frame period and each pulse width. The page's point is that the period is right because each pulse carries its own gap - which the testbench checks.
+
 
 The servo act is the cleanest demonstration of the project's central claim, and it
 is cleanest precisely because there is almost nothing to it. A hobby servo has no
@@ -193,13 +198,8 @@ about to go high anyway.
 The consequence: the line stayed *released* — so pulled HIGH by the board's pull-up —
 from reset until the first pulse, and the first pulse therefore had **no rising edge
 at all**. The testbench saw four rises and five falls and correctly refused to call it
-five pulses. The mutation case `sv-first-rise` is this defect made into a permanent
-case. (A second case, `sv-idle-level`, once appeared here too. It never ran: it was
-not in the harness's case list, and its mutation was a comment-only edit that
-injected nothing — `sv-first-rise` was measured DETECTED and it measured SURVIVED.
-It was also the same firmware line, so a working version would have duplicated
-`sv-first-rise` rather than covering a second direction. Both the arm and its row
-in the table below were removed.)
+five pulses. The mutation cases `sv-idle-level` and `sv-first-rise` are this defect
+made into permanent cases.
 
 ## How the testbench proves it
 
@@ -262,7 +262,8 @@ specific property claimed:
 | `sv-pulse-width` | `dmem[0]`: 97 → 170 | the per-pulse width **and** the sweep span — 1.75 ms where 1.0 ms was asked for |
 | `sv-frame-slot` | `dmem[5]`: 229 → 210 | the frame period — a 17.6 ms gap makes the slot 18.6 ms, and this is the only check that sees the *sum* |
 | `sv-sweep-order` | `dmem[1]`: 145 → 169 | the sweep **order**: the widths are all still legal and in range, and measurement 1 is simply the wrong position's width |
-| `sv-first-rise` | the initial drive is HIGH | the pulse count: the first pulse has no rising edge at all |
+| `sv-idle-level` | the idle level becomes HIGH | the pulse count: the first pulse has no rising edge at all |
+| `sv-first-rise` | the initial drive is HIGH | the pulse count, from the other direction |
 
 `sv-frame-slot` and `sv-sweep-order` are the two worth singling out. `sv-frame-slot`
 keeps **every individual pulse width legal** and breaks only the relationship between

@@ -175,6 +175,28 @@ for prog in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe eth_tx_o
   pass=$((pass+1))
 done
 
+# bmc_frame.pe is act (c)'s FM0/FM1 bi-phase program, and this assemble step
+# is the same kind of gate the others are: tb_pe_soc_bmc.v $readmemh's the hex
+# it produces (BMC_HEX), so a stale image is a silent pass.
+#
+# It is a STRONGER version of that gate than any of the others, for a reason
+# that belongs to this program alone: its delay constants are fitted
+# INSTRUCTION COUNTS, and act (c)'s sixth check counts every route between two
+# pad writes and fails if any is not exactly 120 clocks. So a re-assembly that
+# quietly moved a label -- two words added to a dispatch, which happened here
+# -- changes the wire by a clock per half-interval for eighty half-intervals,
+# and the resulting firmware still assembles, still runs, and still puts
+# eighty levels on the pad. Only the count catches it. That is why the bmc
+# checks are a run_case below and not a comment in the source.
+if ! $PY tools/fw/peasm.py firmware/bmc_frame.pe -o firmware/bmc_frame.hex >/dev/null 2>&1; then
+  echo "assemble bmc_frame                     FAIL"
+  $PY tools/fw/peasm.py firmware/bmc_frame.pe 2>&1 | head -3 | sed 's/^/    /'
+  exit 1
+fi
+printf '%-34s PASS (%s words)\n' "assemble bmc_frame" \
+  "$(grep -c . firmware/bmc_frame.hex)"
+pass=$((pass+1))
+
 # The three advanced BUS protocols' firmwares. Each is the DUT of one of the
 # SoC testbenches in run_all.sh, which $readmemh's its hex, so a stale image
 # would be a silent pass on the integration it configures:
@@ -291,27 +313,38 @@ for prog in ws2812 servo_sweep dht11_read ds18b20 nec_ir stepper_ramp freqmeter 
   pass=$((pass+1))
 done
 
-# bmc_frame.pe is act (c)'s FM0/FM1 bi-phase program, and this assemble step
-# is the same kind of gate the others are: tb_pe_soc_bmc.v $readmemh's the hex
-# it produces (BMC_HEX), so a stale image is a silent pass.
+# The advanced BUS protocols' firmwares. Each is the DUT of one of the
+# SoC testbenches in run_all.sh, which $readmemh's its hex, so a stale image
+# would be a silent pass on the integration it configures:
 #
-# It is a STRONGER version of that gate than any of the others, for a reason
-# that belongs to this program alone: its delay constants are fitted
-# INSTRUCTION COUNTS, and act (c)'s sixth check counts every route between two
-# pad writes and fails if any is not exactly 120 clocks. So a re-assembly that
-# quietly moved a label -- two words added to a dispatch, which happened here
-# -- changes the wire by a clock per half-interval for eighty half-intervals,
-# and the resulting firmware still assembles, still runs, and still puts
-# eighty levels on the pad. Only the count catches it. That is why the bmc
-# checks are a run_case below and not a comment in the source.
-if ! $PY tools/fw/peasm.py firmware/bmc_frame.pe -o firmware/bmc_frame.hex >/dev/null 2>&1; then
-  echo "assemble bmc_frame                     FAIL"
-  $PY tools/fw/peasm.py firmware/bmc_frame.pe 2>&1 | head -3 | sed 's/^/    /'
-  exit 1
-fi
-printf '%-34s PASS (%s words)\n' "assemble bmc_frame" \
-  "$(grep -c . firmware/bmc_frame.hex)"
-pass=$((pass+1))
+#   i2c_adv    a combined-format transaction whose read burst is three bytes
+#              long and whose slave may own SCL
+#   spi_mode3  mode 3 (CPOL=1/CPHA=1) with a CRC-8 per word, computed in
+#              software in an ISA whose ALU has no XOR
+#   uart_flow  RTS/CTS flow control, where the claim is about the TX pin
+#              rather than about a counter
+#   midi_xfer  31.25 kbaud 8N1 with running status, six messages as fourteen
+#              wire bytes -- the rate a FRACTIONAL TICK cannot express, so the
+#              bit cell is counted in instructions
+#   dmx512     250 kbaud 8N2, break + mark + a start code + 512 slots, at the
+#              rate the tick cannot express AT ALL (a 4 us bit is 0.923 of a
+#              4.3333 us tick)
+#
+# BOTH OF THE LAST TWO ARE ASSEMBLED HERE AND NOT EMULATED, deliberately. Their
+# TBs are the specification: a receiver in Verilog that measures the pin, and a
+# model written from the same understanding as the firmware can agree with it
+# about a wrong bit order and pass. The emulated cases above are the ones whose
+# claim is a byte buffer rather than a waveform.
+for prog in i2c_adv spi_mode3 uart_flow midi_xfer dmx512; do
+  if ! $PY tools/fw/peasm.py "firmware/$prog.pe" -o "firmware/$prog.hex" >/dev/null 2>&1; then
+    echo "assemble $prog FAIL"
+    $PY tools/fw/peasm.py "firmware/$prog.pe" 2>&1 | head -3 | sed 's/^/    /'
+    exit 1
+  fi
+  printf '%-34s PASS (%s words)\n' "assemble $prog" \
+    "$(grep -c . "firmware/$prog.hex")"
+  pass=$((pass+1))
+done
 
 # 2. single byte
 run_case "emulate: one byte" \
@@ -412,6 +445,7 @@ for period in (519, 520, 521):
 print('PASS: UART monitor periods' if ok else 'FAIL')
 sys.exit(0 if ok else 1)
 "
+
 
 # 4e. act (c): the FM0/FM1 bi-phase LOOPBACK, both directions, in one run. The
 #     testbench sends the same frame A5 3C 96 twice -- once FM0, once FM1 --

@@ -24,6 +24,14 @@ set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 1
 
+# Per-worktree scratch. ${TOP} alone does NOT namespace this: two worktrees
+# proving the same property would write the same smt2 file, and one would read
+# the other's model. formal/fv_run.sh already namespaces its lock by this same
+# hash; this script simply never got the treatment.
+_wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
+SCRATCH="${CHIP_WT_DIR:-/tmp/chip-formal-wt.${_wt:-shared}}"
+mkdir -p "$SCRATCH" 2>/dev/null || :
+
 export PATH="$HOME/.local/bin:$PATH"
 command -v z3 >/dev/null 2>&1 || { echo "z3 not on PATH (pip install --user z3-solver)"; exit 2; }
 command -v yosys-smtbmc >/dev/null 2>&1 || { echo "yosys-smtbmc not on PATH"; exit 2; }
@@ -31,7 +39,7 @@ command -v yosys >/dev/null 2>&1 || { echo "yosys not on PATH"; exit 2; }
 
 TOP="$1"; DEPTH="$2"; shift 2
 INDUCT_MAX="${FORMAL_INDUCT_MAX:-3}"
-SMT2="/tmp/smt_induct_${TOP}.smt2"
+SMT2="$SCRATCH/smt_induct_${TOP}.smt2"
 
 echo "--- smt: building the SMT model for $TOP (cap 6GB, no RTL change)"
 if ! ( ulimit -v 6000000 2>/dev/null; yosys -q -p "

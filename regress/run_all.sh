@@ -43,6 +43,8 @@ chip_take_run_lock "run_all.sh"
 # negative control that proves it can fail.
 # shellcheck source=regress/dep_guard.sh
 . "$(dirname "$0")/dep_guard.sh"
+# shellcheck source=regress/lib_leak.sh
+. "$(dirname "$0")/lib_leak.sh"
 _on_exit() {
   local rc=$?
   # The pre-flight runs FIRST, before the lock is released: a run whose scripts
@@ -58,42 +60,6 @@ trap '_on_exit' EXIT
 # any later `dirname "$0"` resolves against the wrong directory. Gates that are
 # invoked mid-script use this. (The param-guard gate failed exactly this way.)
 REPO_ROOT="$(pwd)"
-#
-# ---- THE LOG DIRECTORY, AND IT IS PER-WORKTREE FOR A MEASURED REASON -------
-#
-# Every gate below writes its result to a fixed `/tmp/<name>.log` and reads it
-# back to decide PASS or FAIL. **Two gate runs in different worktrees therefore
-# overwrite each other's result files**, and per-worktree locks make concurrent
-# runs possible BY DESIGN -- so a verdict can be read out of a file another
-# worktree is still writing.
-#
-# MEASURED, and not predicted: two concurrent runs produced
-#     timing TB mutations: FAILED
-#     ... 58 case rows ...
-#     timing-TB mutations: 58 cases, 58 detected, 0 survived, 0 errors
-#     RESULT: PASS
-# A gate said FAILED directly over a suite that printed PASS on the same page.
-# The verdict is the exit code; the table beside it is a `tail` of a shared file.
-#
-# THE KEY IS THE REPO ROOT, hashed -- not a worktree NAME, because the name is
-# a convention and the root is the thing that actually differs; not $TMPDIR,
-# because that is shared. And it is STABLE for a given worktree, so a run that
-# fails can still be read after the fact instead of being overwritten by the
-# next one.
-#
-# SEVENTEEN paths are repointed here. THE OTHER NINE ARE DELIBERATELY NOT, and
-# the split is measured rather than guessed: a path is safe iff run_all.sh both
-# WRITES it (a redirect) and is the ONLY script that hard-codes the literal.
-# The nine that fail that test -- mutate_codec, mutate_ctrl, mutate_eth_soc,
-# mutate_eth_tx, mutate_eth_tx_loop, mutate_fwbus, mutate_serdes,
-# mutate_soc_serdes, check_formal_ifdef -- are read by their WRITER as well, so
-# repointing them here alone would break the pair. **They stay on their shared
-# paths and that is named rather than quietly left**, because a half-fix that
-# silently leaves nine shared paths is worse than a stated remainder.
-RLOG="/tmp/run_all.$(printf '%s' "$REPO_ROOT" | md5sum | cut -c1-12)"
-mkdir -p "$RLOG" || { echo "run_all.sh: cannot create $RLOG" >&2; exit 1; }
-# THE DIRECTORY IS EXPORTED so a sub-gate can put its own results in here too.
-export RLOG
 # Stamp the dependency set now that the root is known. Every regress/ script is
 # included because this file invokes most of them and any of them could be the
 # one under edit.
@@ -132,6 +98,22 @@ case "$JOBS" in
   ''|*[!0-9]*) echo "run_all.sh: -j needs a positive integer, got '$JOBS'" >&2; exit 2 ;;
   0)           echo "run_all.sh: -j 0 would run nothing" >&2; exit 2 ;;
 esac
+
+# THE SIMULATION WALL-CLOCK BOUND. A testbench that never reaches $finish does
+# not fail: vvp spins one core at 100% and prints nothing, and nothing bounded
+# it. On 2026-09-27 that pegged all 24 cores for ~10 minutes and the accumulated
+# processes drove user-1000.slice into its pids limit (TasksMax=84178), so the
+# desktop could no longer fork a thread and the graphical session was torn down
+# to a login screen. The suite's own record of that window says a run "printed
+# NO summary, NO survivor count and no error text" - a hang was indistinguishable
+# from silence, which is why it took a forensic session to attribute.
+#
+# 900s is deliberately far above any legitimate run here: the mutation harnesses
+# that already carried bounds use 120-600s, and the slowest real testbench in
+# this suite finishes in well under a minute. A case that reaches 900s is not
+# slow, it is stuck, and it now says so by name. Override with VVP_TIMEOUT=.
+VVP_TIMEOUT="${VVP_TIMEOUT:-900}"
+export VVP_TIMEOUT
 
 if [ "$FAST" -eq 1 ]; then
   echo "(--fast: parallel testbench loop, $JOBS jobs, same 4-state simulation)"
@@ -267,7 +249,7 @@ CASES=(
   "tb_pe_soc_stepper_ramp|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_stepper_ramp"
   # The INPUT acts: the pin is an INPUT and the firmware recovers numbers from
   # a waveform it does not control, so the number that is the claim is the
-  # ACCURACY OF A COUNT. Twelve banked points from 158 Hz to 10 kHz with a
+  # ACCURACY OF A COUNT. Twelve banked points from 100 Hz to 12.5 kHz with a
   # varying duty, each checked against a SECOND, independent measurement of the
   # pad (the receiver in the TB) rather than against the generator's table --
   # a generator that knew the answer would agree with a firmware that had the
@@ -278,6 +260,19 @@ CASES=(
   # four of them. ~43 ms of 60 MHz, the largest simulation in the repository;
   # the generator is edge-driven with absolute delays rather than clocked,
   # which is what keeps it inside ~55 s of wall.
+  #
+  # The endpoints above took a measurement to settle, and the pair that was here
+  # before ("158 Hz to 10 kHz") was wrong at BOTH ends while looking right.
+  # Each run drives three periods and the firmware banks the second and third,
+  # so the banked set is p_us indices 1,2 4,5 7,8 10,11 13,14 16,17, and the
+  # extremes of THAT set are p_us[2] = 10 000 us = 100 Hz and p_us[16] = 80 us =
+  # 12.5 kHz. The 158 Hz that was here is p_us[0] = 6300 us, the first period
+  # of run 0 -- a warm-up the firmware never banks. The trap is that
+  # tb_pe_soc_freqmeter.v's banner prints 1_000_000/p_us[0] and
+  # 1_000_000/p_us[N_PTS-1], the FULL eighteen-point sweep (158.7 Hz to 10 kHz),
+  # which is a different set from the twelve that are verified: reading the
+  # banner instead of the banking loop is how 158 Hz got in here. The unit is the
+  # second trap -- p_us[] is microseconds, so 80 is 12.5 kHz and never 80 Hz.
   "tb_pe_soc_freqmeter|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_freqmeter"
   "tb_pe_soc_i2c|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_i2c"
   # The I2C TRANSACTION layer on real RTL: firmware/i2c_xfer.pe against a
@@ -321,17 +316,17 @@ CASES=(
   # destroyed answer as a wrong number with no way to say which measurement it
   # belonged to. See firmware/sr04_range.pe's header.
   "tb_pe_soc_sr04|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_sr04"
-  # The FM0/FM1 BI-PHASE ACT (2026-09-26/27). It WAS wired here behind a
-  # <<wip>> marking, and the marking is GONE now, which is the visible proof
-  # the self-expiring design works on a case that passes on the day it is
-  # wired: the first run reported
+  # The FM0/FM1 BI-PHASE ACT (from fw-timing-protocols, re-applied over main at
+  # the 2026-09-28 landing-prep merge). It WAS wired here behind a <<wip>>
+  # marking, and the marking was removed on the strength of that report and of
+  # nothing else: the first run reported
   #     tb_pe_soc_bmc      WIP-NOW-PASSING (remove the <<wip>> marking)
   #     TOTAL: 1   PASS: 0   FAIL: 1   failed: tb_pe_soc_bmc(wip-now-passing)
-  # and the marking was removed on the strength of that report and of nothing
-  # else. It was wired rather than left out in the first place because an
-  # unwired red act is a claim hazard: "46/46 PASS" then reads as "the bi-phase
-  # act is verified" when nothing has ever run it. The SR04 comment above
-  # names the same fault, and the two marks are the same fix.
+  # so the marking is the visible proof the self-expiring design works. It was
+  # wired rather than left out because an unwired red act is a claim hazard:
+  # "46/46 PASS" then reads as "the bi-phase act is verified" when nothing has
+  # ever run it. The SR04 comment above names the same fault, and the two marks
+  # are the same fix.
   #
   # WHAT MAKES THIS CASE DIFFERENT FROM EVERY OTHER ONE HERE IS THAT IT
   # EXERCISES BOTH DIRECTIONS OF ONE PROTOCOL, AND NEITHER SIDE IS TOLD WHAT
@@ -457,6 +452,26 @@ CASES=(
   #     clock on the pin. A second case holds CTS low for ever and requires
   #     that nothing at all is transmitted.
   "tb_pe_soc_uart_flow|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_uart_flow"
+  # (4) MIDI 1.0 AT 31.25 kBAUD, WITH RUNNING STATUS. firmware/midi_xfer.pe is
+  #     the rate a FRACTIONAL TICK cannot express: a 32 us bit against a
+  #     4.3333 us tick is 7.38 ticks, and the program builds the cell from
+  #     counted instructions -- 1920 clocks, measured on the pin -- and uses
+  #     the timer not at all. Six two-data-byte messages go out as fourteen
+  #     bytes rather than eighteen because a new status byte REPLACES the
+  #     running one. The TB's receiver is a free-running oversampling search
+  #     that VERIFIES each frame's stop bit, because in a back-to-back 8N1
+  #     stream a falling edge is not a start bit; and it found a firmware
+  #     defect that compared thirteen perfectly good bytes and never noticed
+  #     the fourteenth had no stop bit at all.
+  "tb_pe_soc_midi|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_midi"
+  # (5) DMX512-A AT 250 kBAUD, WITH BREAK AND MARK. firmware/dmx512.pe is the
+  #     rate a tick cannot express AT ALL: a 4 us bit is 0.923 of the shared
+  #     4.3333 us tick, so the timer is not used once. The frame is break
+  #     (>=87.5 us), mark (>=8 us), a start code and 512 slots of a wrapping
+  #     8-bit ramp, each 8N2 -- 22.6 ms and 1.37 million clocks of simulated
+  #     time, which is why this TB samples only inside a slot instead of
+  #     free-running a strobe across the frame.
+  "tb_pe_soc_dmx512|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_dmx512"
 )
 
 # ---- OPTIONAL case filter (OFF by default; the merge gate's driver) --------
@@ -553,14 +568,19 @@ else
 for c in "${CASES[@]}"; do
   IFS='|' read -r name rtl top wip <<< "$c"
   tb="../tb/${name}.v"
-  if ! iverilog -g2012 -s "$top" -o "/tmp/${top}.vvp" $rtl $SRAM_FLAGS "$tb" 2>"/tmp/${top}.err"; then
+  if ! iverilog -g2012 -s "$top" -o "$CHIP_WT_DIR/${top}.vvp" $rtl $SRAM_FLAGS "$tb" 2>"$CHIP_WT_DIR/${top}.err"; then
     printf '%-18s COMPILE-FAIL\n' "$top"
-    sed -n '1,3p' "/tmp/${top}.err"
+    sed -n '1,3p' "$CHIP_WT_DIR/${top}.err"
     fail=$((fail+1)); failed_names+=("$top(compile)")
     continue
   fi
-  out=$(vvp "/tmp/${top}.vvp" 2>&1)
-  if grep -q '^PASS' <<< "$out"; then
+  # Bounded, and the verdict is NAMED. vvp_run.sh returns one of PASS / FAIL /
+  # TIMEOUT on its first line, so a hung testbench is a labelled red instead of
+  # silence, and it is counted as a failure like any other.
+  verdict_out=$("$REPO_ROOT/regress/vvp_run.sh" "$VVP_TIMEOUT" "$CHIP_WT_DIR/${top}.vvp" 2>&1)
+  verdict=$(head -1 <<< "$verdict_out")
+  detail=$(tail -n +2 <<< "$verdict_out")
+  if [ "$verdict" = "PASS" ]; then
     if [ "$wip" = "<<wip>>" ]; then
       printf '%-18s WIP-NOW-PASSING (remove the <<wip>> marking)\n' "$top"
       fail=$((fail+1)); failed_names+=("$top(wip-now-passing)")
@@ -570,12 +590,14 @@ for c in "${CASES[@]}"; do
     pass=$((pass+1))
   elif [ "$wip" = "<<wip>>" ]; then
     printf '%-18s KNOWN-WIP (expected red; the act is not finished)\n' "$top"
-    grep -E '^FAIL' <<< "$out" | head -5 | sed 's/^/  /'
+    [ -n "$detail" ] && printf '%s\n' "$detail" | sed 's/^/  /'
     WIP_LIST="$WIP_LIST $top"
   else
-    printf '%-18s FAIL\n' "$top"
-    grep -E '^FAIL' <<< "$out" | head -5
-    fail=$((fail+1)); failed_names+=("$top")
+    # The actual verdict, not a hardcoded FAIL. TIMEOUT has to be visible as
+    # TIMEOUT or nobody can tell a stuck testbench from a wrong one.
+    printf '%-18s %s\n' "$top" "$verdict"
+    [ -n "$detail" ] && printf '%s\n' "$detail"
+    fail=$((fail+1)); failed_names+=("$top($verdict)")
   fi
 done
 fi
@@ -604,11 +626,42 @@ fi
 #
 # Invoked via REPO_ROOT captured at the top: this file cds into sim/ and back,
 # and $0 may be relative, so any later `dirname "$0"` resolves wrongly.
-if "$REPO_ROOT/regress/param_guards.sh" > $RLOG/param_guards.log 2>&1; then
+# THE RUN ENVIRONMENT, CHECKED FIRST, BEFORE ANY GATE THAT WRITES SCRATCH.
+#
+# On 2026-09-26 /tmp (a 16G tmpfs) hit 100% and tools/diag/check_diagrams.sh went
+# red with an EMPTY log, then passed minutes later with no change to the tree.
+# A gate that is intermittently red for an environmental reason cannot be trusted
+# either way, and the natural reading of "diagrams: FAILED" with nothing under it
+# is that somebody broke a figure. So the precondition is named, separated, and
+# run first: "the host cannot support this run" and "the tree is wrong" have to
+# be different sentences.
+#
+# It reports rather than remediates on purpose. During the incident the largest
+# consumers in /tmp were other workers' LIVE worktrees, and deleting one to make
+# room is a far worse failure than the full disk.
+if bash "$REPO_ROOT/regress/check_run_environment.sh" > "$CHIP_WT_DIR"/check_run_environment.log 2>&1; then
+  echo "run environment: OK ($(awk '/scratch/ && /free/ {for(i=1;i<=NF;i++) if ($i ~ /KiB/) {printf "%s %s free on scratch", $(i-1), $i; exit}}' "$CHIP_WT_DIR"/check_run_environment.log))"
+else
+  echo "run environment: FAILED — this HOST cannot support a suite run (see $CHIP_WT_DIR/check_run_environment.log)"
+  sed -n '2,20p' "$CHIP_WT_DIR"/check_run_environment.log
+  fail=$((fail+1))
+  failed_names+=("check_run_environment")
+  echo "  NOTE: this is an ENVIRONMENT fault, not a tree fault. Every downstream gate"
+  echo "  result on this run should be read as UNKNOWN rather than as a verdict."
+fi
+if bash "$REPO_ROOT/regress/check_run_environment.sh" --self-test > "$CHIP_WT_DIR"/check_run_environment_selftest.log 2>&1; then
+  echo "run environment self-test: OK ($(grep -c 'ok:   self-test' "$CHIP_WT_DIR"/check_run_environment_selftest.log) of 2 cases behaved correctly)"
+else
+  echo "run environment self-test: FAILED (see $CHIP_WT_DIR/check_run_environment_selftest.log)"
+  cat "$CHIP_WT_DIR"/check_run_environment_selftest.log
+  fail=$((fail+1))
+  failed_names+=("check_run_environment_selftest")
+fi
+if "$REPO_ROOT/regress/param_guards.sh" > "$CHIP_WT_DIR"/param_guards.log 2>&1; then
   echo "param guards: OK"
 else
   echo "param guards: FAILED"
-  cat $RLOG/param_guards.log
+  cat "$CHIP_WT_DIR"/param_guards.log
   fail=$((fail+1))
   failed_names+=("param_guards")
 fi
@@ -618,13 +671,36 @@ fi
 # helper made all sixteen mutation suites run to completion, report their real
 # verdicts, and exit 4 — and `bash -n regress/*.sh` had said "all parse", because
 # bash -n over a glob parses the FIRST file and passes the rest as arguments.
-if "$REPO_ROOT/regress/check_shell_syntax.sh" > $RLOG/check_shell_syntax.log 2>&1; then
-  echo "regress script syntax: OK ($(tail -1 $RLOG/check_shell_syntax.log))"
+if "$REPO_ROOT/regress/check_shell_syntax.sh" > "$CHIP_WT_DIR"/check_shell_syntax.log 2>&1; then
+  echo "regress script syntax: OK ($(tail -1 "$CHIP_WT_DIR"/check_shell_syntax.log))"
 else
   echo "regress script syntax: FAILED"
-  cat $RLOG/check_shell_syntax.log
+  cat "$CHIP_WT_DIR"/check_shell_syntax.log
   fail=$((fail+1))
   failed_names+=("check_shell_syntax")
+fi
+
+# No script may write a FIXED GLOBAL /tmp artifact name. The failure this
+# prevents is a run reporting another worktree's numbers: on 2026-09-26 two
+# worktrees ran the same harness, compiled to the same /tmp/mut_eth_tx_tt.vvp,
+# and each executed whichever binary the other wrote last. The per-worktree run
+# lock cannot see it (different worktrees, so neither is refused) and the
+# dep-guard cannot see it either (it watches this worktree's scripts and RTL
+# targets, and its stamps were provably clean while the run was still wrong).
+# a04bc7f fixed 83 paths and still missed mutate_codec_tb.sh, because the grep
+# that listed the files -- /tmp/mut_ -- cannot match /tmp/mutate_. A fix to
+# instances cannot be complete; this gates the class.
+if "$REPO_ROOT/regress/check_tmp_isolation.sh" > "$CHIP_WT_DIR"/check_tmp_isolation.log 2>&1; then
+  # The lint's own summary line already begins "tmp isolation: ", so wrapping it
+  # in another "tmp isolation: OK (...)" printed the phrase twice. Strip its
+  # prefix rather than re-word it: the suite log is evidence, and a stutter in
+  # the evidence reads as a second check having run.
+  echo "tmp isolation: $(tail -1 "$CHIP_WT_DIR"/check_tmp_isolation.log | sed 's/^tmp isolation: //')"
+else
+  echo "tmp isolation: FAILED -- a script shares a global /tmp name with every other worktree"
+  cat "$CHIP_WT_DIR"/check_tmp_isolation.log
+  fail=$((fail+1))
+  failed_names+=("check_tmp_isolation")
 fi
 
 # Every mutation harness must be covered by the harness-edit pre-flight. The
@@ -632,13 +708,58 @@ fi
 # harness added would take the lock, be stamped and never be checked - which is a
 # mid-run edit yielding a false pass with nothing saying so. Same drift class as
 # the MUTABLE check below, one layer over.
-if "$REPO_ROOT/regress/check_harness_preflight.sh" > $RLOG/check_harness_preflight.log 2>&1; then
-  echo "harness pre-flight coverage: OK ($(tail -1 $RLOG/check_harness_preflight.log))"
+if "$REPO_ROOT/regress/check_harness_preflight.sh" > "$CHIP_WT_DIR"/check_harness_preflight.log 2>&1; then
+  echo "harness pre-flight coverage: OK ($(tail -1 "$CHIP_WT_DIR"/check_harness_preflight.log))"
 else
   echo "harness pre-flight coverage: FAILED"
-  cat $RLOG/check_harness_preflight.log
+  cat "$CHIP_WT_DIR"/check_harness_preflight.log
   fail=$((fail+1))
   failed_names+=("check_harness_preflight")
+fi
+
+# ---- tree-known: no orphaned mutation residue in rtl/ or tb/ ---------------
+# Runs BEFORE any testbench compiles, because a planted mutant left behind by a
+# killed harness is not a red result - it is a tree that no longer says what it
+# says, and every case compiled after it measures a broken design. On
+# 2026-09-27 a mutation run died to a session-teardown SIGKILL holding a planted
+# line in rtl/pe_eth_mac.v, and nothing in the suite would have said so: the
+# existing check_staged_mutants.sh only fires at COMMIT time, and in that failure
+# mode nobody commits. SIGKILL cannot be trapped, so no cleanup could have run;
+# this verifies rather than trusts. See regress/check_tree_known.sh.
+if "$REPO_ROOT/regress/check_tree_known.sh" "$REPO_ROOT" > "$CHIP_WT_DIR"/check_tree_known.log 2>&1; then
+  echo "tree-known: OK (no orphaned mutation residue)"
+else
+  echo "tree-known: FAILED"
+  cat "$CHIP_WT_DIR"/check_tree_known.log
+  fail=$((fail+1))
+  failed_names+=("check_tree_known")
+fi
+# Its NEGATIVE CONTROL, in the suite. All three of this gate's rules - including
+# the MUTABLE-baseline rule the declaration protocol added - are rules that PASS
+# by not noticing, so each is planted here and required to fire, plus the
+# EXEMPTION planted and required to stay quiet. Until this existed the sampler's
+# rule was proven exactly once, by a worker at a terminal, which is a memory and
+# not a check: a rule nobody re-runs is a rule that quietly stops being true.
+if bash "$REPO_ROOT/regress/check_harness_preflight.sh" --self-test > "$CHIP_WT_DIR"/check_harness_preflight_selftest.log 2>&1; then
+  # The total is COUNTED, not typed. This line used to print a literal "of 5"
+  # beside a grep -c of the passes, so the run log carried two counts and the
+  # wrong one was the one phrased as a claim: add a case to the preflight's
+  # self-test and run_all goes on asserting "of 5" while the counted number
+  # beside it changes, leaving a reader no way to tell which to believe. The
+  # same class fixed in check_tmp_isolation, and worse-placed -- this is the
+  # master suite's own reporting, so every run log a human reads is affected.
+  # The denominator is read from the self-test's own "N/M cases" summary, which
+  # 9ea3b44 made a checked rendering rather than a typed literal. The fallback
+  # keeps the line honest if that summary ever changes shape: an unknown total
+  # prints as "?", never as a number nobody counted.
+  _hpf_n=$(grep -oE '[0-9]+/[0-9]+' "$CHIP_WT_DIR"/check_harness_preflight_selftest.log | head -1 | cut -d/ -f2)
+  [ -n "$_hpf_n" ] || _hpf_n="?"
+  echo "harness pre-flight self-test: OK ($(grep -c 'ok:   self-test' "$CHIP_WT_DIR"/check_harness_preflight_selftest.log) of $_hpf_n cases behaved correctly)"
+else
+  echo "harness pre-flight self-test: FAILED (see $CHIP_WT_DIR/check_harness_preflight_selftest.log)"
+  cat "$CHIP_WT_DIR"/check_harness_preflight_selftest.log
+  fail=$((fail+1))
+  failed_names+=("check_harness_preflight_selftest")
 fi
 
 # The mutation suites' MUTABLE lists decide which suites a NARROWED merge gate
@@ -647,11 +768,11 @@ fi
 # file. The check belongs in the FULL gate too, not only in the mapper: a list is
 # only trustworthy while something keeps proving it, and this is the master gate
 # that everything else trusts.
-if "$REPO_ROOT/regress/check_mutation_lists.sh" > $RLOG/check_mutation_lists.log 2>&1; then
+if "$REPO_ROOT/regress/check_mutation_lists.sh" > "$CHIP_WT_DIR"/check_mutation_lists.log 2>&1; then
   echo "mutation MUTABLE lists: OK"
 else
   echo "mutation MUTABLE lists: FAILED"
-  cat $RLOG/check_mutation_lists.log
+  cat "$CHIP_WT_DIR"/check_mutation_lists.log
   fail=$((fail+1))
   failed_names+=("check_mutation_lists")
 fi
@@ -749,13 +870,55 @@ run_mutation_suite() {
   _mut_deps=()
   if [ -f "$1" ]; then
     while IFS= read -r _md; do
-      [ -n "$_md" ] && _mut_deps+=("$REPO_ROOT/$_md")
+      [ -n "$_md" ] && _mut_deps+=("$(chip_dep_abspath "$_md")")
     done < <(grep -m1 '^MUTABLE=' "$1" | cut -d'"' -f2 | tr ' ' '\n')
   fi
   chip_dep_stamp "suite_$n" "$1" ${_mut_deps[@]+"${_mut_deps[@]}"}
+  # ... AND THE SAMPLER, which is the only mechanism that can see an external
+  # actor RESTORING a target mid-run, because a restore leaves the end state
+  # exactly as chip_dep_check expects to find it. That was the real 2026-09-25
+  # incident. See regress/dep_guard.sh for why this is a declaration protocol
+  # and not the pattern-detector that was measured failing on clean runs.
+  #
+  # THE LABEL IS THE HARNESS'S OWN, derived the way the harness derives it inside
+  # chip_dep_expect, because that is where its declarations land. Deriving it
+  # here from the script path gives the same string, and if the two ever
+  # disagreed the failure would be visible rather than silent: sample_stop
+  # reports every target the harness never declared, and a disagreement means it
+  # declared none of them.
+  _sampler_label="run_$(basename "$1")"
+  chip_dep_sample_start "$_sampler_label" ${_mut_deps[@]+"${_mut_deps[@]}"}
   "$@"
   local rc=$?
-  if ! chip_dep_check "suite_$n"; then
+  # A LEAKED CHILD, caught at the one boundary where it is still cheap.
+  #
+  # The suites here are called strictly one at a time - 16 separate calls, nothing
+  # backgrounded, no waits - so two suites cannot race each other directly. But a
+  # suite can spawn a child that outlives it, and that child keeps writing.
+  # Observed twice on 2026-09-27: mutate_eth_mac_tb.sh saw rtl/pe_eth_mac.v change
+  # to `mutated` with `cause: external` for 0.168s while it ran and was correctly
+  # declared INCONCLUSIVE, and a harness was still alive holding a plant in
+  # rtl/pe_soc.v after run_all had exited. One interference, two costs.
+  #
+  # So before the next suite may start, this suite's process tree must actually be
+  # gone. A leak returns the SAME verdict the dep-guard returns for interference,
+  # and for the same reason: the suite that leaked verified nothing reliable, and
+  # neither did the one after it. A warning would be worse than nothing, because a
+  # green earned by accident is the one nobody re-checks.
+  local leak_pids=""
+  if ! leak_pids="$(mut_leak_check "$n" "${MUT_LEAK_GRACE:-20}")"; then
+    echo "  LEAKED CHILD: $n left $(printf '%s\n' "$leak_pids" | grep -c '') process(es) alive" >&2
+    echo "  after it returned: $(printf '%s' "$leak_pids" | tr '\n' ' ')" >&2
+    echo "  They may still be writing, so this suite - and the next - have verified" >&2
+    echo "  nothing. INCONCLUSIVE, not a warning." >&2
+    rc=4
+  fi
+  # The sampler is stopped before the check so its verdict is in hand either way,
+  # and BOTH verdicts force the same INCONCLUSIVE: a suite whose DUT was
+  # interfered with has verified nothing, whichever check noticed.
+  local samp_rc=0
+  chip_dep_sample_stop "$_sampler_label" || samp_rc=1
+  if [ "$samp_rc" -ne 0 ] || ! chip_dep_check "suite_$n"; then
     echo "mutation suite $n: INCONCLUSIVE — the harness script or one of its MUTABLE targets changed while it was running" >&2
     return 4
   fi
@@ -800,7 +963,7 @@ fi
 # instantiates needs a legal placement and hooks for all three of its supplies,
 # or LibreLane leaves it unplaced and unpowered. Static check only -- no
 # physical flow, DRC or LVS.
-python3 tools/checks/macro_flow_config.py > $RLOG/macro_flow.log 2>&1
+python3 tools/checks/macro_flow_config.py > "$CHIP_WT_DIR"/macro_flow.log 2>&1
 macro_rc=$?
 if [ "$macro_rc" -eq 0 ]; then
   echo "macro flow config: OK (placements, pin-to-net hooks and the Metal4 ladder complete)"
@@ -810,10 +973,10 @@ elif [ "$macro_rc" -eq 2 ]; then
   # checker returns 2 ONLY for that case, so findings and yosys failures
   # still land in the FAILED branch below.
   echo "macro flow config: SKIPPED (required PDK geometry unavailable)"
-  cat $RLOG/macro_flow.log
+  cat "$CHIP_WT_DIR"/macro_flow.log
 else
   echo "macro flow config: FAILED"
-  cat $RLOG/macro_flow.log
+  cat "$CHIP_WT_DIR"/macro_flow.log
   stale=1
 fi
 # The gate's own negative tests (E2-1/E2-2/E2-3): a wrong pin-to-net mapping,
@@ -821,15 +984,15 @@ fi
 # skip and a yosys-elaboration failure must all behave as designed. The
 # mutations run on a COPY of the flow config/PDN script, never the tracked
 # files, and the harness reports SKIPPED when its baseline is incomplete.
-if run_mutation_suite mutate_macro_flow_config.sh ./regress/mutate_macro_flow_config.sh > $RLOG/mutate_macro_flow.log 2>&1; then
-  if grep -q "^SKIPPED" $RLOG/mutate_macro_flow.log; then
+if run_mutation_suite mutate_macro_flow_config.sh ./regress/mutate_macro_flow_config.sh > "$CHIP_WT_DIR"/mutate_macro_flow.log 2>&1; then
+  if grep -q "^SKIPPED" "$CHIP_WT_DIR"/mutate_macro_flow.log; then
     echo "macro flow config negatives: SKIPPED (required PDK geometry unavailable)"
   else
     echo "macro flow config negatives: OK (pin-to-net, typed views, per-type geometry, ladder, skip and yosys-failure checks)"
   fi
 else
   echo "macro flow config negatives: FAILED"
-  tail -20 $RLOG/mutate_macro_flow.log
+  tail -20 "$CHIP_WT_DIR"/mutate_macro_flow.log
   stale=1
 fi
 # The CRC constants are checked against the RevEng catalogue on every run, not
@@ -874,13 +1037,32 @@ fi
 # because a baseline that silently outlives its defect is a checklist rather than
 # a pin. Its negative control (13 cases, including the stale direction and the
 # fail-closed paths) is regress/test_check_wiki_pages.sh.
-if bash regress/check_wiki_pages.sh > $RLOG/check_wiki_pages.log 2>&1; then
-  echo "wiki page rules: OK ($(grep -c . $RLOG/check_wiki_pages.log) line(s); see regress/check_wiki_pages.sh)"
+if bash regress/check_wiki_pages.sh > "$CHIP_WT_DIR"/check_wiki_pages.log 2>&1; then
+  echo "wiki page rules: OK ($(grep -c . "$CHIP_WT_DIR"/check_wiki_pages.log) line(s); see regress/check_wiki_pages.sh)"
 else
-  echo "wiki page rules: FAILED (see $RLOG/check_wiki_pages.log)"
-  tail -20 $RLOG/check_wiki_pages.log
+  echo "wiki page rules: FAILED (see $CHIP_WT_DIR/check_wiki_pages.log)"
+  tail -20 "$CHIP_WT_DIR"/check_wiki_pages.log
   stale=1
 fi
+# THE NEGATIVE CONTROL FOR BOTH GATES ABOVE, and this is the line whose absence
+# is the real lesson. The gates had been wired and green while nothing ever ran
+# the test that proves they can fail - so a future edit could break a case, or
+# break the wiring, and the full regression would be green and say nothing about
+# it. That is the same drift regress/check_harness_preflight.sh exists to stop for
+# the mutation harnesses, one level up: there, the wiring was correct on the day
+# it was written and nothing asserted it; here, the wiring was not even being
+# executed. Its own cases are built on synthetic fixtures rather than on corpus
+# pages, because a corpus page's state must never be a precondition for the test
+# that verifies the corpus - that coupling was found by another worker, in the
+# STALE case, after it had already been written that way.
+if bash regress/test_check_wiki_pages.sh > "$CHIP_WT_DIR"/test_check_wiki_pages.log 2>&1; then
+  echo "wiki gate negative control: OK ($(tail -1 "$CHIP_WT_DIR"/test_check_wiki_pages.log))"
+else
+  echo "wiki gate negative control: FAILED (see $CHIP_WT_DIR/test_check_wiki_pages.log)"
+  tail -25 "$CHIP_WT_DIR"/test_check_wiki_pages.log
+  stale=1
+fi
+
 # The DIAGRAMS, which until this gate existed had NO gate at all: 22 .puml
 # sources and 84 renders whose entire value is that they are correct pictures of
 # the code, with nothing in the suite that would have noticed one going stale,
@@ -901,13 +1083,67 @@ fi
 # sharing /tmp paths across gate logs is a known open defect here (14 logs at the
 # time of writing), and a new bare path would add to it rather than fix it. The
 # digest is the same one regress/mutate_fwbus_tb.sh adopted.
-_diag_wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
-[ -n "$_diag_wt" ] || _diag_wt=shared
-if bash tools/diag/check_diagrams.sh > "/tmp/check_diagrams.${_diag_wt}.log" 2>&1; then
-  echo "diagrams: OK ($(grep -c '^  ok:' "/tmp/check_diagrams.${_diag_wt}.log") check(s) passed; see tools/diag/check_diagrams.sh)"
+# The FILE-LINK gate. The gates above ask whether the wiki's own RULES hold; this
+# one asks the question a reader actually has — does this link go anywhere. It is
+# the check that would have caught the README gallery losing its `proto-` prefix,
+# which broke 37 links in one commit and was found by a person reading the
+# rendered page. Scoped to the LIVE surface (wiki/** minus raw/, README, docs/) by
+# ruling: reviews/ records are evidence, and a path in one that was true when
+# written must not be rewritten to follow a rename, nor flagged forever.
+if bash regress/check_wiki_links.sh > "$CHIP_WT_DIR"/check_wiki_links.log 2>&1; then
+  echo "document links: OK ($(grep -m1 'document(s) scanned' "$CHIP_WT_DIR"/check_wiki_links.log | sed 's/^ *//'))"
 else
-  echo "diagrams: FAILED (see /tmp/check_diagrams.${_diag_wt}.log)"
-  tail -20 "/tmp/check_diagrams.${_diag_wt}.log"
+  echo "document links: FAILED (see $CHIP_WT_DIR/check_wiki_links.log)"
+  tail -20 "$CHIP_WT_DIR"/check_wiki_links.log
+  stale=1
+fi
+# ...and that the link checker can FAIL. "document links: OK" above is only
+# evidence if a dead link would have been caught; a checker that never fires looks
+# exactly like a checker that works. check_wiki_links.sh grew a --self-test in
+# 0d8474a that plants one resolvable link of each [[wikilink]] convention plus a
+# genuinely absent target, and requires exactly one dead link. Until it ran here,
+# that proof existed but nothing re-ran it -- and a rule nobody re-runs is a rule
+# that quietly stops being true.
+# BOTH NUMBERS ARE COUNTED, never typed. cb613b2 fixed exactly this mistake in
+# the harness pre-flight line, where a literal "of 5" sat beside a counted pass
+# count; repeating it here would undo that fix in the very commit extending it.
+if bash regress/check_wiki_links.sh --self-test > "$CHIP_WT_DIR"/check_wiki_links_selftest.log 2>&1; then
+  _wl_n=$(grep -oE '[0-9]+/[0-9]+' "$CHIP_WT_DIR"/check_wiki_links_selftest.log | head -1 | cut -d/ -f2)
+  [ -n "$_wl_n" ] || _wl_n="?"
+  echo "document links self-test: OK ($(grep -c 'ok   self-test' "$CHIP_WT_DIR"/check_wiki_links_selftest.log) of $_wl_n cases proved the resolver)"
+else
+  echo "document links self-test: FAILED (see $CHIP_WT_DIR/check_wiki_links_selftest.log)"
+  cat "$CHIP_WT_DIR/check_wiki_links_selftest.log"
+  fail=$((fail+1))
+  failed_names+=("check_wiki_links_selftest")
+fi
+if bash tools/diag/check_diagrams.sh > "$CHIP_WT_DIR/check_diagrams.log" 2>&1; then
+  echo "diagrams: OK ($(grep -c '^  ok:' "$CHIP_WT_DIR/check_diagrams.log") check(s) passed; see tools/diag/check_diagrams.sh)"
+else
+  echo "diagrams: FAILED (see $CHIP_WT_DIR/check_diagrams.log)"
+  tail -20 "$CHIP_WT_DIR/check_diagrams.log"
+  stale=1
+fi
+# The OTHER direction of the document index. check_wiki_links.sh proves every
+# link POINTS AT SOMETHING; nothing proved that every figure is LISTED, which is
+# the defect reviews/2026-09-26/DOCS-ACCURACY-REVIEW-PASS11.md F3 recorded (47 of
+# 54 renders, four act sets absent) and which the regenerated gallery closed
+# WITHOUT anything keeping it closed. An index that is complete by hand and
+# unchecked is a list that drifts the first time someone adds a figure. Its
+# self-test is wired with it rather than left on request, for the reason every
+# other gate's is: a checker that stops detecting reports OK on a broken tree.
+if bash regress/check_doc_index.sh > "$CHIP_WT_DIR/check_doc_index.log" 2>&1; then
+  echo "document index: OK ($(grep -m1 'render(s) listed' "$CHIP_WT_DIR/check_doc_index.log" | sed 's/^ *//'))"
+else
+  echo "document index: FAILED (see $CHIP_WT_DIR/check_doc_index.log)"
+  tail -20 "$CHIP_WT_DIR/check_doc_index.log"
+  stale=1
+fi
+if bash regress/check_doc_index.sh --self-test > "$CHIP_WT_DIR/check_doc_index_selftest.log" 2>&1; then
+  echo "document index gate self-test: OK ($(grep -c 'ok:   self-test' "$CHIP_WT_DIR/check_doc_index_selftest.log") of 3 cases behaved correctly)"
+else
+  echo "document index gate self-test: FAILED (see $CHIP_WT_DIR/check_doc_index_selftest.log)"
+  tail -20 "$CHIP_WT_DIR/check_doc_index_selftest.log"
   stale=1
 fi
 # Its NEGATIVE CONTROL, in the suite and not merely available on request. A gate
@@ -918,11 +1154,11 @@ fi
 # to fail on every one while passing on an untouched synthetic fixture. It also
 # verifies each PLANTING actually changed something, because a no-op planting
 # otherwise reports itself as a broken checker.
-if bash tools/diag/check_diagrams.sh --self-test > "/tmp/check_diagrams_selftest.${_diag_wt}.log" 2>&1; then
-  echo "diagrams gate self-test: OK ($(grep -c 'ok:   self-test' "/tmp/check_diagrams_selftest.${_diag_wt}.log") of $(grep -c 'self-test —' "/tmp/check_diagrams_selftest.${_diag_wt}.log") cases behaved correctly)"
+if bash tools/diag/check_diagrams.sh --self-test > "$CHIP_WT_DIR/check_diagrams_selftest.log" 2>&1; then
+  echo "diagrams gate self-test: OK ($(grep -c 'ok:   self-test' "$CHIP_WT_DIR/check_diagrams_selftest.log") of $(grep -c 'self-test —' "$CHIP_WT_DIR/check_diagrams_selftest.log") cases behaved correctly)"
 else
-  echo "diagrams gate self-test: FAILED (see /tmp/check_diagrams_selftest.${_diag_wt}.log)"
-  tail -20 "/tmp/check_diagrams_selftest.${_diag_wt}.log"
+  echo "diagrams gate self-test: FAILED (see $CHIP_WT_DIR/check_diagrams_selftest.log)"
+  tail -20 "$CHIP_WT_DIR/check_diagrams_selftest.log"
   stale=1
 fi
 # THE NUMBERS GATE, and its self-test, in the suite at last. Nothing invoked
@@ -939,28 +1175,28 @@ fi
 # on a broken tree. The step counts are read out of the log at run time instead
 # of being written into this line, because a hardcoded "13/13" is a number that
 # goes stale in a file nobody re-reads -- and the count has already moved once.
-if python3 tools/diag/delay_lattice.py > "/tmp/delay_lattice.${_diag_wt}.log" 2>&1; then
-  echo "delay-lattice numbers: OK ($(grep -m1 '^RESULT' "/tmp/delay_lattice.${_diag_wt}.log"))"
+if python3 tools/diag/delay_lattice.py > "$CHIP_WT_DIR/delay_lattice.log" 2>&1; then
+  echo "delay-lattice numbers: OK ($(grep -m1 '^RESULT' "$CHIP_WT_DIR/delay_lattice.log"))"
 else
-  echo "delay-lattice numbers: FAILED (see /tmp/delay_lattice.${_diag_wt}.log)"
-  grep -E '^(FAIL|RESULT)' "/tmp/delay_lattice.${_diag_wt}.log" | head -10 | sed 's/^/    /'
+  echo "delay-lattice numbers: FAILED (see $CHIP_WT_DIR/delay_lattice.log)"
+  grep -E '^(FAIL|RESULT)' "$CHIP_WT_DIR/delay_lattice.log" | head -10 | sed 's/^/    /'
   stale=1
 fi
-if python3 tools/diag/delay_lattice.py --selftest > "/tmp/delay_lattice_selftest.${_diag_wt}.log" 2>&1; then
-  echo "delay-lattice gate self-test: OK ($(grep -c '^ok' "/tmp/delay_lattice_selftest.${_diag_wt}.log") check(s) passed, $(grep -c '^FAIL' "/tmp/delay_lattice_selftest.${_diag_wt}.log") failed)"
+if python3 tools/diag/delay_lattice.py --selftest > "$CHIP_WT_DIR/delay_lattice_selftest.log" 2>&1; then
+  echo "delay-lattice gate self-test: OK ($(grep -c '^ok' "$CHIP_WT_DIR/delay_lattice_selftest.log") check(s) passed, $(grep -c '^FAIL' "$CHIP_WT_DIR/delay_lattice_selftest.log") failed)"
 else
-  echo "delay-lattice gate self-test: FAILED (see /tmp/delay_lattice_selftest.${_diag_wt}.log)"
-  tail -20 "/tmp/delay_lattice_selftest.${_diag_wt}.log"
+  echo "delay-lattice gate self-test: FAILED (see $CHIP_WT_DIR/delay_lattice_selftest.log)"
+  tail -20 "$CHIP_WT_DIR/delay_lattice_selftest.log"
   stale=1
 fi
 # The local presentation viewer's fit arithmetic has its own focused check.
 # This uses an embedded SVG fixture and does not consume the project diagrams,
 # which are maintained as PlantUML source in diagrams/.
-if python3 tools/checks/canvas_viewer.py > $RLOG/canvas_viewer.log 2>&1; then
+if python3 tools/checks/canvas_viewer.py > "$CHIP_WT_DIR"/canvas_viewer.log 2>&1; then
   echo "canvas viewer: OK"
 else
   echo "canvas viewer: FAILED"
-  cat $RLOG/canvas_viewer.log
+  cat "$CHIP_WT_DIR"/canvas_viewer.log
   stale=1
 fi
 
@@ -975,30 +1211,30 @@ fi
 # for formal targets 2 and 4) must never be live on a synthesis path. This
 # checks that no build script defines FORMAL, and that a real synthesis
 # elaboration contains no fv_* wire at all.
-if bash tools/check_formal_ifdef.sh > $RLOG/check_formal_ifdef.log 2>&1; then
+if bash tools/check_formal_ifdef.sh > "$CHIP_WT_DIR"/check_formal_ifdef.log 2>&1; then
   echo "formal-ifdef gate: OK (FORMAL never defined on a synthesis path; taps compile out)"
 else
-  echo "formal-ifdef gate: FAILED (see $RLOG/check_formal_ifdef.log)"
-  tail -12 $RLOG/check_formal_ifdef.log
+  echo "formal-ifdef gate: FAILED (see $CHIP_WT_DIR/check_formal_ifdef.log)"
+  tail -12 "$CHIP_WT_DIR"/check_formal_ifdef.log
   stale=1
 fi
 
-if bash formal/run_formal.sh > $RLOG/run_formal.log 2>&1; then
+if bash formal/run_formal.sh > "$CHIP_WT_DIR"/run_formal.log 2>&1; then
   echo "formal safety proofs: OK (see formal/results/summary.txt for per-property status)"
 else
   echo "formal safety proofs: FAILED (counterexample or build error)"
-  tail -20 $RLOG/run_formal.log
+  tail -20 "$CHIP_WT_DIR"/run_formal.log
   stale=1
 fi
 
 # The non-vacuity evidence for those proofs: every proof must kill the mutant
 # that attacks its claim. Runs in its own proof shape per case (BMC or
 # induction) and takes the run lock reentrantly via CHIP_RUN_LOCK_HELD.
-if bash formal/mutants.sh > $RLOG/run_formal_mutants.log 2>&1; then
+if bash formal/mutants.sh > "$CHIP_WT_DIR"/run_formal_mutants.log 2>&1; then
   echo "formal mutant checks: OK (see formal/results/mutants.txt for the per-mutant table)"
 else
   echo "formal mutant checks: FAILED (a mutant survived -- a claim is a blind spot)"
-  tail -20 $RLOG/run_formal_mutants.log
+  tail -20 "$CHIP_WT_DIR"/run_formal_mutants.log
   stale=1
 fi
 
@@ -1010,11 +1246,11 @@ fi
 # real stripper for every 0..15 wait words, so the seam that held finding B1
 # cannot silently reopen. It also asserts an all-filler stream raises rather
 # than decoding to a plausible-looking success.
-if python3 regress/cross_check_wait_words.py > $RLOG/cross_wait_words.log 2>&1; then
+if python3 regress/cross_check_wait_words.py > "$CHIP_WT_DIR"/cross_wait_words.log 2>&1; then
   echo "wait-word cross-check: OK (chip filler <-> host stripper, 0..15)"
 else
   echo "wait-word cross-check: FAILED"
-  cat $RLOG/cross_wait_words.log
+  cat "$CHIP_WT_DIR"/cross_wait_words.log
   stale=1
 fi
 
@@ -1027,11 +1263,11 @@ fi
 # exit, a reentrant child, and a background subshell that must NOT fire the
 # kill trap. It uses a private lock file, so it never touches the worktree lock
 # and is safe to run beside a real run.
-if bash regress/test_run_lock.sh > $RLOG/test_run_lock.log 2>&1; then
+if bash regress/test_run_lock.sh > "$CHIP_WT_DIR"/test_run_lock.log 2>&1; then
   echo "run-lock process tree: OK (every signal reaps the run; no bystander killed)"
 else
   echo "run-lock process tree: FAILED"
-  cat $RLOG/test_run_lock.log
+  cat "$CHIP_WT_DIR"/test_run_lock.log
   stale=1
 fi
 
@@ -1046,11 +1282,11 @@ fi
 # snapshot is a byte copy, and the chip's evidence for each confirmation lives
 # in reviews/2026-09-25/R2-HELD-CORE-CHIP-SIDE.md rather than in an edited copy
 # of somebody else's file.
-if "$REPO_ROOT/regress/check_r2_package.sh" > /tmp/check_r2_package.log 2>&1; then
-  echo "R2 golden package: OK ($(tail -1 /tmp/check_r2_package.log))"
+if "$REPO_ROOT/regress/check_r2_package.sh" > "$CHIP_WT_DIR"/check_r2_package.log 2>&1; then
+  echo "R2 golden package: OK ($(tail -1 "$CHIP_WT_DIR"/check_r2_package.log))"
 else
   echo "R2 golden package: FAILED (snapshot drift, or a claim that does not match its own flags)"
-  cat /tmp/check_r2_package.log
+  cat "$CHIP_WT_DIR"/check_r2_package.log
   fail=$((fail+1))
   failed_names+=("check_r2_package")
 fi
@@ -1074,14 +1310,14 @@ fi
 if diff -r --exclude='*.vh' --exclude='R3_KNOWN_DIVERGENCES.txt' \
         --exclude='manifest.json' \
         reviews/2026-09-25/r3-hex tb/r3-vectors \
-     > /tmp/r3_package_diff.log 2>&1 \
-   && python3 tools/gen/gen_r3_vectors.py --check >> /tmp/r3_package_diff.log 2>&1 \
+     > "$CHIP_WT_DIR"/r3_package_diff.log 2>&1 \
+   && python3 tools/gen/gen_r3_vectors.py --check >> "$CHIP_WT_DIR"/r3_package_diff.log 2>&1 \
    && python3 tools/gen/annotate_r3_confirmations.py --check \
-        >> /tmp/r3_package_diff.log 2>&1; then
+        >> "$CHIP_WT_DIR"/r3_package_diff.log 2>&1; then
   echo "R3 golden package: OK (tb copy byte-exact; include and confirmations current)"
 else
   echo "R3 golden package: FAILED (package drift or a stale generated include)"
-  cat /tmp/r3_package_diff.log
+  cat "$CHIP_WT_DIR"/r3_package_diff.log
   stale=1
 fi
 
@@ -1089,11 +1325,11 @@ fi
 # standard-mode table. This is a SPEC check, so it runs every time rather than on
 # request -- a firmware edit that shortens a delay is exactly the change that
 # looks harmless in review.
-if python3 tools/checks/i2c_timing.py > /tmp/i2c_timing.log 2>&1; then
+if python3 tools/checks/i2c_timing.py > "$CHIP_WT_DIR"/i2c_timing.log 2>&1; then
   echo "i2c pin timing: OK (tLOW/tHIGH/period clear their floors)"
 else
   echo "i2c pin timing: FAILED"
-  cat /tmp/i2c_timing.log
+  cat "$CHIP_WT_DIR"/i2c_timing.log
   stale=1
 fi
 
@@ -1101,11 +1337,11 @@ fi
 # model: address, ACKs, the read path, the repeated START, timing and grammar,
 # across all 60 tick phases. The RTL TB is the same claim on real RTL; these
 # must agree, and a disagreement is a signal (STATUS gotcha 11).
-if python3 tools/checks/i2c_xfer_check.py > /tmp/i2c_xfer.log 2>&1; then
+if python3 tools/checks/i2c_xfer_check.py > "$CHIP_WT_DIR"/i2c_xfer.log 2>&1; then
   echo "i2c transaction: OK (bytes, ACKs, read path, timing, grammar)"
 else
   echo "i2c transaction: FAILED"
-  cat /tmp/i2c_xfer.log
+  cat "$CHIP_WT_DIR"/i2c_xfer.log
   stale=1
 fi
 
@@ -1113,11 +1349,11 @@ fi
 # testbench nobody mutation-tests is a testbench that quietly stops testing --
 # and this one has already been caught being vacuous twice (a wrong edge index
 # that made both interval checks unfailable, and a missing interval check).
-if run_mutation_suite mutate_i2c_tb.sh ./regress/mutate_i2c_tb.sh > /tmp/mutate_i2c.log 2>&1; then
+if run_mutation_suite mutate_i2c_tb.sh ./regress/mutate_i2c_tb.sh > "$CHIP_WT_DIR"/mutate_i2c.log 2>&1; then
   echo "i2c TB mutations: OK (no unexplained survivors)"
 else
   echo "i2c TB mutations: FAILED"
-  tail -20 /tmp/mutate_i2c.log
+  tail -20 "$CHIP_WT_DIR"/mutate_i2c.log
   stale=1
 fi
 
@@ -1131,92 +1367,92 @@ fi
 # then cmp-verifies that the tree was never written to -- a stronger statement
 # than "restored correctly". It is the slowest suite here (the servo TB is 66 s
 # per case) and runs at MUTATE_TIMING_JOBS, default 6.
-if run_mutation_suite mutate_timing_tb.sh ./regress/mutate_timing_tb.sh > $RLOG/mutate_timing.log 2>&1; then
+if run_mutation_suite mutate_timing_tb.sh ./regress/mutate_timing_tb.sh > "$CHIP_WT_DIR"/mutate_timing.log 2>&1; then
   echo "timing TB mutations: OK (no unexplained survivors)"
 else
   echo "timing TB mutations: FAILED"
-  tail -20 $RLOG/mutate_timing.log
+  tail -20 "$CHIP_WT_DIR"/mutate_timing.log
   stale=1
 fi
 
-if run_mutation_suite mutate_spi_tb.sh ./regress/mutate_spi_tb.sh > $RLOG/mutate_spi.log 2>&1; then
+if run_mutation_suite mutate_spi_tb.sh ./regress/mutate_spi_tb.sh > "$CHIP_WT_DIR"/mutate_spi.log 2>&1; then
   echo "spi TB mutations: OK (no unexplained survivors)"
 else
   echo "spi TB mutations: FAILED"
-  tail -20 $RLOG/mutate_spi.log
+  tail -20 "$CHIP_WT_DIR"/mutate_spi.log
   stale=1
 fi
 
 # The frame buffer's TB, mutation-tested on BOTH implementations (the macro and
 # the FLOP=1 fallback), because the fallback exists to stand in for the macro --
 # so a test that only covered one would leave that claim unchecked.
-if run_mutation_suite mutate_fbuf_tb.sh ./regress/mutate_fbuf_tb.sh > $RLOG/mutate_fbuf.log 2>&1; then
+if run_mutation_suite mutate_fbuf_tb.sh ./regress/mutate_fbuf_tb.sh > "$CHIP_WT_DIR"/mutate_fbuf.log 2>&1; then
   echo "fbuf TB mutations: OK (no unexplained survivors)"
 else
   echo "fbuf TB mutations: FAILED"
-  tail -20 $RLOG/mutate_fbuf.log
+  tail -20 "$CHIP_WT_DIR"/mutate_fbuf.log
   stale=1
 fi
 
-if run_mutation_suite mutate_eth_mac_tb.sh ./regress/mutate_eth_mac_tb.sh > $RLOG/mutate_eth_mac.log 2>&1; then
+if run_mutation_suite mutate_eth_mac_tb.sh ./regress/mutate_eth_mac_tb.sh > "$CHIP_WT_DIR"/mutate_eth_mac.log 2>&1; then
   echo "eth_mac TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_mac TB mutations: FAILED"
-  tail -20 $RLOG/mutate_eth_mac.log
+  tail -20 "$CHIP_WT_DIR"/mutate_eth_mac.log
   stale=1
 fi
 
 # The SoC-level Ethernet TB is the only proof a PROGRAM can consume a frame,
 # so it gets the same treatment the block TBs get.
-if run_mutation_suite mutate_eth_soc_tb.sh ./regress/mutate_eth_soc_tb.sh > $RLOG/mutate_eth_soc.log 2>&1; then
+if run_mutation_suite mutate_eth_soc_tb.sh ./regress/mutate_eth_soc_tb.sh > "$CHIP_WT_DIR"/mutate_eth_soc.log 2>&1; then
   echo "eth_soc TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_soc TB mutations: FAILED"
-  tail -20 $RLOG/mutate_eth_soc.log
+  tail -20 "$CHIP_WT_DIR"/mutate_eth_soc.log
   stale=1
 fi
 
 # The loader is how a program reaches silicon; its TB gets the same gate. The
 # run-transition cases (run rising in W_IDLE, W_PULSE or W_DONE) are the ones
 # the independent review found missing.
-if run_mutation_suite mutate_ctrl_tb.sh ./regress/mutate_ctrl_tb.sh > $RLOG/mutate_ctrl.log 2>&1; then
+if run_mutation_suite mutate_ctrl_tb.sh ./regress/mutate_ctrl_tb.sh > "$CHIP_WT_DIR"/mutate_ctrl.log 2>&1; then
   echo "ctrl TB mutations: OK (no unexplained survivors)"
 else
   echo "ctrl TB mutations: FAILED"
-  tail -20 $RLOG/mutate_ctrl.log
+  tail -20 "$CHIP_WT_DIR"/mutate_ctrl.log
   stale=1
 fi
 
 # The I2C transaction TB's DUT is the firmware, so its mutations are firmware
 # edits (bit order, repeated START, tLOW, STOP, arbitration, the tHD;DAT hold,
 # the read accumulator). Both the .pe and the .hex are restored and verified.
-if run_mutation_suite mutate_i2c_xfer_tb.sh ./regress/mutate_i2c_xfer_tb.sh > /tmp/mutate_i2c_xfer.log 2>&1; then
+if run_mutation_suite mutate_i2c_xfer_tb.sh ./regress/mutate_i2c_xfer_tb.sh > "$CHIP_WT_DIR"/mutate_i2c_xfer.log 2>&1; then
   echo "i2c_xfer TB mutations: OK (no unexplained survivors)"
 else
   echo "i2c_xfer TB mutations: FAILED"
-  tail -20 /tmp/mutate_i2c_xfer.log
+  tail -20 "$CHIP_WT_DIR"/mutate_i2c_xfer.log
   stale=1
 fi
 
 # The word engine's unit suite: the integration split bit_en into tx/rx
 # enables, and the TB's directed split case is what proves the sides are
 # independent.
-if run_mutation_suite mutate_serdes_tb.sh ./regress/mutate_serdes_tb.sh > $RLOG/mutate_serdes.log 2>&1; then
+if run_mutation_suite mutate_serdes_tb.sh ./regress/mutate_serdes_tb.sh > "$CHIP_WT_DIR"/mutate_serdes.log 2>&1; then
   echo "serdes TB mutations: OK (no unexplained survivors)"
 else
   echo "serdes TB mutations: FAILED"
-  tail -20 $RLOG/mutate_serdes.log
+  tail -20 "$CHIP_WT_DIR"/mutate_serdes.log
   stale=1
 fi
 
 # The word-engine integration: the plan's four required mutations (TX hold,
 # RX skip, doubled cell enable, strobe cross-wire) plus the two alignment
 # defects and the grid-aligned load. Each must fail tb_pe_soc_serdes.
-if run_mutation_suite mutate_soc_serdes_tb.sh ./regress/mutate_soc_serdes_tb.sh > $RLOG/mutate_soc_serdes.log 2>&1; then
+if run_mutation_suite mutate_soc_serdes_tb.sh ./regress/mutate_soc_serdes_tb.sh > "$CHIP_WT_DIR"/mutate_soc_serdes.log 2>&1; then
   echo "soc serdes TB mutations: OK (no unexplained survivors)"
 else
   echo "soc serdes TB mutations: FAILED"
-  tail -20 $RLOG/mutate_soc_serdes.log
+  tail -20 "$CHIP_WT_DIR"/mutate_soc_serdes.log
   stale=1
 fi
 
@@ -1225,11 +1461,11 @@ fi
 # preset 0x51, the ones-only cfg[7] rule and the cfg[6:4] run length, the
 # registered clr/rx_err contract (clr reaches every stage), and the pipeline
 # order / bypass subsets / half_phase. All 13 mutations must fail the TB.
-if run_mutation_suite mutate_codec_tb.sh ./regress/mutate_codec_tb.sh > $RLOG/mutate_codec.log 2>&1; then
+if run_mutation_suite mutate_codec_tb.sh ./regress/mutate_codec_tb.sh > "$CHIP_WT_DIR"/mutate_codec.log 2>&1; then
   echo "codec TB mutations: OK (no unexplained survivors)"
 else
   echo "codec TB mutations: FAILED"
-  tail -20 $RLOG/mutate_codec.log
+  tail -20 "$CHIP_WT_DIR"/mutate_codec.log
   stale=1
 fi
 
@@ -1239,19 +1475,19 @@ fi
 # and the done pulse. Two of them (pad-extra, ifg-95) SURVIVED the first
 # version of the suite and found two real gaps in tb_pe_eth_tx.v, which the
 # suite's own record carries.
-if run_mutation_suite mutate_ctrl_r3_tb.sh ./regress/mutate_ctrl_r3_tb.sh > /tmp/mutate_ctrl_r3.log 2>&1; then
+if run_mutation_suite mutate_ctrl_r3_tb.sh ./regress/mutate_ctrl_r3_tb.sh > "$CHIP_WT_DIR"/mutate_ctrl_r3.log 2>&1; then
   echo "ctrl R3 debug mutations: OK (no unexplained survivors)"
 else
   echo "ctrl R3 debug mutations: FAILED"
-  tail -20 /tmp/mutate_ctrl_r3.log
+  tail -20 "$CHIP_WT_DIR"/mutate_ctrl_r3.log
   stale=1
 fi
 
-if run_mutation_suite mutate_eth_tx_tb.sh ./regress/mutate_eth_tx_tb.sh > $RLOG/mutate_eth_tx.log 2>&1; then
+if run_mutation_suite mutate_eth_tx_tb.sh ./regress/mutate_eth_tx_tb.sh > "$CHIP_WT_DIR"/mutate_eth_tx.log 2>&1; then
   echo "eth_tx TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_tx TB mutations: FAILED"
-  tail -20 $RLOG/mutate_eth_tx.log
+  tail -20 "$CHIP_WT_DIR"/mutate_eth_tx.log
   stale=1
 fi
 
@@ -1261,11 +1497,11 @@ fi
 # convention and the window's push wrap. The pad mapping is only visible at
 # the PAD, so this harness runs BOTH tb_pe_soc_eth_loop and the pad-level
 # case in tb_tt_um_protocol_emulator.
-if run_mutation_suite mutate_eth_tx_loop_tb.sh ./regress/mutate_eth_tx_loop_tb.sh > $RLOG/mutate_eth_tx_loop.log 2>&1; then
+if run_mutation_suite mutate_eth_tx_loop_tb.sh ./regress/mutate_eth_tx_loop_tb.sh > "$CHIP_WT_DIR"/mutate_eth_tx_loop.log 2>&1; then
   echo "eth_tx loopback TB mutations: OK (no unexplained survivors)"
 else
   echo "eth_tx loopback TB mutations: FAILED"
-  tail -20 $RLOG/mutate_eth_tx_loop.log
+  tail -20 "$CHIP_WT_DIR"/mutate_eth_tx_loop.log
   stale=1
 fi
 
@@ -1275,11 +1511,11 @@ fi
 # CRC's comparison, the CTS wait, the RTS assertion -- and each TB must catch
 # every one that applies to it. A survivor means the TB does not test what it
 # claims, which is the failure mode this project treats as worse than a red.
-if run_mutation_suite mutate_fwbus_tb.sh ./regress/mutate_fwbus_tb.sh > $RLOG/mutate_fwbus.log 2>&1; then
+if run_mutation_suite mutate_fwbus_tb.sh ./regress/mutate_fwbus_tb.sh > "$CHIP_WT_DIR"/mutate_fwbus.log 2>&1; then
   echo "fw-bus TB mutations: OK (no unexplained survivors)"
 else
   echo "fw-bus TB mutations: FAILED"
-  tail -20 $RLOG/mutate_fwbus.log
+  tail -20 "$CHIP_WT_DIR"/mutate_fwbus.log
   stale=1
 fi
 
@@ -1290,11 +1526,11 @@ fi
 # whose comparison never fires) fails 3 of its 7 cases, so the test is not
 # vacuous. It uses a private stamp directory and touches nothing in the repo, so
 # it is safe to run while a real run holds the worktree lock.
-if bash "$REPO_ROOT/regress/test_dep_guard.sh" > $RLOG/test_dep_guard.log 2>&1; then
+if bash "$REPO_ROOT/regress/test_dep_guard.sh" > "$CHIP_WT_DIR"/test_dep_guard.log 2>&1; then
   echo "harness-edit pre-flight: OK (fires on a changed script, quiet on an unchanged one)"
 else
   echo "harness-edit pre-flight: FAILED"
-  cat $RLOG/test_dep_guard.log
+  cat "$CHIP_WT_DIR"/test_dep_guard.log
   stale=1
 fi
 

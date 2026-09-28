@@ -67,15 +67,18 @@ fi
 # NOTE: $dumpfile writes relative to the PROCESS cwd, and we are in sim/, so
 # dumps land in sim/ exactly as the serial path leaves them. That is deliberate:
 # --fast must not change where artifacts appear, only how fast they get there.
-out=$(vvp "$work/$top.vvp" 2>&1)
-
-{
-  if grep -q '^PASS' <<< "$out"; then
-    printf 'PASS\n'
-  else
-    printf 'FAIL\n'
-    grep -E '^FAIL' <<< "$out" | head -5
-  fi
-} > "$work/$top.result"
-
+# BOUNDED, and the verdict is NAMED. This is the --fast worker, so it is the
+# path that fans out JOBS-wide (nproc by default = 24 concurrent simulations on
+# this box). Before the bound, a testbench that never reached $finish held a core
+# at 100% forever and printed nothing at all; on 2026-09-27 the accumulated
+# processes exhausted the user slice's pids limit and the desktop could no longer
+# fork, so the graphical session was torn down to a login screen.
+#
+# vvp_run.sh bounds the run and returns PASS / FAIL / TIMEOUT on its first line.
+# The collector in run_all.sh prints that verdict verbatim and counts it as a
+# failure, so a stuck testbench is a LABELLED red rather than silence - which is
+# the whole difference between a hang you can read in the summary and one that
+# costs a forensic session. VVP_TIMEOUT is exported by run_all.sh; the default
+# covers a standalone invocation of this worker.
+"$REPO/regress/vvp_run.sh" "${VVP_TIMEOUT:-900}" "$work/$top.vvp" > "$work/$top.result"
 exit 0

@@ -181,6 +181,48 @@ if start_case refuse 'sleep 30'; then
   sleep 0.5
 fi
 
+# ---- H: a STALE CHIP_RUN_LOCK_HELD is not a pass ticket -------------------
+# The variable is exported, so it outlives the run that set it into any later
+# shell, supervisor or worker that starts an INDEPENDENT gate. A gate that
+# believed it never reached the flock at all, so mutual exclusion was silently
+# absent and two runs mutated and restored the same RTL at once -- which is
+# what four concurrent gates did in this worktree on 2026-09-26, each reporting
+# the others' MUTABLE files changing under it while the lock reported nothing.
+#
+# This case is case A with EXACTLY ONE difference, so it pins this defect and
+# nothing else: the second taker is told it already holds the lock, and it must
+# still be refused. A real reentrant child inherits the lock DESCRIPTOR, which
+# is the evidence the fix now requires; this one inherits only the name, so
+# there is nothing behind it.
+#
+# The 9>&- is load-bearing and is why this case only works when the suite
+# caught it the FIRST time: this gate runs INSIDE run_all.sh, which is itself a
+# lock holder, so fd 9 is open in every descendant. Without closing it the
+# probe inherits a descriptor, the fast path legitimately fires, and the case
+# fails -- a failure that means nothing about the defect. Closing fd 9 makes
+# the probe what it claims to be: a process that inherited the NAME and nothing
+# else, which is the whole hazard. A case that only passes outside the suite is
+# a case that is not testing the thing it names.
+if start_case staleheld 'sleep 30'; then
+  if CHIP_RUN_LOCK_FILE="$WORK/staleheld.lock" \
+     CHIP_RUN_OWNER_FILE="$WORK/staleheld.probe.owner" \
+     CHIP_RUN_WATCHDOG=0 \
+     CHIP_RUN_LOCK_HELD=1 \
+     bash -c ". '$HERE/run_lock.sh'; chip_take_run_lock stale" 9>&- \
+       > "$WORK/staleheld.second.log" 2>&1; then
+    bad "H: a stale CHIP_RUN_LOCK_HELD let a second run start while the lock was held"
+  else
+    rc=$?
+    if [ "$rc" -eq 75 ] && grep -q "REFUSING TO START" "$WORK/staleheld.second.log"; then
+      ok "H: a stale CHIP_RUN_LOCK_HELD is refused, not honoured"
+    else
+      bad "H: refused with exit $rc, wanted 75"
+    fi
+  fi
+  stop_case
+  sleep 0.5
+fi
+
 # ---- B/C/D: a signal to the holder must take its child with it ------------
 for sig in INT TERM KILL; do
   if start_case "sig$sig" 'sleep 30'; then
@@ -209,12 +251,41 @@ if start_case normal 'exit 0'; then
   child=$(cat "$WORK/child.normal")
   wait "$RUNNER_PID" 2>/dev/null
   RUNNER_PID=""
-  sleep 0.4
-  case "$(heartbeat_state "$child")" in
-    growing) bad "E: a cleanly finished run left its child running" ;;
-    silent)  bad "E: the child never ran, so the case proves nothing" ;;
-    still)   ok "E: a clean exit leaves no strays" ;;
-  esac
+  # THE 0.4s SLEEP THIS REPLACED WAS A RACE, AND IT MADE THE GATE FLAKY. This
+  # child IGNORES TERM on purpose, so the run's cleanup cannot kill it politely:
+  # it dies to the TERM->KILL escalation, or to the watchdog, and either way its
+  # death lands a beat AFTER the holder is gone -- later still on a loaded box.
+  # A fixed sleep then sampled the heartbeat ACROSS that death, so the child's
+  # very last write counted as "growing" and the case reported a leak that had
+  # not happened. Measured, not inferred: 0 failed on an idle box, 1 failed
+  # inside the full suite, and on both failures the child was already dead with
+  # no strays and no holder note. A gate that is red sometimes and green other
+  # times cannot be trusted in EITHER direction, which is the one property
+  # dep_guard.sh exists to protect, so the case waits for the death the
+  # contract actually promises -- bounded, so a genuine leak still fails.
+  e_alive() {   # a zombie is dead: kill -0 still succeeds on one
+    kill -0 "$1" 2>/dev/null || return 1
+    case "$(ps -o stat= -p "$1" 2>/dev/null)" in
+      Z*) return 1 ;;   # exited but not yet reaped: dead, and waiting longer
+                         # would only spin to the bound and then cry "leak"
+      *)  return 0 ;;
+    esac
+  }
+  e_waited=0
+  while e_alive "$child" && [ "$e_waited" -lt 100 ]; do
+    sleep 0.1; e_waited=$((e_waited + 1))
+  done
+  if e_alive "$child"; then
+    bad "E: a cleanly finished run left its child running (alive after $((e_waited * 100))ms)"
+  elif [ ! -e "$WORK/heartbeat.$child" ]; then
+    bad "E: the child never ran, so the case proves nothing"
+  else
+    case "$(heartbeat_state "$child")" in
+      growing) bad "E: a cleanly finished run left its child running" ;;
+      silent)  bad "E: the child never ran, so the case proves nothing" ;;
+      still)   ok "E: a clean exit leaves no strays (child gone after $((e_waited * 100))ms)" ;;
+    esac
+  fi
   if lock_frees_within 3; then ok "E: the lock is free after a clean exit"
   else bad "E: the lock is still held after a clean exit"; fi
   if [ -e "$WORK/normal.owner" ]; then

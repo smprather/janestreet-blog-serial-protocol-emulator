@@ -43,10 +43,32 @@
 # Usage: worker_supervisor.sh [--once]     (deploy detached via nohup setsid)
 
 set -u
+
+# tmp-isolation: box-global singleton, EXEMPT on purpose. The supervisor's state
+# under /tmp/pi-sup-* is deliberately fleet-wide: it must see every agent in
+# every worktree at once, or it cannot tell that the fleet is idle and cannot
+# stop two agents writing the same violation counter. Namespacing these per
+# worktree would give each worktree a supervisor blind to the others, which is
+# the opposite of the job. regress/check_tmp_isolation.sh honours this marker,
+# so the exemption is greppable at the site that needs it.
+
 INTERVAL="${INTERVAL:-30}"
-NUDGE_COOLDOWN="${NUDGE_COOLDOWN:-180}"
+NUDGE_COOLDOWN="${NUDGE_COOLDOWN:-600}"
 STALL_ALERT_S="${STALL_ALERT_S:-900}"
 WORKLOG="${WORKLOG:-/home/mylesp/janestreet-blog-serial-protocol-emulator/WORKLOG.md}"
+# NAMING + OWNERSHIP (user ruling 2026-09-27 13:44). A restarted agent is
+# relaunched through launch_agent.sh under its OWN name, so every process it
+# spawns carries PE_TEAM + PE_AGENT_NAME in its /proc/<pid>/environ and the
+# manager's runaway/RSS brakes can tell whose runaway they are looking at - and
+# refuse to touch anything they do not recognise as the team's. The launcher
+# path is ABSOLUTE on purpose: worker panes run in /tmp/worktrees/*, which do
+# not have this repo's uncommitted tools/manager/launch_agent.sh of their own.
+REPO_ROOT="${REPO_ROOT:-/home/mylesp/janestreet-blog-serial-protocol-emulator}"
+LAUNCHER="${LAUNCHER:-$REPO_ROOT/tools/manager/launch_agent.sh}"
+# The L3/L5 sweep, which owns its own pattern and its own ownership gate. If it
+# is missing the supervisor says so loudly rather than falling back to the old
+# box-global kill, which was the behaviour that damaged another project.
+SWEEP="${SWEEP:-$REPO_ROOT/tools/manager/pe_forbidden_sweep.sh}"
 ALERT="${ALERT:-/tmp/pi-manager-interrupt}"
 PIDFILE="${PIDFILE:-/tmp/pi-worker-supervisor.pid}"
 LOG="${LOG:-/tmp/pi-worker-supervisor.log}"
@@ -77,7 +99,17 @@ hard_restart() {  # $1=window $2=agent $3=reason — LAST RESORT (wedged pane)
   hellfire "$2 | $3 | penalty: LAST-RESORT RESTART (pane wedged/uninterruptible; context lost)"
   tmux respawn-pane -k -t "$1" 2>/dev/null
   sleep 2
-  tmux send-keys -t "$1" -l "pi"
+  # Relaunch NAMED, not bare `pi`. A bare restart brings back an untagged
+  # session whose descendants the manager's brakes must then refuse to act on -
+  # the watchdog would go blind to that agent's runaways. Say which happened:
+  # an untagged restart is a silent loss of coverage, not a cosmetic detail.
+  if [ -x "$LAUNCHER" ]; then
+    tmux send-keys -t "$1" -l "$LAUNCHER $2 pi"
+    logline "hard_restart: $2 relaunched NAMED via $LAUNCHER"
+  else
+    tmux send-keys -t "$1" -l "pi"
+    logline "hard_restart: $2 relaunched UNTAGGED - launcher missing/not executable at $LAUNCHER"
+  fi
   sleep 0.5
   tmux send-keys -t "$1" Enter
   sleep 6
@@ -87,20 +119,31 @@ hard_restart() {  # $1=window $2=agent $3=reason — LAST RESORT (wedged pane)
   rm -f "/tmp/pi-sup-stall-$2" "/tmp/pi-sup-last-$2"
 }
 
-[ "$ONCE" -eq 0 ] && { if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then echo "supervisor already running (pid $(cat "$PIDFILE"))" >&2; exit 1; fi; echo $$ >"$PIDFILE"; logline "supervisor start pid=$$ interval=${INTERVAL}s stall_alert=${STALL_ALERT_S}s"; }
+[ "$ONCE" -eq 0 ] && { if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then echo "supervisor already running (pid $(cat "$PIDFILE"))" >&2; exit 1; fi; echo $$ >"$PIDFILE"; logline "supervisor start pid=$$ interval=${INTERVAL}s stall_alert=${STALL_ALERT_S}s launcher=$([ -x "$LAUNCHER" ] && echo ok || echo MISSING)"; }
 
 while :; do
-  # ---- law enforcement: forbidden processes (kill on sight) ----------------
-  while read -r pid rest; do
-    [ -z "${pid:-}" ] && continue
-    agent="unknown"
-    case "$rest" in *host_bridge*|*host_gui*) agent=gui-worker;; *janestreet-blog*|*regress*|*rtl*) agent=protocol-worker;; esac
-    kill -9 "$pid" 2>/dev/null
-    viol "L3/L5 forbidden process killed: pid=$pid [$rest] attributed to $agent"
-    bump_violation "$agent"
-    n=$(violation_count "$agent")
-    [ "$n" -ge 2 ] && [ "$agent" != unknown ] && manager_alert "$agent" "REPEAT forbidden-process violation ($n) — adjudicate; worker session preserved"
-  done < <(ps -eo pid,args | grep -E "$FORBIDDEN_PROC_RE" | grep -v grep | grep -v worker_supervisor)
+  # ---- law enforcement: forbidden processes (OUR OWN only) -----------------
+  # WAS: an inline `ps -eo pid,args | grep -E "$FORBIDDEN_PROC_RE" | kill -9`.
+  # That was a BOX-GLOBAL scan with no ownership filter, and it was killing the
+  # USER'S OTHER PROJECT - WORKLOG lines 1811-1818 and the 13:47/13:51 VIOLATION
+  # entries record it kill -9ing engineering-loadout's `loadout install librelane
+  # yosys openroad klayout` runs and two openroad-cts invocations, in a different
+  # repository, in a live tmux window this project has no jurisdiction over. Its
+  # own `agent="unknown"` fallback was the admission that it could not tell whose
+  # processes those were.
+  #
+  # NOW: the sweep only ever acts on a process carrying
+  # PE_TEAM=protocol-emulator, i.e. one this team's own launcher started.
+  # Everything else is logged as a SKIP and left alone. USER RULING 2026-09-27:
+  # "you are only allowed to manage pe work." The rule forbids the same things;
+  # it simply may not reach outside the team. The sweep is a separate script
+  # because it can delete processes, and that has no business being an untestable
+  # block inside this loop - see tools/manager/test_pe_forbidden_sweep.sh.
+  if [ -x "$SWEEP" ]; then
+    LOG="${SUP_LOG:-/tmp/pi-worker-supervisor.log}" "$SWEEP" >/dev/null 2>&1
+  else
+    logline "forbidden-process sweep UNAVAILABLE at $SWEEP - L3/L5 enforcement is OFF this tick (not silently passing)"
+  fi
 
   for spec in $WORKERS; do
     IFS=: read -r sess win agent <<<"$spec"
@@ -142,8 +185,8 @@ while :; do
       rm -f "/tmp/pi-sup-idle-since-${agent}"
       # A worker whose newest line is IDLE-QUEUE-EMPTY cannot be
       # 'silent while working' — stale spinner scrollback is not activity.
-      newest_line=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -1)
-      case "$newest_line" in *IDLE-QUEUE-EMPTY*) continue;; esac
+      newest_line=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -3)
+      case "$newest_line" in *IDLE-QUEUE-EMPTY*|*standby*|*STANDBY*|*QUESTION*|*BLOCKED*) continue;; esac
       # Marker lifecycle: cleared the moment the worker resumes logging,
       # so a gap can re-alert if it recurs (the 02:44 marker never cleared).
       if [ $((now - newest_epoch)) -lt "$STALL_ALERT_S" ]; then rm -f "/tmp/pi-sup-stall-${agent}"; fi
@@ -170,7 +213,7 @@ while :; do
     # phrase may sit on any of its last few lines (reports interleave with
     # bookkeeping lines). Check the last 3 and both phrases.
     newest=$(grep -E " \| (pw-)?${agent} \| " "$WORKLOG" 2>/dev/null | grep -v " | supervisor | " | tail -3)
-    case "$newest" in *IDLE-QUEUE-EMPTY*|*standby*|*STANDBY*) continue;; esac
+    case "$newest" in *IDLE-QUEUE-EMPTY*|*standby*|*STANDBY*|*QUESTION*|*BLOCKED*) continue;; esac
     echo "$now" >"/tmp/pi-sup-last-${agent}"
     if [ "$ONCE" -eq 1 ]; then
       echo "WOULD-NUDGE $agent ($(date '+%T')) last-worklog: ${newest:-none}"

@@ -39,6 +39,35 @@
 #  17.  octet-msb-first     the first bit of every byte is bit 7
 #  18.  done-before-fcs     tx_done pulses when the field STARTS
 #
+# The line driver (wiki/plans/eth-tx-line-driver.md: the differential pair,
+# the start-of-idle delimiter, the link pulses):
+#
+#  19.  nlp-never              no link pulse is ever sent (the link partner
+#                              declares link failure: nothing is received)
+#  20.  nlp-period-short       the period is one cell short
+#  21.  nlp-count-not-reset    the count is not cleared when a pulse fires,
+#                              so pulses repeat on every cell
+#  22.  nlp-not-ended          a pulse never releases the pair (DC)
+#  23.  nlp-period-not-restarted
+#                              a frame does not restart the period, so the
+#                              first pulse after a frame comes early
+#  24.  start-loses-to-nlp     a due pulse beats a pending start, delaying
+#                              the frame by a cell
+#  25.  start-not-cancel-tpidl a start inside an abort's TP_IDL leaves the
+#                              countdown running: it releases the pair two
+#                              cells into the new preamble
+#  26.  tpidl-omitted          the pair drops with the last FCS cell
+#  27.  tpidl-short            2 cells (200 ns), under 802.3's 250 ns
+#  28.  tpidl-not-on-abort     an aborted frame ends with no delimiter
+#  29.  tpidl-not-on-underrun  a DATA underrun ends with no delimiter
+#  30.  tpidl-not-on-preamble-underrun
+#                              a bare-preamble underrun ends with none
+#  31.  pair-kept-on-disable   losing `enable` leaves the pair driven
+#  32.  period-kept-on-disable a mid-count disable does not restart the
+#                              period, so the next pulse comes early
+#  33.  nlp-negative           the pulse is the NEGATIVE level (a partner's
+#                              polarity detector reads the pair as swapped)
+#
 # RESTORE IS A FILE COPY, cmp-verified after every mutation and snapshotted
 # into a temp dir that survives a SIGKILL (the 2026-09-24 18:43 OOM left a
 # mutant behind precisely because the restore step never ran; the snapshot is
@@ -61,8 +90,8 @@ RTL="$ROOT/rtl/pe_eth_tx.v"
 # NEVER SKIPPED. A MISSING line is the opposite: unmappable, and the gate
 # escalates to running every suite rather than guessing.
 MUTABLE="rtl/pe_eth_tx.v"
-LOG="${RLOG:-/tmp}/mutate_eth_tx.log"
-CCLOG=${RLOG:-/tmp}/mutate_eth_tx_cc.log
+LOG="$CHIP_WT_DIR"/mutate_eth_tx.log
+CCLOG="$CHIP_WT_DIR"/mutate_eth_tx_cc.log
 PRISTINE=$(mktemp -d /tmp/pristine_eth_tx_tb.XXXXXX)
 BAK=$(mktemp -d /tmp/backup_eth_tx_tb.XXXXXX)
 
@@ -80,13 +109,13 @@ cmp -s "$RTL" "$PRISTINE/pe_eth_tx.v" || { echo "FATAL: could not snapshot $RTL"
 # Same source list as run_all.sh's tb_pe_eth_tx case (no SRAM model: the
 # engine + the CRC engine are the whole design here).
 run_tb() {
-  iverilog -g2012 -s tb_pe_eth_tx -o /tmp/mut_eth_tx.vvp \
+  iverilog -g2012 -s tb_pe_eth_tx -o "$CHIP_WT_DIR"/mut_eth_tx.vvp \
     ../rtl/pe_eth_tx.v ../rtl/pe_crc.v ../tb/tb_pe_eth_tx.v >"$CCLOG" 2>&1 || return 2
-  timeout 300 vvp /tmp/mut_eth_tx.vvp >"$LOG" 2>&1
+  timeout 300 vvp "$CHIP_WT_DIR"/mut_eth_tx.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
 
-restore() { cp "$BAK/pe_eth_tx.v" "$RTL"; }
+restore() { cp "$BAK/pe_eth_tx.v" "$RTL"; chip_dep_expect pristine $MUTABLE; }
 verify_restore() {
   cmp -s "$PRISTINE/pe_eth_tx.v" "$RTL" || {
     echo "  FATAL: $RTL does not match the pristine snapshot after restore."; exit 3; }
@@ -109,6 +138,35 @@ check_mutation() {
   if ! mutate "$1" "$2"; then
     echo "  [$name] HARNESS ERROR: anchor not found/unique"; restore; fail=$((fail+1)); return
   fi
+    chip_dep_expect mutated $MUTABLE
+  run_tb
+  local rc=$?
+  if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))
+  elif [ $rc -eq 1 ]; then echo "  [$name] detected"; pass=$((pass+1))
+  else                     echo "  [$name] HARNESS ERROR: exit $rc"; tail -3 "$CCLOG" "$LOG" 2>/dev/null; fail=$((fail+1))
+  fi
+  restore; verify_restore
+}
+
+# A mutant that must move TWO assignments together. F1 is a pair: the pre-fix
+# boundary took its length from frame_len in BOTH stored_bytes and
+# data_bits_left, so this is the faithful inverse of the fix rather than an
+# arbitrary double perturbation.
+#
+# MEASURED, not assumed: a single-assignment mutant (stored_bytes only, with
+# data_bits_left left on pend_len) is ALSO killed by tb_pe_eth_tx's
+# f1-apply-window case, because that case asserts on the applied length
+# directly. The pair is therefore fidelity to the original defect and a wider
+# net -- NOT a necessity, and the comment must not claim otherwise.
+check_mutation2() {
+  local name="$1"; shift
+  if ! mutate "$1" "$2"; then
+    echo "  [$name] HARNESS ERROR: anchor 1 not found/unique"; restore; fail=$((fail+1)); return
+  fi
+  if ! mutate "$3" "$4"; then
+    echo "  [$name] HARNESS ERROR: anchor 2 not found/unique"; restore; fail=$((fail+1)); return
+  fi
+    chip_dep_expect mutated $MUTABLE
   run_tb
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))
@@ -219,6 +277,107 @@ check_mutation "octet-msb-first" \
 check_mutation "done-before-fcs" \
   "              if (fcs_left == 6'd1) begin" \
   "              if (fcs_left == 6'd32) begin   // MUTANT: done before the FCS"
+
+# ---- the line driver ---------------------------------------------------
+
+# 19. No link pulse is ever sent.
+check_mutation "nlp-never" \
+  "                if (nlp_cnt == NLPW'(NLP_CELLS - 1)) begin" \
+  "                if (1'b0 && nlp_cnt == NLPW'(NLP_CELLS - 1)) begin   // MUTANT: no link pulses"
+
+# 20. The period is one cell short.
+check_mutation "nlp-period-short" \
+  "                if (nlp_cnt == NLPW'(NLP_CELLS - 1)) begin" \
+  "                if (nlp_cnt == NLPW'(NLP_CELLS - 2)) begin   // MUTANT: period one cell short"
+
+# 21. The count is not cleared when a pulse fires: pulses on every cell.
+check_mutation "nlp-count-not-reset" \
+  "                  nlp_cnt    <= '0;
+                  nlp_cell   <= 1'b1;" \
+  "                  nlp_cell   <= 1'b1;   // MUTANT: count not reset after a pulse"
+
+# 22. A pulse never releases the pair.
+check_mutation "nlp-not-ended" \
+  "        if (nlp_cell) begin
+          nlp_cell   <= 1'b0;
+          line_drive <= 1'b0;
+        end" \
+  "        if (nlp_cell) begin
+          nlp_cell   <= 1'b0;   // MUTANT: the pulse never releases the pair
+        end"
+
+# 23. A frame does not restart the period.
+check_mutation "nlp-period-not-restarted" \
+  "                tpidl_left     <= 2'd0;              // a start ends any delimiter
+                nlp_cnt        <= '0;" \
+  "                tpidl_left     <= 2'd0;              // MUTANT: a frame does not restart the period"
+
+# 24. A due pulse beats a pending start.
+check_mutation "start-loses-to-nlp" \
+  "              if (start_pend) begin
+                start_pend     <= 1'b0;" \
+  "              if (start_pend && nlp_cnt != NLPW'(NLP_CELLS - 1)) begin   // MUTANT: a due pulse beats a start
+                start_pend     <= 1'b0;"
+
+# 25. A start inside an abort's TP_IDL does not cancel the countdown.
+check_mutation "start-not-cancel-tpidl" \
+  "                tpidl_left     <= 2'd0;              // a start ends any delimiter" \
+  "                // MUTANT: a start does not cancel a running TP_IDL"
+
+# 26. No delimiter: the pair drops with the last FCS cell.
+check_mutation "tpidl-omitted" \
+  "                tpidl_left <= 2'(TPIDL_CELLS);       // start-of-idle delimiter" \
+  "                line_drive <= 1'b0;   // MUTANT: no TP_IDL, the pair drops with the FCS"
+
+# 27. The delimiter is 200 ns, under 802.3's 250 ns.
+check_mutation "tpidl-short" \
+  "  localparam int TPIDL_CELLS = 3;        // 300 ns: 802.3 wants >= 250 ns positive" \
+  "  localparam int TPIDL_CELLS = 2;   // MUTANT: 200 ns, under 802.3's 250 ns"
+
+# 28. An aborted frame ends with no delimiter.
+check_mutation "tpidl-not-on-abort" \
+  "          if (in_frame) tpidl_left <= 2'(TPIDL_CELLS);" \
+  "          if (in_frame) line_drive <= 1'b0;   // MUTANT: an abort drops the pair with no TP_IDL"
+
+# 29. A DATA underrun ends with no delimiter.
+check_mutation "tpidl-not-on-underrun" \
+  "                    tpidl_left  <= 2'(TPIDL_CELLS);  // still end with TP_IDL" \
+  "                    line_drive  <= 1'b0;   // MUTANT: a DATA underrun drops the pair with no TP_IDL"
+
+# 30. A bare-preamble underrun ends with no delimiter.
+check_mutation "tpidl-not-on-preamble-underrun" \
+  "                  tpidl_left  <= 2'(TPIDL_CELLS);    // still end with TP_IDL" \
+  "                  line_drive  <= 1'b0;   // MUTANT: a preamble underrun drops the pair with no TP_IDL"
+
+# 31. Losing `enable` leaves the pair driven.
+check_mutation "pair-kept-on-disable" \
+  "        abort_pend <= 1'b0;
+        line_drive <= 1'b0;" \
+  "        abort_pend <= 1'b0;   // MUTANT: disable keeps the pair driven"
+
+# 32. A mid-count disable does not restart the period.
+check_mutation "period-kept-on-disable" \
+  "        line_drive <= 1'b0;
+        nlp_cnt    <= '0;
+        tpidl_left <= 2'd0;" \
+  "        line_drive <= 1'b0;
+        tpidl_left <= 2'd0;   // MUTANT: disable keeps the period count"
+
+# 33. The pulse is the NEGATIVE level.
+check_mutation "nlp-negative" \
+  "      default:                 tx_bit = half_phase;" \
+  "      default:                 tx_bit = nlp_cell ? ~half_phase : half_phase;   // MUTANT: negative link pulse"
+
+# 34. F1's defect, restored. The guard and the latch are the SAME event, and
+# both consumers of the latched length must move together: a start pulse can be
+# up to DIV-1 = 5 clocks ahead of the cell boundary that applies it, and the
+# host owns TXLEN for that whole window. Re-reading frame_len at the boundary
+# transmits a length the runt/jabber guard never saw -- the original defect.
+check_mutation2 "f1-boundary-reread" \
+  "                stored_bytes   <= pend_len;          // the length validated at" \
+  "                stored_bytes   <= frame_len;         // MUTANT: boundary re-read (F1)" \
+  "                data_bits_left <= {pend_len, 3'b000};" \
+  "                data_bits_left <= {frame_len, 3'b000};  // MUTANT: boundary re-read (F1)"
 
 echo
 echo "=== $pass detected, $survived survived, $fail harness errors ==="

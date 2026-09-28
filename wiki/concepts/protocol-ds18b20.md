@@ -1,7 +1,7 @@
 ---
 title: DS18B20 — 1-Wire, where the device speaks first and the polarity flips
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-27
 type: concept
 tags: [protocol, verification, clocking, physical-layer, gpio, architecture]
 sources: []
@@ -9,6 +9,11 @@ confidence: high
 ---
 
 # DS18B20 on 1-Wire
+
+> **What you'll learn here:** a 1-Wire exchange where the device speaks first and the polarity of a read slot is the opposite of a write slot's
+>
+> **You can verify this by:** `tb/tb_pe_soc_ds18b20.v` models the sensor, decodes the command bytes and measures the sample point against the device's timing.
+
 
 The DS18B20 inverts the DHT11's problem, and it is the second act to make the
 family's central rule unavoidable: **where the wire announces an event, wait for the

@@ -44,8 +44,8 @@ MUTABLE="rtl/pe_ctrl.v rtl/tt_um_protocol_emulator.v"
 TB="$ROOT/tb/tb_pe_ctrl.v"
 SRCS="../rtl/pe_ctrl.v $TB"
 WTB_SRCS="../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v ../rtl/pe_ctrl.v ../rtl/tt_um_protocol_emulator.v"
-LOG="${RLOG:-/tmp}/mutate_ctrl.log"
-WTB_LOG=${RLOG:-/tmp}/mutate_ctrl_tt.log
+LOG="$CHIP_WT_DIR"/mutate_ctrl.log
+WTB_LOG="$CHIP_WT_DIR"/mutate_ctrl_tt.log
 BAK=$(mktemp /tmp/pe_ctrl.XXXXXX.v)
 WBAK=$(mktemp /tmp/tt_um.XXXXXX.v)
 
@@ -65,30 +65,30 @@ cmp -s "$WRTL" "$WBAK" || { echo "FATAL: could not snapshot $WRTL"; exit 2; }
 # standalone harness run must not silently test a stale or missing image.
 if [ ! -f "$ROOT/firmware/spi_xfer.hex" ]; then
   echo "  firmware images missing: building them first"
-  ( cd "$ROOT" && ./regress/run_firmware_tests.sh >${RLOG:-/tmp}/mut_ctrl_fw.log 2>&1 ) \
+  ( cd "$ROOT" && ./regress/run_firmware_tests.sh >"$CHIP_WT_DIR"/mut_ctrl_fw.log 2>&1 ) \
     || { echo "FATAL: could not build the firmware images"; exit 2; }
 fi
 
 pass=0; fail=0; survived=0
 
 run_tb() {
-  iverilog -g2012 -s tb_pe_ctrl -o /tmp/mut_ctrl.vvp $SRCS >${RLOG:-/tmp}/mut_ctrl_cc.log 2>&1 || return 2
-  timeout 120 vvp /tmp/mut_ctrl.vvp >"$LOG" 2>&1
+  iverilog -g2012 -s tb_pe_ctrl -o "$CHIP_WT_DIR"/mut_ctrl.vvp $SRCS >"$CHIP_WT_DIR"/mut_ctrl_cc.log 2>&1 || return 2
+  timeout 120 vvp "$CHIP_WT_DIR"/mut_ctrl.vvp >"$LOG" 2>&1
   grep -qE "^PASS" "$LOG"
 }
 
 run_wrapper_tb() {
   local sram
   sram=$(bash "$ROOT/regress/sram_model.sh" 2>/dev/null) || return 2
-  iverilog -g2012 -s tb_tt_um_protocol_emulator -o /tmp/mut_ctrl_tt.vvp \
+  iverilog -g2012 -s tb_tt_um_protocol_emulator -o "$CHIP_WT_DIR"/mut_ctrl_tt.vvp \
     $WTB_SRCS $sram ../tb/tb_tt_um_protocol_emulator.v \
-    >${RLOG:-/tmp}/mut_ctrl_tt_cc.log 2>&1 || return 2
-  timeout 300 vvp /tmp/mut_ctrl_tt.vvp >"$WTB_LOG" 2>&1
+    >"$CHIP_WT_DIR"/mut_ctrl_tt_cc.log 2>&1 || return 2
+  timeout 300 vvp "$CHIP_WT_DIR"/mut_ctrl_tt.vvp >"$WTB_LOG" 2>&1
   grep -qE "^PASS" "$WTB_LOG"
 }
 
-restore() { cp "$BAK" "$RTL"; }
-wrestore() { cp "$WBAK" "$WRTL"; }
+restore() { cp "$BAK" "$RTL"; chip_dep_expect pristine $MUTABLE; }
+wrestore() { cp "$WBAK" "$WRTL"; chip_dep_expect pristine $MUTABLE; }
 verify_restore() {
   cmp -s "$BAK" "$RTL" || { echo "  FATAL: $RTL does not match the snapshot after restore."; exit 3; }
 }
@@ -110,6 +110,7 @@ check_mutation() {
   if ! mutate "$1" "$2"; then
     echo "  [$name] HARNESS ERROR: anchor not found"; restore; fail=$((fail+1)); return
   fi
+    chip_dep_expect mutated rtl/pe_ctrl.v
   run_tb
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))
@@ -124,6 +125,7 @@ check_wrapper_mutation() {
   if ! mutate "$1" "$2" "$WRTL"; then
     echo "  [$name] HARNESS ERROR: anchor not found"; wrestore; fail=$((fail+1)); return
   fi
+  chip_dep_expect mutated rtl/tt_um_protocol_emulator.v
   run_wrapper_tb
   local rc=$?
   if   [ $rc -eq 0 ]; then echo "  [$name] SURVIVED"; survived=$((survived+1))
@@ -256,7 +258,7 @@ run_wrapper_tb
 rc=$?
 if [ $rc -ne 0 ]; then
   echo "  FATAL: the pad-level TB does not pass on the clean design (exit $rc)"
-  [ $rc -eq 2 ] && tail -5 ${RLOG:-/tmp}/mut_ctrl_tt_cc.log ${RLOG:-/tmp}/mut_ctrl_tt.log 2>/dev/null
+  [ $rc -eq 2 ] && tail -5 "$CHIP_WT_DIR"/mut_ctrl_tt_cc.log "$CHIP_WT_DIR"/mut_ctrl_tt.log 2>/dev/null
   exit 2
 fi
 echo "  [baseline-wrapper] tb_tt_um_protocol_emulator passes on the unmutated design"

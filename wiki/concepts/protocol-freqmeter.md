@@ -1,7 +1,7 @@
 ---
 title: Frequency and duty meter — the first act that listens
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-27
 type: concept
 tags: [protocol, verification, clocking, physical-layer, architecture]
 sources: []
@@ -9,6 +9,11 @@ confidence: high
 ---
 
 # Input frequency and duty meter
+
+> **What you'll learn here:** measuring rather than generating: measuring period and duty, and why the low end is the whole difficulty
+>
+> **You can verify this by:** `tb/tb_pe_soc_freqmeter.v` feeds known periods and duty cycles in and checks the firmware's measurement against them.
+
 
 Six of the timing acts in this repository **drive** a pad. This one **listens**,
 and that makes it a different shape of problem: the PWM arrives from outside, the

@@ -165,6 +165,63 @@ check_pinmux "pe_pinmux PINS=9 (> 8)"            "PINS must be <= 8" 9
 check_pinmux "pe_pinmux PINS=8 (the boundary)"   "ACCEPT"            8
 check_pinmux "pe_pinmux PINS=1 (the other end)"  "ACCEPT"            1
 
+# ------------------------------------------------------------------ pe_eth_tx
+# check_eth_tx <name> <expect|ACCEPT> <NLP_CELLS value>
+#
+# NLP_CELLS is the link-pulse period in cells (wiki/plans/eth-tx-line-driver.md).
+# At 1, every quiet idle cell would be a pulse: the pair would sit at a DC level
+# instead of carrying link pulses, with no error anywhere. The guard rejects it;
+# 2 (a pulse every other cell) is the smallest period that is still pulses, so
+# it must be accepted, or the guard is off by one. The unit TB runs at 50 and
+# silicon at 160,000 -- neither is near the boundary, which is why it is here.
+check_eth_tx() {
+  local name="$1" expect="$2" nlp="$3"
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  cat > "$tmpdir/elab.v" <<EOF
+\`timescale 1ns / 1ps
+module elab_top;
+  logic clk = 0, rst_n = 0, enable = 0, cell_start = 0, half_phase = 0;
+  logic push = 0, start = 0, frame_abort = 0;
+  logic [7:0]  push_byte = 0;
+  logic [11:0] frame_len = 0;
+  logic push_ready, tx_busy, tx_done, tx_underrun, tx_overlong, ifg_active;
+  logic tx_bit, line_drive;
+  pe_eth_tx #(.NLP_CELLS($nlp)) dut (
+    .clk(clk), .rst_n(rst_n), .enable(enable), .cell_start(cell_start),
+    .half_phase(half_phase), .push(push), .push_byte(push_byte),
+    .push_ready(push_ready), .frame_len(frame_len), .start(start),
+    .frame_abort(frame_abort), .tx_busy(tx_busy), .tx_done(tx_done),
+    .tx_underrun(tx_underrun), .tx_overlong(tx_overlong),
+    .ifg_active(ifg_active), .tx_bit(tx_bit), .line_drive(line_drive));
+endmodule
+EOF
+  if out=$(iverilog -g2012 -s elab_top -o "$tmpdir/elab.vvp" rtl/pe_eth_tx.v rtl/pe_crc.v "$tmpdir/elab.v" 2>&1); then
+    if [ "$expect" = "ACCEPT" ]; then
+      printf '%-34s accepted OK\n' "$name"; pass=$((pass + 1))
+    else
+      printf '%-34s FAIL (compiled -- guard did not reject)\n' "$name"; fail=$((fail + 1))
+    fi
+  else
+    if [ "$expect" = "ACCEPT" ]; then
+      printf '%-34s FAIL (should have been accepted)\n' "$name"
+      grep -E 'ERROR|sorry' <<< "$out" | head -2
+      fail=$((fail + 1))
+    elif grep -q "$expect" <<< "$out"; then
+      printf '%-34s rejected OK\n' "$name"; pass=$((pass + 1))
+    else
+      printf '%-34s FAIL (rejected, but not with the expected message)\n' "$name"
+      grep -E 'ERROR|sorry' <<< "$out" | head -2
+      fail=$((fail + 1))
+    fi
+  fi
+  rm -rf "$tmpdir"
+}
+
+check_eth_tx "pe_eth_tx NLP_CELLS=1 (DC pair)"   "NLP_CELLS must be >= 2" 1
+check_eth_tx "pe_eth_tx NLP_CELLS=2 (boundary)"  "ACCEPT"                 2
+check_eth_tx "pe_eth_tx NLP_CELLS=160000 (16ms)" "ACCEPT"                 160000
+
 echo
 echo "param guards: $pass rejected/accepted as specified, $fail wrong"
 [ "$fail" -eq 0 ] || exit 1

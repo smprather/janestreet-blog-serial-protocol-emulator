@@ -10,6 +10,11 @@ confidence: high
 
 # SPI mode 3 with a per-word CRC-8
 
+> **What you'll learn here:** what SPI mode 3 actually means on the wire, and how a per-word CRC-8 is computed in an ISA with no XOR
+>
+> **You can verify this by:** `tb/tb_pe_soc_spi3.v` runs the frame against a mode-3 slave model and checks the CRC word by word.
+
+
 `firmware/spi_mode3.pe` is an SPI **mode 3 (CPOL=1, CPHA=1)** master with a
 CRC-8 on every word, in both directions. There is no SPI hardware in this chip
 and nothing below adds any: the same `rtl/pe_pinmux.v` per-pin direction file,

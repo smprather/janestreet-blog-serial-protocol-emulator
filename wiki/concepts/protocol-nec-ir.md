@@ -1,7 +1,7 @@
 ---
 title: NEC infrared — the protocol with no wire, and a carrier that cannot be late
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-27
 type: concept
 tags: [protocol, verification, clocking, physical-layer, gpio, architecture]
 sources: []
@@ -9,6 +9,11 @@ confidence: high
 ---
 
 # NEC infrared
+
+> **What you'll learn here:** decoding a protocol with no wire at all: finding a 38 kHz carrier and timing the gaps between its bursts
+>
+> **You can verify this by:** `tb/tb_pe_soc_ir_nec.v` synthesises the carrier and gaps and checks the decoded frame. The page's list of five firmware defects is the record of what that testbench caught once it existed.
+
 
 NEC is the sharpest timing claim in this repository and the only act in the
 family with **no wire**. The only thing that leaves the pin is light, so a

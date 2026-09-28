@@ -22,6 +22,17 @@
 set -u
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO" || exit 2
+
+# Per-worktree scratch. This script's VERDICT is read back out of this log
+# below, so a path shared with another worktree does not merely lose a log: it
+# lets one tree's synthesis result decide another tree's tap-leak verdict. The
+# hash is the one regress/run_lock.sh already computes and exports as
+# CHIP_WT_DIR. This script deliberately does NOT source run_lock.sh -- a check
+# is not a run, and a check must never take the run lock.
+_wt=$(git rev-parse --show-toplevel 2>/dev/null | md5sum | cut -c1-8)
+SCRATCH="${CHIP_WT_DIR:-/tmp/chip-wt.${_wt:-shared}}"
+mkdir -p "$SCRATCH" 2>/dev/null || :
+
 rc=0
 
 echo "--- formal-ifdef gate: FORMAL must never be defined on a synthesis path"
@@ -47,8 +58,8 @@ if yosys -p "
       hierarchy -top tt_um_protocol_emulator;
       proc; opt -fast;
       select -count w:fv_*;
-    " > ${RLOG:-/tmp}/check_formal_ifdef.log 2>&1; then
-  count=$(grep -oE "^[0-9]+ objects" ${RLOG:-/tmp}/check_formal_ifdef.log | tail -1 | awk '{print $1}')
+    " > "$SCRATCH"/check_formal_ifdef.log 2>&1; then
+  count=$(grep -oE "^[0-9]+ objects" "$SCRATCH"/check_formal_ifdef.log | tail -1 | awk '{print $1}')
   if [ "${count:-1}" = "0" ]; then
     echo "  OK   0 fv_* wires in a synthesis elaboration (taps compiled out)"
   else
@@ -56,8 +67,8 @@ if yosys -p "
     rc=1
   fi
 else
-  echo "FAIL: the synthesis elaboration did not complete (see ${RLOG:-/tmp}/check_formal_ifdef.log)"
-  tail -5 ${RLOG:-/tmp}/check_formal_ifdef.log | sed 's/^/    /'
+  echo "FAIL: the synthesis elaboration did not complete (see $SCRATCH/check_formal_ifdef.log)"
+  tail -5 "$SCRATCH"/check_formal_ifdef.log | sed 's/^/    /'
   rc=1
 fi
 

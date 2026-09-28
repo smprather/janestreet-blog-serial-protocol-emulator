@@ -2184,6 +2184,30 @@
 - The same turn ran the wiki-features page gate (`regress/check_wiki_pages.sh`, their branch) against my pages via a redirected scratch copy, rather than continuing to hand-check SCHEMA's rules. It found that all **six** of my concept pages are `not-in-index` (the manager's pending wiring, correctly theirs) and that a **pinned baseline entry for `debug-control.md zero-outbound-links` is now STALE** — the gate says to delete that line from `wiki/.known-rule-violations.txt`, since the page is fixed. `concepts/host-stack.md` has the same stale entry.
 - **16 reported "blockers" in `tools/host_gui/server.py` are one false positive, dispositioned with evidence and NOT actioned.** The imports are correctly guarded (`try: # optional dependency … except ImportError: HAVE_FASTAPI = False`); `fastapi` and `uvicorn` are genuinely **not installed** here; and the module **imports cleanly with them absent**, setting `HAVE_FASTAPI = False`. The 27-line change to that file came from **main via this merge**, not from me — `git log 5199060..HEAD -- tools/` is empty, I have never edited `tools/`, and the file is not this worker's. The "possibly unbound" cascade is what a static analyzer reports when it cannot resolve an *optional uninstalled* dependency. Editing correct guarded code to satisfy it would break the documented no-fastapi test path, so it is left alone. Re-run at an environment with the extras installed and the findings should vanish; if they do not, the file deserves a look by its owner.
 
+
+## [2026-09-25] gate | the negative control gets run at last, and the lesson lands twice
+- **The gap this closes is the one the repo already has a name for.** `regress/test_check_wiki_pages.sh` is the negative control for BOTH gates, and **nothing ran it**. Worse, on checking properly, the render gate was not called either: of the three scripts, only the page gate was actually executed by `run_all.sh` (a grep of my own had been fooled by a *comment* mentioning the self-test, which is the cheapest possible false positive — the sentence said it existed, the runner never called it). So a full run could be green with the render gate never invoked and the control that would have noticed never executed.
+- All three are now called from `run_all.sh`, each guarded, each setting `stale=1` on failure so a red gate turns the run red rather than printing `FAILED` and continuing.
+- **Five new cases assert that wiring**, because a negative control that does not assert its own wiring is the thing it exists to prevent — the same bug, one level up. Three assert each script is genuinely `if bash regress/<script>` CALLED (not mentioned), and two assert the call can turn the run red.
+- **Case 6 rebuilt, on the manager's diagnosis, and it was right.** The STALE case borrowed `plans/spi-pads.md` as its fixture, so it only worked while that page was both violating AND pinned — meaning the day someone fixed it and collected its pin, which is what the gate *demands*, the case would have broken. A corpus page's state must never be a precondition for the test that verifies the corpus. The fixture is now built from the compliant synthetic wiki and the pin is written by the test, with a new preceding case that proves the pin is LOAD-BEARING (pinned and still violating must be green) — otherwise "STALE below" would be satisfied by a gate that reports everything.
+- **The same coupling was in a second case, and applying the lesson found it.** Case 21 asserted the render gate was "green on the real tree", so any genuine defect anywhere in `diagrams/` turned a negative control red and the suite would have reported the gate broken while it was working perfectly. It went red for real within a merge of landing. It now runs on a compliant fixture built in a scratch tree, and the real tree's state is reported as INFORMATIONAL, with each stale render named.
+- **Cost, measured rather than guessed, then halved.** The suite spent ~20 of 24 seconds copying 13 MB and re-rendering 34 sources into throwaway trees for cases that each need exactly ONE source. The render fixture is now two sources, and the suite runs in 12 s.
+- Repaired two of my own insertion mishaps along the way, both caught by `bash -n` and by counting rather than by reading: a block spliced into the middle of the fail-closed guard (so the guard never completed), and a case that `printf >>`-created a file it meant to corrupt — which is not a no-op, so the no-op guard could not catch it, and the case silently tested the wrong rule. Targets are now derived from the fixture and asserted to exist first.
+
+## [2026-09-25] FINDING, NOT FIXED BY ME | the render gate is red on four real stale renders
+- The gate landed one merge ago and immediately caught a genuine defect: **both project maps' renders are stale**. `project-plan.{svg,png}` and `project-progress.{svg,png}` differ from a fresh render of their own `.puml` (e.g. `project-plan.svg` 112,288 B checked in against 115,687 B fresh).
+- Cause, from the history: commit `5c6db3d` edited `diagrams/project-plan.puml` and `project-progress.puml` **without re-rendering them**; the renders were last refreshed together with their sources in `3a2fd6a`.
+- **Not fixed here.** My dispatch says plainly: do not touch any diagram file. The remedy is two documented commands from `diagrams/README.md` and belongs to whoever owns the maps.
+- **Consequence the manager needs to know: `run_all.sh` is now RED** until those four renders are regenerated. That is the gate working — it is the first evidence that the ungated `diagrams/` directory was a real hole and not a theoretical one — but it does block merges, so the routing is the manager's call.
+
+## [2026-09-25] gate | the render gate gets a pinned baseline, so the suite is green AND honest
+- Left the suite red for want of a decision I should not have waited for. The manager's ruling on the page gate already answered this exact shape — a gate meeting a corpus with known defects owned by other people — and the answer was a pinned baseline, not a red gate. The render gate had 4 real known-stale renders and no pins, so the whole regression was red and the eventual response would have been to switch the gate off, which protects nothing.
+- NEW `wiki/.known-stale-renders.txt`: the 4 renders, each with the cause and the byte counts. Enforced BOTH ways exactly like the page baseline — a stale render NOT listed is NEW and red; a listed render that is no longer stale is STALE-PIN and red. So the pin is a receipt: when the map owner re-renders, the gate goes red and names the line to delete.
+- **The pin mechanism needed a THIRD case, and the self-test found it.** A pin stops biting two different ways — the render was re-rendered, or the render is GONE — and those have different remedies (re-render and collect; collect and notice a lost render). The first version reported both as "no longer stale", which is a claim about a file the checker cannot see. Caught because a reduced fixture tree did not contain the pinned renders. Now distinguished as `STALE-PIN` and `STALE-PIN-ABSENT`, each with its own case.
+- **A case that passed for the wrong reason, and it was mine.** The STALE-PIN case built its pin with a `printf` whose format string had no `%s`, so the filename argument was silently discarded and the pin named a file called `a`; the gate then reported `STALE-PIN-ABSENT`, and the assertion grepped for `STALE-PIN`, which is a **substring** of it. Green, testing the wrong defect. Both defects are the reason the case now asserts the specific finding AND the absence of the other one. A test that cannot fail for the reason it claims is the failure mode this whole file exists to prevent, and it is invisible precisely because it is green.
+- **Cost: 45s -> 21s, and the last corpus coupling is gone.** Measurement, not guesswork: the render cases were cheap (1s each on a 2-source fixture) and the real cost was the page gate invoked ~20 times over the 63-page corpus. Nine cases copied the whole corpus and four of them mutated `concepts/spi-as-firmware.md` — a page another worker may edit, rename or delete, which is exactly the coupling diag-timing caught in case 6. All nine are fixture-based now. The one case that deliberately reads the real tree says so, and reports corpus health informationally rather than asserting it.
+- The no-op-mutation guard caught two more dead setups during this work (a `sed` still pointing at a corpus page after the tree became the fixture, and a `printf` with no `%s`). It is the cheapest useful thing in the file and it has now earned its keep five times.
+
 - **Correction — a published rule that was wrong about the thing it was used to prove** (`protocol-spi3-crc.md`, review pass 7). The page stated `resp = word XOR 0x7E5A, applied byte-wise` and used it to argue the slave's response is COMPUTED from the received word rather than played back. The rule does not produce the bytes listed beside it: the 16-bit form gives `0x6F6E / 0x6C1F / 0x6D0C`, three for three not the measured `0x6F / 0x6C / 0x6D`. Derived from the source instead: the TB declares `logic [7:0] sl_resp, sl_crc_resp`, so `sl_resp = sl_word[15:8] ^ RESP_MASK[15:8]` assigns **one byte** and the mask's low half (`0x5A`) is never computed at all. **The real rule is one line: `resp = word[15:8] XOR 0x7E`.** Verified by computing the CRC over both candidate bytes — `crc8(0x6F)=0x0A` (what the wire carried) against `crc8(0x6E)=0x0D` — which is what distinguishes them. The computed-not-played-back claim survives intact and is *stronger* than stated, since the response depends on the received word's high byte. Fixed in the page and in `diagrams/proto-spi3-crc.puml`; the measured bytes were never in question.
 - **The diagrams gate** (`tools/diag/check_diagrams.sh`, wired into `regress/run_all.sh` beside the wiki-pages gate): the `diagrams/` directory had **no gate at all** — 22 `.puml` sources and 84 renders whose whole value is being correct pictures of the code. PlantUML makes that class of failure especially quiet, because a `.puml` with a syntax error still RENDERS as an error image, so the committed artifact is a valid PNG of a parser complaint. Four checks: every source parses (`--check-syntax`, two-stage so the healthy path is 0.5 s and a failure still gets a filename); every block has **both** formats colocated under the multi-block naming convention, which is now written down (`<stem>`, then `<stem>_001`..`<stem>_(N-1)`) because a second person otherwise assumes one source means one picture and deletes two thirds of a figure set; every render is **byte-identical to a fresh render** of its source; and no render is unclaimed. The byte test rests on a fact it verifies rather than assumes — PlantUML output is deterministic for a fixed source and version — and it is what catches the `data-source-line` drift class, where an earlier block in a multi-block source grows and every later block's line references shift while the visible picture is unchanged.
 - **Three design errors the gate's own negative control caught, all of which would have shipped as a green gate.** (1) Failing on mtime alone reported **64 failures on a tree where every figure was byte-identical to a fresh render**: restoring or `cp`-ing a `.puml` updates its mtime without changing one byte of output, so the byte comparison is authoritative and the mtime is only a hint that may not fail alone. (2) The orphan test globbed per source, so `proto-ws2812.puml` reported its siblings' renders — `proto-ws2812-frame.png` and `-timing.png` — as four orphans, because the timing family uses stems that are prefixes of each other; an orphan is a render no source in the directory claims. (3) `check_dir` returned the status of an **arithmetic assignment** on the missing-directory path, so a gate pointed at a directory that does not exist reported PASS. Each was found by the self-test, which plants a stale render, a hand-edited render, a broken `.puml`, a committed error image, an unclaimed render and a missing block render, and requires the checker to fail on all six while passing an untouched **synthetic fixture** — synthetic rather than a copy of the real tree, because a copy can only test the defect classes the tree happens to contain. The self-test also verifies each **planting actually changed something**, after a `sed` without `/g` silently rewrote one `data-source-line` attribute to the value it already held and the self-test duly reported the *checker* as broken.
@@ -2213,8 +2237,147 @@
 - `wiki/index.md` deliberately untouched — the docs fleet wires the index.
 
 - **Reader-path integration** (`README.md`, `docs/demo-walkthrough.md`, `HANDOFF.md`): the deep-reading entry (`wiki/concepts/overview.md`) and the next-ideas list (`wiki/plans/feature-brainstorm.md`) are now linked from the README's highest-traffic block, one pointer line per protocol section was added to the demo walkthrough (the four baseline acts, the three timing acts, the three input acts) and to the two HANDOFF sections that discuss protocol evidence, and every one names only pages that exist. `docs/demo-walkthrough.md` previously had **zero** wiki links across 476 lines.
-- **The README figure gallery was 37 of 42 links broken.** Every firmware-persona figure pointed at `diagrams/<name>.png` while every file on disk is `diagrams/proto-<name>.png` — a reader clicking any of them got a 404, in the section a reader is most likely to reach for the material. Repaired to the real names and re-verified: **0 broken of 59** local link targets in the README, 0 of 23 in the walkthrough, 0 of 12 in HANDOFF. The `Host ↔ chip` figures and the two project maps were already correct and were left alone. Worth noting the gate could not have caught this: `tools/diag/check_diagrams.sh` proves each `.puml` parses and each render is byte-identical to a fresh render, but **nothing checks that a document links to a file that exists** — a gate that verifies the figures are correct and not that anyone can reach them. That is a separate checker, on markdown rather than PlantUML, and belongs with the wiki-pages gate rather than in this one.
+- **The README figure gallery was 37 of 42 links broken.** Every firmware-persona figure pointed at `diagrams/<name>.png` while every file on disk is `diagrams/proto-<name>.png` — a reader clicking any of them got a 404, in the section a reader is most likely to reach for the material. Repaired to the real names and re-verified: **0 broken of 59** local link targets in the README, 0 of 23 in the walkthrough, 0 of 12 in HANDOFF. The `Host ↔ chip` figures and the two project maps were already correct and were left alone. Worth noting the gate could not have caught this: `tools/diag/check_diagrams.sh` proves each `.puml` parses and each render is byte-identical to a fresh render, but it says nothing about whether a document **links** to a file that exists. **CORRECTION, added later the same session:** I first wrote here that *nothing* checks that, and that is **false** — `regress/check_wiki_links.sh` proves every link in the live document surface POINTS AT SOMETHING, and `regress/check_doc_index.sh` proves the other direction, that every render is LISTED. Both exist and both are wired. The correct statement is narrower and is the one worth keeping: *this* gate verifies the figures are correct, and link resolution is someone else's gate, which is where it belongs — a markdown question, not a PlantUML one. The 37 broken links shipped because the link gate did not exist yet, not because link resolution is unowned.
 - **The diagrams gate pinned the toolchain** (`diagrams/TOOLCHAIN.md`, new; noted in `diagrams/README.md`; enforced by `tools/diag/check_diagrams.sh`). Reported by a sibling worker: the gate compared raw bytes while **nothing in the repo pinned the renderer**, so a contributor on a different host got a red on figures they had never touched — *"a red that no diagram change can clear is a broken gate"* — with the signature "exactly the 2 largest maps failed, ~30 smaller figures passed". **The mechanism was measured, and it is not the obvious one.** Fonts are *not* it: PlantUML emits `font-family="monospace"` and `"sans-serif"` as generic references, and substituting the resolved family (Adwaita Mono, confirmed with `fc-match`) leaves `project-plan.svg` **byte-identical**. The **layout engine** is it: `dot` produces the geometry for the five `package`/`component` sources, and forcing PlantUML's own engine moves the coordinates and the `viewBox` (112,288 B → 106,411 B). The largest dot figures have the most coordinates to move, which is exactly why the failure looked selective. A first attempt at the measurement was itself vacuous — the substituted font was not installed, so fontconfig silently fell back — and was caught by checking that the instrument had actually changed what it claimed to change.
   Normalised content hashing was **rejected on evidence, not taste**: the failure *is* a geometry difference, and PlantUML bakes font metrics into the output as `textLength` numbers, so "geometry + text, fonts stripped" either keeps the geometry — which is the byte comparison, still environment-sensitive — or discards it, and then it no longer verifies the figure at all. Pinning is also the only option that gives a red an *action*: the gate now names the differing component and both versions.
   The byte comparison is therefore **conditional on the pin matching**. On a match it stays authoritative (a one-character edit to a committed render is still a hard failure — verified in both directions). On a mismatch the gate reports a TOOLCHAIN MISMATCH and treats byte-differences as inconclusive, while the environment-independent checks — parses, both formats colocated, nothing unclaimed, aspect sane — still fail as hard, because none of them depends on which renderer produced the bytes. A **missing pin is a failure, not a skip**: without one the byte comparison is unenforceable, and skipping it would be fail-open.
 - **A toolchain check that cried wolf on the right host, and the JVM banner that caused it.** The first working version reported `plantuml(not detected on this host)` and `java(not detected on this host)` on *every* run — including a self-test that then passed two byte-difference cases for the wrong reason, because inconclusive is indistinguishable from clean. Both tools are JVMs, and a JVM prints `Picked up JAVA_TOOL_OPTIONS: ...` to **stderr whenever that variable is set** — and the gate exports it, because `diagrams/README.md` requires it for the headless render. So `plantuml -version 2>&1 | head -1` captured the *banner*, and the anchored `sed` matched nothing. `dot` and `fc-match` are not JVMs, which is precisely why only those two keys failed and why the fault looked like a parsing bug. The detectors now **filter before `head`**, and the self-test grew two cases that would have caught it: one where a byte difference under a *differing* pin must be inconclusive rather than a stale-render failure, and one where a missing pin must fail. 10 of 10.
+## [2026-09-26] docs (diag-proto) | white-on-white scope measurement, handed to diag-bus (no .puml touched)
+
+Read-only measurement taken while standing clear of the fleet-wide palette
+mandate, so the fix has a scope rather than a guess. **No diagram was edited.**
+
+- **My five sets are CLEAN.** Every text and every rect in `project-plan`,
+  `project-progress`, `proto-spi-framing`, `proto-r2-read-path` and
+  `proto-r3-debug-control` carries an EXPLICIT `fill`, and there are **zero
+  `<style>` blocks**. A viewer's stylesheet therefore cannot override them, so
+  for these files **a `.puml` palette change is not the fix** — there is no
+  unpinned colour to unpin. Decisive test, each text against its nearest
+  preceding filled rect (WCAG contrast, 1,375 text elements): `project-plan`
+  18.59:1, `project-progress` 8.89:1, and the three proto figures 6.00:1 each.
+  The closest pair in the set is **`#7F4B00` on `#FFE6CC`** (the
+  integrity/ceil stereotype) at 6.00:1 — legible, above the 4.5:1 AA line, and
+  the **only** pair under 7:1, so it is the first thing to look at if a user
+  reports faintness in these figures.
+- **The two structural facts that should shape the fix.** (1)
+  `regress/check_diagram_renders.sh` no longer exists on main — the pin
+  mechanism was folded into `tools/diag/check_diagrams.sh` and the duplicate
+  retired (2741328), so a sweep reaching for the old script will not find it.
+  (2) The render gate compares **bytes** with no plantuml/dot/JVM/font pin
+  anywhere in the repo, and the SVGs emit a **generic** `font-family`
+  (`monospace`) that resolves per host. If the user-reported symptom is faint
+  glyphs in the **PNG** path rather than a colour collision, the missing
+  toolchain and font pin is the cause and a palette change would fix nothing.
+- All five of my sources are currently green under the consolidated gate: one
+  block each, both formats colocated, every render fresh and byte-consistent.
+- **A false positive of my own, corrected here rather than left in a report.** I
+  earlier reported `project-plan` as pinned stale in
+  `wiki/.known-stale-diagrams.txt`. It is not, and the baseline carries **zero**
+  pins: my grep was unanchored and matched an explanatory comment in the file's
+  header. My second, anchored check returned nothing, and the "contradiction"
+  between a pin and a passing gate was never real. Sixth instrument of mine to
+  lie this session, after the XML-BAD, a worker-count that read 0, a fence-count
+  that counted closings, a zero-loss baseline that never changed, and a
+  class/fill regex that reported inheritance where every fill was explicit.
+
+### Correction to the entry above — the "no toolchain or font pin" claim is WITHDRAWN
+
+Appended rather than edited in place, per the append-only rule. Verified with
+`ls` + `grep` before recording, so this is a measurement and not a relay.
+
+- **WITHDRAWN: "the byte-comparing gate has no toolchain or font pin anywhere in
+  the repo."** That was true when I measured it and it is **no longer true.**
+  `diagrams/TOOLCHAIN.md` landed in `6481fdb` — *"tools/diag: pin the toolchain,
+  so the byte comparison can be trusted"* — and pins all four:
+
+```text
+  plantuml    = 1.2026.8
+  graphviz    = 16.1.0
+  java        = 26.0.2
+  monospace   = Noto Sans Mono
+```
+
+- **The byte-compare IS pin-aware**, not merely mentioned. `check_diagrams.sh`
+  carries `PIN_NAME=TOOLCHAIN.md`, a `detect_toolchain()`, a `pinned_toolchain()`
+  and a `compare_toolchain()`, reports `TOOLCHAIN MISMATCH: ...` per
+  divergence, and has a **self-test that FAILS if the gate does not report a
+  mismatch** — so the pin is enforced in both directions, like the page baseline.
+  One number differs from the relay and the measured one is recorded: by my count
+  the script references the pin **86** times (`TOOLCHAIN|pin`, case-insensitive),
+  not 15.
+- **MY FONT SPECULATION IS ALSO WITHDRAWN, on the pin's own evidence.** I wrote
+  that "if the symptom is faint glyphs in the PNG path, the missing font pin is
+  the cause." `TOOLCHAIN.md` measures the opposite: PlantUML emits **generic**
+  family references (`font-family="monospace"`, `"sans-serif"`), so the *viewer's*
+  fontconfig picks glyphs at display time and **the committed file is unaffected
+  by which font is installed** — fonts are explicitly **not** the driver, and the
+  driver is the plantuml/graphviz version with complex layouts having the most
+  coordinates to move. That also explains the shape of the earlier red: exactly
+  the two largest maps, which is what a dot-version divergence produces.
+- **WHY MY CLAIM WENT STALE, since that is the transferable part.** I measured
+  the absence of a pin, then carried the claim into a durable record without
+  re-taking the measurement — the same shelf-life failure as the `index.md` note
+  I repeated through four reports. The instruments were fine; the *claim* was
+  not re-derived. A durable record is a snapshot, and a snapshot decays.
+- **WHAT STILL STANDS** from the entry above, re-checked and unaffected: my five
+  sets measured CLEAN — every text and rect carries an explicit fill, zero
+  `<style>` blocks, worst text-vs-container contrast 6.00:1 — and the one pair
+  under 7:1 is `#7F4B00` on `#FFE6CC`. All five are green under the consolidated
+  gate.
+## [2026-09-26] rtl (branch `eth-tx-line-driver`, PROPOSED) | 10BASE-T gets its pair: `eth_tx_n` on `uo_out[3]`, link pulses and TP_IDL
+
+- **The gap:** the TX frame was bit-perfect on one single-ended pad, but a real partner would never accept it. Nothing sent **normal link pulses**, so a switch or NIC declares link failure after 50–150 ms and disables its receiver, and one pad has two levels where the line needs three (+, −, 0 V) for the idle line, the positive pulses and the positive start-of-idle delimiter.
+- **The change:** `pe_eth_tx` gains a registered `line_drive` (every frame cell, 3 TP_IDL cells after the frame, an abort or either underrun, and one 100 ns pulse every 160,000 quiet cells = 16 ms). `pe_soc` composes `eth_tx_n = wire ^ line_drive` and `eth_tx_n_en`. The wrapper maps `uo_out[3] = eth_tx_n_en ? eth_tx_n : dbg_pc[1]`, bit-identical at reset. Idle is both-high, so `eth_tx` is unchanged. Cost: +54 cells (+0.8%) at the top.
+- **Evidence:** RED-first at unit, SoC and pad level; mutation 33/33 (15 new) and 13/13 (5 new); param guards 11/11; lint clean; the existing eth/SoC formal targets re-run unchanged; 16.000 ms measured at the SoC pads. Record: [[plans/eth-tx-line-driver]] and `reviews/2026-09-26/ETH-TX-LINE-DRIVER.md`.
+- **Also corrected:** [[concepts/physical-layer-gpio]] and [[reference/protocol-pin-budget]] no longer offer "a PHY" as a 10BASE-T option (a PHY bypasses the chip's own Manchester layer), and `tools/gen/pin_budget.py`'s prose no longer claims the outputs fit when the arithmetic says they do not.
+- **Not done:** a formal property for the line driver, an STA screen of `uo_out[3]`, auto-negotiation or collision detection, and a DRU duty-skew case. The pinout change is the manager's to adopt.
+- **Findings for the manager (not fixed here):** (A) `regress/run_all.sh --fast` cannot exit non-zero. Its EXIT trap runs `rm -rf "$work"` before `_on_exit`, whose `local rc=$?` then reads `rm`'s 0, and `verify_merge.sh` forwards `--fast` and trusts that code. (B) `formal/mutants.sh` prints INCONCLUSIVE for a mutation whose anchor vanished but does not count it, so the gate says OK with a mutant missing. My first edit tripped it; fixed on the branch. (C) The R3 package README copies differ on `main`, so that gate is red today. Details and fixes: `reviews/2026-09-26/ETH-TX-LINE-DRIVER.md` §9.
+- **Palette propagation: 7 semantic stereotypes were lost, and the fix is a one-step job** (found by the visual pass, not by a check). The white-on-white fix authored ONE palette and wrote it verbatim into the 17 in-scope sources. It carries `<<tx>> <<rx>> <<ack>> <<abort>> <<box>>` — but the sources use **seven more**: `<<brk>>` (break), `<<slot>>` (slot), `<<crc>>` (CRC fold), `<<data>>` (data branch), `<<stat>>` (status byte), `<<hs>>` (handshake), `<<wait>>` (CTS wait). Those are exactly the timing family's own semantic colours, and they were not in the palette I authored, so every state using one **silently fell back to the default light blue**. Cause: I carried the stereotypes from my own bus figures and the maps' status palette, and repainted a family whose vocabulary I had not enumerated. Nothing is *invisible* — the figures still read, which is why the mechanical check passed and only looking caught it. To restore the coding, add to the canonical `skinparam state` block in all 17 sources (suggested values, each darker than the block it sits beside so the distinction survives at a glance): `<<brk>>` #FADBD8/#A93226 · `<<slot>>` #D6EAF8/#2E6DA4 · `<<crc>>` #EDE0F5/#6B4E9B · `<<data>>` #D5F0E0/#2E7D4F · `<<stat>>` #FDECC8/#A9741A · `<<hs>>` #FDF2E9/#A04000 · `<<wait>>` #D2E3F0/#24506E, then re-render all 42 figures. The durable lesson is the one this tree keeps teaching: **a propagated definition needs a presence check, and a check needs a negative control**, and until the palette-drift check lands the 17 copies are held together by nothing.
+
+
+### Fleet WCAG contrast sweep — 54 figures, and MY earlier 6.00:1 figure was WRONG
+
+A read-only sweep of all 54 committed SVGs, each `<text>` fill against the
+nearest **enclosing** filled rect, 7,389 text elements.
+
+- **Result: nothing fails. 0 figures under 4.5:1 (WCAG AA) and 0 under 3:1.**
+  The fleet floor is **7.22:1**, so there is no contrast fix to route — the
+  earlier red was a palette/render issue, not legibility.
+- **Correction to my own record.** I earlier reported my five sets' worst as
+  **6.00:1, `#7F4B00` on `#FFE6CC`**, and put that in a durable entry. It was
+  **wrong**: measured properly, every `#7F4B00` text element (78 of them) sits
+  on `#FFFFFF`, giving **7.22:1**. `#FFE6CC` is a real fill in those files but
+  no text rests on it. The cause was **my method** — I paired text with the
+  nearest *preceding* rect in document order, which misattributes a text drawn
+  outside any filled box. The tree-walk (nearest *enclosing* rect) is the
+  correct method; this is the second time a figure of mine was wrong because
+  the instrument was wrong, and the first time the error survived into a
+  durable record.
+- **Worst text colour, fleet-wide: `#7F4B00` at 7.22:1** (my `held`/`ceil`/`integ`
+  stereotype). The next floors are `#5A3D12` 9.95:1, `#17452A` 10.93:1,
+  `#6A2020` 11.41:1, `#143D1E` 12.24:1, `#16324F` 13.10:1, `#333` 12.63:1, and
+  `#000` 21.00:1. Every one clears AA with margin, so the palette needs no
+  change and none is routed to diag-bus.
+
+### Adoption recorded: the 10BASE-T line driver is ADOPTED and MERGED (manager's fact)
+
+- **`wiki/plans/eth-tx-line-driver.md`** — the status line read "IMPLEMENTED and
+  COMMITTED on branch `eth-tx-line-driver` … **NOT MERGED** … a proposal for the
+  manager to adopt, amend or reject" *after* the adoption had already landed. It
+  now states **ADOPTED and MERGED** via `02fe062` ("merge: eth-tx-line-driver …
+  gate 46/46 + documented sr04 wip"), names the wrapper pad map as the pinout
+  authority, and notes that the line was stale because the page was written on
+  the branch and the merge did not revisit it. The heading "Decisions taken here
+  (for the manager)" is now "(adopted)", and the "How to read this page" note
+  no longer points at a branch or at "awaiting adoption".
+- **`rtl/tt_um_protocol_emulator.v`** — the wrapper contradicted itself: its
+  pad-map line listed `uo_out[3] = eth_tx_n` as an ordinary assignment while the
+  narrative four lines later still called it "PROPOSED on branch
+  eth-tx-line-driver … the manager adopts or rejects". The narrative now records
+  the pinout as **ADOPTED and MERGED (02fe062, gate 46/46)** and says the pad-map
+  entry is the landed pinout, with STATUS item 4's `dbg_pc` pads released for
+  the pair. **Comment-only change, 3 insertions / 2 deletions, zero non-comment
+  lines**, so no RTL behaviour moved; the file still elaborates.
+- This closes the item `concepts/soc-wiring-and-memory.md` flagged in its own
+  body: the page's `uo_out[3]` row had been corrected to state what the RTL does
+  without asserting adoption, because adoption was not mine to record. It is now.
