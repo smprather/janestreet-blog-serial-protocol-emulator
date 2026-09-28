@@ -14,9 +14,13 @@
 // firmware/sr04_range.pe for why the conversion is mostly doublings).
 //
 // WHAT THE ANSWER IS, precisely, because "us*11/64 is exact" is a sentence
-// this file used to print and it is FALSE. For the two distances in this
-// case: 1160*11/64 = 199.375 and 5816*11/64 = 999.625. The firmware banks
-// 199 and 999, and the difference is a FLOOR, not an error in the arithmetic.
+// this file used to print and it is FALSE. For the four distances in this
+// case: 1160*11/64 = 199.375, 5816*11/64 = 999.625, 2000*11/64 = 343.75 and
+// 8000*11/64 = 1375.0 EXACTLY. The firmware banks
+// 199, 999, 343 and 1375, and the difference is a FLOOR, not an error in the
+// arithmetic. The fourth point is the one that pins it: 8000*11/64 lands on a
+// whole millimetre, so a truncation and a rounding disagree about it and only
+// one of them survives.
 // The identity the conversion rests on is exact in the reals --
 // us*11/64 = 11q + 11r/64 with q = us>>6 and r = us&63, and 11q is an integer
 // -- and the result is required to be an integer, so the floor is part of the
@@ -50,7 +54,8 @@
 //   4. BOTH pads' output enable: ECHO released on every clock of the trigger
 //      pulse, and TRIG released whenever the program is not pulsing.
 //   5. NON-VACUITY, restated for the shape the program now has: it measures
-//      ONE distance per run and parks, so there are TWO RUNS, one per
+//      ONE distance per run and parks, so there are FOUR RUNS (N_MEAS = 4), one
+//      per
 //      distance, with a full reset between them, and the second distance is
 //      5816 us so the capture's 16-bit counter is what is under test (an
 //      8-bit capture reports 136 us for 5816).
@@ -79,7 +84,8 @@
 // a convenience this file invented: the program measures one distance, banks
 // one answer at dmem[6..7] and parks, because this machine has sixteen bytes
 // of data memory and two banked answers plus a four-temporary exact 16-bit
-// add do not fit in it. The two distances are therefore two RUNS with a full
+// add do not fit in it. The four distances are therefore four RUNS (N_MEAS = 4)
+// with a full
 // reset between them, which is also the only arrangement in which the
 // firmware's own init -- the thing that seeds PREV, the state and the tick's
 // previous reading -- runs before each measurement. A second run WITHOUT a
@@ -278,6 +284,20 @@ module tb_pe_soc_sr04;
   // The banked answer and the width that produced it, as they stood on the
   // clock the completion flag rose. Read there rather than at the end of the
   // run -- see the header.
+  //
+  // THE WIDTH IS READ OUT OF dmem[2..3] AFTER THE BANK, AND THAT IS LEGAL ONLY
+  // BECAUSE THE CONVERSION NEVER WRITES THOSE TWO BYTES. They ARE the width:
+  // F_US_LO=2 is the low byte and dmem[3] the high byte, they are what the
+  // echo sounder put there, and the conversion writes the answer to a
+  // different pair. So the bank and the width check do not collide -- and if
+  // a future edit gives the conversion the high byte for an exact 16-bit add,
+  // this line silently starts reading back the program's own arithmetic and
+  // the failure looks like a wrong millimetre figure rather than an alias.
+  // That is the same aliasing that made three stray reads in this act's
+  // leftover tail reachable: they were reads, so the answer stayed exact, and
+  // only the rule "no instruction outside init / echo_down / convert may
+  // touch dmem[2] or dmem[3]" catches it. That rule has no mechanical gate
+  // yet, so this comment is what stands in for one.
   //
   // STAGED THROUGH INTEGERS, and that is not style. `(dmem[3] << 8)` is an
   // EIGHT-BIT shift in a self-determined context: a probe added to this file
@@ -625,11 +645,13 @@ module tb_pe_soc_sr04;
   end
 
   initial begin
-    // TWO RUNS, so the watchdog is twice what one run needed. The longest run
-    // is 5816 us of echo plus 300 us of sensor response plus the conversion,
-    // and the two per-run budgets above are 17 ms each, so 34 ms of waiting
-    // plus a little over 120 ms leaves the failure path room to report rather
-    // than being cut off mid-sentence.
+    // FOUR RUNS, so the watchdog is four times what one run needed: WAIT_CHUNKS
+    // is 4000 and one chunk is 256 clocks, so a run is budgeted 17.07 ms and
+    // four of them are 68.3 ms of the 120 ms below. The longest single run is
+    // 8000 us of echo plus 300 us of sensor response plus the conversion.
+    // The margin is what lets the failure path report rather than being cut off
+    // mid-sentence -- and it is why adding a fifth distance is a decision about
+    // this constant, not a free edit.
     #120_000_000;
     $display("FAIL: watchdog -- test did not complete");
     $finish;

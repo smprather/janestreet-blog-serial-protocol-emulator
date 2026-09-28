@@ -316,6 +316,48 @@ CASES=(
   # destroyed answer as a wrong number with no way to say which measurement it
   # belonged to. See firmware/sr04_range.pe's header.
   "tb_pe_soc_sr04|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_sr04"
+  # The FM0/FM1 BI-PHASE ACT (from fw-timing-protocols, re-applied over main at
+  # the 2026-09-28 landing-prep merge). It WAS wired here behind a <<wip>>
+  # marking, and the marking was removed on the strength of that report and of
+  # nothing else: the first run reported
+  #     tb_pe_soc_bmc      WIP-NOW-PASSING (remove the <<wip>> marking)
+  #     TOTAL: 1   PASS: 0   FAIL: 1   failed: tb_pe_soc_bmc(wip-now-passing)
+  # so the marking is the visible proof the self-expiring design works. It was
+  # wired rather than left out because an unwired red act is a claim hazard:
+  # "46/46 PASS" then reads as "the bi-phase act is verified" when nothing has
+  # ever run it. The SR04 comment above names the same fault, and the two marks
+  # are the same fix.
+  #
+  # WHAT MAKES THIS CASE DIFFERENT FROM EVERY OTHER ONE HERE IS THAT IT
+  # EXERCISES BOTH DIRECTIONS OF ONE PROTOCOL, AND NEITHER SIDE IS TOLD WHAT
+  # THE OTHER SENT. IN: this testbench encodes a5 3c 96 and firmware/bmc_frame.pe
+  # decodes it, once as FM0 and once as FM1 with a reset between, and the two
+  # runs must DIFFER in the flag and AGREE in all three bytes -- a receiver
+  # that guessed the polarity would agree with itself, and one that never
+  # looked at the levels would answer the same both times. OUT: the firmware
+  # re-encodes the three bytes it just banked, under the polarity it MEASURED
+  # off the incoming preamble, and this testbench's own receiver -- written
+  # from the wire rules, not from the firmware -- decodes them. The encoder is
+  # entered ONCE, from frame_done, and the poll loop's mode dispatch was deleted
+  # rather than left beside it: two entries to one transmitter re-enter it on
+  # the next poll and restart the transmission in the middle of it.
+  #
+  # The wire is checked a THIRD way, against a model that shares no code with
+  # either side: 80 levels per pass, both polarities, from the Python
+  # firmware/bmc_model.py against the Verilog enc_wire_lev here. 40 bits go out
+  # -- 16 preamble + 24 payload -- as 80 half-intervals of 2 us, so 160 us on
+  # the pad, and the testbench's 1200 us per pass covers the in leg, the out
+  # leg and both margins with room to spare.
+  #
+  # The delay constants in bmc_frame.pe are FITTED INSTRUCTION COUNTS, and
+  # firmware/bmc_checks.py counts every route between two pad writes and fails
+  # unless all of them are exactly 120 clocks. So a re-assembly that moved a
+  # label changes the wire by a clock per half-interval for eighty
+  # half-intervals, and the firmware still assembles, still runs, and still
+  # puts eighty levels on the pad. That check is a run_case in
+  # regress/run_firmware_tests.sh, and it is why the counting is a gate and
+  # not a comment in the source.
+  "tb_pe_soc_bmc|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_bmc"
   "tb_pe_fbuf|../rtl/pe_fbuf.v|tb_pe_fbuf"
 
   # 10BASE-T on the SoC: wire -> DRU -> Manchester -> MAC + CRC + frame

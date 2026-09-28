@@ -11,11 +11,24 @@ more than the acts they came from.
 
 ## Where the three acts of Block 3 stand
 
+**ALL THREE ARE GREEN AND IN THE REGRESSION, UNMARKED. The full gate measured
+it: `TOTAL: 48 PASS: 48 FAIL: 0`, and NOT ONE case carries a `<<wip>>` -- the
+suite has no known-red act left in it at all.** (The gate's one red line is
+`R3 golden package: FAILED`, a committed README drift in another block's golden
+package; all 124 `.hex` streams are byte-identical.)
+
 | act | state | where |
 |---|---|---|
 | (b) input frequency + duty meter | **GREEN, in the regression**, 58/58 mutations | `d88e316` |
-| (a) HC-SR04 ultrasonic ranging | **BLOCKED** on one 26-instruction block; everything else measured | `b0351b3` |
-| (c) FM0/FM1 bi-phase | **started**: RED testbench (7 checks) + first-draft firmware; the WIRE RULES were wrong and are now corrected | `3dace8`, `0513b7e`, `cb191ef` |
+| (a) HC-SR04 ultrasonic ranging | **GREEN, in the regression.** Testbench restructured to two runs, each answer read as it is banked | `c790945`, `ac14baa` (wip marking removed) |
+| (c) FM0/FM1 bi-phase | **GREEN BOTH DIRECTIONS, in the regression, unmarked.** Same frame both polarities, two flags, 80 pad levels against an independent model, every delay route counted | `b0fc713`, `2e37b32` |
+
+**The dated sections below still say (a) and (c) are unfinished. They are
+HISTORY, kept because this project records what was believed and when -- and all
+three are marked SUPERSEDED where they appear.** They are the reason this
+session opened with a stale brief: the status a next context reads first was
+two acts out of date, and "(c) is RED" sent a worker to re-encode an act that
+had been green for hours. **If you are reading this table, read THIS one.**
 
 Also delivered this session: the **merge-repair** of the six acts in main
 (`3657847`, proven on three throwaway exports of main: unpatched 6/6 FAIL,
@@ -23,7 +36,15 @@ the RTL hunk alone 6/6 PASS, the TB hunks alone 6/6 PASS, both 6/6 PASS).
 
 ---
 
-## (a) HC-SR04 — BLOCKED, and the block is the EDIT
+## (a) HC-SR04 — BLOCKED, and the block is the EDIT -- **SUPERSEDED, see the top table**
+
+> **(a) IS GREEN AND IN THE REGRESSION.** The carry fault described below was
+> fixed by the exact-carry identity and exhaustively verified over all 65,536
+> operand pairs; the testbench was restructured (`c790945`) and the case wired
+> green (`ac14baa`). Both "Also open" items below are also closed: peasm's
+> derivation reads `4*SR_TRIG + 5` and the hardware equality follows it, and the
+> inter-measurement check guards on `n_trig == N_MEAS`. Kept as the record of
+> the act's hardest hour.
 
 ### What is measured and correct
 
@@ -163,7 +184,7 @@ prove the flag is **measured** rather than **assumed**.
 * `tb/tb_pe_soc_bmc.v` -- 7 named checks, both directions, the encoding flag,
   and the constant-line case (a line held constant has no transitions and
   carries no clock, which is what a dead sensor looks like). RED, and the
-  checks are RIGHT as of `3dace8`.
+  checks are RIGHT as of `tb/tb_pe_soc_bmc.v`.
 * `firmware/bmc_frame.pe` -- 139 words, assembles, first draft. Two fixes
   landed: the testbench's encoder is now bi-phase, and the firmware no longer
   **claims its input pad** (`0513b7e` -- a pad the firmware drives reads back
@@ -235,7 +256,7 @@ else.
 \`\`\`text
 cb191ef docs(WORKLOG): the bi-phase WIRE RULES were wrong in a second way
 0513b7e fix: the FM0/FM1 firmware claimed its INPUT pad
-3dace8 fix: the FM0/FM1 testbench's encoder was not bi-phase
+3dace8 fix: the FM0/FM1 testbench's encoder was not bi-phase  [NOT IN THIS REPOSITORY -- no object, no branch contains it; the file it produced, tb/tb_pe_soc_bmc.v, is present. The hash is kept in this excerpt because the excerpt is a record, but it does not resolve and must not be cited as a pointer.]
 3b10217 wip: FM0/FM1 - the RED testbench now has both directions
 b2cb76c wip: FM0/FM1 - the first draft of the firmware
 b0351b3 docs(WORKLOG): BLOCKED on the HC-SR04 act's last block
@@ -552,7 +573,13 @@ always been hardest and has never once been about the maths.
 
 ---
 
-## FINAL STATE AT THE HARD WRAP (2026-09-27 00:30)
+## FINAL STATE AT THE HARD WRAP (2026-09-27 00:30) -- **SUPERSEDED, see the top table**
+
+> **BOTH (a) AND (c) ARE NOW GREEN AND IN THE REGRESSION.** At the moment this
+> section was written they were not, and it is kept as the record of what was
+> believed then. The testbench restructure it calls outstanding on (a) landed
+> in `c790945` and the case was wired green in `ac14baa`; (c) reached both
+> directions green in `b0fc713` and was wired in `2e37b32`.
 
 Everything below is COMMITTED and the working tree is clean.
 
@@ -575,13 +602,18 @@ the TB hunks alone 6/6 PASS, both 6/6 PASS.
   (four temporaries and three), and the three-temporary form is what shipped;
 * one answer per run, temporaries at {6,7,11}, bank low byte first.
 
-### The three things still open on (a), in the order they should be done
+### The three things that were open on (a), and where each landed
 
 1. **Restructure tb_pe_soc_sr04.v into two runs** -- loop over the two
    distances, reset between (rst_n low, reload, four stopped clocks then #1),
    and **read the answer at the moment dmem[10] goes to 1**, not at the end of
    the run. The end-reading is what reported a correct conversion as 222 mm.
    The full recipe is in the WORKLOG at 23:45.
+   **DONE, `c790945`.** The TB now has a `run_reset()` task and reads on
+   `F_DONE`'s RISING edge, and it has since grown to **FOUR** distances
+   (`N_MEAS = 4`), not the two this section names: 1160, 5816, 2000 and 8000 us,
+   answering 199 / 999 / 343 / 1375 mm. All four are exactly `floor(us*11/64)`,
+   checked as equalities and not as windows.
 2. **Three stray reads in the leftover acc_x11_h tail** (`LDM A,2` and
    `LDM A,3` twice) -- a site's replacement range ends at the NEXT LABEL, and
    the old block's `<lab>_h` label and high-byte add sit after the JZ. They are
@@ -589,8 +621,18 @@ the TB hunks alone 6/6 PASS, both 6/6 PASS.
    **The rule that catches this, and it should become a permanent gate on this
    act: no instruction outside init / echo_down / convert may touch dmem[2] or
    dmem[3]** -- those two bytes ARE the width, and the width is the measurement.
+   **DONE, by DELETION rather than by a gate.** The `acc_x11_h` tail is now
+   `LDM A,7 / LDM X,6 / OR / AND A,0x80 / LDM A,1 / ADD A,1 / STM 1,A` and the
+   high-byte add -- no `dmem[2]` or `dmem[3]` read survives in it. **The
+   proposed permanent gate does not exist**, and with nothing left to catch it
+   would police empty space; the rule is recorded in the TB's header instead.
 3. The width check reads dmem[2..3] AFTER the bank, which is legal only
    because the conversion no longer writes those bytes. Say so in the file.
+   **DONE.** `tb/tb_pe_soc_sr04.v` now states it at the read: the bank and the
+   width check do not collide *because* `dmem[2..3]` are the width and the
+   conversion writes a different pair, and an edit that gave the conversion the
+   high byte would alias its own arithmetic back into the measurement and look
+   like a wrong millimetre figure rather than an alias.
 
 ### The finding that outlives all of it
 
@@ -613,35 +655,74 @@ measures one distance per run.
 
 ---
 
-## THE MERGE-ORDER DEPENDENCY THE NEXT CONTEXT MUST NOT MISS
+## THE MERGE-ORDER DEPENDENCY -- **CORRECTED 2026-09-27, THE TABLE BELOW WAS INVERTED**
 
-**fw-bus-protocols commit `1798abf` already corrects `firmware/dmx512.pe` AND
-`firmware/spi_mode3.pe`** ("docs(firmware): correct two header figures the wire
-contradicts"). The routed comment batch was already actioned by the worker who
-owns those files; neither needs doing again.
+**Everything in this section was wrong, and it was wrong in the way this block's
+own wrap point predicts: a derivation recomputed on paper instead of measured,
+and the two workers ended up each certain about the other's list.**
 
-Two things to know before that branch is merged:
+The claim it made, for the record, so the error is traceable: that the code
+builds `0x1134, 0x2245, 0x3356`, that the comment's `0x1134, 0x1245, 0x1356`
+was "wrong for two of the three", and that the first list therefore owes the
+wire `0x6F, 0x5C, 0x4D` while `1798abf`'s `0x6D, 0x6C, 0x6F` goes stale.
 
-1. **My `spi_mode3.pe` word-list fix is a different line and does not conflict.**
-   Line 224 adds the word index (0, 17, 34) to BOTH bytes as independent 8-bit
-   adds, so the words are `0x1134, 0x2245, 0x3356` -- the comment said
-   `0x1134, 0x1245, 0x1356`, wrong for two of the three. I reverted my own
-   edit of the response line precisely BECAUSE `1798abf` edits that same line
-   better (it derives the wire byte as the high byte XOR 0x7E), so my branch
-   still carries the stale response list and theirs replaces it cleanly.
+**It is the other way round, and the wire settles it.** `firmware/spi_mode3.pe`
+state 0 assembles `LDI A, 0x11 / MOV X, A / LDM A, 5 / ADD A, X` -- the high
+byte is `0x11 + i`, so the high bytes are `0x11, 0x12, 0x13` and the words are
+**`0x1134, 0x1245, 0x1356`**. The file's own prose at state 0 already said so.
+The high bytes are NOT `0x22, 0x33`; nothing in the program can produce them.
 
-2. **THE TWO FIXES INTERACT, AND `1798abf` FIGURES BECOME WRONG WITH MINE.**
+Measured, not derived -- `tb_pe_soc_spi3.v` run against the assembled image:
 
-   | | high bytes | wire bytes |
-   |---|---|---|
-   | corrected words `0x1134, 0x2245, 0x3356` | `0x11, 0x22, 0x33` | **`0x6F, 0x5C, 0x4D`** |
-   | old list `0x1134, 0x1245, 0x1356` | `0x11, 0x12, 0x13` | `0x6D, 0x6C, 0x6F` <- what 1798abf states |
+    CS_N high -> frame 0: word=1134 crc_in=ce (want ce) | MISO carried resp=6f
+    CS_N high -> frame 1: word=1245 crc_in=a1 (want a1) | MISO carried resp=6c
+    CS_N high -> frame 2: word=1356 crc_in=cd (want cd) | MISO carried resp=6d
+    PASS: tb_pe_soc_spi3
 
-   So `1798abf` is right for the words the comment used to claim and wrong for
-   the words the code builds. **Whichever commit lands second has to recompute
-   the response bytes from the corrected words.** That is the one thing in this
-   block that two workers have to agree on, and it is arithmetic rather than
-   judgement.
+| | high bytes | wire bytes | |
+|---|---|---|---|
+| **`0x1134, 0x1245, 0x1356`** | `0x11, 0x12, 0x13` | **`0x6F, 0x6C, 0x6D`** | the code's, and the measured |
+| `0x1134, 0x2245, 0x3356` | `0x11, 0x22, 0x33` | `0x6F, 0x5C, 0x4D` | the stale comment, never sent |
+
+**So `0x6F, 0x5C, 0x4D` is not what "the corrected words" give -- it is what the
+STALE `0x22/0x33` high bytes give** (`0x22^0x7E = 0x5C`, `0x33^0x7E = 0x4D`),
+which is why it looked authoritative: it is real arithmetic, of the wrong
+words. And the other row was wrong in ORDER as well as in its label: `0x11,
+0x12, 0x13` gives `0x6F, 0x6C, 0x6D`, not `0x6D, 0x6C, 0x6F`. The rule is
+`resp = word_high XOR 0x7E` (`RESP_MASK[15:8]`), which is monotone-inverting
+here, so the first and last swap.
+
+**`1798abf` is the one that had the words right** -- its `0x11, 0x12, 0x13` is
+the code -- so it did not need recomputing after all, and the merge-order
+dependency this section was built to warn about **does not exist**. There was
+never an interaction; there was one list, one derivation, and a swap.
+
+**THREE THINGS THAT SECTION GOT WRONG BEYOND THE TABLE, all now settled:**
+
+1. **A mis-citation above.** The handwrap point lists "spi_mode3 word list
+   (`4a7e172`)". `4a7e172` is *"join the sentence my rewrap had split"* -- a
+   rewrap. The commit that put the word list in is **`f768e5a`**, *"the SPI mode
+   3 word list is 0x1134, 0x2245, 0x3356"*, and it is the one that is wrong. The
+   code it was documenting has not changed since `0d776e3`, so it was wrong on
+   the day it landed.
+2. **A THIRD response set existed and nobody had seen it.** The file carried
+   `0x6B, 0x2C, 0xD9` on the same line -- answering to neither word list, and
+   to no XOR mask either. Three sets of response bytes in one repository for
+   one slave model. Corrected to `0x6F, 0x6C, 0x6D`.
+3. **`1798abf` is not in this branch.** `git merge-base --is-ancestor 1798abf
+   HEAD` is false, and `firmware/dmx512.pe` **does not exist in this worktree at
+   all** -- no file, and no mention of "dmx512" anywhere under `firmware/`. It
+   is fw-bus's file on their branch. The routed batch item "dmx512.pe NOP count"
+   is therefore **not actionable here**, and no fix was invented for it.
+
+**What landed on this branch, all comment-only and all with the image md5
+unchanged (`spi_mode3.hex` = `0e48460d0200c067ad8626b1dd1b77ba` before and
+after):** the word list at line 56, the response bytes at line 60, and this
+section. The other two routed items were already in and were **re-verified
+rather than redone**: `cacaf23` (`(2,13)` = 69 clocks = 1.15 us) checks out
+against the same `clocks = n3*(2*n2) + 17` that `servo_sweep.pe` states, and
+that formula reproduces its own `625 clocks = 10.4 us` too; `4355c29`'s
+servo intermediates are internally consistent to 0.1 us across all five rows.
 
 ## AND THE PATTERN ACROSS ALL FIVE
 
@@ -661,7 +742,14 @@ they assert a number in a second place, and the second place is what goes stale.
 
 ---
 
-## THE MANAGER'S FINAL HANDWRAP POINT (2026-09-27 03:05)
+## THE MANAGER'S FINAL HANDWRAP POINT (2026-09-27 03:05) -- **SUPERSEDED, see the top table**
+
+> **THIS SECTION SAYS "(c) IS RED" AND (a) HAS AN OPEN ITEM. BOTH ARE GREEN NOW
+> AND IN THE REGRESSION.** It is kept verbatim as the record of what was
+> believed at the cut, and the bullets are annotated below rather than rewritten.
+> The "read this section first" instruction is the part that did damage: a
+> worker took "(c) is RED" from here as a brief and went to re-encode an act
+> that had been green for hours. **The top table is the current status.**
 
 Read this section first. It is the state at the cut.
 
@@ -677,15 +765,26 @@ Read this section first. It is the state at the cut.
   moment dmem[10] goes to 1 rather than at the end of the run. Recipe in the
   WORKLOG at 23:45. Also three stray reads in a reachable tail, which the
   width-byte rule catches.
+  **>> CLOSED.** `c790945` did the restructure; `ac14baa` wired the case green
+  and removed the `<<wip>>`. The stray reads are gone by deletion, and the TB
+  has since grown a third distance. `tb_pe_soc_sr04.v` PASSES.
 * **(c) FM0/FM1 -- RED testbench with seven correct checks**, a first-draft
   firmware, and the wire rules corrected. Needs a PREAMBLE, because a bi-phase
   stream carries no polarity information; the check that matters is that the
   same frame sent both ways gives two different flags and the same three bytes.
+  **>> CLOSED, AND THE PREAMBLE IS THE WHOLE ACT.** `b0fc713` took it to both
+  directions green; `2e37b32` wired it into the regression unmarked. The check
+  this bullet names is the one that shipped: one frame both polarities, two
+  different flags, the same three bytes, 80 pad levels against a model sharing
+  no code with either side.
 
 **The firmware comment batch -- done on my side, and the rest is not mine:**
 
 * mine, comment-only, image md5 proven unchanged: servo_sweep intermediates
   (4355c29), peasm (2,13) conversion (cacaf23), spi_mode3 word list (4a7e172);
+  **>> the third citation is wrong -- `4a7e172` is a rewrap commit. The
+  word-list commit is `f768e5a`, and it is the one that is WRONG; it was
+  corrected in `9d462b3` after the wire was measured.**
 * fw-bus already corrected dmx512.pe and the spi_mode3 response line in
   `1798abf`, and I reverted my duplicate edit of that line (222f384) because
   theirs derives the wire byte and mine only named the rule;
@@ -693,6 +792,13 @@ Read this section first. It is the state at the cut.
   response figures wrong** (they state 0x6D, 0x6C, 0x6F from the OLD high bytes
   0x11, 0x12, 0x13; the corrected words give 0x6F, 0x5C, 0x4D). Whichever
   commit lands second recomputes them. It is arithmetic, not judgement.
+  **>> THIS WAS BACKWARDS AND THERE IS NO TWO-WORKER DEPENDENCY.** 0x6F, 0x5C,
+  0x4D is what the STALE high bytes 0x22/0x33 give, not what the code's
+  0x11/0x12/0x13 give -- the code's words are 0x1134, 0x1245, 0x1356 and their
+  responses are 0x6F, 0x6C, 0x6D (also in the wrong order here). `1798abf` had
+  the words RIGHT, so there was never anything to recompute after it. Measured
+  on the wire, not derived: `word=1134/1245/1356`, `resp=6f/6c/6d`. See THE
+  MERGE-ORDER DEPENDENCY section below, which is corrected in place.**
 
 **Also delivered:** the merge-repair of the six acts in main (`3657847`), proven on
 three throwaway exports -- unpatched 6/6 FAIL, RTL hunk alone 6/6 PASS, TB hunks
@@ -704,3 +810,64 @@ gate is X and it never commits an instruction.
 duplicate of one that nobody recomputed when an input moved -- and the three I
 could NOT check are the three that were wrong, all of them a number asserted in a
 second place.
+
+## FINDINGS ADDED 2026-09-27 -- from the FM0/FM1 act, and they outlive the act
+
+These came out of act (c) and none of them is about bi-phase. They are
+recorded here because the general form of each is worth more than the fix that
+provoked it.
+
+### 1. A TEST AND ITS STIMULUS THAT SHARE A FLAW CANNOT FIND IT
+
+The sharpest catch of the block. The FM0/FM1 firmware recovered its clock by
+counting TRANSITIONS and calling two of them a bit -- which is unsound,
+because in bi-phase the number of transitions in a bit depends on the data.
+The testbench's own decoder folded two transitions per bit: **the same flaw**.
+So the two agreed with each other, all session, producing plausible numbers
+instead of noise, and the mutual agreement read as corroboration.
+
+A pair that is wrong together cancels its own error. What this act needed was
+a stimulus varied in the dimension the claim is about -- the same frame sent as
+FM0 and as FM1 -- and it is the one variation the harness never made.
+
+**The two defences that would have applied, and that this act should adopt:**
+
+* **Vary the stimulus in the dimension the claim is about.** A claim that the
+  receiver reports WHICH encoding it locked onto is only tested by sending both
+  encodings. Sending one encoding twice tests nothing about the flag.
+* **Check each side against a DERIVATION, not against the other side.** Two
+  implementations of one idea will agree when they share a mistake, and
+  disagree when they differ innocently. Agreement between a design and its
+  model is evidence only if the two were derived independently.
+
+### 2. THREE DEAD BRANCHES IN ONE PROGRAM, ALL VISIBLE IN THE LISTING, NONE IN THE SOURCE
+
+`LDI A,2 / SUB A,1 / JNZ`, `LDI A,8 / SUB A,1 / JZ`, and a byte cleared on the
+way into the block that then tests it for zero. The first two share one cause:
+**`SUB`'s operand field is an IMMEDIATE and this ISA has no `SUB A, <dmem>`
+form**, so both were subtracting a literal and neither could ever be zero. In
+the listing a constant subtraction is visible as a constant; in the source
+`SUB A, 1` reads like "subtract one". Two copies of one mistake, eight
+instructions apart, in a program nobody had finished.
+
+### 3. SIX FAULTS, NONE FOUND BY REASONING; ALL FOUND BY MAKING SOMETHING PRINT
+
+Act (c) alone: two uninitialised bytes in a machine whose RAM survives reset,
+a stimulus wired to the wrong pad, two constant subtractions, a dead branch, a
+60x units mismatch between a microsecond constant and a clock counter, and a
+mode byte never seeded. Not one was found by reading the code, and one was
+invisible to reading it twice. Every one was found by a probe printing a value
+or by reading the assembler's listing.
+
+The number that named the addressing mode was `dmem[8] = 46` -- a counter that
+should never have passed 2. Nobody would have predicted that number, and it is
+the entire diagnosis.
+
+### 4. A COMMENT OR A CONSTANT CAN BE RIGHT AND STILL MISLEAD
+
+`enc_level(b, half, fm0)` declares an `fm0` parameter and never reads it, so
+FM0 and FM1 encode to the identical stream. The wire rules are written down
+correctly in three places -- the act's header, the commit that corrected them,
+and peasm's CONSTS -- and implemented in none of them. A documented
+parameter is not a working one, and the cheapest check for it is to vary it and
+see whether anything changes.

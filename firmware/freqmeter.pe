@@ -9,8 +9,17 @@
 ;
 ; WHAT IS MEASURED, per run: two 16-bit pairs -- (period, high time), in whole
 ; microseconds -- for two consecutive periods of the incoming PWM. The
-; testbench sweeps the input over 158 Hz to 10 kHz with a varying duty and
-; checks every banked point, not the ends of the sweep.
+; testbench sweeps the input with a varying duty over 18 DRIVEN periods
+; spanning 100 Hz to 15.9 kHz, and banks 12 of them; **the banked set spans
+; 100 Hz to 12.5 kHz, which is NOT the range of the table's first and last
+; entries.** p_us[0] is 6300 us and p_us[17] is 100 us -- 158.7 Hz and 10 kHz
+; -- so a range quoted from those two is neither the driven extremes nor the
+; banked ones. Each run drives three periods and banks k=1,2, discarding k=0,
+; so the banked extremes are p_us[2] = 10000 us (100 Hz, the slowest point in
+; the table) and p_us[16] = 80 us (12.5 kHz). 80 here is MICROSECONDS; read
+; as a frequency it gives the 80 Hz that appears in two comments elsewhere and
+; that no point in this sweep has ever been. Every banked point is checked,
+; not the ends of the sweep.
 ;
 ; WHY THE LOW END IS THE POINT OF THE ACT. At 100 Hz the period is 10 000 us,
 ; which does not fit in one 8-bit counter. A firmware that counts into a byte

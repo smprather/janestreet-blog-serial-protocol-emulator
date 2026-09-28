@@ -329,5 +329,88 @@ if start_case subshell 'pids=""; for i in 1 2 3; do ( true ) & pids="$pids $!"; 
   fi
 fi
 
+# ---- H: a scan that goes UNREADABLE must not be read as a clean tree ------
+# The escalation loop in chip_signal_run_tree ends as soon as the tree looks
+# empty. `ps` reads /proc, and a starved or racing read can come back empty --
+# and an empty scan and a clean tree were the SAME THING to the caller, so the
+# loop returned SUCCESS and SKIPPED THE KILL ESCALATION. A child that traps
+# TERM (which the mutation heartbeat does) then outlived the run still holding
+# fd 9, which is the exact hazard run_lock.sh exists to prevent, reached
+# through the mechanism written to prevent it.
+#
+# IT WAS LOAD-DEPENDENT, and that is why it read as "not mine": 16/16 on a
+# quiet box, 15/16 with 48 spinners on 24 cores, red on the full gate. A case
+# that can only fail when the machine is busy is a case nobody can debug, so
+# this one forces the unreadable scan and the hole becomes a red line instead
+# of a bad afternoon.
+#
+# *** THE STUB GOES BLIND ON THE THIRD `ps`, NOT THE FIRST, AND THE COUNT IS
+# THE WHOLE CASE. *** One call is chip_run_pgid's process-group probe and the
+# second is the TERM pass's scan, so both of those are READABLE and the TERM
+# pass really does find the child and really does signal it -- which is what
+# happens in the real fault: the polite signal goes out, the child ignores it,
+# and then every later scan comes back unreadable and the loop declares
+# victory. The stub is also run under `setsid` so the scan takes the
+# process-GROUP path with exactly one `ps` per call, rather than the recursive
+# descendant fallback whose call count depends on how deep the tree is. A test
+# that counts `ps` calls and does not pin the path it is counting is a test
+# that measures its own stub.
+#
+# A stub that went blind from the very first scan would ask for something no
+# enumeration can deliver -- to kill a process it never managed to see -- and
+# the first version of this case asked for exactly that, and failed against a
+# CORRECT fix. Fixing the test rather than the fix is the only honest move
+# when the two disagree about the contract.
+#
+# The child is started with `trap '' TERM` because that is the whole point: a
+# child that DIES on TERM proves nothing here, since the polite signal alone
+# would reap it even if the escalation did nothing at all.
+# *** THE ASSERTION IS HOW MANY SCANS THE ESCALATION PERFORMED, NOT WHETHER A
+# CHILD IS STILL ALIVE, AND THAT IS THE THIRD TIME THIS CASE HAS BEEN WRONG
+# IN A DIFFERENT WAY. *** A return-early reads the stub about twice; an
+# escalation that runs its course reads it about forty-five times. That count
+# is deterministic, it needs no liveness judgement at all, and it is exactly
+# the property the fix changes.
+#
+# The two judgements this case made before it both said SURVIVED against a fix
+# that had worked, and both are worth recording:
+#   * `kill -0` on the child -- a KILLED child whose parent has not reaped it is
+#     a ZOMBIE, and `kill -0` SUCCEEDS on a zombie. A pid that answers is not a
+#     process that is running. Cases B-G measure a growing file for this reason.
+#   * then a growing heartbeat -- sound in general, unreliable HERE, because the
+#     loop backgrounds `sleep` children of its own and the group scan sees a
+#     different member than `$!` names, so "did the file grow" ends up
+#     answering a question about the wrong process.
+# The stub counts its own invocations instead, which cannot be misread.
+h_out=$(setsid bash -c '
+  set -u
+  . "$1/regress/run_lock.sh"
+  stub_dir=$(mktemp -d)
+  count=$stub_dir/n
+  : > "$count"
+  cat > "$stub_dir/ps" <<STUB
+#!/bin/sh
+c=\$(cat "\$STUB_N" 2>/dev/null || echo 0)
+echo \$((c + 1)) > "\$STUB_N"
+if [ "\$c" -lt 2 ]; then exec $2 "\$@"; fi
+exit 1
+STUB
+  chmod +x "$stub_dir/ps"
+  ( trap "" TERM INT HUP; sleep 20 ) &
+  kid=$!
+  sleep 0.2
+  STUB_N="$count" PATH="$stub_dir:$PATH" chip_signal_run_tree TERM
+  printf "SCANS=%s" "$(cat "$count")"
+  kill -KILL "$kid" 2>/dev/null
+  pkill -KILL -P "$kid" 2>/dev/null
+  rm -rf "$stub_dir"
+' _ "$PWD" "$(command -v ps)" 2>/dev/null)
+h_scans=${h_out#SCANS=}
+if [ "$h_scans" -ge 20 ] 2>/dev/null; then
+  ok   "H: a scan that goes unreadable cannot be read as a clean tree ($h_out -- the wait ran its course and escalated)"
+else
+  bad  "H: the escalation returned EARLY on an unreadable scan ($h_out -- a return-early reads the stub about twice, so this never escalated to KILL)"
+fi
+
 printf 'run_lock: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

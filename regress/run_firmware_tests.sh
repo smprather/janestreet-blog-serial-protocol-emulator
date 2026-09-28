@@ -175,6 +175,28 @@ for prog in eth_arp_echo eth_tx_two eth_tx_wrap_probe eth_tx_busy_probe eth_tx_o
   pass=$((pass+1))
 done
 
+# bmc_frame.pe is act (c)'s FM0/FM1 bi-phase program, and this assemble step
+# is the same kind of gate the others are: tb_pe_soc_bmc.v $readmemh's the hex
+# it produces (BMC_HEX), so a stale image is a silent pass.
+#
+# It is a STRONGER version of that gate than any of the others, for a reason
+# that belongs to this program alone: its delay constants are fitted
+# INSTRUCTION COUNTS, and act (c)'s sixth check counts every route between two
+# pad writes and fails if any is not exactly 120 clocks. So a re-assembly that
+# quietly moved a label -- two words added to a dispatch, which happened here
+# -- changes the wire by a clock per half-interval for eighty half-intervals,
+# and the resulting firmware still assembles, still runs, and still puts
+# eighty levels on the pad. Only the count catches it. That is why the bmc
+# checks are a run_case below and not a comment in the source.
+if ! $PY tools/fw/peasm.py firmware/bmc_frame.pe -o firmware/bmc_frame.hex >/dev/null 2>&1; then
+  echo "assemble bmc_frame                     FAIL"
+  $PY tools/fw/peasm.py firmware/bmc_frame.pe 2>&1 | head -3 | sed 's/^/    /'
+  exit 1
+fi
+printf '%-34s PASS (%s words)\n' "assemble bmc_frame" \
+  "$(grep -c . firmware/bmc_frame.hex)"
+pass=$((pass+1))
+
 # The three advanced BUS protocols' firmwares. Each is the DUT of one of the
 # SoC testbenches in run_all.sh, which $readmemh's its hex, so a stale image
 # would be a silent pass on the integration it configures:
@@ -423,6 +445,71 @@ for period in (519, 520, 521):
 print('PASS: UART monitor periods' if ok else 'FAIL')
 sys.exit(0 if ok else 1)
 "
+
+
+# 4e. act (c): the FM0/FM1 bi-phase LOOPBACK, both directions, in one run. The
+#     testbench sends the same frame A5 3C 96 twice -- once FM0, once FM1 --
+#     and the firmware must (a) bank the same three bytes under both flags,
+#     with dmem[3] reading back 0 then 1, and (b) put the frame back on the
+#     pad, re-encoded under the flag it READ. Neither side is told the other's
+#     polarity, which is the whole point: the testbench's decoder and the
+#     firmware's both lock their own from the preamble's levels, so a wrong
+#     encoder polarity can only pass if the two independent measurements
+#     agree.
+#
+#     The level check inside the testbench is the one that cannot go stale: it
+#     watches out_oe, reconstructs the half-interval sequence from the pad's
+#     OWN changes (so a one-clock-per-half-interval drift cannot accumulate the
+#     way a fixed sampling grid did), and compares all eighty levels against
+#     the stimulus's own model of the wire, in both polarities, every pass.
+run_case "bi-phase loopback: FM0 + FM1" tb/probes/run.sh
+
+# 4f. The seven static checks on the same firmware, which is a DIFFERENT kind
+#     of gate and catches what the simulation cannot. The half-interval check
+#     is the reason this is not redundant: it counts every route between two
+#     pad writes in the LISTING, and the testbench's gap check exempts the
+#     first gap (a receiver has no previous transition to measure it from), so
+#     a first half-interval of the wrong length passes the simulation and
+#     fails here. It did: 122 where 120 was claimed, on an interval the wire
+#     showed as 117 and the model excluded.
+run_case "bi-phase: 7 static checks" $PY firmware/bmc_checks.py firmware/bmc_frame.pe
+
+# 4f2. THE SELF-TEST FOR THE MODEL-AGREEMENT CHECK, and this one is here
+#     because of what its absence cost. The check that compares the two
+#     independent models of the wire rules has a DISAGREE branch -- the branch
+#     that catches a misreading of the encoding, which is the fault the whole
+#     check exists for -- and that branch cannot be reached by injection, because
+#     each model's own self-check catches a fault first. So it was untested:
+#     a check whose whole point is to catch disagreement, with its
+#     disagreement path never once run. `--self-test` exercises the comparison
+#     with no simulation and no models at all, and it earned its place on its
+#     first run: it found that the "flip one bit" case compared a string with
+#     ITSELF (the base alternates and already starts '0'), and that the
+#     harness called the comparison with printing switched off, so the "a
+#     disagreement must not be silent" requirement could never pass.
+#
+#     IT IS A run_case RATHER THAN A FLAG SOMEONE REMEMBERS, which is the same
+#     lesson bmc_checks.py taught this act: seven checks, printed counts, and
+#     a whole session outside the regression because nothing ran them.
+run_case "bi-phase: model-agree self-test" \
+  $PY firmware/bmc_models_agree.py --self-test
+
+# 4g. The two models of the wire RULES must agree with each other. This is a
+#     different kind of gate from 4e and 4f, and it is the one that makes 4e's
+#     reference falsifiable: the eighty levels are compared against
+#     `enc_wire_lev`, which lives INSIDE the testbench that runs the firmware,
+#     so every level act (c) has reported was measured against a function with
+#     no witness but itself. `firmware/bmc_model.py` is a second, independent
+#     implementation of the same rules -- Python against Verilog, written from
+#     the prose of the encoding rather than from each other -- so the two can
+#     be compared. Neither is modified or imported into the other, because a
+#     model told what the other model says is one model.
+#
+#     It says nothing about the firmware, and the comment in the file says so:
+#     the pad could be wrong in eighty ways and both models would still agree.
+#     What it bounds is a different fault -- the act's reference confirming
+#     itself -- which is the one failure here that nothing else could detect.
+run_case "bi-phase: two models agree" $PY firmware/bmc_models_agree.py
 
 # 5. the documented limitation: back-to-back bytes are LOST (half-duplex).
 #    Asserts the failure mode rather than hiding it -- if this ever starts
