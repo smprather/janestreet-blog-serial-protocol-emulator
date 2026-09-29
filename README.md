@@ -32,31 +32,32 @@ listed below, its page is the prose behind them. The next-ideas list is
 ## Block diagrams
 
 **Project plan** — architecture and contracts
-([SVG](diagrams/project-plan.svg) · [PlantUML](diagrams/project-plan.puml)):
+([PNG](diagrams/project-plan.png) · [PlantUML](diagrams/project-plan.puml)):
 
 ![Project plan](diagrams/project-plan.png)
 
 **Implementation progress** — per-block status
-([SVG](diagrams/project-progress.svg) · [PlantUML](diagrams/project-progress.puml)):
+([PNG](diagrams/project-progress.png) · [PlantUML](diagrams/project-progress.puml)):
 
 ![Implementation progress](diagrams/project-progress.png)
 
 ## Protocol diagrams
 
-Every figure ships as colocated `.puml` / `.png` / `.svg` in [`diagrams/`](diagrams/)
-(see [`diagrams/README.md`](diagrams/README.md) for how to regenerate them).
+Every figure ships as a colocated `.puml` source and `.png` render in [`diagrams/`](diagrams/)
+(`.svg` is not tracked — no SVG renderer uses a sane transparency background; see
+[`diagrams/README.md`](diagrams/README.md) for how to regenerate them).
 
 ### Host ↔ chip protocol
 
-**SPI framing & wait-word contract** ([SVG](diagrams/proto-spi-framing.svg) · [PlantUML](diagrams/proto-spi-framing.puml)):
+**SPI framing & wait-word contract** ([PNG](diagrams/proto-spi-framing.png) · [PlantUML](diagrams/proto-spi-framing.puml)):
 
 ![SPI framing & wait-word contract](diagrams/proto-spi-framing.png)
 
-**R2 bounded-read path (11-word header)** ([SVG](diagrams/proto-r2-read-path.svg) · [PlantUML](diagrams/proto-r2-read-path.puml)):
+**R2 bounded-read path (11-word header)** ([PNG](diagrams/proto-r2-read-path.png) · [PlantUML](diagrams/proto-r2-read-path.puml)):
 
 ![R2 bounded-read path (11-word header)](diagrams/proto-r2-read-path.png)
 
-**R3 debug-control state machine** ([SVG](diagrams/proto-r3-debug-control.svg) · [PlantUML](diagrams/proto-r3-debug-control.puml)):
+**R3 debug-control state machine** ([PNG](diagrams/proto-r3-debug-control.png) · [PlantUML](diagrams/proto-r3-debug-control.puml)):
 
 ![R3 debug-control state machine](diagrams/proto-r3-debug-control.png)
 

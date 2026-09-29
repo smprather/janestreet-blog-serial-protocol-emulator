@@ -288,7 +288,8 @@ numbers; do not edit them by hand.
 
 ### Diagrams (in the repo, not in the wiki)
 
-Editable PlantUML sources with colocated `.png`/`.svg` renders, in `diagrams/`:
+Editable PlantUML sources with a colocated `.png` render, in `diagrams/`
+(`.svg` is not tracked — no SVG renderer uses a sane transparency background):
 
 - `project-plan.puml` — planned system topology, baseline and stretch protocol
   goals.

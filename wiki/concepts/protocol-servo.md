@@ -198,8 +198,22 @@ about to go high anyway.
 The consequence: the line stayed *released* — so pulled HIGH by the board's pull-up —
 from reset until the first pulse, and the first pulse therefore had **no rising edge
 at all**. The testbench saw four rises and five falls and correctly refused to call it
-five pulses. The mutation cases `sv-idle-level` and `sv-first-rise` are this defect
-made into permanent cases.
+five pulses. One mutation case guards this, `sv-first-rise`, which mutates that very
+`OUT TXPIN, A` and is detected by six of the checks below.
+
+> **A previous version of this page claimed the guard was a PAIR — `sv-idle-level`
+> and `sv-first-rise` — covering the fault "from both directions". That was false,
+> and `sv-idle-level` was deliberately removed rather than repaired.** The facts,
+> measured by listing both cases and running them: `sv-first-rise` DETECTED (6
+> checks failed), `sv-idle-level` SURVIVED. Its anchor and replacement were
+> *textually identical apart from a comment*, so nothing was injected and nothing
+> failed; adding the row would have reddened the gate for a reason that has
+> nothing to do with the servo. It was also redundant: `servo_sweep.pe` writes the
+> idle level in exactly one place, so a working `sv-idle-level` would have had to
+> mutate the same two lines `sv-first-rise` already mutates — one site, one fault,
+> 66 seconds of servo simulation each, and the second would add no coverage. There
+> is only one direction to cover, and it is covered. See the arm in
+> `regress/mutate_timing_tb.sh` where it was removed, which records this in place.
 
 ## How the testbench proves it
 

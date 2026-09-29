@@ -799,13 +799,17 @@ EOF
     # red gets ignored or the gate gets disabled.
     while IFS= read -r st; do
       [ -n "$st" ] || continue
+      # PNG is the REQUIRED, TRACKED render. SVG is not tracked (user ruling
+      # 2026-09-28: no SVG renderer uses a sane transparency background, so an
+      # untracked .svg is the honest state) and may be absent or stale on disk
+      # without failing the gate. The freshness and white-on-white passes below
+      # already `continue` on a missing render, so PNG-only is coherent.
       [ -f "${st}.png" ] || { miss=1; [ "$quiet" = "1" ] || fail "$base: no ${st##*/}.png for one of its $n block(s)"; }
-      [ -f "${st}.svg" ] || { miss=1; [ "$quiet" = "1" ] || fail "$base: no ${st##*/}.svg for one of its $n block(s)"; }
     done < <(expected_stems "$src" "$n")
     if [ $miss -ne 0 ]; then
       bad_total=$((bad_total + 1))
     else
-      ok "$base: $n block(s), both formats colocated"
+      ok "$base: $n block(s), .png render colocated"
     fi
   done
 
@@ -817,7 +821,10 @@ EOF
     [ -e "$src" ] || continue
     expected_stems "$src" "$(block_count "$src")" >> "$claimed"
   done
-  for st in "$dir"/*.png "$dir"/*.svg; do
+  # PNG only: a render is a TRACKED artifact, and .png is the one we track. A
+  # stray .svg on disk (someone ran plantuml locally) is not an orphan, because
+  # it is not a tracked claim on the tree - it is the untracked by-design file.
+  for st in "$dir"/*.png; do
     [ -e "$st" ] || continue
     local key="${st%.*}"
     if ! grep -qxF "$key" "$claimed"; then
@@ -1002,7 +1009,14 @@ EOF
 
   n_png=$(find "$dir" -maxdepth 1 -name '*.png' | wc -l)
   n_svg=$(find "$dir" -maxdepth 1 -name '*.svg' | wc -l)
-  [ "$quiet" = "1" ] || printf '  -- %d .puml, %d .png, %d .svg in %s\n' "$n_puml" "$n_png" "$n_svg" "$dir"
+  # .svg is not tracked by design (user ruling 2026-09-28 - no sane transparency
+  # background), so its count is reported only when a local one exists, to make
+  # clear the gate is not requiring it rather than silently ignoring it.
+  if [ "$quiet" != "1" ] && [ "$n_svg" -gt 0 ]; then
+    printf '  -- %d .puml, %d .png (tracked), %d untracked .svg in %s\n' "$n_puml" "$n_png" "$n_svg" "$dir"
+  else
+    [ "$quiet" = "1" ] || printf '  -- %d .puml, %d .png (tracked) in %s\n' "$n_puml" "$n_png" "$dir"
+  fi
 
   rm -rf "${work:?}"
   FAILURES=$bad_total

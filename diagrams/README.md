@@ -1,17 +1,24 @@
 # Project block diagrams
 
-These are the project's editable, text-based PlantUML sources. Keep generated
-`.svg` and `.png` renders beside each `.puml` source so they are easy to preview
-in tools that do not render PlantUML.
+These are the project's editable, text-based PlantUML sources. Keep the generated
+`.png` render beside each `.puml` source so they are easy to preview in tools that
+do not render PlantUML.
 
-Regenerate both formats after editing either diagram, with PlantUML installed:
+`.svg` is **not tracked** (user ruling 2026-09-28): no SVG renderer uses a sane
+transparency background, so an SVG renders wrong in most viewers while the PNG
+carries an explicit opaque background. The two tracked items per diagram are the
+`.puml` source and the `.png` render. A `.svg` on disk is a local by-product of
+`plantuml -tsvg` and is gitignored.
+
+Regenerate the `.png` after editing a diagram, with PlantUML installed:
 
 ```sh
 JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=8192" \
   plantuml -tpng diagrams/project-plan.puml diagrams/project-progress.puml
-JAVA_TOOL_OPTIONS="-Djava.awt.headless=true -DPLANTUML_LIMIT_SIZE=8192" \
-  plantuml -tsvg diagrams/project-plan.puml diagrams/project-progress.puml
 ```
+
+`tools/diag/check_diagrams.sh` requires the `.png` for every block and does not
+flag a stray untracked `.svg` as an orphan.
 
 - `project-plan.puml` shows the full planned architecture, including the
   committed baseline and stretch goals. Optional protocol targets are marked

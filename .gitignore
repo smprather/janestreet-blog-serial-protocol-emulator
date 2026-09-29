@@ -265,6 +265,15 @@ sim/*.vcd
 # PlantUML sidecars are tracked beside their editable sources.
 diagrams/.part-*
 
+# Rendered SVG is NOT tracked (user ruling 2026-09-28). No SVG renderer uses a
+# sane transparency background, so the .svg is a file that renders wrong in
+# most viewers while the .png - which has an explicit opaque background - is
+# the tracked, correct render. The .puml source and the .png render are the
+# two tracked items; .svg is a local by-product of `plantuml -tsvg` and is
+# regenerated on demand, never committed. tools/diag/check_diagrams.sh treats
+# .png as the required render and does not flag a stray .svg as an orphan.
+diagrams/*.svg
+
 # Keep the checked-in dashboard bundle under dist/.
 !tools/live-canvas/dashboard/dist/
 !tools/live-canvas/dashboard/dist/**
