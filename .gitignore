@@ -57,6 +57,14 @@ cover/
 
 # Django stuff:
 *.log
+# EXCEPTION, and it is load-bearing: the v1.0 gate evidence is a .log, and this
+# rule silently swallowed it. `git add -A` does NOT report a file it skipped, so
+# reviews/2026-09-27/V1-BASELINE-GATE.log and reviews/2026-09-28/V1.0-GATE.log
+# were "committed" and recoverable and existed on disk, and were in NO commit at
+# all. An audit trail that only exists on one machine is not an audit trail.
+# Curated evidence under reviews/ is tracked; runtime tool output (baseline-*.log,
+# synth-*.log, /tmp logs) stays ignored. Add new evidence logs here by name.
+!reviews/**/V1*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
