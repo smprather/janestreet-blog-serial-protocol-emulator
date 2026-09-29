@@ -1,0 +1,186 @@
+=== TIER 2 - the FULL gate (named gates only) ===
+=== firmware (assemble + emulator) ===
+assemble uart_echo                 PASS (118 of 128 words)
+assemble tick_count                PASS (8 words)
+assemble spi_xfer                  PASS (70 words)
+assemble i2c_pins                  PASS (79 words)
+assemble eth_rx                    PASS (42 words)
+assemble i2c_xfer                  PASS (311 words)
+assemble serdes_loop               PASS (70 words)
+assemble eth_tx_arp                PASS (502 words)
+assemble eth_arp_echo              PASS (546 words)
+assemble eth_tx_two                PASS (299 words)
+assemble eth_tx_wrap_probe         PASS (41 words)
+assemble eth_tx_busy_probe         PASS (225 words)
+assemble eth_tx_owner_probe        PASS (69 words)
+assemble i2c_adv                   PASS (372 words)
+assemble spi_mode3                 PASS (256 words)
+assemble uart_flow                 PASS (109 words)
+assemble ws2812                    PASS (129 words)
+assemble servo_sweep               PASS (84 words)
+assemble dht11_read                PASS (134 words)
+assemble ds18b20                   PASS (205 words)
+assemble nec_ir                    PASS (165 words)
+assemble stepper_ramp              PASS (96 words)
+assemble freqmeter                 PASS (103 words)
+assemble sr04_range                PASS (387 words)
+emulate: one byte                  PASS
+emulate: three bytes + buffer      PASS
+emulate: 00 FF 55 AA               PASS
+emulate: spi mode 0, 4 frames      PASS
+emulate: timer wrap semantics      PASS
+emulate: UART monitor periods      PASS
+limitation: gap=1 loses bytes      PASS (emulator err = not delivered)
+
+=== assembler range checks (must be rejected) ===
+reject: program over 1024 words    PASS (rejected)
+reject: jump past imem             PASS (rejected)
+reject: jump past operand field    PASS (rejected)
+accept: jump past word 255         PASS (word 300 reachable)
+reject: LDM A above dmem           PASS (rejected)
+reject: STM above dmem             PASS (rejected)
+reject: IO port above 15           PASS (rejected)
+
+========================================
+FIRMWARE: 38   PASS: 38   FAIL: 0
+all firmware tests pass
+
+=== RTL testbenches ===
+tb_pe_serdes       PASS
+tb_pe_uart         PASS
+tb_pe_spi          PASS
+tb_pe_i2c          PASS
+tb_pe_jtag         PASS
+tb_pe_swd          PASS
+tb_pe_ps2          PASS
+tb_pe_can          PASS
+tb_pe_usb          PASS
+tb_pe_eth          PASS
+tb_pe_nrzi         PASS
+tb_pe_manch        PASS
+tb_pe_bitstuff     PASS
+tb_pe_codec_mux    PASS
+tb_pe_crc          PASS
+tb_pe_imem         PASS
+tb_pe_dru          PASS
+tb_pe_pinmux       PASS
+tb_pe_cpu          PASS
+tb_pe_soc_uart     PASS
+tb_pe_soc_tick     PASS
+tb_tt_um_protocol_emulator PASS
+tb_pe_soc_ws2812   PASS
+tb_pe_soc_servo    PASS
+tb_pe_soc_dht11    PASS
+tb_pe_soc_ds18b20  PASS
+tb_pe_soc_ir_nec   PASS
+tb_pe_soc_stepper_ramp PASS
+tb_pe_soc_freqmeter PASS
+tb_pe_soc_i2c      PASS
+tb_pe_soc_i2c_xfer PASS
+tb_pe_soc_spi      PASS
+tb_pe_soc_sr04     PASS
+tb_pe_fbuf         PASS
+tb_pe_soc_eth      PASS
+tb_pe_soc_serdes   PASS
+tb_pe_soc_eth_tx   PASS
+tb_pe_soc_eth_loop PASS
+tb_pe_ctrl         PASS
+tb_pe_ctrl_r2      PASS
+tb_pe_ctrl_r3      PASS
+tb_pe_ctrl_r3_conf PASS
+tb_pe_eth_mac      PASS
+tb_pe_eth_tx       PASS
+tb_pe_soc_i2c_adv  PASS
+tb_pe_soc_spi3     PASS
+tb_pe_soc_uart_flow PASS
+
+========================================
+TOTAL: 47   PASS: 47   FAIL: 0
+run environment: OK (3207180 KiB free on scratch)
+run environment self-test: OK (2 of 2 cases behaved correctly)
+param guards: OK
+regress script syntax: OK (check_shell_syntax: 45 scripts, each parsed on its own (one bash -n per file))
+tmp isolation: OK (no script writes a fixed global /tmp artifact name, 3 deliberate box-global exemption(s))
+harness pre-flight coverage: OK (check_harness_preflight: 16 harnesses, every one stamped by the lock and checked on its own exit path)
+tree-known: OK (no orphaned mutation residue)
+harness pre-flight self-test: OK (5 of 5 cases behaved correctly)
+mutation MUTABLE lists: OK
+all testbenches pass
+pe_serdes                    lint OK
+pe_nrzi                      lint OK
+pe_manch                     lint OK
+pe_bitstuff                  lint OK
+pe_codec_mux                 lint OK
+pe_crc                       lint OK
+pe_eth_tx                    lint OK
+pe_dru                       lint OK
+pe_cpu                       lint OK
+pe_imem                      lint OK
+pe_soc                       lint OK
+pe_pinmux                    lint OK
+pe_eth_mac                   lint OK
+pe_fbuf                      lint OK
+pe_ctrl                      lint OK
+tt_um_protocol_emulator      lint OK
+pe_serdes                    elaborate OK
+pe_codec_mux                 elaborate OK
+pe_crc                       elaborate OK
+pe_dru                       elaborate OK
+pe_cpu                       elaborate OK
+pe_imem                      elaborate OK
+pe_soc                       elaborate OK
+pe_pinmux                    elaborate OK
+pe_eth_mac                   elaborate OK
+pe_fbuf                      elaborate OK
+pe_ctrl                      elaborate OK
+tt_um_protocol_emulator      elaborate OK
+pe_eth_tx                    elaborate OK
+
+lint clean
+
+signal glossary up to date
+protocol pin budget up to date
+sram budget up to date
+floorplan feasibility up to date
+macro flow config: OK (placements, pin-to-net hooks and the Metal4 ladder complete)
+macro flow config negatives: OK (pin-to-net, typed views, per-type geometry, ladder, skip and yosys-failure checks)
+crc config up to date
+clock arithmetic up to date
+block diagram up to date
+wiki page rules: OK (4 line(s); see regress/check_wiki_pages.sh)
+wiki gate negative control: OK (test_check_wiki_pages: 46/46 cases passed, 0 failed)
+document links: OK (check_wiki_links: 77 document(s) scanned, 792 link(s) checked, 0 dead)
+document links self-test: OK (3 of 3 cases proved the resolver)
+diagrams: OK (69 check(s) passed; see tools/diag/check_diagrams.sh)
+document index: OK (54/54 render(s) listed in README.md)
+document index gate self-test: OK (3 of 3 cases behaved correctly)
+diagrams gate self-test: OK (21 of 21 cases behaved correctly)
+delay-lattice numbers: OK (RESULT: PASS)
+delay-lattice gate self-test: OK (18 check(s) passed, 0 failed)
+canvas viewer: OK
+formal-ifdef gate: OK (FORMAL never defined on a synthesis path; taps compile out)
+formal safety proofs: OK (see formal/results/summary.txt for per-property status)
+formal mutant checks: OK (see formal/results/mutants.txt for the per-mutant table)
+wait-word cross-check: OK (chip filler <-> host stripper, 0..15)
+run-lock process tree: OK (every signal reaps the run; no bystander killed)
+R2 golden package: OK (check_r2_package: OK)
+R3 golden package: OK (tb copy byte-exact; include and confirmations current)
+i2c pin timing: OK (tLOW/tHIGH/period clear their floors)
+i2c transaction: OK (bytes, ACKs, read path, timing, grammar)
+i2c TB mutations: OK (no unexplained survivors)
+timing TB mutations: OK (no unexplained survivors)
+spi TB mutations: OK (no unexplained survivors)
+fbuf TB mutations: OK (no unexplained survivors)
+eth_mac TB mutations: OK (no unexplained survivors)
+eth_soc TB mutations: OK (no unexplained survivors)
+ctrl TB mutations: OK (no unexplained survivors)
+i2c_xfer TB mutations: OK (no unexplained survivors)
+serdes TB mutations: OK (no unexplained survivors)
+soc serdes TB mutations: OK (no unexplained survivors)
+codec TB mutations: OK (no unexplained survivors)
+ctrl R3 debug mutations: OK (no unexplained survivors)
+eth_tx TB mutations: OK (no unexplained survivors)
+eth_tx loopback TB mutations: OK (no unexplained survivors)
+fw-bus TB mutations: OK (no unexplained survivors)
+harness-edit pre-flight: OK (fires on a changed script, quiet on an unchanged one)
+mutation suites: 16 ran (full gate — no narrowing)
