@@ -31,20 +31,43 @@ hardware-only. So this SHRINKS item 11 from "trust the whole stack" to "trust
 these four things", which is the difference between an acceptance run and a coin
 flip. It does not close item 11 and must never be reported as if it did.
 
-THE SPI CONTRACT, read off the code rather than assumed. Mode 0 (spi_xfer.pe is
-a mode-0 master), CS-framed. Pad map on the ui_in/uo_out buses: SCLK_BIT=0,
-MOSI_BIT=1, CS_BIT=2, MISO_BIT=3 (identical to tb_pe_soc_spi3.v:78). MISO is
-valid only while miso_oe is asserted - the pad must be modelled, because the
-R2 bounded read can be preceded by up to 15 leading 0xFFFF wait words that the
-host strips with strip_wait_words. Framing (pe_frame.py): HEADER_WORDS=4 (sync,
-header, sequence, length), payload, TRAILER_WORDS=1 (CRC-16/CCITT-FALSE, poly
-0x1021, init 0xFFFF, no reflection, no final XOR), MAX_PAYLOAD_WORDS=0xFFFF,
-MAX_WAIT_WORDS=15. The bridge path: encode_frame -> host_spi_transfer(raw,
-read_words) -> strip_wait_words -> decode_frame, with read_words = 6 + data +
-MAX_WAIT_WORDS (main.py:328-354).
+THE SPI CONTRACT, read off the code rather than assumed. Mode 0 (pe_ctrl is a
+mode-0, MSB-first, 16-bit-word slave), CS-framed, and - the correction that
+matters - the pad map is the WRAPPER's framed host bus, not the SoC's own
+SPI-master map:
+
+    uio[4] = host CS_N      uio[5] = host MOSI
+    uio[6] = host MISO      uio[7] = host SCK
+    uo_out[1] = IRQ_N      ui_in[1] = run
+
+MISO is valid only while miso_oe is asserted - uio[6] is RELEASED when idle,
+which is the R2 wait-word contract, and the host strips up to 15 leading 0xFFFF
+words with strip_wait_words.
+
+An earlier draft of this file carried SCLK=0, MOSI=1, CS=2, MISO=3 from
+tb_pe_soc_spi3.v:78. That map is the UART/SPI row used when pe_soc is the SPI
+MASTER - the firmware's own path - and it is wrong here in two ways at once: it
+is the opposite direction of traffic, and pe_ctrl does not live in pe_soc.v at
+all (pe_soc.v:224 says so outright: "the host bus (pe_ctrl, outside this
+block)"). pe_ctrl is instantiated in rtl/tt_um_protocol_emulator.v. Building the
+14-file pe_soc list would produce a chip with no pe_ctrl in it, and a smoke test
+against it would pass on a part that cannot answer a single frame.
+
+So a VvpTTAdapter testbench must instantiate tt_um_protocol_emulator, NOT bare
+pe_soc. The protocol worker caught this before it wrote code against the wrong
+map - it was given the contract spelled out and the authority to reject it, and
+it did, rather than silently picking one. That is the behaviour worth having.
+
+Framing (pe_frame.py): HEADER_WORDS=4 (sync, header, sequence, length),
+payload, TRAILER_WORDS=1 (CRC-16/CCITT-FALSE, poly 0x1021, init 0xFFFF, no
+reflection, no final XOR), MAX_PAYLOAD_WORDS=0xFFFF, MAX_WAIT_WORDS=15. The
+bridge path: encode_frame -> host_spi_transfer(raw, read_words) ->
+strip_wait_words -> decode_frame, with read_words = 6 + data + MAX_WAIT_WORDS
+(main.py:328-354).
 
 WHY A TESTBENCH BUILD COMES FIRST. Every existing tb_pe_soc_*.v is self-contained
 and free-runs, and tb_pe_soc_spi3.v hardcodes ONE specific transaction shape in
-a bit-level slave model. A VvpTTAdapter needs a testbench whose SPI traffic is
-externally supplied rather than self-generated, so that bite is the prerequisite
-and is in flight in the chip lane now (tb/tb_pe_soc_extspi.v).
+a bit-level slave model against the SoC-as-master pad map. A VvpTTAdapter needs
+a testbench that (a) builds tt_um_protocol_emulator so pe_ctrl is present, and
+(b) takes its SPI traffic from outside rather than generating it. That bite is in
+flight in the chip lane now (tb/tb_pe_soc_extspi.v).
