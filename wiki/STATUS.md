@@ -1,3 +1,35 @@
+> **v1.0 — THE FULL GATE IS GREEN (2026-09-28, commit `dca7033`).** Every branch
+> of real work is now on `main`; zero unmerged. The measured result, from
+> `reviews/2026-09-28/V1.0-GATE.log` (tracked; an earlier commit recovered it from
+> `.gitignore`): **TOTAL 50 PASS 50 FAIL 0**; **16 of 16 mutation suites OK** with
+> no unexplained survivors; **formal safety proofs and formal mutant checks OK**;
+> **77 documents / 792 links / 0 dead**; **69 diagram checks**; **document index
+> 54 of 54**. The testbench count is **50**, not the older 47 — the
+> `fwbus/block3-land` merge added `tb_pe_soc_dmx512` and `tb_pe_soc_midi`.
+>
+> **What this is, and is not.** Every number above is **green in SIMULATION**. The
+> v1.0 gate says nothing about silicon: it is a simulation and documentation
+> result. The one acceptance step that needs real hardware — the Pico/USB
+> acceptance run — remains **open and hardware-gated** (item 11 below). Do not read
+> "v1.0 green" as "hardware-verified"; it is not.
+>
+> **The `fw-timing-protocols` branch is merged** (111 commits), including the
+> `bmc_checks.py` SIGALRM watchdog that fixed a recorded **27 h 36 m**
+> single-core spin. It was merged with **main's safety layer kept over the
+> branch's** — if you are reading an older copy of this file that credits the
+> timing acts to a separate branch, that is stale.
+>
+> **Diagram artefacts changed 2026-09-28: `.puml` source and `.png` render are
+> the tracked items; `.svg` is NO LONGER tracked** (no sane transparency
+> background). `diagrams/README.md` and `wiki/index.md` already say so; this file
+> does not contradict them.
+>
+> **In progress, owned elsewhere, not done:** a `VvpTTAdapter` is being built to
+> run the real host bridge against the real chip RTL under `vvp`, using the
+> existing 6-method `TTAdapter` seam. It is a way to shrink item 11, but it is
+> **built-in-progress in another lane** and is **not** a completed result. Do not
+> cite it as one.
+
 > **Three TIMING protocols as firmware, TBs and demo acts (2026-09-25,
 > branch `fw-timing-protocols`).** WS2812 800 kHz one-wire (`ws2812.pe`, 129
 > words), servo PWM 50 Hz 1-2 ms (`servo_sweep.pe`, 84), DHT11 start signal +
@@ -644,10 +676,16 @@ The one-line version, for the reader who wants it before clicking through:
                                    + timing divider + 0xF window (2026-09-24)
     └── pe_ctrl (463) ── passive SPI load + A1 readback into imem
 
+  pe_eth_tx (892)  pe_crc  pe_fbuf  — 10BASE-T TX frame path, COMPLETE
+  pe_ctrl (463) ── framed host bus: R1 load, R2 read path, R3 debug control
+
   INSTANTIATED NOWHERE (0) — both landed in pe_soc on 2026-09-24
   (split serdes enables, two codec instances, the 0xF window, the pad
    overlay; see [[plans/serdes-integration]]):
     pe_serdes (539)  pe_codec_mux (130)  — now instantiated in pe_soc
+
+  As of v1.0 (2026-09-28) every branch is merged; the ordered work list
+  below has ONE open item (11, the hardware acceptance run).
 ```
 
 
@@ -2052,12 +2090,27 @@ mutation suites**. Record: [[reviews/2026-09-25/R2-READ-PATH-REVIEW]]. This
 also **closes the P3 chip-side liveness gap** (STATUS now carries
 pc/a/x/y/timer and READ_CPU answers while running).
 
-### 11. Real Pico/USB acceptance run — OPEN (hardware-gated)
+### 11. Real Pico/USB acceptance run — OPEN (hardware-gated) — the ONLY open item
 
 The one acceptance step that cannot be done in simulation: run the Pico
 bridge and GUI against a real RP2040 on the Tiny Tapeout demo board over USB,
 load a program, start it, and confirm liveness. Blocked on hardware, not on
 design or software.
+
+**As of v1.0 (2026-09-28): every other ordered item — 0–10, 12 and 13 — is
+DONE, and this is the only thing left.** The v1.0 gate is green in
+**SIMULATION** (`reviews/2026-09-28/V1.0-GATE.log`: 50/50 TBs, 16/16 mutation
+suites, formal OK, 77 documents / 792 links / 0 dead); none of that is a
+hardware measurement, and this item is what stands between the project and a
+hardware result.
+
+**A way to shrink this item is in progress and owned elsewhere, NOT done:** a
+`VvpTTAdapter` that runs the real host bridge against the real chip RTL under
+`vvp`, using the existing 6-method `TTAdapter` seam, would let most of the
+bridge's behaviour be exercised without a board. It is **built-in-progress in
+another lane**; do not treat it as a completed result, and do not let it
+replace the real board run — it narrows what the board still has to prove, it
+does not prove it.
 
 **Everything it depends on is DONE.** The host bridge's wait-word gap (B1) is
 **fixed** (059d6c3, merged def51ea — variable-length read + leading-`0xFFFF`
@@ -2083,7 +2136,11 @@ side verified at 18/18.
 
 ### Remaining: the hardware run only
 
-The only open item is item 11, and it is gated on having a board.
+The only open item is item 11, and it is gated on having a board. As of
+v1.0 (2026-09-28) items 0–10, 12 and 13 are DONE and all branches of real work
+are merged, so this is the single remaining item in the whole ordered list —
+not one of several. It needs a Tiny Tapeout demo board and a real RP2040 on
+USB; nothing on the design or software side blocks it.
 
 ## Reading order for a fresh session
 

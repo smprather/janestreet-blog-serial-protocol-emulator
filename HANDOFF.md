@@ -1,3 +1,29 @@
+> **v1.0 — state of the repo as of 2026-09-28 (commit `dca7033`).** This block
+> is the current summary; the dated sections below it are the historical record
+> and are kept as written. **Every branch of real work is merged to `main`; zero
+> unmerged.** The full gate is GREEN in **SIMULATION**, from the tracked evidence
+> `reviews/2026-09-28/V1.0-GATE.log`: **TOTAL 50 PASS 50 FAIL 0**; **16/16
+> mutation suites OK** (no unexplained survivors); **formal safety proofs and
+> formal mutant checks OK**; **77 documents / 792 links / 0 dead**; **69 diagram
+> checks**; **document index 54 of 54**. The testbench count is **50** (not the
+> older 47): the `fwbus/block3-land` merge added `tb_pe_soc_dmx512` and
+> `tb_pe_soc_midi`. The `fw-timing-protocols` branch (111 commits, the
+> `bmc_checks.py` SIGALRM watchdog that fixed a recorded 27 h 36 m single-core
+> spin) is merged, with **main's safety layer kept over the branch's**.
+>
+> **Simulation, not silicon.** None of the above is a hardware measurement. The
+> one acceptance step needing real hardware — the Pico/USB run — is still **open
+> (STATUS item 11)** and hardware-gated. "v1.0 green" must not be read as
+> "hardware-verified"; it is not.
+>
+> **Diagram artefacts (2026-09-28): `.puml` + `.png` are tracked; `.svg` is NOT**
+> (no sane transparency background) — consistent with `diagrams/README.md` and
+> `wiki/index.md`.
+>
+> **In progress, owned elsewhere, NOT done:** a `VvpTTAdapter` (real host bridge
+> against real chip RTL under `vvp`, via the existing 6-method `TTAdapter` seam)
+> is being built to shrink item 11. Do not cite it as a finished result.
+
 # Handoff — state of the repo (2026-09-23)
 
 ## Operating role: Pi Harness & RTL Hardening Steward
@@ -1091,8 +1117,9 @@ those checks.
 The standard regression and the directed review probes measure different cases:
 
 ```bash
-./regress/run_all.sh            # 29/29 TBs + 20/20 firmware + lint + 7 mutation
-                           # suites + generated-doc drift, exits 0
+./regress/run_all.sh            # v1.0: 50/50 TBs + 37/37 firmware + lint + 16 mutation
+                            # suites + formal + generated-doc/doc gates, exits 0
+                            # evidence: reviews/2026-09-28/V1.0-GATE.log
 ./regress/run_all.sh --fast     # same verdicts, parallel TB loop, 4-state iverilog
 bash reviews/2026-09-22/review2/run_repros.sh
                            # the seven second-review probes; exits 0
