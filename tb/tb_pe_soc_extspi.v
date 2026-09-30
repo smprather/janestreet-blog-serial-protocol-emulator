@@ -129,25 +129,41 @@ module tb_pe_soc_extspi;
   );
 
   // ---- request / response plumbing ----------------------------------------
-  integer req_fd, resp_fd, code, n_req, n_rsp, i, bit_i, errors;
+  integer n_req, n_rsp, i, bit_i, errors;
   reg [1023:0] req_path, resp_path;
   reg have_req, have_resp;
   integer period_ns;
   integer n_clocked, n_captured;
   reg [15:0] rx_shift;
   reg [7:0]  tx_word;
-  reg [7:0]  cap_words [0:MAX_WORDS-1];
+  reg [15:0] cap_words [0:MAX_WORDS-1];
 
   // Drive one bit pair per bit period. Mode 0: MOSI is presented while SCLK is
   // low and the chip samples on the RISE, so the value must be stable across
-  // the rising edge - hence set MOSI first, then raise SCLK.
-  task bit_xchg(input logic out_bit);
+  // THE SAMPLING POINT, taken from the testbench that already drives this slave
+  // correctly, tb_pe_ctrl_r2.v:116-133:
+  //
+  //     send: sclk=0, mosi=b, half, sclk=1, half
+  //     recv: sclk=0, half, q=miso, sclk=1, half
+  //
+  // Mode 0 means the SLAVE changes its output on the falling edge and the MASTER
+  // samples during the following LOW phase, before the next rise. My first two
+  // attempts both sampled at the rise: the first after the fall (one bit late) and
+  // the second just after the rise (one bit early, because the non-blocking
+  // assignments had already advanced the serializer). Neither showed in bite 1
+  // because the capture was all-0xFF and a shifted 0xFF is still 0xFF; with a real
+  // frame coming back the slip read as a corrupted SYNC word (a518 instead of
+  // a55a). So one task does both directions, sampling on the low phase exactly
+  // as the working testbench does.
+  task bit_xchg(input logic out_bit, output logic in_bit);
     begin
+      // low phase: present the next response bit, and drive our out bit
+      uio_in[SCK_BIT]  = 1'b0;
       uio_in[MOSI_BIT] = out_bit;
       #(period_ns/2);
-      uio_in[SCK_BIT]  = 1'b1;         // rising edge: the chip captures
+      in_bit = miso;                 // sample while SCLK is LOW
       #(period_ns/2);
-      uio_in[SCK_BIT]  = 1'b0;         // falling edge: the mode-0 change edge
+      uio_in[SCK_BIT]  = 1'b1;      // rising edge: the chip captures MOSI
       #(period_ns/2);
     end
   endtask
@@ -155,11 +171,12 @@ module tb_pe_soc_extspi;
   // Clock one 16-bit word out MSB-first and capture 16 bits back, MSB-first.
   task word_xchg(input [15:0] w_out, output [15:0] w_in);
     integer k;
+    logic mbit;
     begin
       w_in = 16'h0;
       for (k = 15; k >= 0; k = k - 1) begin
-        bit_xchg(w_out[k]);
-        w_in = {w_in[14:0], miso};     // sample after the rise
+        bit_xchg(w_out[k], mbit);
+        w_in = {w_in[14:0], mbit};
       end
     end
   endtask
@@ -168,19 +185,24 @@ module tb_pe_soc_extspi;
   initial begin
     have_req = 0; have_resp = 0; period_ns = 100;
     n_req = 0; n_rsp = 0; n_clocked = 0; n_captured = 0; errors = 0;
-    for (i = 0; i < MAX_WORDS; i = i + 1) cap_words[i] = 8'h00;
+    for (i = 0; i < MAX_WORDS; i = i + 1) cap_words[i] = 16'h0000;
     if (!$value$plusargs("period=%d", period_ns) || period_ns <= 0) period_ns = 100;
     if ($value$plusargs("req=%s", req_path))  have_req  = 1;
     if ($value$plusargs("resp=%s", resp_path)) have_resp = 1;
+    // Read budget. The default is the host's worst case for a zero-data
+    // response: 6 overhead + 0 data + 15 wait words (main.py:317-328,
+    // pe_frame.MAX_WAIT_WORDS=15). A caller can override with +nresp=<n>.
+    if (!$value$plusargs("nresp=%d", n_rsp) || n_rsp <= 0) n_rsp = 6 + 15;
   end
 
   // ---- main ----------------------------------------------------------------
-  integer fh, scan, w_in_tmp;
+  integer fh, scan, req_fd, resp_fd, code, w_in_tmp;
   reg [15:0] w_in;
   reg [15:0] words [0:MAX_WORDS-1];
 
   initial begin
     $display("tb_pe_soc_extspi: period=%0dns  host bus uio[4]=CS_N uio[5]=MOSI uio[6]=MISO uio[7]=SCK", period_ns);
+    $display("tb_pe_soc_extspi: request %0d word(s) + read budget %0d word(s), all inside one CS-low frame", n_req, n_rsp);
 
     // Release the host bus to a defined idle: CS high, SCLK low (mode 0 idle).
     uio_in[CS_BIT] = 1'b1;
@@ -218,25 +240,66 @@ module tb_pe_soc_extspi;
     #(20 * CLK_NS);
     $display("tb_pe_soc_extspi: out of reset, run=%0d, irq_n=%0d", ui_in[RUN_BIT], irq_n);
 
-    // ---- the transaction ----------------------------------------------------
-    // CS low selects the slave; the whole frame is inside it.
-    uio_in[CS_BIT] = 1'b0;
+  // ---- the transaction: REQUEST, then READ BUDGET, all inside one CS-low ----
+    //
+    // THE HALF-DUPLEX SHARED-CLOCK CONTRACT, and why bite 1 saw all-0xFF.
+    // pe_ctrl launches the response serializer when the last request word lands
+    // (pe_ctrl.v:1132-1136) and shifts it out on the SAME rising SCLK edges that
+    // carried the request. It RELEASES the pad on the CS RISING edge
+    // (pe_ctrl.v:716-723, resp_active/resp_hold_oe -> 0). So the host must:
+    //   CS low  -> clock the request words  -> KEEP CS LOW and keep clocking
+    //            to read the response     -> raise CS to end the frame.
+    // Bite 1 raised CS immediately after the request, which released the pad
+    // before a single response bit was clocked, so every capture read idle. The
+    // read budget is the one main.py:317-328 computes: 6 overhead words (sync,
+    // header, sequence, length, CRC, one slack) + data + 15 worst-case wait
+    // words. We read that many and let pe_frame.strip_wait_words drop the
+    // leading 0xFFFF fillers, exactly as the host does.
+    uio_in[CS_BIT] = 1'b0;              // CS low: select the slave
     #(period_ns);
+
+    // request words
     for (i = 0; i < n_req; i = i + 1) begin
       word_xchg(words[i], w_in);
       n_clocked = n_clocked + 1;
+    end
+
+    // ONE settle word after the request, captured like any other. pe_ctrl launches
+    // the response serializer on the rising edge that completes the last request
+    // word (pe_ctrl.v:1132-1136, resp_active<=1), so the first read clock lands ON
+    // the launch edge: resp_active and resp_idx are being assigned that same edge and
+    // the pad has not yet presented the first RESPONSE bit. Sampling there captured
+    // the launch transient (the first byte came back a5 - the real SYNC high byte -
+    // followed by garbage, because the serializer had not yet shifted). A settle
+    // word lets the launch complete; if the chip is genuinely answering, the first
+    // settle word is a wait word (0xFFFF) that strip_wait_words removes, and if the
+    // chip is NOT answering, the settle word is 0xFFFF too and the decode still
+    // fails - so this costs correctness nothing and only removes a race.
+    word_xchg(16'h0000, w_in);          // settle/launch clock, MOSI idle
+    n_clocked = n_clocked + 1;
+    if (n_captured < MAX_WORDS) begin
+      cap_words[n_captured] = w_in;      // the WHOLE word, not just its high byte
+      n_captured = n_captured + 1;
+    end
+
+    // read budget: keep CS low, keep clocking. The response words are captured
+    // from here on. n_rsp defaults to the worst case the host uses.
+    for (i = 0; i < n_rsp; i = i + 1) begin
+      word_xchg(16'h0000, w_in);        // MOSI idle during the read
+      n_clocked = n_clocked + 1;
       if (n_captured < MAX_WORDS) begin
-        cap_words[n_captured] = w_in[15:8];
+        cap_words[n_captured] = w_in;    // the WHOLE word
         n_captured = n_captured + 1;
       end
     end
-    uio_in[CS_BIT] = 1'b1;         // CS high ends the frame
+
+    uio_in[CS_BIT] = 1'b1;               // CS high ends the frame
     #(period_ns);
 
     // ---- report -------------------------------------------------------------
     $display("tb_pe_soc_extspi: clocked %0d word(s), captured %0d", n_clocked, n_captured);
     for (i = 0; i < n_captured; i = i + 1)
-      $display("  resp[%0d] = 0x%02h", i, cap_words[i]);
+      $display("  resp[%0d] = 0x%04h", i, cap_words[i]);
 
     if (have_resp) begin
       resp_fd = $fopen(resp_path, "w");
@@ -244,15 +307,15 @@ module tb_pe_soc_extspi;
         $display("FAIL: cannot open +resp=%0s for writing", resp_path);
         $finish;
       end
-      for (i = 0; i < n_captured; i = i + 1) $fdisplay(resp_fd, "%02h", cap_words[i]);
+      for (i = 0; i < n_captured; i = i + 1) $fdisplay(resp_fd, "%04h", cap_words[i]);
       $fclose(resp_fd);
       $display("tb_pe_soc_extspi: wrote %0d word(s) to %0s", n_captured, resp_path);
     end
 
-    if (n_clocked == n_req && n_req > 0) begin
-      $display("PASS: %0d word(s) clocked out and %0d clocked back in", n_clocked, n_captured);
+    if (n_clocked == (n_req + n_rsp + 1) && n_req > 0) begin
+      $display("PASS: %0d word(s) clocked out (request %0d + settle 1 + read budget %0d), %0d captured", n_clocked, n_req, n_rsp, n_captured);
     end else begin
-      $display("FAIL: clocked %0d of %0d requested word(s)", n_clocked, n_req);
+      $display("FAIL: clocked %0d, expected %0d (request %0d + settle 1 + read budget %0d)", n_clocked, n_req + n_rsp + 1, n_req, n_rsp);
     end
     $finish;
   end
