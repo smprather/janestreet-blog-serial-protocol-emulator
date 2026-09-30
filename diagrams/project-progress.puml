@@ -199,7 +199,7 @@ package "Timing acts as firmware (fw-timing)\nsame CPU, pin matrix, and TWO tick
   component "MIDI 31.25k\n8N1" as p_midi <<complete>>
   component "DMX512-A 250k\n8N2" as p_dmx <<complete>>
   component "7 timing acts\n(fw-timing)" as p_time <<complete>>
-  component "HC-SR04 ranging\ntb NOT wired into run_all.sh;\n5 checks fail standalone" as p_sr04 <<open>>
+  component "HC-SR04 ranging\ntb wired into run_all.sh; PASS\n3 distances, exact" as p_sr04 <<complete>>
   cpu --> p_midi
   cpu --> p_dmx
   cpu --> p_time
@@ -248,8 +248,8 @@ package "Parallel worktree fleet" {
 
 package "Per-act protocol figures — documentation" {
   component "proto-<act>   13 acts\ndht11 dmx512 ds18b20 fm-biphase\nfreqmeter i2c-adv midi nec-ir\nservo spi3-crc sr04 uart-flow ws2812" as pf_act <<complete>>
-  component "proto-<act>-frame\nthe encoding layer, 7 acts" as pf_frame <<complete>>
-  component "proto-<act>-timing\nthe cell layer, 7 acts" as pf_timing <<complete>>
+  component "proto-<act>-frame\nthe encoding layer, 8 acts" as pf_frame <<complete>>
+  component "proto-<act>-timing\nthe cell layer, 8 acts" as pf_timing <<complete>>
   pf_act --> pf_frame : pf_frame --> pf_timing
 }
 
@@ -283,35 +283,40 @@ pf_timing -[hidden]down-> doc_frame
 note bottom of pf_act
   29 figures across 13 act families, on a naming convention rather than a
   convention-free pile: bare `proto-<act>` is the act's own figure, `-frame`
-  and `-timing` split it into the encoding and cell/cadence layers. Seven acts
-  carry all three (dht11, ds18b20, fm-biphase, freqmeter, nec-ir, servo, sr04);
-  the other six carry the bare figure only. The maps name the convention
+  and `-timing` split it into the encoding and cell/cadence layers. Eight acts
+  carry all three (dht11, ds18b20, fm-biphase, freqmeter, nec-ir, servo, sr04,
+  ws2812); the other five carry the bare figure only. Counted from diagrams/,
+  2026-09-29. The maps name the convention
   instead of listing 29 nodes, because a list that long stops being a map.
 end note
 
 note bottom of p_sr04
-  MEASURED, NOT INHERITED -- and the measurement CORRECTS the brief this map
+  MEASURED, NOT INHERITED -- and the measurement CORRECTED the brief this map
   was drawn from, which listed the FREQMETER testbench as the deliberate WIP.
-  Run standalone from tb/ on 2026-09-25:
+  Measured standalone from tb/ on 2026-09-25:
 
     tb_pe_soc_freqmeter   PASS: all checks -- every banked point inside spec
                           (the sweep and its endpoints belong to
                           wiki/concepts/protocol-freqmeter.md, which links
                           proto-freqmeter)
-    tb_pe_soc_sr04        FAIL: 5 checks -- the firmware banks only one of two
-                          measurements and the trigger pulse is one clock long
-                          (the readings belong to
-                          wiki/concepts/protocol-sr04.md, which links
-                          proto-sr04)
 
-  The freqmeter is GREEN. The act that is genuinely WIP is HC-SR04, and it is
-  worse than red: tb_pe_soc_sr04.v is NOT wired into run_all.sh, so a green
-  suite is currently SILENT about it rather than reporting it.
+  The freqmeter is GREEN.
+
+  **HC-SR04 is NOW GREEN TOO, and this note is the second half of that story.**
+  On 2026-09-25 it was FAIL: 5 checks -- the firmware banked only one of two
+  measurements and the trigger pulse was one clock long -- AND it was not wired
+  into run_all.sh, so a green suite was SILENT about it. Both conditions are
+  resolved: the act was fixed, tb_pe_soc_sr04 is wired into run_all.sh with its
+  self-expiring WIP marking removed, and re-measured 2026-09-29 it reports
+  PASS on three distances (1160, 2000 and 8000 us echoes -> 199, 343 and
+  1375 mm, each exact). The readings belong to wiki/concepts/protocol-sr04.md,
+  which links proto-sr04.
 
   Recorded rather than smoothed because the correction cuts against the
-  instruction: the project rule is that a local measurement is not a project
-  claim, and that cuts both ways -- a brief is not a measurement either. Both
-  numbers above are reproducible with one command. Flagged to the manager.
+  instruction both times: the project rule is that a local measurement is not a
+  project claim, and that cuts both ways -- a brief is not a measurement either,
+  and a measurement is not a permanent one. Both sets of numbers above are
+  reproducible with one command.
 
   The first attempt at this measurement was a FALSE RED, and it is worth
   naming: run from the repo ROOT the TB cannot open ../firmware/freqmeter.hex

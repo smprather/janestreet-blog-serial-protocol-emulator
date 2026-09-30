@@ -114,7 +114,7 @@ package "R3 debug control — landed 2026-09-25" {
 package "Protocol and timing acts as firmware\none CPU, one pin matrix, TWO tick counters" {
   component "Protocol acts\nI2C adv, SPI m3+CRC, UART RTS/CTS,\nMIDI 31.25k, DMX512-A 250k" as p_proto
   component "Timing acts\nWS2812, servo, DHT11, DS18B20,\nNEC IR, stepper, freqmeter" as p_timing
-  component "HC-SR04 ranging\nplanned; the TB is not wired\ninto run_all.sh yet" as p_sr04
+  component "HC-SR04 ranging\nintegrated; tb wired into run_all.sh" as p_sr04
   cpu --> p_proto : programs
   cpu --> p_timing : programs
   cpu --> p_sr04 : programs
@@ -125,8 +125,8 @@ package "Protocol and timing acts as firmware\none CPU, one pin matrix, TWO tick
 
 package "Per-act protocol figures — one family per firmware persona act" {
   component "proto-<act>   the act's own figure\ndht11 · dmx512 · ds18b20 · fm-biphase\nfreqmeter · i2c-adv · midi · nec-ir\nservo · spi3-crc · sr04 · uart-flow · ws2812" as pf_act
-  component "proto-<act>-frame\nthe frame / encoding layer\n7 of the 13 acts carry one" as pf_frame
-  component "proto-<act>-timing\nthe cell / cadence layer\n7 of the 13 acts carry one" as pf_timing
+  component "proto-<act>-frame\nthe frame / encoding layer\n8 of the 13 acts carry one" as pf_frame
+  component "proto-<act>-timing\nthe cell / cadence layer\n8 of the 13 acts carry one" as pf_timing
   pf_act --> pf_frame : pf_frame --> pf_timing
 }
 
@@ -248,10 +248,11 @@ end note
 note bottom of pf_act
   29 figures across 13 act families, on a deliberate naming convention: the
   bare `proto-<act>` is the act's own figure, and `-frame` and `-timing` split
-  it into the encoding layer and the cell/cadence layer. Seven acts carry all
-  three (dht11, ds18b20, fm-biphase, freqmeter, nec-ir, servo, sr04); the other
-  six carry the bare figure only, because those acts have one story to tell
-  rather than two layers over it.
+  it into the encoding layer and the cell/cadence layer. Eight acts carry all
+  three (dht11, ds18b20, fm-biphase, freqmeter, nec-ir, servo, sr04,
+  ws2812); the other five carry the bare figure only, because those acts have
+  one story to tell rather than two layers over it. Counted from diagrams/,
+  2026-09-29.
 
   The maps name the whole convention rather than listing 29 nodes, because a
   list that long stops being a map. What matters for a reader is that the
@@ -275,10 +276,13 @@ note bottom of p_docframe
 end note
 
 note bottom of p_sr04
-  HC-SR04 ranging is PLANNED, and is the one firmware act whose testbench is
-  not wired into run_all.sh -- so a green suite is currently SILENT about it.
-  Measured standalone 2026-09-25: 5 checks fail. See the progress map, which
-  records the measurement rather than the intention.
+  HC-SR04 ranging is INTEGRATED. The act was red on 2026-09-25 - its testbench
+  was not wired into run_all.sh and 5 checks failed standalone - and that was
+  recorded here as a claim hazard, because an unwired red act makes a green
+  suite SILENT about it. Both are now resolved: tb_pe_soc_sr04 is wired into
+  run_all.sh with its self-expiring WIP marking removed, and it reports
+  PASS on three distances (1160, 2000 and 8000 us echoes -> 199, 343 and
+  1375 mm, each exact). Re-measured 2026-09-29, not inherited.
 end note
 
 note bottom of pads
