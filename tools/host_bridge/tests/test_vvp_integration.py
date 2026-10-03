@@ -10,9 +10,10 @@ re-test of the bridge.
 
 WHAT THIS ESTABLISHES, precisely. A PING is encoded by the real ``pe_frame``
 codec, clocked onto the real chip's SPI host-slave, and the chip's response must
-decode through the same codec with a VERIFIED CRC-16 and RESPONSE_BIT set. A frame
-with a deliberately corrupted CRC must FAIL to decode. Those two together are
-what make this a test: a check that passed on garbage would satisfy neither.
+decode through the same codec with a VERIFIED CRC-16, RESPONSE_BIT set and
+STATUS_OK. A frame with a deliberately corrupted CRC must FAIL to decode. Those two
+together are what make this a test: a check that passed on garbage would satisfy
+neither.
 
 WHAT IT DOES NOT ESTABLISH, and this is the load-bearing caveat. USB
 enumeration, real SPI timing and setup, board power and clock configuration, and
@@ -29,16 +30,25 @@ WHERE THE REAL CHIP AND FakePE GENUINELY DIFFER, stated rather than papered over
     is replaced by the wire-visible equivalent, or skipped with a reason.
   * ``irq_n()`` returns None. Every IRQ- and liveness-dependent assertion is
     SKIPPED with an explicit reason. None is faked, and none is weakened to pass.
+  * Every exchange is a SEPARATE vvp run, and tb_pe_soc_extspi.v resets the chip
+    and holds run low at the start of each one (VvpTTAdapter.reset and set_run
+    only record the call). No chip state - loaded IMEM, run - carries from one
+    exchange to the next, so an assertion about what an EARLIER exchange did
+    cannot pass over this adapter. That is a limit of the backend, not a chip
+    result.
 
-TWO REPORTED DEFECTS, deliberately not patched here, because the manager gates the
-files they live in. See the module's docstring notes below and the WORKLOG entry.
+The two adapter defects this lane first reported (the testbench path missing
+``../`` for the regress cwd, and ``+read_words=`` where the testbench reads
+``+nresp=``) were fixed in vvp_adapter.py at 7de9775; see the WORKLOG entry.
 """
 
 from __future__ import annotations
 
 import json
-import os
+import shutil
+import subprocess
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 from tools.host_bridge import main as M
@@ -52,53 +62,79 @@ from tools.host_gui.session import (
 from tools.host_gui.tests.fakes import LoopbackPort
 from tools.host_gui.transport import SerialTransport
 
-REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__)))))
-GOLDEN = os.path.join(REPO, "tools", "host_bridge", "tests",
-                      "golden_vectors.json")
+REPO = str(Path(__file__).resolve().parents[3])
+GOLDEN = Path(__file__).resolve().parent / "golden_vectors.json"
 
 PROJECT = "tt_um_protocol_emulator"
 # Same image the fake-chip test uses, so the two lanes are comparable.
 WORDS = (0x0041, 0x1001, 0x4002)
 
+# pe_frame's status codes by value, so a refusal is reported by name.
+_STATUS_NAMES = {
+    value: name for name, value in vars(F).items() if name.startswith("STATUS_")
+}
 
-class _VvpSkip(Exception):
-    """Raised to skip with a REASON that names the missing capability."""
+
+def setUpModule():
+    """Skip this lane, and say why, on a host that cannot run the simulator.
+
+    tools/host_gui/run_host_tests.sh discovers this directory, and the host gate
+    promises to need nothing but python3, so a missing simulator or PDK SRAM model
+    is a SKIP that names what is missing (the convention the node-backed tests
+    follow), never an ERROR that turns that gate red for a reason it says it does
+    not cover. It is not a substitution: nothing here falls back to a fake chip,
+    and the chip gate still fails loudly without the model.
+    """
+    missing = [tool for tool in ("iverilog", "vvp") if shutil.which(tool) is None]
+    if missing:
+        raise unittest.SkipTest(f"simulator not on PATH: {', '.join(missing)}")
+    sram = subprocess.run(
+        [str(Path(REPO, "regress", "sram_model.sh"))],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if sram.returncode != 0:
+        raise unittest.SkipTest("PDK SRAM model unavailable (regress/sram_model.sh)")
+
+
+def _bring_up(adapter):
+    """Run the bridge's own connect sequence - hello, then prepare - on ``adapter``.
+
+    The direct-adapter tests bypass the session, so they must do this
+    themselves: VvpTTAdapter refuses a transfer before configure_host_spi()
+    (vvp_adapter.py:218), and that refusal is the adapter correctly enforcing the
+    HAL contract rather than a defect. Driving PicoBridge's own handlers, rather
+    than re-typing their HAL calls, keeps this exactly what main.py does on
+    connect - prepare's reset pulse and its SCLK rule included - by construction
+    instead of by copy.
+    """
+    bridge = M.PicoBridge(adapter, project=PROJECT, sleep=lambda _seconds: None)
+    for request_id, op in enumerate(("hello", "prepare"), start=1):
+        response = bridge.handle(M.USBRequest(request_id, op))
+        if not response.ok:
+            raise RuntimeError(f"bring-up {op!r} failed: {response.error}")
 
 
 class TestRealBridgeOverRealChip(unittest.TestCase):
     """The mirror of TestHostOverRealBridge, with the real chip in the seat."""
 
     def setUp(self):
-        # One adapter per test: it owns a vvp process and a scratch directory,
-        # and _start() compiles the 16-file wrapper ONCE, so the second and later
-        # exchanges in a test are vvp runs rather than compiles.
+        # One adapter per test: it owns a scratch directory, and _start()
+        # compiles the 16-file wrapper ONCE, so the second and later exchanges in
+        # a test are vvp runs rather than compiles - each a FRESH simulation from
+        # reset (see the module docstring), not one long-lived chip.
         self.adapter = VvpTTAdapter(repo_root=REPO)
-        self.bridge = M.PicoBridge(self.adapter, project=PROJECT,
-                                   sleep=lambda _seconds: None)
+        # Registered the moment the scratch directory exists: if a later setUp
+        # step raises, tearDown never runs, and a cleanup still does.
+        self.addCleanup(self.adapter.close)
+        self.bridge = M.PicoBridge(
+            self.adapter, project=PROJECT, sleep=lambda _seconds: None
+        )
         self.port = LoopbackPort(self.bridge)
         self.transport = SerialTransport(self.port, timeout_s=10.0)
         self.session = ControllerSession(lambda: self.transport)
-        self.image = SimpleNamespace(words=WORDS, word_count=len(WORDS),
-                                     sha256="ab" * 32)
-
-    def _bring_up(self):
-        """The HAL sequence the bridge performs on connect.
-
-        The direct-adapter tests bypass the session, so they must do this
-        themselves: VvpTTAdapter refuses a transfer before configure_host_spi()
-        (vvp_adapter.py:218), and that refusal is the adapter correctly
-        enforcing the HAL contract rather than a defect. Doing it by hand here is
-        exactly what main.py does on connect.
-        """
-        self.adapter.enable_project(PROJECT)
-        self.adapter.set_clock(60_000_000)
-        self.adapter.reset(False)
-        self.adapter.set_run(False)
-        self.adapter.configure_host_spi(5_000_000)
-
-    def tearDown(self):
-        self.adapter.close()
+        self.image = SimpleNamespace(words=WORDS, word_count=len(WORDS), sha256="ab" * 32)
 
     # ---- the round trip, same steps and same assertions as the fake-chip lane --
     def test_connect_load_start_status_stop_dump_round_trip(self):
@@ -153,18 +189,35 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
         produces a decodable frame, so it uses the adapter directly and checks
         the bytes with pe_frame, which is the same codec the Pico bridge runs.
         """
-        self._bring_up()
+        _bring_up(self.adapter)
         frame = F.encode_frame(F.OP_PING, 7, F.TARGET_HOST)
-        raw = self.adapter.host_spi_transfer(frame, read_words=6 + 15)
-        self.assertGreater(len(raw), 0, "the chip returned nothing at all")
+        # Twice the testbench's built-in default budget (6 + 15, which is also what
+        # the bridge asks for on a PING): if the +nresp plumbing fixed at 7de9775
+        # ever broke again, the testbench would fall back to that default and this
+        # capture would come back short, so the PING guards that fix as well.
+        read_words = 2 * (6 + 15)
+        raw = self.adapter.host_spi_transfer(frame, read_words=read_words)
+        self.assertGreaterEqual(
+            len(raw), 2 * read_words, "the read budget never reached the testbench"
+        )
 
         # Same rule the host uses: leading 0xFFFF wait words are the R2 contract,
-        # so strip them before decoding and do NOT assume zero.
-        decoded = F.decode_frame(F.strip_wait_words(raw))
-        self.assertTrue(decoded.opcode & F.RESPONSE_BIT,
-                        "response opcode lacks RESPONSE_BIT")
-        self.assertEqual(decoded.opcode & 0x7F, F.OP_PING)
+        # so strip them before decoding and do NOT assume zero. A chip that does
+        # not answer still fills the whole read budget (an idle pad reads 0xFFFF),
+        # so it is the decode, not the byte count, that tells a silent chip apart.
+        try:
+            decoded = F.decode_frame(F.strip_wait_words(raw))
+        except F.FrameError as exc:
+            self.fail(f"the chip's answer did not decode: {exc}")
+        self.assertEqual(
+            decoded.opcode, F.OP_PING | F.RESPONSE_BIT, "not a response to the PING"
+        )
         self.assertEqual(decoded.sequence, 7)
+        self.assertEqual(decoded.target, F.TARGET_HOST)
+        # A refusal is a CRC-valid response too: pe_ctrl echoes the opcode and
+        # sequence of a request it REJECTS (BAD_FRAME, UNSUPPORTED), so only the
+        # status word says the chip accepted the PING.
+        self.assertEqual(decoded.payload, (F.STATUS_OK,), "the chip refused the PING")
 
     # ---- the negative: a corrupted frame must NOT decode --------------------
     def test_a_corrupted_frame_does_not_decode(self):
@@ -176,7 +229,7 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
         """
         good = F.encode_frame(F.OP_PING, 7, F.TARGET_HOST)
         bad = bytearray(good)
-        bad[-1] ^= 0x01                      # flip one bit of the CRC
+        bad[-1] ^= 0x01  # flip one bit of the CRC
         with self.assertRaises(F.FrameError):
             F.decode_frame(F.strip_wait_words(bytes(bad)))
 
@@ -196,37 +249,39 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
         # Asserting liveness on it would manufacture a signal nothing measured.
         # The fake-chip lane covers the IRQ path against FakePE; that path is
         # BLOCKED-ON-A-REAL-CHIP-CAPABILITY here, not skipped for convenience.
-        with self.assertRaises(_VvpSkip):
-            raise _VvpSkip(
-                "IRQ_N is not modelled per-call by tb_pe_soc_extspi.v, so the "
-                "chip.irq event and the liveness row are BLOCKED ON A REAL CHIP "
-                "CAPABILITY, not proven and not faked")
+        # skipTest, not an exception raised and caught inside assertRaises: that
+        # form reported this test as a PASS and never showed the reason.
+        self.skipTest(
+            "IRQ_N is not modelled per-call by tb_pe_soc_extspi.v, so the "
+            "chip.irq event and the liveness row are BLOCKED ON A REAL CHIP "
+            "CAPABILITY, not proven and not faked"
+        )
 
 
 class TestGoldenVectorsOnRealChip(unittest.TestCase):
     """The project's own golden frames, sent to the real chip.
 
     This is the deliverable number of the whole effort: how many of the recorded
-    frames the REAL RTL reproduces byte-exactly IN SIMULATION. A precise partial
-    result is worth far more than a green that hides it, so every vector reports
-    its own outcome and the reasons for any mismatch are named.
+    frames the REAL RTL accepts IN SIMULATION. A vector is "reproduced" only when
+    the chip answers THAT request - its opcode with RESPONSE_BIT, its sequence, its
+    target - with a CRC-valid frame carrying STATUS_OK. A CRC-valid REFUSAL
+    (STATUS_RANGE, STATUS_UNSUPPORTED, ...) is a decodable frame too, so it is
+    reported under "partial" with its status named, never counted.
+    golden_vectors.json records no expected replies, so this is not a byte-exact
+    comparison of what the chip sends back. A precise partial result is worth far
+    more than a green that hides it, so every vector reports its own outcome and
+    the reasons for any mismatch are named.
     """
 
     def setUp(self):
         self.adapter = VvpTTAdapter(repo_root=REPO)
+        self.addCleanup(self.adapter.close)  # the bring-up below can raise
         with open(GOLDEN, encoding="utf-8") as fh:
             self.golden = json.load(fh)["frames"]
-        # The same HAL bring-up the other class does: without it every vector
-        # fails the adapter's own precondition (configure_host_spi before a
-        # transfer) and the count reports a harness bug as a chip failure.
-        self.adapter.enable_project(PROJECT)
-        self.adapter.set_clock(60_000_000)
-        self.adapter.reset(False)
-        self.adapter.set_run(False)
-        self.adapter.configure_host_spi(5_000_000)
-
-    def tearDown(self):
-        self.adapter.close()
+        # The same bring-up the other class does: without it every vector fails
+        # the adapter's own precondition (configure_host_spi before a transfer)
+        # and the count reports a harness bug as a chip failure.
+        _bring_up(self.adapter)
 
     def test_golden_vectors_against_the_real_chip(self):
         self.assertGreater(len(self.golden), 0, "no golden frames to run")
@@ -238,35 +293,63 @@ class TestGoldenVectorsOnRealChip(unittest.TestCase):
             try:
                 raw = self.adapter.host_spi_transfer(frame, read_words=6 + 15)
             except VvpTTAdapterError as exc:
-                failed.append((name, f"adapter: {exc}"))
+                # The lane could not run this vector at all (vvp timeout, no
+                # response file, X on MISO): say so, rather than let it read as a
+                # chip that answered nothing.
+                failed.append((name, f"HARNESS, not a chip answer: {exc}"))
                 continue
             try:
-                F.decode_frame(F.strip_wait_words(raw))
+                answer = F.decode_frame(F.strip_wait_words(raw))
             except F.FrameError as exc:
-                # No decodable frame. On a target_loopback vector that is the
-                # CORRECT answer (the chip echoes to the loopback persona, not
-                # the host), so it is not automatically a defect.
+                # No decodable frame. Every vector here is answered on the host
+                # MISO - target_loopback too: it is an OP_TARGET request SENT to
+                # TARGET_HOST - so this is a real miss, never an expected one.
                 failed.append((name, f"no decodable frame: {exc}"))
                 continue
-            reproduced.append(name)
+            status = answer.payload[0] if answer.payload else None
+            if (answer.opcode, answer.sequence, answer.target) != (
+                v["opcode"] | F.RESPONSE_BIT,
+                v["sequence"],
+                v["target"],
+            ):
+                why = (
+                    f"answered opcode 0x{answer.opcode:02X} sequence "
+                    f"{answer.sequence} target {answer.target}, not this request"
+                )
+                partial.append((name, why))
+            elif status != F.STATUS_OK:
+                why = f"answered {_STATUS_NAMES.get(status, status)}, not STATUS_OK"
+                if v["opcode"] & F.RESPONSE_BIT:
+                    why += " (a RESPONSE frame sent as a request: refusing it is right)"
+                partial.append((name, why))
+            else:
+                reproduced.append(name)
 
-        print("\n  golden vectors against the REAL chip:")
-        print(f"    n vectors      : {len(self.golden)}")
-        print(f"    reproduced     : {len(reproduced)}  {reproduced}")
-        print(f"    not reproduced : {len(failed)}")
-        for name, why in failed:
-            print(f"      - {name}: {why}")
+        lines = [
+            "  golden vectors against the REAL chip:",
+            f"    n vectors      : {len(self.golden)}",
+            f"    reproduced     : {len(reproduced)}  {reproduced}",
+            "      (a STATUS_OK answer to that request; not a byte-exact match)",
+            f"    not reproduced : {len(failed)}",
+        ]
+        lines += [f"      - {name}: {why}" for name, why in failed]
         if partial:
-            print(f"    partial        : {len(partial)}")
-            for name, why in partial:
-                print(f"      - {name}: {why}")
+            lines.append(f"    partial        : {len(partial)}")
+            lines += [f"      - {name}: {why}" for name, why in partial]
+        report = "\n".join(lines)
+        # Flushed, so a redirected run keeps the report next to this test instead
+        # of after the runner's summary; and carried in the failure message, so a
+        # failing run states its reasons even when stdout is buffered away.
+        print("\n" + report, flush=True)
 
         # The number is reported; the threshold is deliberately low so the test
         # proves the LANE runs end to end. Raising it is a judgement about what
         # the chip should do, not about whether this harness works.
         self.assertGreater(
-            len(reproduced), 0,
-            "the real chip answered NO golden frame - the lane is not proven")
+            len(reproduced),
+            0,
+            "NO golden frame was reproduced - the lane is not proven\n" + report,
+        )
 
 
 if __name__ == "__main__":
