@@ -79,7 +79,8 @@ class VvpTTAdapter:
             self.repo_root = repo_root
         else:
             self.repo_root = os.path.dirname(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
         self.tb = tb
         self.period_ps = period_ps
         self.vvp_timeout_s = vvp_timeout_s
@@ -107,14 +108,12 @@ class VvpTTAdapter:
                         return line.strip().split("|")[1].split()
         except OSError as exc:
             raise VvpTTAdapterError(f"cannot read {run_all}: {exc}") from exc
-        raise VvpTTAdapterError(
-            "could not find the wrapper source list in run_all.sh")
+        raise VvpTTAdapterError("could not find the wrapper source list in run_all.sh")
 
     def _sram_files(self) -> list[str]:
         sram = os.path.join(self.repo_root, "regress", "sram_model.sh")
         try:
-            res = subprocess.run(
-                [sram], capture_output=True, text=True, check=True)
+            res = subprocess.run([sram], capture_output=True, text=True, check=True)
         except (OSError, subprocess.CalledProcessError) as exc:
             raise VvpTTAdapterError(f"sram_model.sh failed: {exc}") from exc
         return res.stdout.split()
@@ -124,13 +123,23 @@ class VvpTTAdapter:
             return
         out = os.path.join(self._workdir, "sim.vvp")
         cmd = [
-            "iverilog", "-g2012", "-s", self.tb, "-o", out,
-            *self._rtl_list(), *self._sram_files(),
-            os.path.join("tb", f"{self.tb}.v"),
+            "iverilog",
+            "-g2012",
+            "-s",
+            self.tb,
+            "-o",
+            out,
+            *self._rtl_list(),
+            *self._sram_files(),
+            os.path.join("..", "tb", f"{self.tb}.v"),
         ]
         res = subprocess.run(
-            cmd, cwd=os.path.join(self.repo_root, "regress"),
-            capture_output=True, text=True, check=False)
+            cmd,
+            cwd=os.path.join(self.repo_root, "regress"),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         if res.returncode != 0:
             raise VvpTTAdapterError(f"compile failed: {res.stderr[:400]}")
         self._vvp_path = out
@@ -149,20 +158,26 @@ class VvpTTAdapter:
             raise VvpTTAdapterError(f"cannot stage the request: {exc}") from exc
 
         cmd = [
-            "vvp", str(self._vvp_path),
-            f"+req={req}", f"+resp={resp}", f"+period={self.period_ps}",
-            f"+read_words={resp_words}",
+            "vvp",
+            str(self._vvp_path),
+            f"+req={req}",
+            f"+resp={resp}",
+            f"+period={self.period_ps}",
+            f"+nresp={resp_words}",
         ]
         try:
             res = subprocess.run(
-                cmd, cwd=os.path.join(self.repo_root, "regress"),
-                capture_output=True, text=True, check=False,
-                timeout=self.vvp_timeout_s)
+                cmd,
+                cwd=os.path.join(self.repo_root, "regress"),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=self.vvp_timeout_s,
+            )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise VvpTTAdapterError(f"vvp did not complete: {exc}") from exc
         if res.returncode != 0:
-            raise VvpTTAdapterError(
-                f"vvp exited {res.returncode}: {res.stdout[-400:]}")
+            raise VvpTTAdapterError(f"vvp exited {res.returncode}: {res.stdout[-400:]}")
         try:
             with open(resp, "r", encoding="utf-8") as fh:
                 return [int(l.strip(), 16) for l in fh if l.strip()]
@@ -188,8 +203,7 @@ class VvpTTAdapter:
         self.calls.append(("configure_host_spi", sclk_hz))
         self._configured = True
 
-    def host_spi_transfer(self, data: bytes,
-                          read_words: int | None = None) -> bytes:
+    def host_spi_transfer(self, data: bytes, read_words: int | None = None) -> bytes:
         """Exchange one framed request; return the RAW response byte stream.
 
         Mirrors TTAdapter: CS_N low for the whole frame, the request MSB-first
@@ -201,11 +215,9 @@ class VvpTTAdapter:
         project already got wrong once.
         """
         if not self._configured:
-            raise VvpTTAdapterError(
-                "configure_host_spi() must run before a transfer")
+            raise VvpTTAdapterError("configure_host_spi() must run before a transfer")
         self.calls.append(("spi_transfer", len(data)))
-        req_words = [(data[i] << 8) | data[i + 1]
-                     for i in range(0, len(data) - 1, 2)]
+        req_words = [(data[i] << 8) | data[i + 1] for i in range(0, len(data) - 1, 2)]
         if len(data) % 2:
             req_words.append(data[-1])  # defensive; frames are word-aligned
         total = max(1, len(req_words)) if read_words is None else max(1, read_words)
