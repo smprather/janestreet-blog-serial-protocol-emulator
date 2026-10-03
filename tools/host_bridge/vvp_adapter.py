@@ -67,8 +67,9 @@ class VvpTTAdapter:
         repo_root: str | None = None,
         *,
         tb: str = "tb_pe_soc_extspi",
-        period_ps: int = 200,
+        period_ns: int = 200,
         vvp_timeout_s: float = 30.0,
+        compile_timeout_s: float = 300.0,
     ) -> None:
         # repo_root defaults to the repo this file lives in:
         # tools/host_bridge/vvp_adapter.py -> up three levels is the repo root.
@@ -82,7 +83,11 @@ class VvpTTAdapter:
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             )
         self.tb = tb
-        self.period_ps = period_ps
+        # +period is in NANOSECONDS (tb_pe_soc_extspi.v, "TIMING"); the old name
+        # period_ps was a 1000x unit error in the name. configure_host_spi()
+        # derives it from the negotiated SCLK.
+        self.period_ns = period_ns
+        self.compile_timeout_s = compile_timeout_s
         self.vvp_timeout_s = vvp_timeout_s
         self._workdir = tempfile.mkdtemp(prefix="pe-vvp-")
         self._vvp_path: str | None = None
@@ -113,8 +118,18 @@ class VvpTTAdapter:
     def _sram_files(self) -> list[str]:
         sram = os.path.join(self.repo_root, "regress", "sram_model.sh")
         try:
-            res = subprocess.run([sram], capture_output=True, text=True, check=True)
-        except (OSError, subprocess.CalledProcessError) as exc:
+            res = subprocess.run(
+                [sram],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=self.compile_timeout_s,
+            )
+        except (
+            OSError,
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+        ) as exc:
             raise VvpTTAdapterError(f"sram_model.sh failed: {exc}") from exc
         return res.stdout.split()
 
@@ -133,13 +148,19 @@ class VvpTTAdapter:
             *self._sram_files(),
             os.path.join("..", "tb", f"{self.tb}.v"),
         ]
-        res = subprocess.run(
-            cmd,
-            cwd=os.path.join(self.repo_root, "regress"),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        try:
+            res = subprocess.run(
+                cmd,
+                cwd=os.path.join(self.repo_root, "regress"),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=self.compile_timeout_s,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            # A missing iverilog (FileNotFoundError) or a hung compile is a
+            # harness fault: report it as one, in the adapter's own error type.
+            raise VvpTTAdapterError(f"iverilog did not complete: {exc}") from exc
         if res.returncode != 0:
             raise VvpTTAdapterError(f"compile failed: {res.stderr[:400]}")
         self._vvp_path = out
@@ -162,7 +183,7 @@ class VvpTTAdapter:
             str(self._vvp_path),
             f"+req={req}",
             f"+resp={resp}",
-            f"+period={self.period_ps}",
+            f"+period={self.period_ns}",
             f"+nresp={resp_words}",
         ]
         try:
@@ -190,8 +211,11 @@ class VvpTTAdapter:
         self._start()
 
     def set_clock(self, hz: int) -> int:
+        # The testbench clock is fixed at PROJECT_CLK_HZ (tb CLK_HZ). The HAL
+        # returns the clock actually running - as TTAdapter returns what the PWM
+        # got - so the bridge never derives SCLK from a clock it did not get.
         self.calls.append(("set_clock", hz))
-        return hz
+        return PROJECT_CLK_HZ
 
     def reset(self, active: bool) -> None:
         self.calls.append(("reset", bool(active)))
@@ -200,7 +224,14 @@ class VvpTTAdapter:
         self.calls.append(("set_run", bool(active)))
 
     def configure_host_spi(self, sclk_hz: int) -> None:
+        if sclk_hz <= 0:
+            raise VvpTTAdapterError(f"sclk_hz must be positive, got {sclk_hz}")
         self.calls.append(("configure_host_spi", sclk_hz))
+        # One testbench bit takes 1.5 x period_ns (bit_xchg: a full low phase,
+        # then a half high phase). Real SPI timing is hardware-only territory
+        # (item 11) either way; this keeps the period tied to the SCLK the
+        # bridge negotiated instead of a constant that ignored it.
+        self.period_ns = max(1, round(1_000_000_000 / sclk_hz))
         self._configured = True
 
     def host_spi_transfer(self, data: bytes, read_words: int | None = None) -> bytes:
@@ -239,17 +270,20 @@ class VvpTTAdapter:
         """
 
     def close(self) -> None:
-        """Release the scratch directory.
+        """Release the scratch directory. Safe to call more than once.
 
         Teardown must not raise and mask the failure that caused it, so the
-        error is recorded rather than swallowed or re-raised: a caller that
-        cares can still read ``cleanup_error``, and a caller that does not is
-        not interrupted by a leftover temp directory.
+        FIRST error is recorded in ``cleanup_error`` rather than swallowed or
+        re-raised. (``ignore_errors=True`` used to discard every error, so
+        ``cleanup_error`` could never be set.)
         """
-        try:
-            shutil.rmtree(self._workdir, ignore_errors=True)
-        except OSError as exc:
-            self.cleanup_error = exc
+
+        def record(_function, _path, exc):
+            if self.cleanup_error is None and isinstance(exc, OSError):
+                self.cleanup_error = exc
+
+        if os.path.isdir(self._workdir):
+            shutil.rmtree(self._workdir, onexc=record)
 
     def __enter__(self):
         return self
