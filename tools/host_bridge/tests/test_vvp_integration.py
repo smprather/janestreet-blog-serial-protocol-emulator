@@ -420,6 +420,13 @@ class TestGoldenVectorsOnRealChip(unittest.TestCase):
                 why = f"answered {_STATUS_NAMES.get(status, status)}, not STATUS_OK"
                 if v["opcode"] & F.RESPONSE_BIT:
                     why += " (a RESPONSE frame sent as a request: refusing it is right)"
+                elif name == "read_imem":
+                    # Not a defect: the vector asks for 32 words and a bounded
+                    # read answers at most 15 (pe_ctrl.v, R2 contract).
+                    why += (
+                        " (the CORRECT refusal: count 32 exceeds the 15-word"
+                        " bounded-read limit, pe_ctrl.v)"
+                    )
                 partial.append((name, why))
             else:
                 reproduced.append(name)

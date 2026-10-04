@@ -434,10 +434,11 @@ class TestBringupRunbook(unittest.TestCase):
         starts DEMANDING the old one instead, which is how the row was pinned
         at '18 read-path steps' after the chip confirmed all 22.
 
-        The row is selected as the markdown TABLE row that names the pattern.
-        The runbook also has a prose "Consequence for you" line that names
-        `r2_read_*`, and a first-match selector picked that prose line instead
-        of the triage row - which is what made this test fail.
+        The row is selected as the table row that names BOTH `r2_read_*` and
+        `FAIL`. The runbook also has a prose "Consequence for you" line that
+        names `r2_read_*` but not FAIL, and a first-match selector picked that
+        prose line instead of the triage row - which is what made this test
+        fail.
         """
         from tools.host_gui import r2_vectors as R2V
 
@@ -446,13 +447,15 @@ class TestBringupRunbook(unittest.TestCase):
         pending = len(evidence["pending_steps"])
         total = confirmed + pending
         text = read(BRINGUP)
-        rows = [
-            line
-            for line in text.splitlines()
-            if "r2_read_*" in line and line.lstrip().startswith("|")
+        matches = [
+            line for line in text.splitlines() if "r2_read_*" in line and "FAIL" in line
         ]
-        self.assertEqual(len(rows), 1, "the triage table needs one r2_read_* row")
-        row = rows[0]
+        self.assertEqual(
+            len(matches),
+            1,
+            "the triage table needs exactly one row naming r2_read_* and FAIL",
+        )
+        row = matches[0]
         self.assertNotIn("the 15 steps", row)
         self.assertIn(str(total), row)
         # never present a partial count as the package

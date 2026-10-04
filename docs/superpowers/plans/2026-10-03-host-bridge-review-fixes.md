@@ -19,7 +19,7 @@ commits it together with each task, so a lost session costs nothing.
 | 4 Test hygiene | DONE | `afcffca` |
 | 5 TTAdapter read budget (#1) | DONE, own commit, FLAGGED for the user | `f7b2baa` |
 | 6 Docs | DONE (Amendment A1 (d) recorded: design doc, RESUME-V1, WORKLOG) | `5d0caea` |
-| 7 Final verification | DONE, ALL STEPS GREEN. Step 3 `run_host_tests.sh` now exits 0 (11/11 `[ok]`, host gate PASS) after the reviewer-ruled TEST-SELECTOR fix in `test_docs.py`; the doc is untouched | this commit |
+| 7 Final verification | DONE, ALL STEPS GREEN. Step 3 `run_host_tests.sh` exits 0 (11/11 `[ok]`, host gate PASS). The failure was ruled PRE-EXISTING (fails at `63a0d49`/`dca7033`/`58e4903`; passes only back at `b435853`, before `d617513`'s prose line broke the first-match selector) and fixed by the reviewer-ruled TEST-SELECTOR change in `test_docs.py` (selects the table row naming BOTH `r2_read_*` and `FAIL`); the doc is untouched | this commit |
 | A2 RTL fix for the IMEM read defect | **NOT for the pi worker.** Needs a stronger agent and the user's sign-off; see Amendment A | |
 
 Decisions on record:
