@@ -19,7 +19,7 @@ commits it together with each task, so a lost session costs nothing.
 | 4 Test hygiene | DONE | `afcffca` |
 | 5 TTAdapter read budget (#1) | DONE, own commit, FLAGGED for the user | `f7b2baa` |
 | 6 Docs | DONE (Amendment A1 (d) recorded: design doc, RESUME-V1, WORKLOG) | `5d0caea` |
-| 7 Final verification | **BLOCKED at Step 3.** Steps 1, 2, 4 PASS; Step 3 `run_host_tests.sh` exits 1 on ONE PRE-EXISTING failure (not this plan): `test_docs.TestBringupRunbook.test_the_r2_triage_row_does_not_quote_a_stale_step_count` | see the note below; NOT fixed (out of scope) |
+| 7 Final verification | DONE with one ruled exception. Steps 1, 2, 4 PASS; Step 3 `run_host_tests.sh` exits 1 on ONE PRE-EXISTING failure, ruled out of scope by the reviewer (see the decision note) | this commit |
 | A2 RTL fix for the IMEM read defect | **NOT for the pi worker.** Needs a stronger agent and the user's sign-off; see Amendment A | |
 
 Decisions on record:
@@ -44,6 +44,16 @@ Decisions on record:
   for you" line) and asserts the current step total "22" is in it; the real
   triage row with "all 22 steps" is line 138. NOT fixed: neither file is in any
   task's Files block. Steps 1, 2 and 4 pass; Step 5 report delivered.
+- 2026-10-04 REVIEWER VERDICT (independently verified; do not re-litigate): the
+  Task 7 Step 3 failure
+  (`test_docs.TestBringupRunbook.test_the_r2_triage_row_does_not_quote_a_stale_step_count`)
+  is PRE-EXISTING. It fails at `63a0d49`, `dca7033` and `58e4903`, and passes
+  only back at `b435853`, before `d617513`'s "Consequence for you" prose line
+  broke the first-match selector. The chip gate's old green never covered this
+  host lane. Therefore Step 3 does not block Task 7, and NO fix is applied to
+  `docs/host-bridge-bringup.md` or `tools/host_gui/tests/test_docs.py` (neither
+  is in any task's Files block). `run_host_tests.sh` stays red on this one test
+  for a reason outside this plan.
 - #1 (Task 5) is the user's open decision; it is implemented as a revertable
   best effort.
 - 2026-10-04: Task 5 (#1) implemented as a revertable best effort: TTAdapter
