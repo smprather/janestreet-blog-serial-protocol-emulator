@@ -4,6 +4,29 @@
 resume is here or in `WORKLOG.md` (which is complete and authoritative). If you
 read only one file after the flush, read this one.
 
+## 2026-10-04 update: read this before anything below
+
+- **The live work is a plan with its own progress checkpoint:**
+  `docs/superpowers/plans/2026-10-03-host-bridge-review-fixes.md`. Read its
+  "Progress checkpoint" table first; it says which tasks are done (with commit
+  hashes), which is in flight, and what is left. A pi worker in tmux pane
+  `0:5.4` was executing it. Check that pane, `git log` and `git status` before
+  redoing anything.
+- **REAL CHIP DEFECT FOUND (2026-10-04):** every host IMEM read
+  (R2 `READ_IMEM`) returns the PREVIOUS address's word. The cause is
+  `rtl/pe_soc.v:391-394`, which captures the registered `imem_rdata` one edge
+  early. It was found by the new `+script` replay lane and verified
+  independently. **This puts a hole in "Chip side is DONE and GREEN" below:** no
+  earlier test read IMEM through the real SoC and memory. The user chose to
+  finish the harness work first, with the defect pinned by
+  `test_known_defect_*` tests, and to fix the RTL separately. That fix needs a
+  stronger agent and the user's sign-off (plan Amendment A2). Open question for
+  the user: was the design already submitted to a shuttle?
+- **Open user decision:** plan Task 5, the TTAdapter read budget (#1), lands as
+  its own revertable commit, flagged.
+- **Discipline:** checkpoint progress into these .md files (the plan's table,
+  WORKLOG) at every step. Sessions here end on rate limits without warning.
+
 ## Start here, in this order
 
 1. `WORKLOG.md` — the full record. The last ~12 entries cover everything below.

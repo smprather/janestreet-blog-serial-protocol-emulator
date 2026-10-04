@@ -5,6 +5,32 @@
 > for tracking. Do the tasks IN ORDER: later tasks call names that earlier tasks
 > create.
 
+## Progress checkpoint: read this first; update it at the end of EVERY task
+
+This is the live state. Whoever executes the plan (the pi worker in tmux pane
+`0:5.4`, or any agent that picks it up after it) updates this section and
+commits it together with each task, so a lost session costs nothing.
+
+| Task | State | Commit / note |
+|---|---|---|
+| 1 Harden VvpTTAdapter | DONE | `530496d` |
+| 2 Testbench `+script` | BUILT, NOT COMMITTED. Stopped at Step 6 by a real chip defect; **resume with Amendment A** | files in tree: `tb/tb_pe_soc_extspi.v`, `vvp_adapter.py`, `test_vvp_adapter.py`, `test_vvp_integration.py` |
+| 3 Session replay (#2 fix) | TODO, with Amendment A | |
+| 4 Test hygiene | TODO | |
+| 5 TTAdapter read budget (#1) | TODO, own commit, FLAGGED for the user | |
+| 6 Docs | TODO, and must record Amendment A's defect | |
+| 7 Final verification | TODO | |
+| A2 RTL fix for the IMEM read defect | **NOT for the pi worker.** Needs a stronger agent and the user's sign-off; see Amendment A | |
+
+Decisions on record:
+- 2026-10-04: the user chose "unblock first, fix the chip separately" for the
+  defect (Amendment A).
+- #1 (Task 5) is the user's open decision; it is implemented as a revertable
+  best effort.
+- Accepted ruling (manager, 2026-10-04): Task 2 Step 5's only stdout difference
+  was Icarus's `$finish called at <line>` trace; the captures were
+  byte-identical, so the step passes.
+
 **Goal:** Fix every open finding from the 2026-10-03 `/code-review max --fix` pass
 on `tools/host_bridge`. The headline item is that the real-bridge-over-real-chip
 round trip (`test_connect_load_start_status_stop_dump_round_trip`) fails on every
@@ -1756,6 +1782,182 @@ the plan's commits on `main`, unpushed.
     user's decision; nothing was pushed."
 
 ---
+
+## Amendment A (2026-10-04): the host IMEM read is one address stale
+
+### What the lane found (verified independently by the manager)
+
+After LOADing `0x0041 0x1001 0x4002`, `READ_IMEM(1, 2)` answers
+`(STATUS_OK, 0x0041, 0x1001)`, not `(STATUS_OK, 0x1001, 0x4002)`. Every host IMEM
+read returns the PREVIOUS address's word. The first word returned is whatever
+the bus last addressed: the halted CPU's fetch at 0.
+
+Root cause: `rtl/pe_soc.v:391-394` copies `imem_rdata` into `dbg_rd_data` on the
+REQUEST edge. But `pe_imem`'s read is registered (its header says "READ LATENCY
+IS ONE CYCLE", and both the SRAM macro and the `FLOP=1` array register it), so
+on that edge `imem_rdata` still holds the previous address's word. The comment
+right above the code says the answer "can only be captured on the next edge";
+the code does not do that.
+
+DMEM reads are correct, because `dmem_byte` is combinational.
+
+It was never caught because:
+- `tb/tb_pe_ctrl_r2.v` models the read port combinationally,
+- every `tb_pe_soc_*.v` ties `dbg_rd_req` to 0,
+
+so no test had ever read IMEM through the real SoC and memory. **The R2 "chip
+confirmed" status does not cover this path.**
+
+### A1: unblock the harness work (pi worker: do this now)
+
+The user's choice is to finish Tasks 2–7 now and fix the chip separately. Do
+NOT touch `rtl/`. Only the assertions about IMEM read VALUES change, and those
+are kept as **defect-pinning** tests rather than deleted: each asserts the exact
+stale answer and is named `test_known_defect_…`. Pinning the wrong value,
+rather than using `@unittest.expectedFailure`, means the test cannot pass for
+some unrelated reason. It fails the moment anything about the read changes,
+including the RTL fix; the RTL fix then flips it to the correct answer. Every
+other assertion stays strict.
+
+In `tools/host_bridge/tests/test_vvp_integration.py`:
+
+(a) After `_STATUS_NAMES = {…}`, add:
+
+```python
+# KNOWN CHIP DEFECT, found 2026-10-04 by this lane (plan Amendment A,
+# docs/superpowers/plans/2026-10-03-host-bridge-review-fixes.md):
+# rtl/pe_soc.v:391-394 copies imem_rdata on the REQUEST edge, but pe_imem's read
+# is registered, so every host IMEM read returns the PREVIOUS address's word -
+# READ_IMEM(1, 2) after loading 0x0041 0x1001 0x4002 answers (0x0041, 0x1001).
+# The tests named test_known_defect_* pin that exact wrong answer; every other
+# test leaves IMEM read VALUES to them. When the RTL is fixed, those tests fail:
+# change their expectation to the correct answer given in each docstring.
+```
+
+(b) In `TestExtspiTestbench`, add this helper and rewrite
+`test_chip_state_carries_from_one_transfer_to_the_next` to use it, then add the
+pinning test:
+
+```python
+    def _load_then_read(self, address, count):
+        """LOAD WORDS, then READ_IMEM(address, count), in ONE script; return the
+        decoded answer to the read."""
+        d = self._scratch()
+        load = F.encode_frame(F.OP_LOAD, 1, F.TARGET_HOST, F.words_to_bytes(WORDS))
+        read = F.encode_frame(
+            F.OP_READ_IMEM, 2, F.TARGET_HOST, F.words_to_bytes((address, count))
+        )
+        script = d / "script.txt"
+        script.write_text(
+            _xfer_line(load, 6 + 15) + "\n" + _xfer_line(read, 6 + count + 15) + "\n"
+        )
+        resp = d / "resp.txt"
+        r = self._vvp(f"+script={script}", f"+resp={resp}")
+        self.assertIn("PASS: script ran 2 transfer(s)", r.stdout, r.stdout)
+        captures = parse_captures(resp.read_text())
+        self.assertEqual(len(captures), 2)
+        return F.decode_frame(F.strip_wait_words(F.words_to_bytes(captures[1])))
+
+    def test_chip_state_carries_from_one_transfer_to_the_next(self):
+        """THE property the #2 fix needs: the LOAD is still there on the next
+        transfer, because both run in ONE simulation. A fresh chip's IMEM is X,
+        so its read could not even be captured. The read VALUES are the known
+        defect's test, below."""
+        answer = self._load_then_read(1, 2)
+        self.assertEqual(answer.opcode, F.OP_READ_IMEM | F.RESPONSE_BIT)
+        self.assertEqual(answer.sequence, 2)
+        self.assertEqual(answer.payload[0], F.STATUS_OK)
+        self.assertEqual(len(answer.payload), 1 + 2)
+
+    def test_known_defect_host_imem_read_is_one_address_stale(self):
+        """KNOWN CHIP DEFECT, pinned to its exact signature (see the note at the
+        top of this module). The CORRECT answer is (STATUS_OK, *WORDS[1:3]).
+        When the RTL fix makes this fail, change the expectation to that."""
+        answer = self._load_then_read(1, 2)
+        self.assertEqual(answer.payload, (F.STATUS_OK, WORDS[0], WORDS[1]))
+```
+
+(c) In Task 3, change three expectations, and add one pinning test to
+`TestRealBridgeOverRealChip`:
+
+- `test_a_load_is_still_there_on_the_next_exchange`: replace
+  `self.assertEqual(answer.payload, (F.STATUS_OK, *WORDS))` with
+
+  ```python
+        # A decodable STATUS_OK read of the right length proves the LOAD carried
+        # (a fresh chip's IMEM is X). The VALUES are the known defect's test.
+        self.assertEqual(answer.payload[0], F.STATUS_OK)
+        self.assertEqual(len(answer.payload), 1 + len(WORDS))
+  ```
+
+- `test_the_chip_itself_refuses_memory_reads_while_running`: replace the final
+  `self.assertEqual(_exchange(…).payload, (F.STATUS_OK, WORDS[0]))` with
+
+  ```python
+        # Value deliberately not checked: with the known defect, address 0's
+        # stale answer IS WORDS[0] (the halted CPU fetches 0), so it would pass
+        # for the wrong reason. Status and length are the gate's business.
+        answer = _exchange(self.adapter, read, 6 + 1 + 15)
+        self.assertEqual(answer.payload[0], F.STATUS_OK)
+        self.assertEqual(len(answer.payload), 2)
+  ```
+
+- In `test_connect_load_start_status_stop_dump_round_trip`, replace
+  `self.assertEqual(words, WORDS[1:3])` with
+
+  ```python
+        # The read path works end to end; its VALUES are
+        # test_known_defect_session_read_imem_is_one_address_stale.
+        self.assertEqual(len(words), 2)
+  ```
+
+- Add:
+
+  ```python
+    def test_known_defect_session_read_imem_is_one_address_stale(self):
+        """KNOWN CHIP DEFECT through the whole host stack (see the note at the
+        top of this module). The CORRECT answer is WORDS[1:3]. When the RTL fix
+        makes this fail, change the expectation to that."""
+        self.session.connect()
+        self.session.load(self.image)
+        self.session.start()
+        self.session.stop()
+        self.assertEqual(self.session.read_imem(1, 2), (WORDS[0], WORDS[1]))
+  ```
+
+  If this returns anything other than `(0x0041, 0x1001)`, STOP and report the
+  value. Do not adjust it to whatever comes back.
+
+(d) Task 6 must record the defect: a WORKLOG `CHIP-DEFECT` line (the manager
+has already written one; reference it), and a RESUME-V1 line saying the R2 host
+IMEM read path is defective in RTL and pinned by the two `test_known_defect_*`
+tests.
+
+(e) Commit Task 2 with the testbench and its tests, as the plan says, with the
+Amendment A changes (a)–(b) included. Then continue with Task 3, applying (c).
+
+### A2: the RTL fix (NOT for the pi worker; it needs a stronger agent and the user's sign-off)
+
+Proposed fix: keep the one-cycle host contract. In the `dbg_rd_valid` cycle,
+present IMEM data straight from the registered macro output. `imem_addr` is
+still the host's in that cycle, because `dbg_reading = dbg_rd_req |
+dbg_rd_valid`. `pe_ctrl` samples `dbg_rd_data` in exactly that cycle
+(`rtl/pe_ctrl.v:1223-1240`, `if (dbg_rd_valid) … <= dbg_rd_data`). So: capture
+only the DMEM byte and a `dmem` flag on the request edge, and drive
+`dbg_rd_data = dmem_q ? {8'h00, dmem_byte_q} : imem_rdata`.
+
+Before calling it fixed:
+1. Add a pe_soc-level testbench case that reads IMEM through the real `pe_imem`
+   at addresses 0, 1, 2 and checks the exact words.
+2. Flip both `test_known_defect_*` tests to the correct answers given in their
+   docstrings.
+3. Run `regress/tier.sh` T2, the formal proofs, the mutation suites, and the
+   R2/R3 vector drift checks.
+4. Confirm with the user whether the design was already submitted to a shuttle.
+   If it was, this is a silicon erratum, not just an RTL fix, and the host would
+   need a workaround. Read one EXTRA word from the same address and discard
+   the first: `READ_IMEM(a, n+1)` answers `(stale, mem[a] … mem[a+n-1])`. That
+   caps a useful read at 14 words.
 
 ## Appendix A: findings map
 
