@@ -30,12 +30,13 @@ WHERE THE REAL CHIP AND FakePE GENUINELY DIFFER, stated rather than papered over
     is replaced by the wire-visible equivalent, or skipped with a reason.
   * ``irq_n()`` returns None. Every IRQ- and liveness-dependent assertion is
     SKIPPED with an explicit reason. None is faked, and none is weakened to pass.
-  * Every exchange is a SEPARATE vvp run, and tb_pe_soc_extspi.v resets the chip
-    and holds run low at the start of each one (VvpTTAdapter.reset and set_run
-    only record the call). No chip state - loaded IMEM, run - carries from one
-    exchange to the next, so an assertion about what an EARLIER exchange did
-    cannot pass over this adapter. That is a limit of the backend, not a chip
-    result.
+  * Every exchange is a separate vvp run that REPLAYS the whole session from
+    power-on - each reset, run-pad change and earlier transfer - before its
+    own transfer (VvpTTAdapter.host_spi_transfer). The simulation is
+    deterministic, so chip state (a loaded IMEM, run) carries exactly as on a
+    long-lived chip, and each replay must reproduce every earlier capture or
+    the exchange is a harness error. Each exchange costs a little more than
+    the one before it.
 
 The two adapter defects this lane first reported (the testbench path missing
 ``../`` for the regress cwd, and ``+read_words=`` where the testbench reads
@@ -51,6 +52,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from tools.host_bridge import main as M
 from tools.host_bridge import pe_frame as F
@@ -138,8 +140,9 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
     def setUp(self):
         # One adapter per test: it owns a scratch directory, and _start()
         # compiles the 16-file wrapper ONCE, so the second and later exchanges in
-        # a test are vvp runs rather than compiles - each a FRESH simulation from
-        # reset (see the module docstring), not one long-lived chip.
+        # a test are vvp runs rather than compiles - each REPLAYING the session
+        # from power-on (see the module docstring), so the chip keeps its state
+        # like a long-lived one.
         self.adapter = VvpTTAdapter(repo_root=REPO)
         # Registered the moment the scratch directory exists: if a later setUp
         # step raises, tearDown never runs, and a cleanup still does.
@@ -164,8 +167,14 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
         # there. A mirror of the fake lane is only a mirror if the assertions
         # survive the swap, not if they keep the fake's vocabulary.
         recorded = list(self.adapter.calls)
-        self.assertIn(("enable_project", PROJECT), recorded)
-        self.assertIn(("set_clock", 60_000_000), recorded)
+        # Exactly once each, as the fake lane asserts (project_calls ==
+        # [PROJECT], clock_calls == [60 MHz]): assertIn would pass a bridge that
+        # re-selected the project or restarted the clock on every request.
+        self.assertEqual(recorded.count(("enable_project", PROJECT)), 1)
+        self.assertEqual(
+            [call for call in recorded if call[0] == "set_clock"],
+            [("set_clock", 60_000_000)],
+        )
 
         result = self.session.load(self.image)
         self.assertEqual(result.words_written, len(WORDS))
@@ -196,12 +205,34 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
         dump = self.session.dump_core()
         self.assertEqual(dump.words_written, len(WORDS))
 
-    # ---- memory reads stay gated while running, over the real chip ------------
-    def test_memory_reads_are_gated_while_running_over_the_wire(self):
+    # ---- memory reads while running: the HOST refuses before the wire -------
+    def test_memory_reads_are_refused_by_the_host_while_running(self):
+        """The session refuses a read while RUNNING before anything reaches the
+        chip (the bridge carries the same guard, main.py _op_read_imem). That is
+        the host half of the gate; the chip's own half is
+        test_the_chip_itself_refuses_memory_reads_while_running."""
         self.session.connect()
         self.session.load(self.image)
         self.session.start()
+        sent = len(self.adapter.transfers)
         self.assertRaises(SessionStateError, self.session.read_imem, 0, 1)
+        self.assertEqual(
+            len(self.adapter.transfers), sent, "a gated read reached the chip"
+        )
+
+    # ---- a long TMPDIR used to break EVERY exchange (128-byte path regs) -----
+    def test_a_long_scratch_path_still_reaches_the_chip(self):
+        base = Path(tempfile.mkdtemp(prefix="pe-deep-"))
+        self.addCleanup(shutil.rmtree, base, True)
+        deep = base.joinpath(*(["d" * 50] * 4))  # well past 128 bytes
+        deep.mkdir(parents=True)
+        with mock.patch.object(tempfile, "tempdir", str(deep)):
+            adapter = VvpTTAdapter(repo_root=REPO)
+        self.addCleanup(adapter.close)
+        self.assertTrue(adapter._workdir.startswith(str(deep)))
+        _bring_up(adapter)
+        answer = _exchange(adapter, F.encode_frame(F.OP_PING, 7, F.TARGET_HOST), 6 + 15)
+        self.assertEqual(answer.payload, (F.STATUS_OK,))
 
     # ---- state carries from one exchange to the next, over the real chip ----
     def test_a_load_is_still_there_on_the_next_exchange(self):
@@ -260,10 +291,9 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
         """
         _bring_up(self.adapter)
         frame = F.encode_frame(F.OP_PING, 7, F.TARGET_HOST)
-        # Twice the testbench's built-in default budget (6 + 15, which is also what
-        # the bridge asks for on a PING): if the +nresp plumbing fixed at 7de9775
-        # ever broke again, the testbench would fall back to that default and this
-        # capture would come back short, so the PING guards that fix as well.
+        # Twice the bridge's PING budget (6 + 15): if the read budget ever
+        # stopped reaching the testbench (the XFER line's nresp field), the
+        # capture would come back short, so the PING guards that plumbing too.
         read_words = 2 * (6 + 15)
         raw = self.adapter.host_spi_transfer(frame, read_words=read_words)
         self.assertGreaterEqual(

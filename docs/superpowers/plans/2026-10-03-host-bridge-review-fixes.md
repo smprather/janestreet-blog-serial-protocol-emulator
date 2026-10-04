@@ -15,8 +15,8 @@ commits it together with each task, so a lost session costs nothing.
 |---|---|---|
 | 1 Harden VvpTTAdapter | DONE | `530496d` |
 | 2 Testbench `+script` | DONE (Amendment A (a)–(b) applied: known-defect pinned) | `64c3292` |
-| 3 Session replay (#2 fix) | DONE (Amendment A (c) applied) | hash recorded in Task 4's table update |
-| 4 Test hygiene | TODO | |
+| 3 Session replay (#2 fix) | DONE (Amendment A (c) applied) | `610b636` |
+| 4 Test hygiene | DONE | hash recorded in Task 5's table update |
 | 5 TTAdapter read budget (#1) | TODO, own commit, FLAGGED for the user | |
 | 6 Docs | TODO, and must record Amendment A's defect | |
 | 7 Final verification | TODO | |
