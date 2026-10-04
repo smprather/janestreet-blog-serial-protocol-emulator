@@ -19,7 +19,7 @@ commits it together with each task, so a lost session costs nothing.
 | 4 Test hygiene | DONE | `afcffca` |
 | 5 TTAdapter read budget (#1) | DONE, own commit, FLAGGED for the user | `f7b2baa` |
 | 6 Docs | DONE (Amendment A1 (d) recorded: design doc, RESUME-V1, WORKLOG) | `5d0caea` |
-| 7 Final verification | DONE with one ruled exception. Steps 1, 2, 4 PASS; Step 3 `run_host_tests.sh` exits 1 on ONE PRE-EXISTING failure, ruled out of scope by the reviewer (see the decision note) | this commit |
+| 7 Final verification | DONE, ALL STEPS GREEN. Step 3 `run_host_tests.sh` now exits 0 (11/11 `[ok]`, host gate PASS) after the reviewer-ruled TEST-SELECTOR fix in `test_docs.py`; the doc is untouched | this commit |
 | A2 RTL fix for the IMEM read defect | **NOT for the pi worker.** Needs a stronger agent and the user's sign-off; see Amendment A | |
 
 Decisions on record:
@@ -54,6 +54,13 @@ Decisions on record:
   `docs/host-bridge-bringup.md` or `tools/host_gui/tests/test_docs.py` (neither
   is in any task's Files block). `run_host_tests.sh` stays red on this one test
   for a reason outside this plan.
+- 2026-10-04 REVIEWER RULING (applied): fix the TEST selector, do NOT touch the
+  doc. Adding the count to bringup line 44 is REJECTED - line 44 is prose, and
+  the count belongs only in the triage row. `tools/host_gui/tests/test_docs.py`
+  now selects the markdown TABLE row that names `r2_read_*` (asserting exactly
+  one such row) instead of the first occurrence. Result: `test_docs` 38/38 OK;
+  `tools/host_gui/run_host_tests.sh` exits 0 with 11/11 `[ok]` and "host gate:
+  PASS". `docs/host-bridge-bringup.md` is untouched (`git diff` empty).
 - #1 (Task 5) is the user's open decision; it is implemented as a revertable
   best effort.
 - 2026-10-04: Task 5 (#1) implemented as a revertable best effort: TTAdapter
