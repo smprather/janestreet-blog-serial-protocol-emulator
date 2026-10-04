@@ -17,8 +17,8 @@ commits it together with each task, so a lost session costs nothing.
 | 2 Testbench `+script` | DONE (Amendment A (a)–(b) applied: known-defect pinned) | `64c3292` |
 | 3 Session replay (#2 fix) | DONE (Amendment A (c) applied) | `610b636` |
 | 4 Test hygiene | DONE | `afcffca` |
-| 5 TTAdapter read budget (#1) | DONE, own commit, FLAGGED for the user | hash recorded in Task 6's table update |
-| 6 Docs | TODO, and must record Amendment A's defect | |
+| 5 TTAdapter read budget (#1) | DONE, own commit, FLAGGED for the user | `f7b2baa` |
+| 6 Docs | DONE (Amendment A1 (d) recorded: design doc, RESUME-V1, WORKLOG) | hash recorded in Task 7's table update |
 | 7 Final verification | TODO | |
 | A2 RTL fix for the IMEM read defect | **NOT for the pi worker.** Needs a stronger agent and the user's sign-off; see Amendment A | |
 

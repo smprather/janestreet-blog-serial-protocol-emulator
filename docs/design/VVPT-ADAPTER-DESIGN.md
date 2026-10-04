@@ -71,3 +71,17 @@ a bit-level slave model against the SoC-as-master pad map. A VvpTTAdapter needs
 a testbench that (a) builds tt_um_protocol_emulator so pe_ctrl is present, and
 (b) takes its SPI traffic from outside rather than generating it. That bite is in
 flight in the chip lane now (tb/tb_pe_soc_extspi.v).
+
+STATE ACROSS EXCHANGES (added 2026-10-03). The first adapter ran each exchange
+as a fresh vvp simulation from reset, and set_run/reset only recorded the call,
+so no chip state carried: a LOAD was gone by the next exchange and STATUS after
+START read run=0. Each exchange now REPLAYS the whole session - every reset,
+run-pad change and earlier transfer - from power-on in one run, through the
+testbench's +script mode, and then performs its own transfer. Icarus is
+deterministic, so the replayed chip is exactly the chip a long-lived simulation
+would hold, and every replay must reproduce each earlier transfer's capture or
+the exchange is a harness error ("replay diverged"). A failed transfer is
+dropped from the session. The cost grows with the session, which suits test
+lanes of tens of exchanges. A long-lived vvp process fed over stdin/stdout was
+rejected: a blocking read stalls the simulator, pipe deadlocks and timeouts need
+select(), and it would give up the inspectable file handshake.

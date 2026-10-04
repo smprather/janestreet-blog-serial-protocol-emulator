@@ -78,9 +78,10 @@ The fleet was killed mid-bite (all pe scopes gone). Relaunch with
 skipped (a bare `pi` came up with empty panes twice). Names: `protocol-worker`,
 `wiki-features`, `diag-proto`.
 
-Only one thing is unfinished: `test_vvp_integration.py` has an uncommitted
-post-commit edit in the worktree (18 insertions). It is already in `main` at
-`3412e14`; the diff is work-in-progress on top. Check it before overwriting.
+That uncommitted post-commit edit was a format-on-save `ruff format` reflow
+plus the review fixes on top of `3412e14`; it is committed at `56492b4` (with
+the `56492b4` lane work: 3 of 6 golden frames, not 6). Nothing is left
+uncommitted there.
 
 ## The number that is the deliverable
 
@@ -89,6 +90,32 @@ byte-exactly, through the real bridge.** It is currently **BLOCKED, not zero** â
 the worker refused to report a count because no vector had reached the chip. With
 the adapter fixed, run it and report the real number, including which ones do not
 match and why. A partial count reported precisely beats a green that hides it.
+
+**2026-10-03, the measured number: 3 of 6 reproduced** (`ping`, `load_single`,
+`target_loopback`), **0 not reproduced**, **3 partial**: `read_imem` answered
+`STATUS_RANGE` (not `STATUS_OK`), and `response_status_ok` /
+`response_loopback_ping` answered `STATUS_UNSUPPORTED` (a RESPONSE frame sent as
+a request â€” refusing it is right). "Reproduced" here means the chip answered
+THAT request with its opcode|RESPONSE_BIT, sequence and target, CRC-valid, and
+`STATUS_OK`; it is **accepted with `STATUS_OK` in SIMULATION, not a byte-exact
+match**, because `golden_vectors.json` records no expected replies. Do not
+report this as a hardware result.
+
+**2026-10-03: the real-chip round trip is green over the session replay**
+(`test_connect_load_start_status_stop_dump_round_trip`, plan Task 3): `run=1`
+after START, `pc=2` (the image's `JMP 2` is a jump to itself), and the LOAD is
+still there on later exchanges. The TTAdapter read-budget change (plan Task 5,
+#1) is committed but **FLAGGED for the user's HAL-contract decision**.
+
+**2026-10-04, KNOWN CHIP DEFECT: the R2 host IMEM read path is defective in
+RTL.** Every host `READ_IMEM` returns the PREVIOUS address's word
+(`rtl/pe_soc.v:391-394` captures the registered `imem_rdata` one edge early;
+`pe_imem` read latency is one cycle). It is pinned by two
+`test_known_defect_*` tests (`test_known_defect_host_imem_read_is_one_address_stale`,
+`test_known_defect_session_read_imem_is_one_address_stale`); when the RTL is
+fixed they fail and must be flipped to the correct answer in their docstrings.
+The RTL fix (plan Amendment A2) is a separate gated change, NOT for the pi
+worker. DMEM reads are unaffected.
 
 ## Discipline that has repeatedly mattered
 
