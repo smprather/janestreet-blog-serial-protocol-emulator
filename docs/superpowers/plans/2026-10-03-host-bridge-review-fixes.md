@@ -14,7 +14,7 @@ commits it together with each task, so a lost session costs nothing.
 | Task | State | Commit / note |
 |---|---|---|
 | 1 Harden VvpTTAdapter | DONE | `530496d` |
-| 2 Testbench `+script` | BUILT, NOT COMMITTED. Stopped at Step 6 by a real chip defect; **resume with Amendment A** | files in tree: `tb/tb_pe_soc_extspi.v`, `vvp_adapter.py`, `test_vvp_adapter.py`, `test_vvp_integration.py` |
+| 2 Testbench `+script` | DONE (Amendment A (a)–(b) applied: known-defect pinned) | hash recorded in Task 3's table update |
 | 3 Session replay (#2 fix) | TODO, with Amendment A | |
 | 4 Test hygiene | TODO | |
 | 5 TTAdapter read budget (#1) | TODO, own commit, FLAGGED for the user | |
@@ -25,6 +25,10 @@ commits it together with each task, so a lost session costs nothing.
 Decisions on record:
 - 2026-10-04: the user chose "unblock first, fix the chip separately" for the
   defect (Amendment A).
+- 2026-10-04: Amendment A1 (a)–(b) applied in Task 2: the stale IMEM answer is
+  pinned by `test_known_defect_host_imem_read_is_one_address_stale`; the
+  state-carry test now asserts opcode/sequence/status/length only. `rtl/` was
+  not touched. A1 (c) lands in Task 3, (d) in Task 6.
 - #1 (Task 5) is the user's open decision; it is implemented as a revertable
   best effort.
 - Accepted ruling (manager, 2026-10-04): Task 2 Step 5's only stdout difference

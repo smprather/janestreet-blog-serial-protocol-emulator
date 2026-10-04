@@ -47,13 +47,14 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
 from tools.host_bridge import main as M
 from tools.host_bridge import pe_frame as F
-from tools.host_bridge.vvp_adapter import VvpTTAdapter, VvpTTAdapterError
+from tools.host_bridge.vvp_adapter import VvpTTAdapter, VvpTTAdapterError, parse_captures
 from tools.host_gui.session import (
     ControllerSession,
     SessionState,
@@ -73,6 +74,15 @@ WORDS = (0x0041, 0x1001, 0x4002)
 _STATUS_NAMES = {
     value: name for name, value in vars(F).items() if name.startswith("STATUS_")
 }
+
+# KNOWN CHIP DEFECT, found 2026-10-04 by this lane (plan Amendment A,
+# docs/superpowers/plans/2026-10-03-host-bridge-review-fixes.md):
+# rtl/pe_soc.v:391-394 copies imem_rdata on the REQUEST edge, but pe_imem's read
+# is registered, so every host IMEM read returns the PREVIOUS address's word -
+# READ_IMEM(1, 2) after loading 0x0041 0x1001 0x4002 answers (0x0041, 0x1001).
+# The tests named test_known_defect_* pin that exact wrong answer; every other
+# test leaves IMEM read VALUES to them. When the RTL is fixed, those tests fail:
+# change their expectation to the correct answer given in each docstring.
 
 
 def setUpModule():
@@ -350,6 +360,125 @@ class TestGoldenVectorsOnRealChip(unittest.TestCase):
             0,
             "NO golden frame was reproduced - the lane is not proven\n" + report,
         )
+
+
+PING_WORDS = ("A55A", "1010", "0007", "0000", "7DFE")  # PING seq 7 (RESUME-V1)
+
+
+def _xfer_line(frame: bytes, nresp: int, period_ns: int = 200) -> str:
+    """One +script XFER event for ``frame`` (format: tb_pe_soc_extspi.v)."""
+    words = F.bytes_to_words(frame)
+    head = f"3 {period_ns:X} {nresp:X} {len(words):X} "
+    return head + " ".join(f"{w:04X}" for w in words)
+
+
+class TestExtspiTestbench(unittest.TestCase):
+    """tb_pe_soc_extspi.v's own contract: +script replay and its limits."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.adapter = VvpTTAdapter(repo_root=REPO)
+        cls.addClassCleanup(cls.adapter.close)
+        cls.adapter._start()  # compile once for the class
+
+    def _scratch(self) -> Path:
+        path = Path(tempfile.mkdtemp(prefix="pe-tb-"))
+        self.addCleanup(shutil.rmtree, path, True)
+        return path
+
+    def _vvp(self, *plusargs: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["vvp", str(self.adapter._vvp_path), *plusargs],
+            cwd=str(Path(REPO, "regress")),
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+
+    def test_a_one_transfer_script_captures_what_single_shot_mode_does(self):
+        d = self._scratch()
+        req = d / "req.txt"
+        req.write_text("\n".join(PING_WORDS) + "\n")
+        single = d / "single.txt"
+        r1 = self._vvp(f"+req={req}", f"+resp={single}", "+period=200", "+nresp=21")
+        self.assertIn("PASS:", r1.stdout)
+        script = d / "script.txt"
+        script.write_text("3 C8 15 5 " + " ".join(PING_WORDS) + "\n")
+        replay = d / "replay.txt"
+        r2 = self._vvp(f"+script={script}", f"+resp={replay}")
+        self.assertIn("PASS: script ran 1 transfer(s)", r2.stdout, r2.stdout)
+        lines = replay.read_text().split()
+        self.assertEqual(lines[0], "@0")
+        self.assertEqual(lines[1:], single.read_text().split())
+
+    def _load_then_read(self, address, count):
+        """LOAD WORDS, then READ_IMEM(address, count), in ONE script; return the
+        decoded answer to the read."""
+        d = self._scratch()
+        load = F.encode_frame(F.OP_LOAD, 1, F.TARGET_HOST, F.words_to_bytes(WORDS))
+        read = F.encode_frame(
+            F.OP_READ_IMEM, 2, F.TARGET_HOST, F.words_to_bytes((address, count))
+        )
+        script = d / "script.txt"
+        script.write_text(
+            _xfer_line(load, 6 + 15) + "\n" + _xfer_line(read, 6 + count + 15) + "\n"
+        )
+        resp = d / "resp.txt"
+        r = self._vvp(f"+script={script}", f"+resp={resp}")
+        self.assertIn("PASS: script ran 2 transfer(s)", r.stdout, r.stdout)
+        captures = parse_captures(resp.read_text())
+        self.assertEqual(len(captures), 2)
+        return F.decode_frame(F.strip_wait_words(F.words_to_bytes(captures[1])))
+
+    def test_chip_state_carries_from_one_transfer_to_the_next(self):
+        """THE property the #2 fix needs: the LOAD is still there on the next
+        transfer, because both run in ONE simulation. A fresh chip's IMEM is X,
+        so its read could not even be captured. The read VALUES are the known
+        defect's test, below."""
+        answer = self._load_then_read(1, 2)
+        self.assertEqual(answer.opcode, F.OP_READ_IMEM | F.RESPONSE_BIT)
+        self.assertEqual(answer.sequence, 2)
+        self.assertEqual(answer.payload[0], F.STATUS_OK)
+        self.assertEqual(len(answer.payload), 1 + 2)
+
+    def test_known_defect_host_imem_read_is_one_address_stale(self):
+        """KNOWN CHIP DEFECT, pinned to its exact signature (see the note at the
+        top of this module). The CORRECT answer is (STATUS_OK, *WORDS[1:3]).
+        When the RTL fix makes this fail, change the expectation to that."""
+        answer = self._load_then_read(1, 2)
+        self.assertEqual(answer.payload, (F.STATUS_OK, WORDS[0], WORDS[1]))
+
+    def test_a_request_over_capacity_fails_loudly_in_both_modes(self):
+        d = self._scratch()
+        script = d / "script.txt"
+        script.write_text("3 C8 15 201 " + " ".join(["0000"] * 0x201) + "\n")
+        r = self._vvp(f"+script={script}", f"+resp={d / 'resp.txt'}")
+        self.assertIn("FAIL", r.stdout)
+        self.assertNotIn("PASS", r.stdout)
+        req = d / "req.txt"
+        req.write_text("\n".join(["0000"] * 513) + "\n")
+        r = self._vvp(f"+req={req}", f"+resp={d / 'single.txt'}")
+        self.assertIn("FAIL", r.stdout)
+        self.assertNotIn("PASS", r.stdout)
+
+    def test_a_read_budget_over_capacity_fails_loudly(self):
+        d = self._scratch()
+        script = d / "script.txt"
+        script.write_text("3 C8 200 5 " + " ".join(PING_WORDS) + "\n")  # 512 + settle
+        r = self._vvp(f"+script={script}", f"+resp={d / 'resp.txt'}")
+        self.assertIn("FAIL", r.stdout)
+        self.assertNotIn("PASS", r.stdout)
+
+    def test_paths_longer_than_128_bytes_reach_the_testbench_intact(self):
+        deep = self._scratch().joinpath(*(["d" * 50] * 4))  # well past 128 bytes
+        deep.mkdir(parents=True)
+        script = deep / "script.txt"
+        script.write_text("3 C8 15 5 " + " ".join(PING_WORDS) + "\n")
+        resp = deep / "resp.txt"
+        r = self._vvp(f"+script={script}", f"+resp={resp}")
+        self.assertIn("PASS: script ran 1 transfer(s)", r.stdout, r.stdout)
+        self.assertTrue(resp.exists())
 
 
 if __name__ == "__main__":

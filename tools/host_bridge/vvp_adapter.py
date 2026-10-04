@@ -53,6 +53,29 @@ class VvpTTAdapterError(RuntimeError):
     pass
 
 
+def parse_captures(text: str) -> list[list[int]]:
+    """Split a +script response file into one word list per XFER, in order.
+
+    tb_pe_soc_extspi.v writes "@<n>" before each transfer's capture. Anything
+    that is not a marker or a hex word - an "xxxx" from an undriven MISO, say -
+    is a harness error, not data.
+    """
+    captures: list[list[int]] = []
+    for token in text.split():
+        if token.startswith("@"):
+            if token[1:] != str(len(captures)):
+                raise VvpTTAdapterError(f"capture marker {token} out of order")
+            captures.append([])
+        elif not captures:
+            raise VvpTTAdapterError(f"capture word {token!r} before any marker")
+        else:
+            try:
+                captures[-1].append(int(token, 16))
+            except ValueError as exc:
+                raise VvpTTAdapterError(f"capture word {token!r} is not hex") from exc
+    return captures
+
+
 class VvpTTAdapter:
     """The 6-method HAL, backed by a vvp process running the real chip.
 

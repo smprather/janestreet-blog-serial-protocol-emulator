@@ -121,5 +121,23 @@ class TestAdapterCleanup(unittest.TestCase):
         self.assertIsInstance(adapter.cleanup_error, PermissionError)
 
 
+class TestParseCaptures(unittest.TestCase):
+    def test_splits_captures_by_marker(self):
+        text = "@0\nffff\na55a\n@1\n0001\n"
+        self.assertEqual(V.parse_captures(text), [[0xFFFF, 0xA55A], [0x0001]])
+
+    def test_an_undriven_word_is_a_harness_error(self):
+        with self.assertRaises(V.VvpTTAdapterError):
+            V.parse_captures("@0\nxxxx\n")
+
+    def test_markers_must_count_up_from_zero(self):
+        with self.assertRaises(V.VvpTTAdapterError):
+            V.parse_captures("@1\nffff\n")
+
+    def test_a_word_before_any_marker_is_a_harness_error(self):
+        with self.assertRaises(V.VvpTTAdapterError):
+            V.parse_captures("ffff\n@0\n")
+
+
 if __name__ == "__main__":
     unittest.main()

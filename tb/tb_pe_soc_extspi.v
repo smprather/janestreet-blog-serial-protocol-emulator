@@ -71,6 +71,16 @@
 // was clocked out of MISO, including the wait-word fillers. A missing +resp
 // prints the captured words to stdout instead.
 //
+// +script=<path>  (VvpTTAdapter's mode) a whole host session replayed from
+// power-on in ONE run: reset and run-pad events and every framed exchange, one
+// event per line (format: run_script, below). Each exchange's capture goes to
+// +resp under an "@<n>" marker. Replaying the session is how chip state - a
+// loaded IMEM, run - carries from one host exchange to the next.
+//
+// LIMITS, all FAIL loudly, never truncate: paths up to PATH_BYTES bytes; a
+// request up to MAX_WORDS words; a read budget up to MAX_WORDS-1 (one capture
+// slot is the settle word). The 50 ms wall-clock cap bounds a WHOLE script.
+//
 // NOT A GATE. This is a dev/acceptance tool for the VvpTTAdapter work. It is
 // deliberately not registered in run_all.sh, and it is not covered by
 // check_harness_preflight. It is proven by hand, by the commands in the WORKLOG
@@ -92,6 +102,8 @@ module tb_pe_soc_extspi;
   localparam real CLK_NS    = 1e9 / CLK_HZ;
   localparam int  MAX_BITS   = 4096;   // a sanity ceiling on one frame
   localparam int  MAX_WORDS  = 512;    // and on the capture
+  localparam int  GAP_CLKS   = 64;     // idle clocks after a RUN or XFER event
+  localparam int  PATH_BYTES = 4096;   // longest +req/+resp/+script path
 
   // MISO IDLE is what a RELEASED pad reads on a board with a pull-up. It is the
   // value the wait-word filler is expected to be contrasted against, so it is a
@@ -130,8 +142,10 @@ module tb_pe_soc_extspi;
 
   // ---- request / response plumbing ----------------------------------------
   integer n_req, n_rsp, i, bit_i, errors;
-  reg [1023:0] req_path, resp_path;
-  reg have_req, have_resp;
+  // Paths were 1024 BITS (128 bytes): a TMPDIR longer than ~100 characters
+  // silently truncated every path and broke every exchange.
+  reg [8*PATH_BYTES-1:0] req_path, resp_path, script_path;
+  reg have_req, have_resp, have_script;
   integer period_ns;
   integer n_clocked, n_captured;
   reg [15:0] rx_shift;
@@ -183,12 +197,13 @@ module tb_pe_soc_extspi;
 
   // ---- plusargs ------------------------------------------------------------
   initial begin
-    have_req = 0; have_resp = 0; period_ns = 100;
+    have_req = 0; have_resp = 0; have_script = 0; period_ns = 100;
     n_req = 0; n_rsp = 0; n_clocked = 0; n_captured = 0; errors = 0;
     for (i = 0; i < MAX_WORDS; i = i + 1) cap_words[i] = 16'h0000;
     if (!$value$plusargs("period=%d", period_ns) || period_ns <= 0) period_ns = 100;
     if ($value$plusargs("req=%s", req_path))  have_req  = 1;
     if ($value$plusargs("resp=%s", resp_path)) have_resp = 1;
+    if ($value$plusargs("script=%s", script_path)) have_script = 1;
     // Read budget. The default is the host's worst case for a zero-data
     // response: 6 overhead + 0 data + 15 wait words (main.py:317-328,
     // pe_frame.MAX_WAIT_WORDS=15). A caller can override with +nresp=<n>.
@@ -200,7 +215,169 @@ module tb_pe_soc_extspi;
   reg [15:0] w_in;
   reg [15:0] words [0:MAX_WORDS-1];
 
+  // ---- one CS-framed exchange: REQUEST, SETTLE, READ BUDGET -----------------
+  //
+  // THE HALF-DUPLEX SHARED-CLOCK CONTRACT, and why bite 1 saw all-0xFF.
+  // pe_ctrl launches the response serializer when the last request word lands
+  // (pe_ctrl.v:1132-1136) and shifts it out on the SAME rising SCLK edges that
+  // carried the request. It RELEASES the pad on the CS RISING edge
+  // (pe_ctrl.v:716-723, resp_active/resp_hold_oe -> 0). So the host must:
+  //   CS low  -> clock the request words  -> KEEP CS LOW and keep clocking
+  //            to read the response     -> raise CS to end the frame.
+  // Bite 1 raised CS immediately after the request, which released the pad
+  // before a single response bit was clocked, so every capture read idle. The
+  // read budget is the one main.py:317-328 computes: 6 overhead words (sync,
+  // header, sequence, length, CRC, one slack) + data + 15 worst-case wait
+  // words. We read that many and let pe_frame.strip_wait_words drop the
+  // leading 0xFFFF fillers, exactly as the host does.
+  //
+  // ONE settle word after the request, captured like any other. pe_ctrl launches
+  // the response serializer on the rising edge that completes the last request
+  // word (pe_ctrl.v:1132-1136, resp_active<=1), so the first read clock lands ON
+  // the launch edge: resp_active and resp_idx are being assigned that same edge and
+  // the pad has not yet presented the first RESPONSE bit. Sampling there captured
+  // the launch transient (the first byte came back a5 - the real SYNC high byte -
+  // followed by garbage, because the serializer had not yet shifted). A settle
+  // word lets the launch complete; if the chip is genuinely answering, the first
+  // settle word is a wait word (0xFFFF) that strip_wait_words removes, and if the
+  // chip is NOT answering, the settle word is 0xFFFF too and the decode still
+  // fails - so this costs correctness nothing and only removes a race.
+  //
+  // Clocks words[0..nreq-1], one settle word, then nresp read words, and leaves
+  // the settle word plus every read word in cap_words[0..n_captured-1]. Callers
+  // guarantee nreq <= MAX_WORDS and nresp + 1 <= MAX_WORDS.
+  task do_xfer(input integer nreq, input integer nresp);
+    integer k;
+    reg [15:0] xw;
+    begin
+      n_clocked = 0;
+      n_captured = 0;
+      uio_in[CS_BIT] = 1'b0;              // CS low: select the slave
+      #(period_ns);
+      for (k = 0; k < nreq; k = k + 1) begin
+        word_xchg(words[k], xw);
+        n_clocked = n_clocked + 1;
+      end
+      word_xchg(16'h0000, xw);            // settle/launch clock, MOSI idle
+      n_clocked = n_clocked + 1;
+      cap_words[n_captured] = xw;         // the WHOLE word, not just its high byte
+      n_captured = n_captured + 1;
+      for (k = 0; k < nresp; k = k + 1) begin
+        word_xchg(16'h0000, xw);          // MOSI idle during the read
+        n_clocked = n_clocked + 1;
+        cap_words[n_captured] = xw;
+        n_captured = n_captured + 1;
+      end
+      uio_in[CS_BIT] = 1'b1;              // CS high ends the frame
+      #(period_ns);
+    end
+  endtask
+
+  // ---- +script mode: a whole session, replayed from power-on ---------------
+  // One event per line, every field HEX:
+  //   1 <level>                              RST  1 = reset asserted (rst_n=0)
+  //   2 <level>                              RUN  ui_in[RUN_BIT] = level
+  //   3 <period_ns> <nresp> <nreq> <w0> ...  XFER one CS-framed exchange
+  // Each XFER's capture is written to +resp as "@<n>" (n = 0-based XFER index,
+  // decimal) and then one 4-hex-digit word per line.
+  integer s_fd, s_out, s_code, s_op, s_arg, s_nreq, s_nresp, s_period, s_n, s_k, s_ev;
+  reg [15:0] s_word;
+
+  task run_script;
+    begin
+      if (!have_resp) begin
+        $display("FAIL: +script needs +resp");
+        $finish;
+      end
+      s_fd = $fopen(script_path, "r");
+      if (s_fd == 0) begin
+        $display("FAIL: cannot open +script=%0s", script_path);
+        $finish;
+      end
+      s_out = $fopen(resp_path, "w");
+      if (s_out == 0) begin
+        $display("FAIL: cannot open +resp=%0s for writing", resp_path);
+        $finish;
+      end
+      // Power-on: the same defined idle and reset the single-shot path uses.
+      uio_in[CS_BIT] = 1'b1;
+      uio_in[SCK_BIT] = 1'b0;
+      uio_in[MOSI_BIT] = 1'b0;
+      rst_n = 1'b0;
+      ui_in = 8'h00;
+      #(20 * CLK_NS);
+      rst_n = 1'b1;
+      #(20 * CLK_NS);
+      s_n = 0;
+      s_ev = 0;
+      s_code = $fscanf(s_fd, "%h", s_op);
+      while (s_code == 1) begin
+        case (s_op)
+          1: begin
+            if ($fscanf(s_fd, "%h", s_arg) != 1) begin
+              $display("FAIL: script event %0d: RST without a level", s_ev);
+              $finish;
+            end
+            rst_n = (s_arg == 0);
+            #(20 * CLK_NS);
+          end
+          2: begin
+            if ($fscanf(s_fd, "%h", s_arg) != 1) begin
+              $display("FAIL: script event %0d: RUN without a level", s_ev);
+              $finish;
+            end
+            ui_in[RUN_BIT] = (s_arg != 0);
+            #(GAP_CLKS * CLK_NS);
+          end
+          3: begin
+            if ($fscanf(s_fd, "%h %h %h", s_period, s_nresp, s_nreq) != 3) begin
+              $display("FAIL: script event %0d: XFER header truncated", s_ev);
+              $finish;
+            end
+            if (s_period <= 0 || s_nreq <= 0 || s_nreq > MAX_WORDS
+                || s_nresp < 0 || s_nresp + 1 > MAX_WORDS) begin
+              $display("FAIL: script event %0d: XFER period=%0d nreq=%0d nresp=%0d is outside 1..%0d words (read budget + settle <= %0d)",
+                       s_ev, s_period, s_nreq, s_nresp, MAX_WORDS, MAX_WORDS);
+              $finish;
+            end
+            for (s_k = 0; s_k < s_nreq; s_k = s_k + 1) begin
+              if ($fscanf(s_fd, "%h", s_word) != 1) begin
+                $display("FAIL: script event %0d: XFER has fewer than %0d request words", s_ev, s_nreq);
+                $finish;
+              end
+              words[s_k] = s_word;
+            end
+            period_ns = s_period;
+            do_xfer(s_nreq, s_nresp);
+            $fdisplay(s_out, "@%0d", s_n);
+            for (s_k = 0; s_k < n_captured; s_k = s_k + 1)
+              $fdisplay(s_out, "%04h", cap_words[s_k]);
+            s_n = s_n + 1;
+            #(GAP_CLKS * CLK_NS);
+          end
+          default: begin
+            $display("FAIL: script event %0d: unknown event code %0h", s_ev, s_op);
+            $finish;
+          end
+        endcase
+        s_ev = s_ev + 1;
+        s_code = $fscanf(s_fd, "%h", s_op);
+      end
+      if (!$feof(s_fd)) begin
+        $display("FAIL: script event %0d is not a hex event code", s_ev);
+        $finish;
+      end
+      $fclose(s_fd);
+      $fclose(s_out);
+      $display("PASS: script ran %0d transfer(s)", s_n);
+    end
+  endtask
+
   initial begin
+    if (have_script) begin
+      run_script;
+      $finish;
+    end
     $display("tb_pe_soc_extspi: period=%0dns  host bus uio[4]=CS_N uio[5]=MOSI uio[6]=MISO uio[7]=SCK", period_ns);
     $display("tb_pe_soc_extspi: request %0d word(s) + read budget %0d word(s), all inside one CS-low frame", n_req, n_rsp);
 
@@ -223,6 +400,10 @@ module tb_pe_soc_extspi;
         scan = $fscanf(fh, "%h", w_in);
       end
       $fclose(fh);
+      if (scan == 1) begin
+        $display("FAIL: +req holds more than MAX_WORDS=%0d words", MAX_WORDS);
+        $finish;
+      end
       $display("tb_pe_soc_extspi: request %0d word(s) from %0s", n_req, req_path);
     end else begin
       // SMOKE TEST with no +req: one known word, A55A (the pe_frame SYNC), so
@@ -230,6 +411,11 @@ module tb_pe_soc_extspi;
       words[0] = 16'hA55A;
       n_req = 1;
       $display("tb_pe_soc_extspi: no +req, smoke word 0xA55A");
+    end
+
+    if (n_rsp + 1 > MAX_WORDS) begin
+      $display("FAIL: read budget %0d + 1 settle word exceeds MAX_WORDS=%0d", n_rsp, MAX_WORDS);
+      $finish;
     end
 
     // ---- reset, then release ------------------------------------------------
@@ -240,61 +426,8 @@ module tb_pe_soc_extspi;
     #(20 * CLK_NS);
     $display("tb_pe_soc_extspi: out of reset, run=%0d, irq_n=%0d", ui_in[RUN_BIT], irq_n);
 
-  // ---- the transaction: REQUEST, then READ BUDGET, all inside one CS-low ----
-    //
-    // THE HALF-DUPLEX SHARED-CLOCK CONTRACT, and why bite 1 saw all-0xFF.
-    // pe_ctrl launches the response serializer when the last request word lands
-    // (pe_ctrl.v:1132-1136) and shifts it out on the SAME rising SCLK edges that
-    // carried the request. It RELEASES the pad on the CS RISING edge
-    // (pe_ctrl.v:716-723, resp_active/resp_hold_oe -> 0). So the host must:
-    //   CS low  -> clock the request words  -> KEEP CS LOW and keep clocking
-    //            to read the response     -> raise CS to end the frame.
-    // Bite 1 raised CS immediately after the request, which released the pad
-    // before a single response bit was clocked, so every capture read idle. The
-    // read budget is the one main.py:317-328 computes: 6 overhead words (sync,
-    // header, sequence, length, CRC, one slack) + data + 15 worst-case wait
-    // words. We read that many and let pe_frame.strip_wait_words drop the
-    // leading 0xFFFF fillers, exactly as the host does.
-    uio_in[CS_BIT] = 1'b0;              // CS low: select the slave
-    #(period_ns);
-
-    // request words
-    for (i = 0; i < n_req; i = i + 1) begin
-      word_xchg(words[i], w_in);
-      n_clocked = n_clocked + 1;
-    end
-
-    // ONE settle word after the request, captured like any other. pe_ctrl launches
-    // the response serializer on the rising edge that completes the last request
-    // word (pe_ctrl.v:1132-1136, resp_active<=1), so the first read clock lands ON
-    // the launch edge: resp_active and resp_idx are being assigned that same edge and
-    // the pad has not yet presented the first RESPONSE bit. Sampling there captured
-    // the launch transient (the first byte came back a5 - the real SYNC high byte -
-    // followed by garbage, because the serializer had not yet shifted). A settle
-    // word lets the launch complete; if the chip is genuinely answering, the first
-    // settle word is a wait word (0xFFFF) that strip_wait_words removes, and if the
-    // chip is NOT answering, the settle word is 0xFFFF too and the decode still
-    // fails - so this costs correctness nothing and only removes a race.
-    word_xchg(16'h0000, w_in);          // settle/launch clock, MOSI idle
-    n_clocked = n_clocked + 1;
-    if (n_captured < MAX_WORDS) begin
-      cap_words[n_captured] = w_in;      // the WHOLE word, not just its high byte
-      n_captured = n_captured + 1;
-    end
-
-    // read budget: keep CS low, keep clocking. The response words are captured
-    // from here on. n_rsp defaults to the worst case the host uses.
-    for (i = 0; i < n_rsp; i = i + 1) begin
-      word_xchg(16'h0000, w_in);        // MOSI idle during the read
-      n_clocked = n_clocked + 1;
-      if (n_captured < MAX_WORDS) begin
-        cap_words[n_captured] = w_in;    // the WHOLE word
-        n_captured = n_captured + 1;
-      end
-    end
-
-    uio_in[CS_BIT] = 1'b1;               // CS high ends the frame
-    #(period_ns);
+    // ---- the transaction (half-duplex contract and settle word: do_xfer) ---
+    do_xfer(n_req, n_rsp);
 
     // ---- report -------------------------------------------------------------
     $display("tb_pe_soc_extspi: clocked %0d word(s), captured %0d", n_clocked, n_captured);
