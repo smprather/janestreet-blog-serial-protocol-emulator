@@ -20,10 +20,12 @@ is a one-line change in setUp. Everything above the HAL is exercised on both
 sides of it, which is why this is the seam rather than re-testing the bridge.
 
 THE BACKEND IS FILE-BASED, DELIBERATELY. The testbench ``tb_pe_soc_extspi.v``
-reads a request frame from a file, clocks it out on the framed host bus, and
-writes the captured MISO to a response file. File handshake rather than VPI
+reads a +script of events (reset, run pad, framed transfers) from a file,
+replays it from power-on, and writes every transfer's captured MISO to a
+response file. File handshake rather than VPI or a long-lived process on pipes,
 because this is an acceptance/dev tool, not a gate, and a file handshake is
 inspectable when a run goes wrong - which is the whole lesson of this project.
+Chip state carries across calls by REPLAY: see host_spi_transfer.
 
 PATHS ARE CONSTRUCTED UNDER AN EXPLICIT repo_root rather than discovered by
 walking upward from arbitrary locations: this tool builds a simulator from a
@@ -47,6 +49,17 @@ PAD_SCK = 7
 IRQ_UO_BIT = 1
 
 PROJECT_CLK_HZ = 60_000_000
+
+# tb_pe_soc_extspi.v's limits (MAX_WORDS, PATH_BYTES). The adapter refuses
+# anything past them up front, so the error names the limit instead of being a
+# FAIL line from deep inside a vvp run.
+TB_MAX_WORDS = 512
+TB_PATH_BYTES = 4096
+
+# +script event codes (tb_pe_soc_extspi.v, "+script mode").
+_EV_RST = 1
+_EV_RUN = 2
+_EV_XFER = 3
 
 
 class VvpTTAdapterError(RuntimeError):
@@ -118,6 +131,10 @@ class VvpTTAdapter:
         self._irq_enabled = False
         self.calls: list[tuple] = []  # recorded for parity with FakeTTAdapter
         self.transfers: list[bytes] = []
+        # The session so far as +script lines, and what each completed transfer
+        # returned - see host_spi_transfer, "STATE CARRIES ACROSS CALLS".
+        self._events: list[str] = []
+        self._captures: list[list[int]] = []
         self.cleanup_error: OSError | None = None
 
     # ---- lifecycle ---------------------------------------------------------
@@ -188,27 +205,27 @@ class VvpTTAdapter:
             raise VvpTTAdapterError(f"compile failed: {res.stderr[:400]}")
         self._vvp_path = out
 
-    def _run_tb(self, req_words: list[int], resp_words: int) -> list[int]:
-        """One externally-paced exchange: write the request, run vvp, read back."""
+    def _run_script(self, events: list[str]) -> list[list[int]]:
+        """Replay ``events`` from power-on in ONE vvp run; return every capture."""
         self._start()
-        req = os.path.join(self._workdir, "req.txt")
+        script = os.path.join(self._workdir, "script.txt")
         resp = os.path.join(self._workdir, "resp.txt")
+        for path in (script, resp):
+            size = len(os.fsencode(path))
+            if size > TB_PATH_BYTES:
+                raise VvpTTAdapterError(
+                    f"scratch path is {size} bytes; the testbench holds at most "
+                    f"{TB_PATH_BYTES} (use a shorter TMPDIR)"
+                )
         try:
-            with open(req, "w", encoding="utf-8") as fh:
-                fh.write("\n".join(f"{w & 0xFFFF:04X}" for w in req_words) + "\n")
+            with open(script, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(events) + "\n")
             if os.path.exists(resp):
                 os.remove(resp)
         except OSError as exc:
-            raise VvpTTAdapterError(f"cannot stage the request: {exc}") from exc
+            raise VvpTTAdapterError(f"cannot stage the script: {exc}") from exc
 
-        cmd = [
-            "vvp",
-            str(self._vvp_path),
-            f"+req={req}",
-            f"+resp={resp}",
-            f"+period={self.period_ns}",
-            f"+nresp={resp_words}",
-        ]
+        cmd = ["vvp", str(self._vvp_path), f"+script={script}", f"+resp={resp}"]
         try:
             res = subprocess.run(
                 cmd,
@@ -220,12 +237,16 @@ class VvpTTAdapter:
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise VvpTTAdapterError(f"vvp did not complete: {exc}") from exc
-        if res.returncode != 0:
-            raise VvpTTAdapterError(f"vvp exited {res.returncode}: {res.stdout[-400:]}")
+        lines = res.stdout.splitlines()
+        failed = [line for line in lines if line.startswith("FAIL")]
+        passed = any(line.startswith("PASS: script ran") for line in lines)
+        if res.returncode != 0 or failed or not passed:
+            detail = "; ".join(failed) or res.stdout[-400:]
+            raise VvpTTAdapterError(f"vvp run failed (exit {res.returncode}): {detail}")
         try:
-            with open(resp, "r", encoding="utf-8") as fh:
-                return [int(l.strip(), 16) for l in fh if l.strip()]
-        except (OSError, ValueError) as exc:
+            with open(resp, encoding="utf-8") as fh:
+                return parse_captures(fh.read())
+        except OSError as exc:
             raise VvpTTAdapterError(f"cannot read the response: {exc}") from exc
 
     # ---- the 6-method HAL --------------------------------------------------
@@ -242,9 +263,11 @@ class VvpTTAdapter:
 
     def reset(self, active: bool) -> None:
         self.calls.append(("reset", bool(active)))
+        self._events.append(f"{_EV_RST:X} {int(bool(active)):X}")
 
     def set_run(self, active: bool) -> None:
         self.calls.append(("set_run", bool(active)))
+        self._events.append(f"{_EV_RUN:X} {int(bool(active)):X}")
 
     def configure_host_spi(self, sclk_hz: int) -> None:
         if sclk_hz <= 0:
@@ -260,13 +283,23 @@ class VvpTTAdapter:
     def host_spi_transfer(self, data: bytes, read_words: int | None = None) -> bytes:
         """Exchange one framed request; return the RAW response byte stream.
 
-        Mirrors TTAdapter: CS_N low for the whole frame, the request MSB-first
-        with simultaneous clock-out, then clock a total of ``read_words``
-        16-bit words (padding 0xFFFF after the request, exactly as the real
-        adapter does). The caller strips leading wait words with
-        strip_wait_words - this deliberately does NOT strip them, because that is
-        the host's job and doing it here would hide the wait-word contract this
-        project already got wrong once.
+        Mirrors TTAdapter: CS_N low for the whole frame, the request MSB-first,
+        then ``read_words`` 16-bit words clocked out AFTER the request (the
+        testbench adds one settle word first, and returns it too). The caller
+        strips leading wait words with strip_wait_words - this deliberately does
+        NOT strip them, because that is the host's job and doing it here would
+        hide the wait-word contract this project already got wrong once.
+
+        STATE CARRIES ACROSS CALLS. Every call replays the whole session so far
+        - each reset() and set_run(), and every earlier transfer - from power-on
+        in ONE vvp run, and then performs this transfer. The simulation is
+        deterministic, so the chip this transfer meets is exactly the chip a
+        long-lived simulation would hold at this point. The replay re-captures
+        every earlier transfer, and a capture that differs from what that
+        transfer returned the first time is a harness error, never trusted. A
+        transfer that fails is dropped from the session, so it cannot leak into
+        later replays. Cost grows with the session - each call replays all the
+        earlier ones - which suits test lanes of tens of exchanges.
         """
         if not self._configured:
             raise VvpTTAdapterError("configure_host_spi() must run before a transfer")
@@ -274,11 +307,39 @@ class VvpTTAdapter:
         req_words = [(data[i] << 8) | data[i + 1] for i in range(0, len(data) - 1, 2)]
         if len(data) % 2:
             req_words.append(data[-1])  # defensive; frames are word-aligned
-        total = max(1, len(req_words)) if read_words is None else max(1, read_words)
+        if not req_words:
+            raise VvpTTAdapterError("an empty request cannot be clocked")
+        total = len(req_words) if read_words is None else max(1, read_words)
+        if len(req_words) > TB_MAX_WORDS or total + 1 > TB_MAX_WORDS:
+            raise VvpTTAdapterError(
+                f"{len(req_words)} request word(s) and a {total}-word read budget "
+                f"exceed the testbench capacity of {TB_MAX_WORDS} words (the read "
+                "budget also carries one settle word)"
+            )
         self.transfers.append(bytes(data))
-        resp = self._run_tb(req_words, total)
+        self._events.append(
+            f"{_EV_XFER:X} {self.period_ns:X} {total:X} {len(req_words):X} "
+            + " ".join(f"{w:04X}" for w in req_words)
+        )
+        try:
+            captures = self._run_script(self._events)
+            if len(captures) != len(self._captures) + 1:
+                raise VvpTTAdapterError(
+                    f"the replay returned {len(captures)} capture(s) for "
+                    f"{len(self._captures) + 1} transfer(s)"
+                )
+            for index, (first, again) in enumerate(zip(self._captures, captures)):
+                if first != again:
+                    raise VvpTTAdapterError(
+                        f"replay diverged at transfer {index}: the simulation did "
+                        "not reproduce what it returned the first time"
+                    )
+        except VvpTTAdapterError:
+            self._events.pop()  # this exchange never happened
+            raise
+        self._captures.append(captures[-1])
         out = bytearray()
-        for w in resp:
+        for w in captures[-1]:
             out += bytes(((w >> 8) & 0xFF, w & 0xFF))
         return bytes(out)
 
@@ -306,7 +367,15 @@ class VvpTTAdapter:
                 self.cleanup_error = exc
 
         if os.path.isdir(self._workdir):
-            shutil.rmtree(self._workdir, onexc=record)
+            try:
+                shutil.rmtree(self._workdir, onexc=record)
+            except OSError as exc:
+                # Defensive: with onexc set, rmtree routes every OSError to the
+                # callback, so this is unreachable today. It is here so the
+                # method's promise - teardown never raises - holds even if a
+                # future Python changes that, and so the static check sees it.
+                if self.cleanup_error is None:
+                    self.cleanup_error = exc
 
     def __enter__(self):
         return self

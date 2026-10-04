@@ -126,6 +126,12 @@ def _bring_up(adapter):
             raise RuntimeError(f"bring-up {op!r} failed: {response.error}")
 
 
+def _exchange(adapter, frame, read_words):
+    """One raw exchange through ``adapter``, decoded exactly as the bridge does."""
+    raw = adapter.host_spi_transfer(frame, read_words=read_words)
+    return F.decode_frame(F.strip_wait_words(raw))
+
+
 class TestRealBridgeOverRealChip(unittest.TestCase):
     """The mirror of TestHostOverRealBridge, with the real chip in the seat."""
 
@@ -171,7 +177,11 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
 
         snapshot = self.session.status()
         self.assertTrue(snapshot.run)
-        self.assertEqual(snapshot.pc, 0)
+        # NOT 0, which the fake lane asserts because FakePE never executes. The
+        # real core runs the image: 0x0041 LDI a,0x41; 0x1001 OUT 1,a; 0x4002
+        # JMP 2 - a jump to itself (wiki/concepts/isa-and-soc.md). So a running
+        # chip sits at pc 2.
+        self.assertEqual(snapshot.pc, 2)
 
         self.session.stop()
         self.assertEqual(self.session.state, SessionState.STOPPED)
@@ -179,7 +189,9 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
         # The R2 read path over the real chip: these are the reads the B1
         # wait-word fix is about, so they are the ones worth having.
         words = self.session.read_imem(1, 2)
-        self.assertEqual(words, WORDS[1:3])
+        # The read path works end to end; its VALUES are
+        # test_known_defect_session_read_imem_is_one_address_stale.
+        self.assertEqual(len(words), 2)
 
         dump = self.session.dump_core()
         self.assertEqual(dump.words_written, len(WORDS))
@@ -190,6 +202,53 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
         self.session.load(self.image)
         self.session.start()
         self.assertRaises(SessionStateError, self.session.read_imem, 0, 1)
+
+    # ---- state carries from one exchange to the next, over the real chip ----
+    def test_a_load_is_still_there_on_the_next_exchange(self):
+        _bring_up(self.adapter)
+        load = F.encode_frame(F.OP_LOAD, 1, F.TARGET_HOST, F.words_to_bytes(WORDS))
+        answer = _exchange(self.adapter, load, 6 + 15)
+        self.assertEqual(answer.payload[:2], (F.STATUS_OK, len(WORDS)))
+        read = F.encode_frame(
+            F.OP_READ_IMEM, 2, F.TARGET_HOST, F.words_to_bytes((0, len(WORDS)))
+        )
+        answer = _exchange(self.adapter, read, 6 + len(WORDS) + 15)
+        # A decodable STATUS_OK read of the right length proves the LOAD carried
+        # (a fresh chip's IMEM is X). The VALUES are the known defect's test.
+        self.assertEqual(answer.payload[0], F.STATUS_OK)
+        self.assertEqual(len(answer.payload), 1 + len(WORDS))
+
+    # ---- the CHIP's own read gate, over the wire ----------------------------
+    def test_the_chip_itself_refuses_memory_reads_while_running(self):
+        """pe_ctrl answers a bounded read with NOT_READY while run=1
+        (pe_ctrl.v, "Bounded reads. While run=1 they answer NOT_READY"). The
+        session and the bridge refuse first, so only a direct exchange can
+        reach this gate."""
+        _bring_up(self.adapter)
+        load = F.encode_frame(F.OP_LOAD, 1, F.TARGET_HOST, F.words_to_bytes(WORDS))
+        self.assertEqual(_exchange(self.adapter, load, 6 + 15).payload[0], F.STATUS_OK)
+        self.adapter.set_run(True)
+        read = F.encode_frame(F.OP_READ_IMEM, 2, F.TARGET_HOST, F.words_to_bytes((0, 1)))
+        answer = _exchange(self.adapter, read, 6 + 1 + 15)
+        self.assertEqual(answer.payload[0], F.STATUS_NOT_READY)
+        self.adapter.set_run(False)
+        read = F.encode_frame(F.OP_READ_IMEM, 3, F.TARGET_HOST, F.words_to_bytes((0, 1)))
+        # Value deliberately not checked: with the known defect, address 0's
+        # stale answer IS WORDS[0] (the halted CPU fetches 0), so it would pass
+        # for the wrong reason. Status and length are the gate's business.
+        answer = _exchange(self.adapter, read, 6 + 1 + 15)
+        self.assertEqual(answer.payload[0], F.STATUS_OK)
+        self.assertEqual(len(answer.payload), 2)
+
+    def test_known_defect_session_read_imem_is_one_address_stale(self):
+        """KNOWN CHIP DEFECT through the whole host stack (see the note at the
+        top of this module). The CORRECT answer is WORDS[1:3]. When the RTL fix
+        makes this fail, change the expectation to that."""
+        self.session.connect()
+        self.session.load(self.image)
+        self.session.start()
+        self.session.stop()
+        self.assertEqual(self.session.read_imem(1, 2), (WORDS[0], WORDS[1]))
 
     # ---- THE ASSERTION THAT MATTERS: a real PING, a verified CRC-16 ----------
     def test_real_chip_ping_comes_back_with_a_verified_crc(self):

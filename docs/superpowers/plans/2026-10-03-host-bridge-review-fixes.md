@@ -14,8 +14,8 @@ commits it together with each task, so a lost session costs nothing.
 | Task | State | Commit / note |
 |---|---|---|
 | 1 Harden VvpTTAdapter | DONE | `530496d` |
-| 2 Testbench `+script` | DONE (Amendment A (a)–(b) applied: known-defect pinned) | hash recorded in Task 3's table update |
-| 3 Session replay (#2 fix) | TODO, with Amendment A | |
+| 2 Testbench `+script` | DONE (Amendment A (a)–(b) applied: known-defect pinned) | `64c3292` |
+| 3 Session replay (#2 fix) | DONE (Amendment A (c) applied) | hash recorded in Task 4's table update |
 | 4 Test hygiene | TODO | |
 | 5 TTAdapter read budget (#1) | TODO, own commit, FLAGGED for the user | |
 | 6 Docs | TODO, and must record Amendment A's defect | |
@@ -29,6 +29,11 @@ Decisions on record:
   pinned by `test_known_defect_host_imem_read_is_one_address_stale`; the
   state-carry test now asserts opcode/sequence/status/length only. `rtl/` was
   not touched. A1 (c) lands in Task 3, (d) in Task 6.
+- 2026-10-04: Amendment A1 (c) applied in Task 3: the round trip is green
+  (`run=1`, `pc=2`), IMEM read VALUES are pinned by
+  `test_known_defect_session_read_imem_is_one_address_stale` and the two
+  testbench-level defect tests; every other assertion is strict. `rtl/` was not
+  touched. A1 (d) lands in Task 6.
 - #1 (Task 5) is the user's open decision; it is implemented as a revertable
   best effort.
 - Accepted ruling (manager, 2026-10-04): Task 2 Step 5's only stdout difference
