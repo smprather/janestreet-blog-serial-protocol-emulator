@@ -16,8 +16,8 @@ commits it together with each task, so a lost session costs nothing.
 | 1 Harden VvpTTAdapter | DONE | `530496d` |
 | 2 Testbench `+script` | DONE (Amendment A (a)–(b) applied: known-defect pinned) | `64c3292` |
 | 3 Session replay (#2 fix) | DONE (Amendment A (c) applied) | `610b636` |
-| 4 Test hygiene | DONE | hash recorded in Task 5's table update |
-| 5 TTAdapter read budget (#1) | TODO, own commit, FLAGGED for the user | |
+| 4 Test hygiene | DONE | `afcffca` |
+| 5 TTAdapter read budget (#1) | DONE, own commit, FLAGGED for the user | hash recorded in Task 6's table update |
 | 6 Docs | TODO, and must record Amendment A's defect | |
 | 7 Final verification | TODO | |
 | A2 RTL fix for the IMEM read defect | **NOT for the pi worker.** Needs a stronger agent and the user's sign-off; see Amendment A | |
@@ -36,6 +36,11 @@ Decisions on record:
   touched. A1 (d) lands in Task 6.
 - #1 (Task 5) is the user's open decision; it is implemented as a revertable
   best effort.
+- 2026-10-04: Task 5 (#1) implemented as a revertable best effort: TTAdapter
+  now discards what MISO carried during the request and clocks `read_words`
+  words after it; the fake SPI is half-duplex like pe_ctrl; a 1..40-word LOAD
+  sweep through the real bridge pins it. The HAL-contract decision is still the
+  user's.
 - Accepted ruling (manager, 2026-10-04): Task 2 Step 5's only stdout difference
   was Icarus's `$finish called at <line>` trace; the captures were
   byte-identical, so the step passes.

@@ -310,7 +310,8 @@ class PicoBridge:
         # Plan Global Constraints: min(5 MHz, project_clk / 6), never more.
         return min(SCLK_GUARD_HZ, self._clock_hz // 6)
 
-    # Worst-case words to clock out for an opcode, given its request payload.
+    # Worst-case words to clock out AFTER the request (the HAL contract,
+    # tt_adapter.host_spi_transfer), given its request payload.
     # A bounded read's response carries the data it asked for, so this is
     # computed from the request; every other reply is fixed-size.
     @staticmethod

@@ -13,10 +13,27 @@ import sys
 import types
 import unittest
 
+from tools.host_bridge import main as M
 from tools.host_bridge import pe_frame as PF
 from tools.host_bridge import tt_adapter as A
 
 PINS = {"sck": 2, "mosi": 3, "miso": 4}
+
+# What a RELEASED MISO pad reads (the board pull-up; tb_pe_soc_extspi.v models
+# the same MISO_IDLE). pe_ctrl drives MISO only while a response shifts.
+MISO_IDLE = 0xFF
+
+
+def _request_complete(rx) -> bool:
+    """True once ``rx`` holds a whole request frame, by its length field - the
+    same rule pe_ctrl uses to know the request is over and start answering."""
+    if len(rx) < PF.HEADER_WORDS * 2:
+        return False
+    length = (rx[6] << 8) | rx[7]  # header word 3 is the length field
+    return len(rx) >= (PF.HEADER_WORDS + length + PF.TRAILER_WORDS) * 2
+
+
+REQ = PF.encode_frame(PF.OP_STATUS, 1, PF.TARGET_HOST)
 
 
 class FakeProject:
@@ -77,11 +94,12 @@ def _fake_module(name: str, **attrs) -> types.ModuleType:
 def install_fake_sdk():
     """Install fake SDK modules; return (recorded state, sys.modules map).
 
-    The fake SPI is a STREAM: each ``write_readinto`` returns the next bytes
-    of ``state.response`` (via a cursor), exactly as real SPI shifts MISO out
-    during the request and keeps clocking afterwards. That is what makes
-    variable-length (wait-word) responses testable — the fixed-length double
-    that echoed the whole response every call is precisely why B1 was invisible.
+    The fake SPI is a HALF-DUPLEX STREAM, like pe_ctrl: MISO is released
+    (MISO_IDLE) while a request shifts in, the chip answers once the request
+    frame is complete, and past the end of its answer MISO is released again.
+    That is what makes variable-length (wait-word) responses testable — the
+    fixed-length double that echoed the whole response every call is precisely
+    why B1 was invisible.
     """
     state = types.SimpleNamespace(
         board=FakeDemoBoard(),
@@ -92,7 +110,22 @@ def install_fake_sdk():
         boom=False,
         cursor=0,
         max_words=None,  # optional cap the bridge must respect
+        rx=bytearray(),
+        responder=None,
     )
+
+    class Pads(list):
+        """uio_out, plus the one side effect a half-duplex slave needs: CS_N
+        falling starts a new frame, so the chip forgets the previous request
+        and answers this one from the start."""
+
+        def __setitem__(self, index, value):
+            super().__setitem__(index, value)
+            if index == A.PAD_CS_N and value == 0:
+                state.rx = bytearray()
+                state.cursor = 0
+
+    state.board.uio_out = Pads(state.board.uio_out)
 
     class Pin:
         def __init__(self, gpio):
@@ -121,14 +154,21 @@ def install_fake_sdk():
             )
             if state.boom:
                 raise OSError("spi down")
-            # Stream out the next len(received) bytes of the response; past the
-            # end, MISO idles (the chip released it) as zeros.
+            # HALF-DUPLEX, like pe_ctrl: MISO is released (MISO_IDLE) while the
+            # request shifts in; the chip answers once the request frame is
+            # complete, and past the end of its answer MISO is released again.
             for index in range(len(received)):
-                if state.cursor < len(state.response):
+                if not _request_complete(state.rx):
+                    state.rx.append(data[index])
+                    received[index] = MISO_IDLE
+                    if state.responder is not None and _request_complete(state.rx):
+                        state.response = state.responder(bytes(state.rx))
+                        state.cursor = 0
+                elif state.cursor < len(state.response):
                     received[index] = state.response[state.cursor]
                     state.cursor += 1
                 else:
-                    received[index] = 0x00
+                    received[index] = MISO_IDLE
 
     class DemoBoard:
         @staticmethod
@@ -200,11 +240,11 @@ class TestTTAdapter(unittest.TestCase):
         adapter = A.TTAdapter(pins=PINS)
         adapter.configure_host_spi(5_000_000)
         # A real framed reply (STATUS): sync, hdr, seq, len, CRC. The request
-        # is 3 words; the reply is 6 words, so the adapter MUST keep clocking
-        # past the request length to collect it (variable-length).
+        # is a 5-word STATUS frame; the reply is 6 words, so the adapter MUST
+        # keep clocking past the request length to collect it (variable-length).
         frame = bytes.fromhex("a55a19100001000100001eed")
         self.state.response = frame
-        received = adapter.host_spi_transfer(b"\x00" * 6, read_words=6)
+        received = adapter.host_spi_transfer(REQ, read_words=6)
         self.assertEqual(received, frame)
         self.assertEqual(self.state.spi_calls[0]["cs_n"], 0)
         # more than one clocking call was needed (6 words in, 6 words out)
@@ -218,7 +258,7 @@ class TestTTAdapter(unittest.TestCase):
         adapter.configure_host_spi(5_000_000)
         frame = bytes.fromhex("a55a19100001000100001eed")  # 6 words
         self.state.response = frame
-        received = adapter.host_spi_transfer(b"\x00" * 2, read_words=6)
+        received = adapter.host_spi_transfer(REQ, read_words=6)
         self.assertEqual(received, frame)
 
     def test_host_spi_transfer_skips_leading_wait_words(self):
@@ -229,7 +269,7 @@ class TestTTAdapter(unittest.TestCase):
         adapter.configure_host_spi(5_000_000)
         frame = bytes.fromhex("a55a19100001000100001eed")
         self.state.response = b"\xff\xff" * 2 + frame  # 2 wait words
-        received = adapter.host_spi_transfer(b"\x00" * 2, read_words=8)
+        received = adapter.host_spi_transfer(REQ, read_words=8)
         # the adapter hands the raw stream; the wait words are still there ...
         self.assertTrue(received.startswith(b"\xff\xff\xff\xff"))
         # ... and the real frame is present after them
@@ -244,7 +284,7 @@ class TestTTAdapter(unittest.TestCase):
         the chip's 15 worst-case wait words for every opcode, so a six-word PING
         reply is read with room for 15 more. Those words come off a RELEASED
         pad (pe_ctrl drives MISO only while a response shifts), and this stub
-        models exactly that as zeros.
+        models exactly that as MISO_IDLE (0xFF).
 
         It is the case the read-length defect lived in, and it is why the
         bridge-side tests are not enough on their own: they drive the FAKE
@@ -263,12 +303,12 @@ class TestTTAdapter(unittest.TestCase):
         words = len(frame) // 2
         self.state.response = frame
         budget = words + PF.MAX_WAIT_WORDS  # what the bridge really asks for
-        received = adapter.host_spi_transfer(b"\x00" * (words * 2), read_words=budget)
+        received = adapter.host_spi_transfer(REQ, read_words=budget)
 
         # the idle words ARE in the buffer - the adapter must not hide them ...
         self.assertEqual(len(received), budget * 2)
         self.assertEqual(received[: len(frame)], frame)
-        self.assertEqual(received[len(frame) :], b"\x00" * (budget - words) * 2)
+        self.assertEqual(received[len(frame) :], b"\xff" * ((budget - words) * 2))
         # ... and the reader must find the frame anyway
         decoded = PF.decode_frame(PF.strip_wait_words(received))
         self.assertEqual(decoded.sequence, 1)
@@ -277,12 +317,8 @@ class TestTTAdapter(unittest.TestCase):
     def test_a_budget_too_small_for_the_reply_is_reported_not_truncated(self):
         """The other direction: a budget too small must not yield a frame.
 
-        A silently short read is how a framing bug turns into a data bug, so
-        the reader has to refuse. The request is kept SHORTER than the budget
-        deliberately: the adapter never clocks out fewer words than the request
-        itself (the MISO stream starts during the request), so a long request
-        would mask a short budget entirely - which is itself worth knowing, and
-        is why the budget is always larger than the request in `_response_words`.
+        The read budget counts words AFTER the request, so a short budget is
+        short however long the request is - the request can no longer mask it.
         """
         adapter = A.TTAdapter(pins=PINS)
         adapter.configure_host_spi(5_000_000)
@@ -293,10 +329,44 @@ class TestTTAdapter(unittest.TestCase):
             PF.words_to_bytes((PF.STATUS_OK,)),
         )
         self.state.response = frame
-        received = adapter.host_spi_transfer(b"\x00\x00", read_words=3)
+        received = adapter.host_spi_transfer(REQ, read_words=3)
         self.assertEqual(len(received), 6, "the budget, not the request, governs")
         with self.assertRaises(PF.FrameError):
             PF.decode_frame(PF.strip_wait_words(received))
+
+    def test_a_load_of_any_length_round_trips_through_the_real_bridge(self):
+        """#1 regression: the bridge budgets 21 words for EVERY LOAD
+        (main._response_words), counted after the request. When the adapter
+        counted the request's own words inside the budget, a LOAD of 8-10
+        words came back truncated and 11+ found no frame at all."""
+
+        def chip(request):
+            frame = PF.decode_frame(request)
+            words = frame.payload
+            reply = (PF.STATUS_OK, len(words), 0, words[-1] if words else 0)
+            return PF.encode_frame(
+                PF.OP_LOAD | PF.RESPONSE_BIT,
+                frame.sequence,
+                PF.TARGET_HOST,
+                PF.words_to_bytes(reply),
+            )
+
+        self.state.responder = chip
+        bridge = M.PicoBridge(
+            A.TTAdapter(pins=PINS),
+            project="tt_um_protocol_emulator",
+            sleep=lambda _seconds: None,
+        )
+        for request_id, op in enumerate(("hello", "prepare"), start=1):
+            self.assertTrue(bridge.handle(M.USBRequest(request_id, op)).ok, op)
+        for n in range(1, 41):
+            words = [(0x1000 + i) & 0xFFFF for i in range(n)]
+            response = bridge.handle(M.USBRequest(100 + n, "load", {"words": words}))
+            self.assertTrue(response.ok, f"LOAD of {n} words: {response.error}")
+            result = response.result
+            if result is None:
+                self.fail(f"LOAD of {n} words returned no result")
+            self.assertEqual(result["words_written"], n)
 
     def test_host_spi_transfer_releases_cs_on_error(self):
         board = self.state.board

@@ -9,7 +9,7 @@ small duck-typed HAL so ``main.PicoBridge`` is testable under CPython against
     reset(active)                     # project reset (active high)
     set_run(active)                   # ui_in[1] RUN strap
     configure_host_spi(sclk_hz)       # uio direction + SPI peripheral
-    host_spi_transfer(data) -> bytes  # one CS-framed full-duplex transaction
+    host_spi_transfer(data, read_words) -> bytes  # request, then read_words after it
     irq_n() -> True|False|None        # None = no IRQ input reported
 
 The concrete ``TTAdapter`` speaks the TT MicroPython SDK v3 (``ttboard``):
@@ -37,8 +37,8 @@ PAD_MOSI = 5
 PAD_MISO = 6
 PAD_SCK = 7
 
-RUN_UI_BIT = 1                  # ui_in[1] = RUN
-IRQ_UO_BIT = 1                  # uo_out[1] = IRQ_N (RTL phase R1, landed)
+RUN_UI_BIT = 1  # ui_in[1] = RUN
+IRQ_UO_BIT = 1  # uo_out[1] = IRQ_N (RTL phase R1, landed)
 
 # uio_oe_pico bits for the host SPI: CS_N, MOSI and SCK are Pico outputs,
 # MISO is an input. The firmware protocol row (uio[0:3]) is untouched.
@@ -65,7 +65,8 @@ class TTAdapter:
             except ImportError as exc:  # pragma: no cover - board only
                 raise RuntimeError(
                     "ttboard SDK not found; run on the TT demo board with the "
-                    "TT MicroPython SDK (v3) installed") from exc
+                    "TT MicroPython SDK (v3) installed"
+                ) from exc
             board = DemoBoard.get()
             board.mode = RPMode.ASIC_RP_CONTROL
             self._board_ref = board
@@ -75,7 +76,8 @@ class TTAdapter:
         if not self.pins:
             raise RuntimeError(
                 "host SPI pin map is not configured; which RP2040 GPIOs carry "
-                "uio[4..7] is board-revision specific (plan Open Item 2)")
+                "uio[4..7] is board-revision specific (plan Open Item 2)"
+            )
         return self.pins
 
     # ---- HAL ---------------------------------------------------------------
@@ -108,50 +110,61 @@ class TTAdapter:
         direction = int(board.uio_oe_pico.value)
         direction = (direction | _HOST_DRIVE_MASK) & ~_HOST_INPUT_MASK
         board.uio_oe_pico.value = direction
-        board.uio_out[PAD_CS_N] = 1          # CS_N idles high
+        board.uio_out[PAD_CS_N] = 1  # CS_N idles high
         try:
             from machine import SPI, Pin
         except ImportError as exc:  # pragma: no cover - board only
             raise RuntimeError("machine.SPI is only available on the board") from exc
-        self._spi = SPI(self.spi_id, baudrate=int(sclk_hz), polarity=0, phase=0,
-                        sck=Pin(pins["sck"]), mosi=Pin(pins["mosi"]),
-                        miso=Pin(pins["miso"]))
+        self._spi = SPI(
+            self.spi_id,
+            baudrate=int(sclk_hz),
+            polarity=0,
+            phase=0,
+            sck=Pin(pins["sck"]),
+            mosi=Pin(pins["mosi"]),
+            miso=Pin(pins["miso"]),
+        )
 
     def host_spi_transfer(self, data: bytes, read_words: int | None = None) -> bytes:
-        """Exchange one framed request and return the response byte stream.
+        """Clock one framed request, then return what the chip sent AFTER it.
 
-        The response is NOT the request length. A bounded read (R2) may be
-        preceded by up to 15 leading 0xFFFF wait words, and even a 1-word reply
-        is shorter than a long request, so a fixed-length read is wrong for
-        every opcode (chip review B1). ``read_words`` is the total number of
-        16-bit words to clock out after the request (None = just the request
-        length, the ready-immediate case). The caller bounds it and skips the
-        wait words with ``pe_frame.strip_wait_words``.
+        pe_ctrl is half-duplex on this bus: it starts answering when the last
+        request word lands, and MISO is released (meaningless) while the
+        request shifts in. So the bytes clocked in during the request are
+        discarded, and ``read_words`` 16-bit words are clocked out AFTER the
+        request (None = as many as the request; the bridge always passes a
+        budget). The response is NOT the request length: a bounded read (R2)
+        may be preceded by up to 15 leading 0xFFFF wait words, so the caller
+        bounds the budget and skips the wait words with
+        ``pe_frame.strip_wait_words`` (chip review B1). VvpTTAdapter keeps the
+        same contract, so the simulation lane and the board agree.
         """
         if self._spi is None:
             raise RuntimeError("configure_host_spi() must run before a transfer")
         board = self._board()
-        received = bytearray(len(data))
-        total_words = max(1, (len(data) + 1) // 2) if read_words is None \
-            else max(1, read_words)
-        board.uio_out[PAD_CS_N] = 0          # CS_N low for the whole frame
+        total_words = (
+            max(1, (len(data) + 1) // 2) if read_words is None else max(1, read_words)
+        )
+        received = bytearray()
+        board.uio_out[PAD_CS_N] = 0  # CS_N low for the whole frame
         try:
-            # MOSI during the trailing clocking is irrelevant (the chip is a
-            # slave and ignores it), so 0xFFFF filler is sent.
-            self._spi.write_readinto(data, received)
+            # The request; what MISO carried meanwhile is not a reply.
+            self._spi.write_readinto(data, bytearray(len(data)))
+            # MOSI during the read is irrelevant (the chip is a slave and
+            # ignores it), so 0xFFFF filler is sent.
             while len(received) < total_words * 2:
                 chunk = bytearray(2)
                 self._spi.write_readinto(b"\xff\xff", chunk)
                 received.extend(chunk)
         finally:
-            board.uio_out[PAD_CS_N] = 1      # release even on error
+            board.uio_out[PAD_CS_N] = 1  # release even on error
         return bytes(received)
 
     def irq_n(self):
         if not self.irq_enabled:
-            return None                      # IRQ reporting not enabled here
+            return None  # IRQ reporting not enabled here
         board = self._board()
         try:
-            return not bool(board.uo_out[IRQ_UO_BIT])   # active low
+            return not bool(board.uo_out[IRQ_UO_BIT])  # active low
         except (AttributeError, IndexError, KeyError, OSError):
-            return None                      # pragma: no cover - board only
+            return None  # pragma: no cover - board only
