@@ -360,11 +360,16 @@ module pe_soc #(
 
   // ---- R2: the bounded host read port ------------------------------------
   // One request/answer shape for both memories, one cycle of latency:
-  //   imem  -> the addressed instruction WORD (the macro read is registered,
-  //            so the answer can only be captured on the next edge);
+  //   imem  -> the addressed instruction WORD, PRESENTED in the dbg_rd_valid
+  //            cycle straight from the macro's registered output. Capturing
+  //            imem_rdata on the REQUEST edge -- which this block did until
+  //            2026-10-04, plan Amendment A2 -- copied the PREVIOUS address's
+  //            word, because the macro's read is registered and imem_rdata on
+  //            that edge is still the last-fetched word;
   //   dmem  -> the addressed BYTE in dbg_rd_data[7:0] (the flop array reads
-  //            combinationally; it is given the same latency so the host
-  //            contract has one shape, and so a byte pair can be assembled
+  //            combinationally, so the byte is captured on the request edge
+  //            and held to the answer cycle). Both memories keep the same
+  //            one-cycle host contract, and a byte pair can be assembled
   //            from two consecutive answers).
   // The request is held for one cycle by the caller through dbg_rd_req; the
   // answer pulses dbg_rd_valid. pe_soc does NOT range-check: R2 puts the
@@ -383,17 +388,32 @@ module pe_soc #(
   assign dmem_rd_addr = dbg_reading && dbg_rd_dmem ? dbg_addr[DAW-1:0]
                                                    : cpu_dmem_addr;
 
+  // The read data path, and the edge each memory is captured on. The IMEM
+  // answer is PRESENTED, not captured: dbg_reading covers dbg_rd_valid too,
+  // so imem_addr is still the host's in the answer cycle, and the macro's
+  // registered output in that cycle is exactly the requested word. pe_ctrl
+  // samples dbg_rd_data in that cycle and no other (pe_ctrl.v:1223-1240,
+  // `if (dbg_rd_valid) ... <= dbg_rd_data`), so nothing else sees the path.
+  // Outside a read, dbg_rd_data follows imem_rdata, the last-fetched word;
+  // no consumer samples it there.
+  logic       dbg_rd_dmem_q;   // the request's memory, held to the answer cycle
+  logic [7:0] dmem_byte_q;     // the request's dmem byte, held to the answer cycle
+
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      dbg_rd_valid <= 1'b0;
-      dbg_rd_data  <= 16'h0000;
+      dbg_rd_valid  <= 1'b0;
+      dbg_rd_dmem_q <= 1'b0;
+      dmem_byte_q   <= 8'h00;
     end else begin
       dbg_rd_valid <= dbg_rd_req;      // the answer, one cycle later
-      if (dbg_rd_req)
-        dbg_rd_data <= dbg_rd_dmem ? {8'h00, dmem_byte}
-                                   : imem_rdata;
+      if (dbg_rd_req) begin
+        dmem_byte_q   <= dmem_byte;    // dmem reads combinationally; imem does not
+        dbg_rd_dmem_q <= dbg_rd_dmem;
+      end
     end
   end
+
+  assign dbg_rd_data = dbg_rd_dmem_q ? {8'h00, dmem_byte_q} : imem_rdata;
 
   // ---- tick counter -----------------------------------------------------
   // tick_cnt, tick_val and tick_flag are ONE register process. They used to be

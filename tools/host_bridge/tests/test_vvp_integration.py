@@ -77,14 +77,13 @@ _STATUS_NAMES = {
     value: name for name, value in vars(F).items() if name.startswith("STATUS_")
 }
 
-# KNOWN CHIP DEFECT, found 2026-10-04 by this lane (plan Amendment A,
-# docs/superpowers/plans/2026-10-03-host-bridge-review-fixes.md):
-# rtl/pe_soc.v:391-394 copies imem_rdata on the REQUEST edge, but pe_imem's read
-# is registered, so every host IMEM read returns the PREVIOUS address's word -
-# READ_IMEM(1, 2) after loading 0x0041 0x1001 0x4002 answers (0x0041, 0x1001).
-# The tests named test_known_defect_* pin that exact wrong answer; every other
-# test leaves IMEM read VALUES to them. When the RTL is fixed, those tests fail:
-# change their expectation to the correct answer given in each docstring.
+# FIXED 2026-10-04 by plan Amendment A2. rtl/pe_soc.v:391-394 used to copy
+# imem_rdata into dbg_rd_data on the REQUEST edge, but pe_imem's read is
+# registered, so every host IMEM read returned the PREVIOUS address's word
+# (READ_IMEM(1, 2) after loading 0x0041 0x1001 0x4002 answered 0x0041 0x1001).
+# pe_soc now presents the macro output in the dbg_rd_valid cycle, and
+# tb/tb_pe_soc_dbgread.v pins the port at the SoC level in the regression.
+# Every IMEM read VALUE is asserted here, exactly.
 
 
 def setUpModule():
@@ -198,9 +197,7 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
         # The R2 read path over the real chip: these are the reads the B1
         # wait-word fix is about, so they are the ones worth having.
         words = self.session.read_imem(1, 2)
-        # The read path works end to end; its VALUES are
-        # test_known_defect_session_read_imem_is_one_address_stale.
-        self.assertEqual(len(words), 2)
+        self.assertEqual(words, WORDS[1:3])
 
         dump = self.session.dump_core()
         self.assertEqual(dump.words_written, len(WORDS))
@@ -244,10 +241,7 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
             F.OP_READ_IMEM, 2, F.TARGET_HOST, F.words_to_bytes((0, len(WORDS)))
         )
         answer = _exchange(self.adapter, read, 6 + len(WORDS) + 15)
-        # A decodable STATUS_OK read of the right length proves the LOAD carried
-        # (a fresh chip's IMEM is X). The VALUES are the known defect's test.
-        self.assertEqual(answer.payload[0], F.STATUS_OK)
-        self.assertEqual(len(answer.payload), 1 + len(WORDS))
+        self.assertEqual(answer.payload, (F.STATUS_OK, *WORDS))
 
     # ---- the CHIP's own read gate, over the wire ----------------------------
     def test_the_chip_itself_refuses_memory_reads_while_running(self):
@@ -264,22 +258,18 @@ class TestRealBridgeOverRealChip(unittest.TestCase):
         self.assertEqual(answer.payload[0], F.STATUS_NOT_READY)
         self.adapter.set_run(False)
         read = F.encode_frame(F.OP_READ_IMEM, 3, F.TARGET_HOST, F.words_to_bytes((0, 1)))
-        # Value deliberately not checked: with the known defect, address 0's
-        # stale answer IS WORDS[0] (the halted CPU fetches 0), so it would pass
-        # for the wrong reason. Status and length are the gate's business.
         answer = _exchange(self.adapter, read, 6 + 1 + 15)
-        self.assertEqual(answer.payload[0], F.STATUS_OK)
-        self.assertEqual(len(answer.payload), 2)
+        self.assertEqual(answer.payload, (F.STATUS_OK, WORDS[0]))
 
-    def test_known_defect_session_read_imem_is_one_address_stale(self):
-        """KNOWN CHIP DEFECT through the whole host stack (see the note at the
-        top of this module). The CORRECT answer is WORDS[1:3]. When the RTL fix
-        makes this fail, change the expectation to that."""
+    def test_session_read_imem_returns_the_requested_address(self):
+        """READ_IMEM answers the words at the requested address, through the
+        whole host stack (plan Amendment A2 fixed the one-address-stale
+        capture; tb/tb_pe_soc_dbgread.v pins the read port itself)."""
         self.session.connect()
         self.session.load(self.image)
         self.session.start()
         self.session.stop()
-        self.assertEqual(self.session.read_imem(1, 2), (WORDS[0], WORDS[1]))
+        self.assertEqual(self.session.read_imem(1, 2), WORDS[1:3])
 
     # ---- THE ASSERTION THAT MATTERS: a real PING, a verified CRC-16 ----------
     def test_real_chip_ping_comes_back_with_a_verified_crc(self):
@@ -530,20 +520,18 @@ class TestExtspiTestbench(unittest.TestCase):
     def test_chip_state_carries_from_one_transfer_to_the_next(self):
         """THE property the #2 fix needs: the LOAD is still there on the next
         transfer, because both run in ONE simulation. A fresh chip's IMEM is X,
-        so its read could not even be captured. The read VALUES are the known
-        defect's test, below."""
+        so its read could not even be captured. The read VALUES are checked
+        here too, exactly."""
         answer = self._load_then_read(1, 2)
         self.assertEqual(answer.opcode, F.OP_READ_IMEM | F.RESPONSE_BIT)
         self.assertEqual(answer.sequence, 2)
-        self.assertEqual(answer.payload[0], F.STATUS_OK)
-        self.assertEqual(len(answer.payload), 1 + 2)
+        self.assertEqual(answer.payload, (F.STATUS_OK, WORDS[1], WORDS[2]))
 
-    def test_known_defect_host_imem_read_is_one_address_stale(self):
-        """KNOWN CHIP DEFECT, pinned to its exact signature (see the note at the
-        top of this module). The CORRECT answer is (STATUS_OK, *WORDS[1:3]).
-        When the RTL fix makes this fail, change the expectation to that."""
+    def test_host_imem_read_returns_the_requested_address(self):
+        """READ_IMEM(1, 2) after LOADing WORDS answers exactly (WORDS[1],
+        WORDS[2]), at the testbench level (plan Amendment A2)."""
         answer = self._load_then_read(1, 2)
-        self.assertEqual(answer.payload, (F.STATUS_OK, WORDS[0], WORDS[1]))
+        self.assertEqual(answer.payload, (F.STATUS_OK, WORDS[1], WORDS[2]))
 
     def test_a_request_over_capacity_fails_loudly_in_both_modes(self):
         d = self._scratch()

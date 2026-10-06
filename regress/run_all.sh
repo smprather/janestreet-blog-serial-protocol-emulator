@@ -409,6 +409,18 @@ CASES=(
   # observed SET against that list, so a known divergence that changes, or any
   # new one, turns this red.
   "tb_pe_ctrl_r3_conf|../rtl/pe_ctrl.v ../rtl/pe_cpu.v|tb_pe_ctrl_r3_conf"
+  # R2 read path at the SoC LEVEL, against the REAL SRAM macro: the bounded
+  # host read port driven the way pe_ctrl's R_REQ/R_WAIT engine drives it
+  # (one-cycle request, answer the next cycle, and the tight no-gap cadence a
+  # range walk actually uses). IMEM words read back exactly at 0..3 and at a
+  # high address whose filler names its own address; dmem bytes read back
+  # zero-extended; dbg_rd_valid one cycle late, one cycle wide, never without
+  # a request. Every other pe_soc TB ties dbg_rd_req to 0 and tb_pe_ctrl_r2/r3
+  # serve the port from a TB-side image combinationally, so the macro's
+  # registered read latency was in NO gate -- which is exactly where the
+  # one-address-stale IMEM defect lived (plan Amendment A2, 2026-10-04; found
+  # by the tb_pe_soc_extspi dev lane).
+  "tb_pe_soc_dbgread|../rtl/pe_cpu.v ../rtl/pe_imem.v ../rtl/pe_pinmux.v ../rtl/pe_dru.v ../rtl/pe_manch.v ../rtl/pe_crc.v ../rtl/pe_eth_mac.v ../rtl/pe_fbuf.v ../rtl/pe_serdes.v ../rtl/pe_nrzi.v ../rtl/pe_bitstuff.v ../rtl/pe_codec_mux.v ../rtl/pe_eth_tx.v ../rtl/pe_soc.v|tb_pe_soc_dbgread"
 
   # The 10BASE-T receive path, end to end on real RTL: raw Manchester
   # levels into pe_dru, through pe_manch and pe_crc, into pe_fbuf. Every
