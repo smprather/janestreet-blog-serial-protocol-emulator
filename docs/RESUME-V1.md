@@ -12,16 +12,23 @@ read only one file after the flush, read this one.
   hashes), which is in flight, and what is left. A pi worker in tmux pane
   `0:5.4` was executing it. Check that pane, `git log` and `git status` before
   redoing anything.
-- **REAL CHIP DEFECT FOUND (2026-10-04):** every host IMEM read
-  (R2 `READ_IMEM`) returns the PREVIOUS address's word. The cause is
-  `rtl/pe_soc.v:391-394`, which captures the registered `imem_rdata` one edge
-  early. It was found by the new `+script` replay lane and verified
-  independently. **This puts a hole in "Chip side is DONE and GREEN" below:** no
-  earlier test read IMEM through the real SoC and memory. The user chose to
-  finish the harness work first, with the defect pinned by
-  `test_known_defect_*` tests, and to fix the RTL separately. That fix needs a
-  stronger agent and the user's sign-off (plan Amendment A2). Open question for
-  the user: was the design already submitted to a shuttle?
+- **CHIP DEFECT FOUND 2026-10-04, FIXED 2026-10-06:** every host IMEM read
+  (R2 `READ_IMEM`) returned the PREVIOUS address's word. The cause was
+  `rtl/pe_soc.v` capturing the registered `imem_rdata` one edge early; found
+  by the new `+script` replay lane and verified independently. **The hole this
+  put in "Chip side is DONE and GREEN" below is NOW CLOSED:** plan Amendment A2
+  is DONE - RTL fix `55ab86f` with a new gate testbench `tb_pe_soc_dbgread`
+  (reads IMEM through the real SoC and the real SRAM macro), a 6-mutant
+  mutation suite `994224c` (all killed), and a final full T2 gate PASS
+  (`TOTAL: 51 PASS: 51 FAIL: 0`, 17 mutation suites, no narrowing). The two
+  `test_known_defect_*` pinning tests were flipped to the correct answers and
+  renamed `test_host_imem_read_returns_the_requested_address` and
+  `test_session_read_imem_returns_the_requested_address`. **USER RULING
+  (2026-10-06):** the design was never submitted to a shuttle - the project is
+  greenfield - so this was an RTL fix, not a silicon erratum, and the
+  `READ_IMEM(a, n+1)` host workaround is NOT needed. The three full-gate checks
+  that were red during the A2 lane were confirmed pre-existing and are fixed
+  (`a7ba206`).
 - **Open user decision:** plan Task 5, the TTAdapter read budget (#1), lands as
   its own revertable commit, flagged.
 - **Discipline:** checkpoint progress into these .md files (the plan's table,
@@ -107,15 +114,21 @@ after START, `pc=2` (the image's `JMP 2` is a jump to itself), and the LOAD is
 still there on later exchanges. The TTAdapter read-budget change (plan Task 5,
 #1) is committed but **FLAGGED for the user's HAL-contract decision**.
 
-**2026-10-04, KNOWN CHIP DEFECT: the R2 host IMEM read path is defective in
-RTL.** Every host `READ_IMEM` returns the PREVIOUS address's word
-(`rtl/pe_soc.v:391-394` captures the registered `imem_rdata` one edge early;
-`pe_imem` read latency is one cycle). It is pinned by two
-`test_known_defect_*` tests (`test_known_defect_host_imem_read_is_one_address_stale`,
-`test_known_defect_session_read_imem_is_one_address_stale`); when the RTL is
-fixed they fail and must be flipped to the correct answer in their docstrings.
-The RTL fix (plan Amendment A2) is a separate gated change, NOT for the pi
-worker. DMEM reads are unaffected.
+**2026-10-04 defect, FIXED 2026-10-06: the R2 host IMEM read path.** Every
+host `READ_IMEM` returned the PREVIOUS address's word: `rtl/pe_soc.v` captured
+the registered `imem_rdata` one edge early, and `pe_imem` read latency is one
+cycle. Fixed at `55ab86f` (plan Amendment A2, DONE): `pe_soc` presents the IMEM
+word straight from the registered macro output in the `dbg_rd_valid` cycle,
+gated by the new `tb/tb_pe_soc_dbgread.v` testbench (reverted RTL fails 9
+checks with the stale signature; fixed RTL passes all) and a 6-mutant mutation
+suite (`994224c`, no survivors). The full T2 gate is PASS (`TOTAL: 51 PASS: 51
+FAIL: 0`, 17 mutation suites). The two pinning tests were flipped to the
+correct answers from their docstrings and renamed
+`test_host_imem_read_returns_the_requested_address` and
+`test_session_read_imem_returns_the_requested_address` - expect those names,
+not `test_known_defect_*`. USER RULING (2026-10-06): greenfield project, never
+submitted to a shuttle, so an RTL fix not a silicon erratum; no host
+workaround. DMEM reads were never affected.
 
 ## Discipline that has repeatedly mattered
 

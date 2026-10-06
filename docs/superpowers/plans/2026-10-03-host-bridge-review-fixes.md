@@ -20,7 +20,7 @@ commits it together with each task, so a lost session costs nothing.
 | 5 TTAdapter read budget (#1) | DONE, own commit, FLAGGED for the user | `f7b2baa` |
 | 6 Docs | DONE (Amendment A1 (d) recorded: design doc, RESUME-V1, WORKLOG) | `5d0caea` |
 | 7 Final verification | DONE, ALL STEPS GREEN. Step 3 `run_host_tests.sh` exits 0 (11/11 `[ok]`, host gate PASS). The failure was ruled PRE-EXISTING (fails at `63a0d49`/`dca7033`/`58e4903`; passes only back at `b435853`, before `d617513`'s prose line broke the first-match selector) and fixed by the reviewer-ruled TEST-SELECTOR change in `test_docs.py` (selects the table row naming BOTH `r2_read_*` and `FAIL`); the doc is untouched | this commit |
-| A2 RTL fix for the IMEM read defect | **NOT for the pi worker.** Needs a stronger agent and the user's sign-off; see Amendment A | |
+| A2 RTL fix for the IMEM read defect | **DONE (2026-10-06).** Fix `55ab86f` (RTL + new gate TB `tb_pe_soc_dbgread` + exact-value test flips); the three full-gate reds were ruled PRE-EXISTING (A2 attribution: none) and fixed at `a7ba206`; mutation suite `994224c`; final full gate T2 PASS (`TOTAL: 51 PASS: 51 FAIL: 0`, 17 mutation suites, no narrowing). User ruling: greenfield, never shuttle-submitted - RTL fix, no host workaround | `55ab86f`, `a7ba206`, `994224c` |
 
 Decisions on record:
 - 2026-10-04: the user chose "unblock first, fix the chip separately" for the
@@ -61,6 +61,11 @@ Decisions on record:
   one such row) instead of the first occurrence. Result: `test_docs` 38/38 OK;
   `tools/host_gui/run_host_tests.sh` exits 0 with 11/11 `[ok]` and "host gate:
   PASS". `docs/host-bridge-bringup.md` is untouched (`git diff` empty).
+- 2026-10-06 USER RULING (step 4's open question, answered): the design was
+  NEVER submitted to a shuttle - the project is greenfield. The A2 fix is
+  therefore an RTL fix, not a silicon erratum, and the `READ_IMEM(a, n+1)`
+  host workaround is NOT needed. A2 is CLOSED; see the `A2 CLOSED 2026-10-06`
+  note in the Amendment A section.
 - #1 (Task 5) is the user's open decision; it is implemented as a revertable
   best effort.
 - 2026-10-04: Task 5 (#1) implemented as a revertable best effort: TTAdapter
@@ -1999,6 +2004,54 @@ Before calling it fixed:
    need a workaround. Read one EXTRA word from the same address and discard
    the first: `READ_IMEM(a, n+1)` answers `(stale, mem[a] … mem[a+n-1])`. That
    caps a useful read at 14 words.
+
+**A2 CLOSED 2026-10-06.**
+
+- Fix committed at `55ab86f` (`fix(rtl): host IMEM reads answer their own
+  address`). `rtl/pe_soc.v` no longer captures `imem_rdata` on the request edge;
+  the request edge captures only what the macro does not register (the DMEM byte
+  and the memory select), and the `dbg_rd_valid` cycle presents the IMEM word
+  straight from the registered macro output
+  (`dbg_rd_data = dmem_q ? {8'h00, dmem_byte_q} : imem_rdata`) — exactly the fix
+  proposed above. The commit also ships the step-1 testbench
+  `tb/tb_pe_soc_dbgread.v`: the real SoC in front of the real SRAM macro,
+  reading IMEM at addresses 0..3 with spaced, repeat and tight cadences, plus an
+  address-encoded filler read.
+- Red-green evidence: with `rtl/pe_soc.v` reverted to `55ab86f^`,
+  `tb_pe_soc_dbgread` fails 9 checks with the exact stale signature
+  (`spaced IMEM read of 1 = 0041, expected 1001`, …); with the fix it passes
+  every check (`PASS: all checks (the real pe_imem answered every read with its
+  own word)`). Reproduced independently on 2026-10-06.
+- Step 2's exact-value flips landed in `55ab86f`: both pinning tests now assert
+  the correct answers and were renamed from the two `test_known_defect_*` names
+  to `test_host_imem_read_returns_the_requested_address` and
+  `test_session_read_imem_returns_the_requested_address`.
+- Mutation suite (`994224c`, `regress/mutate_soc_dbgread_tb.sh`): 6 mutants,
+  all detected, 0 survivors, 0 harness errors. Mutant #1 restores the pre-A2
+  request-edge capture block (the historical defect itself) and is killed with
+  the exact stale signature; one deliberately-excluded EQUIVALENT mutant (the
+  arbiter releasing `imem_addr` during the answer cycle) is documented in the
+  harness header.
+- The three full-gate checks that were red at the start of the A2 lane were
+  confirmed PRE-EXISTING (A2 attribution: none) and fixed at `a7ba206`:
+  (1) the wiki-pages negative control under-modelled the host toolchain pin
+  (`diagrams/TOOLCHAIN.md` pins java 26.0.2, this host runs java 27), demoting
+  the planted stale render to INCONCLUSIVE — the fixture now writes a
+  host-matching pin; (2) the diagrams self-test case (e) deleted a `.svg`,
+  which has been by-design-not-dirty since 555335c's PNG-only gate, so it
+  planted nothing — it now deletes the `.png`; (3) the delay-lattice gate
+  flagged `wiki/concepts/protocol-servo.md`'s `updated:` stamp as older than
+  its last commit — re-stamped.
+- Final full-gate verdict (steps 1–3): `regress/tier.sh 2` on the committed
+  tree at `994224c` exited 0 — **`TOTAL: 51 PASS: 51 FAIL: 0`**,
+  `FIRMWARE: 48 PASS: 48 FAIL: 0`, `mutation suites: 17 ran (full gate — no
+  narrowing)`, `tb_pe_soc_dbgread PASS`,
+  `soc dbgread TB mutations: OK (no unexplained survivors)`, formal safety
+  proofs / formal mutant checks / formal-ifdef gate all OK, wiki links /
+  diagrams / document index / canvas viewer all OK. No WIP, no SKIPPED.
+- Step 4, USER RULING (2026-10-06): the design was NEVER submitted to a
+  shuttle — the project is greenfield. This is an RTL fix, not a silicon
+  erratum, and the `READ_IMEM(a, n+1)` host workaround is NOT needed.
 
 ## Appendix A: findings map
 
