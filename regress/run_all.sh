@@ -1468,6 +1468,25 @@ else
   stale=1
 fi
 
+# The R2 host read port at the SoC level: the A2 fix (55ab86f) made pe_soc
+# PRESENT the macro's registered output in the dbg_rd_valid cycle instead of
+# capturing it on the request edge, and tb_pe_soc_dbgread is the only gate
+# that drives that port against the real macro — so the suite keeps the TB
+# from silently stopping testing what it exists to test. Six mutations: the
+# historical request-edge capture restored, the dmem capture edge moved to
+# the answer, dmem reads answered from the imem path (twice over: the data
+# mux and the memory-select hold), and the answer pulse held or pipelined a
+# cycle late. The dbg_reading-without-valid arbiter mutation is deliberately
+# absent as an equivalent (the macro registers the word at the request edge,
+# so the port cannot observe the address mux leaving).
+if run_mutation_suite mutate_soc_dbgread_tb.sh ./regress/mutate_soc_dbgread_tb.sh > "$CHIP_WT_DIR"/mutate_soc_dbgread.log 2>&1; then
+  echo "soc dbgread TB mutations: OK (no unexplained survivors)"
+else
+  echo "soc dbgread TB mutations: FAILED"
+  tail -20 "$CHIP_WT_DIR"/mutate_soc_dbgread.log
+  stale=1
+fi
+
 # The codec pipeline unit TB. The integration instantiated pe_codec_mux twice
 # in pe_soc, so its unit suite now guards shared silicon: the documented CAN
 # preset 0x51, the ones-only cfg[7] rule and the cfg[6:4] run length, the
