@@ -70,6 +70,22 @@ $(printf '%s\n' "$out" | sed 's/^/        | /')"
   ok "$name"
 }
 
+# fixture_detect_toolchain — a mirror of tools/diag/check_diagrams.sh's
+# detect_toolchain(), emitting the key=value lines that gate's pinned_toolchain
+# parses. It mirrors (and does not source) the gate function because sourcing
+# the gate would RUN it. The filter-before-head order matters for the same
+# reason it does there: plantuml and java are JVMs, and a JVM warning banner
+# precedes the version line on stderr, so `head -1` after the pipe would keep
+# the banner and report it as the version.
+fixture_detect_toolchain() {
+  local v
+  v=$(plantuml -version 2>&1 | sed -n 's/^PlantUML version \([^ /]*\).*/\1/p' | head -1); echo "plantuml=${v:-unknown}"
+  v=$(dot -V 2>&1 | sed -n 's/^dot - graphviz version \([^ ]*\).*/\1/p' | head -1);       echo "graphviz=${v:-unknown}"
+  v=$(java -version 2>&1 | sed -n 's/.*version "\([^"]*\)".*/\1/p' | head -1);            echo "java=${v:-unknown}"
+  v=$(fc-match monospace  2>/dev/null | sed -n 's/^[^:]*:[[:space:]]*"\([^"]*\)".*/\1/p'); echo "monospace=${v:-unknown}"
+  v=$(fc-match sans-serif 2>/dev/null | sed -n 's/^[^:]*:[[:space:]]*"\([^"]*\)".*/\1/p'); echo "sans-serif=${v:-unknown}"
+}
+
 # fresh_render <name> — like fresh(), but also carrying the diagram render gate
 # and a MINIMAL diagrams/ tree.
 #
@@ -101,13 +117,20 @@ fresh_render() {
   done
   # diagrams/TOOLCHAIN.md is an INPUT to the gate, not a diagram: it pins the
   # renderer so a byte difference can be attributed to the toolchain rather than
-  # to a stale render. Without it in the fixture the gate correctly reports the
-  # toolchain as unknown and the "pinned and held green" case fails. This is the
-  # THIRD time this fixture has under-modelled the gate's real inputs - the first
-  # was not copying the gate at all, the second not copying the pin file - and
-  # the rule is the same each time: a fixture must model everything the thing
+  # to a stale render. The fixture's pin must match the HOST THAT RUNS THE
+  # CASE, not the repo: an earlier version copied the repo's TOOLCHAIN.md,
+  # which pins the versions the committed renders were made against, and on a
+  # host with a different toolchain (this host runs java 27 against a pinned
+  # 26.0.2) the gate reported a TOOLCHAIN MISMATCH and demoted every byte
+  # difference to INCONCLUSIVE - so the planted stale render in "an UNPINNED
+  # stale render is NEW-red" read green and the case failed while the gate
+  # worked perfectly. check_diagrams.sh's own self-test solved this the same
+  # way: `detect_toolchain > "$d/$PIN_NAME"`. This is the FOURTH time this
+  # fixture has under-modelled the gate's real inputs - after not copying the
+  # gate, not copying the pin file, and copying the REPO's pin file - and the
+  # rule is the same each time: a fixture must model everything the thing
   # under test READS, or the test is measuring the fixture.
-  [ -f diagrams/TOOLCHAIN.md ] && cp diagrams/TOOLCHAIN.md "$d/diagrams/"
+  fixture_detect_toolchain > "$d/diagrams/TOOLCHAIN.md"
   echo "$d"
 }
 

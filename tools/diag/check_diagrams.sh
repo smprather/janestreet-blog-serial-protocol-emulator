@@ -1181,9 +1181,12 @@ self_test() {
   fi
 
   # (e) A BLOCK'S RENDER REMOVED: an unviewable figure.
+  #     The TRACKED render, so the removal is a colocation failure: since the
+  #     PNG-only ruling (555335c) a missing .svg is by design not dirty, and
+  #     planting the .svg here tested nothing while still looking busy.
   fresh_case c5
-  if [ -f "$sandbox/c5/fixture-multi_001.svg" ]; then
-    rm -f "$sandbox/c5/fixture-multi_001.svg"
+  if [ -f "$sandbox/c5/fixture-multi_001.png" ]; then
+    rm -f "$sandbox/c5/fixture-multi_001.png"
     plant "e a missing block render" dirty c5
   else
     printf '  FAIL: self-test — e: the fixture has no second block, so the\n'
