@@ -1,10 +1,10 @@
 ---
 title: Competition Overview
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-10-08
 type: concept
 tags: [competition, constraint, area-budget, process-node, verification]
-sources: [raw/articles/janestreet-protocol-emulator-competition.md, raw/transcripts/gemini-asic-competition-discussion-2026-09.md]
+sources: [raw/articles/janestreet-competition-blog-fulltext.md, raw/articles/janestreet-protocol-emulator-competition.md, raw/transcripts/gemini-asic-competition-discussion-2026-09.md]
 confidence: high
 ---
 
@@ -29,7 +29,7 @@ Design an open-source, general-purpose protocol-emulator ASIC: a tiny CPU with a
 - Area: **current maximum 6x4 tiles = 24 tiles**, ~200x150 um per tile, **~0.7 mm2 nominal**, ~1K logic cells/tile (rough). The blog's own arithmetic is self-consistent: 6x4 at 200x150 is 1200x600 um = 0.72 mm2.
 - **8x4 is an upside, not the allocation.** The blog says they are "working on the possibility of scaling up to 8x4 tiles (~30% more area)" and will update the page and email sign-ups if it happens. Design to 24 tiles; treat 32 as headroom that may never arrive.
 - Instruction memory: prefer SRAM over flops for area; TT has SRAM examples on this node.
-- Deadline 2026-01-18; March 2027 CMOS5L shuttle (foundry schedule permitting). Open source, build in public, teams encouraged.
+- Deadline **2027-01-18** (corrected 2026-10-08: this page said 2026-01-18, and the wrong year then propagated into the README; the blog says "Submit your design by January 18th, 2027", the verbatim capture and the transcript both say 2027, and this page had never cited the fulltext capture as a source — it does now); March 2027 CMOS5L shuttle (foundry schedule permitting). Open source, build in public, teams encouraged.
 
 ## Transcript corrections — REVERSED 2026-09-20
 

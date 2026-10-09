@@ -7,7 +7,7 @@ than dedicated protocol logic. One CPU, a shared SERDES and line-codec pipeline,
 a pin matrix and a 10BASE-T datapath speak UART, SPI, I2C, JTAG, SWD, PS/2, CAN,
 USB-LS and 10BASE-T — by loading a different program. Target: IHP 130 nm CMOS5L
 via [Tiny Tapeout](https://tinytapeout.com/), 6×4 tiles; competition deadline
-**2026-01-18**, March 2027 CMOS5L shuttle (foundry schedule permitting).
+**2027-01-18**, March 2027 CMOS5L shuttle (foundry schedule permitting).
 
 **Status — 2026-10-06. Everything green below is a simulation result; the design
 has never been submitted to a shuttle, and no silicon has been measured.** The

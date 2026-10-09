@@ -2381,3 +2381,26 @@ nearest **enclosing** filled rect, 7,389 text elements.
 - This closes the item `concepts/soc-wiring-and-memory.md` flagged in its own
   body: the page's `uo_out[3]` row had been corrected to state what the RTL does
   without asserting adoption, because adoption was not mine to record. It is now.
+
+## [2026-10-08] verify + correct | the competition capture is re-verified; the deadline year in one page was wrong
+
+- **Re-fetched `https://blog.janestreet.com/protocol-emulator-asic-competition/` and
+diffed it against `raw/articles/janestreet-competition-blog-fulltext.md` in BOTH
+directions: 0 paragraphs differ either way.** The file is complete and current, so
+it is NOT superseded (per SCHEMA a superseding capture would be a new file). The
+fresh HTML hash differs from the 2026-09-20 one — a rebuild changes bytes, not
+content — so the frontmatter `sha256:` is kept as this capture's provenance and
+the header now records the re-verification.
+- **The capture is now marked DO NOT CHANGE**, at the user's request and consistent
+with `SCHEMA.md`'s "raw sources are immutable" rule, so the next reader cannot
+mistake it for a page to edit.
+- **A real error was found while doing it: `concepts/competition-overview.md` said
+"Deadline 2026-01-18". The blog says January 18th, 2027** — also 2027 in the
+verbatim capture, in the 2026-09-17 summary, and in the Gemini transcript. The
+wrong year had just been propagated into `README.md` by the previous docs pass,
+which trusted that page; both are corrected. Cause: the page's `sources:` cited
+only the lossy summary and the transcript and never the fulltext root reference,
+so a paraphrase outranked the source again — the same failure the 6x4/8x4
+correction recorded. The capture is now first in its `sources:`.
+- **Not touched:** the summary (`janestreet-protocol-emulator-competition.md`) and
+the transcript, which are historical captures; `raw/` stays immutable.
