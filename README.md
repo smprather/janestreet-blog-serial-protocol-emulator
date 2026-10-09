@@ -1,33 +1,192 @@
 # Protocol Emulator ASIC — Jane Street competition entry
 
 Entry for [Jane Street's protocol emulator ASIC competition](https://blog.janestreet.com/protocol-emulator-asic-competition/):
-design an open-source, general-purpose protocol emulator — a small chip whose
-instruction set reads and writes pins, counts cycles and hits protocol timing
-precisely, so most protocol sequencing can live in **firmware** rather than
-dedicated protocol logic. Target: IHP 130 nm CMOS5L via Tiny Tapeout, 6×4 tiles,
-submission 2027-01-18.
+a small chip whose instruction set reads and writes pins, counts cycles and hits
+protocol timing exactly, so most protocol sequencing lives in **firmware** rather
+than dedicated protocol logic. One CPU, a shared SERDES and line-codec pipeline,
+a pin matrix and a 10BASE-T datapath speak UART, SPI, I2C, JTAG, SWD, PS/2, CAN,
+USB-LS and 10BASE-T — by loading a different program. Target: IHP 130 nm CMOS5L
+via [Tiny Tapeout](https://tinytapeout.com/), 6×4 tiles; competition deadline
+**2026-01-18**, March 2027 CMOS5L shuttle (foundry schedule permitting).
 
-**Status: the programmable core runs UART, SPI mode 0, and a complete I2C
-write/read transaction as firmware on real RTL. The wrapper has a passive SPI
-program loader, and the SoC integrates 10BASE-T **receive and transmit**
-hardware (real Manchester on the pad, both directions proven by testbench).
-The chip also implements a framed host bus (R1: PING / LOAD / STATUS /
-CLEAR_FAULT / TARGET, sticky faults, `IRQ_N`, target-1 loopback) and a host
-read path (R2: `READ_CPU` / `READ_IMEM` / `READ_DMEM` / `DUMP_CORE`), so a
-laptop can load, run, observe and debug it over USB via the host controller
-below. See [`wiki/STATUS.md`](wiki/STATUS.md) for integration details and the
-ordered work list, and [`docs/demo-walkthrough.md`](docs/demo-walkthrough.md)
-for the judge-facing demo script (with a no-board fallback).
+**Status — 2026-10-06. Everything green below is a simulation result; the design
+has never been submitted to a shuttle, and no silicon has been measured.** The
+programmable core runs UART, SPI mode 0 and a complete I2C
+write/repeated-START/read transaction as firmware on real RTL. The SoC integrates
+10BASE-T **receive and transmit** (real Manchester on the pad, both directions
+proven by testbench) and a framed host bus: R1 (PING / LOAD / STATUS /
+CLEAR_FAULT / TARGET, sticky faults, `IRQ_N`, target-1 loopback), R2 reads
+(`READ_CPU` / `READ_IMEM` / `READ_DMEM` / `DUMP_CORE`, an 11-word core header and
+a wait-word contract) and R3 debug control (single-instruction step, one PC
+breakpoint, `DEBUG_STATUS` readback). A laptop loads, runs, observes and debugs
+the chip over USB through the [host controller](#host-controller-usb--pico--pe)
+below.
+
+The full gate is green at `994224c` (2026-10-06): **48/48 firmware tests, 51/51
+testbench runs, 17 mutation suites with no unexplained survivors**, formal safety
+proofs plus their non-vacuity mutants, the lint gate, and the documentation gates
+(wiki links 0 dead across 80 documents; 69 diagram checks; document index 54/54). The
+v1.0 baseline is recorded in
+[`reviews/2026-09-28/V1.0-GATE.log`](reviews/2026-09-28/V1.0-GATE.log). **The one
+open item is the real-board acceptance run** — a Pico on the Tiny Tapeout demo
+board over USB — and it is hardware-gated, not design-gated. The live state and
+the ordered work list are in [`wiki/STATUS.md`](wiki/STATUS.md); the judge-facing
+demo script (four acts, proven vs pending, plus a no-board fallback) is
+[`docs/demo-walkthrough.md`](docs/demo-walkthrough.md).
 
 > Picking this up cold (human or agent)? Read **[`HANDOFF.md`](HANDOFF.md)** first
 > — current verified state, the traps worth not rediscovering, and the next step.
 
-**Deep reading.** [`wiki/concepts/overview.md`](wiki/concepts/overview.md) is the
-entry point for the concept pages — one per protocol, each with the wire format,
-the timing constraints and their tolerances, how the emulator implements it, how
-the testbench proves it and the mutation coverage. Where a protocol's figures are
-listed below, its page is the prose behind them. The next-ideas list is
-[`wiki/plans/feature-brainstorm.md`](wiki/plans/feature-brainstorm.md).
+## Verify it yourself
+
+A few minutes, no board:
+
+| Command | What it shows |
+|---|---|
+| `./regress/run_firmware_tests.sh` | assemble + emulate every firmware program — **FIRMWARE: 48 PASS: 48 FAIL: 0** (~12 s) |
+| `python3 tools/fw/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex && python3 tools/fw/peemu.py firmware/uart_echo.hex --send "41 42"` | the UART persona end to end, bit-accurately, in about a second — no RTL build |
+| `python3 tools/host_bridge/acceptance.py --fake` | the whole host path (session → bridge protocol → fake PE) with no hardware |
+| `tools/host_gui/run_host_tests.sh` | the host gate: unit tests, bridge tests, lint, protocol/server fuzz, soak smoke, acceptance |
+| `bash regress/lint.sh` | `verilator -Wall` + a yosys elaboration check on every top (needs verilator + yosys) |
+
+The chip-side full regression is one command. It includes the mutation suites, so
+it is a 20–30 minute named gate, not a keystroke check:
+
+```bash
+regress/tier.sh 2                  # the full gate; refuses to start unless the tree is clear
+./regress/run_all.sh --fast -j8    # the same gate directly (--fast is parallel iverilog, not a simulator swap)
+./regress/synth_area.sh            # mapped cells + area per block (needs yosys + the IHP PDK liberty)
+```
+
+Place-and-route is dockerized LibreLane against the checked-in **60 MHz**
+constraints (`CLOCK_PERIOD` 16.667 ns; see
+[`wiki/concepts/pdk-toolchain.md`](wiki/concepts/pdk-toolchain.md)):
+
+```bash
+flow/run_librelane.sh flow/pe_serdes.json   # results under ~/asic-runs/
+flow/run_librelane.sh flow/pe_soc.json
+```
+
+Requirements: `iverilog` ≥ 11 and `python3` for the regression; `verilator` +
+`yosys` + the IHP PDK for lint and area; docker for place-and-route; `plantuml`
+for the diagram gate.
+
+<!-- BEGIN gui-worker host block (host controller section) - keep whole;
+     place BESIDE the chip-side Quick start / Layout sections when merging -->
+## Host controller (USB → Pico → PE)
+
+The operator tooling lives in `tools/host_gui/` (browser UI, session state
+machine, framed protocol) and `tools/host_bridge/` (MicroPython bridge for the
+TT demo board). Contract and decisions: `wiki/plans/host-controller-gui.md`.
+
+```bash
+pip install .[host-gui]           # optional: fastapi/uvicorn + pyserial
+sudo usermod -aG dialout $USER    # then re-login: the CDC device is root:dialout
+
+tools/host_gui/run_host_tests.sh   # the one-command host gate (tests + lint + fuzz + soak + acceptance)
+python3 tools/host_bridge/acceptance.py --fake
+python3 tools/host_bridge/acceptance.py --device /dev/ttyACM0 --board <rev>
+```
+
+Deploy the bridge by copying `tools/host_bridge/{main,pe_frame,tt_adapter}.py`
+to the Pico's MicroPython filesystem and running `main.py`: it selects the
+shuttle, starts the 60 MHz project clock, holds reset, configures the host SPI
+on `uio[4:7]`, and speaks the newline-JSON protocol over USB CDC. The
+first-pass SCLK cap is 5 MHz (`min(5 MHz, project_clk/6)`); `LOAD` always
+forces `run=0`, and `start` raises `ui_in[1]` only after a successful LOAD
+response. The local page is served by `tools.host_gui.server.serve(Api())`
+(the acceptance runner is the scripted equivalent of the same sequence).
+
+Evidence levels are kept distinct: **simulator** (fake PE model),
+**host-verified** (this tree's tests), **board-observed** (Pico `hello`/STATUS),
+and **chip-confirmed** — the R1/R2/R3 host protocol in RTL, verified in
+simulation: the R2 golden package is confirmed against the real RTL, and the
+`VvpTTAdapter` replays a whole recorded host session against the real chip RTL
+under `vvp`. The real device run is still pending hardware. `acceptance.py --fake` is the current end-to-end evidence and its checklist is in
+`tools/host_gui/tests/fixtures/acceptance.md`. The R2 read obligations
+themselves live in `tools/host_gui/r2_reads.py` — probes over the host FakePE
+model, marked **not chip-confirmed**; the chip-side confirmation is the R2
+golden package, 22/22 steps byte-exact against the real RTL in simulation, and
+still not a board result.
+
+**Docs:** `docs/host-bridge-bringup.md` is the operator runbook (flash, deploy,
+permissions, the real acceptance, failure triage). `docs/demo-walkthrough.md`
+is the judge-facing demo script (the four protocols, proven vs pending, the
+no-board fallback). Both are pinned by tests so their claims cannot go stale.
+
+<!-- END gui-worker host block (host controller section) -->
+
+## What is in the chip today
+
+| Block | File | What it is |
+|---|---|---|
+| SERDES | `rtl/pe_serdes.v` | 1–32-bit word engine, runtime bit order, paced by a per-bit-cell `bit_en` strobe |
+| Line codecs | `rtl/pe_nrzi.v`, `rtl/pe_manch.v`, `rtl/pe_bitstuff.v` | NRZI, Manchester, bit stuffing (CAN/USB style) |
+| Codec pipeline mux | `rtl/pe_codec_mux.v` | `cfg`-selected codec subset; two instances in the SoC (TX and RX) |
+| CRC / LFSR engine | `rtl/pe_crc.v` | CRC-5/8/15/16/32 from one datapath, checked against the RevEng catalogue |
+| DRU | `rtl/pe_dru.v` | oversampled Manchester receiver, dual-edge capture — 10BASE-T and PS/2 |
+| CPU | `rtl/pe_cpu.v` | 16-bit instruction, 16 opcodes, A/Y/X; PC width follows the IMEM depth |
+| Pin matrix | `rtl/pe_pinmux.v` | per-pin out / output-enable / open-drain / read-back — the I2C gate |
+| Instruction memory | `rtl/pe_imem.v` | 1,024×16 real SRAM macro (`RM_IHPSG13_1P_1024x16_c2_bm_bist`) + glue; a flop build is available for comparison |
+| Frame buffer | `rtl/pe_fbuf.v` | 2 KB behind a byte interface, the same macro part as the IMEM |
+| 10BASE-T receive MAC | `rtl/pe_eth_mac.v` | SFD lock, byte assembly, FCS check, store-and-forward into the frame buffer |
+| 10BASE-T transmit engine | `rtl/pe_eth_tx.v` | preamble/SFD, FCS, 64-byte pad, 96-bit-time IFG, and its own CRC instance |
+| Host bus + loader + debug | `rtl/pe_ctrl.v` | passive SPI program loader and the framed host bus (R1 / R2 / R3) |
+| Programmable protocol SoC | `rtl/pe_soc.v` | CPU + IMEM + tick timers + pin matrix + SERDES/codecs + 10BASE-T RX/TX |
+| Tiny Tapeout top level | `rtl/tt_um_protocol_emulator.v` | loader + SoC — **the deliverable, the only submittable module** |
+| Assembler / emulator | `tools/fw/peasm.py`, `tools/fw/peemu.py` | assemble `.pe` → `.hex`; bit-accurate emulation on the host |
+
+The protocol personas are firmware: 27 programs in [`firmware/`](firmware/), one
+per act — `uart_echo.pe` (the UART itself is 118 words of firmware),
+`spi_xfer.pe`, `i2c_pins.pe` and `i2c_xfer.pe`, plus UART RTS/CTS, SPI mode 3 +
+CRC, advanced I2C, DMX-512, MIDI, WS2812, servo PWM, DHT11, DS18B20, NEC IR,
+FM0/FM1 bi-phase, a frequency/duty meter, HC-SR04 ranging, a stepper ramp, the
+10BASE-T RX/TX consumers, and the emulator and CPU test programs. The same core
+and pin matrix run all of them; nothing in the RTL knows which protocol is
+loaded.
+
+**Area and timing.** Per-block mapped cell counts and areas are regenerated by
+`regress/synth_area.sh` and recorded in
+[`wiki/reference/block-diagram.md`](wiki/reference/block-diagram.md) and
+[`wiki/reference/floorplan-feasibility.md`](wiki/reference/floorplan-feasibility.md)
+(standard cells, sg13g2 typical, pre-placement; the two SRAM macros contribute
+area from their LEF — 79,674 µm² each, 237×336 µm — not from gates). The die is
+the 6×4 template, 1002×432 µm ≈ 0.433 mm², which `flow/pe_soc.json` declares as
+`DIE_AREA`. The operating point is **60 MHz** (16.667 ns) in `info.yaml` and in
+both flow configs; the full-SoC LibreLane run signed off setup and hold at all
+three corners on 2026-09-22 with **+2.6601 ns** worst setup slack (slow corner)
+and 0 violating paths, and the post-route critical path puts Fmax at 71.4 MHz.
+`wiki/STATUS.md` records what is *not* clean in that run too: SRAM-pin max-slew /
+max-cap checker violations that a longer clock period cannot fix, and a
+LibreLane stop before GDS streamout (a PDK-macro-vs-flow `prBoundary` mismatch,
+not a design defect).
+
+`regress/lint.sh` runs Verilator `-Wall` plus a yosys elaboration check on every
+top, and the regression fails if either finds anything. It exists because a green
+testbench says nothing about the netlist: two drivers on one flop raced in Icarus
+and became a constant 0 in yosys, and a hierarchical debug reference simulated
+correctly while synthesising backwards. Neither is reachable from a testbench.
+
+## Design in one paragraph
+
+Most protocol sequencing runs in **firmware**. The CPU executes programs against
+the pin matrix and cycle counter; the UART is 118 words of firmware, and SPI mode
+0 and a complete I2C transaction run there too. The wrapper's `pe_ctrl` SPI slave
+loads instruction SRAM before `run`; 10BASE-T receive and transmit use dedicated
+SoC datapaths, a 2 KB frame buffer for RX and an 8-byte staging FIFO for TX (a
+general word FIFO remains future work). For protocols where a word moves in one
+operation (UART/SPI/CAN/USB), the shared SERDES handles the datapath: a
+programmable divider generates a `bit_en` strobe per bit cell, the SERDES
+converts words to and from bit streams, and the codec pipeline applies line
+coding. A 60 MHz board clock (DDR capture) makes every hard
+protocol's timing an exact integer number of ticks; 10BASE-T's 50 ns half-bit
+cell is the binding constraint at 3 ticks. No PLL, no DLL. I2C uses firmware
+bit-banging because its control flow is per bit (ACK, arbitration, clock stretch);
+the I2C transaction is checked against independent emulator and RTL slave models,
+and handles arbitration loss, unexpected NACKs and SCL stretching. An abort parks
+with an outcome code — there is no STOP-qualified bus-free wait and no retry. See
+[`wiki/concepts/isa-and-soc.md`](wiki/concepts/isa-and-soc.md) and
+[`wiki/plans/through-i2c.md`](wiki/plans/through-i2c.md).
 
 ## Block diagrams
 
@@ -45,7 +204,9 @@ listed below, its page is the prose behind them. The next-ideas list is
 
 Every figure ships as a colocated `.puml` source and `.png` render in [`diagrams/`](diagrams/)
 (`.svg` is not tracked — no SVG renderer uses a sane transparency background; see
-[`diagrams/README.md`](diagrams/README.md) for how to regenerate them).
+[`diagrams/README.md`](diagrams/README.md) for how to regenerate them). The
+regression's document-index gate requires this list to name every render, so it
+cannot quietly lose one.
 
 ### Host ↔ chip protocol
 
@@ -82,176 +243,49 @@ diagrams (`-timing`) for each act.
 | UART RTS/CTS | [proto-uart-flow](diagrams/proto-uart-flow.png) · [proto-uart-flow_001](diagrams/proto-uart-flow_001.png) · [proto-uart-flow_002](diagrams/proto-uart-flow_002.png) · [proto-uart-flow_003](diagrams/proto-uart-flow_003.png) · [proto-uart-flow_004](diagrams/proto-uart-flow_004.png) |
 | WS2812 | [proto-ws2812-frame](diagrams/proto-ws2812-frame.png) · [proto-ws2812-timing](diagrams/proto-ws2812-timing.png) · [proto-ws2812](diagrams/proto-ws2812.png) |
 
-## What exists today
-
-Mapped cell areas below are standard cells at sg13g2 typical, before placement;
-SRAM macro footprints are excluded.
-
-| Block | File | Size (mapped, sg13g2 typ) |
-|---|---|---|
-| SERDES — 1–32 b word engine, runtime bit order, strobe-paced | `rtl/pe_serdes.v` | 539 cells / 11.2k µm² (17.2k µm² routed) |
-| NRZI / Manchester / bit-stuffing codecs | `rtl/pe_nrzi.v`, `rtl/pe_manch.v`, `rtl/pe_bitstuff.v` | 15 / 7 / 99 cells |
-| Config-driven codec pipeline mux | `rtl/pe_codec_mux.v` | 130 cells / 1.8k µm² |
-| **CRC / LFSR engine** — CRC-5/8/15/16/32, one datapath | `rtl/pe_crc.v` | 209 cells / 3.4k µm² |
-| **DRU** — oversampled Manchester receive (10BASE-T, PS/2), dual-edge | `rtl/pe_dru.v` | 148 cells / 2.4k µm² |
-| CPU — 16-bit insn, 16 opcodes, A/Y/X, PC width from IMEM depth | `rtl/pe_cpu.v` | 377 cells / 4.8k µm² |
-| Passive SPI program loader — mode 0, MSB-first, IMEM only | `rtl/pe_ctrl.v` | 292 cells / 5.8k µm² |
-| **Instruction memory** — real SRAM macro + protocol wrapper | `rtl/pe_imem.v` | 12 glue cells (+ the macro's LEF area) |
-| Ethernet receive MAC — DRU/Manchester/CRC integration and frame window | `rtl/pe_eth_mac.v` | 1,402 cells / 20.4k µm² |
-| **Frame buffer** — 2 KB SRAM macro + wrapper | `rtl/pe_fbuf.v` | 48 glue cells (+ the macro's LEF area) |
-| Programmable protocol SoC — CPU + IMEM + ticks + pin matrix + Ethernet RX | `rtl/pe_soc.v` | 3,298 cells / 53.7k µm² |
-| **Tiny Tapeout top level** — loader + SoC, the deliverable | `rtl/tt_um_protocol_emulator.v` | 3,613 cells / 59.5k µm² |
-| Assembler / bit-accurate emulator | `tools/fw/peasm.py`, `tools/fw/peemu.py` | Python |
-| The UART itself — **as firmware** | `firmware/uart_echo.pe` | 114 words |
-
-Verified by **29 self-checking testbenches + 20 firmware tests + a lint gate**
-(`regress/run_all.sh`), including one TB per target protocol: UART, SPI, I2C,
-JTAG, SWD, PS/2, CAN, USB-LS, 10BASE-T. Seven mutation suites and generated-doc
-gates also pass. **The operating point and signoff target are
-60 MHz** (`CLOCK_PERIOD` 16.667 ns in both flow configs). The SERDES's historical
-2026-09-18 place-and-route run reported 0 DRC, 0 LVS and +7.6 ns setup slack at
-the slow corner under the former 66 MHz constraint. The current configs use the
-60 MHz target; recorded timing results are in [`wiki/STATUS.md`](wiki/STATUS.md).
-
-`regress/lint.sh` runs Verilator `-Wall` plus a yosys elaboration check on every top,
-and the regression fails if either finds anything. It exists because a green
-testbench says nothing about the netlist: two drivers on one flop raced in Icarus
-and became a constant 0 in yosys, and a hierarchical debug reference simulated
-correctly while synthesising backwards. Neither is reachable from a testbench.
-
-`tb/tb_pe_soc_uart.v` demonstrates the UART firmware on `pe_soc`: one input
-pin, one output pin, a counter, and a program produce 115200 8N1, echoing bytes
-at 8.6–8.7 µs per bit cell measured at the pin. The same core and pin matrix
-run SPI mode 0 and a complete I2C write/repeated-START/read transaction. The
-I2C transaction is checked against independent emulator and RTL slave models;
-it also handles arbitration loss (release both lines, no STOP), unexpected
-NACKs (record the phase, issue a STOP and abort) and SCL stretching (poll the
-pad before timing tHIGH). An abort parks with an outcome code — there is no
-STOP-qualified bus-free wait and no retry.
-
-The instruction memory is a **real SRAM macro** (`1P_1024x16`, 1,024 program
-words) behind `rtl/pe_imem.v`; `pe_ctrl` loads it through the wrapper's SPI pads
-before `run` rises. The intended board-side controller is the RP2040 on the
-Tiny Tapeout demo board (Raspberry Pi Pico); it drives this passive SPI loader.
-A Linux PC demo GUI is on the TODO list; its PC-to-board transport and control
-API have not been selected.
-The pin matrix (`rtl/pe_pinmux.v`) supplies per-pin
-direction and open-drain control. The 2 KB frame buffer and 10BASE-T receive
-chain are integrated into `pe_soc`; `firmware/eth_rx.pe` consumes the verified
-frame window. See [`wiki/STATUS.md`](wiki/STATUS.md) for limits and next steps.
-The word FIFO remains future work.
-
-## Quick start
-
-```bash
-./regress/run_all.sh             # firmware regression, all 29 TBs, lint, doc drift
-./regress/run_firmware_tests.sh  # just assemble + emulate the firmware
-./regress/lint.sh                # verilator -Wall + yosys elaboration check
-./regress/synth_area.sh          # mapped cell count + area per block (needs yosys + IHP PDK)
-
-# the fast firmware loop: 2 seconds instead of a 1-minute RTL build
-python3 tools/fw/peasm.py firmware/uart_echo.pe -o firmware/uart_echo.hex
-python3 tools/fw/peemu.py firmware/uart_echo.hex --send "41 42" --max-cycles 900000
-```
-
-Place-and-route uses dockerized LibreLane and the checked-in **60 MHz**
-constraints (`CLOCK_PERIOD` 16.667 ns; see `wiki/concepts/pdk-toolchain.md`):
-
-```bash
-flow/run_librelane.sh flow/pe_serdes.json   # results under ~/asic-runs/
-```
-
-<!-- BEGIN gui-worker host block (host controller section) - keep whole;
-     place BESIDE the chip-side Quick start / Layout sections when merging -->
-## Host controller (USB → Pico → PE)
-
-The operator tooling lives in `tools/host_gui/` (browser UI, session state
-machine, framed protocol) and `tools/host_bridge/` (MicroPython bridge for the
-TT demo board). Contract and decisions: `wiki/plans/host-controller-gui.md`.
-
-```bash
-pip install .[host-gui]           # optional: fastapi/uvicorn + pyserial
-sudo usermod -aG dialout $USER    # then re-login: the CDC device is root:dialout
-
-tools/host_gui/run_host_tests.sh   # the one-command host gate (tests + lint + fuzz + soak + acceptance)
-python3 tools/host_bridge/acceptance.py --fake
-python3 tools/host_bridge/acceptance.py --device /dev/ttyACM0 --board <rev>
-```
-
-Deploy the bridge by copying `tools/host_bridge/{main,pe_frame,tt_adapter}.py`
-to the Pico's MicroPython filesystem and running `main.py`: it selects the
-shuttle, starts the 60 MHz project clock, holds reset, configures the host SPI
-on `uio[4:7]`, and speaks the newline-JSON protocol over USB CDC. The
-first-pass SCLK cap is 5 MHz (`min(5 MHz, project_clk/6)`); `LOAD` always
-forces `run=0`, and `start` raises `ui_in[1]` only after a successful LOAD
-response. The local page is served by `tools.host_gui.server.serve(Api())`
-(the acceptance runner is the scripted equivalent of the same sequence).
-
-Evidence levels are kept distinct: **simulator** (fake PE model),
-**host-verified** (this tree's tests), **board-observed** (Pico `hello`/STATUS),
-and **chip-confirmed** (requires the PE host protocol in RTL, plan Tasks 3-5,
-not landed yet. `acceptance.py --fake` is the current end-to-end evidence and
-its checklist is in `tools/host_gui/tests/fixtures/acceptance.md`; the real
-device run is pending hardware and the RTL phases. The R2 read obligations
-themselves live in `tools/host_gui/r2_reads.py`, each marked
-**not chip-confirmed** until the RTL passes the same probes.
-
-**Docs:** `docs/host-bridge-bringup.md` is the operator runbook (flash, deploy,
-permissions, the real acceptance, failure triage). `docs/demo-walkthrough.md`
-is the judge-facing demo script (the four protocols, proven vs pending, the
-no-board fallback). Both are pinned by tests so their claims cannot go stale.
-
-<!-- END gui-worker host block (host controller section) -->
-
 ## Layout
 
 ```
-rtl/        synthesizable Verilog (the hardware): one module per file --
+rtl/        synthesizable Verilog (the hardware), one module per file —
             pe_serdes, pe_nrzi, pe_manch, pe_bitstuff, pe_codec_mux, pe_crc,
-            pe_dru, pe_cpu, pe_imem, pe_fbuf, pe_eth_mac, pe_ctrl, pe_pinmux,
-            pe_soc, and tt_um_protocol_emulator (the Tiny Tapeout top level --
-            the only submittable module); rtl/vendor/ holds the SRAM macro's
-            port shell
+            pe_dru, pe_cpu, pe_imem, pe_fbuf, pe_eth_mac, pe_eth_tx, pe_ctrl,
+            pe_pinmux, pe_soc, and tt_um_protocol_emulator (the Tiny Tapeout top
+            level — the only submittable module); rtl/vendor/ holds the SRAM
+            macro's port shell
 info.yaml   Tiny Tapeout project metadata: tiles, clock, pinout
 flow/       LibreLane config + runner (pe_soc.*, pe_serdes.*), reproducible from
             a clone
 tb/         self-checking testbenches only (tb_*.v)
-regress/    the regression itself: run_all.sh, run_one_tb.sh,
+regress/    the regression itself: run_all.sh, tier.sh, run_one_tb.sh,
             run_firmware_tests.sh, lint.sh, synth_area.sh, param_guards.sh,
-            sram_model.sh, and the seven mutate_*_tb.sh harnesses
-firmware/   protocol programs (.pe source, .hex assembled) -- uart_echo is the UART
+            sram_model.sh, and the 17 mutate_*_tb.sh harnesses
+firmware/   protocol programs (.pe source, .hex assembled) — 27 of them
 tools/fw/   peasm.py (assembler), peemu.py (bit-accurate emulator)
-tools/gen/  documentation generators (block inventory, clock arithmetic, CRC
-            config, floorplan feasibility, pin budget, signal glossary, SRAM
-            budget), drift-checked in the regression
-tools/checks/  standalone validation helpers
+tools/      gen/ documentation generators, drift-checked in the regression;
+            checks/ standalone validators; host_gui/ browser UI, session state
+            machine, framed protocol; host_bridge/ MicroPython bridge for the
+            TT demo board
+docs/       judge-facing and operator-facing documents (demo walkthrough,
+            bring-up runbook, submission readiness, cold-clone audit, plans)
 reviews/    the external review passes and their evidence (historical; the probe
             scripts are kept runnable)
 diagrams/   editable PlantUML text: project plan and implementation progress
 sim/        VCD waveforms from the testbenches (regenerated, not tracked)
-wiki/       the design record -- read STATUS.md; its Next-steps section is the work list
+wiki/       the design record — read STATUS.md; its Next-steps section is the work list
 ```
 
-The `wiki/` is where the reasoning lives: competition rules and platform
-constraints, protocol physical-layer analysis, timing plans and their arithmetic,
-ADRs, the current work plan, and the toolchain notes (including the failure modes
-worth not rediscovering). `wiki/STATUS.md` is the resume-here page, and its
-Next-steps section is the live work list (`plans/through-i2c` is a completed plan,
-kept for its findings).
+## Where the reasoning lives
 
-## Design in one paragraph
+[`wiki/concepts/overview.md`](wiki/concepts/overview.md) is the entry point for
+the concept pages — one per protocol, each with the wire format, the timing
+constraints and their tolerances, how the emulator implements it, how the
+testbench proves it and the mutation coverage. The next-ideas list is
+[`wiki/plans/feature-brainstorm.md`](wiki/plans/feature-brainstorm.md).
 
-Most protocol sequencing runs in **firmware**. The 377-cell CPU executes
-programs against the pin matrix and cycle counter; the UART is 114 words of
-firmware, SPI mode 0 and a fixed I2C transaction run there too. The wrapper's
-`pe_ctrl` SPI slave loads instruction SRAM before `run`; 10BASE-T receive uses
-a dedicated SoC datapath and frame buffer. For protocols where a byte moves in
-one operation (UART/SPI/CAN/USB), the shared SERDES handles the datapath: a
-programmable divider generates a `bit_en` strobe per bit cell, the SERDES
-converts words to and from bit streams, and the codec pipeline applies line
-coding. A 60 MHz board clock (DDR capture) makes every hard protocol's timing an
-exact integer number of ticks; 10BASE-T's 50 ns half-bit cell is the binding
-constraint at 3 ticks. Signoff targets the same **60 MHz** operating point
-(16.667 ns); the former 66 MHz signoff target is retired. No PLL, no DLL. I2C
-uses firmware bit-banging because its control flow is per bit; see
-`wiki/plans/through-i2c.md`.
+The [`wiki/`](wiki/index.md) is where the reasoning lives: competition rules and
+platform constraints, protocol physical-layer analysis, timing plans and their
+arithmetic, ADRs, formal-verification results, the current work plan, and the
+toolchain notes (including the failure modes worth not rediscovering).
+[`wiki/STATUS.md`](wiki/STATUS.md) is the resume-here page, and its Next-steps
+section is the live work list (`plans/through-i2c` is a completed plan, kept for
+its findings).
