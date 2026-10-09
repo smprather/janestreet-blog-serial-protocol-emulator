@@ -12,6 +12,13 @@ supersedes: raw/articles/janestreet-protocol-emulator-competition.md (2026-09-17
 > the primary source for every competition fact in this wiki. Extracted from the
 > page's `post-content` div; links preserved inline, author bios at the end.
 >
+> **DO NOT CHANGE ANYTHING BELOW THIS BLOCK.** The text is a verbatim capture of a
+> primary source, and `wiki/SCHEMA.md` rules raw sources immutable: corrections go
+> in wiki pages, never in `raw/`, and a superseding capture is a NEW file. Editing
+> this text destroys the only record of what the page actually said — which is how
+> the 8x4 tile error and the 2026/2027 deadline error both survived. If the page
+> changes upstream, add a new dated capture; do not rewrite this one.
+>
 > **Why this file exists.** The 2026-09-17 capture
 > (`janestreet-protocol-emulator-competition.md`) is a hand-written SUMMARY, not the
 > source. It recorded the tile allocation as **8x4**. The blog says **6x4**, and
@@ -19,13 +26,20 @@ supersedes: raw/articles/janestreet-protocol-emulator-competition.md (2026-09-17
 > correct "initially 6x4, possibly scaling to 8x4" claim stale. Keep the real text
 > so a paraphrase can never outrank the source again.
 >
-> **This page is explicitly a living document.** It states that it will be updated
-> if 8x4 becomes available, and that sign-ups will be emailed. Re-fetch and diff
-> this file periodically; the sha256 above is of the raw HTML as fetched.
+> **Re-verified 2026-10-08 against a fresh fetch.** The HTML bytes differ from the
+> 2026-09-20 fetch — a rebuild changes the hash, so the `sha256:` above is kept as
+> this capture's provenance — but the content is identical in BOTH directions:
+> every paragraph here is on the live page, and every paragraph on the live page is
+> here. No superseding capture is needed.
+>
+> **This page is explicitly a living document.** It says it will be updated if 8x4
+> becomes available and that sign-ups will be emailed, so re-fetch and diff it
+> periodically — then add the result as a NEW capture or a dated note, never as an
+> edit to the text below.
 
 ---
 
-[](/protocol-emulator-asic-competition/oscilloscope-clean.png)
+![Vintage oscilloscope illustration with UART, SPI, I2C, USB and 10BASE-T traces; independent time scales, not a real acquisition](/protocol-emulator-asic-competition/oscilloscope-clean.png)
 
 Last month, we asked you to [reverse engineer a
 chip](https://blog.janestreet.com/can-you-reverse-engineer-an-asic/) from nothing but its
