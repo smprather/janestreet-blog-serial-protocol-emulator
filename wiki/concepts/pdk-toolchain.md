@@ -28,8 +28,19 @@ is the captured shuttle installer and it hardcodes `IHP_PDK_REV=2bbec755…`.
 The 2026-11-12 full-SoC signoff was produced on that commit.
 
 On 2026-11-15 the local tree was pulled to `main` (`e73adb40`, described as
-`v0.3.0-1151-ge73adb40`), i.e. **1,151 commits ahead of the shuttle pin**. Check
-which commit a run used before believing its numbers:
+`v0.3.0-1151-ge73adb40`), i.e. **1,151 commits ahead of the shuttle pin**. The
+checkout had been sitting on a detached HEAD since the 2026-10-18 pin checkout,
+so the pull fast-forwarded the detached HEAD and left the local `main` branch
+stale at the clone commit; on 2026-11-16 local `main` was fast-forwarded to
+`e73adb40` (now tracking `origin/main`) and the pin was tagged **locally** as
+`shuttle-pin-2bbec755`. So the two states are one command apart:
+
+```bash
+git -C ~/pdk/IHP-Open-PDK checkout shuttle-pin-2bbec755   # shuttle-faithful signoff
+git -C ~/pdk/IHP-Open-PDK checkout main                    # forward-compat probe
+```
+
+Check which commit a run used before believing its numbers:
 
 ```bash
 git -C ~/pdk/IHP-Open-PDK rev-parse --short HEAD
