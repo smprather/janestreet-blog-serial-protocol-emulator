@@ -10,7 +10,7 @@ area cache `wiki/reference/.floorplan-areas` (refreshed by
 
     python3 tools/gen/floorplan_feasibility.py            # write the page
     python3 tools/gen/floorplan_feasibility.py --check     # exit 1 if stale
-    python3 tools/gen/floorplan_feasibility.py --tiles 8x4 # upside allocation
+    python3 tools/gen/floorplan_feasibility.py --tiles 8x4 # explicit allocation
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ OUT = REPO / "wiki" / "reference" / "floorplan-feasibility.md"
 FLOW = REPO / "flow" / "pe_soc.json"
 AREAS = REPO / "wiki" / "reference" / ".floorplan-areas"
 
-TILE_TEMPLATE = sram_budget.TILE_TEMPLATE      # 167 x 108
-TILE_BLOG = sram_budget.TILE_BLOG              # 200 x 150
+TILE_TEMPLATE = sram_budget.TILE_TEMPLATE      # 202 x 155
+TILE_BLOG = sram_budget.TILE_BLOG              # 202 x 155 (same as template)
 # stdcell -> die inflation measured on the routed SERDES run (die / stdcell).
 INFLATE = sram_budget.SERDES_DIE_UM2 / sram_budget.SERDES_STDCELL_UM2
 GAP_UM = 10.0
@@ -100,6 +100,7 @@ def overlaps(plc) -> list[str]:
 
 
 def build(scenarios) -> str:
+    tw, th = scenarios[0][1], scenarios[0][2]
     cfg = load_flow()
     areas = load_areas()
     lef = lef_by_name(sram_budget.parse_lefs())
@@ -116,10 +117,11 @@ def build(scenarios) -> str:
     add("---")
     add("title: Floorplan feasibility — two macros and logic on the real die")
     add("created: 2026-09-23")
-    add("updated: 2026-09-23")
+    add("updated: 2026-11-10")
     add("type: reference")
     add("tags: [area-budget, floorplan, verification, planning]")
-    add("sources: [flow/pe_soc.json, pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram, "
+    add("sources: [flow/pe_soc.json, "
+        "pdk/IHP-Open-PDK/ihp-sg13cmos5l/libs.ref/sg13cmos5l_sram, "
         "wiki/reference/.floorplan-areas, regress/synth_area.sh]")
     add("confidence: medium")
     add("---")
@@ -166,7 +168,7 @@ def build(scenarios) -> str:
     add("")
     add("`macro fit` compares the placed bounding box with the die rectangle;")
     add("`occupancy` is (macros + inflated logic) / die area. Occupancy below")
-    add("100% is necessary, not sufficient: routing, the pad ring and the PDN")
+    add("100% is necessary, not sufficient: routing and the PDN")
     add("are separate checks.")
     add("")
     add("| die scenario | die (µm) | area (µm²) | macro bbox fits | macros + inflated logic | occupancy |")
@@ -185,7 +187,8 @@ def build(scenarios) -> str:
     add("## What the flow config declares")
     add("")
     add(f"- `flow/pe_soc.json` declares `DIE_AREA`: "
-        f"{die_cfg[2]:g} × {die_cfg[3]:g} µm = the template 6×4 die.")
+        f"{die_cfg[2]:g} × {die_cfg[3]:g} µm = the {tw}×{th} allocation "
+        f"at 202×155 µm per tile.")
     add(f"- The two macro placements are declared at " +
         ", ".join(f"`{path}` ({x:g}, {y:g})" for path, _, x, y, _ in plc) +
         ", both `N`.")
@@ -197,47 +200,45 @@ def build(scenarios) -> str:
     add("  requests Metal4 macro stripes and ordered connects up to the grid;")
     add("  the E2 static check validates these clauses, not physical connectivity.")
     add("")
-    add("**The critical caveat: this is a PADLESS CORE flow.** `pe_soc`'s ports")
-    add("are pins at the die boundary; there is no `CORE_AREA`, no pad ring and")
-    add("no wrapper in the run. The Tiny Tapeout deliverable")
-    add("(`tt_um_protocol_emulator`) does have pads, and the shuttle's pad ring")
-    add("occupies the perimeter of the same 1002×432 outline, so its usable core")
-    add("is smaller. The placement coordinates above are statically checked to")
-    add("fit the configured `DIE_AREA`, not a padded core. Macro `y=10` in particular")
-    add("may sit under the ring. That is the first thing a real TT-top floorplan")
-    add("must settle.")
+    add("**No pads are instantiated in this design.** `pe_soc`'s ports are pins")
+    add("at the tile boundary; the Tiny Tapeout deliverable")
+    add("(`tt_um_protocol_emulator`) exposes the standard `ui_in`/`uo_out`/")
+    add("`uio_in`/`uio_out`/`uio_oe` port set, and the shared tt-multiplexer")
+    add("selects the active design and drives the chip's pad frame. The mux and")
+    add(f"pads sit outside the design's {tw}×{th} tile allocation, so they do not")
+    add(f"reduce the {die_cfg[2]:g}×{die_cfg[3]:g} µm² denominator. The placement coordinates above")
+    add("are statically checked against `DIE_AREA`. The macro `y=85.54` is")
+    add("deliberate: every SRAM signal pin is on the macro's bottom edge")
+    add("(Metal2, y=0), so the bottom channel gives 100+ pins room to escape")
+    add("on the 4-layer CMOS5L stack. Keep that escape channel clear to the")
+    add("tile boundary in the TT-top flow.")
     add("")
 
-    # ---- assumptions that differ -----------------------------------------
-    add("## Assumptions that differ between the blog and the TT template")
+    # ---- confirmed allocation --------------------------------------------
+    add("## Confirmed allocation")
     add("")
-    add("| assumption | Jane Street blog | TT template / this repo |")
+    add("| item | value | source |")
     add("|---|---|---|")
-    add("| tile size | ~200 × 150 µm | **167 × 108 µm** (`ttihp-verilog-template`) |")
-    add(f"| per-tile area | 30,000 µm² | {TILE_TEMPLATE[0]*TILE_TEMPLATE[1]:,.0f} µm² |")
-    add("| 6×4 die | 1200 × 600 µm (0.720 mm²) | **1002 × 432 µm (0.433 mm²)** |")
-    add("| logic per tile | \"~1K cells per tile\" (~24,000 cells) | the template die's own fit is ~8,000 cells |")
-    add("| SRAM macro choice | not specified | 30 fixed PDK shapes; the die shape excludes the densest classes |")
+    add("| tile size | **202 × 155 µm** | blog 2026-11-09 update; `ttihp-verilog-template` main |")
+    add(f"| per-tile area | {TILE_TEMPLATE[0]*TILE_TEMPLATE[1]:,.0f} µm² | same |")
+    add(f"| allocation | **{tw}×{th} = {tw*th} tiles = {tw*TILE_TEMPLATE[0]:.0f} × {th*TILE_TEMPLATE[1]:.0f} µm** | blog; `info.yaml` |")
+    add("| logic per tile | \"~1K cells per tile\" (~32,000 cells) | blog |")
+    add("| SRAM macro choice | 30 fixed PDK shapes; one macro does not fit | PDK LEFs |")
     add("")
-    add("The two tile figures disagree by +66% in area, and the blog's logic")
-    add("figure is inconsistent with the template's own area budget — but")
-    add(f"**neither figure threatens this design**: it maps to {logic_top['cells']:,}")
-    add("standard cells, well under both. What the tile size *does* decide is")
-    add("the macro rectangle, and the template figure is the conservative case.")
-    add("")
-    add("- **6×4 is the allocation** the blog commits to (8×4 is upside, +33%")
-    add("  width at the same height, so it only helps).")
-    add("- **The tile size is still unconfirmed.** Re-run this page with")
-    add("  `--tiles` when TT finalises it; the SRAM page carries the same")
-    add("  warning.")
+    add(f"**The allocation is confirmed.** The blog's 2026-11-09 update says 8×4")
+    add("is final for the March 2027 CMOS5L shuttle, and the template's main")
+    add("branch now targets CMOS5L (the `cmos5l` branch is retired). This design")
+    add(f"maps to {logic_top['cells']:,} standard cells and the estimate above is")
+    add(f"**{100*(macro_area + logic_top['area']*INFLATE)/(tw*TILE_TEMPLATE[0]*th*TILE_TEMPLATE[1]):.1f}%** of the die.")
     add("")
     add("## Evidence needed later (deferred — not run here)")
     add("")
-    add("1. **A TT-top flow config.** Only `flow/pe_soc.json` (padless core) and")
-    add("   `flow/pe_serdes.json` exist today; the deliverable's wrapper has no")
+    add("1. **A TT-top flow config.** Only `flow/pe_soc.json` (the SoC subcore)")
+    add("   and `flow/pe_serdes.json` exist today; the deliverable's wrapper has no")
     add("   floorplan run at all.")
-    add("2. **Placement inside a real `CORE_AREA`** with the pad ring present,")
-    add("   re-checking both macro locations and the 10 µm gap.")
+    add("2. **Placement inside the TT tile boundary** (the mux/pad frame is")
+    add("   outside the design allocation), re-checking both macro locations")
+    add("   and the 10 µm gap.")
     add("3. **PDN connectivity for both macros** in a real run: `PSM-0040 All")
     add("   shapes connected`, no `PDN-0189`/`PSM-0069`, and the Metal4 ladder")
     add("   reaching the frame-buffer macro (E2).")
@@ -247,9 +248,7 @@ def build(scenarios) -> str:
     add("   SERDES-derived stdcell-to-die inflation factor used above.")
     add("6. **Macro-alone DRC provenance** (the vendor macro's own violations)")
     add("   and LVS, at the flow stage before tapeout.")
-    add("7. **The tile size confirmed** by TT/submission docs, then this page")
-    add("   regenerated.")
-    add("8. **The full-chip timing/electrical items** from the reviews (the `run`")
+    add("7. **The full-chip timing/electrical items** from the reviews (the `run`")
     add("   hold, high-fanout nets, and the macro's out-of-table slew/cap).")
     add("")
     add("## Non-actions")
@@ -262,7 +261,7 @@ def build(scenarios) -> str:
     add("")
     add("- [[reference/sram-budget]] — the generic macro-vs-die analysis.")
     add("- [[reference/block-diagram]] — what is in the chip.")
-    add("- [[STATUS]] — item 5 and the tile-size risk.")
+    add("- [[STATUS]] — item 5 and the measured area ledger.")
     add("- `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`.")
     add("")
     return "\n".join(lines)
@@ -272,16 +271,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--check", action="store_true")
-    ap.add_argument("--tiles", default="6x4",
-                    help="tile allocation WxH for the headline scenarios (default 6x4)")
+    ap.add_argument("--tiles", default="8x4",
+                    help="tile allocation WxH for the headline scenario (default 8x4)")
     args = ap.parse_args()
 
     tw, th = (int(v) for v in args.tiles.lower().split("x"))
-    scenarios = [
-        (f"Template {tw}×{th}", tw, th, TILE_TEMPLATE),
-        (f"Blog-tile {tw}×{th}", tw, th, TILE_BLOG),
-        ("Template 8×4 (upside)", 8, 4, TILE_TEMPLATE),
-    ]
+    scenarios = [(f"Template {tw}×{th}", tw, th, TILE_TEMPLATE)]
 
     rendered = build(scenarios)
     if args.check:

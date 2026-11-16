@@ -151,7 +151,7 @@ buffered pad bit, no dedicated tree.
 
 Source caveat: that clock page is **sky130-framed** — its ~66 MHz pad-macro
 limit, its QFN-64 / `mprj_io[6]` pinout and its RP2040 references are
-sky130-flow artifacts, and the wiki holds no IHP/sg13g2-specific clock-max page
+sky130-flow artifacts, and the wiki holds no IHP/CMOS5L-specific clock-max page
 (`wiki/raw/articles/tinytapeout-clock-spec.md` note;
 `wiki/entities/tiny-tapeout.md` open questions 1–3). Treat 1 Hz–66.5 MHz and the
 exact control API as platform-doc figures pending IHP-specific confirmation;

@@ -15,7 +15,7 @@ confidence: high
 
 ## Context
 
-Dual-edge sampling needs a flop that captures on both clock edges (see [[comparisons/clocking-options]]). Verified in `sg13g2_stdcell_typ_1p20V_25C.lib`: all flops (dfr/sdfr families) are rising-edge only — no negedge flops. Both latch polarities exist (dlh*, dll*).
+Dual-edge sampling needs a flop that captures on both clock edges (see [[comparisons/clocking-options]]). Verified in `sg13cmos5l_stdcell_typ_1p20V_25C.lib`: the same 84-cell set as SG13G2, renamed with the `sg13cmos5l_` prefix; all flops (dfr/sdfr families) are rising-edge only — no negedge flops. Both latch polarities exist (`sg13cmos5l_dlh*`, `sg13cmos5l_dll*`).
 
 ## Decision
 

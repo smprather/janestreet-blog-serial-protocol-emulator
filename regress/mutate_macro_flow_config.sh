@@ -20,7 +20,7 @@
 #   6. reversed-layers: that connect names the pair in the other order;
 #   7. missing-lef-view / missing-gds-view / missing-lib-corner /
 #      nonexistent-view / wrong-view-type: the E2-4 macro view configuration
-#      is incomplete, names a file the PDK sg13g2_sram tree does not contain,
+#      is incomplete, names a file the PDK sg13cmos5l_sram tree does not contain,
 #      or puts a view of the wrong class (a .lib in the LEF slot) where a
 #      typed view belongs;
 #   8. corner-file-shared / corner-key-wildcard (R3): one lib file satisfies
@@ -110,8 +110,12 @@ def edit(fname, old, new):
     assert old in t, f"{which}: anchor not found in {fname}"
     p.write_text(t.replace(old, new, 1))
 
-M4V = ('add_pdn_connect \\\n    -grid macro \\\n'
-       '    -layers "Metal4 $::env(PDN_VERTICAL_LAYER)"\n')
+# The Metal4->vertical connect is inside `if { PDN_VERTICAL_LAYER != "Metal4" }`
+# because on CMOS5L the vertical layer IS Metal4. Keep the anchor identical to
+# the tracked script's indented block, including the conditional wrapper.
+M4V = ('    add_pdn_connect \\\n'
+       '        -grid macro \\\n'
+       '        -layers "Metal4 $::env(PDN_VERTICAL_LAYER)"\n')
 VH = ('add_pdn_connect \\\n    -grid macro \\\n'
       '    -layers "$::env(PDN_VERTICAL_LAYER) $::env(PDN_HORIZONTAL_LAYER)"\n')
 STRIPE = ('add_pdn_stripe \\\n    -grid macro \\\n    -layer Metal4 \\\n'
@@ -349,7 +353,7 @@ module pe_soc(input wire clk);
   RM_IHPSG_FAKE_B u_b (.clk(clk));
 endmodule
 ''')
-sram = root / "pdk/ihp-sg13g2/libs.ref/sg13g2_sram"
+sram = root / "pdk/ihp-sg13cmos5l/libs.ref/sg13cmos5l_sram"
 for cls in ("gds", "lef", "lib"):
     (sram / cls).mkdir(parents=True)
 (sram / "lef/RM_IHPSG_FAKE_A.lef").write_text(
@@ -365,7 +369,7 @@ for n in ("RM_IHPSG_FAKE_A", "RM_IHPSG_FAKE_B"):
 # A LEF whose geometry parses but that declares no MACRO at all: identity is
 # fail-closed for LEFs (the MACRO declaration is mandatory LEF syntax).
 (sram / "lef/RM_IHPSG_FAKE_NO_MACRO.lef").write_text("  SIZE 100 BY 100 ;\n")
-stdcell = root / "pdk/ihp-sg13g2/libs.tech/librelane/sg13g2_stdcell"
+stdcell = root / "pdk/ihp-sg13cmos5l/libs.tech/librelane/sg13cmos5l_stdcell"
 stdcell.mkdir(parents=True)
 (stdcell / "config.tcl").write_text(
     'set ::env(STA_CORNERS) "\\\nnom_typ_1p20V_25C \\\n"\n'

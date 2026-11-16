@@ -150,19 +150,17 @@ module pe_crc #(
   assign R_next = (R >> 1) ^ (fb ? cfg_poly_r : {W{1'b0}});
 
   always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-      R        <= '0;
-      crc_zero <= 1'b0;
-    end else if (clr) begin
-      // clr wins over bit_en, like every other stage in this repo: a frame
-      // boundary is not a strobe, and letting a strobe land on the boundary
-      // would fold one bit of the previous frame into the next one's register.
-      R        <= cfg_seed;
-      crc_zero <= 1'b0;
-    end else if (bit_en) begin
-      R        <= R_next;
-      crc_zero <= (R_next == {W{1'b0}});
-    end
+    if (!rst_n)       crc_zero <= 1'b0;
+    else if (clr)     crc_zero <= 1'b0;
+    else if (bit_en)  crc_zero <= (R_next == {W{1'b0}});
+  end
+
+  always_ff @(posedge clk) begin
+    // clr wins over bit_en, like every other stage in this repo: a frame
+    // boundary is not a strobe, and letting a strobe land on the boundary
+    // would fold one bit of the previous frame into the next one's register.
+    if (clr)          R <= cfg_seed;
+    else if (bit_en)  R <= R_next;
   end
 
 endmodule

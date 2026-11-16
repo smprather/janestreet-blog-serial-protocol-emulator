@@ -1,10 +1,10 @@
 ---
 title: ADR-004 — SRAM instruction memory, and the PC width it requires
 created: 2026-09-20
-updated: 2026-09-20
+updated: 2026-11-10
 type: decision
 tags: [decision, area-budget, architecture, process-node]
-sources: [rtl/pe_cpu.v, pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram/verilog/RM_IHPSG13_1P_core_behavioral_bm_bist.v]
+sources: [rtl/pe_cpu.v, pdk/IHP-Open-PDK/ihp-sg13cmos5l/libs.ref/sg13cmos5l_sram/verilog/RM_IHPSG13_1P_core_behavioral_bm_bist.v]
 confidence: high
 ---
 
@@ -111,8 +111,9 @@ rather than belt-and-braces (gotcha 16).
 
 ## Why 1,024 and not 512
 
-512 words (`1P_512x16`) saves 34,365 µm² and lands the design at 46% of the 6×4
-die instead of 54%. It also fits an 8-bit PC exactly, so it needs NO CPU change
+512 words (`1P_512x16`) saves 34,365 µm² and lands the design at 20% of the
+confirmed 8×4 die instead of 23% (46% vs 54% of the original 6×4). It also fits
+an 8-bit PC exactly, so it needs NO CPU change
 at all — which is a genuinely cheaper option and worth stating plainly.
 
 Rejected on program budget, not area: `uart_echo` is already 114 words, an I2C
@@ -156,7 +157,8 @@ easier** — no PC change. That is the reason to record the alternative.
   before it was useful.
 - **Keep flops and just deepen the array.** Measured at 1,271 µm² and 60 cells
   *per instruction word*, so 1,024 words is ~1.3 mm² of die — three times the
-  whole 6×4 budget. This is the measurement that motivated ADR-003.
+  original 6×4 budget and still ~1.3× the confirmed 8×4 die. This is the
+  measurement that motivated ADR-003.
 
 ## Related
 

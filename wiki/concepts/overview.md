@@ -628,8 +628,9 @@ Stated plainly, because a document that only lists strengths is not a map.
   vocabulary mismatch**, not a design defect: the IHP SRAM macro ships no
   `pblock` layer, so LibreLane's `get_bbox.tcl` cannot extract a PR boundary
   from its GDSII.
-- **8×4 tiles may never happen.** The competition blog says 6×4 and describes
-  8×4 as a possibility it might offer later. Design for 24 tiles.
+- **8×4 tiles are confirmed.** The blog's 2026-11-09 update fixes the March 2027
+  allocation at 32 tiles (202×155 µm each) and says the tile sizes are final.
+  The design now budgets 1616×620 µm.
 - **Three of five `ui_in` pads are free and all of `uio` is spoken for.** Any
   idea that needs a pad is expensive.
 - **The regression figure moves.** Do not quote a number from memory;

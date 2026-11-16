@@ -80,29 +80,30 @@ module pe_serdes #(
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      tx_shreg   <= '0;
-      tx_nbits   <= '0;
-      tx_cnt     <= '0;
-      cfg_lsb_tx <= 1'b0;
-      tx_busy    <= 1'b0;
-      tx_done    <= 1'b0;
+      tx_busy <= 1'b0;
+      tx_done <= 1'b0;
     end else begin
       tx_done <= 1'b0;
       if (tx_load && (|tx_len)) begin
+        tx_busy <= 1'b1;
+      end else if (tx_busy && tx_bit_en && (tx_cnt == tx_nbits - 1'b1)) begin
+        tx_busy <= 1'b0;
+        tx_done <= 1'b1;
+      end
+    end
+  end
+
+  always_ff @(posedge clk) begin
+    if (tx_load && |tx_len) begin
         tx_shreg   <= tx_data;
         tx_nbits   <= tx_len;
         tx_cnt     <= '0;
         cfg_lsb_tx <= cfg_lsb_first;
-        tx_busy    <= 1'b1;
       end else if (tx_bit_en && tx_busy) begin
-        if (tx_cnt == tx_nbits - 1'b1) begin
-          tx_busy <= 1'b0;
-          tx_done <= 1'b1;
-        end else begin
+        if (tx_cnt != tx_nbits - 1'b1) begin
           tx_cnt <= tx_cnt + 1'b1;
         end
       end
-    end
   end
 
   // ---------------- Receive ----------------
@@ -118,44 +119,45 @@ module pe_serdes #(
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      rx_shreg   <= '0;
-      rx_nbits   <= '0;
-      rx_cnt     <= '0;
-      rx_pos     <= '0;
-      cfg_lsb_rx <= 1'b0;
-      rx_fin     <= 1'b0;
-      rx_data    <= '0;
-      rx_busy    <= 1'b0;
-      rx_valid   <= 1'b0;
+      rx_fin   <= 1'b0;
+      rx_busy  <= 1'b0;
+      rx_valid <= 1'b0;
     end else begin
       rx_valid <= 1'b0;
+      if (rx_fin) begin
+        rx_fin   <= 1'b0;
+        rx_valid <= 1'b1;
+      end
+      if (rx_start && (|rx_len)) begin
+        rx_busy  <= 1'b1;
+      end else if (rx_busy && rx_bit_en && (rx_cnt == rx_nbits - 1'b1)) begin
+        rx_busy  <= 1'b0;
+        rx_fin   <= 1'b1;
+      end
+    end
+  end
+
+  always_ff @(posedge clk) begin
       // Delayed completion: rx_shreg holds the full word by now, so the
       // copy needs no variable-shift forward path. Deliberately ordered
       // before rx_start handling so a start on this exact cycle still
       // delivers the old word (no register conflict: disjoint targets).
       if (rx_fin) begin
-        rx_fin   <= 1'b0;
-        rx_valid <= 1'b1;
         rx_data  <= rx_shreg;
       end
-      if (rx_start && (|rx_len)) begin
+      if (rx_start && |rx_len) begin
         rx_shreg   <= '0;
         rx_nbits   <= rx_len;
         rx_cnt     <= '0;
         rx_pos     <= cfg_lsb_first ? '0 : IDXW'(rx_len - 1'b1);
         cfg_lsb_rx <= cfg_lsb_first;
-        rx_busy    <= 1'b1;
       end else if (rx_bit_en && rx_busy) begin
         rx_shreg[rx_pos] <= rx_ser;
-        if (rx_cnt == rx_nbits - 1'b1) begin
-          rx_busy <= 1'b0;
-          rx_fin  <= 1'b1;
-        end else begin
+        if (rx_cnt != rx_nbits - 1'b1) begin
           rx_cnt <= rx_cnt + 1'b1;
           rx_pos <= cfg_lsb_rx ? rx_pos + 1'b1 : rx_pos - 1'b1;
         end
       end
-    end
   end
 
 endmodule

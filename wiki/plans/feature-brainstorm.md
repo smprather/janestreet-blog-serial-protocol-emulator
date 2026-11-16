@@ -1091,8 +1091,8 @@ DMEM).
 The budget question is real and the pages that answer it are
 [[reference/protocol-pin-budget]] (19 of 24 pads committed) and
 [[reference/floorplan-feasibility]] (two `1P_1024x16` macros at 159,347 µm²
-against a 1002×432 µm die at the template's tile size, with the routed
-`tt_um_top` at 138,817 µm² mapped). There is *area* headroom on the logic;
+against the confirmed 8×4 die, 1616×620 µm, with the routed `tt_um_top` at
+170,255 µm² mapped). There is *area* headroom on the logic;
 there is very little *SRAM* headroom, which is what kills the ambitious
 versions of A4 and F4.
 

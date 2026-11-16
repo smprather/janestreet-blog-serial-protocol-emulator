@@ -1,0 +1,559 @@
+Analog Specs :: Quicker, easier and cheaper to make your own chip!
+
+ Tiny Tapeout
+
+ Home
+
+ News
+
+ Universities & Schools
+
+ Tiny Tapeout Chips
+
+ Silicon proven projects
+
+ Tiny Tapeout SKY 26c
+
+ Tiny Tapeout SKY 26b
+
+ Tiny Tapeout SKY 26a
+
+ Tiny Tapeout SKY 25b
+
+ Tiny Tapeout SKY 25a
+
+ Tiny Tapeout IHP 26b
+
+ Tiny Tapeout IHP 26a
+
+ Tiny Tapeout IHP 25b
+
+ Tiny Tapeout IHP 25a
+
+ Tiny Tapeout GF 26b
+
+ Tiny Tapeout GF 26a
+
+ Tiny Tapeout CAD 25a
+
+ Tiny Tapeout 9
+
+ Tiny Tapeout 8
+
+ Tiny Tapeout 7
+
+ Tiny Tapeout 6
+
+ Workshops
+
+ Digital Design Guide
+
+ Getting started with our digital design tool
+
+ Holidays
+
+ Logic Gates
+
+ Logic Puzzle - Flip Flop
+
+ Logic Puzzle - Edge Detect
+
+ Logic Puzzle - Full Adder
+
+ Logic Puzzle - Padlock
+
+ Customisable Design - Padlock
+
+ Customisable Design - UART
+
+ Customisable Design - 7-Seg
+
+ Simple automated testing using truth tables
+
+ Generating Wokwi designs from truth tables
+
+ How do semiconductors work?
+
+ Introduction to SiliWiz
+
+ Draw a Resistor
+
+ Parasitics
+
+ Voltage Divider
+
+ Draw a capacitor
+
+ Draw an N MOSFET
+
+ Making a logic inverter
+
+ Draw a P type MOSFET
+
+ Draw a CMOS inverter
+
+ Making ASICs
+
+ Working with HDLs
+
+ Important!
+
+ FPGA to ASIC
+
+ HDL resources
+
+ HDL templates
+
+ Testing your design
+
+ Competitions
+
+ TTSKY26a Demoscene Competition (closed)
+
+ TTSKY26a Demoscene Entries
+
+ Crowd Sourced RISC-V (closed)
+
+ Crowd Sourced RISC-V Peripheral Entries and Winners
+
+ TT08 Demoscene Entries
+
+ TT08 Demoscene Winners
+
+ TT08 Demoscene (closed)
+
+ Sticker Design (closed)
+
+ Guides
+
+ Creating Silicon Art
+
+ TT04+ demoboard quickstart
+
+ TT ETR demoboard quickstart
+
+ Hackaday GF0p2 chip breakout quickstart
+
+ Local hardening
+
+ Testing Projects with the Analog Discovery
+
+ Updating your project documentation
+
+ Using the FPGA ASIC simulator breakout
+
+ Flashing the Gamepad PMOD
+
+ Change your submitted project repository
+
+ Workshop
+
+ 1 - Draw your own MOSFET
+
+ 2 - Simulate a logic gate
+
+ 3 - Create the GDS and submit your design
+
+ 4 - Optional - Submit a design revision
+
+ 5 - Optional - Activate and Test a Design
+
+ Advanced Workshop
+
+ 1 - Draw your own MOSFET
+
+ 2 - Verilog with VGA Playground
+
+ 3 - Create GDS from VGA Playground
+
+ 4 - Submit your design
+
+ 5 - Optional - Activate and Test a Design
+
+ Configuring and flashing the QSPI Pmod
+
+ Laying Out Standard Cells with Magic VLSI
+
+ Tech specs
+
+ Clock
+
+ GPIO pins
+
+ Analog Specs
+
+ Memory
+
+ Pinouts
+
+ PCB - ETR (TT09+)
+
+ PCB (TT04-08)
+
+ PCB (TT02-03)
+
+ FAQ
+
+ Branding
+
+ Contact
+
+ Press
+
+ Terms
+
+ Credits
+
+More
+
+ Store
+
+ Tiny Tapeout > Tech specs > Analog Specs
+
+PDK
+
+Analog pins
+
+Specifications and limitations - sky130A
+
+Pin locations
+
+Area - sky130A
+
+Power pins
+
+Pricing - sky130A
+
+Create the repository
+
+Decide on the size of your design
+
+Edit the info.yaml file
+
+Edit the verilog stub
+
+Documentation
+
+Draw the rest of the owl
+
+Resources
+
+Export the GDS and LEF files
+
+Submit your design
+
+ Analog Specs
+
+PDK
+
+Tiny Tapeout shuttles use the sky130A, ihp-sg13g2, and gfmcu180D open source PDKs. Make sure you simulate with the correct PDK for your shuttle.
+
+Analog pins
+
+The analog pins are labeled 
+ua[0] through 
+ua[5] (ua stands for “user analog”). The number of pins that will actually be connected to pads depends on the number of analog pins that you defined in the 
+pinout section in info.yaml (and paid for).
+
+For example, if you purchased two analog pins, only 
+ua[0] and 
+ua[1] will be connected to the pads. The remaining pins will not be connected.
+
+You must use the pins in order, starting from 0.
+
+Even though there are 8 pins in the templates, you can only use the first 6.
+
+If you end up with pins which are not being driven and are floating, please either connect them to GND or use
+
+conb cells -
+see our guide on laying out standard cells with Magic.
+
+There is an analog switch (
+tt_asw_3v3) placed between the analog pins of your project and the output pads of the chip.
+The design files of the analog switch are available on GitHub.
+The overall GPIO configuration of the chip can be found there too.
+It is shown below for convenience but is subject to change at any time.
+
+ // GPIO configuration
+ // ------------------
+
+ localparam [15:0] TT_PAD_CTRL = 16'b0_00_00_0_0_0_0_0_0_0_0_001;
+ localparam [15:0] TT_PAD_IN = 16'b0_00_00_0_0_0_0_0_0_0_0_001;
+ localparam [15:0] TT_PAD_OUT = 16'b0_11_00_1_0_0_0_0_0_0_0_110;
+ localparam [15:0] TT_PAD_INOUT = 16'b0_10_00_0_0_0_0_0_0_0_0_110;
+ localparam [15:0] TT_PAD_ANALOG = 16'b1_00_00_1_0_0_0_0_0_0_0_000;
+ // | | | | | | | | | | |
+ // [ 15] Analog path select --------' | | | | | | | | | |
+ // [14:13] Output wiring mode ----------' | | | | | | | | |
+ // [ 10] gpio_inp_dis ----------------' | | | | | | | |
+ // [ 9] gpio_ib_mode_sel ------------------' | | | | | | |
+ // [ 8] gpio_vtrip_sel --------------------' | | | | | |
+ // [ 7] gpio_slow_sel ----------------------' | | | | |
+ // [ 6] gpio_holdover ------------------------' | | | |
+ // [ 5] gpio_analog_en --------------------------' | | |
+ // [ 4] gpio_analog_sel ----------------------------' | |
+ // [ 3] gpio_analog_pol ------------------------------' |
+ // [ 2: 0] gpio_dm[2:0] ---------------------------------'
+
+Specifications and limitations - sky130A
+
+The path between the analog pads and your project (the ua pins) is expected to have the following properties:
+
+Resistance: < 500 ohm
+
+Capacitance: < 5 pf
+
+Max current: 4 mA
+
+You are not allowed to use the metal 5 layer in your design, as it’s used by Tiny Tapeout’s power grid.
+
+Pin locations
+
+The pin locations must match one of the Tiny Tapeout templates. The templates are available in DEF format, which is compatible with the Magic VLSI layout tool.
+
+The templates include all the eight analog pins, but only the pins that you paid for will be connected to the pads. In addition, the templates also include all the standard digital pins.
+
+Important: Do not leave any floating digital output pins in your design. Connect any unused 
+uo_out, 
+uio_out and 
+uio_oe pins to GND.
+
+Area - sky130A
+
+1x2 tiles = 160x225um
+
+2x2 tiles = 334x225um
+
+Note that these are approximate. 3.3v designs are slightly narrower as an additional power FET is required. Make sure to use our templates linked above.
+
+Power pins
+
+The following power pins are available:
+
+VGND: Ground rail
+
+VDPWR: 1.8V digital core voltage
+
+VAPWR: 3.3V analog supply rail (optional, requires a different template)
+
+A draw of around 20mA from the power supply will result in a 0.1V drop through the PDN.
+
+Power pins need to be vertical stripes on met4 layer and must adhere to the following rules:
+
+Start within the bottom 10 µm of the module and extend at least to the top 10 µm of the module.
+
+Minimum width of 1.2 um.
+
+Projects utilizing the 3.3V rail MUST use the 
+tt_analog_*_3v3.def templates and set 
+uses_3v3: true in 
+info.yaml.
+
+Multiple power pins of each type can be used with varying dimensions as long as the above constraints are met.
+
+The actual metal area can be larger or have a different shape, but the area defined as a pin must comply with these constraints.
+
+Pricing - sky130A
+
+Projects with analog pins must be two tiles high. This means that the minimum price for the area of the project is 140€ (each tile is 70€).
+
+In addition, there is a cost for each analog pin attributable to a given customer (rather than project) on a given shuttle. The price for analog pins is 40€ per pin for the first 2 pins you need on the Tiny Tapeout shuttle, and 100€ per pin for additional pins.
+
+Example:
+
+You submit a design requiring 1x2 tiles and 2 analog pins. This costs you 220€ (140€ for the tiles, and 80€ for the analog pins).
+
+You then submit another design on the same shuttle, itself requiring 2x2 tiles and 3 analog pins. This would cost you 580€ (280€ for the tiles, and 300€ for the analog pins).
+
+i.e. as a customer you are using a total of 5 analog pins on the shuttle.
+
+This price is only for including the design in the shuttle, and does not include the cost of the ASIC, PCB, or shipping.
+
+For more information on pricing, check the calculator.
+
+Instructions for creating and submitting an analog design
+
+These instructions assume you are using the Magic VLSI tool, but you can do the same with Klayout or proprietary tools.
+
+Make sure the version of Magic matches the PDK.
+
+Create the repository
+
+Start your design from one of the following analog templates - make sure to select the appropriate template for the shuttle you’re targeting:
+
+SKY
+
+IHP
+
+Click on the green “Use this template” button on the top of the page, and select “Create a new repository”.
+
+Decide on the size of your design
+
+Tiny Tapeout provides templates for custom GDS submissions. These templates include all the required pins on the metal 4 layer. Do not change the pin sizes or positions.
+
+Select your target shuttle below and download a template to use as a starting point for your design.
+
+ SKY
+
+ IHP
+
+Download: github.com/TinyTapeout/tt-support-tools/tree/main/tech/sky130A/def/analog
+
+The table below shows the available templates:
+
+Tile size
+
+Filename
+
+Available power supplies
+
+1.8V (VDPWR)
+
+3.3V (VAPWR)
+
+1x2
+
+tt_analog_1x2.def
+
+✅
+❌
+
+tt_analog_1x2_3v3.def
+
+✅
+✅
+
+2x2
+
+tt_analog_2x2.def
+
+✅
+❌
+
+tt_analog_2x2_3v3.def
+
+✅
+✅
+
+Download: github.com/TinyTapeout/tt-support-tools/tree/main/tech/ihp-sg13g2/def/analog
+
+The table below shows the available templates:
+
+Tile size
+
+Filename
+
+Available power supplies
+
+1.8V (VDPWR)
+
+3.3V (VAPWR)
+
+1x2
+
+tt_analog_1x2.def
+
+✅
+❌
+
+2x2
+
+tt_analog_2x2.def
+
+✅
+❌
+
+Larger tiles are not shown in these tables but may be available via the provided link. They follow the same
+pattern as the ones mentioned above (i.e. a 
+_3v3 suffix denotes that VAPWR is available).
+
+An analog project can either be 1x2 or 2x2 tiles large. If you require additional space, you will be
+charged as if you had submitted multiple 1x2/2x2 projects separately. Read our FAQ item
+for more info.
+
+Edit the info.yaml file
+
+It’s important that you are consistent with your naming. The name of the project must match the final GDS and LEF files.
+
+Decide on a name for your module (top cell). The top level module name must start with ’tt_um_’, and it must be unique on the shuttle, so we suggest including your github username, e.g. tt_um_username_amazing_adc.
+
+Edit the 
+info.yaml files and the the following properties:
+
+top_module - the name of your top module
+
+tiles - should match your selected template size (1x2 or 2x2)
+
+analog_pins - the number of analog pins you use
+
+pinout - describe the function of each digital / analog pin you use, leave the others empty ("")
+
+Also fill in the title, author and description fields.
+
+Edit the verilog stub
+
+This file is used to ‘blackbox’ your design when we integrate it into the Tiny Tapeout shuttle.
+
+Edit 
+src/project.v and replace 
+tt_um_example with the actual name of your top module.
+
+Documentation
+
+Edit 
+docs/info.md and add a description of your project.
+
+Draw the rest of the owl
+
+Use your preferred analog flow to design, simulate, layout, extract, LVS and post layout simulate.
+
+A quick way to get started is to use this tcl script to draw and label the power ports.
+
+Download the script
+
+Edit it to change the module name and configure the pin template and power stripes
+
+Start Magic and in the tcl command window, write 
+source magic_init_project.tcl
+
+Resources
+
+Matt’s Zero to ASIC analog course
+
+Drawing an inverter with Magic by Ryan Ridley, Teo Ene, and James E. Stine
+
+Magic cheatsheet by Harald Pretl
+
+Circuit designers etiquette by Harald Pretl
+
+Xschem tutorial by Stefan Schippers (video)
+
+Analog tutorials by Carsten Wulff (video)
+
+Analog design flow by Carsten Wulff
+
+Analog tutorials by BMinch (video)
+
+Magic layout demonstration by Tim Edwards (video)
+
+Export the GDS and LEF files
+
+Save the resulting GDS file in the 
+gds folder, and the LEF file in the 
+lef folder. The file names must match your 
+top_module property (e.g. 
+gds/tt_um_example.gds).
+
+If you use Magic to create your design, make sure to export the LEF file with the “-pinonly” option, e.g.:
+
+lef write ../lef/tt_um_project_name.lef -pinonly
+
+Export the GDS by running:
+
+gds write ../gds/tt_um_project_name.gds
+
+If you’re using Magic - do not flatten the .mag file, leave it hierarchical to avoid weird DRC issues.
+
+Submit your design
+
+Go to app.tinytapeout.com to submit your design.

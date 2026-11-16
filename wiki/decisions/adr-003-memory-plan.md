@@ -1,10 +1,10 @@
 ---
 title: ADR-003 — Two SRAM macros, instruction and frame buffer
 created: 2026-09-20
-updated: 2026-09-20
+updated: 2026-11-10
 type: decision
 tags: [decision, area-budget, architecture, process-node]
-sources: [raw/articles/janestreet-competition-blog-fulltext.md]
+sources: [raw/articles/janestreet-competition-blog-update-2026-11-09.md, raw/articles/janestreet-competition-blog-fulltext.md]
 confidence: medium
 ---
 
@@ -92,37 +92,42 @@ die at 78% utilisation). Macros place as-is and take no routing inflation.
 Projected full design: SoC logic + SERDES + codec pipeline + DRU + CRC LFSR + pin
 matrix, plus both macros.
 
+**Allocation update (2026-11-09): 8×4 is confirmed.** The rows below are the
+original decision record at 6×4 and the old 167×108 µm tile; the current budget
+is 8×4 at 202×155 µm = 1616×620 µm = 1,001,920 µm². The decision itself (two
+`1P_1024x16` macros) is unaffected. Current measured ledger: [[STATUS]].
+
 | Allocation | Die (µm²) | Design | Occupancy |
 |---|---|---|---|
-| **6×4 = 1002 × 432 µm (the real budget)** | 432,864 | 235,116 | **54%** |
-| 8×4 = 1336 × 432 µm (upside, if offered) | 577,152 | 235,116 | 41% |
+| **8×4 = 1616 × 620 µm (confirmed 2026-11-09)** | 1,001,920 | 235,116 | **23%** |
+| 6×4 = 1212 × 620 µm (same tiles at 202×155) | 751,440 | 235,116 | 31% |
+| 6×4 = 1002 × 432 µm (original decision, 167×108 tile) | 432,864 | 235,116 | 54% |
 
 For comparison, the design **today** (flop IMEM, SoC + SERDES + codecs) is 385,265
-µm² of die, which is **89% of the 6×4** and 67% of an 8×4. The swap is what turns
-"will not fit once the pin matrix and DRU land" into "roomy either way."
+µm² of die, which is **38% of the confirmed 8×4** (89% of the original 6×4). The
+swap is what turns "will not fit once the pin matrix and DRU land" into "roomy
+either way."
 
 Dropping instruction memory to `1P_512x16` (512 words) saves 34,365 µm² and lands at
-46% of the 6×4. Take that only if the floorplan demands it: `uart_echo` is already
+20% of the 8×4. Take that only if the floorplan demands it: `uart_echo` is already
 114 words, and two or three resident protocol programs will approach 512.
 
 ## The allocation, settled
 
-**6×4 = 24 tiles.** The blog says "Set the tile size in info.yaml to 6x4" and "The
-current maximum area is 6x4 tiles per design", and describes 8×4 only as a
-possibility worth ~30% more area that would be announced by a page update and an
-email. `info.yaml` matches. Verbatim source:
-[[raw/articles/janestreet-competition-blog-fulltext]].
+**8×4 = 32 tiles.** The blog's 2026-11-09 update confirms 8×4 for the March 2027
+CMOS5L shuttle and says Tiny Tapeout's tile sizes are final; the template's main
+branch lists 8×4. `info.yaml` matches. At 202×155 µm per tile the die is
+1616×620 µm (1.002 mm², 2.61:1). Source:
+[[raw/articles/janestreet-competition-blog-update-2026-11-09]].
 
-**This decision survives the upside intact.** 6×4 and 8×4 are the same *height*
-(432 µm at the template tile) and differ only in width, so no macro that fits one
-fails on the other. `tools/gen/sram_budget.py --tiles 8x4` re-answers
-[[reference/sram-budget]] for the larger die; the committed page is the 6×4 answer.
+**This decision survives the allocation change.** Both chosen macros are
+237 × 336 µm and fit the 8×4 rectangle. The die is wide enough for the 64-bit-wide
+macro family (`1P_1024x64`, `1P_512x64`, `1P_256x64`, `1P_64x64`, all 784 µm wide),
+which a near-square 4×8 rotation would lose. `tools/gen/sram_budget.py --tiles WxH`
+re-answers [[reference/sram-budget]] for another allocation; the committed page is
+the 8×4 answer.
 
-Worth recording because it nearly went the other way: a **4×6** die — the same 24
-tiles, rotated — would be 668 × 648 µm and would lose the entire 64-bit-wide macro
-family (`1P_1024x64`, `1P_512x64`, `1P_256x64`, `1P_64x64`), all 784 µm wide. Both
-macros chosen here are 237 × 336 µm and fit any of the three shapes, but a future
-move to wide fetch would not. **Shape, not tile count, is what decides macro fit.**
+**Shape, not tile count, is what decides macro fit.**
 
 ## Alternatives rejected
 

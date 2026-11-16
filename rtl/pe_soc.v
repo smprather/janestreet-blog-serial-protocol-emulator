@@ -773,19 +773,9 @@ module pe_soc #(
     if (!rst_n) begin
       eth_valid     <= 1'b0;
       eth_bad       <= 1'b0;
-      eth_is_type   <= 1'b0;
-      eth_len       <= '0;
-      eth_field     <= '0;
-      eth_buf_raddr <= '0;
     end else begin
-      // A completed frame owns the window: latch the header and arm the byte
-      // walk at the frame's first stored byte.
       if (eth_frame_valid) begin
         eth_valid     <= 1'b1;
-        eth_is_type   <= eth_frame_is_type;
-        eth_len       <= eth_frame_len;
-        eth_field     <= eth_frame_field;
-        eth_buf_raddr <= eth_frame_start;
       end
       // Set beats clear, for the same reason STATUS's tick flag does: a frame
       // landing on the cycle firmware reads the status must not be lost. A
@@ -796,12 +786,23 @@ module pe_soc #(
         if (!eth_frame_bad)   eth_bad   <= 1'b0;
       end
       if (eth_frame_bad) eth_bad <= 1'b1;
+    end
+  end
+
+  always_ff @(posedge clk) begin
+    // A completed frame owns the window: latch the header and arm the byte
+    // walk at the frame's first stored byte.
+    if (eth_frame_valid) begin
+        eth_is_type   <= eth_frame_is_type;
+        eth_len       <= eth_frame_len;
+        eth_field     <= eth_frame_field;
+        eth_buf_raddr <= eth_frame_start;
+    end
       // BUFBYTE advances the window. See the memory-map note on the
       // one-cycle read pipeline, and the header note on the read/write port
       // race.
       if (bufbyte_rd && !eth_frame_valid)
         eth_buf_raddr <= eth_buf_raddr + 1'b1;
-    end
   end
 
   // =========================================================================
@@ -871,7 +872,7 @@ module pe_soc #(
   // ---- the 0xF indexed window -------------------------------------------
   logic       win_phase;              // 0 = INDEX, 1 = DATA
   logic [4:0] win_index;
-  logic [7:0] win_regs [0:31];
+  (* mem2reg *) logic [7:0] win_regs [0:31];
   logic [7:0] win_rdata;
   wire        win_we = io_we && (io_port == 4'hF);
   wire        win_re = io_re && (io_port == 4'hF);
@@ -918,20 +919,18 @@ module pe_soc #(
   // so there is exactly one writer per window register.
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      win_phase    <= 1'b0;
-      win_index    <= '0;
-      for (int i = 0; i < 32; i++) win_regs[i] <= '0;
-      eng_en       <= 1'b0;
-      eng_lsb      <= 1'b0;
-      eng_txsel    <= 1'b0;
-      tx_load_strb <= 1'b0;
-      rx_start_strb<= 1'b0;
-      eng_clr_strb <= 1'b0;
-      tx_path          <= 1'b0;
+      win_phase           <= 1'b0;
+      win_index           <= '0;
+      eng_en              <= 1'b0;
+      eng_lsb             <= 1'b0;
+      eng_txsel           <= 1'b0;
+      tx_load_strb        <= 1'b0;
+      rx_start_strb       <= 1'b0;
+      eng_clr_strb        <= 1'b0;
+      tx_path             <= 1'b0;
       tx_frame_start_strb <= 1'b0;
       tx_frame_abort_strb <= 1'b0;
-      eth_push         <= 1'b0;
-      eth_push_byte    <= 8'h00;
+      eth_push            <= 1'b0;
     end else begin
       tx_load_strb  <= 1'b0;
       rx_start_strb <= 1'b0;
@@ -966,12 +965,9 @@ module pe_soc #(
             eng_clr_strb  <= io_wdata[3];
             eng_lsb       <= io_wdata[4];
             eng_txsel     <= io_wdata[5];
-            win_regs[0]   <= {2'b00, io_wdata[5], io_wdata[4],
-                              3'b000, io_wdata[0]};
             win_index     <= 5'd1;
           end else if (win_index >= 5'd16 && win_index <= 5'd23) begin
             eth_push      <= 1'b1;
-            eth_push_byte <= io_wdata;
             win_index     <= (win_index == 5'd23) ? 5'd16 : win_index + 5'd1;
           end else if (win_index == 5'd26) begin
             tx_frame_start_strb <= io_wdata[0];
@@ -988,20 +984,25 @@ module pe_soc #(
             end else if (!eth_tx_busy) begin
               tx_path <= 1'b0;
             end
-            win_regs[26] <= {5'b0,
-                             io_wdata[2] ? (ser_tx_busy ? tx_path : 1'b1)
-                                         : (eth_tx_busy ? tx_path : 1'b0),
-                             2'b00};
             win_index    <= 5'd27;
           end else begin
-            win_regs[win_index] <= io_wdata;
-            win_index           <= win_index + 5'd1;
+            win_index    <= win_index + 5'd1;
           end
         end
       end
       if (win_re) begin
         win_index <= win_index + 5'd1;
         win_phase <= 1'b0;                         // any read re-arms INDEX
+      end
+    end
+  end
+
+  always_ff @(posedge clk) begin
+    if (win_we && win_phase) begin
+      if (win_index >= 5'd16 && win_index <= 5'd23) begin
+        eth_push_byte <= io_wdata;
+      end else if (win_index != 5'd0 && win_index != 5'd26) begin
+        win_regs[win_index] <= io_wdata;
       end
     end
   end
@@ -1214,6 +1215,7 @@ module pe_soc #(
   // views, not stored registers; everything else reads back what was written.
   always_comb begin
     case (win_index)
+      5'd0:    win_rdata = {2'b00, eng_txsel, eng_lsb, 3'b000, eng_en};
       5'd6:    win_rdata = {1'b0, eng_en, eth_locked, rx_err_lat,
                             rx_valid_lat, tx_done_lat, ser_rx_busy,
                             ser_tx_busy};
@@ -1221,6 +1223,7 @@ module pe_soc #(
       5'd12:   win_rdata = ser_rx_word[15:8];
       5'd13:   win_rdata = ser_rx_word[23:16];
       5'd14:   win_rdata = ser_rx_word[31:24];
+      5'd26:   win_rdata = {5'b00000, tx_path, 2'b00};
       5'd27:   win_rdata = {2'b00, eth_ifg_active, eth_fifo_ready,
                             eth_overlong_lat, eth_underrun_lat,
                             eth_done_lat, eth_tx_busy};

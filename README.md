@@ -6,7 +6,7 @@ protocol timing exactly, so most protocol sequencing lives in **firmware** rathe
 than dedicated protocol logic. One CPU, a shared SERDES and line-codec pipeline,
 a pin matrix and a 10BASE-T datapath speak UART, SPI, I2C, JTAG, SWD, PS/2, CAN,
 USB-LS and 10BASE-T — by loading a different program. Target: IHP 130 nm CMOS5L
-via [Tiny Tapeout](https://tinytapeout.com/), 6×4 tiles; competition deadline
+via [Tiny Tapeout](https://tinytapeout.com/), 8×4 tiles; competition deadline
 **2027-01-18**, March 2027 CMOS5L shuttle (foundry schedule permitting).
 
 **Status — 2026-10-06. Everything green below is a simulation result; the design
@@ -21,6 +21,31 @@ a wait-word contract) and R3 debug control (single-instruction step, one PC
 breakpoint, `DEBUG_STATUS` readback). A laptop loads, runs, observes and debugs
 the chip over USB through the [host controller](#host-controller-usb--pico--pe)
 below.
+
+**PDK note (2026-10-18).** The local place-and-route/STA flow is now
+`ihp-sg13cmos5l` + `sg13cmos5l_stdcell` (the March 2027 shuttle process), not
+the SG13G2 library. Routed/STA numbers recorded before this date were measured
+on SG13G2 and are marked historical; the CMOS5L `pe_serdes` rerun is complete
+(0 DRC, 0 LVS, positive setup and hold). The full-SoC rerun completed routing
+with 0 detailed-route DRC; enabling every timing fixer (timing-driven GPL,
+post-GRT design repair and post-GRT resizer) improved slow-corner setup from
+WNS −2.296 ns / 105 paths to **−1.138 ns / 9 paths**. The original
+`A_DOUT[14] -> dbg_next_pc[5]` path is fixed; the remaining worst path is a
+long `A_DOUT[1]` reg-to-reg cone. Macro-power LVS remains open; see
+[`reviews/2026-11-10/PE-SOC-PNR.md`](reviews/2026-11-10/PE-SOC-PNR.md).
+The current `tt_um_top` mapping is **170,255 µm² of logic = 16.99%** of the
+8×4 allocation (1616×620 µm = 1,001,920 µm², confirmed for the March 2027
+shuttle). Adding the two SRAM macros (159,347 µm²) gives **32.90%**; applying
+the measured CMOS5L routing/fill inflation (×1.865) gives **47.60%**, so the
+TT top fits by this estimate. The `pe_soc` subcore alone is ~36.8% under the
+same estimate. Neither `pe_soc` nor `tt_um_top` instantiates pad cells; both
+connect to the shared mux. A real TT-top physical run is still required.
+
+**Competition note (2026-11-09).** Jane Street confirmed **8×4 tiles** for the
+March 2027 CMOS5L shuttle and says the tile sizes are final; the Tiny Tapeout
+IHP Verilog template's **main branch** now targets CMOS5L, so the `cmos5l`
+branch is retired. `info.yaml` is `8x4`, and `flow/pe_soc.json` uses the
+202×155 µm tile (1616×620 µm).
 
 The full gate is green at `994224c` (2026-10-06): **48/48 firmware tests, 51/51
 testbench runs, 17 mutation suites with no unexplained survivors**, formal safety
@@ -55,7 +80,8 @@ it is a 20–30 minute named gate, not a keystroke check:
 ```bash
 regress/tier.sh 2                  # the full gate; refuses to start unless the tree is clear
 ./regress/run_all.sh --fast -j8    # the same gate directly (--fast is parallel iverilog, not a simulator swap)
-./regress/synth_area.sh            # mapped cells + area per block (needs yosys + the IHP PDK liberty)
+./regress/synth_area.sh            # mapped cells + area per block (needs yosys + the CMOS5L PDK liberty)
+./regress/synth_area.sh --out DIR  # same, plus per-block JSON/Verilog/logs outside the repo
 ```
 
 Place-and-route is dockerized LibreLane against the checked-in **60 MHz**
@@ -68,8 +94,10 @@ flow/run_librelane.sh flow/pe_soc.json
 ```
 
 Requirements: `iverilog` ≥ 11 and `python3` for the regression; `verilator` +
-`yosys` + the IHP PDK for lint and area; docker for place-and-route; `plantuml`
-for the diagram gate.
+`yosys` + the **IHP SG13CMOS5L** PDK at `~/pdk/IHP-Open-PDK` for lint and area;
+docker (image `ghcr.io/librelane/librelane:3.1.0.dev3`) for place-and-route;
+`plantuml` for the diagram gate. The flow is `ihp-sg13cmos5l` +
+`sg13cmos5l_stdcell`, not the SG13G2 library.
 
 <!-- BEGIN gui-worker host block (host controller section) - keep whole;
      place BESIDE the chip-side Quick start / Layout sections when merging -->
@@ -149,17 +177,19 @@ loaded.
 `regress/synth_area.sh` and recorded in
 [`wiki/reference/block-diagram.md`](wiki/reference/block-diagram.md) and
 [`wiki/reference/floorplan-feasibility.md`](wiki/reference/floorplan-feasibility.md)
-(standard cells, sg13g2 typical, pre-placement; the two SRAM macros contribute
+(current run: **sg13cmos5l typical**, mapped pre-route; the routed signoff
+numbers below are the historical SG13G2 run; the two SRAM macros contribute
 area from their LEF — 79,674 µm² each, 237×336 µm — not from gates). The die is
-the 6×4 template, 1002×432 µm ≈ 0.433 mm², which `flow/pe_soc.json` declares as
-`DIE_AREA`. The operating point is **60 MHz** (16.667 ns) in `info.yaml` and in
-both flow configs; the full-SoC LibreLane run signed off setup and hold at all
-three corners on 2026-09-22 with **+2.6601 ns** worst setup slack (slow corner)
-and 0 violating paths, and the post-route critical path puts Fmax at 71.4 MHz.
-`wiki/STATUS.md` records what is *not* clean in that run too: SRAM-pin max-slew /
-max-cap checker violations that a longer clock period cannot fix, and a
-LibreLane stop before GDS streamout (a PDK-macro-vs-flow `prBoundary` mismatch,
-not a design defect).
+the 8×4 allocation at 202×155 µm per tile, 1616×620 µm ≈ 1.002 mm², which
+`flow/pe_soc.json` declares as `DIE_AREA`. The operating point is **60 MHz**
+(16.667 ns) in `info.yaml` and in
+both flow configs. The 2026-09-22 full-SoC LibreLane signoff (**+2.6601 ns**
+worst setup slack, 0 violating paths, Fmax 71.4 MHz) was produced against
+`ihp-sg13g2` + `sg13g2_stdcell`, **not the CMOS5L shuttle PDK**; it is retained
+as historical evidence while the CMOS5L flow is rerun. `wiki/STATUS.md` records
+what is *not* clean in that historical run too: SRAM-pin max-slew / max-cap
+checker violations and a LibreLane stop before GDS streamout (a
+PDK-macro-vs-flow `prBoundary` mismatch, not a design defect).
 
 `regress/lint.sh` runs Verilator `-Wall` plus a yosys elaboration check on every
 top, and the regression fails if either finds anything. It exists because a green

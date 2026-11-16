@@ -284,8 +284,8 @@ bash regress/sram_model.sh
 **What you will see** — the two behavioural models it resolved, one per line:
 
 ```
-/home/<you>/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram/verilog/RM_IHPSG13_1P_1024x16_c2_bm_bist.v
-/home/<you>/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram/verilog/RM_IHPSG13_1P_core_behavioral_bm_bist.v
+/home/<you>/pdk/IHP-Open-PDK/ihp-sg13cmos5l/libs.ref/sg13cmos5l_sram/verilog/RM_IHPSG13_1P_1024x16_c2_bm_bist.v
+/home/<you>/pdk/IHP-Open-PDK/ihp-sg13cmos5l/libs.ref/sg13cmos5l_sram/verilog/RM_IHPSG13_1P_core_behavioral_bm_bist.v
 ```
 
 **What it means.** Both files were found, so testbenches will simulate the real

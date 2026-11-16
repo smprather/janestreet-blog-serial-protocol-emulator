@@ -325,11 +325,8 @@ module pe_dru #(
       grid_phase         <= 4'd0;
       grid_prev_lvl      <= 1'b1;
       grid_expect_second <= 1'b0;
-      grid_held_first    <= 1'b0;
-      bit_en          <= 1'b0;
-      rx_first        <= 1'b0;
-      rx_second       <= 1'b0;
-      rx_wire         <= 1'b1;
+      bit_en             <= 1'b0;
+      rx_wire            <= 1'b1;
     end else begin
       bit_en <= 1'b0;
       // Rising-edge sample first, then falling-edge: within one bit period the
@@ -339,22 +336,24 @@ module pe_dru #(
       grid_phase         <= p2_phase;
       grid_prev_lvl      <= p2_prev;
       grid_expect_second <= p2_expect;
-      grid_held_first    <= p2_held;
 
       // At most one bit per clock: captures are SPB/2 samples apart and there
       // are two samples per clock, so SPB=8 (the smallest legal grid) still
       // spaces them by two clocks. The priority if-else is belt and braces,
       // with the earlier sample winning.
-      if (b1) begin
-        bit_en    <= 1'b1;
-        rx_first  <= f1;
-        rx_second <= s1;
-      end else if (b2) begin
-        bit_en    <= 1'b1;
-        rx_first  <= f2;
-        rx_second <= s2;
-      end
+      if (b1 || b2) bit_en <= 1'b1;
       rx_wire <= rx_n_in;      // the later of the two samples this clock
+    end
+  end
+
+  always_ff @(posedge clk) begin
+    grid_held_first <= p2_held;
+    if (b1) begin
+      rx_first  <= f1;
+      rx_second <= s1;
+    end else if (b2) begin
+      rx_first  <= f2;
+      rx_second <= s2;
     end
   end
 

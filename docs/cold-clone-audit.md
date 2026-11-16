@@ -27,8 +27,8 @@ below); the rest is friction-free.
 | 5 | (README quick start) `./regress/run_firmware_tests.sh`, `./regress/lint.sh` | **not run separately** | both are inside `run_all.sh` above; the verify list only names `run_all.sh --fast`. |
 
 Tooling assumption check: the docs assume `python3`, and `run_all` assumes
-`iverilog`, `yosys` (+ the IHP PDK under `~/pdk/IHP-Open-PDK` for the SRAM
-model). On a machine with the toolchain and PDK all four pass; without the
+`iverilog`, `yosys` (+ the **IHP SG13CMOS5L** PDK under `~/pdk/IHP-Open-PDK`
+for the SRAM model). On a machine with the toolchain and PDK all four pass; without the
 PDK the SRAM model fails loudly by design (documented chip behavior). A judge
 with the toolchain and PDK reproduces everything; without them the host side
 (steps 1-3) still needs only `python3`.

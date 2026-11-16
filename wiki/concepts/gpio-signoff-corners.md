@@ -18,7 +18,7 @@ Internal logic signs off at SS/FF, but the pad ring needs FS (fast-N/slow-P) and
 
 ## Signoff loop
 
-1. ngspice the sg13g2 GPIO buffer across FF/SS/FS/SF driving a realistic PCB load (15-30 pF + pin inductance) with a 10 Mbps Manchester train; also capture input-threshold skew on receive.
+1. ngspice the CMOS5L GPIO buffer across FF/SS/FS/SF driving a realistic PCB load (15-30 pF + pin inductance) with a 10 Mbps Manchester train; also capture input-threshold skew on receive.
 2. Extract worst-case thinning: dt_skew = max|tplh(corner) - tphl(corner)|.
 3. Inject into OpenROAD SDC without custom multi-corner IO libs:
    - asymmetric `set_input_delay -rise/-fall` (and output equivalents) on the RX/TX GPIOs, or

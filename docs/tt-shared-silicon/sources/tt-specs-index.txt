@@ -1,0 +1,245 @@
+Tech specs :: Quicker, easier and cheaper to make your own chip!
+
+ Tiny Tapeout
+
+ Home
+
+ News
+
+ Universities & Schools
+
+ Tiny Tapeout Chips
+
+ Silicon proven projects
+
+ Tiny Tapeout SKY 26c
+
+ Tiny Tapeout SKY 26b
+
+ Tiny Tapeout SKY 26a
+
+ Tiny Tapeout SKY 25b
+
+ Tiny Tapeout SKY 25a
+
+ Tiny Tapeout IHP 26b
+
+ Tiny Tapeout IHP 26a
+
+ Tiny Tapeout IHP 25b
+
+ Tiny Tapeout IHP 25a
+
+ Tiny Tapeout GF 26b
+
+ Tiny Tapeout GF 26a
+
+ Tiny Tapeout CAD 25a
+
+ Tiny Tapeout 9
+
+ Tiny Tapeout 8
+
+ Tiny Tapeout 7
+
+ Tiny Tapeout 6
+
+ Workshops
+
+ Digital Design Guide
+
+ Getting started with our digital design tool
+
+ Holidays
+
+ Logic Gates
+
+ Logic Puzzle - Flip Flop
+
+ Logic Puzzle - Edge Detect
+
+ Logic Puzzle - Full Adder
+
+ Logic Puzzle - Padlock
+
+ Customisable Design - Padlock
+
+ Customisable Design - UART
+
+ Customisable Design - 7-Seg
+
+ Simple automated testing using truth tables
+
+ Generating Wokwi designs from truth tables
+
+ How do semiconductors work?
+
+ Introduction to SiliWiz
+
+ Draw a Resistor
+
+ Parasitics
+
+ Voltage Divider
+
+ Draw a capacitor
+
+ Draw an N MOSFET
+
+ Making a logic inverter
+
+ Draw a P type MOSFET
+
+ Draw a CMOS inverter
+
+ Making ASICs
+
+ Working with HDLs
+
+ Important!
+
+ FPGA to ASIC
+
+ HDL resources
+
+ HDL templates
+
+ Testing your design
+
+ Competitions
+
+ TTSKY26a Demoscene Competition (closed)
+
+ TTSKY26a Demoscene Entries
+
+ Crowd Sourced RISC-V (closed)
+
+ Crowd Sourced RISC-V Peripheral Entries and Winners
+
+ TT08 Demoscene Entries
+
+ TT08 Demoscene Winners
+
+ TT08 Demoscene (closed)
+
+ Sticker Design (closed)
+
+ Guides
+
+ Creating Silicon Art
+
+ TT04+ demoboard quickstart
+
+ TT ETR demoboard quickstart
+
+ Hackaday GF0p2 chip breakout quickstart
+
+ Local hardening
+
+ Testing Projects with the Analog Discovery
+
+ Updating your project documentation
+
+ Using the FPGA ASIC simulator breakout
+
+ Flashing the Gamepad PMOD
+
+ Change your submitted project repository
+
+ Workshop
+
+ 1 - Draw your own MOSFET
+
+ 2 - Simulate a logic gate
+
+ 3 - Create the GDS and submit your design
+
+ 4 - Optional - Submit a design revision
+
+ 5 - Optional - Activate and Test a Design
+
+ Advanced Workshop
+
+ 1 - Draw your own MOSFET
+
+ 2 - Verilog with VGA Playground
+
+ 3 - Create GDS from VGA Playground
+
+ 4 - Submit your design
+
+ 5 - Optional - Activate and Test a Design
+
+ Configuring and flashing the QSPI Pmod
+
+ Laying Out Standard Cells with Magic VLSI
+
+ Tech specs
+
+ Clock
+
+ GPIO pins
+
+ Analog Specs
+
+ Memory
+
+ Pinouts
+
+ PCB - ETR (TT09+)
+
+ PCB (TT04-08)
+
+ PCB (TT02-03)
+
+ FAQ
+
+ Branding
+
+ Contact
+
+ Press
+
+ Terms
+
+ Credits
+
+More
+
+ Store
+
+ Tiny Tapeout > Tech specs
+
+ Tech specs
+
+Clock
+
+Clock generation and limitations
+
+GPIO pins
+
+GPIO pin specifications and limitations
+
+Analog Specs
+
+Analog specifications
+
+Memory
+
+Memory for Tiny Tapeout projects
+
+Pinouts
+
+Recommended pinouts for various protocols and Pmods
+
+PCB - ETR
+
+PCBs for the latest Tiny Tapeout shuttles
+
+PCB (Tiny Tapeout 4-8)
+
+PCBs for Tiny Tapeout 4-8
+
+PCB (Tiny Tapeout 1-3)
+
+PCBs for Tiny Tapeout 1, 2 and 3

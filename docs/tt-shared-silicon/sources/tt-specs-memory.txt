@@ -1,0 +1,567 @@
+Memory :: Quicker, easier and cheaper to make your own chip!
+
+ Tiny Tapeout
+
+ Home
+
+ News
+
+ Universities & Schools
+
+ Tiny Tapeout Chips
+
+ Silicon proven projects
+
+ Tiny Tapeout SKY 26c
+
+ Tiny Tapeout SKY 26b
+
+ Tiny Tapeout SKY 26a
+
+ Tiny Tapeout SKY 25b
+
+ Tiny Tapeout SKY 25a
+
+ Tiny Tapeout IHP 26b
+
+ Tiny Tapeout IHP 26a
+
+ Tiny Tapeout IHP 25b
+
+ Tiny Tapeout IHP 25a
+
+ Tiny Tapeout GF 26b
+
+ Tiny Tapeout GF 26a
+
+ Tiny Tapeout CAD 25a
+
+ Tiny Tapeout 9
+
+ Tiny Tapeout 8
+
+ Tiny Tapeout 7
+
+ Tiny Tapeout 6
+
+ Workshops
+
+ Digital Design Guide
+
+ Getting started with our digital design tool
+
+ Holidays
+
+ Logic Gates
+
+ Logic Puzzle - Flip Flop
+
+ Logic Puzzle - Edge Detect
+
+ Logic Puzzle - Full Adder
+
+ Logic Puzzle - Padlock
+
+ Customisable Design - Padlock
+
+ Customisable Design - UART
+
+ Customisable Design - 7-Seg
+
+ Simple automated testing using truth tables
+
+ Generating Wokwi designs from truth tables
+
+ How do semiconductors work?
+
+ Introduction to SiliWiz
+
+ Draw a Resistor
+
+ Parasitics
+
+ Voltage Divider
+
+ Draw a capacitor
+
+ Draw an N MOSFET
+
+ Making a logic inverter
+
+ Draw a P type MOSFET
+
+ Draw a CMOS inverter
+
+ Making ASICs
+
+ Working with HDLs
+
+ Important!
+
+ FPGA to ASIC
+
+ HDL resources
+
+ HDL templates
+
+ Testing your design
+
+ Competitions
+
+ TTSKY26a Demoscene Competition (closed)
+
+ TTSKY26a Demoscene Entries
+
+ Crowd Sourced RISC-V (closed)
+
+ Crowd Sourced RISC-V Peripheral Entries and Winners
+
+ TT08 Demoscene Entries
+
+ TT08 Demoscene Winners
+
+ TT08 Demoscene (closed)
+
+ Sticker Design (closed)
+
+ Guides
+
+ Creating Silicon Art
+
+ TT04+ demoboard quickstart
+
+ TT ETR demoboard quickstart
+
+ Hackaday GF0p2 chip breakout quickstart
+
+ Local hardening
+
+ Testing Projects with the Analog Discovery
+
+ Updating your project documentation
+
+ Using the FPGA ASIC simulator breakout
+
+ Flashing the Gamepad PMOD
+
+ Change your submitted project repository
+
+ Workshop
+
+ 1 - Draw your own MOSFET
+
+ 2 - Simulate a logic gate
+
+ 3 - Create the GDS and submit your design
+
+ 4 - Optional - Submit a design revision
+
+ 5 - Optional - Activate and Test a Design
+
+ Advanced Workshop
+
+ 1 - Draw your own MOSFET
+
+ 2 - Verilog with VGA Playground
+
+ 3 - Create GDS from VGA Playground
+
+ 4 - Submit your design
+
+ 5 - Optional - Activate and Test a Design
+
+ Configuring and flashing the QSPI Pmod
+
+ Laying Out Standard Cells with Magic VLSI
+
+ Tech specs
+
+ Clock
+
+ GPIO pins
+
+ Analog Specs
+
+ Memory
+
+ Pinouts
+
+ PCB - ETR (TT09+)
+
+ PCB (TT04-08)
+
+ PCB (TT02-03)
+
+ FAQ
+
+ Branding
+
+ Contact
+
+ Press
+
+ Terms
+
+ Credits
+
+More
+
+ Store
+
+ Tiny Tapeout > Tech specs > Memory
+
+Memory
+
+ Memory
+
+Memory
+
+If your design needs memory, you have the following options:
+
+Use registers (DFF) in your design area
+
+Use DFF RAM (efficient array of DFFs)
+
+Use an external SPI RAM (can be simulated by the RP2040 on the demo board)
+
+Using registers
+
+The simplest way to store data is to use registers. It’s also very flexible: you can use as many as you want and you can read / write from them at any time. The downside is that they are not very efficient in terms of area.
+
+As a rule of thumb, you can fit about 320 DFFs (40 bytes of memory) in a single tile. Since your design will also need some logic, you will probably be able to fit less than that.
+
+Here are a few examples of projects that use registers as memory:
+
+Register based 32 byte RAM - uses 264 DFFs (32 bytes of memory + 8 bits for the output register), and utilizes 70% of the tile area.
+
+Simon Says game - uses 188 DFFs for the game state, and utilizes 76% of the tile area (for both logic and memory)
+
+Using latch-based memory
+
+Latches are more area-efficient than registers, but they are also more complex to use. We’ve seen people fit as many as 512 bits into a single Tiny Tapeout tile. Check out the 64 byte latch-based memory example from Michael Bell for more details (the example uses 88% of a single tile area).
+
+Using DFF RAM
+
+The DFF RAM compiler creates a dense array of DFFs that can be used as memory. It’s more efficient than using registers, but it’s also less flexible: you can only read / write one address at a time, and there are only a few sizes available.
+
+For Tiny Tapeout, you can use the RAM32 macro, which is 128 bytes arranged as 32x32 bits (32 words of 32 bits each) with a single read/write port (1RW). This macro uses an area of 401 x 136 um, which fits in 3x2 tiles and uses about 54% of the area.
+
+Including DFF RAM in your design is a bit more complicated than using registers, as connecting the power and ground pins is not trivial. You can use the DFF RAM example project as a starting point.
+
+Using pregenerated SRAM macros
+
+IHP has several variations of SRAM macros which can be used in shuttles which they will manufacture (i.e. specifically
+being taped out with their PDK). One of these macros, 1024x8, has been successfully taped out and tested to be working -
+read more about it in the ttihp0p2 SRAM (1024x8) test project datasheet.
+
+The tables below are not exhaustive - you should visit IHP’s PDK repository to see their full SRAM macro selection.
+
+Integrating the IHP SRAM macro at this stage is not trivial. There have been many changes since the example project linked
+above, and additional changes will come after TTIHP26A. The table below should be used as rough guidance only, and is subject
+to change at any time. 
+
+For additional help, join our discord.
+
+IHP SG13G2 single-port SRAM comparison table
+
+SRAM macro
+
+Physical dimensions 
+ (width x height) (µm)
+
+Area (µm²)
+
+Minimum tile size required
+
+Area consumption
+
+Approximate density (bits per tile)
+
+256x8
+
+236.80 x 74.10
+
+17546.88
+
+1x2*
+
+27.7%
+
+~3700
+
+512x8
+
+236.80 x 110.38
+
+26137.98
+
+1x2*
+
+41.2%
+
+~4970
+
+1024x8
+
+146.88 x 336.46
+
+49419.24
+
+2x1*
+
+76.0%
+
+~5390
+
+256x16
+
+236.80 x 118.78
+
+28127.10
+
+1x2*
+
+44.4%
+
+~4620
+
+512x16
+
+236.80 x 191.34
+
+45309.31
+
+1x2*
+
+71.5%
+
+~5730
+
+1024x16
+
+236.80 x 336.46
+
+79673.73
+
+2x2*
+
+60.5%
+
+~6770
+
+256x32
+
+416.64 x 118.78
+
+49488.50
+
+3x4
+
+10.9%
+
+~6240
+
+512x32
+
+416.64 x 191.34
+
+79719.90
+
+3x4
+
+17.6%
+
+~7750
+
+1024x32
+
+416.64 x 336.46
+
+140182.69
+
+3x4
+
+31.0%
+
+~8820
+
+256x48
+
+596.48 x 118.78
+
+70849.89
+
+3x1
+
+71.8%
+
+~5710
+
+256x64
+
+784.48 x 118.78
+
+93180.53
+
+4x1
+
+70.4%
+
+~5820
+
+512x64
+
+784.48 x 191.34
+
+150102.40
+
+4x2
+
+56.0%
+
+~7310
+
+* = requires rotating macro by 90 degrees to fit
+
+IHP SG13G2 dual-port SRAM comparison table
+
+SRAM macro
+
+Physical dimensions 
+ (width x height) (µm)
+
+Area (µm²)
+
+Minimum tile size required
+
+Area consumption
+
+Approximate density (bits per tile)
+
+256x8
+
+278.51 x 136.97
+
+38147.51
+
+1x2*
+
+60.2%
+
+~1700
+
+512x8
+
+261.17 x 219.77
+
+57397.33
+
+2x2
+
+43.6%
+
+~2350
+
+256x16
+
+419.95 x 136.97
+
+57520.55
+
+3x4
+
+12.7%
+
+~2690
+
+512x16
+
+402.61 x 219.77
+
+88481.60
+
+3x4
+
+19.5%
+
+~3490
+
+1024x16
+
+402.61 x 385.37
+
+155153.82
+
+3x4
+
+34.3%
+
+~3980
+
+64x32
+
+702.83 x 74.87
+
+52620.88
+
+3x4*
+
+11.6%
+
+~1470
+
+256x32
+
+702.83 x 136.97
+
+96266.63
+
+3x4*
+
+21.3%
+
+~3210
+
+512x32
+
+685.49 x 219.77
+
+150650.14
+
+3x4*
+
+33.3%
+
+~4100
+
+1024x32
+
+685.49 x 385.37
+
+264167.28
+
+3x4*
+
+58.4%
+
+~4680
+
+* = requires rotating macro by 90 degrees to fit
+
+For other PDKs
+
+For SkyWater shuttles, the density of memory macros is significantly lower. There is an experimental 32x32 register file
+created by Sylvain Munaut which has a density of 1200 bits per tile - see the datasheet for more information.
+
+Using external SPI RAM
+
+The RP2040 on the demo board can be configured to provide 64 kbytes of RAM to the chip over SPI thanks to the spi-ram-emu project by Mike Bell. It simulates the 23LC512 SPI RAM chip. This is a good option if you need a lot of memory, but it’s also the slowest option.
+
+Using QSPI Pmod
+
+The QSPI Pmod, made by mole99 and Mike Bell, is an expansion card available for purchase
+which provides external memory to your project via the Pmod connectors. It contains a 16MB flash chip and two 8MB PSRAM chips.
+The KianV µLinux SoC make use of the Pmod to
+provide additional storage space for the processor.
+
+You can view the schematics on GitHub too: github.com/mole99/qspi-pmod

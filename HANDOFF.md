@@ -799,7 +799,7 @@ user (separate session); no GUI/bridge implementation is dispatched here.
 > grid's Metal4 stripe plus
 > its ordered Metal4-to-vertical and vertical-to-horizontal connects, and
 > validates every macro view (nonempty gds/lef/lib, every ./src path resolving
-> in the PDK sg13g2_sram tree, and lib coverage of the flow's PVT corners), and
+> in the PDK sg13cmos5l_sram tree, and lib coverage of the flow's PVT corners), and
 > derives each macro type's own LEF SIZE so every placement is checked against
 > its own dimensions (E2-5);
 > `regress/mutate_macro_flow_config.sh` proves the wrong-net, every
@@ -1231,9 +1231,11 @@ grepped for three known diagnostics and passed a file yosys could not parse.
    flop could be a constant and the regression stayed green.
    `firmware/tick_count.pe` + `tb/tb_pe_soc_tick.v` exist to close that.
    When you add a peripheral, add the program that uses it in the same change.
-6. **The LibreLane `--dockerized` wrapper cannot auto-enable ihp-sg13g2.** Invoke
-   the container with explicit `-p ihp-sg13g2 -s sg13g2_stdcell`. Command is in
-   `wiki/STATUS.md` and `README.md`. This cost hours once; do not rediscover it.
+6. **The LibreLane `--dockerized` wrapper cannot auto-enable the IHP PDK.** The
+   current target is `ihp-sg13cmos5l` + `sg13cmos5l_stdcell`; invoke the
+   container with explicit `-p ihp-sg13cmos5l -s sg13cmos5l_stdcell`. Command is
+   in `wiki/STATUS.md` and `README.md`. This cost hours once; do not rediscover
+   it. Do not fall back to the SG13G2 CIEL tree.
 7. **Check a test vector is not a bit palindrome before trusting a bit-order
    test.** `0x5A` reverses to itself, so an SPI master that shifted LSB-first
    instead of MSB-first would put the *identical levels on the wire* and no
@@ -1280,7 +1282,7 @@ Verilog slave FSM. **Item 4 is decided: the six `uo_out[7:2]` pads stay
 `dbg_pc[5:0]` for now** (no readback path; 6 usable pads free, or 12 if
 debug is reclaimed; see STATUS for the revisit trigger). **Item 5's read-only feasibility is documented in
 [[reference/floorplan-feasibility]]**: the two macros plus logic fit the
-template 6×4 die at ~60% occupancy, the open question is the pad ring
+confirmed 8×4 die at ~48% occupancy; the remaining question is the pad ring
 (`CORE_AREA` vs `DIE_AREA`), and the physical-flow evidence is deferred and
 listed. `wiki/plans/through-i2c.md` is kept for its timing analysis;
 `wiki/plans/i2c-transaction.md` is the completed transaction plan.
@@ -1369,7 +1371,10 @@ enforces both continuously.
 
 ## Environment
 
-PDK `~/pdk/IHP-Open-PDK`; Ciel `~/.ciel` (`ihp-sg13g2` enabled); EDA venv
-`~/venvs/asic`; LibreLane run dirs under `~/asic-runs` (outside git). Tools needed
-for the regression: `iverilog` (≥11), `yosys`, `python3`. `verilator` and
-`rsvg-convert` are used by lint/diagram tooling only.
+PDK `~/pdk/IHP-Open-PDK` at the Tiny Tapeout CMOS5L pin
+(`2bbec755dc67ca3db0261c3d6163e15735d66710`), containing `ihp-sg13cmos5l`;
+flow container `ghcr.io/librelane/librelane:3.1.0.dev3`; LibreLane run dirs under
+`~/asic-runs` (outside git). The old `~/.ciel` `ihp-sg13g2` tree and
+`~/venvs/asic` LibreLane 3.0.x venv are SG13G2-era and are not part of the
+CMOS5L flow. Tools needed for the regression: `iverilog` (≥11), `yosys`,
+`python3`. `verilator` and `rsvg-convert` are used by lint/diagram tooling only.

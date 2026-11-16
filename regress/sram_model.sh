@@ -15,7 +15,7 @@
 
 set -u
 PDK="${IHP_PDK:-$HOME/pdk/IHP-Open-PDK}"
-VDIR="$PDK/ihp-sg13g2/libs.ref/sg13g2_sram/verilog"
+VDIR="$PDK/ihp-sg13cmos5l/libs.ref/sg13cmos5l_sram/verilog"
 
 WRAPPER="$VDIR/RM_IHPSG13_1P_1024x16_c2_bm_bist.v"
 CORE="$VDIR/RM_IHPSG13_1P_core_behavioral_bm_bist.v"

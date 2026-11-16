@@ -192,12 +192,12 @@ SERDES's 539 — smaller, as predicted, because it has no datapath.
 master plus per-bit arbitration and stretching is more, and two protocols resident
 at once will not fit. Options, with the real numbers from [[reference/sram-budget]]:
 
-| Option | Size | Die cost (template 6x4 = 1002x432) | Note |
+| Option | Size | Die cost (confirmed 8x4 = 1616x620) | Note |
 |---|---|---|---|
-| Flops, 256 words | ~4.1 kbit | ~4 k cells ≈ 18% of the logic budget | no macro needed, no latency change |
-| `1P_512x16_c2_bm_bist` | 8,192 b | 45,309 µm² = **8%** | 512 words, 1-cycle read, wide-and-flat shape |
-| `1P_1024x16_c2_bm_bist` | 16,384 b | 79,674 µm² = **14%** | 1024 words, the comfortable choice |
-| `1P_1024x32_c2_bm_bist` | 32,768 b | 140,183 µm² = 24% | 4 KB — the practical ceiling |
+| Flops, 256 words | ~4.1 kbit | ~4 k cells ≈ 13% of the logic budget | no macro needed, no latency change |
+| `1P_512x16_c2_bm_bist` | 8,192 b | 45,309 µm² = **5%** | 512 words, 1-cycle read, wide-and-flat shape |
+| `1P_1024x16_c2_bm_bist` | 16,384 b | 79,674 µm² = **8%** | 1024 words, the comfortable choice |
+| `1P_1024x32_c2_bm_bist` | 32,768 b | 140,183 µm² = 14% | 4 KB — the practical ceiling |
 
 Recommendation: **`1P_1024x16` (1024 instructions)**. This section is now
 SUPERSEDED by [[decisions/adr-003-memory-plan]], which keeps that choice and adds
@@ -471,9 +471,9 @@ TNS 0.0, three corners), routing DRC clear, XOR clear, disconnected pins clear,
 
 ## Risks and open questions
 
-- **The tile-size discrepancy is unresolved** (blog ~200x150 µm vs template
-  167x108 µm). Every area number in this plan is per the template; the SRAM
-  decision in Blocker 3 is the one place it changes the answer materially.
+- **The tile size is confirmed (2026-11-09):** 202×155 µm per tile, 8×4
+  allocation. Every area number in this plan now uses the 1616×620 µm die; the
+  SRAM decision in Blocker 3 was the one place it changed the answer materially.
 - ~~**Pad OE and open-drain through the TT harness** is assumed available (`uio_oe`)
   but has not been verified end to end in this repo.~~ **Partly closed 2026-09-20:**
   `rtl/tt_um_protocol_emulator.v` now exists and wires `uio_oe[1:0]` to SDA/SCL, and

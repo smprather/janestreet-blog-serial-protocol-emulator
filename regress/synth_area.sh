@@ -1,15 +1,48 @@
 #!/usr/bin/env bash
-# synth_area.sh — mapped cell count + area per RTL block (sg13g2, typ corner).
+# synth_area.sh — mapped cell count + area per RTL block (sg13cmos5l, typ corner).
 #
-# Usage:  regress/synth_area.sh
+# Usage:  regress/synth_area.sh [--out DIR]
 # Uses the system yosys (native, no container needed) with the IHP liberty.
+# With --out, writes one JSON + Verilog + Yosys log per block under DIR and a
+# summary.tsv. DIR must be outside the repo; the default is stdout only.
 # For real routed numbers use the LibreLane flow (see wiki/concepts/pdk-toolchain.md).
 
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
+OUT=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --out)
+      [ "$#" -ge 2 ] || { echo "synth_area.sh: --out needs a directory" >&2; exit 2; }
+      OUT=$2
+      shift 2
+      ;;
+    -h|--help)
+      sed -n '2,9p' "$0"
+      exit 0
+      ;;
+    *)
+      echo "synth_area.sh: unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ -n "$OUT" ]; then
+  OUT=$(realpath -m "$OUT")
+  case "$OUT/" in
+    "$PWD/"*)
+      echo "synth_area.sh: refusing to write synthesis artifacts inside the repo: $OUT" >&2
+      exit 2
+      ;;
+  esac
+  mkdir -p "$OUT"
+  printf 'block\tcells\tarea_um2\n' > "$OUT/summary.tsv"
+fi
+
 PDK="${IHP_PDK:-$HOME/pdk/IHP-Open-PDK}"
-LIB="$PDK/ihp-sg13g2/libs.ref/sg13g2_stdcell/lib/sg13g2_stdcell_typ_1p20V_25C.lib"
+LIB="$PDK/ihp-sg13cmos5l/libs.ref/sg13cmos5l_stdcell/lib/sg13cmos5l_stdcell_typ_1p20V_25C.lib"
 [ -f "$LIB" ] || { echo "liberty not found: $LIB"; exit 1; }
 
 rc=0
@@ -17,8 +50,17 @@ rc=0
 report() {   # name, rtl files, top, optional chparam
   local name=$1 rtl=$2 top=$3 chparam=${4:-}
   local out yrc
-  out=$(yosys -p "read_verilog -sv $rtl; hierarchy -check -top $top $chparam; proc; opt; fsm; opt; memory; opt; techmap; opt; dfflibmap -liberty $LIB; abc -liberty $LIB; stat -liberty $LIB" 2>&1)
-  yrc=$?
+  local ycmd="read_verilog -sv $rtl; hierarchy -check -top $top $chparam; proc; opt; fsm; opt; memory; opt; techmap; opt; dfflibmap -liberty $LIB; abc -liberty $LIB; stat -liberty $LIB"
+  if [ -n "$OUT" ]; then
+    mkdir -p "$OUT/$name"
+    ycmd="$ycmd; write_json $OUT/$name/$name.json; write_verilog $OUT/$name/$name.v"
+    out=$(yosys -p "$ycmd" 2>&1)
+    yrc=$?
+    printf '%s\n' "$out" > "$OUT/$name/$name.yosys.log"
+  else
+    out=$(yosys -p "$ycmd" 2>&1)
+    yrc=$?
+  fi
   local cells area
   # Hierarchical designs print per-module lines then a design total. The total
   # line is the one WITHOUT a module name in front of it, so match that shape
@@ -45,6 +87,9 @@ report() {   # name, rtl files, top, optional chparam
     note="  (+1 SRAM macro, area from LEF not gates)"
   fi
   printf '%-18s %8s cells  %12s um2%s\n' "$name" "${cells:--}" "${area:--}" "$note"
+  if [ -n "$OUT" ]; then
+    printf '%s\t%s\t%s\n' "$name" "${cells:--}" "${area:--}" >> "$OUT/summary.tsv"
+  fi
 
   # SURFACE THE DIAGNOSTICS. This script used to capture yosys's whole output
   # into $out and grep it only for numbers, so every warning it printed was
@@ -79,7 +124,7 @@ report() {   # name, rtl files, top, optional chparam
   fi
 }
 
-echo "sg13g2 typ corner (1.20V/25C) — mapped, pre-route"
+echo "sg13cmos5l typ corner (1.20V/25C) — mapped, pre-route"
 echo "-----------------------------------------------"
 report pe_serdes    "rtl/pe_serdes.v"                            pe_serdes
 report pe_nrzi      "rtl/pe_nrzi.v"                        pe_nrzi
@@ -134,8 +179,9 @@ report pe_soc  "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_m
 # The deliverable: the only module Tiny Tapeout will instantiate.
 report tt_um_top    "rtl/pe_cpu.v rtl/pe_imem.v rtl/pe_pinmux.v rtl/pe_dru.v rtl/pe_manch.v rtl/pe_crc.v rtl/pe_eth_mac.v rtl/pe_fbuf.v rtl/pe_ctrl.v rtl/vendor/RM_IHPSG13_1P_1024x16_c2_bm_bist.bb.v rtl/pe_serdes.v rtl/pe_nrzi.v rtl/pe_bitstuff.v rtl/pe_codec_mux.v rtl/pe_eth_tx.v rtl/pe_soc.v rtl/tt_um_protocol_emulator.v" tt_um_protocol_emulator
 echo "-----------------------------------------------"
-echo "routed reference: pe_serdes = 17,211 um2 cells / 29,164 um2 die @78% util"
-echo "reproduce it with: flow/run_librelane.sh flow/pe_serdes.json"
+echo "historical SG13G2 routed reference: pe_serdes = 17,211 um2 cells /"
+echo "29,164 um2 die @78% util (NOT CMOS5L signoff)"
+echo "reproduce the current flow with: flow/run_librelane.sh flow/pe_serdes.json"
 
 if [ "$rc" -ne 0 ]; then
   echo

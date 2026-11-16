@@ -4,35 +4,38 @@
 # WHY THIS FILE EXISTS.
 #
 # LibreLane's stock PDN config (scripts/openroad/common/pdn_cfg.tcl) builds the
-# stdcell grid on TopMetal1/TopMetal2 with Metal1 rails, and defines a macro
-# grid that connects TopMetal1 <-> TopMetal2 only:
+# stdcell grid on the PDK's vertical/horizontal layers with Metal1 rails, and
+# defines a macro grid that connects only those two layers:
 #
 #     define_pdn_grid -macro -default -name macro -halo "10 10"
 #     add_pdn_connect -grid macro -layers "$PDN_VERTICAL_LAYER $PDN_HORIZONTAL_LAYER"
 #
-# That assumes a macro whose supply pins are reachable on the top two metals.
-# THIS macro is not one of those. The IHP RM_IHPSG13_1P_1024x16's supplies
-# (VDD!, VSS!, VDDARRAY!) are brought out on **Metal4**, as vertical stripes
-# running the full height of the macro -- measured from the placed DEF:
+# On CMOS5L those layers are Metal4 and TopMetal1 (there is no Metal5 or
+# TopMetal2). That still assumes a macro whose supply pins are reachable on the
+# top two metals. THIS macro is not one of those. The IHP
+# RM_IHPSG13_1P_1024x16's supplies (VDD!, VSS!, VDDARRAY!) are brought out on
+# **Metal4**, as vertical stripes running the full height of the macro --
+# measured from the placed DEF:
 #
 #     VSS! spans Metal4, x = 9.88..226.92, full height y = 0..336.46
 #     VDD! spans Metal4, x = 4.26..232.54, full height or 0..38.825 (core taps)
 #
-# so the macro's own supply geometry sits three to four layers BELOW the grid
-# that is supposed to feed it. `PDN_MACRO_CONNECTIONS` makes OpenROAD *connect*
-# the pins logically (that part works -- VDD!/VSS!/VDDARRAY! all land on
-# VPWR/VGND), but connecting a pin is not the same as building a physical path
-# to it. There is no Metal4 geometry on VPWR at all, so `check_power_grid`
-# reports the macro's Metal4 straps as ~50 unconnected shapes (PSM-0038), and
-# the router -- which is free to use Metal4 for signal -- shorts into them.
+# so on the old SG13G2 stack the macro's own supply geometry sat three to four
+# layers BELOW the grid that was supposed to feed it; on CMOS5L Metal4 is the
+# grid's vertical layer, but there is still no Metal4 geometry on VPWR over the
+# macro. `PDN_MACRO_CONNECTIONS` makes OpenROAD *connect* the pins logically
+# (that part works -- VDD!/VSS!/VDDARRAY! all land on VPWR/VGND), but connecting
+# a pin is not the same as building a physical path to it. `check_power_grid`
+# therefore reports the macro's Metal4 straps as unconnected shapes (PSM-0038),
+# and the router -- which is free to use Metal4 for signal -- shorts into them.
 #
-# THE FIX: extend the macro grid DOWN to Metal4. Add a Metal4 stripe set over
-# the macro's halo and connect Metal1 rails -> Metal4 -> TopMetal1, so the
-# macro's stripes have a real path up to the grid.
+# THE FIX: add a Metal4 stripe set over the macro's halo and connect Metal1
+# rails -> Metal4 -> TopMetal1, so the macro's stripes have a real path up to
+# the grid.
 #
-# This is the same structure the stdcell grid already uses (rails on Metal1,
-# a `add_pdn_connect -layers "$PDN_RAIL_LAYER $PDN_VERTICAL_LAYER"`), just
-# stopped at the wrong layer for this macro.
+# This mirrors the stdcell grid (rails on Metal1, a
+# `add_pdn_connect -layers "$PDN_RAIL_LAYER $PDN_VERTICAL_LAYER"`), but adds
+# the macro's own Metal4 straps, which the stock macro grid does not create.
 #
 # HOW IT IS WIRED IN: set PDN_CFG to this file in the flow config. LibreLane
 # only substitutes its default when PDN_CFG is None (steps/openroad.py:1479).
@@ -236,10 +239,15 @@ add_pdn_stripe \
     -offset 4.26 \
     -starts_with POWER
 
-# The ladder up: Metal4 -> TopMetal1 (vertical) -> TopMetal2 (horizontal).
-add_pdn_connect \
-    -grid macro \
-    -layers "Metal4 $::env(PDN_VERTICAL_LAYER)"
+# The ladder up. On SG13G2 the vertical layer is TopMetal1, so this is
+# Metal4 -> TopMetal1 -> TopMetal2. On CMOS5L the vertical layer IS Metal4, so
+# the first connect would be a same-layer no-op; skip it and connect the
+# macro's Metal4 stripes straight to TopMetal1.
+if { $::env(PDN_VERTICAL_LAYER) != "Metal4" } {
+    add_pdn_connect \
+        -grid macro \
+        -layers "Metal4 $::env(PDN_VERTICAL_LAYER)"
+}
 
 add_pdn_connect \
     -grid macro \

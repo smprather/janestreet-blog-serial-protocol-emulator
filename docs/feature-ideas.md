@@ -55,7 +55,7 @@ It is proposed, not merged, because it reclaims a pad.
   about 66 MHz. Tiny Tapeout (TT) lists outputs at about 33 MHz maximum and up
   to about 20 ns round trip through its pin multiplexer. Those figures come
   from the older sky130 pad docs, so check them for IHP.
-- **Area:** about 1K cells per tile, so roughly 24K cells at 6×4. Flip-flops
+- **Area:** about 1K cells per tile, so roughly 32K cells at 8×4. Flip-flops
   are costly, so FIFOs and buffers should go in SRAM. TT's IHP SRAM example is
   a 1024×8 macro with one port.
 
@@ -493,6 +493,6 @@ This won't all fit in about 24K cells. The strongest subset to build around:
 - [Jane Street: Can you design a chip? Announcing the protocol emulator ASIC competition](https://blog.janestreet.com/protocol-emulator-asic-competition/)
 - [Tiny Tapeout clock spec](https://tinytapeout.com/specs/clock/)
 - [Tiny Tapeout GPIO spec](https://tinytapeout.com/specs/gpio/)
-- [Tiny Tapeout CMOS5L Verilog template](https://github.com/TinyTapeout/ttihp-verilog-template/tree/cmos5l)
+- [Tiny Tapeout IHP Verilog template (main branch targets CMOS5L)](https://github.com/TinyTapeout/ttihp-verilog-template)
 - [Tiny Tapeout IHP SRAM example](https://www.tinytapeout.com/chips/ttihp0p2/tt_um_urish_sram_test)
 - [Micro Linear ML4658 10BASE-T transceiver datasheet](https://www.cdiweb.com/datasheets/microlinear/ds4658.pdf) (link-pulse timing, squelch thresholds, idle drive)

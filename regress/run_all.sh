@@ -952,7 +952,7 @@ fi
 # The SRAM budget reads the PDK, which lives outside the repo. Skip it (loudly)
 # when the PDK is not cloned rather than failing a regression on a missing
 # dependency.
-if [ -d "$HOME/pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram/lef" ]; then
+if [ -d "$HOME/pdk/IHP-Open-PDK/ihp-sg13cmos5l/libs.ref/sg13cmos5l_sram/lef" ]; then
   if python3 tools/gen/sram_budget.py --check >/dev/null 2>&1; then
     echo "sram budget up to date"
   else

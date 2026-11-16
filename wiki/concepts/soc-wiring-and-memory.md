@@ -101,7 +101,7 @@ rewrite*: for tests, area experiments, and the harness. A generate-time
 `WORDS=1024`.
 
 The cost of taking that fallback, re-measured on this tree with the flow and
-liberty `regress/synth_area.sh` uses (yosys 0.69+post, sg13g2 typ corner):
+liberty `regress/synth_area.sh` uses (yosys 0.69+post, sg13cmos5l typ corner):
 
 | configuration | cells | area |
 |---|---|---|
@@ -119,7 +119,7 @@ re-derived the same way.
 
 ## Synthesis and timing screens
 
-`regress/synth_area.sh` reports each block at the sg13g2 typ corner, and reports
+`regress/synth_area.sh` reports each block at the sg13cmos5l typ corner, and reports
 the memory blocks **twice** (`pe_imem_flop` and `pe_imem_macro`) — keeping the
 fallback rule honest by the gate rather than by a comment.
 

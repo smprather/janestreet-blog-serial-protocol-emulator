@@ -1,0 +1,6113 @@
+<!DOCTYPE html>
+<html lang="en" class="js csstransforms3d">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="Hugo 0.160.1">
+    <meta name="description" content="PCBs for Tiny Tapeout 4-8">
+
+
+    <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
+
+    <title>PCB (Tiny Tapeout 4-8) :: Quicker, easier and cheaper to make your own chip!</title>
+
+    
+    <link href="/css/nucleus.css?1792236135" rel="stylesheet">
+    <link href="/css/fontawesome-all.min.css?1792236135" rel="stylesheet">
+    <link href="/css/hybrid.css?1792236135" rel="stylesheet">
+    <link href="/css/featherlight.min.css?1792236135" rel="stylesheet">
+    <link href="/css/perfect-scrollbar.min.css?1792236135" rel="stylesheet">
+    <link href="/css/auto-complete.css?1792236135" rel="stylesheet">
+    <link href="/css/atom-one-dark-reasonable.css?1792236135" rel="stylesheet">
+    <link href="/css/theme.css?1792236135" rel="stylesheet">
+    <link href="/css/tabs.css?1792236135" rel="stylesheet">
+    <link href="/css/hugo-theme.css?1792236135" rel="stylesheet">
+    
+    <link href="/css/theme-tinytapeout.css?1792236135" rel="stylesheet">
+    
+    
+
+    <script src="/js/jquery-3.3.1.min.js?1792236135"></script>
+
+    <style>
+      :root #header + #content > #left > #rlblock_left{
+          display:none !important;
+      }
+      
+    </style>
+    
+
+<meta property="og:url" content="https://tinytapeout.com/specs/pcb/">
+  <meta property="og:site_name" content="Quicker, easier and cheaper to make your own chip!">
+  <meta property="og:title" content="PCB (Tiny Tapeout 4-8) - Tiny Tapeout">
+  <meta property="og:description" content="PCBs for Tiny Tapeout 4-8">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:type" content="website">
+
+
+  <meta itemprop="name" content="PCB (Tiny Tapeout 4-8)">
+  <meta itemprop="description" content="PCBs for Tiny Tapeout 4-8">
+  <meta itemprop="dateModified" content="2026-10-17T14:21:52+03:00">
+  <meta itemprop="wordCount" content="499">
+
+
+  <meta name="twitter:card" content="summary">
+
+  <meta name="twitter:title" content="PCB (Tiny Tapeout 4-8) - Tiny Tapeout">
+  <meta name="twitter:description" content="PCBs for Tiny Tapeout 4-8"><link href="/css/carousel.css" rel="stylesheet">
+<link href="/css/news.css" rel="stylesheet">
+<link href="//cdn.jsdelivr.net/npm/slick-carousel@1.8.1/slick/slick.css" type="text/css" rel="stylesheet"/>
+<link href="//cdn.jsdelivr.net/npm/slick-carousel@1.8.1/slick/slick-theme.css" type="text/css" rel="stylesheet"/>
+<script type="text/javascript" src="//cdn.jsdelivr.net/npm/slick-carousel@1.8.1/slick/slick.min.js"></script>
+
+  </head>
+  <body class="" data-url="/specs/pcb/">
+    <nav id="sidebar" class="">
+
+
+
+  <div id="header-wrapper">
+    <div id="header">
+      <a href="/" style="display: flex; align-items: center;">
+  <img src="/ttlogo_400.png" width="54" height="53" />
+  <h1 style="margin: 0; margin-left: 0.5em; color: white; text-transform: none; font-size: 32px; line-height: 1">
+    Tiny Tapeout
+  </h1>
+</a>
+
+    </div>
+    
+        <div class="searchbox">
+    <label for="search-by"><i class="fas fa-search"></i></label>
+    <input data-search-input id="search-by" type="search" placeholder="Search...">
+    <span data-search-clear=""><i class="fas fa-times"></i></span>
+</div>
+
+<script type="text/javascript" src="/js/lunr.min.js?1792236135"></script>
+<script type="text/javascript" src="/js/auto-complete.js?1792236135"></script>
+<script type="text/javascript">
+    
+        var baseurl = "https:\/\/tinytapeout.com\/";
+    
+</script>
+<script type="text/javascript" src="/js/search.js?1792236135"></script>
+
+    
+  </div>
+  
+    <section id="homelinks">
+      <ul>
+        <li>
+            <a class="padding" href='/'><i class='fas fa-home'></i> Home</a>
+        </li>
+      </ul>
+    </section>
+  
+
+    <div class="highlightable">
+    <ul class="topics">
+
+        
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/news/" title="News" class="dd-item
+        
+        
+        
+        ">
+      <a href="/news/">
+          News
+          
+      </a>
+
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/teaching/" title="Universities &amp; Schools" class="dd-item
+        
+        
+        
+        ">
+      <a href="/teaching/">
+          Universities &amp; Schools
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/" title="Tiny Tapeout Chips" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/">
+          Tiny Tapeout Chips
+          
+      </a>
+
+      
+        
+        
+          <ul>
+            
+            
+              
+            
+            
+
+          
+            
+              
+                
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+      <li data-nav-id="/chips/silicon-proven/" title="Silicon proven projects" class="dd-item ">
+        <a href="/chips/silicon-proven/">
+        Silicon proven projects
+        
+        </a>
+    </li>
+     
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttsky26c/" title="Tiny Tapeout SKY 26c" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttsky26c/">
+          Tiny Tapeout SKY 26c
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttsky26b/" title="Tiny Tapeout SKY 26b" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttsky26b/">
+          Tiny Tapeout SKY 26b
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttsky26a/" title="Tiny Tapeout SKY 26a" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttsky26a/">
+          Tiny Tapeout SKY 26a
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttsky25b/" title="Tiny Tapeout SKY 25b" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttsky25b/">
+          Tiny Tapeout SKY 25b
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttsky25a/" title="Tiny Tapeout SKY 25a" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttsky25a/">
+          Tiny Tapeout SKY 25a
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttihp26b/" title="Tiny Tapeout IHP 26b" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttihp26b/">
+          Tiny Tapeout IHP 26b
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttihp26a/" title="Tiny Tapeout IHP 26a" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttihp26a/">
+          Tiny Tapeout IHP 26a
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttihp25b/" title="Tiny Tapeout IHP 25b" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttihp25b/">
+          Tiny Tapeout IHP 25b
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttihp25a/" title="Tiny Tapeout IHP 25a" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttihp25a/">
+          Tiny Tapeout IHP 25a
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+              
+                
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttgf26b/" title="Tiny Tapeout GF 26b" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttgf26b/">
+          Tiny Tapeout GF 26b
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttgf26a/" title="Tiny Tapeout GF 26a" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttgf26a/">
+          Tiny Tapeout GF 26a
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+              
+                
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/ttcad25a/" title="Tiny Tapeout CAD 25a" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/ttcad25a/">
+          Tiny Tapeout CAD 25a
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/tt09/" title="Tiny Tapeout 9" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/tt09/">
+          Tiny Tapeout 9
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/tt08/" title="Tiny Tapeout 8" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/tt08/">
+          Tiny Tapeout 8
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/tt07/" title="Tiny Tapeout 7" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/tt07/">
+          Tiny Tapeout 7
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/chips/tt06/" title="Tiny Tapeout 6" class="dd-item
+        
+        
+        
+        ">
+      <a href="/chips/tt06/">
+          Tiny Tapeout 6
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+              
+                
+                
+              
+                
+                
+              
+                
+                
+              
+                
+                
+              
+            
+          
+          </ul>
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/workshops/" title="Workshops" class="dd-item
+        
+        
+        
+        ">
+      <a href="/workshops/">
+          Workshops
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/" title="Digital Design Guide" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/">
+          Digital Design Guide
+          
+      </a>
+
+      
+        
+        
+          <ul>
+            
+            
+              
+            
+            
+
+          
+            
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/wokwi/" title="Getting started with our digital design tool" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/wokwi/">
+          Getting started with our digital design tool
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/holidays/" title="Holidays" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/holidays/">
+          Holidays
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/logic_gates/" title="Logic Gates" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/logic_gates/">
+          Logic Gates
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/puzzle_flipflop/" title="Logic Puzzle - Flip Flop" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/puzzle_flipflop/">
+          Logic Puzzle - Flip Flop
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/puzzle_edgedetect/" title="Logic Puzzle - Edge Detect" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/puzzle_edgedetect/">
+          Logic Puzzle - Edge Detect
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/puzzle_adder/" title="Logic Puzzle - Full Adder" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/puzzle_adder/">
+          Logic Puzzle - Full Adder
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/puzzle_padlock_seq/" title="Logic Puzzle - Padlock" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/puzzle_padlock_seq/">
+          Logic Puzzle - Padlock
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/design_padlock/" title="Customisable Design - Padlock" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/design_padlock/">
+          Customisable Design - Padlock
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/design_uart/" title="Customisable Design - UART" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/design_uart/">
+          Customisable Design - UART
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/design_7seg/" title="Customisable Design - 7-Seg" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/design_7seg/">
+          Customisable Design - 7-Seg
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/wokwi_automated_testing/" title="Simple automated testing using truth tables" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/wokwi_automated_testing/">
+          Simple automated testing using truth tables
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/digital_design/wokwi_lut_generator/" title="Generating Wokwi designs from truth tables" class="dd-item
+        
+        
+        
+        ">
+      <a href="/digital_design/wokwi_lut_generator/">
+          Generating Wokwi designs from truth tables
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+            
+          
+          </ul>
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/siliwiz/" title="How do semiconductors work?" class="dd-item
+        
+        
+        
+        ">
+      <a href="/siliwiz/">
+          How do semiconductors work?
+          
+      </a>
+
+      
+        
+        
+          <ul>
+            
+            
+              
+            
+            
+
+          
+            
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/siliwiz/introduction/" title="Introduction to SiliWiz" class="dd-item
+        
+        
+        
+        ">
+      <a href="/siliwiz/introduction/">
+          Introduction to SiliWiz
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/siliwiz/resistors/" title="Draw a Resistor" class="dd-item
+        
+        
+        
+        ">
+      <a href="/siliwiz/resistors/">
+          Draw a Resistor
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/siliwiz/parasitics/" title="Parasitics" class="dd-item
+        
+        
+        
+        ">
+      <a href="/siliwiz/parasitics/">
+          Parasitics
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/siliwiz/divider/" title="Voltage Divider" class="dd-item
+        
+        
+        
+        ">
+      <a href="/siliwiz/divider/">
+          Voltage Divider
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/siliwiz/capacitors/" title="Draw a capacitor" class="dd-item
+        
+        
+        
+        ">
+      <a href="/siliwiz/capacitors/">
+          Draw a capacitor
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/siliwiz/nmos/" title="Draw an N MOSFET" class="dd-item
+        
+        
+        
+        ">
+      <a href="/siliwiz/nmos/">
+          Draw an N MOSFET
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/siliwiz/inverter/" title="Making a logic inverter" class="dd-item
+        
+        
+        
+        ">
+      <a href="/siliwiz/inverter/">
+          Making a logic inverter
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/siliwiz/pmos/" title="Draw a P type MOSFET" class="dd-item
+        
+        
+        
+        ">
+      <a href="/siliwiz/pmos/">
+          Draw a P type MOSFET
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/siliwiz/cmosinverter/" title="Draw a CMOS inverter" class="dd-item
+        
+        
+        
+        ">
+      <a href="/siliwiz/cmosinverter/">
+          Draw a CMOS inverter
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+            
+          
+          </ul>
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/making_asics/" title="Making ASICs" class="dd-item
+        
+        
+        
+        ">
+      <a href="/making_asics/">
+          Making ASICs
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/hdl/" title="Working with HDLs" class="dd-item
+        
+        
+        
+        ">
+      <a href="/hdl/">
+          Working with HDLs
+          
+      </a>
+
+      
+        
+        
+          <ul>
+            
+            
+              
+            
+            
+
+          
+            
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/hdl/important/" title="Important!" class="dd-item
+        
+        
+        
+        ">
+      <a href="/hdl/important/">
+          Important!
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/hdl/fpga_vs_asic/" title="FPGA to ASIC" class="dd-item
+        
+        
+        
+        ">
+      <a href="/hdl/fpga_vs_asic/">
+          FPGA to ASIC
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/hdl/resources/" title="HDL resources" class="dd-item
+        
+        
+        
+        ">
+      <a href="/hdl/resources/">
+          HDL resources
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/hdl/templates/" title="HDL templates" class="dd-item
+        
+        
+        
+        ">
+      <a href="/hdl/templates/">
+          HDL templates
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/hdl/testing/" title="Testing your design" class="dd-item
+        
+        
+        
+        ">
+      <a href="/hdl/testing/">
+          Testing your design
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+            
+          
+          </ul>
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/competitions/" title="Competitions" class="dd-item
+        
+        
+        
+        ">
+      <a href="/competitions/">
+          Competitions
+          
+      </a>
+
+      
+        
+        
+          <ul>
+            
+            
+              
+            
+            
+
+          
+            
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/competitions/demoscene-ttsky26a-announce/" title="TTSKY26a Demoscene Competition (closed)" class="dd-item
+        
+        
+        
+        ">
+      <a href="/competitions/demoscene-ttsky26a-announce/">
+          TTSKY26a Demoscene Competition (closed)
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/competitions/demoscene-ttsky26a-entries/" title="TTSKY26a Demoscene Entries" class="dd-item
+        
+        
+        
+        ">
+      <a href="/competitions/demoscene-ttsky26a-entries/">
+          TTSKY26a Demoscene Entries
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/competitions/risc-v-peripheral/" title="Crowd Sourced RISC-V (closed)" class="dd-item
+        
+        
+        
+        ">
+      <a href="/competitions/risc-v-peripheral/">
+          Crowd Sourced RISC-V (closed)
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/competitions/risc-v-peripheral-winners/" title="Crowd Sourced RISC-V Peripheral Entries and Winners" class="dd-item
+        
+        
+        
+        ">
+      <a href="/competitions/risc-v-peripheral-winners/">
+          Crowd Sourced RISC-V Peripheral Entries and Winners
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/competitions/demoscene-tt08-entries/" title="TT08 Demoscene Entries" class="dd-item
+        
+        
+        
+        ">
+      <a href="/competitions/demoscene-tt08-entries/">
+          TT08 Demoscene Entries
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/competitions/demoscene-tt08-winners/" title="TT08 Demoscene Winners" class="dd-item
+        
+        
+        
+        ">
+      <a href="/competitions/demoscene-tt08-winners/">
+          TT08 Demoscene Winners
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/competitions/demoscene-tt08-announce/" title="TT08 Demoscene (closed)" class="dd-item
+        
+        
+        
+        ">
+      <a href="/competitions/demoscene-tt08-announce/">
+          TT08 Demoscene (closed)
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/competitions/sticker-design-competition/" title="Sticker Design (closed)" class="dd-item
+        
+        
+        
+        ">
+      <a href="/competitions/sticker-design-competition/">
+          Sticker Design (closed)
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+            
+          
+          </ul>
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/" title="Guides" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/">
+          Guides
+          
+      </a>
+
+      
+        
+        
+          <ul>
+            
+            
+              
+            
+            
+
+          
+            
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/creating-silicon-art/" title="Creating Silicon Art" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/creating-silicon-art/">
+          Creating Silicon Art
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/get-started-demoboard/" title="Getting started with the Tiny Tapeout 04&#43; demo board" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/get-started-demoboard/">
+          TT04&#43; demoboard quickstart
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/get-started-demoboard-etr/" title="Getting started with the Tiny Tapeout ETR demo board" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/get-started-demoboard-etr/">
+          TT ETR demoboard quickstart
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/get-started-had-gf0p2/" title="Getting started with the Tiny Tapeout Hackaday GF0p2 chip breakout" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/get-started-had-gf0p2/">
+          Hackaday GF0p2 chip breakout quickstart
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/local-hardening/" title="Hardening Tiny Tapeout Projects Locally" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/local-hardening/">
+          Local hardening
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/analog-discovery/" title="Interacting with projects and making measurements with the Analog Discovery" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/analog-discovery/">
+          Testing Projects with the Analog Discovery
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/documentation/" title="Updating your project documentation" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/documentation/">
+          Updating your project documentation
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/fpga-breakout/" title="FPGA ASIC simulator breakout" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/fpga-breakout/">
+          Using the FPGA ASIC simulator breakout
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/flash-gamepad-pmod/" title="Flashing the Gamepad PMOD" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/flash-gamepad-pmod/">
+          Flashing the Gamepad PMOD
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/change-project-repo/" title="Change your submitted project repository" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/change-project-repo/">
+          Change your submitted project repository
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/workshop/" title="Workshop" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/workshop/">
+          Workshop
+          
+      </a>
+
+      
+        
+        
+          <ul>
+            
+            
+              
+            
+            
+
+          
+            
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/workshop/draw-a-mosfet-faster/" title="1 - Draw your own MOSFET" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/workshop/draw-a-mosfet-faster/">
+          1 - Draw your own MOSFET
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/workshop/simulate-a-gate/" title="2 - Simulate a logic gate" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/workshop/simulate-a-gate/">
+          2 - Simulate a logic gate
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/workshop/create-your-gds/" title="3 - Create the GDS and submit your design" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/workshop/create-your-gds/">
+          3 - Create the GDS and submit your design
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/workshop/submit-your-design/" title="4 - Optional - Submit a design revision" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/workshop/submit-your-design/">
+          4 - Optional - Submit a design revision
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/workshop/activate-and-test-a-design/" title="5 - Optional - Activate and Test a Design" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/workshop/activate-and-test-a-design/">
+          5 - Optional - Activate and Test a Design
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+            
+          
+          </ul>
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/advanced-workshop/" title="Advanced Workshop" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/advanced-workshop/">
+          Advanced Workshop
+          
+      </a>
+
+      
+        
+        
+          <ul>
+            
+            
+              
+            
+            
+
+          
+            
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/advanced-workshop/draw-a-mosfet-faster/" title="1 - Draw your own MOSFET" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/advanced-workshop/draw-a-mosfet-faster/">
+          1 - Draw your own MOSFET
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/advanced-workshop/verilog-with-vga-playground/" title="2 - Verilog with VGA Playground" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/advanced-workshop/verilog-with-vga-playground/">
+          2 - Verilog with VGA Playground
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/advanced-workshop/create-gds-from-vga-playground/" title="3 - Create GDS from VGA Playground" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/advanced-workshop/create-gds-from-vga-playground/">
+          3 - Create GDS from VGA Playground
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/advanced-workshop/submit-your-design/" title="4 - Submit your design" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/advanced-workshop/submit-your-design/">
+          4 - Submit your design
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/advanced-workshop/activate-and-test-a-design/" title="5 - Optional - Activate and Test a Design" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/advanced-workshop/activate-and-test-a-design/">
+          5 - Optional - Activate and Test a Design
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+            
+          
+          </ul>
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/configure-flash-qspi-pmod/" title="Configuring and flashing the QSPI Pmod" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/configure-flash-qspi-pmod/">
+          Configuring and flashing the QSPI Pmod
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/guides/laying-standard-cells-with-magic/" title="Laying Out Standard Cells with Magic VLSI" class="dd-item
+        
+        
+        
+        ">
+      <a href="/guides/laying-standard-cells-with-magic/">
+          Laying Out Standard Cells with Magic VLSI
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+            
+          
+          </ul>
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/specs/" title="Tech specs" class="dd-item
+        parent
+        
+        
+        ">
+      <a href="/specs/">
+          Tech specs
+          
+      </a>
+
+      
+        
+        
+          <ul>
+            
+            
+              
+            
+            
+
+          
+            
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/specs/clock/" title="Clock" class="dd-item
+        
+        
+        
+        ">
+      <a href="/specs/clock/">
+          Clock
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/specs/gpio/" title="GPIO pins" class="dd-item
+        
+        
+        
+        ">
+      <a href="/specs/gpio/">
+          GPIO pins
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/specs/analog/" title="Analog Specs" class="dd-item
+        
+        
+        
+        ">
+      <a href="/specs/analog/">
+          Analog Specs
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/specs/memory/" title="Memory" class="dd-item
+        
+        
+        
+        ">
+      <a href="/specs/memory/">
+          Memory
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/specs/pinouts/" title="Pinouts" class="dd-item
+        
+        
+        
+        ">
+      <a href="/specs/pinouts/">
+          Pinouts
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/specs/pcb-etr/" title="PCB - ETR" class="dd-item
+        
+        
+        
+        ">
+      <a href="/specs/pcb-etr/">
+          PCB - ETR (TT09&#43;)
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/specs/pcb/" title="PCB (Tiny Tapeout 4-8)" class="dd-item
+        
+        active
+        
+        ">
+      <a href="/specs/pcb/">
+          PCB (TT04-08)
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+                
+                
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/specs/pcb-tt123/" title="PCB (Tiny Tapeout 1-3)" class="dd-item
+        
+        
+        
+        ">
+      <a href="/specs/pcb-tt123/">
+          PCB (TT02-03)
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+                
+              
+            
+          
+          </ul>
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/faq/" title="FAQ" class="dd-item
+        
+        
+        
+        ">
+      <a href="/faq/">
+          FAQ
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/branding/" title="Branding" class="dd-item
+        
+        
+        
+        ">
+      <a href="/branding/">
+          Branding
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/contact/" title="Contact" class="dd-item
+        
+        
+        
+        ">
+      <a href="/contact/">
+          Contact
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/press/" title="Press" class="dd-item
+        
+        
+        
+        ">
+      <a href="/press/">
+          Press
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/terms/" title="Terms" class="dd-item
+        
+        
+        
+        ">
+      <a href="/terms/">
+          Terms
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+    <li data-nav-id="/credits/" title="Credits" class="dd-item
+        
+        
+        
+        ">
+      <a href="/credits/">
+          Credits
+          
+      </a>
+
+      
+        
+        
+      
+    </li>
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+  
+ 
+
+          
+          
+
+
+
+
+ 
+  
+    
+  
+ 
+
+          
+        
+    </ul>
+
+    
+    
+      <section id="shortcuts">
+        <h3>More</h3>
+        <ul>
+          
+              <li>
+                  <a class="padding" href="https://store.tinytapeout.com/"><i class='fa fa-shopping-basket'></i> Store</a>
+              </li>
+          
+        </ul>
+      </section>
+    
+
+    
+    <section id="footer">
+      
+
+    </section>
+  </div>
+</nav>
+
+
+
+
+        <section id="body">
+        <div id="overlay"></div>
+        <div class="padding highlightable">
+              
+              <div>
+                <div id="top-bar">
+                
+                
+                <div id="breadcrumbs" itemscope="" itemtype="http://data-vocabulary.org/Breadcrumb">
+                    <span id="sidebar-toggle-span">
+                        <a href="#" id="sidebar-toggle" data-sidebar-toggle="">
+                          <i class="fas fa-bars"></i>
+                        </a>
+                    </span>
+                  
+                  <span id="toc-menu"><i class="fas fa-list-alt"></i></span>
+                  
+                  <span class="links">
+                 
+                 
+                    
+          
+          
+            
+            
+          
+          
+            
+            
+          
+          
+            <a href='/'>Tiny Tapeout</a> > <a href='/specs/'>Tech specs</a> > PCB (Tiny Tapeout 4-8)
+          
+        
+          
+        
+          
+        
+                 
+                  </span>
+                </div>
+                
+                    <div class="progress">
+    <div class="wrapper">
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#breakout-board">Breakout board</a></li>
+    <li><a href="#demo-board">Demo board</a>
+      <ul>
+        <li><a href="#rp2040-on-board-mcu">RP2040 on-board MCU</a></li>
+        <li><a href="#usb-connection">USB connection</a></li>
+        <li><a href="#connections-and-extensions">Connections and extensions</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+    </div>
+</div>
+
+                
+              </div>
+            </div>
+            
+        <div id="head-tags">
+        
+        </div>
+        
+        <div id="body-inner">
+          
+            <h1>
+              
+              PCB (Tiny Tapeout 4-8)
+            </h1>
+          
+
+        
+
+
+
+	<figure><img src="/specs/pcb/images/tt04_board_annotated.jpeg"><figcaption>
+      <h4>PCB for TT04-TT08</h4>
+    </figcaption>
+</figure>
+
+<h2 id="breakout-board">Breakout board</h2>
+<p>PCB files: <a href="https://github.com/TinyTapeout/breakout-pcb">https://github.com/TinyTapeout/breakout-pcb</a></p>
+<p>Chips are mounted on a breakout board, we expect all TT chips to be in QFN.</p>
+<p>The breakout board makes it easy to:</p>
+<ul>
+<li>access all the chip signals</li>
+<li>build your own motherboard without having to solder a bare ASIC chip</li>
+</ul>
+<h2 id="demo-board">Demo board</h2>
+<p>The demo board is a work in progress: <a href="https://github.com/TinyTapeout/tt-demo-pcb">https://github.com/TinyTapeout/tt-demo-pcb</a></p>
+<p>The main features of the demo board are:</p>
+<ul>
+<li>
+<p>hosts and powers the ASIC breakout;</p>
+</li>
+<li>
+<p>includes facilities to interact with projects &ldquo;stand-alone&rdquo; (input DIP switches and 7-segment output display);</p>
+</li>
+<li>
+<p>has an <a href="https://www.raspberrypi.com/documentation/microcontrollers/rp2040.html">RP2040</a>  microcontroller (same chip that powers the <a href="https://www.raspberrypi.com/products/raspberry-pi-pico/">Raspberry Pi Pico</a>), to select and optionally interact with projects;</p>
+</li>
+<li>
+<p>has a USB Type-C connector, for powering the board and to interact with the RP2040; and</p>
+</li>
+<li>
+<p>provides a number of means to interact with the demoboard and projects from external circuitry.</p>
+</li>
+</ul>
+<h3 id="rp2040-on-board-mcu">RP2040 on-board MCU</h3>
+<p>From TT04 onwards, the demoboard will include an <a href="https://www.raspberrypi.com/documentation/microcontrollers/rp2040.html">RP2040 MCU</a> and supporting components (such as flash memory) to:</p>
+<ul>
+<li>select the active design</li>
+<li>generate <a href="/specs/clock/">the clock signal</a> for your design, up to 50 MHz</li>
+<li>provide <a href="https://github.com/MichaelBell/spi-ram-emu">SPI RAM emulation</a>, up to 512 Kbit</li>
+</ul>
+<p>The RP2040 can provide a <a href="https://micropython.org/">MicroPython</a> environment, and we&rsquo;ve created a <a href="https://github.com/TinyTapeout/tt-micropython-firmware">TT4+ MicroPython SDK</a> which simplifies configuring, selecting and interacting with projects.</p>
+<p>The RP2040 is clocked at 12MHz, but has a PLL which is used to increase the system clock greatly.  Prototype testing has shown it to be possible to clock the RP2040 itself well over 150MHz.</p>
+<p>Synchronous logic projects may be clocked using the RP2040, and the demoboard allows project selection as well as driving the project inputs and bi-directional pins, and reading bi-directional pins and outputs.</p>
+<h3 id="usb-connection">USB connection</h3>
+<p>In addition to providing power, the USB port connects the USB 2.0 data lines to the RP2040.  This allows communications between computer and MCU, as well as updating the RP2040 firmware (using the boot button during powerup).</p>
+<p>When MicroPython is installed, this can be a simple REPL interface to the python interpreter, allowing manual project selection and control, or other types of serial interfaces.</p>
+<h3 id="connections-and-extensions">Connections and extensions</h3>
+<p>Creating add-on hardware and interacting with the demoboard and projects from off-board is supported in two ways:</p>
+<ul>
+<li>
+<p>PMODs for pluggable peripherals; and</p>
+</li>
+<li>
+<p>single inline headers to expose pretty much everything.</p>
+</li>
+</ul>
+<h4 id="pmods">PMODs</h4>
+<p>Off-board interaction with the I/O is possible through various headers, including <a href="https://digilent.com/reference/_media/reference/pmod/pmod-interface-specification-1_2_0.pdf">PMODs</a> using standard spacing.</p>
+<p>Two sets of PMODs are on the demoboard:</p>
+<ul>
+<li>
+<p>a simple in, bidirectional, and out trio (bottom of image above); and</p>
+</li>
+<li>
+<p>another set which provide mixes of inputs and outputs to facilitate interactions with existing PMOD-compatible peripherals.</p>
+</li>
+</ul>
+<h4 id="sils">SILs</h4>
+<p>The bottom row of PMODs is laid out with additional pins to provide access to all the I/O in a single line.</p>
+<figure><img src="/specs/pcb/images/tt04_offboard_sils.jpeg"><figcaption>
+      <h4>TT04 offboard connection headers</h4>
+    </figcaption>
+</figure>
+
+<p>In addition, another 1x24 pin header is laid out put top that gives access to power and MUX control lines.</p>
+<p>Note: you should avoid conflicting with the RP2040 when using external signals to interact with the projects or control MUX.  See the <a href="https://github.com/TinyTapeout/tt-micropython-firmware">SDK documentation</a> for information on the RP2040 modes of operation.</p>
+
+
+
+
+
+<footer class=" footline" >
+	
+</footer>
+
+        
+        </div>
+        
+
+      </div>
+
+    <div id="navigation">
+        
+
+        
+            
+            
+                
+                    
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+                
+                    
+                        
+                        
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+        
+                    
+                        
+            
+            
+        
+                    
+                        
+            
+            
+        
+                    
+                        
+            
+            
+        
+                    
+                        
+            
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+        
+                    
+                        
+            
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+        
+                    
+                        
+            
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+        
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                    
+                
+                
+
+                    
+                    
+                        
+                    
+                    
+
+                    
+                        
+            
+            
+                
+                    
+                        
+                        
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                        
+                        
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+                
+                    
+                
+                
+
+                    
+                    
+                    
+
+                    
+            
+        
+                    
+                        
+            
+            
+        
+                    
+                        
+            
+            
+        
+                    
+            
+        
+
+        
+
+
+	 
+	 
+		
+			<a class="nav nav-prev" href="/specs/pcb-etr/" title="PCB - ETR"> <i class="fa fa-chevron-left"></i></a>
+		
+		
+			<a class="nav nav-next" href="/specs/pcb-tt123/" title="PCB (Tiny Tapeout 1-3)" style="margin-right: 0px;"><i class="fa fa-chevron-right"></i></a>
+		
+	
+    </div>
+
+    </section>
+
+    <div style="left: -1000px; overflow: scroll; position: absolute; top: -1000px; border: none; box-sizing: content-box; height: 200px; margin: 0px; padding: 0px; width: 200px;">
+      <div style="border: none; box-sizing: content-box; height: 200px; margin: 0px; padding: 0px; width: 200px;"></div>
+    </div>
+    <script src="/js/clipboard.min.js?1792236135"></script>
+    <script src="/js/perfect-scrollbar.min.js?1792236135"></script>
+    <script src="/js/perfect-scrollbar.jquery.min.js?1792236135"></script>
+    <script src="/js/jquery.sticky.js?1792236135"></script>
+    <script src="/js/featherlight.min.js?1792236135"></script>
+    <script src="/js/highlight.pack.js?1792236135"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+    <script src="/js/modernizr.custom-3.6.0.js?1792236135"></script>
+    <script src="/js/learn.js?1792236135"></script>
+    <script src="/js/hugo-learn.js?1792236135"></script>
+    
+        
+            <script src="/mermaid/mermaid.js?1792236135"></script>
+        
+        <script>
+            mermaid.initialize({ startOnLoad: true });
+        </script>
+    
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-0GDZC5ENSF"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-0GDZC5ENSF');
+</script>
+
+  <!-- Cloudflare Pages Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "1e683ea945224269a56e4c57d573a1da"}'></script><!-- Cloudflare Pages Analytics --></body>
+</html>

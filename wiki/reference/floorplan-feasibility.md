@@ -1,10 +1,10 @@
 ---
 title: Floorplan feasibility — two macros and logic on the real die
 created: 2026-09-23
-updated: 2026-09-23
+updated: 2026-11-10
 type: reference
 tags: [area-budget, floorplan, verification, planning]
-sources: [flow/pe_soc.json, pdk/IHP-Open-PDK/ihp-sg13g2/libs.ref/sg13g2_sram, wiki/reference/.floorplan-areas, regress/synth_area.sh]
+sources: [flow/pe_soc.json, pdk/IHP-Open-PDK/ihp-sg13cmos5l/libs.ref/sg13cmos5l_sram, wiki/reference/.floorplan-areas, regress/synth_area.sh]
 confidence: medium
 ---
 
@@ -21,77 +21,73 @@ confidence: medium
 
 | instance | macro | W×H (µm) | at (µm) | orient |
 |---|---|---|---|---|
-| `u_imem.g_macro.u_sram` | `1P_1024x16_c2_bm_bist` | 237×336 | (10, 10) | N |
-| `u_eth_fbuf.g_macro.u_sram` | `1P_1024x16_c2_bm_bist` | 237×336 | (256.8, 10) | N |
+| `u_imem.g_macro.u_sram` | `1P_1024x16_c2_bm_bist` | 237×336 | (10, 85.54) | N |
+| `u_eth_fbuf.g_macro.u_sram` | `1P_1024x16_c2_bm_bist` | 237×336 | (256.8, 85.54) | N |
 
 - **Macro area, both instances:** 159,347 µm² (one macro is 79,674 µm²).
 - **Macro bounding box:** 483.6 × 336.5 µm.
-- **Logic, mapped (`tt_um_top`):** 91,268 µm² in 5,363 standard cells. (`pe_soc` alone: 82,894 µm², 4,961 cells.)
-- **Logic, with routing/clock/fill:** ×1.69 (the SERDES-measured stdcell→die factor) → 154,648 µm². That factor comes from a
+- **Logic, mapped (`tt_um_top`):** 170,255 µm² in 9,940 standard cells. (`pe_soc` alone: 112,014 µm², 6,422 cells.)
+- **Logic, with routing/clock/fill:** ×1.87 (the SERDES-measured stdcell→die factor) → 317,599 µm². That factor comes from a
   different design; the real SoC run must replace it.
 
 ## Fit by die scenario
 
 `macro fit` compares the placed bounding box with the die rectangle;
 `occupancy` is (macros + inflated logic) / die area. Occupancy below
-100% is necessary, not sufficient: routing, the pad ring and the PDN
+100% is necessary, not sufficient: routing and the PDN
 are separate checks.
 
 | die scenario | die (µm) | area (µm²) | macro bbox fits | macros + inflated logic | occupancy |
 |---|---|---|---|---|---|
-| Template 6×4 | 1002 × 432 | 432,864 | yes | 313,996 | 72.5% |
-| Blog-tile 6×4 | 1200 × 600 | 720,000 | yes | 313,996 | 43.6% |
-| Template 8×4 (upside) | 1336 × 432 | 577,152 | yes | 313,996 | 54.4% |
+| Template 8×4 | 1616 × 620 | 1,001,920 | yes | 476,947 | 47.6% |
 
 ## What the flow config declares
 
-- `flow/pe_soc.json` declares `DIE_AREA`: 1002 × 432 µm = the template 6×4 die.
-- The two macro placements are declared at `u_imem.g_macro.u_sram` (10, 10), `u_eth_fbuf.g_macro.u_sram` (256.8, 10), both `N`.
+- `flow/pe_soc.json` declares `DIE_AREA`: 1616 × 620 µm = the 8×4 allocation at 202×155 µm per tile.
+- The two macro placements are declared at `u_imem.g_macro.u_sram` (10, 85.54), `u_eth_fbuf.g_macro.u_sram` (256.8, 85.54), both `N`.
 - The 10 µm placement gap and the die-bound check are enforced on
   every regression by `tools/checks/macro_flow_config.py` (E2): clean.
 - `PDN_CFG` is `./src/pe_soc_pdn.tcl`. Its script
   requests Metal4 macro stripes and ordered connects up to the grid;
   the E2 static check validates these clauses, not physical connectivity.
 
-**The critical caveat: this is a PADLESS CORE flow.** `pe_soc`'s ports
-are pins at the die boundary; there is no `CORE_AREA`, no pad ring and
-no wrapper in the run. The Tiny Tapeout deliverable
-(`tt_um_protocol_emulator`) does have pads, and the shuttle's pad ring
-occupies the perimeter of the same 1002×432 outline, so its usable core
-is smaller. The placement coordinates above are statically checked to
-fit the configured `DIE_AREA`, not a padded core. Macro `y=10` in particular
-may sit under the ring. That is the first thing a real TT-top floorplan
-must settle.
+**No pads are instantiated in this design.** `pe_soc`'s ports are pins
+at the tile boundary; the Tiny Tapeout deliverable
+(`tt_um_protocol_emulator`) exposes the standard `ui_in`/`uo_out`/
+`uio_in`/`uio_out`/`uio_oe` port set, and the shared tt-multiplexer
+selects the active design and drives the chip's pad frame. The mux and
+pads sit outside the design's 8×4 tile allocation, so they do not
+reduce the 1616×620 µm² denominator. The placement coordinates above
+are statically checked against `DIE_AREA`. The macro `y=85.54` is
+deliberate: every SRAM signal pin is on the macro's bottom edge
+(Metal2, y=0), so the bottom channel gives 100+ pins room to escape
+on the 4-layer CMOS5L stack. Keep that escape channel clear to the
+tile boundary in the TT-top flow.
 
-## Assumptions that differ between the blog and the TT template
+## Confirmed allocation
 
-| assumption | Jane Street blog | TT template / this repo |
+| item | value | source |
 |---|---|---|
-| tile size | ~200 × 150 µm | **167 × 108 µm** (`ttihp-verilog-template`) |
-| per-tile area | 30,000 µm² | 18,036 µm² |
-| 6×4 die | 1200 × 600 µm (0.720 mm²) | **1002 × 432 µm (0.433 mm²)** |
-| logic per tile | "~1K cells per tile" (~24,000 cells) | the template die's own fit is ~8,000 cells |
-| SRAM macro choice | not specified | 30 fixed PDK shapes; the die shape excludes the densest classes |
+| tile size | **202 × 155 µm** | blog 2026-11-09 update; `ttihp-verilog-template` main |
+| per-tile area | 31,310 µm² | same |
+| allocation | **8×4 = 32 tiles = 1616 × 620 µm** | blog; `info.yaml` |
+| logic per tile | "~1K cells per tile" (~32,000 cells) | blog |
+| SRAM macro choice | 30 fixed PDK shapes; one macro does not fit | PDK LEFs |
 
-The two tile figures disagree by +66% in area, and the blog's logic
-figure is inconsistent with the template's own area budget — but
-**neither figure threatens this design**: it maps to 5,363
-standard cells, well under both. What the tile size *does* decide is
-the macro rectangle, and the template figure is the conservative case.
-
-- **6×4 is the allocation** the blog commits to (8×4 is upside, +33%
-  width at the same height, so it only helps).
-- **The tile size is still unconfirmed.** Re-run this page with
-  `--tiles` when TT finalises it; the SRAM page carries the same
-  warning.
+**The allocation is confirmed.** The blog's 2026-11-09 update says 8×4
+is final for the March 2027 CMOS5L shuttle, and the template's main
+branch now targets CMOS5L (the `cmos5l` branch is retired). This design
+maps to 9,940 standard cells and the estimate above is
+**47.6%** of the die.
 
 ## Evidence needed later (deferred — not run here)
 
-1. **A TT-top flow config.** Only `flow/pe_soc.json` (padless core) and
-   `flow/pe_serdes.json` exist today; the deliverable's wrapper has no
+1. **A TT-top flow config.** Only `flow/pe_soc.json` (the SoC subcore)
+   and `flow/pe_serdes.json` exist today; the deliverable's wrapper has no
    floorplan run at all.
-2. **Placement inside a real `CORE_AREA`** with the pad ring present,
-   re-checking both macro locations and the 10 µm gap.
+2. **Placement inside the TT tile boundary** (the mux/pad frame is
+   outside the design allocation), re-checking both macro locations
+   and the 10 µm gap.
 3. **PDN connectivity for both macros** in a real run: `PSM-0040 All
    shapes connected`, no `PDN-0189`/`PSM-0069`, and the Metal4 ladder
    reaching the frame-buffer macro (E2).
@@ -101,9 +97,7 @@ the macro rectangle, and the template figure is the conservative case.
    SERDES-derived stdcell-to-die inflation factor used above.
 6. **Macro-alone DRC provenance** (the vendor macro's own violations)
    and LVS, at the flow stage before tapeout.
-7. **The tile size confirmed** by TT/submission docs, then this page
-   regenerated.
-8. **The full-chip timing/electrical items** from the reviews (the `run`
+7. **The full-chip timing/electrical items** from the reviews (the `run`
    hold, high-fanout nets, and the macro's out-of-table slew/cap).
 
 ## Non-actions
@@ -116,5 +110,5 @@ measured synthesis cache; it is a plan, not a signoff.
 
 - [[reference/sram-budget]] — the generic macro-vs-die analysis.
 - [[reference/block-diagram]] — what is in the chip.
-- [[STATUS]] — item 5 and the tile-size risk.
+- [[STATUS]] — item 5 and the measured area ledger.
 - `flow/pe_soc.json`, `tools/checks/macro_flow_config.py`.

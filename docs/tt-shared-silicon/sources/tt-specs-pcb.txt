@@ -1,0 +1,303 @@
+PCB (Tiny Tapeout 4-8) :: Quicker, easier and cheaper to make your own chip!
+
+ Tiny Tapeout
+
+ Home
+
+ News
+
+ Universities & Schools
+
+ Tiny Tapeout Chips
+
+ Silicon proven projects
+
+ Tiny Tapeout SKY 26c
+
+ Tiny Tapeout SKY 26b
+
+ Tiny Tapeout SKY 26a
+
+ Tiny Tapeout SKY 25b
+
+ Tiny Tapeout SKY 25a
+
+ Tiny Tapeout IHP 26b
+
+ Tiny Tapeout IHP 26a
+
+ Tiny Tapeout IHP 25b
+
+ Tiny Tapeout IHP 25a
+
+ Tiny Tapeout GF 26b
+
+ Tiny Tapeout GF 26a
+
+ Tiny Tapeout CAD 25a
+
+ Tiny Tapeout 9
+
+ Tiny Tapeout 8
+
+ Tiny Tapeout 7
+
+ Tiny Tapeout 6
+
+ Workshops
+
+ Digital Design Guide
+
+ Getting started with our digital design tool
+
+ Holidays
+
+ Logic Gates
+
+ Logic Puzzle - Flip Flop
+
+ Logic Puzzle - Edge Detect
+
+ Logic Puzzle - Full Adder
+
+ Logic Puzzle - Padlock
+
+ Customisable Design - Padlock
+
+ Customisable Design - UART
+
+ Customisable Design - 7-Seg
+
+ Simple automated testing using truth tables
+
+ Generating Wokwi designs from truth tables
+
+ How do semiconductors work?
+
+ Introduction to SiliWiz
+
+ Draw a Resistor
+
+ Parasitics
+
+ Voltage Divider
+
+ Draw a capacitor
+
+ Draw an N MOSFET
+
+ Making a logic inverter
+
+ Draw a P type MOSFET
+
+ Draw a CMOS inverter
+
+ Making ASICs
+
+ Working with HDLs
+
+ Important!
+
+ FPGA to ASIC
+
+ HDL resources
+
+ HDL templates
+
+ Testing your design
+
+ Competitions
+
+ TTSKY26a Demoscene Competition (closed)
+
+ TTSKY26a Demoscene Entries
+
+ Crowd Sourced RISC-V (closed)
+
+ Crowd Sourced RISC-V Peripheral Entries and Winners
+
+ TT08 Demoscene Entries
+
+ TT08 Demoscene Winners
+
+ TT08 Demoscene (closed)
+
+ Sticker Design (closed)
+
+ Guides
+
+ Creating Silicon Art
+
+ TT04+ demoboard quickstart
+
+ TT ETR demoboard quickstart
+
+ Hackaday GF0p2 chip breakout quickstart
+
+ Local hardening
+
+ Testing Projects with the Analog Discovery
+
+ Updating your project documentation
+
+ Using the FPGA ASIC simulator breakout
+
+ Flashing the Gamepad PMOD
+
+ Change your submitted project repository
+
+ Workshop
+
+ 1 - Draw your own MOSFET
+
+ 2 - Simulate a logic gate
+
+ 3 - Create the GDS and submit your design
+
+ 4 - Optional - Submit a design revision
+
+ 5 - Optional - Activate and Test a Design
+
+ Advanced Workshop
+
+ 1 - Draw your own MOSFET
+
+ 2 - Verilog with VGA Playground
+
+ 3 - Create GDS from VGA Playground
+
+ 4 - Submit your design
+
+ 5 - Optional - Activate and Test a Design
+
+ Configuring and flashing the QSPI Pmod
+
+ Laying Out Standard Cells with Magic VLSI
+
+ Tech specs
+
+ Clock
+
+ GPIO pins
+
+ Analog Specs
+
+ Memory
+
+ Pinouts
+
+ PCB - ETR (TT09+)
+
+ PCB (TT04-08)
+
+ PCB (TT02-03)
+
+ FAQ
+
+ Branding
+
+ Contact
+
+ Press
+
+ Terms
+
+ Credits
+
+More
+
+ Store
+
+ Tiny Tapeout > Tech specs > PCB (Tiny Tapeout 4-8)
+
+Breakout board
+
+Demo board
+
+RP2040 on-board MCU
+
+USB connection
+
+Connections and extensions
+
+ PCB (Tiny Tapeout 4-8)
+
+PCB for TT04-TT08
+
+Breakout board
+
+PCB files: https://github.com/TinyTapeout/breakout-pcb
+
+Chips are mounted on a breakout board, we expect all TT chips to be in QFN.
+
+The breakout board makes it easy to:
+
+access all the chip signals
+
+build your own motherboard without having to solder a bare ASIC chip
+
+Demo board
+
+The demo board is a work in progress: https://github.com/TinyTapeout/tt-demo-pcb
+
+The main features of the demo board are:
+
+hosts and powers the ASIC breakout;
+
+includes facilities to interact with projects “stand-alone” (input DIP switches and 7-segment output display);
+
+has an RP2040 microcontroller (same chip that powers the Raspberry Pi Pico), to select and optionally interact with projects;
+
+has a USB Type-C connector, for powering the board and to interact with the RP2040; and
+
+provides a number of means to interact with the demoboard and projects from external circuitry.
+
+RP2040 on-board MCU
+
+From TT04 onwards, the demoboard will include an RP2040 MCU and supporting components (such as flash memory) to:
+
+select the active design
+
+generate the clock signal for your design, up to 50 MHz
+
+provide SPI RAM emulation, up to 512 Kbit
+
+The RP2040 can provide a MicroPython environment, and we’ve created a TT4+ MicroPython SDK which simplifies configuring, selecting and interacting with projects.
+
+The RP2040 is clocked at 12MHz, but has a PLL which is used to increase the system clock greatly. Prototype testing has shown it to be possible to clock the RP2040 itself well over 150MHz.
+
+Synchronous logic projects may be clocked using the RP2040, and the demoboard allows project selection as well as driving the project inputs and bi-directional pins, and reading bi-directional pins and outputs.
+
+USB connection
+
+In addition to providing power, the USB port connects the USB 2.0 data lines to the RP2040. This allows communications between computer and MCU, as well as updating the RP2040 firmware (using the boot button during powerup).
+
+When MicroPython is installed, this can be a simple REPL interface to the python interpreter, allowing manual project selection and control, or other types of serial interfaces.
+
+Connections and extensions
+
+Creating add-on hardware and interacting with the demoboard and projects from off-board is supported in two ways:
+
+PMODs for pluggable peripherals; and
+
+single inline headers to expose pretty much everything.
+
+PMODs
+
+Off-board interaction with the I/O is possible through various headers, including PMODs using standard spacing.
+
+Two sets of PMODs are on the demoboard:
+
+a simple in, bidirectional, and out trio (bottom of image above); and
+
+another set which provide mixes of inputs and outputs to facilitate interactions with existing PMOD-compatible peripherals.
+
+SILs
+
+The bottom row of PMODs is laid out with additional pins to provide access to all the I/O in a single line.
+
+TT04 offboard connection headers
+
+In addition, another 1x24 pin header is laid out put top that gives access to power and MUX control lines.
+
+Note: you should avoid conflicting with the RP2040 when using external signals to interact with the projects or control MUX. See the SDK documentation for information on the RP2040 modes of operation.

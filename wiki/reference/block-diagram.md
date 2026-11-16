@@ -1,10 +1,10 @@
 ---
 title: "RTL block inventory"
 created: 2026-09-22
-updated: 2026-09-23
+updated: 2026-10-18
 type: reference
 tags: [architecture, reference, verification]
-sources: [rtl/, tools/synth_area.sh, wiki/plans/through-i2c.md]
+sources: [rtl/, regress/synth_area.sh, wiki/plans/through-i2c.md]
 confidence: high
 ---
 
@@ -35,15 +35,15 @@ These blocks pass their own testbenches but no SoC instance drives them:
 
 | block | role | instantiated in | cells | TB |
 |---|---|---|---|---|
-| `pe_cpu` | the ISA: 16 opcodes, A/Y/X, 8-bit datapath | pe_soc.v | 377 | `tb_pe_cpu` |
+| `pe_cpu` | the ISA: 16 opcodes, A/Y/X, 8-bit datapath | pe_soc.v | 392 | `tb_pe_cpu` |
 | `pe_imem` | instruction memory; SRAM macro by default | pe_soc.v | 12 | `tb_pe_imem` |
-| `pe_eth_mac` | 10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward | pe_soc.v | 1681 | `tb_pe_eth_mac` |
+| `pe_eth_mac` | 10BASE-T receive: SFD lock, byte assembly, FCS, store-and-forward | pe_soc.v | 1668 | `tb_pe_eth_mac` |
 | `pe_fbuf` | frame buffer: 2 KB behind a byte interface, same macro as pe_imem | pe_soc.v | 48 | `tb_pe_fbuf` |
-| `pe_ctrl` | passive SPI load path: host clocks words into imem | tt_um_protocol_emulator.v | 292 | `tb_pe_ctrl` |
-| `pe_serdes` | word engine: load 8-32 bits, pace with tx_bit_en/rx_bit_en (split for stuffing) | pe_soc.v | 539 | `tb_pe_serdes` |
-| `pe_dru` | digital receiver unit: 12x oversampled edge recovery | pe_soc.v | 148 | `tb_pe_dru` |
+| `pe_ctrl` | passive SPI load path: host clocks words into imem | tt_um_protocol_emulator.v | 3419 | `tb_pe_ctrl` |
+| `pe_serdes` | word engine: load 8-32 bits, pace with tx_bit_en/rx_bit_en (split for stuffing) | pe_soc.v | 529 | `tb_pe_serdes` |
+| `pe_dru` | digital receiver unit: 12x oversampled edge recovery | pe_soc.v | 147 | `tb_pe_dru` |
 | `pe_crc` | CRC/LFSR generator, 8/16/32-bit, catalogue-checked | pe_soc.v | 209 | `tb_pe_crc` |
-| `pe_pinmux` | per-pin direction, open-drain, read-back (the I2C gate) | pe_soc.v | 111 | `tb_pe_pinmux` |
+| `pe_pinmux` | per-pin direction, open-drain, read-back (the I2C gate) | pe_soc.v | 127 | `tb_pe_pinmux` |
 | `pe_codec_mux` | stuff -> nrzi/manchester; cfg selects the subset; TWO instances in pe_soc (TX/RX) | pe_soc.v | 130 | `tb_pe_codec_mux` |
 | `pe_nrzi` | NRZI encode/decode | pe_codec_mux.v | 15 | `tb_pe_codec_mux` |
 | `pe_manch` | Manchester encode/decode | pe_codec_mux.v | 7 | `tb_pe_codec_mux` |
@@ -96,6 +96,10 @@ Counts come from `regress/synth_area.sh` (mapped, typ corner). To refresh:
   > wiki/reference/.block-diagram-cells
 python3 tools/gen/block_diagram.py
 ```
+
+For per-block synthesis artifacts, add `--out DIR` to the same command.
+`DIR` must be outside the repo; the script refuses a path inside it, so
+JSON/Verilog/Yosys logs never become git artifacts.
 
 ## Related
 

@@ -635,37 +635,29 @@ module pe_ctrl #(
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      shreg         <= '0;
-      bit_cnt       <= '0;
-      word_ready    <= 1'b0;
-      rx_state      <= S_SYNC;
-      frm_tgt       <= '0; frm_op <= '0;
-      frm_seq       <= '0; rx_ntogo <= '0;
-      crc_acc       <= '0;
-      frm_hdr_bad   <= 1'b0; frm_len_bad <= 1'b0;
-      frm_not_ready <= 1'b0; frm_aborted <= 1'b0; frm_range <= 1'b0;
-      pay0          <= '0; pay0_valid <= 1'b0; load_idx <= '0;
-      rstate        <= R_IDLE; r_imm <= 1'b0; r_dmem <= 1'b0; r_first <= 1'b1;
-      resp_active   <= 1'b0; resp_hold_oe <= 1'b0; resp_idx <= '0;
+      bit_cnt         <= '0;
+      word_ready      <= 1'b0;
+      rx_state        <= S_SYNC;
+      rstate          <= R_IDLE;
+      resp_active     <= 1'b0;
+      resp_hold_oe    <= 1'b0;
       // R2 wait-word machinery must start from DEFINED values: r_filling feeds
       // miso_oe, so an X here would put an X on the host pad before the first
       // frame (the pad-level TB checks uio_oe for X at time 0).
-      fill_pos      <= 4'd0;
-      r_launch      <= 1'b0;
-      resp_bitpos   <= '0; resp_op <= '0; resp_tgt <= '0;
-      resp_seq      <= '0; resp_len <= '0; resp_crc <= 16'hFFFF;
-      resp_shreg    <= '0;
-      addr          <= '0;
-      we_r          <= 1'b0;
-      wstate        <= W_IDLE;
-      words_written <= '0;
-      load_echo     <= '0;
-      faults        <= '0;
+      fill_pos        <= 4'd0;
+      r_launch        <= 1'b0;
+      we_r            <= 1'b0;
+      wstate          <= W_IDLE;
+      words_written   <= '0;
+      load_echo       <= '0;
+      faults          <= '0;
       selected_target <= '0;
-      spi_miso      <= 1'b0;
-      bp_addr <= 10'd0; bp_en <= 1'b0; bp_hit <= 1'b0;
-      dbg_hold_r <= 1'b0; dbg_step_r <= 1'b0;
-      for (int i = 0; i < 16; i++) resp_buf[i] <= '0;
+      spi_miso        <= 1'b0;
+      bp_addr         <= 10'd0;
+      bp_en           <= 1'b0;
+      bp_hit          <= 1'b0;
+      dbg_hold_r      <= 1'b0;
+      dbg_step_r      <= 1'b0;
     end else begin
 `ifdef FORMAL
       fv_clr_mask_r <= 16'h0000;   // formal-only: default = no CLEAR_FAULT
@@ -678,17 +670,6 @@ module pe_ctrl #(
       // The comparison is on the LANDING address, so the core halts at the
       // breakpoint with that instruction UNEXECUTED; the decode below can
       // override the hit in the same cycle (a step's landing rule).
-      //
-      // BOTH HALVES, because stating only one of them is how a reader ends up
-      // with the wrong model. Stop-before protects the instruction AT the
-      // breakpoint: it has NOT run, and no io_we / dmem_we / a/x/y effect of it
-      // occurred. It does NOT mean the step is a no-op: the step DOES retire the
-      // instruction it executed on the way there, exactly as a step always does.
-      // Stepping from 1 to 2 with the breakpoint armed at 2 therefore executes
-      // the LDI at 1 (so `a` becomes its value) and leaves the instruction at 2
-      // untouched -- the one the debugger is about to inspect. The host vectors
-      // are reconciled to this: a step onto an armed address retires the
-      // instruction stepped FROM and protects the one AT the breakpoint.
       if (bp_en && !dbg_hold_r && (run || dbg_step_r) &&
           (dbg_next_pc == bp_addr)) begin
         bp_hit     <= 1'b1;
@@ -698,17 +679,14 @@ module pe_ctrl #(
       // faults, words_written, echo and selected target persist.
       if (cs_fall) begin
         rx_state      <= S_SYNC;
-        bit_cnt       <= '0;
-        shreg         <= '0;
-        word_ready    <= 1'b0;
-        we_r          <= 1'b0;
-        wstate        <= W_IDLE;
-        addr          <= '0;
-        frm_hdr_bad   <= 1'b0; frm_len_bad <= 1'b0;
-        frm_not_ready <= 1'b0; frm_aborted <= 1'b0; frm_range <= 1'b0;
-        pay0_valid    <= 1'b0; load_idx <= '0;
-        resp_active   <= 1'b0; resp_hold_oe <= 1'b0;
-        spi_miso      <= 1'b0;
+        bit_cnt      <= '0;
+        word_ready   <= 1'b0;
+        we_r         <= 1'b0;
+        wstate       <= W_IDLE;
+        frm_range    <= 1'b0;
+        resp_active  <= 1'b0;
+        resp_hold_oe <= 1'b0;
+        spi_miso     <= 1'b0;
       end
 
       // CS rising edge: the transaction is over. A word truncated mid-shift
@@ -731,11 +709,259 @@ module pe_ctrl #(
           case (rx_state)
             S_SYNC: begin
               if (rx_word == SYNC) begin
-                rx_state      <= S_HEADER;
+                rx_state  <= S_HEADER;
+                frm_range <= 1'b0;
+              end
+            end
+            S_HEADER: begin
+              if (rx_word[11:4] == OP_LOAD && rx_word[3:0] == TARGET_HOST && !run) begin
+                words_written <= '0;
+                load_echo     <= '0;
+              end
+              rx_state <= S_SEQ;
+            end
+            S_SEQ: begin
+              rx_state <= S_LEN;
+            end
+            S_LEN: begin
+              if (rx_word == 16'd0) rx_state <= S_CRC;
+              else                  rx_state <= S_PAYLOAD;
+            end
+            S_PAYLOAD: begin
+              if (rx_ntogo == 16'd1) rx_state <= S_CRC;
+
+              if (frm_op == OP_LOAD) begin
+                if (frm_tgt == TARGET_HOST && !frm_not_ready && !frm_aborted &&
+                    !frm_range && !frm_hdr_bad && !frm_len_bad) begin
+                  if (load_idx >= 16'(WORDS)) begin
+                    frm_range <= 1'b1;
+                    faults    <= faults | FAULT_RANGE;
+                  end else if (run) begin
+                    faults    <= faults | FAULT_LOAD;
+                  end else begin
+                    pay0       <= rx_word;
+                    word_ready <= 1'b1;
+                  end
+                end
+              end else if (frm_op == OP_CLRFLT || frm_op == OP_TARGET ||
+                           frm_op == OP_DBGBPSET || frm_op == OP_RDIMEM ||
+                           frm_op == OP_RDMEM) begin
+                if (!pay0_valid) begin
+                  pay0 <= rx_word;
+                end
+              end
+            end
+            S_CRC: begin
+              // ---- faults for this frame ---------------------------------
+              if (crc_acc != rx_word)
+                faults <= faults | FAULT_CRC;
+              else if (frm_hdr_bad || frm_len_bad)
+                faults <= faults | FAULT_PROTOCOL;
+
+              if ((crc_acc != rx_word) || frm_hdr_bad || frm_len_bad) begin
+              end else if (frm_op[7]) begin
+              end else if (TARGET_LOOP == frm_tgt) begin
+                if (frm_op == OP_TARGET) begin
+                  selected_target <= 16'd1;
+                end
+              end else if (frm_tgt != TARGET_HOST) begin
+              end else begin
+                case (frm_op)
+                  OP_CLRFLT: begin
+                    faults      <= faults & ~pay0;
+`ifdef FORMAL
+                    fv_clr_mask_r <= pay0;   // formal-only observation
+`endif
+                  end
+                  OP_TARGET: begin
+                    if (pay0 == 16'd0) begin
+                      selected_target <= 16'd0;
+                    end else if (pay0 == 16'd1) begin
+                      selected_target <= 16'd1;
+                    end
+                  end
+                  OP_RDIMEM, OP_RDMEM: begin
+                    if (run) begin
+                      rstate <= R_START;
+                    end else if (frm_op == OP_RDIMEM) begin
+                      if ((32'(pay1) + 32'(pay0)) > 32'(WORDS) ||
+                          pay1 == 16'd0 || pay1 > 16'(MAX_READ_WORDS)) begin
+                        faults      <= faults | FAULT_RANGE;
+                        rstate      <= R_START;
+                      end else begin
+                        rstate      <= R_START;
+                      end
+                    end else begin
+                      if ((32'(pay1) + 32'(pay0)) > 32'(DMEM_BYTES) ||
+                          pay1 == 16'd0 || pay1 > 16'(2 * MAX_READ_WORDS)) begin
+                        faults      <= faults | FAULT_RANGE;
+                        rstate      <= R_START;
+                      end else begin
+                        rstate      <= R_START;
+                      end
+                    end
+                  end
+                  OP_DBGSTEP: begin
+                    if (!(run && !dbg_hold_r)) begin
+                      dbg_step_r <= 1'b1;
+                      dbg_hold_r <= 1'b1;
+                      bp_hit     <= bp_en && (dbg_next_pc == bp_addr);
+                    end
+                  end
+                  OP_DBGBPSET: begin
+                    if (32'(WORDS) > 32'(pay0)) begin
+                      bp_addr <= pay0[9:0];
+                      bp_en   <= 1'b1;
+                      bp_hit  <= 1'b0;
+                    end
+                  end
+                  OP_DBGBPCLR: begin
+                    bp_en      <= 1'b0;
+                    bp_hit     <= 1'b0;
+                    dbg_hold_r <= 1'b0;
+                  end
+                  default: ;
+                endcase
+              end
+
+              // ---- start the response serializer --------------------------
+              if (!r_is_read) begin
+                resp_active <= 1'b1;
+              end
+              rx_state <= S_SYNC;
+              fill_pos <= 4'd0;
+              r_launch <= 1'b0;
+            end
+            default: rx_state <= S_SYNC;
+          endcase
+        end else begin
+          bit_cnt <= bit_cnt + 4'd1;
+        end
+      end
+
+      // ---- write engine: one host_we cycle per committed payload word -----
+      case (wstate)
+        W_IDLE: begin
+          we_r <= 1'b0;
+          if (word_ready) begin
+            if (run) begin
+              word_ready <= 1'b0;
+              faults     <= faults | FAULT_LOAD;
+            end else begin
+              wstate <= W_PULSE;
+            end
+          end
+        end
+        W_PULSE: begin
+          if (run) begin
+            we_r       <= 1'b0;
+            word_ready <= 1'b0;
+            faults     <= faults | FAULT_LOAD;
+            wstate     <= W_IDLE;
+          end else begin
+            we_r   <= 1'b1;
+            wstate <= W_DONE;
+          end
+        end
+        W_DONE: begin
+          we_r       <= 1'b0;
+          word_ready <= 1'b0;
+          if (run) begin
+            faults <= faults | FAULT_LOAD;
+            wstate <= W_IDLE;
+          end else begin
+            words_written <= words_written + 16'd1;
+            load_echo     <= pay0;      // commit-latched echo
+            wstate        <= W_IDLE;
+          end
+        end
+        default: wstate <= W_IDLE;
+      endcase
+
+      // ---- R2 read engine: walk the requested range, then serialize -------
+      case (rstate)
+        R_IDLE: begin end
+        R_START: begin
+          if (r_imm) begin
+            resp_active <= 1'b1;
+            rstate      <= R_IDLE;
+          end else begin
+            rstate      <= R_REQ;
+          end
+        end
+        R_REQ: begin
+          rstate <= R_WAIT;
+        end
+        R_WAIT: begin
+          if (dbg_rd_valid) begin
+            if (r_left == 16'd1) begin
+              r_launch <= 1'b1;
+              rstate   <= R_IDLE;
+            end else begin
+              rstate <= R_REQ;
+            end
+          end
+        end
+        default: rstate <= R_IDLE;
+      endcase
+
+      // ---- response serializer (mode 0: changes on the detected fall) -----
+      if (sclk_fall && !cs_s1) begin
+        if (r_filling) begin
+          spi_miso  <= 1'b1;
+          fill_pos  <= fill_pos + 4'd1;
+        end else if (r_launch) begin
+          spi_miso  <= 1'b1;
+          if (fill_pos == 4'd15) begin
+            r_launch    <= 1'b0;
+            fill_pos    <= 4'd0;
+            resp_active <= 1'b1;
+          end else begin
+            fill_pos    <= fill_pos + 4'd1;
+          end
+        end else if (resp_active) begin
+          if (resp_bitpos == 4'd0) begin
+            spi_miso <= resp_w[15];
+          end else begin
+            spi_miso <= resp_shreg[15];
+          end
+          if (resp_bitpos == 4'd15) begin
+            if ({11'b0, resp_idx} == resp_len + 16'd4) begin
+              resp_active  <= 1'b0;
+              resp_hold_oe <= 1'b1;
+            end
+          end
+        end else if (resp_hold_oe) begin
+          resp_hold_oe <= 1'b0;
+        end
+      end
+    end
+  end
+
+`ifdef FORMAL
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) resp_len <= '0;
+    else begin
+`else
+  always_ff @(posedge clk) begin
+    begin
+`endif
+      if (cs_fall) begin
+        shreg         <= '0;
+        addr          <= '0;
+        frm_hdr_bad   <= 1'b0; frm_len_bad <= 1'b0;
+        frm_not_ready <= 1'b0; frm_aborted <= 1'b0;
+        pay0_valid    <= 1'b0; load_idx <= '0;
+      end
+
+      if (sclk_rise && !cs_s1 && !word_ready) begin
+        if (4'd15 == bit_cnt) begin
+          case (rx_state)
+            S_SYNC: begin
+              if (rx_word == SYNC) begin
                 crc_acc       <= crc16_word(16'hFFFF, SYNC);
                 frm_not_ready <= 1'b0;
                 frm_aborted   <= 1'b0;
-                frm_range     <= 1'b0;
                 frm_hdr_bad   <= 1'b0;
                 frm_len_bad   <= 1'b0;
                 pay0_valid    <= 1'b0;
@@ -749,24 +975,18 @@ module pe_ctrl #(
               crc_acc <= crc16_word(crc_acc, rx_word);
               if (rx_word[15:12] != VERSION)
                 frm_hdr_bad <= 1'b1;
-              // A LOAD on the host target is a fresh session: counters and
-              // echo restart, unless the run gate already rejects it.
               if (rx_word[11:4] == OP_LOAD && rx_word[3:0] == TARGET_HOST) begin
                 if (run) begin
                   frm_not_ready <= 1'b1;
                 end else begin
-                  words_written <= '0;
-                  load_echo     <= '0;
                   load_idx      <= '0;
                   addr          <= '0;
                 end
               end
-              rx_state <= S_SEQ;
             end
             S_SEQ: begin
               frm_seq <= rx_word;
               crc_acc <= crc16_word(crc_acc, rx_word);
-              rx_state <= S_LEN;
             end
             S_LEN: begin
               rx_ntogo <= rx_word;
@@ -774,58 +994,40 @@ module pe_ctrl #(
               case (frm_op)
                 OP_PING, OP_STATUS:
                   if (rx_word != 16'd0) frm_len_bad <= 1'b1;
-                // R2: these take no payload. READ_CPU and DUMP_CORE are the
-                // register reads; the two bounded reads DO take a payload
-                // ((address, count) for READ_IMEM, (byte address, byte count)
-                // for READ_DMEM) and are checked when that word pair is read.
                 OP_RDCPU, OP_DUMPCOR:
                   if (rx_word != 16'd0) frm_len_bad <= 1'b1;
-                // The bounded reads carry exactly (address, count).
                 OP_RDIMEM, OP_RDMEM:
                   if (rx_word != 16'd2) frm_len_bad <= 1'b1;
                 OP_CLRFLT, OP_TARGET:
                   if (rx_word != 16'd1) frm_len_bad <= 1'b1;
-                // R3: DEBUG_STEP / BP_CLR / DEBUG_STATUS take no payload;
-                // DEBUG_BP_SET carries exactly the address word.
                 OP_DBGSTEP, OP_DBGBPCLR, OP_DBGSTAT:
                   if (rx_word != 16'd0) frm_len_bad <= 1'b1;
                 OP_DBGBPSET:
                   if (rx_word != 16'd1) frm_len_bad <= 1'b1;
-                default: ;   // LOAD bound by range; unknown ops consume
+                default: ;
               endcase
-              if (rx_word == 16'd0) rx_state <= S_CRC;
-              else                  rx_state <= S_PAYLOAD;
             end
             S_PAYLOAD: begin
               crc_acc  <= crc16_word(crc_acc, rx_word);
               rx_ntogo <= rx_ntogo - 16'd1;
-              if (rx_ntogo == 16'd1) rx_state <= S_CRC;
 
               if (frm_op == OP_LOAD) begin
                 if (frm_tgt == TARGET_HOST && !frm_not_ready && !frm_aborted &&
                     !frm_range && !frm_hdr_bad && !frm_len_bad) begin
                   if (load_idx >= 16'(WORDS)) begin
-                    frm_range <= 1'b1;
-                    faults    <= faults | FAULT_RANGE;
                   end else if (run) begin
                     frm_aborted <= 1'b1;
-                    faults      <= faults | FAULT_LOAD;
                   end else begin
-                    pay0       <= rx_word;
-                    word_ready <= 1'b1;
-                    load_idx   <= load_idx + 16'd1;
+                    load_idx    <= load_idx + 16'd1;
                   end
                 end
               end else if (frm_op == OP_CLRFLT || frm_op == OP_TARGET ||
                            frm_op == OP_DBGBPSET) begin
                 if (!pay0_valid) begin
-                  pay0       <= rx_word;
                   pay0_valid <= 1'b1;
                 end
               end else if (frm_op == OP_RDIMEM || frm_op == OP_RDMEM) begin
-                // (address, count): the bounded read's request pair.
                 if (!pay0_valid) begin
-                  pay0       <= rx_word;
                   pay0_valid <= 1'b1;
                 end else if (!pay1_valid) begin
                   pay1       <= rx_word;
@@ -834,13 +1036,6 @@ module pe_ctrl #(
               end
             end
             S_CRC: begin
-              // ---- faults for this frame ---------------------------------
-              if (crc_acc != rx_word)
-                faults <= faults | FAULT_CRC;
-              else if (frm_hdr_bad || frm_len_bad)
-                faults <= faults | FAULT_PROTOCOL;
-
-              // ---- response dispatch (defaults overridden by the cases) ---
               resp_op     <= frm_op | RESP_BIT;
               resp_seq    <= frm_seq;
               resp_tgt    <= frm_tgt;
@@ -868,7 +1063,6 @@ module pe_ctrl #(
                   resp_buf[0] <= ST_OK;
                   resp_buf[1] <= 16'd1;
                   resp_buf[2] <= CAP_LOOPBACK;
-                  selected_target <= 16'd1;
                 end else begin
                   resp_len    <= 16'd1;
                   resp_buf[0] <= ST_UNSUP;
@@ -883,9 +1077,6 @@ module pe_ctrl #(
                     resp_buf[0] <= ST_OK;
                   end
                   OP_STATUS: begin
-                    // R2 layout: the cpu-derived registers are inserted
-                    // between `target` and `faults` (11 payload words), so no
-                    // field lies about a register the R1 layout omitted.
                     resp_len    <= 16'd11;
                     resp_buf[0] <= ST_OK;
                     resp_buf[1] <= {14'b0, dbg_state};       // state (R3: 2/3 = debug)
@@ -900,10 +1091,6 @@ module pe_ctrl #(
                     resp_buf[10] <= words_written;
                   end
                   OP_DUMPCOR: begin
-                    // The core header. While STOPPED it equals the STATUS
-                    // register header (the golden vectors assert the two are
-                    // byte-identical); while run=1 it answers NOT_READY with
-                    // no fault, because the values would be a moving target.
                     if (run) begin
                       resp_len    <= 16'd1;
                       resp_buf[0] <= ST_NOTREADY;
@@ -923,9 +1110,6 @@ module pe_ctrl #(
                     end
                   end
                   OP_RDCPU: begin
-                    // The ONLY non-halting read: it answers while run=1,
-                    // which is the whole point of the opcode (a debugger must
-                    // be able to see a running program). 7 payload words.
                     resp_len    <= 16'd7;
                     resp_buf[0] <= ST_OK;
                     resp_buf[1] <= {6'b0, dbg_pc};            // pc, FULL width
@@ -949,10 +1133,6 @@ module pe_ctrl #(
                     resp_len    <= 16'd2;
                     resp_buf[0] <= ST_OK;
                     resp_buf[1] <= faults & ~pay0;
-                    faults      <= faults & ~pay0;
-`ifdef FORMAL
-                    fv_clr_mask_r <= pay0;   // formal-only observation
-`endif
                   end
                   OP_TARGET: begin
                     if (pay0 == 16'd0) begin
@@ -960,46 +1140,27 @@ module pe_ctrl #(
                       resp_buf[0] <= ST_OK;
                       resp_buf[1] <= 16'd0;
                       resp_buf[2] <= CAP_HOST;
-                      selected_target <= 16'd0;
                     end else if (pay0 == 16'd1) begin
                       resp_len    <= 16'd3;
                       resp_buf[0] <= ST_OK;
                       resp_buf[1] <= 16'd1;
                       resp_buf[2] <= CAP_LOOPBACK;
-                      selected_target <= 16'd1;
                     end else begin
                       resp_len    <= 16'd1;
                       resp_buf[0] <= ST_UNSUP;
                     end
                   end
                   OP_RDIMEM, OP_RDMEM: begin
-                    // Bounded reads. While run=1 they answer NOT_READY with NO
-                    // fault (a sequencing rejection, like LOAD) -- the CPU is
-                    // fetching and the read would borrow its address bus. The
-                    // bounds are checked BEFORE any read is issued, so a
-                    // rejected read never touches memory, and an
-                    // address+count past the end is RANGE, never a wrap.
                     if (run) begin
                       resp_len    <= 16'd1;
                       resp_buf[0] <= ST_NOTREADY;
                       r_imm       <= 1'b1;
-                      rstate      <= R_START;
                     end else if (frm_op == OP_RDIMEM) begin
-                      // imem: address is a WORD index, count in words.
-                      //
-                      // count == 0 is RANGE, deliberately, NOT a zero-length
-                      // frame: an empty read is a host bug, and answering OK
-                      // with no words would leave the host unable to tell
-                      // "nothing requested" from "read refused". This is pinned
-                      // by the read_ceiling_and_zero_count golden vector, so
-                      // the chip and the host model cannot drift apart on it.
                       if ((32'(pay0) + 32'(pay1)) > 32'(WORDS) ||
                           pay1 == 16'd0 || pay1 > 16'(MAX_READ_WORDS)) begin
                         resp_len    <= 16'd1;
                         resp_buf[0] <= ST_RANGE;
-                        faults      <= faults | FAULT_RANGE;
                         r_imm       <= 1'b1;
-                        rstate      <= R_START;
                       end else begin
                         resp_buf[0] <= ST_OK;
                         resp_len    <= 16'd1 + pay1;   // status + data words
@@ -1010,21 +1171,15 @@ module pe_ctrl #(
                         r_half      <= 8'h00;
                         r_first     <= 1'b1;
                         r_imm       <= 1'b0;
-                        rstate      <= R_START;
                       end
                     end else begin
-                      // dmem: address is a BYTE index, count in bytes; two
-                      // bytes pack per response word (ceil(count/2) words).
                       if ((32'(pay0) + 32'(pay1)) > 32'(DMEM_BYTES) ||
                           pay1 == 16'd0 || pay1 > 16'(2 * MAX_READ_WORDS)) begin
                         resp_len    <= 16'd1;
                         resp_buf[0] <= ST_RANGE;
-                        faults      <= faults | FAULT_RANGE;
                         r_imm       <= 1'b1;
-                        rstate      <= R_START;
                       end else begin
                         resp_buf[0] <= ST_OK;
-                        // One status word plus ceil(count/2) data words.
                         resp_len    <= 16'd1 + ((pay1 + 16'd1) >> 1);
                         r_dmem      <= 1'b1;
                         r_addr      <= pay0;
@@ -1033,27 +1188,16 @@ module pe_ctrl #(
                         r_half      <= 8'h00;
                         r_first     <= 1'b1;      // next byte opens a pair
                         r_imm       <= 1'b0;
-                        rstate      <= R_START;
                       end
                     end
                   end
-                  // ---- R3 debug control ---------------------------------
                   OP_DBGSTEP: begin
-                    // One instruction. The response reports the state and PC
-                    // AFTER the step: state 2 (held) or 3 when the step LANDS
-                    // on the armed breakpoint, and pc_next is where the core
-                    // will resume. A free-running core cannot be stepped:
-                    // NOT_READY with no side effect (no instruction executes).
                     resp_len    <= 16'd5;
                     resp_buf[0] <= ST_OK;
                     resp_buf[1] <= {14'b0, (bp_en && (dbg_next_pc == bp_addr))
                                           ? 2'd3 : 2'd2};
                     resp_buf[2] <= {6'b0, dbg_next_pc[9:0]};
                     resp_buf[3] <= {6'b0, bp_addr};
-                    // POST-step flags: bit0 armed, bit1 the hit the step leaves
-                    // (a step away from the bp clears it; a landing sets it).
-                    // `bp_flags` is the PRE-edge latch and would report the
-                    // hit the step is clearing.
                     resp_buf[4] <= {14'b0, (bp_en && (dbg_next_pc == bp_addr))
                                           ? 2'b11 : {1'b0, bp_en}};
                     if (run && !dbg_hold_r) begin
@@ -1061,16 +1205,9 @@ module pe_ctrl #(
                       resp_buf[1] <= {14'b0, dbg_state};
                       resp_buf[2] <= {6'b0, dbg_pc};
                       resp_buf[4] <= {14'b0, bp_flags};
-                    end else begin
-                      dbg_step_r <= 1'b1;
-                      dbg_hold_r <= 1'b1;
-                      bp_hit     <= bp_en && (dbg_next_pc == bp_addr);
                     end
                   end
                   OP_DBGBPSET: begin
-                    // Arm (or re-arm). Past the end of instruction memory is
-                    // RANGE and changes NOTHING -- a rejected op has no side
-                    // effect. Arming clears a stale hit.
                     resp_len    <= 16'd5;
                     resp_buf[0] <= ST_OK;
                     resp_buf[1] <= {14'b0, dbg_state};
@@ -1081,31 +1218,17 @@ module pe_ctrl #(
                       resp_buf[0] <= ST_RANGE;
                       resp_buf[3] <= {6'b0, bp_addr};
                       resp_buf[4] <= {14'b0, bp_flags};
-                    end else begin
-                      bp_addr <= pay0[9:0];
-                      bp_en   <= 1'b1;
-                      bp_hit  <= 1'b0;
                     end
                   end
                   OP_DBGBPCLR: begin
-                    // Disarm, clear the hit, and RELEASE the hold. The state
-                    // word is the released state: RUNNING when the strap is
-                    // high, STOPPED (boot stop) otherwise. The pc field is the
-                    // PC at the request; with run=0 the core re-zeroes at this
-                    // same edge, so a following STATUS reads 0.
                     resp_len    <= 16'd5;
                     resp_buf[0] <= ST_OK;
                     resp_buf[1] <= {14'b0, run ? 2'd1 : 2'd0};
                     resp_buf[2] <= {6'b0, dbg_pc};
                     resp_buf[3] <= {6'b0, bp_addr};
                     resp_buf[4] <= {14'b0, 2'b00};
-                    bp_en      <= 1'b0;
-                    bp_hit     <= 1'b0;
-                    dbg_hold_r <= 1'b0;
                   end
                   OP_DBGSTAT: begin
-                    // The common 5-word prefix plus the architectural state,
-                    // the same fields and widths READ_CPU reports.
                     resp_len    <= 16'd10;
                     resp_buf[0] <= ST_OK;
                     resp_buf[1] <= {14'b0, dbg_state};
@@ -1125,108 +1248,50 @@ module pe_ctrl #(
                 endcase
               end
 
-              // ---- start the response serializer --------------------------
-              // NOT for the bounded reads: their answer is the memory, so the
-              // read engine starts the serializer itself -- for EVERY read
-              // outcome, including the immediate NOT_READY and RANGE ones.
               if (!r_is_read) begin
                 resp_idx    <= '0;
                 resp_bitpos <= '0;
                 resp_crc    <= 16'hFFFF;
-                resp_active <= 1'b1;
               end
-              rx_state    <= S_SYNC;
-              // A new request frame restarts the filler word: the host's skip
-              // counts leading 0xFFFF words from this frame's first bit.
-              fill_pos    <= 4'd0;
-              r_launch    <= 1'b0;
             end
-            default: rx_state <= S_SYNC;
+            default: ;
           endcase
         end else begin
-          shreg   <= {shreg[13:0], mosi_s1};
-          bit_cnt <= bit_cnt + 4'd1;
+          shreg <= {shreg[13:0], mosi_s1};
         end
       end
 
-      // ---- write engine: one host_we cycle per committed payload word -----
-      // `run` is checked in EVERY state: a word queued when run rises is
-      // ABORTED (discarded, faulted) and never reappears. The frame engine
-      // also stops offering words after the first abort, so the rest of the
-      // load cannot resurrect it.
       case (wstate)
         W_IDLE: begin
-          we_r <= 1'b0;
-          if (word_ready) begin
-            if (run) begin
-              word_ready  <= 1'b0;
-              frm_aborted <= 1'b1;
-              faults      <= faults | FAULT_LOAD;
-            end else begin
-              wstate <= W_PULSE;
-            end
+          if (word_ready && run) begin
+            frm_aborted <= 1'b1;
           end
         end
         W_PULSE: begin
           if (run) begin
-            we_r        <= 1'b0;
-            word_ready  <= 1'b0;
             frm_aborted <= 1'b1;
-            faults      <= faults | FAULT_LOAD;
-            wstate      <= W_IDLE;
-          end else begin
-            we_r   <= 1'b1;
-            wstate <= W_DONE;
           end
         end
         W_DONE: begin
-          we_r       <= 1'b0;
-          word_ready <= 1'b0;
           if (run) begin
             frm_aborted <= 1'b1;
-            faults      <= faults | FAULT_LOAD;
-            wstate      <= W_IDLE;
           end else begin
-            words_written <= words_written + 16'd1;
-            load_echo     <= pay0;      // commit-latched echo
             addr          <= addr + 1'b1;
-            wstate        <= W_IDLE;
           end
         end
-        default: wstate <= W_IDLE;
+        default: ;
       endcase
 
-      // ---- R2 read engine: walk the requested range, then serialize -------
-      // The host asked for a bounded read; answer it from the memory, not
-      // from a register, so the response cannot start until the last word is
-      // in. Each R_REQ pulses one address; R_WAIT collects the answer.
       case (rstate)
-        R_IDLE: begin end
         R_START: begin
-          // Every read outcome passes here exactly once, so the serializer
-          // start lives in ONE place: an immediate rejection starts it now, a
-          // walk starts it when its last word has landed.
           if (r_imm) begin
             resp_idx    <= '0;
             resp_bitpos <= '0;
             resp_crc    <= 16'hFFFF;
-            resp_active <= 1'b1;
-            rstate      <= R_IDLE;
-          end else begin
-            rstate      <= R_REQ;
           end
-        end
-        R_REQ: begin
-          rstate <= R_WAIT;
         end
         R_WAIT: begin
           if (dbg_rd_valid) begin
-            // dmem arrives ONE BYTE per read; two bytes pack big-endian into
-            // one response word (high byte first). The first byte of a pair
-            // is held in r_half and only written to the slot once its partner
-            // arrives, so there is NO read-modify-write of resp_buf (which
-            // would not be a real register). imem arrives one word per read
-            // and is stored as-is.
             if (r_dmem) begin
               if (r_first) begin                   // first byte: hold it
                 r_half  <= dbg_rd_data[7:0];
@@ -1243,83 +1308,38 @@ module pe_ctrl #(
             r_addr <= r_addr + 16'd1;
             r_left <= r_left - 16'd1;
             if (r_left == 16'd1) begin
-              // A dmem read with an ODD byte count ends holding its last byte
-              // in r_half (it never got a partner), so flush it as a word with
-              // that byte in the LOW half. Without this the trailing byte is
-              // silently dropped and the response is a word short of its
-              // declared length. The value is dbg_rd_data, NOT r_half: this
-              // byte is the one that just arrived and is still in flight
-              // (r_half holds the PREVIOUS byte until the non-blocking
-              // assignment lands next cycle).
               if (r_dmem && r_first)
                 resp_buf[r_slot[3:0]] <= {8'h00, dbg_rd_data[7:0]};
-              // The fetch is done, but the frame must begin on a WORD
-              // boundary or the host's 16-bit reader would start half a word
-              // in. Wait for fill_pos to wrap to 0 (the end of the filler
-              // word) and start the real serializer there. That is exactly
-              // the first non-0xFFFF word the host sees.
-              r_launch <= 1'b1;
-              rstate   <= R_IDLE;
-            end else begin
-              rstate <= R_REQ;
             end
           end
         end
-        default: rstate <= R_IDLE;
+        default: ;
       endcase
 
-      // ---- response serializer (mode 0: changes on the detected fall) -----
       if (sclk_fall && !cs_s1) begin
         if (r_filling) begin
-          // One filler bit per SPI falling edge, every bit a 1, so the word
-          // the host assembles is 0xFFFF. No shift register is needed: the
-          // value is constant.
-          spi_miso  <= 1'b1;
-          fill_pos  <= fill_pos + 4'd1;
         end else if (r_launch) begin
-          // The fetch finished, but the frame must begin on a WORD boundary
-          // or the host's 16-bit reader would start half a word in. Keep
-          // driving filler until fill_pos wraps, then hand the line to the
-          // real serializer -- that boundary is exactly the first non-0xFFFF
-          // word the host sees. (This branch CANNOT live inside the r_filling
-          // arm: setting r_launch clears r_filling, so the arm is skipped
-          // exactly when the launch is needed.)
-          spi_miso  <= 1'b1;
           if (fill_pos == 4'd15) begin
-            r_launch    <= 1'b0;
-            fill_pos    <= 4'd0;
             resp_idx    <= '0;
             resp_bitpos <= '0;
             resp_crc    <= 16'hFFFF;
-            resp_active <= 1'b1;
-          end else begin
-            fill_pos    <= fill_pos + 4'd1;
           end
         end else if (resp_active) begin
           if (resp_bitpos == 4'd0) begin
-            spi_miso   <= resp_w[15];
             resp_shreg <= {resp_w[14:0], 1'b0};
           end else begin
-            spi_miso   <= resp_shreg[15];
             resp_shreg <= {resp_shreg[14:0], 1'b0};
           end
           if (resp_bitpos == 4'd15) begin
             if ({11'b0, resp_idx} < resp_len + 16'd4)
               resp_crc <= crc16_word(resp_crc, resp_w);
-            if ({11'b0, resp_idx} == resp_len + 16'd4) begin
-              // The CRC word was just presented; hold the OE through its
-              // sampling rise, then release on the next fall.
-              resp_active  <= 1'b0;
-              resp_hold_oe <= 1'b1;
-            end else begin
+            if ({11'b0, resp_idx} != resp_len + 16'd4) begin
               resp_idx    <= resp_idx + 5'd1;
               resp_bitpos <= 4'd0;
             end
           end else begin
             resp_bitpos <= resp_bitpos + 4'd1;
           end
-        end else if (resp_hold_oe) begin
-          resp_hold_oe <= 1'b0;
         end
       end
     end

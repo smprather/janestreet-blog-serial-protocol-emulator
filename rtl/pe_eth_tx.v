@@ -191,7 +191,7 @@ module pe_eth_tx #(
 
   // ---- staging FIFO (8 bytes) -------------------------------------------
   localparam int FDEPTH = 8;
-  logic [7:0] fifo_mem [0:FDEPTH-1];
+  (* mem2reg *) logic [7:0] fifo_mem [0:FDEPTH-1];
   logic [2:0] fifo_wp, fifo_rp;
   logic [3:0] fifo_cnt;
   wire  [7:0] fifo_head  = fifo_mem[fifo_rp];
@@ -279,21 +279,11 @@ module pe_eth_tx #(
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       state          <= S_IDLE;
-      pre_cnt        <= 6'd0;
-      bit_idx        <= 3'd0;
-      data_bits_left <= 15'd0;
-      pad_bits_left  <= 10'd0;
-      fcs_left       <= 6'd0;
-      ifg_cnt        <= 7'd0;
-      stored_bytes   <= 12'd0;
-      pend_len       <= 12'd0;
-      tx_reg         <= 1'b0;
       start_pend     <= 1'b0;
       abort_pend     <= 1'b0;
       fifo_wp        <= 3'd0;
       fifo_rp        <= 3'd0;
       fifo_cnt       <= 4'd0;
-      for (int i = 0; i < FDEPTH; i++) fifo_mem[i] <= 8'h00;
       tx_done        <= 1'b0;
       tx_underrun    <= 1'b0;
       tx_overlong    <= 1'b0;
@@ -311,9 +301,8 @@ module pe_eth_tx #(
 
       // ---- FIFO write side ----
       if (push && push_ready) begin
-        fifo_mem[fifo_wp] <= push_byte;
-        fifo_wp           <= fifo_wp + 3'd1;
-        fifo_cnt          <= fifo_cnt + 4'd1;
+        fifo_wp  <= fifo_wp + 3'd1;
+        fifo_cnt <= fifo_cnt + 4'd1;
       end
 
       // ---- control strobes (independent of the cell cadence) ----
@@ -327,16 +316,7 @@ module pe_eth_tx #(
         end else if (!len_ok) begin
           tx_overlong <= 1'b1;           // runt (<14) or jabber (>MAX_STORED)
         end else begin
-          // VALIDATE-AND-LATCH, ATOMICALLY (manager ruling 2026-09-25, finding
-          // F1). The guard tests frame_len HERE, at the start pulse, so the
-          // frame must consume exactly the length tested here. It is latched
-          // into pend_len now and copied to stored_bytes at the cell boundary;
-          // a TXLEN write after this pulse affects only the NEXT frame. Before
-          // this, stored_bytes re-read frame_len at the boundary, so a host
-          // rewrite in that window (up to DIV-1 clocks) transmitted a length
-          // the runt/jabber guard never saw.
           start_pend <= 1'b1;
-          pend_len   <= frame_len;
         end
       end
 
@@ -384,11 +364,6 @@ module pe_eth_tx #(
               if (start_pend) begin
                 start_pend     <= 1'b0;
                 state          <= S_PREAMBLE;
-                tx_reg         <= pre_bit(6'd0);     // 1
-                pre_cnt        <= 6'd0;
-                stored_bytes   <= pend_len;          // the length validated at
-                                                     // the start pulse (F1)
-                data_bits_left <= {pend_len, 3'b000};
                 crc_clr        <= 1'b1;              // prelude never folds
                 line_drive     <= 1'b1;              // the pair carries the frame
                 tpidl_left     <= 2'd0;              // a start ends any delimiter
@@ -416,12 +391,7 @@ module pe_eth_tx #(
                   tpidl_left  <= 2'(TPIDL_CELLS);    // still end with TP_IDL
                 end else begin
                   state   <= S_DATA;
-                  tx_reg  <= fifo_head[3'd0];
-                  bit_idx <= 3'd0;
                 end
-              end else begin
-                pre_cnt <= pre_cnt + 6'd1;
-                tx_reg  <= pre_bit(pre_cnt + 6'd1);
               end
             end
 
@@ -429,49 +399,31 @@ module pe_eth_tx #(
             S_DATA: begin
               if (data_bits_left == 15'd1) begin
                 // last stored bit: pop its byte and leave DATA
-                fifo_rp        <= fifo_rp + 3'd1;
-                fifo_cnt       <= fifo_cnt - 4'd1;
-                bit_idx        <= 3'd0;
-                data_bits_left <= 15'd0;
+                fifo_rp  <= fifo_rp + 3'd1;
+                fifo_cnt <= fifo_cnt - 4'd1;
                 if (stored_bytes < 12'd60) begin
-                  state          <= S_PAD;
-                  tx_reg         <= 1'b0;
-                  pad_bits_left  <= (10'd60 - stored_bytes[9:0]) << 3;
+                  state <= S_PAD;
                 end else begin
-                  state    <= S_FCS;
-                  fcs_left <= 6'd32;
+                  state <= S_FCS;
                 end
-              end else begin
-                data_bits_left <= data_bits_left - 15'd1;
-                if (bit_idx == 3'd7) begin
-                  // byte boundary: pop the finished byte and check for the
-                  // next one. fifo_cnt includes the byte just finished, so
-                  // >= 2 means a successor exists.
-                  fifo_rp  <= fifo_rp + 3'd1;
-                  fifo_cnt <= fifo_cnt - 4'd1;
-                  bit_idx  <= 3'd0;
-                  if (fifo_cnt <= 4'd1) begin
+              end else if (bit_idx == 3'd7) begin
+                // byte boundary: pop the finished byte and check for the
+                // next one. fifo_cnt includes the byte just finished, so
+                // >= 2 means a successor exists.
+                fifo_rp  <= fifo_rp + 3'd1;
+                fifo_cnt <= fifo_cnt - 4'd1;
+                if (fifo_cnt <= 4'd1) begin
                     tx_underrun <= 1'b1;             // never a silent gap
                     state       <= S_IDLE;
                     tpidl_left  <= 2'(TPIDL_CELLS);  // still end with TP_IDL
-                  end else begin
-                    tx_reg <= fifo_after[3'd0];
-                  end
-                end else begin
-                  bit_idx <= bit_idx + 3'd1;
-                  tx_reg  <= fifo_head[bit_idx + 3'd1];
                 end
               end
             end
 
             // ---- PAD: zero bits to the 64-byte minimum, folded ----
             S_PAD: begin
-              tx_reg <= 1'b0;
               if (pad_bits_left == 10'd1) begin
-                state    <= S_FCS;
-                fcs_left <= 6'd32;
-              end else begin
-                pad_bits_left <= pad_bits_left - 10'd1;
+                state <= S_FCS;
               end
             end
 
@@ -479,23 +431,112 @@ module pe_eth_tx #(
             S_FCS: begin
               if (fcs_left == 6'd1) begin
                 state   <= S_IFG;
-                ifg_cnt <= 7'd0;
                 tx_done <= 1'b1;
                 tpidl_left <= 2'(TPIDL_CELLS);       // start-of-idle delimiter
-              end else begin
-                fcs_left <= fcs_left - 6'd1;
               end
             end
 
             // ---- IFG: 96 idle cells before the next preamble ----
             S_IFG: begin
               if (ifg_cnt == 7'd95) state <= S_IDLE;
-              else                  ifg_cnt <= ifg_cnt + 7'd1;
             end
 
             default: state <= S_IDLE;
           endcase
         end
+      end
+    end
+  end
+
+`ifdef FORMAL
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) pend_len <= 12'd0;
+    else begin
+`else
+  always_ff @(posedge clk) begin
+    begin
+`endif
+      if (push && push_ready) begin
+        fifo_mem[fifo_wp] <= push_byte;
+      end
+
+      if (start && enable && (state == S_IDLE) && !start_pend && len_ok) begin
+        // VALIDATE-AND-LATCH, ATOMICALLY (manager ruling 2026-09-25, finding
+        // F1). The guard tests frame_len HERE, at the start pulse, so the
+        // frame must consume exactly the length tested here. It is latched
+        // into pend_len now and copied to stored_bytes at the cell boundary;
+        // a TXLEN write after this pulse affects only the NEXT frame.
+        pend_len <= frame_len;
+      end
+
+      if (enable && cell_start && !abort_pend) begin
+        case (state)
+          S_IDLE: begin
+            if (start_pend) begin
+                tx_reg         <= pre_bit(6'd0);     // 1
+                pre_cnt        <= 6'd0;
+                stored_bytes   <= pend_len;          // the length validated at
+                                                     // the start pulse (F1)
+                data_bits_left <= {pend_len, 3'b000};
+            end
+          end
+
+          S_PREAMBLE: begin
+            if (6'd63 == pre_cnt) begin
+              if (fifo_cnt != 4'd0) begin
+                  tx_reg  <= fifo_head[3'd0];
+                  bit_idx <= 3'd0;
+              end
+            end else begin
+              pre_cnt <= pre_cnt + 6'd1;
+              tx_reg  <= pre_bit(pre_cnt + 6'd1);
+            end
+          end
+
+          S_DATA: begin
+            if (data_bits_left == 15'd1) begin
+              bit_idx        <= 3'd0;
+              data_bits_left <= 15'd0;
+              tx_reg         <= 1'b0;
+              pad_bits_left  <= (10'd60 - stored_bytes[9:0]) << 3;
+              fcs_left       <= 6'd32;
+            end else begin
+              data_bits_left <= data_bits_left - 15'd1;
+              if (bit_idx == 3'd7) begin
+                bit_idx <= 3'd0;
+                if (fifo_cnt > 4'd1) begin
+                  tx_reg <= fifo_after[3'd0];
+                end
+              end else begin
+                bit_idx <= bit_idx + 3'd1;
+                tx_reg  <= fifo_head[bit_idx + 3'd1];
+              end
+            end
+          end
+
+          S_PAD: begin
+            tx_reg <= 1'b0;
+            if (pad_bits_left == 10'd1) begin
+              fcs_left <= 6'd32;
+            end else begin
+              pad_bits_left <= pad_bits_left - 10'd1;
+            end
+          end
+
+          S_FCS: begin
+            if (6'd1 == fcs_left) begin
+              ifg_cnt <= 7'd0;
+            end else begin
+              fcs_left <= fcs_left - 6'd1;
+            end
+          end
+
+          S_IFG: begin
+            ifg_cnt <= ifg_cnt + 7'd1;
+          end
+
+          default: ;
+        endcase
       end
     end
   end

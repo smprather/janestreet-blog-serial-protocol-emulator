@@ -120,7 +120,7 @@ second instance at 50; its elaboration guard (`>= 2`) is proven to fire by
 `regress/param_guards.sh`. `TPIDL_CELLS` is a local constant. No parameter
 was added to `pe_soc`: the SoC TB measures the real 16 ms instead.
 
-**Cost** (mapped, sg13g2 typ, pre-route; `regress/synth_area.sh` on `main`
+**Cost** (historical SG13G2 mapped, sg13g2 typ, pre-route; `regress/synth_area.sh` on `main`
 and on the branch): `pe_eth_tx` 904 → 1,040 cells, `pe_soc` 6,345 → 6,447,
 `tt_um_protocol_emulator` 10,215 → 10,269 cells (+1,410 µm², +0.8%). No other
 block changed.

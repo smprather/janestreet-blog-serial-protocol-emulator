@@ -391,31 +391,17 @@ module pe_eth_mac #(
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      state       <= S_SEARCH;
-      pend        <= 1'b0;
-      bit_d       <= 1'b0;
-      sr          <= '0;
-      idle_run    <= '0;
-      may_hunt    <= 1'b0;
-      byte_cnt    <= '0;
-      bit_cnt     <= '0;
-      shreg       <= '0;
-      field       <= '0;
-      is_type     <= 1'b0;
-      hdr_done    <= 1'b0;
-      fcs_done    <= 1'b0;
-      pay_cnt     <= '0;
-      pad_cnt     <= '0;
-      fcs_cnt     <= '0;
-      wptr        <= '0;
-      frame_start <= '0;
-      rptr        <= '0;
+      state          <= S_SEARCH;
+      pend           <= 1'b0;
+      sr             <= '0;
+      idle_run       <= '0;
+      may_hunt       <= 1'b0;
+      wptr           <= '0;
+      rptr           <= '0;
       published_used <= '0;
-      room        <= BUF_BYTES[AW:0];
-      settle      <= '0;
-      frame_valid <= 1'b0;
-      frame_bad   <= 1'b0;
-      frame_len   <= '0;
+      room           <= BUF_BYTES[AW:0];
+      frame_valid    <= 1'b0;
+      frame_bad      <= 1'b0;
     end else begin
       frame_valid <= 1'b0;      // both statuses are one-cycle pulses
       frame_bad   <= 1'b0;
@@ -450,7 +436,6 @@ module pe_eth_mac #(
 
       // ---- latch the strobe -------------------------------------------
       pend <= bit_en;
-      if (bit_en) bit_d <= rx_raw;
 
       // ---- idle run ---------------------------------------------------
       // Counts CONSECUTIVE invalid cells. pe_manch's rx_err is registered, so
@@ -478,16 +463,7 @@ module pe_eth_mac #(
           if (ok) begin
             sr <= sr_n[7:1];
             if ((sr_n == SFD_BYTE) && may_hunt) begin
-              state       <= S_HEADER;
-              byte_cnt    <= '0;
-              bit_cnt     <= '0;
-              shreg       <= '0;
-              hdr_done    <= 1'b0;
-              fcs_done    <= 1'b0;
-              pay_cnt     <= '0;
-              pad_cnt     <= '0;
-              fcs_cnt     <= '0;
-              frame_start <= wptr;
+              state <= S_HEADER;
             end
           end
         end
@@ -500,21 +476,7 @@ module pe_eth_mac #(
         // field arrives last.
         // ---------------------------------------------------------------
         S_HEADER: begin
-          if (ok) begin
-            shreg   <= shreg_n[7:1];
-            bit_cnt <= bit_cnt + 3'd1;
-            if (bit_cnt == 3'd7) begin
-              bit_cnt  <= '0;
-              byte_cnt <= byte_cnt + 8'd1;
-              case (byte_cnt)
-                8'd12: field[15:8] <= shreg_n;
-                8'd13: begin
-                  // Byte 12 is the HIGH half, byte 13 the LOW half. The other
-                  // order byte-swaps the field, and a 256-byte length then
-                  // reads as 1 and runs off the end of the ring.
-                  field[7:0] <= shreg_n;
-                  is_type    <= ({field[15:8], shreg_n} >= TYPE_MIN);
-                  hdr_done   <= 1'b1;
+          if (ok && (bit_cnt == 3'd7) && (byte_cnt == 8'd13)) begin
                   // Reject before writing anything. Only a length frame can be
                   // sized here; a type frame's bound is enforced per byte
                   // below, because its length is not known until the line
@@ -530,13 +492,8 @@ module pe_eth_mac #(
                                ({field[15:8], shreg_n} > {{4{1'b0}}, room})) begin
                     state <= S_ERR;                 // will not fit
                   end else begin
-                    state   <= S_PAYLOAD;
-                    pay_cnt <= '0;
+                    state <= S_PAYLOAD;
                   end
-                end
-                default: ;   // dst/src bytes: assembled and dropped
-              endcase
-            end
           end
         end
 
@@ -546,11 +503,7 @@ module pe_eth_mac #(
         // case, since it is a whole-frame rule.
         // ---------------------------------------------------------------
         S_PAYLOAD: begin
-          if (ok) begin
-            shreg   <= shreg_n[7:1];
-            bit_cnt <= bit_cnt + 3'd1;
-            if (bit_cnt == 3'd7) begin
-              bit_cnt <= '0;
+          if (ok && (bit_cnt == 3'd7)) begin
               // A type frame has no length to bound against, so the bound is
               // enforced here instead: out of room means the frame cannot fit,
               // and it is rejected rather than wrapped over the ring. The FCS
@@ -563,7 +516,6 @@ module pe_eth_mac #(
               end else begin
                 wptr    <= wptr + 1'b1;
                 room    <= room + consume_credit - 1'b1;
-                pay_cnt <= pay_cnt + 16'd1;
                 if (!is_type && (pay_cnt + 16'd1 >= field)) begin
                   // A length frame ends by count. If the declared length is
                   // under the 46-byte minimum, the transmitter appended pad
@@ -578,7 +530,6 @@ module pe_eth_mac #(
                   end
                 end
               end
-            end
           end
         end
 
@@ -589,17 +540,12 @@ module pe_eth_mac #(
         // holds exactly the bytes the client asked for.
         // ---------------------------------------------------------------
         S_PAD: begin
-          if (ok) begin
-            shreg   <= shreg_n[7:1];
-            bit_cnt <= bit_cnt + 3'd1;
-            if (bit_cnt == 3'd7) begin
-              bit_cnt <= '0;
+          if (ok && (bit_cnt == 3'd7)) begin
               pad_cnt <= pad_cnt + 16'd1;
               if (field + pad_cnt + 16'd1 >= MIN_PAY) begin
                 state   <= S_FCS;
                 fcs_cnt <= '0;
               end
-            end
           end
         end
 
@@ -612,9 +558,7 @@ module pe_eth_mac #(
           if (ok) begin
             fcs_cnt <= fcs_cnt + 5'd1;
             if (fcs_cnt == 5'd31) begin
-              state    <= S_SETTLE;
-              settle   <= '0;
-              fcs_done <= 1'b1;
+              state <= S_SETTLE;
             end
           end
         end
@@ -624,7 +568,6 @@ module pe_eth_mac #(
         // 12 clocks apart at the 60 MHz / SPB=12 grid.
         // ---------------------------------------------------------------
         S_SETTLE: begin
-          settle <= settle + 2'd1;
           if (settle == 2'd2) begin
             // The CRC residue is necessary but NOT sufficient: the frame must
             // also have a complete STRUCTURE. A header that never finished has
@@ -636,21 +579,6 @@ module pe_eth_mac #(
             if ((crc_state == CRC_RESIDUE) && hdr_done && (bit_cnt == 3'd0) &&
                 (is_type ? (pay_cnt >= MIN_TYPE_PAY) : fcs_done)) begin
               frame_valid <= 1'b1;
-              // Wind back only what the FCS actually occupied in the buffer:
-              // 4 bytes for a type frame, NOTHING for a length frame whose FCS
-              // was never written.
-              //
-              // A plain if-else, NOT `is_type ? FCS_BYTES : '0`. The ternary
-              // version silently corrupted wptr: an unsized '0 makes that arm
-              // one bit wide, so the subtractor's width came from the ternary
-              // instead of from wptr, and the result truncated -- measurable as
-              // wptr going X after the first frame and later frames being
-              // mis-classified. Explicit width on every arm, or no ternary.
-              // FCS_BYTES is a 3-bit localparam, so it is zero-extended
-              // EXPLICITLY rather than part-selected: `FCS_BYTES[AW:0]` is a
-              // 12-bit select on a 3-bit value, which Icarus resolves to X --
-              // measured, and it silently poisoned `room` from the second
-              // frame on.
               if (is_type) begin
                 wptr      <= wptr - AW'(FCS_BYTES);
                 room      <= room + consume_credit
@@ -658,9 +586,7 @@ module pe_eth_mac #(
                 published_used <= published_used + pay_cnt[AW:0]
                                    - {{(AW-2){1'b0}}, FCS_BYTES}
                                    - consume_credit;
-                frame_len <= pay_cnt - 16'd4;
               end else begin
-                frame_len <= pay_cnt;
                 published_used <= published_used + pay_cnt[AW:0]
                                    - consume_credit;
               end
@@ -669,17 +595,6 @@ module pe_eth_mac #(
               // A bad frame must not leave bytes that look like one: the
               // pointer rolls back to where the frame started.
               wptr  <= frame_start;
-              // Reclaim EVERY byte that was charged against `room`, and the
-              // width is the whole point: `pay_cnt[AW-1:0]` truncates, and a
-              // full 2,048-byte frame has pay_cnt = 2048 = 11'h000, so the
-              // reclaim added zero and left the receiver with room = 0
-              // FOREVER (every later frame then failed its header check).
-              // `pay_cnt[AW:0]` is AW+1 bits, matching `room`, and the sum
-              // cannot overflow because room + pay_cnt is <= BUF_BYTES: every
-              // byte in pay_cnt was subtracted from room as it was written.
-              // The published-byte guard makes `consume_credit` disjoint from
-              // this frame's reclaim, so room + pay_cnt + freed is also <=
-              // BUF_BYTES even if a consumer over-reads during reception.
               room  <= room + consume_credit + pay_cnt[AW:0];
             end
             state <= S_SEARCH;
@@ -717,9 +632,99 @@ module pe_eth_mac #(
       if (ok == 1'b0 && pend == 1'b1 && rx_err == 1'b1 &&
           (state == S_HEADER || state == S_PAYLOAD || state == S_PAD ||
            state == S_FCS)) begin
-        state  <= S_SETTLE;
-        settle <= '0;
+        state <= S_SETTLE;
       end
+    end
+  end
+
+  always_ff @(posedge clk) begin
+    if (bit_en) bit_d <= rx_raw;
+
+    case (state)
+      S_SEARCH: begin
+        if (ok && may_hunt && (sr_n == SFD_BYTE)) begin
+          byte_cnt    <= '0;
+          bit_cnt     <= '0;
+          shreg       <= '0;
+          hdr_done    <= 1'b0;
+          fcs_done    <= 1'b0;
+          pay_cnt     <= '0;
+          frame_start <= wptr;
+        end
+      end
+
+      S_HEADER: begin
+        if (ok) begin
+          shreg   <= shreg_n[7:1];
+          bit_cnt <= bit_cnt + 3'd1;
+          if (bit_cnt == 3'd7) begin
+            bit_cnt  <= '0;
+            byte_cnt <= byte_cnt + 8'd1;
+            case (byte_cnt)
+              8'd12: field[15:8] <= shreg_n;
+              8'd13: begin
+                // Byte 12 is the HIGH half, byte 13 the LOW half. The other
+                // order byte-swaps the field, and a 256-byte length then
+                // reads as 1 and runs off the end of the ring.
+                field[7:0] <= shreg_n;
+                is_type    <= ({field[15:8], shreg_n} >= TYPE_MIN);
+                hdr_done   <= 1'b1;
+                pay_cnt    <= '0;
+              end
+              default: ;   // dst/src bytes: assembled and dropped
+            endcase
+          end
+        end
+      end
+
+      S_PAYLOAD: begin
+        if (ok) begin
+          shreg   <= shreg_n[7:1];
+          bit_cnt <= bit_cnt + 3'd1;
+          if (bit_cnt == 3'd7) begin
+            bit_cnt <= '0;
+            if (room != 0) begin
+              pay_cnt <= pay_cnt + 16'd1;
+            end
+          end
+        end
+      end
+
+      S_PAD: begin
+        if (ok) begin
+          shreg   <= shreg_n[7:1];
+          bit_cnt <= bit_cnt + 3'd1;
+          if (bit_cnt == 3'd7) begin
+            bit_cnt <= '0;
+          end
+        end
+      end
+
+      S_FCS: begin
+        if (ok && (fcs_cnt == 5'd31)) begin
+          settle   <= '0;
+          fcs_done <= 1'b1;
+        end
+      end
+
+      S_SETTLE: begin
+        settle <= settle + 2'd1;
+        if (settle == 2'd2) begin
+          if (hdr_done && (crc_state == CRC_RESIDUE) && (bit_cnt == 3'd0) &&
+              (is_type ? (pay_cnt >= MIN_TYPE_PAY) : fcs_done)) begin
+            if (is_type) frame_len <= pay_cnt - 16'd4;
+            else         frame_len <= pay_cnt;
+          end
+        end
+      end
+
+      default: ;
+    endcase
+
+    if (!ok && pend && rx_err &&
+        (state == S_HEADER || state == S_PAYLOAD || state == S_PAD ||
+         state == S_FCS)) begin
+      settle <= '0;
     end
   end
 

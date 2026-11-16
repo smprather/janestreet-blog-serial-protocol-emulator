@@ -4,12 +4,13 @@
 Answers "how much SRAM fits". Two facts drive it and both are read from source
 rather than assumed:
 
-1. **Macro geometry** — parsed from the sg13g2_sram LEFs (SIZE lines). A macro's
+1. **Macro geometry** — parsed from the sg13cmos5l_sram LEFs (SIZE lines; the
+   CMOS5L tree symlinks the shared SG13G2 SRAM macros). A macro's
    bits-per-um2 and, more importantly, whether it physically fits the die shape
    at all.
-2. **Die size** — the competition is 6x4 tiles (8x4 is a possible upside). TT tile notation is
-   width x height in tiles (per the ttihp template's own comment: "A single tile
-   is about 167x108 uM"), so the die is wide and short. Tall macros do not fit
+2. **Die size** — the competition allocation is 8x4 tiles. TT tile notation is
+   width x height in tiles (the ttihp template's main branch says "A single tile
+   is about 202x155 uM"), so the die is wide and short. Tall macros do not fit
    unrotated, and the biggest ones do not fit in either orientation.
 
     python3 tools/gen/sram_budget.py            # write the page
@@ -25,39 +26,37 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
 OUT = REPO / "wiki" / "reference" / "sram-budget.md"
-PDK_SRAM = Path.home() / "pdk" / "IHP-Open-PDK" / "ihp-sg13g2" / "libs.ref" / "sg13g2_sram"
+PDK_SRAM = (Path.home() / "pdk" / "IHP-Open-PDK" / "ihp-sg13cmos5l"
+            / "libs.ref" / "sg13cmos5l_sram")
 LEF_DIR = PDK_SRAM / "lef"
 
-# Two candidate tile sizes. The blog says ~200x150; the ttihp-verilog-template
-# info.yaml says ~167x108. The wiki's standing instruction is to use the
-# template figure for layout math and re-check after first real floorplan, so
-# the template figure is the headline and the blog figure is the optimistic
-# bound. Ranges are reported, never a single number pretending to be exact.
-TILE_TEMPLATE = (167.0, 108.0)
-TILE_BLOG = (200.0, 150.0)
+# The blog and the ttihp-verilog-template main branch now agree: a single tile
+# is about 202x155 um. The 167x108 figure was the old template and is retired.
+# Keep both names because floorplan_feasibility imports them; they are equal,
+# and the generator emits one die row rather than pretending they are rivals.
+TILE_TEMPLATE = (202.0, 155.0)
+TILE_BLOG = (202.0, 155.0)
 
-# Tile ALLOCATION, width x height in tiles. The blog says 6x4 ("Set the tile
-# size in info.yaml to 6x4", "The current maximum area is 6x4 tiles per
-# design") and describes 8x4 only as a possibility they are working on, worth
-# ~30% more area, to be announced by a page update and an email to sign-ups.
-# So 6x4 is the default and 8x4 is the upside case: --tiles 8x4.
+# Tile ALLOCATION, width x height in tiles. The blog's 2026-11-09 update
+# confirms 8x4 for the March 2027 CMOS5L shuttle and says Tiny Tapeout's tile
+# sizes are final; the template's main branch lists 8x4 as valid.
 #
-# Shape matters more than tile count. At the template tile: 6x4 is 1002x432
-# (2.32:1), 8x4 is 1336x432 (3.09:1), and a hypothetical 4x6 would be 668x648
-# (near square) -- same 24 tiles as 6x4 but it would lose the entire
-# 64-bit-wide macro family, which is 784 um wide.
+# Shape matters more than tile count. At 202x155 per tile, 8x4 is 1616x620
+# (2.6:1) and 1.002 mm2. A hypothetical 4x8 would be 808x1240 (near square) --
+# the same 32 tiles, but it would lose the wide macro family.
 #
 # Override with --tiles WxH to re-answer the whole page for a new allocation:
 #     python3 tools/gen/sram_budget.py --tiles 8x4
-TILES_W, TILES_H = 6, 4
+TILES_W, TILES_H = 8, 4
 
-# Measured on this machine from a real LibreLane run (~/asic-runs/pe-serdes,
-# RUN_2026-09-18_16-53-07): 539 cells, stdcell area 17211.4 um2, die 29163.7 um2
-# at 78% utilization. Used only to sanity-check the logic side of the budget.
-SERDES_CELLS = 539
-SERDES_STDCELL_UM2 = 17211.4
-SERDES_DIE_UM2 = 29163.7
-SERDES_UTIL = 0.7796
+# Measured on this machine from the CMOS5L LibreLane run
+# (~/asic-runs/pe_serdes/runs/RUN_2026-10-18_20-22-12): 999 stdcells,
+# stdcell area 16732.4 um2, die 31213.1 um2 at 69.2% utilization. Used only to
+# sanity-check the logic side of the budget.
+SERDES_CELLS = 999
+SERDES_STDCELL_UM2 = 16732.4
+SERDES_DIE_UM2 = 31213.1
+SERDES_UTIL = 0.692083
 
 
 def parse_lefs() -> list[dict]:
@@ -175,10 +174,11 @@ def build() -> str:
         "---",
         "title: SRAM Budget",
         "created: 2026-09-18",
-        "updated: 2026-09-18",
+        "updated: 2026-11-10",
         "type: reference",
         "tags: [area-budget, process-node, architecture]",
-        "sources: [raw/articles/janestreet-protocol-emulator-competition.md]",
+        "sources: [raw/articles/janestreet-competition-blog-update-2026-11-09.md, "
+        "https://github.com/TinyTapeout/ttihp-verilog-template]",
         "confidence: medium",
         "---",
         "",
@@ -192,21 +192,20 @@ def build() -> str:
         "## The die is wide and short — this decides everything",
         "",
         "TT tile notation is **width × height in tiles**, not a count. The ttihp",
-        "template's own comment says *\"A single tile is about 167x108 uM\"*, and the",
-        f"competition is {TILES_W}×{TILES_H}, so:",
+        "template's main branch and the Jane Street blog now agree: *\"A single tile",
+        f"is about 202x155 uM\"*. The competition is {TILES_W}×{TILES_H}, so:",
         "",
         f"| Source | Tile | Die ({TILES_W}×{TILES_H}) | Area |",
         "|---|---|---|---|",
-        f"| **ttihp-verilog-template** (authoritative) | {TILE_TEMPLATE[0]:.0f}×{TILE_TEMPLATE[1]:.0f} µm | **{die_w_t:.0f} × {die_h_t:.0f} µm** | **{area_t:,.0f} µm² ({area_t/1e6:.3f} mm²)** |",
-        f"| Jane Street blog (optimistic) | {TILE_BLOG[0]:.0f}×{TILE_BLOG[1]:.0f} µm | {die_w_b:.0f} × {die_h_b:.0f} µm | {area_b:,.0f} µm² ({area_b/1e6:.3f} mm²) |",
+        f"| **ttihp-verilog-template main + Jane Street blog** | {TILE_TEMPLATE[0]:.0f}×{TILE_TEMPLATE[1]:.0f} µm | **{die_w_t:.0f} × {die_h_t:.0f} µm** | **{area_t:,.0f} µm² ({area_t/1e6:.3f} mm²)** |",
         "",
         f"Aspect ratio is ~{die_w_t/die_h_t:.1f}:1. That matters more than total area:",
-        "**a macro has to physically fit the rectangle**, and most of the larger",
-        "macros are taller than the die is.",
+        "**a macro has to physically fit the rectangle**, and the tallest macro in",
+        "the PDK does not.",
         "",
         "## Every macro in the PDK",
         "",
-        f"`fit` = can it be placed in the {TILES_W}×{TILES_H} die at the template's tile size",
+        f"`fit` = can it be placed in the {TILES_W}×{TILES_H} die at 202×155 µm per tile",
         "(`rotated` means only at 90°, which the flow supports).",
         "",
         "| Macro | Bits | W×H (µm) | Area (µm²) | bits/µm² | P | fit |",
@@ -246,11 +245,10 @@ def build() -> str:
                          f"{m['w']:.0f}×{m['h']:.0f} µm) — {why}.")
         lines += [
             "",
-            "**The highest-density macros in the PDK are unusable here.** The whole",
-            "8192×32 and 2048×64 classes are excluded by the die's shape, not by the",
-            "area budget. If the tile figure turns out to be the blog's 200×150,",
-            f"the die becomes {die_w_b:.0f}×{die_h_b:.0f} and that changes — re-run this",
-            "page if the tile size is confirmed.",
+            "Only the tallest macro is excluded. The 8192×32 class fits, but with",
+            "almost no margin (1520×618 in a 1616×620 die), so it leaves no room for",
+            "the logic that has to share the rectangle. That is a floorplan fact, not",
+            "a density one.",
         ]
 
     cap_t = best_packing((die_w_t, die_h_t), macros)
@@ -260,18 +258,19 @@ def build() -> str:
         "## So how much actually fits",
         "",
         "This is the number that matters, and it is **smaller than density × area",
-        "suggests**. A rectangle packs worse than its area implies, and a 3:1 die",
-        "punishes tall macros: `1024x64` is the densest macro that fits the template",
-        "die, yet only one instance fits — whereas `2048x32` packs two and",
-        "`1024x16` packs five.",
+        f"suggests**. A rectangle packs worse than its area implies, and a {die_w_t/die_h_t:.1f}:1 die",
+        "punishes tall macros. The table below is the actual grid packing result,",
+        "not density × area.",
         "",
         "Largest **practically packable** capacity, one macro type, grid packing:",
         "",
         "| Die | Best macro | Layout | Total | Occupied area | Die efficiency |",
         "|---|---|---|---|---|---|",
     ]
-    for label, cap in ((f"Template ({die_w_t:.0f}×{die_h_t:.0f})", cap_t),
-                       (f"Blog ({die_w_b:.0f}×{die_h_b:.0f})", cap_b)):
+    caps = [(f"Template ({die_w_t:.0f}×{die_h_t:.0f})", cap_t, area_t)]
+    if TILE_BLOG != TILE_TEMPLATE:
+        caps.append((f"Blog ({die_w_b:.0f}×{die_h_b:.0f})", cap_b, area_b))
+    for label, cap, area in caps:
         if not cap:
             continue
         m, n, lay = cap["macro"], cap["n"], cap["layout"]
@@ -279,7 +278,7 @@ def build() -> str:
             f"| {label} | `{m['name'].replace('RM_IHPSG13_', '')}` | "
             f"{lay[0]}×{lay[1]} @ {lay[2]:.0f}×{lay[3]:.0f} µm | "
             f"**{cap['total']:,} bits ({cap['total']/8/1024:.0f} KB)** | "
-            f"{cap['area']:,.0f} µm² | {100*cap['area']/( (die_w_t*die_h_t) if 'Template' in label else (die_w_b*die_h_b) ):.0f}% |"
+            f"{cap['area']:,.0f} µm² | {100*cap['area']/area:.0f}% |"
         )
     lines += [
         "",
@@ -289,25 +288,39 @@ def build() -> str:
         "",
         "### Area cost of a given SRAM size",
         "",
-        "Smallest single-macro-type area reaching each size, on the **template** die",
-        "(conservative) and the blog die (optimistic):",
+        "Smallest single-macro-type area reaching each size:",
         "",
-        "| SRAM | Bits | Template die: macro × n | Area | % of die | Blog die: area | % of die |",
-        "|---|---|---|---|---|---|---|",
     ]
+    same_tile = TILE_BLOG == TILE_TEMPLATE
+    if same_tile:
+        lines += [
+            "| SRAM | Bits | Macro × n | Area | % of die |",
+            "|---|---|---|---|---|",
+        ]
+    else:
+        lines += [
+            "| SRAM | Bits | Template die: macro × n | Area | % of die | Blog die: area | % of die |",
+            "|---|---|---|---|---|---|---|",
+        ]
     for label, bits in [("1 KB", 8192), ("2 KB", 16384), ("4 KB", 32768),
                         ("8 KB", 65536), ("16 KB", 131072), ("32 KB", 262144)]:
         ct = cheapest_for((die_w_t, die_h_t), macros, bits)
         cb = cheapest_for((die_w_b, die_h_b), macros, bits)
         if ct is None and cb is None:
-            lines.append(f"| {label} | {bits:,} | *not reachable* | — | — | — | — |")
+            if same_tile:
+                lines.append(f"| {label} | {bits:,} | *not reachable* | — | — |")
+            else:
+                lines.append(f"| {label} | {bits:,} | *not reachable* | — | — | — | — |")
             continue
         left = (f"`{ct['macro']['name'].replace('RM_IHPSG13_','')}` × {ct['n']}" if ct else "—")
         a_t = f"{ct['area']:,.0f} µm²" if ct else "—"
         p_t = f"{100*ct['area']/area_t:.0f}%" if ct else "—"
-        a_b = f"{cb['area']:,.0f} µm²" if cb else "—"
-        p_b = f"{100*cb['area']/area_b:.0f}%" if cb else "—"
-        lines.append(f"| {label} | {bits:,} | {left} | {a_t} | {p_t} | {a_b} | {p_b} |")
+        if same_tile:
+            lines.append(f"| {label} | {bits:,} | {left} | {a_t} | {p_t} |")
+        else:
+            a_b = f"{cb['area']:,.0f} µm²" if cb else "—"
+            p_b = f"{100*cb['area']/area_b:.0f}%" if cb else "—"
+            lines.append(f"| {label} | {bits:,} | {left} | {a_t} | {p_t} | {a_b} | {p_b} |")
 
     sr_4k = cheapest_for((die_w_t, die_h_t), macros, 32768)
     sr_8k = cheapest_for((die_w_t, die_h_t), macros, 65536)
@@ -320,7 +333,7 @@ def build() -> str:
         "",
         f"The measured SERDES run gives ~{um2_per_cell:.1f} µm² of standard cell per",
         f"logic cell, inflating ×{inflate:.2f} once routing, clock tree and fill cells are",
-        "included (die ÷ stdcell area on that run). Applying that to the template die:",
+        f"included (die ÷ stdcell area on that run). Applying that to the {TILES_W}×{TILES_H} die:",
         "",
         f"- Whole die, no SRAM: **≈ {area_t / (um2_per_cell * inflate):,.0f} logic cells**",
     ]
@@ -332,11 +345,10 @@ def build() -> str:
                      f"≈ {(area_t - sr_8k['area']) / (um2_per_cell * inflate):,.0f} logic cells")
     lines += [
         "",
-        f"**These are well under the blog's \"~1K cells per tile\" (≈{TILES_W*TILES_H*1000:,}",
-        f"cells for {TILES_W*TILES_H} tiles).** The two published tile figures are inconsistent with",
-        "each other, and the template's tile size is what the flow will actually",
-        "enforce. See [[STATUS]] open risks — worth confirming with TT/Jane Street",
-        "before committing to an SRAM-heavy architecture.",
+        f"**These are in line with the blog's \"~1K cells per tile\" (≈{TILES_W*TILES_H*1000:,}",
+        f"cells for {TILES_W*TILES_H} tiles).** The 8×4 allocation and the 202×155 µm",
+        "tile are confirmed for the March 2027 shuttle, so this is the budget the",
+        "flow will enforce. See [[STATUS]] for the measured area ledger.",
         "",
         "## Recommendation",
         "",
@@ -344,18 +356,18 @@ def build() -> str:
         "  die, leaving the logic budget essentially intact. That is a realistic",
         "  instruction memory for a PIO-style microsequencer (the RP2040's PIO has",
         "  32 instructions × 2 SMs, so even 256 instructions is generous).",
-        "- **4 KB is the practical ceiling** if the design also needs real logic.",
-        "- **8 KB+ turns the chip into a memory chip** with a little logic attached.",
+        "- **4 KB is comfortable** — 14% of the die, leaving ~27.6K logic cells.",
+        "- **8 KB still leaves ~23.8K logic cells**, but it is 26% of the die and",
+        "  only one macro shape reaches it; 16 KB is a memory chip with logic attached.",
         "- **Width beats depth here.** The die is wide and short, so favour macros",
-        "  that are wide and flat (e.g. `2048x32` at 417×627 does *not* pack well;",
-        "  `1024x16` at 237×336 packs five across). Check the layout column before",
+        "  whose long side fits the 1616 µm width. Check the layout column before",
         "  choosing a shape.",
         "- Prefer **fewer, wider macros** — fixed overhead (decoders, BIST, bitmask,",
         "  IO) is per instance, not per bit.",
         "",
         "### Caveats worth carrying",
         "",
-        "- No SRAM compiler for sg13g2 (OpenRAM does not support it), so you get",
+        "- No SRAM compiler for SG13G2/CMOS5L (OpenRAM does not support it), so you get",
         "  exactly the 30 shapes above. Depth/width are not free parameters.",
         "- The macros here include BIST and bitmask (`_bm_bist`) and the 2P variants",
         "  are true two-port. Check which you actually need — and note that",
@@ -422,7 +434,7 @@ def build() -> str:
         "- [[concepts/pdk-toolchain]] — where the macros live and how to use them.",
         "- [[concepts/competition-overview]] — the area budget this sits inside.",
         "- [[reference/protocol-pin-budget]] — the other hard budget (IO).",
-        "- [[STATUS]] — the tile-size discrepancy is an open risk there.",
+        "- [[STATUS]] — the measured area ledger and the 8×4 allocation.",
         "",
     ]
     return "\n".join(lines)
@@ -433,8 +445,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--tiles", metavar="WxH", default=None,
-                    help="tile allocation, width x height (default 6x4, the "
-                         "blog's current allocation). Example: --tiles 8x4")
+                    help="tile allocation, width x height (default 8x4, the "
+                         "confirmed competition allocation)")
     args = ap.parse_args()
 
     if args.tiles:
@@ -448,7 +460,7 @@ def main() -> int:
             return 1
         if args.check:
             print("gen_sram_budget: --tiles and --check are mutually exclusive "
-                  "(the committed page is the 6x4 answer)", file=sys.stderr)
+                  "(the committed page is the 8x4 answer)", file=sys.stderr)
             return 1
 
     rendered = build()
