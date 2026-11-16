@@ -5,14 +5,16 @@
 #
 # WHY THE ARGUMENTS LOOK LIKE THIS.
 #
-# LibreLane's `--dockerized` wrapper CANNOT auto-enable the IHP PDK: it reports
-# "PDK ihp-sg13g2 was not found" even when ~/.ciel/ihp-sg13g2 resolves and
-# config.tcl is present. The smoke test and --run-example paths work; plain
-# config runs do not. The workaround is to invoke the container directly with
-# explicit -p / -s flags, which is what this script does. Do not "simplify" it
-# back to the wrapper without re-testing.
+# The competition target is IHP SG13CMOS5L, not the full SG13G2 BiCMOS PDK.
+# CMOS5L is the 5-metal stack (M1-M4-TopMetal1) with the `sg13cmos5l_stdcell`
+# library and `sg13cmos5l_*` cells. The PDK tree is the TinyTapeout-pinned
+# IHP-Open-PDK commit, installed at ~/pdk/IHP-Open-PDK by default.
 #
-# Requires: docker, and the IHP PDK enabled under ~/.ciel (see
+# LibreLane's `--dockerized` wrapper cannot auto-enable the IHP PDK, so the
+# container is invoked directly with explicit -p / -s flags. Do not "simplify"
+# this back to the wrapper without re-testing.
+#
+# Requires: docker, and the CMOS5L PDK under $PDK_ROOT (see
 # wiki/concepts/pdk-toolchain.md for the one-time setup).
 
 set -eu
@@ -24,14 +26,21 @@ CONFIG="${1:-flow/pe_serdes.json}"
 RUNS="${ASIC_RUNS:-$HOME/asic-runs}"
 NAME="$(basename "$CONFIG" .json)"
 OUT="$RUNS/$NAME"
-: "${PDK_ROOT:=$HOME/.ciel}"
+: "${PDK_ROOT:=$HOME/pdk/IHP-Open-PDK}"
+: "${LIBRELANE_IMAGE:=ghcr.io/librelane/librelane:3.1.0.dev3}"
 
-[ -d "$PDK_ROOT/ihp-sg13g2" ] || {
-  echo "PDK not enabled at $PDK_ROOT/ihp-sg13g2"
-  echo "See wiki/concepts/pdk-toolchain.md (volare family is ihp_sg13g2, with"
-  echo "an explicit version from 'volare ls-remote')."
+[ -d "$PDK_ROOT/ihp-sg13cmos5l" ] || {
+  echo "CMOS5L PDK not enabled at $PDK_ROOT/ihp-sg13cmos5l"
+  echo "See wiki/concepts/pdk-toolchain.md (TinyTapeout pins IHP-Open-PDK"
+  echo "commit 2bbec755dc67ca3db0261c3d6163e15735d66710)."
   exit 1
 }
+
+# Provenance: a run is only as reproducible as the PDK revision it read, and
+# that tree is a git checkout a `git pull` can move (2026-11-15: e73adb40,
+# 1,151 commits past the shuttle pin). Record it in the log every time.
+echo "PDK: $PDK_ROOT @ $(git -C "$PDK_ROOT" rev-parse --short=12 HEAD 2>/dev/null || echo 'unknown (not a git checkout)')"
+echo "PDK shuttle pin: 2bbec755dc67 (docs/tt-shared-silicon/sources/tt-gds-action-install-sg13cmos5l.sh)"
 
 # LibreLane resolves VERILOG_FILES (and every other ./src/... path in the
 # config) relative to the config, and the run directory lives outside the repo
@@ -42,9 +51,9 @@ OUT="$RUNS/$NAME"
 # Hard macros are staged the same way, and they MUST be: the SRAM's timing
 # model reaches OpenROAD only through the config's MACROS block, whose lib/
 # lef/gds entries are file paths. Without them the macro is unannotated and the
-# instruction-fetch path is invisible to STA. The PDK is resolved through Ciel
-# rather than hardcoded, because the version hash in the path changes whenever
-# the PDK is updated.
+# instruction-fetch path is invisible to STA. The PDK is resolved through
+# PDK_ROOT rather than hardcoded so a checkout can be moved or pinned without
+# editing this script.
 mkdir -p "$OUT/src"
 cp "$CONFIG" "$OUT/config.json"
 
@@ -97,12 +106,18 @@ for macro in (spec.get("MACROS") or {}).values():
 
 if macro_names:
     sram_dir = None
-    for cand in sorted(pdk_root.rglob("sg13g2_sram")):
-        if cand.is_dir() and (cand / "lib").is_dir():
-            sram_dir = cand
+    # CMOS5L ships sg13cmos5l_sram as a symlink to the shared SG13G2 SRAM
+    # macros; accept either name so a checkout that resolves the symlink
+    # differently still works.
+    for tree in ("sg13cmos5l_sram", "sg13g2_sram"):
+        for cand in sorted(pdk_root.rglob(tree)):
+            if cand.is_dir() and (cand / "lib").is_dir():
+                sram_dir = cand
+                break
+        if sram_dir is not None:
             break
     if sram_dir is None:
-        raise SystemExit(f"config declares MACROS but no sg13g2_sram dir under {pdk_root}")
+        raise SystemExit(f"config declares MACROS but no CMOS5L/SG13G2 SRAM dir under {pdk_root}")
     print(f"  SRAM macro files from {sram_dir}")
     for name in sorted(macro_names):
         hits = [p for p in sram_dir.rglob(name) if p.is_file() and p.name == name]
@@ -115,7 +130,7 @@ echo "running LibreLane: $CONFIG -> $OUT"
 docker run --rm -i --user "$(id -u):$(id -g)" \
   -v "$HOME:$HOME" -v "$PDK_ROOT:$PDK_ROOT" \
   -e PDK_ROOT="$PDK_ROOT" -w "$OUT" \
-  ghcr.io/librelane/librelane:3.0.14 \
-  python3 -m librelane -p ihp-sg13g2 -s sg13g2_stdcell config.json
+  "$LIBRELANE_IMAGE" \
+  python3 -m librelane --manual-pdk -p ihp-sg13cmos5l -s sg13cmos5l_stdcell config.json
 
 echo "done. results under $OUT/runs/"

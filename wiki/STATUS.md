@@ -1,3 +1,17 @@
+> **COMPETITION UPDATE (2026-11-09).** 8×4 tiles are confirmed for the March
+> 2027 CMOS5L shuttle and the tile sizes are final. The template's main branch
+> now targets CMOS5L (the `cmos5l` branch is retired). `info.yaml` is `8x4`;
+> the die is 1616×620 µm at 202×155 µm per tile. The `tt_um_top` area estimate
+> is **47.6%** of that die, so area is no longer the blocking risk. Source:
+> [[raw/articles/janestreet-competition-blog-update-2026-11-09]].
+>
+> **PDK MIGRATION (2026-10-18).** The local flow now targets the Tiny Tapeout
+> **IHP SG13CMOS5L** PDK (`ihp-sg13cmos5l` + `sg13cmos5l_stdcell`, M1-M4-TM1).
+> Every routed/STA/DRC/LVS number recorded before this date in this file and in
+> `reviews/` was produced against `ihp-sg13g2` + `sg13g2_stdcell` and is
+> **historical SG13G2 evidence, not CMOS5L signoff**. The CMOS5L reruns are the
+> current source of truth; see `concepts/pdk-toolchain.md`.
+>
 > **v1.0 — THE FULL GATE IS GREEN (2026-09-28, commit `dca7033`).** Every branch
 > of real work is now on `main`; zero unmerged. The measured result, from
 > `reviews/2026-09-28/V1.0-GATE.log` (tracked; an earlier commit recovered it from
@@ -470,7 +484,7 @@
 > duplicate) remains documented. The macro gate validates every
 > pin-to-net mapping, the macro grid's Metal4 stripe plus its ordered
 > Metal4-to-vertical and vertical-to-horizontal connects, and every macro view
-> (nonempty gds/lef/lib, every ./src path resolving in the PDK sg13g2_sram
+> (nonempty gds/lef/lib, every ./src path resolving in the PDK sg13cmos5l_sram
 > tree, lib coverage of the flow's PVT corners, and each type's own LEF SIZE
 > driving its placements' bounds/gap); a 20-check negative harness (including a
 > synthetic two-type flow) is wired into the regression. A missing PDK LEF is
@@ -727,9 +741,11 @@ Firmware (no RTL cells — these are programs the CPU runs; see
 | `firmware/i2c_pins.pe` — I2C pin grammar (START/bit cell/STOP) | 79 | `tb_pe_soc_i2c.v` (real RTL), `tools/checks/i2c_timing.py` |
 | `firmware/i2c_xfer.pe` — I2C master transaction (addr, ACK, read, NACK) | 311 | `tb_pe_soc_i2c_xfer.v` (real RTL, slave FSM), `tools/checks/i2c_xfer_check.py` (60 phases) |
 
-Numbers from `regress/synth_area.sh` (sg13g2 typ corner, mapped pre-route). The routed
-figure for the SERDES comes from the full LibreLane flow (route+CTS+PDN inflate
-area ~1.54× over mapped), reproducible from a clean clone with
+Numbers from `regress/synth_area.sh` (historical SG13G2 typ corner, mapped
+pre-route; the current CMOS5L set is tabulated near the end of this file). The
+routed figure for the SERDES comes from the full LibreLane flow
+(route+CTS+PDN inflate area ~1.54× over mapped), reproducible from a clean
+clone with
 `flow/run_librelane.sh flow/pe_serdes.json`.
 
 Two reporting changes on 2026-09-20, so these do not look like regressions against
@@ -838,6 +854,71 @@ drives a real 8N1 waveform on the RX pin and decodes the TX pin: **PASS on
 8.68 µs. `tools/fw/peemu.py` reproduces the same four bytes cycle-accurately, which
 is the fast firmware-development loop (2 s vs a 1 min RTL build).
 
+**Current CMOS5L routed signoff of pe_serdes** (2026-10-18, LibreLane
+3.1.0.dev3, `RUN_2026-10-18_20-22-12`): **0 DRC, 0 LVS**, setup WS
+**+8.362 ns** (slow), hold WS **+0.142 ns** (fast), die
+**167.56 × 186.28 µm**, **69.2 %** utilization, 999 stdcells, 0 macros.
+Run dir: `~/asic-runs/pe_serdes/runs/RUN_2026-10-18_20-22-12`.
+The config is `flow/pe_serdes.json` (`ihp-sg13cmos5l` +
+`sg13cmos5l_stdcell`).
+
+**CMOS5L full-SoC routed run, setup CLOSED at 60 MHz** (`flow/pe_soc.json`,
+`runs/area3`, 2026-11-12, 46 min, two strategies run in parallel): routing
+completed with **0 detailed-route DRC, 0 antenna and 0 XOR differences**, and
+**0 setup violations at all three corners** — setup WNS/TNS 0, worst
+reg-to-reg setup slack **+0.628 ns** (slow, `A_DOUT` → `_15291_/D`), hold clean
+(**+0.109 ns** fast, +0.288 typ, +0.607 slow). Die 1616×620 µm; 11,130
+stdcells + 2 macros; standard-cell area 154,110 µm², utilization **19.59%**
+standard-cell / **33.14%** total. The closure came from re-mapping the netlist
+for delay: `SYNTH_STRATEGY = "AREA 3"`, chosen in 16 s with
+`python3 -m librelane -f synthesisexploration config.json` (pre-PnR ideal-net
+worst reg-to-reg slack: AREA 0 +1.931, AREA 3 +3.683, DELAY 4 +3.646, and
+DELAY 0–3 all *worse* than AREA 0), not from the fixer knobs — a sibling run
+with identical aggressive fixer settings under `DELAY 4` still failed at
+**−0.690 ns / 6 paths**. Cost of the strategy: +15% stdcells, +3.5%
+standard-cell area. LVS **still fails top-level pin matching**; the diff is on
+the SRAM `VDD!`/`VDDARRAY!` power pins, and the flow then aborts in
+LibreLane's netgen stats parser (`JSONDecodeError: Invalid \escape`). KLayout
+DRC reports 2,491 errors, all one rule (`M4.b`); Magic reports 256,865; Magic
+illegal overlap 3,090. Full record:
+[[reviews/2026-11-12/PE-SOC-PNR-TIMING]].
+
+**Re-signoff after the 2026-11-15 PDK pull** (`runs/RUN_2026-11-16_03-59-01`,
+45m49s, same config): the local `~/pdk/IHP-Open-PDK` was pulled from the
+shuttle pin `2bbec755` to `main` **`e73adb40`** (+1,151 commits), so the design
+was re-routed on it. Result: **still 0 setup violations at all three corners**
+(worst reg-to-reg **+0.651 ns** slow, up from +0.628), hold clean
+(+0.101 / +0.278 / +0.594 ns), route DRC 0, XOR 0, 11,131 stdcells. The gain is
+the new CTS default (`CTS_ROOT_BUFFER` `buf_8` → `buf_16`), which delivers a
+cleaner `A_CLK` edge and drops the macro read from 7.689 → 7.540 ns — not a
+lib change, the cell and SRAM Liberty are byte-identical. KLayout DRC reads
+**49** instead of 2,491, and that is the **run mode, not the design**:
+`librelane:3.1.0.dev3` does not implement the new PDK's `KLAYOUT_DRC_DEFINES`,
+so the step ran with no options; on the same streamed GDS `run_mode=deep` alone
+reproduces 2,491 (`runs/drc_rm`), while `no_recommended` true or false both
+give 49, so the only option that matters is the run mode. `flow/pe_soc.json`
+now pins `KLAYOUT_DRC_OPTIONS` so the checked rule set no longer depends on the
+PDK key name. All 49 are `M4.b` on the macro edges;
+Magic DRC 256,865, illegal overlap 3,090 and
+the LVS pin-matching failure are unchanged. This is compatibility evidence,
+**not shuttle signoff**: the capture in `docs/tt-shared-silicon/` pins
+`2bbec755`. Record: [[reviews/2026-11-16/PE-SOC-PNR-NEWPDK]].
+
+**Predecessor: the same design without the strategy change** (`AREA 0`,
+`RUN_2026-11-11_17-01-21`) closed at WNS **−1.138 ns**, TNS −5.049 ns,
+**9 violating paths** (from −2.296 / −74.224 / 105 before the post-GRT fixers
+were enabled), hold clean, 9,648 stdcells, 32.584% utilization. The leftover
+paths were a single reg-to-reg cone from `A_DOUT[1]` to `_11105_/D`; a
+post-CTS ECO that kept the clock tree and reran timing repair + routing with
+`PL_RESIZER_SETUP_MAX_BUFFER_PCT=100` reproduced that result exactly, which is
+what showed the path was logic/drive-limited rather than routing-limited and
+sent the search upstream to technology mapping. Record:
+[[reviews/2026-11-10/PE-SOC-PNR]].
+The `pe_soc` subcore is ~36.8% occupied by the current floorplan estimate; the
+`tt_um_top` deliverable is **47.6%** of the 8×4 die, so area closure is no
+longer an open item by this estimate. Neither level instantiates pad cells; the
+shared tt-multiplexer and pad frame are outside the 8×4 allocation.
+
 **Historical routed signoff of pe_serdes** (2026-09-18, full LibreLane Classic
 on ihp-sg13g2, former 66 MHz target):
 0 DRC, 0 LVS, setup WS +7.6 ns (slow corner), hold WS +0.116 ns (fast corner),
@@ -900,25 +981,26 @@ Yosys 0.69+post, after the read-hold fix in `pe_imem`, reports 61,057 cells /
 uses the current count. The macro contributes **no** synthesised cells — its
 area comes from the LEF, and it is 79,674 µm² per [[reference/sram-budget]].
 
-**The allocation is 6×4 = 24 tiles**, not 8×4. The blog says so three times, and
-`info.yaml` now matches. 8×4 is described only as "the possibility of scaling up
-… (~30% more area)", to be announced by a page update and an email to sign-ups.
-**Design to 24 tiles; treat 32 as headroom that may never arrive.** Verbatim source:
-[[raw/articles/janestreet-competition-blog-fulltext]].
+**The allocation is 8×4 = 32 tiles.** The blog's 2026-11-09 update confirms 8×4
+for the March 2027 CMOS5L shuttle and says Tiny Tapeout's tile sizes are final;
+the `ttihp-verilog-template` main branch now targets CMOS5L (the `cmos5l` branch
+is retired) and lists 8×4. `info.yaml` matches. At 202×155 µm per tile the die is
+1616×620 µm = 1,001,920 µm² (1.002 mm²), 2.6:1. Source:
+[[raw/articles/janestreet-competition-blog-update-2026-11-09]].
 
-| Scenario | Die µm² | of 6×4 (real) | of 8×4 (upside) |
-|---|---|---|---|
-| Before the swap (flop IMEM, 128 words) | 385,265 | **89%** | 67% |
-| **Now: SoC + SERDES + codecs + instruction macro + DRU + CRC** | **154,786** | **36%** | 27% |
-| Still to come: pin matrix + 2 KB frame macro | +79,674 | → 54% | → 41% |
+| Scenario | Die µm² | of 8×4 (real) |
+|---|---|---|
+| Before the swap (flop IMEM, 128 words) | 385,265 | 38% |
+| **Now: SoC + SERDES + codecs + instruction macro + DRU + CRC** | **154,786** | **15%** |
+| Still to come: pin matrix + 2 KB frame macro | +79,674 | → 23% |
 
 The "still to come" row is the two known remaining consumers: the frame buffer is
 79,674 µm² of macro, and the pin matrix is estimated in the low hundreds of cells.
 **The design is no longer area-constrained**, which is the whole point of the swap:
 the remaining risk in this project is now verification, not floorplanning.
 
-Gate count is not the constraint: 1,264 cells for the whole SoC against ~24,000 for
-24 tiles at the blog's ~1K cells/tile — about 5.3% of the logic budget, with the
+Gate count is not the constraint: 1,264 cells for the whole SoC against ~32,000 for
+32 tiles at the blog's ~1K cells/tile — about 4.0% of the logic budget, with the
 SERDES's 539 and the codecs' 115 on top. (The row above is the SRAM-swap
 measurement; the pin matrix moved inside the SoC afterwards, which is the +178
 cells.)
@@ -926,15 +1008,14 @@ cells.)
 **Shape matters more than tile count**, because a macro has to physically fit the
 rectangle. TT notation is WIDTH × HEIGHT:
 
-| Allocation | Die (template tile) | Aspect | Note |
+| Allocation | Die (202×155 µm tile) | Aspect | Note |
 |---|---|---|---|
-| **6×4 (real)** | 1002 × 432 µm, 0.433 mm² | 2.32:1 | keeps every macro 8×4 keeps |
-| 8×4 (upside) | 1336 × 432 µm, 0.577 mm² | 3.09:1 | +33% area, same height |
-| 4×6 (not the offer) | 668 × 648 µm, 0.433 mm² | 1.03:1 | would lose all 64-bit-wide macros |
+| **8×4 (real)** | 1616 × 620 µm, 1.002 mm² | 2.61:1 | one tall macro still does not fit |
+| 4×8 (not the offer) | 808 × 1240 µm, 1.002 mm² | 0.65:1 | would lose the wide macro family |
+| 6×4 (historical) | 1212 × 620 µm, 0.751 mm² | 1.95:1 | the old allocation; superseded |
 
-The 6×4 and 8×4 dice are the same height, so **nothing in the macro analysis
-changes if 8×4 arrives** — it is pure extra width. Re-answer the whole SRAM page for
-the upside case with `tools/gen/sram_budget.py --tiles 8x4`.
+The 8×4 die is wide, so the macro analysis follows the width. Re-answer the whole
+SRAM page for another allocation with `tools/gen/sram_budget.py --tiles WxH`.
 
 
 ## Design decisions in force
@@ -1051,9 +1132,12 @@ python3 tools/fw/peemu.py firmware/uart_echo.hex --send "41 42" --max-cycles 900
 flow/run_librelane.sh flow/pe_serdes.json
 ```
 
-Environment: PDK clone `~/pdk/IHP-Open-PDK`; Ciel PDK `~/.ciel` (enabled
-`ihp-sg13g2` c4b8b4e); venv `~/venvs/asic` (volare + LibreLane 3.0.14); run dirs
-`~/asic-runs` (outside git). Details: `concepts/pdk-toolchain.md`.
+Environment: CMOS5L PDK at `~/pdk/IHP-Open-PDK` (IHP-Open-PDK commit
+`2bbec755dc67ca3db0261c3d6163e15735d66710`, containing `ihp-sg13cmos5l`);
+flow container `ghcr.io/librelane/librelane:3.1.0.dev3`; run dirs
+`~/asic-runs` (outside git). The old `~/.ciel` `ihp-sg13g2` tree and the
+`~/venvs/asic` LibreLane 3.0.x venv are SG13G2-era and are not used for CMOS5L.
+Details: `concepts/pdk-toolchain.md`.
 
 Waveforms: every TB writes a VCD into `sim/` (untracked — they churn on each
 run; `git add -f sim/*.vcd` restores them to the repo if wanted).
@@ -1061,14 +1145,15 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 ## Gotchas learned the hard way
 
 1. **LibreLane's `--dockerized` wrapper cannot auto-enable the IHP PDK** — it
-   reports "PDK ihp-sg13g2 was not found" even when `~/.ciel/ihp-sg13g2` resolves
+   reports the PDK as not found even when `$PDK_ROOT/ihp-sg13cmos5l` resolves
    and `config.tcl` exists. Workaround: invoke the container directly with
-   explicit `-p ihp-sg13g2 -s sg13g2_stdcell` (command above). The smoke test and
-   `--run-example` paths work, plain config runs do not.
+   explicit `-p ihp-sg13cmos5l -s sg13cmos5l_stdcell` (command above). The smoke
+   test and `--run-example` paths work, plain config runs do not.
 2. **pip-only LibreLane is unsupported** (needs Nix or Docker); `--docker-no-tty`
    is required in headless shells.
-3. **volare family name uses an underscore** (`--pdk ihp_sg13g2`) and needs an
-   explicit version from `volare ls-remote`.
+3. **volare is SG13G2-only here.** The CMOS5L PDK is installed from the
+   TinyTapeout-pinned IHP-Open-PDK commit, not a volare family; do not point
+   the flow at `~/.ciel/ihp-sg13g2`.
 4. **GCC 16 breaks the stock volare/librelane pip install** (pybind11 C++ level
    probe): `pip install --upgrade pybind11 setuptools wheel`, then
    `CXX=g++ pip install --no-build-isolation volare librelane`.
@@ -1271,7 +1356,7 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     is enough.**
 34. **Global-routing congestion at low utilization is a CONFIG derate, not a
     capacity problem.** The full SoC failed `GRT-0116` with 34 overflowed GCells
-    at **4.59% total usage** on the real 6x4 die. The cause was `GRT_ADJUSTMENT`:
+    at **4.59% total usage** on the then-current 6x4 die. The cause was `GRT_ADJUSTMENT`:
     LibreLane's generic default is **0.3** (the log prints `[INFO GRT-0022]
     Global adjustment: 30%`) while the IHP PDK ships `GRT_LAYER_ADJUSTMENTS = 0.00`
     for all 7 routing layers — so the PDK's own stated intent is no derate and
@@ -1393,8 +1478,9 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 
     To turn these into real gates, set
     `MAX_SLEW_VIOLATION_CORNERS`/`MAX_CAP_VIOLATION_CORNERS` to `["*"]`.
-40. **1,113,909 Magic DRC + 2,672 KLayout DRC errors, and 100% of BOTH are inside
-    the vendor SRAM macro.** Established by parsing, not assertion: every
+40. **(Historical SG13G2 run.) 1,113,909 Magic DRC + 2,672 KLayout DRC errors,
+    and 100% of BOTH are inside the vendor SRAM macro.** Established by parsing,
+    not assertion: every
     coordinate in `drc.magic.rpt` compared against the macro's placed footprint
     (x 10..246.8, y 10..346.46 µm) gives **1,113,909 inside, 0 outside**, with
     rules that are library-internal artefacts (`Cnt.c` 880,232; `LU.b` 104,724;
@@ -1455,9 +1541,10 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
     memory page documents the IHP SRAM macros as supported for IHP shuttles and
     points at a taped-out, tested 1024x8 SRAM project — i.e. the community route
     to using these macros exists and is sanctioned.
-46. **What this does NOT license.** The macro DRC being the PDK's does not make
-    the *max-slew / max-cap* violations go away — those are on SRAM **pins** as
-    driven by *our* routing (`sg13g2_buf_1` drivers, `A_DOUT[4]` at fanout 20),
+46. **(Historical SG13G2 run.) What this does NOT license.** The macro DRC being
+    the PDK's does not make the *max-slew / max-cap* violations go away — those
+    are on SRAM **pins** as driven by *our* routing (`sg13g2_buf_1` drivers,
+    `A_DOUT[4]` at fanout 20),
     and they are gated by steps 74-75. Gotchas 37-39 stand unchanged. Fixing the
     slew/cap means `DESIGN_REPAIR_MAX_SLEW_PCT` / `DESIGN_REPAIR_MAX_CAP_PCT`
     plus buffering `A_DOUT`, which is our work, not the PDK's.
@@ -1698,20 +1785,19 @@ run; `git add -f sim/*.vcd` restores them to the repo if wanted).
 
 - **IHP-specific max pad clock is unpublished.** The ~66 MHz figure is sky130
   pad-macro-derived. Signing off at 66 gives margin if the real limit is lower.
-- **No SRAM compiler for sg13g2** — only fixed macros (30 shapes). Sizing is in
+- **No SRAM compiler for SG13G2/CMOS5L** — only fixed macros (30 shapes). Sizing is in
   [[reference/sram-budget]]; the choice is made in [[decisions/adr-003-memory-plan]].
   Note the granularity trap: **1.5 KB cannot be bought.** The two 1 KB parts miss a
   1,518-byte Ethernet frame by 494 bytes, so the practical floor for a frame buffer
   is 2 KB.
-- **Tile size discrepancy**: blog says ~200×150 µm/tile, the TT template's
-  `info.yaml` says ~167×108 µm. Use the template for layout math; re-check after
-  the first real floorplan of the full design.
-- **The blog is a LIVING DOCUMENT and must be re-checked.** It states it will be
-  updated if 8×4 becomes available, and that sign-ups will be emailed. The repo's
-  first capture of it was a summary that got the tile count wrong and stood for
-  three days. Re-fetch and diff
-  [[raw/articles/janestreet-competition-blog-fulltext]] periodically; its
-  frontmatter carries the sha256 of the HTML as fetched on 2026-09-20.
+- **Tile size is confirmed (2026-11-09):** 202×155 µm per tile, 8×4 allocation.
+  The old 167×108 µm figure is retired. `flow/pe_soc.json` now declares
+  1616×620 µm, and [[reference/sram-budget]] uses 202×155 for layout math.
+- **The blog is a LIVING DOCUMENT and must be re-checked.** The 2026-11-09 update
+  confirmed 8×4 and added an FAQ; it can change again before the deadline. The
+  repo's first capture of it was a summary that got the tile count wrong and stood
+  for three days. Re-fetch and diff the dated captures under
+  `wiki/raw/articles/`; each frontmatter carries the sha256 of the fetched HTML.
 - **No host data path exists.** The SoC's `host_*` port is firmware loading only and
   `rtl/tt_um_protocol_emulator.v` ties it off. If Ethernet or a logic-analyser mode
   wants to stream to a host, that is unbuilt and unplanned, and it needs a decision
@@ -1860,26 +1946,33 @@ generated from the PDK LEF, `flow/pe_soc.json` and the measured synthesis cache
 (`tools/gen/floorplan_feasibility.py`, drift-gated in the regression):
 
 - The design is two `1P_1024x16` macros (236.8×336.46 µm each, 159,347 µm²
-  total) plus `tt_um_top`'s current 62,745 µm² of logic (3,888 cells). With the
-  SERDES-derived ×1.69 routing inflation that is ~265,666 µm²: **61.4%
-  occupancy on the template 6×4 die**, 36.9% at the blog's larger tile, 46.0%
-  on the 8×4 upside. This arithmetic was refreshed after the MAC ownership fix.
-- **Area is not the open question; the pad ring is.** The existing signoff is a
-  padless core (`DIE_AREA` only, no `CORE_AREA`), while the TT deliverable's
-  pads occupy the perimeter of the same outline, so its usable core is smaller.
-  E2's static checker validates the configured coordinates against `DIE_AREA`,
-  not a padded floorplan; no actual placement was run, and macro `y=10` may sit
-  under the ring.
-- The blog vs template assumptions are tabulated on the page: tile 200×150 vs
-  167×108 µm (+66% area), die 1200×600 vs 1002×432, and the blog's ~24,000-cell
-  logic figure against the template's own ~8,000-cell fit. This design's 3,579
-  cells clears both, so the tile size decides the macro rectangle, not the
-  budget.
+  total) plus `tt_um_top`'s current 170,255 µm² of logic (9,940 cells). With
+  the CMOS5L SERDES-derived ×1.87 routing inflation that is ~476,947 µm²:
+  **47.6% occupancy on the confirmed 8×4 die** (1616×620 µm = 1,001,920 µm²).
+  The `pe_soc` subcore (112,014 µm² logic) is ~36.8%.
+- **Area is no longer the blocking question for the TT top; neither level
+  instantiates pads.** The current `tt_um_top` mapping is 170,255 µm² of logic
+  plus 159,347 µm² of macros; the measured CMOS5L inflation gives **47.6% of
+  the 8×4 tile allocation**. The `pe_soc` subcore is ~36.8% and is the flow
+  that can close first. The TT deliverable does **not** instantiate pads: its
+  `ui_in`/`uo_out`/`uio_*` ports connect to the shared tt-multiplexer, and the
+  mux/pad frame sits outside this 1616×620 µm² design area. It therefore does
+  not shrink the denominator.
+  E2's static checker validates the configured coordinates against `DIE_AREA`.
+  The current placement uses `y=85.54` to leave the SRAM bottom-pin escape
+  channel; the TT-top floorplan must keep that channel clear to the tile
+  boundary.
+- The allocation is confirmed on the page: 202×155 µm per tile, 8×4 =
+  1616×620 µm = 1.002 mm², and ~1K cells per tile (~32,000 cells). This design's
+  9,940 cells is well inside that; the real mapped area above is the number to
+  use. The die shape still decides the macro rectangle, and one tall macro
+  (2048×64) does not fit.
 - **Evidence needed later** (deferred, and not run here): a TT-top flow config;
-  placement inside a real `CORE_AREA` with the ring; both macros' PDN
-  connectivity (PSM-0040, no PDN-0189/PSM-0069); congestion and detailed-route
-  DRC; a routed utilisation report to replace the ×1.69 estimate; macro-alone
-  DRC provenance; a confirmed tile size; and the full-chip hold/high-fanout
+  placement inside the TT tile boundary (the mux/pad frame is outside the
+  design allocation); both macros' PDN connectivity (PSM-0040, no
+  PDN-0189/PSM-0069); congestion and detailed-route DRC; a routed utilisation
+  report to replace the ×1.87 estimate; macro-alone
+  DRC provenance; and the full-chip hold/high-fanout
   items from the reviews. Per the standing ruling, no LibreLane/OpenROAD, DRC
   or LVS was launched.
 
@@ -2168,8 +2261,8 @@ USB; nothing on the design or software side blocks it.
 
 > **R3 debug control — first synthesis screen for the phase (2026-09-25).**
 > `./regress/synth_area.sh` **exit 0**, no diagnostics (no driver-driver
-> conflict, no undriven wire, no yosys ERROR). Current mapped counts, sg13g2 typ
-> 1.20V/25C, pre-route: `pe_cpu` 401 / 5,086.44 µm², `pe_ctrl` 4,054 /
+> conflict, no undriven wire, no yosys ERROR). Historical SG13G2 mapped counts,
+> sg13g2 typ 1.20V/25C, pre-route: `pe_cpu` 401 / 5,086.44 µm², `pe_ctrl` 4,054 /
 > 63,573.51, `pe_soc` 6,355 / 110,569.65, `tt_um_top` 10,221 / 172,760.93.
 >
 > **The R3 cost, measured like for like** — pre-R3 sources taken from git
@@ -2211,8 +2304,39 @@ top whose own source did not change: `pe_ctrl`, `pe_cpu`, `pe_eth_tx`,
 `pe_eth_mac`, `pe_serdes`, `pe_imem_flop`, `pe_fbuf_flop`. Use those for
 regression; use the era table only to interpret a whole-design total.
 
-**Current per-block set** (`regress/synth_area.sh`, sg13g2 typ, mapped
-pre-route, 2026-09-25 — the same script every figure above was measured with):
+**Current per-block set (CMOS5L)** (`regress/synth_area.sh`, sg13cmos5l typ,
+mapped pre-route, 2026-10-18; includes the uncommitted RTL work in this tree):
+
+| block | cells | µm² |
+|---|---|---|
+| `pe_serdes` | 529 | 11,103.56 |
+| `pe_cpu` | 392 | 5,070.19 |
+| `pe_ctrl` | 3,419 | 57,870.93 |
+| `pe_eth_mac` | 1,668 | 23,515.53 |
+| `pe_eth_tx` | 1,048 | 18,882.73 |
+| `pe_imem_flop` | 61,057 | 1,300,811.66 |
+| `pe_fbuf_flop` | 45,557 | 1,340,730.39 |
+| `pe_soc` | 6,422 | 112,014.14 |
+| `tt_um_top` | 9,940 | 170,255.32 |
+
+**Area ledger for `tt_um_top` against the 1616×620 = 1,001,920 µm² allocation:**
+
+| Measure | Area | Fraction |
+|---|---:|---:|
+| mapped logic only | 170,255 µm² | **16.99%** |
+| logic + two SRAM macros | 329,602 µm² | 32.90% |
+| macros + logic × 1.865 routing/fill inflation | 476,946 µm² | **47.60%** |
+
+The first row is the measured logic-cell utilization; the third row is the
+physical-area estimate, and on the confirmed 8×4 die it fits. The inflation
+factor is measured on `pe_serdes` (die/stdcell = 31,213.1/16,732.4), not on a
+routed TT top, so the 47.60% is still an estimate and the gating action is a
+real `tt_um_top` physical run. At that factor the break-even logic area is
+**451,678 µm²**; the current mapping is 281,423 µm² below it. The `pe_soc`
+subcore (112,014 µm²) is ~36.8% under the same estimate.
+
+**Historical SG13G2 per-block set** (2026-09-25; retained for comparison, not
+CMOS5L signoff):
 
 | block | cells | µm² |
 |---|---|---|

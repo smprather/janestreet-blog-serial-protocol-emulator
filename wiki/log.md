@@ -2404,3 +2404,211 @@ so a paraphrase outranked the source again — the same failure the 6x4/8x4
 correction recorded. The capture is now first in its `sources:`.
 - **Not touched:** the summary (`janestreet-protocol-emulator-competition.md`) and
 the transcript, which are historical captures; `raw/` stays immutable.
+
+## [2026-10-18] migrate | flow moved from SG13G2 to SG13CMOS5L
+
+- **PDK.** Installed IHP-Open-PDK `2bbec755dc67ca3db0261c3d6163e15735d66710`
+  (the Tiny Tapeout `ihp-cmos5l` pin) at `~/pdk/IHP-Open-PDK`. Verified
+  `ihp-sg13cmos5l/libs.ref/{sg13cmos5l_stdcell,sg13cmos5l_sram,sg13cmos5l_io}`
+  and `libs.tech/librelane/sg13cmos5l_stdcell`. `sg13cmos5l_sram` is a symlink
+  to the shared SG13G2 SRAM macros.
+- **Flow.** `flow/pe_serdes.json` and `flow/pe_soc.json` now declare
+  `PDK=ihp-sg13cmos5l` and `STD_CELL_LIBRARY=sg13cmos5l_stdcell`.
+  `flow/run_librelane.sh` uses `ghcr.io/librelane/librelane:3.1.0.dev3`,
+  `--manual-pdk`, `PDK_ROOT=$HOME/pdk/IHP-Open-PDK`, and stages the CMOS5L
+  SRAM tree. `flow/pe_soc_pdn.tcl` now understands the M1-M4-TM1 stack and
+  skips the Metal4-to-Metal4 no-op.
+- **Macro placement.** Moved both SRAMs from y=10 to y=85.54 after the first
+  CMOS5L SoC run failed GRT-0116. The SRAM signal pins are on the macro's
+  bottom edge (Metal2), so the old placement left only 10 um for the escapes;
+  the 85.54 um channel gets the SoC past global routing.
+- **Scripts.** `synth_area.sh`, `sram_model.sh`, `macro_flow_config.py`,
+  `run_all.sh`, the macro mutation suite, and the PDK generators now resolve
+  the CMOS5L tree and cell names. `regress/mutate_macro_flow_config.sh`:
+  **26 passed / 0 failed**. `synth_area.sh` exits 0 on the CMOS5L liberty.
+- **Results.** `pe_serdes` CMOS5L flow complete (`RUN_2026-10-18_20-22-12`):
+  **0 DRC, 0 LVS**, setup WS **+8.362 ns** slow, hold WS **+0.142 ns** fast,
+  die **167.56 × 186.28 um**, **69.2%** util. The full SoC flow passes global
+  routing with the new placement but detailed routing is not yet converged
+  (9 Metal2/Metal4 violations after the 16th stubborn-tiles iteration; stopped
+  at the 60-minute cutoff). There is no full-SoC CMOS5L DRC/LVS/STA signoff.
+- **Docs.** `pdk-toolchain`, `STATUS`, `README`, `HANDOFF`, `tiny-tapeout`,
+  ADR-002/004, the SRAM/floorplan/block-diagram pages and the generated area
+  caches were updated. All pre-2026-10-18 routed/STA/DRC numbers are explicitly
+  marked historical SG13G2 evidence. The regenerated TT-top floorplan estimate
+  is **110.2% of the 6x4 die**, so area closure is an open item.
+
+## [2026-10-19] measure + document | no-reset flops in the CMOS5L pe_soc netlist
+
+- **Result:** in `RUN_2026-10-18_20-27-03` stage
+  `06-yosys-synthesis/pe_soc.nl.v`, **805 of 1,116 flops (72.13%)** have
+  `RESET_B` tied high, meaning synthesis identified their reset as unused;
+  the other 311 (27.87%) are driven by `rst_n`. Two latches are excluded from
+  the flop count.
+- **Method:** `opt_dff` plus `dfflibmap` maps every flop to a reset-capable
+  `sg13cmos5l_dfrbpq_1` (the library has no plain DFF); the parser traces each
+  `RESET_B` net to `sg13cmos5l_tiehi`/`tielo` or `rst_n`. The exact parser is
+  in [[reference/no-reset-flops]].
+- **Scope:** `pe_soc` core, post-synthesis/pre-CTS, including the current
+  uncommitted RTL. `tt_um_top` adds `pe_ctrl` and has not been measured in
+  this flow. Historical SG13G2 netlists show 0% tie-high because their recipe
+  did not run the same `opt_dff` tie-off; not comparable.
+- **Added:** `wiki/reference/no-reset-flops.md`, indexed under Reference.
+
+## [2026-10-19] measure | per-block synthesis, parallel, artifacts outside the repo
+
+- `regress/synth_area.sh` gained `--out DIR`: it writes one `*.json`, `*.v`
+  and `*.yosys.log` per block plus `summary.tsv`. `DIR` must be outside the
+  repo; the script rejects a path inside the working tree.
+- Ran all 18 blocks with a 3-worker parallel runner over the same block list,
+  with a 6 GiB `MemAvailable` floor. Peak memory stayed at **19.3 GiB →
+  18.8 GiB available**; no OOM pressure. Total wall time **12.6 s**.
+- Output: `~/asic-runs/synth-blocks/2026-10-19_104002/` (56 files, 101 MB).
+  All 18 blocks exited 0; `summary.tsv` matches the sequential
+  `synth_area.sh` numbers.
+- No synthesis artifacts were written into the repo.
+
+## [2026-11-10] ingest + config | 8x4 confirmed; template main targets CMOS5L
+
+- Re-fetched the competition blog after the 2026-11-09 email. New capture:
+  [[raw/articles/janestreet-competition-blog-update-2026-11-09]] (full HTML
+  sha256 `3e9ae6ad…629e`), containing the update paragraph, revised rules,
+  revised area arithmetic, and the new FAQ.
+- **Allocation is 8x4 = 32 tiles**, tile size **202x155 um** (both the blog and
+  the template main branch now say so; the old 167x108 figure is retired).
+  Die is 1616x620 um = 1,001,920 um2 = 1.002 mm2. `info.yaml` tiles changed
+  `6x4` -> `8x4`; `flow/pe_soc.json` `DIE_AREA` changed `1002x432` ->
+  `1616x620`.
+- Template: `ttihp-verilog-template` **main** now targets CMOS5L; the `cmos5l`
+  branch is retired. Updated the docs link and the shared-silicon README.
+- Regenerated [[reference/sram-budget]], [[reference/floorplan-feasibility]] and
+  [[reference/protocol-pin-budget]] with the new tile constants. The `tt_um_top`
+  estimate is now **47.6%** of the 8x4 die (was 110.2% of the old 6x4 die), so
+  area is no longer the blocking risk. The 8192x32 macro now fits; only
+  2048x64 is excluded by height.
+- Updated current-facing docs: README, STATUS (area ledger, item 5, risks),
+  competition-overview, Tiny Tapeout entity, ADR-003/004, through-i2c,
+  feature-brainstorm, HANDOFF, feature-ideas. Historical logs and reviews keep
+  their 6x4 numbers.
+- Verification: all three generator `--check` gates pass, `check_wiki_pages`
+  and `check_doc_index` pass, and `macro_flow_config.py` accepts the new
+  `DIE_AREA`. `check_wiki_links` reports 8 dead links, all pre-existing
+  relative links inside the untracked `docs/tt-shared-silicon/sources/`
+  captures; none are from this change.
+
+## [2026-11-10] pnr | first full-SoC CMOS5L run on the confirmed 8x4 die
+
+- Run `~/asic-runs/pe_soc/runs/RUN_2026-11-10_19-21-35`, config
+  `flow/pe_soc.json`, LibreLane 3.1.0.dev3, 41 min, exit 1 at Netgen LVS.
+- **Routing clean:** 0 detailed-route DRC, 0 antenna, 0 XOR. Die 1616x620;
+  instance area 924,487 um2; 32.675% utilization; 9,648 stdcells + 2 macros.
+- **Timing not clean at 60 MHz:** slow-corner setup WNS -2.296 ns, TNS
+  -74.224 ns, 105 paths, dominated by `u_imem.../A_DOUT -> next-PC/debug`.
+  Typ/fast setup clean; hold clean at all corners. Slow corner also has 15
+  max-slew / 4 max-cap / 95 max-fanout checks.
+- **LVS fails top-level pin matching:** 9,730 netlist nets vs 9,731 layout
+  nets; the diff is on the SRAM `VDD!`/`VDDARRAY!` power pins. The flow then
+  aborts in LibreLane's netgen-stats parser (`JSONDecodeError: Invalid
+  \escape`), after the LVS verdict.
+- KLayout DRC 2,491, all `M4.b`; Magic 256,864 plus 3,090 illegal overlaps.
+  Detailed-route DRC is 0, so these are the macro-geometry question, not
+  unrouted signal geometry.
+- Record: [[reviews/2026-11-10/PE-SOC-PNR]]. No RTL, SDC or flow config was
+  changed by the run.
+- **Targeted post-CTS ECO** (`runs/eco_failpaths`, then `eco_failpaths_sta`):
+  kept the clock tree/placement, reran `ResizerTimingPostCTS` with
+  `PL_RESIZER_SETUP_MAX_BUFFER_PCT=100` and zero setup margin, then global and
+  detailed route, RCX and post-route STA. It reproduced the **identical**
+  WNS/TNS (-2.296 / -74.224 ns), 105 violating paths, hold slack, cell counts
+  and 149,739 um2 stdcell area. Routing is not the limiter: the worst path has
+  ~0.05 ns of interconnect in a 14.63 ns arrival. The next lever is the path
+  (registered SRAM read, lower clock, or relaxed debug-output constraint).
+
+## [2026-11-11] pnr | all timing fixers: WNS -2.296 -> -1.138 ns
+
+- `flow/pe_soc.json` now enables `PL_TIMING_DRIVEN`,
+  `RUN_POST_CTS_RESIZER_TIMING`, `RUN_POST_GPL_DESIGN_REPAIR`,
+  `RUN_POST_GRT_DESIGN_REPAIR` and `RUN_POST_GRT_RESIZER_TIMING`. The two
+  post-GRT stages were previously gated off, so the only repair ran against
+  pre-route estimated parasitics.
+- Run `~/asic-runs/pe_soc/runs/RUN_2026-11-11_17-01-21` (~38 min):
+  route DRC 0, hold clean, slow setup WNS **-1.138 ns**, TNS **-5.049 ns**,
+  **9 violating paths** (was -2.296 / -74.224 / 105). The original
+  `A_DOUT[14] -> dbg_next_pc[5]` path is fixed; remaining worst is a long
+  `A_DOUT[1] -> _11105_/D` reg-to-reg cone.
+- The flow still exits 1 at Netgen LVS: same top-level pin mismatch on the
+  SRAM `VDD!`/`VDDARRAY!` power pins, then LibreLane's netgen-stats JSON
+  parser (`Invalid \escape`). KLayout DRC 2,491 (`M4.b`), Magic 256,866.
+- Record: [[reviews/2026-11-10/PE-SOC-PNR]]. No custom cell used yet; a
+  higher-drive NAND4/NOR4 is the plausible next step for the remaining 9 paths.
+
+## [2026-11-12] pnr | slow-corner setup CLOSED at 60 MHz (SYNTH_STRATEGY AREA 3)
+
+- The remaining -1.138 ns was inside the cells, so the netlist was re-mapped
+  before touching any placement/routing knob.
+- `python3 -m librelane -f synthesisexploration config.json` (16 s, pre-PnR
+  ideal-net slow-corner STA, `runs/synthx/summary.rpt`) ranked the nine ABC
+  scripts by worst reg-to-reg slack: AREA 0 **+1.931** (baseline), AREA 1
+  +2.067, AREA 2 +2.506, **AREA 3 +3.683**, DELAY 0 +1.504, DELAY 1 +0.753,
+  DELAY 2 +0.660, DELAY 3 +0.723, DELAY 4 **+3.646** ns. The AREA 0
+  pre-PnR -> post-route gap was ~3.07 ns, so +1.75 ns of mapping headroom was
+  the missing margin. DELAY 0-3 being *worse* than AREA 0 is why this had to be
+  measured rather than assumed.
+- Two full runs in parallel, identical fixer settings (setup margin 0.3
+  post-CTS / 0.25 post-GRT, TNS pct 100, setup buffer pct 100, slew/cap
+  30/25): `runs/area3` (AREA 3) and `runs/dly4` (DELAY 4), 46 min 01 s together.
+- **`runs/area3` signoff (RCX + STAPostPNR): 0 setup violators at all three
+  corners**, WNS/TNS 0, worst reg-to-reg **+0.628 ns** (slow,
+  `A_DOUT -> _15291_/D`); hold clean (+0.109 fast / +0.288 typ / +0.607 slow);
+  route DRC 0 (170 -> 107 -> 121 -> 0 -> 2 -> 0), antenna 0, XOR 0, PSM 0,
+  worst VPWR drop 0.42 mV. 11,130 stdcells, 154,110 um2 stdcell area,
+  19.59% stdcell / 33.14% total utilization.
+- `runs/dly4` **still failed**: WNS -0.690 ns, TNS -1.554 ns, 6 paths. Same
+  fixers, different strategy — that pair is the evidence the strategy, not the
+  fixer aggressiveness, closed the design.
+- `flow/pe_soc.json` now carries `SYNTH_STRATEGY: "AREA 3"` plus those fixer
+  settings; loading it resolves to the same values as the passing run
+  (`runs/cfgcheck/resolved.json` vs `runs/area3/resolved.json`, no mismatch).
+  Cost: +15% cells, +3.5% stdcell area.
+- Still failing, unchanged and not timing: LVS top-level pin matching on the
+  SRAM `VDD!`/`VDDARRAY!` power pins (netgen says the device classes are
+  equivalent), then the flow's netgen-stats JSON parser; KLayout DRC 2,491
+  (`M4.b`), Magic 256,865, illegal overlap 3,090.
+- Record: [[reviews/2026-11-12/PE-SOC-PNR-TIMING]].
+
+## [2026-11-16] pnr | re-signoff after the PDK pull: still clean, on a different deck
+
+- `~/pdk/IHP-Open-PDK` was pulled from the shuttle pin `2bbec755` to `main`
+  `e73adb40` (+1,151 commits). Cell and SRAM Liberty are byte-identical, so the
+  netlist is unchanged; what moved is the CTS default, the tech LEF (one via),
+  and the Magic/KLayout decks.
+- `synthesisexploration` on the new tree reproduces the old strategy table to
+  six decimals (AREA 0 +1.931, AREA 3 +3.683, DELAY 4 +3.646 ns), which is the
+  evidence that only the back end moved.
+- Re-ran the full flow (`RUN_2026-11-16_03-59-01`, 45m49s, same config):
+  **0 setup violations at all three corners**, worst reg-to-reg **+0.651 ns**
+  slow (was +0.628), hold **+0.101 / +0.278 / +0.594 ns**, route DRC 0, XOR 0,
+  antenna 0, PSM 0, 11,131 stdcells (was 11,130).
+- Cause of the slight timing gain: the new PDK ships `CTS_ROOT_BUFFER` =
+  `sg13cmos5l_buf_16` (was `buf_8`) and drops `buf_1` from `CTS_CLK_BUFFERS`;
+  the cleaner `A_CLK` edge brings the macro read from 7.689 to 7.540 ns.
+- KLayout DRC reads **49** (`M4.b` only, 24 per macro edge + 1 off-die) instead
+  of 2,491 — and that is the **run mode**. A/B on the same streamed GDS and
+  image: no options -> 49 (`runs/drc_ctl`), `run_mode=deep` alone -> 2,491
+  (`runs/drc_rm`), `no_recommended` true OR false -> 49 (`runs/drc_nr`,
+  `runs/drc_nrtrue`). dev3 does not implement the new PDK's
+  `KLAYOUT_DRC_DEFINES`, so the run passed nothing and the deck never enabled
+  deep mode; `flow/pe_soc.json` now pins `KLAYOUT_DRC_OPTIONS`, which resolves
+  identically on both trees. Magic DRC 256,865, illegal overlap
+  3,090 and the LVS pin-matching failure are unchanged.
+- `librelane:3.1.0.dev3` does not implement the new `KLAYOUT_DRC_DEFINES` /
+  `KLAYOUT_LVS_DEFINES` names, so the PDK's DRC/LVS options are dropped on this
+  image. Pinned in the design config for DRC; KLayout LVS is not this flow's
+  checker (netgen is), so `KLAYOUT_LVS_OPTIONS` stays unset.
+- Repo fixes this pull required: `tools/checks/macro_flow_config.py` now reads
+  the corner list from both LibreLane configs (the pull moved `STA_CORNERS`
+  into the PDK-level `config.tcl`, which had made the gate exit 2 INCOMPLETE);
+  mutation suite 26/26 still detected. `flow/run_librelane.sh` stamps the PDK
+  commit into every run log.
+- Record: [[reviews/2026-11-16/PE-SOC-PNR-NEWPDK]]. Not shuttle signoff — the
+  captured shuttle installer pins `2bbec755`.

@@ -271,11 +271,11 @@ numbers; do not edit them by hand.
 - [[reference/protocol-pin-budget]] — per-protocol IO pin counts against the
   TT pad budget (26 pads, 24 usable; **19 committed**), and what the board
   must add per protocol.
-- [[reference/sram-budget]] — SRAM capacity against the 6×4 die: every PDK
-  macro's real size, what fits, and the area cost of 1–32 KB.
+- [[reference/sram-budget]] — SRAM capacity against the confirmed 8×4 die:
+  every PDK macro's real size, what fits, and the area cost of 1–32 KB.
 - [[reference/floorplan-feasibility]] — the actual two-macro plus logic fit on
-  the real tile allocations, the blog-vs-template assumption difference, and
-  the evidence a later floorplan run must produce (read-only; generated).
+  the confirmed 8×4 allocation, and the evidence a later floorplan run must
+  produce (read-only; generated).
 - [[reference/clock-arithmetic]] — every protocol constant at the locked
   60 MHz point: what is integer-exact and what is an approximation. `CLK_HZ`
   is read from the RTL.
@@ -283,6 +283,9 @@ numbers; do not edit them by hand.
   derived and checked against the RevEng catalogue's published values.
 - [[reference/block-diagram]] — the RTL block inventory: integrated blocks,
   standalone orphans, cell counts, testbenches (generated and drift-checked).
+- [[reference/no-reset-flops]] — the CMOS5L `pe_soc` synthesis netlist:
+  805 of 1,116 flops (72.13%) have `RESET_B` tied high (reset identified as
+  unused), 311 use `rst_n`; method, parser and caveats.
 - [[reference/simulator-bakeoff]] — Icarus versus Verilator, measured: speed,
   build cost, and the `DIDNOTCONVERGE` blocker that decides it.
 
@@ -422,10 +425,14 @@ done.
 Corrections go in wiki pages, never in these. A superseding capture is a new
 file, not an edit.
 
-- [[raw/articles/janestreet-competition-blog-fulltext]] — **the competition
-  blog, full verbatim text**, with the fetched bytes' `sha256` in the
-  frontmatter. Primary source for every competition fact. It says 6×4 tiles and
-  marks itself a living page that will change if 8×4 is offered.
+- [[raw/articles/janestreet-competition-blog-update-2026-11-09]] — **the
+  2026-11-09 update**, verbatim: 8×4 confirmed, tile sizes final, template main
+  branch targets CMOS5L, plus the FAQ. Current primary source for the allocation
+  and submission rules.
+- [[raw/articles/janestreet-competition-blog-fulltext]] — **the original
+  competition blog, full verbatim text**, with the fetched bytes' `sha256` in the
+  frontmatter. It says 6×4 and is superseded on the allocation by the update
+  above; it remains the source for the original rules and framing.
 - [[raw/articles/janestreet-protocol-emulator-competition]] — the original
   ingest of the announcement. **Its summary, not its text, is what caused a
   documented error**; see [[concepts/competition-overview]].
@@ -461,6 +468,17 @@ the R2 record is no longer across a repo boundary.
   the two input-capture blocks: fourteen and eighteen defects respectively, and
   the split between firmware and testbench.
 - [[reviews/2026-09-25/CHIP-CODE-REVIEW]] — the chip-side code review.
+- [[reviews/2026-11-10/PE-SOC-PNR]] — the first full-SoC CMOS5L place-and-route
+  on the confirmed 8×4 die: clean routing, 32.7% utilization, and the open
+  slow-corner SRAM-read timing and macro-power LVS findings.
+- [[reviews/2026-11-12/PE-SOC-PNR-TIMING]] — how the remaining slow-corner
+  setup deficit was closed: a 16 s synthesis-strategy screen picking AREA 3,
+  the parallel DELAY 4 control run that still failed, and the 0-violator
+  signoff it produced.
+- [[reviews/2026-11-16/PE-SOC-PNR-NEWPDK]] — the same design re-routed on the
+  pulled PDK (`e73adb40`): still 0 setup violations, a different clock-tree
+  default, and a 50× smaller KLayout DRC count that is a deck change, not a
+  design change.
 
 ### Verification and formal
 

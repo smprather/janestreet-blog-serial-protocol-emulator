@@ -23,8 +23,9 @@ requires the config to be complete and legal:
      need;
   5. every configured macro type has nonempty `gds`/`lef`/`lib` views, every
      referenced view resolves to exactly one file of the matching class and
-     extension in the PDK `sg13g2_sram` tree that `run_librelane.sh` stages
-     from, and the `lib` keys cover the PVT corners the flow resolves
+     extension in the PDK `sg13cmos5l_sram` tree (a symlink to the shared
+     SG13G2 SRAM macros) that `run_librelane.sh` stages from, and the `lib`
+     keys cover the PVT corners the flow resolves
      (`DEFAULT_CORNER`/`STA_CORNERS`);
   6. each configured type's views belong to that type (E2-6): the `lef` view
      must declare `MACRO <type>` (fail-closed: a LEF with no MACRO
@@ -36,7 +37,7 @@ requires the config to be complete and legal:
      every corner and two corners would silently read the same timing data.
 
 Placement geometry and the macro view tree cannot be established without the
-PDK (no type LEF resolvable, or no `sg13g2_sram`/corner list), so that is an
+PDK (no type LEF resolvable, or no `sg13cmos5l_sram`/corner list), so that is an
 explicit INCOMPLETE run that exits 2 -- a supported PDK-less regression skips
 the PDK-dependent checks rather than failing. Every finding still fails
 (exit 1) even when those assets are unavailable, and a Yosys elaboration
@@ -68,10 +69,11 @@ REPO = Path(__file__).resolve().parents[2]
 FLOW = REPO / "flow" / "pe_soc.json"
 GAP_UM = 10.0
 
-# run_librelane.sh resolves every MACROS view through Ciel (PDK_ROOT, default
-# ~/.ciel) and stages it by basename. The checker mirrors that resolution so a
-# ./src/<name> entry is matched against a real PDK source, never the repo cwd.
-PDK_ROOT = Path(os.environ.get("PDK_ROOT", str(Path.home() / ".ciel")))
+# run_librelane.sh resolves every MACROS view through PDK_ROOT (default
+# ~/pdk/IHP-Open-PDK) and stages it by basename. The checker mirrors that
+# resolution so a ./src/<name> entry is matched against a real PDK source,
+# never the repo cwd.
+PDK_ROOT = Path(os.environ.get("PDK_ROOT", str(Path.home() / "pdk" / "IHP-Open-PDK")))
 
 # The same source list the flow config and synth_area carry, so the netlist
 # this gate sees is the netlist the flow would elaborate.
@@ -119,24 +121,36 @@ def lef_size(lef: Path) -> tuple[float, float] | None:
 
 
 def find_sram_dir(pdk_root: Path) -> Path | None:
-    """The sg13g2_sram tree run_librelane.sh stages macro views from."""
-    for cand in sorted(pdk_root.rglob("sg13g2_sram")):
-        if cand.is_dir() and (cand / "lib").is_dir():
-            return cand
+    """The CMOS5L SRAM tree run_librelane.sh stages macro views from.
+
+    CMOS5L ships `sg13cmos5l_sram` as a symlink to the shared SG13G2 SRAM
+    macros; fall back to the SG13G2 name for a tree that resolves the link
+    differently.
+    """
+    for tree in ("sg13cmos5l_sram", "sg13g2_sram"):
+        for cand in sorted(pdk_root.rglob(tree)):
+            if cand.is_dir() and (cand / "lib").is_dir():
+                return cand
     return None
 
 
-def find_stdcell_config(pdk_root: Path) -> Path | None:
-    """The PDK's LibreLane stdcell config.tcl (the corner source of truth)."""
-    for p in sorted(pdk_root.rglob("config.tcl")):
-        if p.parent.name == "sg13g2_stdcell":
-            return p
-    return None
+def find_librelane_configs(pdk_root: Path) -> list[Path]:
+    """The PDK's LibreLane configs, in the order LibreLane sources them.
+
+    LibreLane sources the PDK-level `libs.tech/librelane/config.tcl` first and
+    the standard-cell one after it, so a later assignment wins. Both layouts
+    have to be read: up to the 2026-11-15 pull (2bbec755) the corner list lived
+    in the standard-cell file, and from e73adb40 it lives in the PDK-level one.
+    """
+    found = sorted(pdk_root.rglob("libs.tech/librelane/config.tcl"))
+    for scl in ("sg13cmos5l_stdcell", "sg13g2_stdcell"):
+        found += sorted(pdk_root.rglob(f"libs.tech/librelane/{scl}/config.tcl"))
+    return found
 
 
 def required_corners(cfg: dict, pdk_root: Path) -> set[str] | None:
     """The flow's PVT corners: the config's own STA_CORNERS/DEFAULT_CORNER if
-    set, else the PDK LibreLane config.tcl the flow resolves them from."""
+    set, else the PDK LibreLane configs the flow resolves them from."""
     sta = cfg.get("STA_CORNERS")
     default = cfg.get("DEFAULT_CORNER")
     if isinstance(sta, str):
@@ -146,17 +160,19 @@ def required_corners(cfg: dict, pdk_root: Path) -> set[str] | None:
     if isinstance(default, list):
         default = default[0] if default else None
     if sta is None or default is None:
-        pdk_cfg = find_stdcell_config(pdk_root)
-        if pdk_cfg is None:
+        configs = find_librelane_configs(pdk_root)
+        if not configs:
             return None
-        text = pdk_cfg.read_text()
-        if sta is None:
-            m = re.search(r"STA_CORNERS\)\s+\"(.*?)\"", text, re.S)
-            sta = (re.sub(r"\\\s*\n", " ", m.group(1)).split()
-                   if m else None)
-        if default is None:
-            m = re.search(r"DEFAULT_CORNER\)\s+\"([^\"]*)\"", text)
-            default = m.group(1) if m else None
+        for path in configs:
+            text = path.read_text()
+            if sta is None:
+                m = re.search(r"STA_CORNERS\)\s+\"(.*?)\"", text, re.DOTALL)
+                if m:
+                    sta = re.sub(r"\\\s*\n", " ", m.group(1)).split()
+            if default is None:
+                m = re.search(r"DEFAULT_CORNER\)\s+\"([^\"]*)\"", text)
+                if m:
+                    default = m.group(1)
     if not sta or not default:
         return None
     return set(sta) | {default}
@@ -254,7 +270,7 @@ def main() -> int:
     # 5: macro views (E2-4). Structural findings -- a missing/empty view list,
     # a path that is not './src/<name>', a view of the wrong type, or a lib
     # key missing for a required corner -- fail even when the PDK tree is
-    # absent. A gds entry must be a .gds under sg13g2_sram/gds/, lef a .lef
+    # absent. A gds entry must be a .gds under sg13cmos5l_sram/gds/, lef a .lef
     # under lef/, lib a .lib under lib/ (the class, not just the basename: a
     # lib file renamed into the lef slot must not pass). The corner list is
     # resolved from the flow config or the PDK's LibreLane config.tcl.
@@ -267,7 +283,7 @@ def main() -> int:
         unable_to_run = True
         missing = []
         if sram_dir is None:
-            missing.append("the sg13g2_sram view tree")
+            missing.append("the sg13cmos5l_sram view tree")
         if corners is None:
             missing.append("the stdcell PVT corner list")
         print("view check: UNAVAILABLE (" + " and ".join(missing)
